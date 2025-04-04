@@ -1,6 +1,5 @@
 #include "_plan.h"
 #include <utility>
-#include "_executor.h"
 #include "duckdb.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/unique_ptr.hpp"
@@ -167,6 +166,30 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     BodoParquetScanFunction table_function = BodoParquetScanFunction();
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoParquetScanFunctionData>(parquet_path);
+
+    // Convert Arrow schema to DuckDB
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+    auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
+
+    duckdb::virtual_column_map_t virtual_columns;
+
+    return duckdb::make_uniq<duckdb::LogicalGet>(
+        binder->GenerateTableIndex(), table_function, std::move(bind_data1),
+        return_types, return_names, virtual_columns);
+}
+
+duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_node(
+    PyObject *df, PyObject *pyarrow_schema) {
+    // See DuckDB Pandas scan code:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_scan.hpp#L19
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_bind.hpp#L19
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/pandas/scan.cpp#L185
+
+    duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+
+    BodoDataFrameScanFunction table_function = BodoDataFrameScanFunction();
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
+        duckdb::make_uniq<BodoDataFrameScanFunctionData>(df);
 
     // Convert Arrow schema to DuckDB
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);

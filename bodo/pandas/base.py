@@ -6,6 +6,26 @@ from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 
 
+def from_pandas(df):
+    """Convert a Pandas DataFrame to a BodoDataFrame."""
+    import pyarrow as pa
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Input must be a pandas DataFrame")
+
+    empty_df = df.iloc[:0]
+    n_rows = len(df)
+    arrow_schema = pa.Schema.from_pandas(df)
+
+    # TODO: distribute to workers and get result_id
+    plan = plan_optimizer.LazyPlan(
+        plan_optimizer.LogicalGetPandasRead, df, arrow_schema
+    )
+    # TODO: Add support for Index
+
+    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows)
+
+
 def read_parquet(
     path,
     engine="auto",

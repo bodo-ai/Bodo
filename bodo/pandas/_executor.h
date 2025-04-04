@@ -44,6 +44,32 @@ class PhysicalReadParquet : public PhysicalOperator {
 };
 
 /**
+ * @brief Physical node for reading Parquet files in pipelines.
+ *
+ */
+class PhysicalReadPandas : public PhysicalOperator {
+   public:
+    PhysicalReadPandas(PyObject* df) : df(df) {
+        Py_INCREF(df);
+        num_rows = PyObject_Length(df);
+    }
+    ~PhysicalReadPandas() { Py_DECREF(df); }
+
+    /**
+     * @brief Read parquet and return the result (placeholder for now).
+     *
+     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
+     * int64 (to pass to Cython easily), pyarrow schema object
+     */
+    std::pair<int64_t, PyObject*> execute() override;
+
+   private:
+    PyObject* df;
+    int64_t current_row = 0;
+    int64_t num_rows;
+};
+
+/**
  * @brief Pipeline class for executing a sequence of physical operators.
  *
  */
