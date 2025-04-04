@@ -554,7 +554,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 new_metadata = zero_size_self.__getitem__(key)
                 return plan_optimizer.wrap_plan(
                     new_metadata,
-                    plan=plan_optimizer.LazyPlan(
+                    plan=LazyPlan(
                         "LogicalProjection",
                         self._plan,
                         key_indices,
