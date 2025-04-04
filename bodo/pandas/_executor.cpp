@@ -57,17 +57,10 @@ std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
     PyObject* pyarrow_schema = arrow::py::wrap_schema(table->schema());
 
     auto* bodo_pool = bodo::BufferPool::DefaultPtr();
+    std::shared_ptr<table_info> out_table =
+        arrow_table_to_bodo(table, bodo_pool);
 
-    std::vector<std::shared_ptr<array_info>> out_arrs;
-    out_arrs.reserve(table->num_columns());
-    for (int64_t i = 0; i < table->num_columns(); i++) {
-        std::shared_ptr<arrow::Array> arr = table->column(i)->chunk(0);
-        std::shared_ptr<array_info> out_arr =
-            arrow_array_to_bodo(arr, bodo_pool);
-        out_arrs.push_back(out_arr);
-    }
-
-    return {reinterpret_cast<int64_t>(new table_info(out_arrs)),
+    return {reinterpret_cast<int64_t>(new table_info(*out_table)),
             pyarrow_schema};
 }
 
@@ -98,14 +91,8 @@ std::pair<int64_t, PyObject*> PhysicalReadPandas::execute() {
 
     // Convert Arrow arrays to Bodo arrays
     auto* bodo_pool = bodo::BufferPool::DefaultPtr();
-    std::vector<std::shared_ptr<array_info>> out_arrs;
-    out_arrs.reserve(table->num_columns());
-    for (int64_t i = 0; i < table->num_columns(); i++) {
-        std::shared_ptr<arrow::Array> arr = table->column(i)->chunk(0);
-        std::shared_ptr<array_info> out_arr =
-            arrow_array_to_bodo(arr, bodo_pool);
-        out_arrs.push_back(out_arr);
-    }
+    std::shared_ptr<table_info> out_table =
+        arrow_table_to_bodo(table, bodo_pool);
 
     // Clean up Python references
     Py_DECREF(iloc);
@@ -115,6 +102,6 @@ std::pair<int64_t, PyObject*> PhysicalReadPandas::execute() {
     Py_DECREF(table_func);
     Py_DECREF(pa_table);
 
-    return {reinterpret_cast<int64_t>(new table_info(out_arrs)),
+    return {reinterpret_cast<int64_t>(new table_info(*out_table)),
             pyarrow_schema};
 }

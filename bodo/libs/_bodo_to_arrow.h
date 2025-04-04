@@ -99,6 +99,17 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
     int64_t array_id = -1, std::shared_ptr<array_info> dicts_ref_arr = nullptr);
 
 /**
+ * @brief Convert Arrow table to Bodo table_info with zero-copy as much as
+ * possible.
+ *
+ * @param table input Arrow table
+ * @param src_pool Pointer to BufferPool used for allocations
+ * @return std::shared_ptr<table_info> Bodo output table
+ */
+std::shared_ptr<table_info> arrow_table_to_bodo(
+    std::shared_ptr<arrow::Table> table, bodo::IBufferPool *src_pool);
+
+/**
  * @brief Convert Arrow DataType to Bodo DataType, including nested types
  *
  * @param arrow_type input Arrow DataType
