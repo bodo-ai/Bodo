@@ -4,7 +4,7 @@ from pandas._libs import lib
 from bodo.ext import plan_optimizer
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
-from bodo.pandas.utils import LazyPlan, scatter_data
+from bodo.pandas.utils import LazyPlan
 
 
 def from_pandas(df):
@@ -29,7 +29,7 @@ def from_pandas(df):
     arrow_schema = pa.Schema.from_pandas(df)
 
     if bodo.dataframe_library_run_parallel:
-        res_id = scatter_data(df)
+        res_id = bodo.spawn.utils.scatter_data(df)
         plan = LazyPlan("LogicalGetPandasReadParallel", res_id, arrow_schema)
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", df, arrow_schema)

@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 import numba
 from llvmlite import ir as lir
 from numba.extending import intrinsic
@@ -9,9 +5,6 @@ from numba.extending import intrinsic
 from bodo.libs.array import cpp_table_to_py_table, delete_table, table_type
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 def get_data_manager_pandas() -> str:
@@ -163,18 +156,3 @@ def execute_plan(plan: LazyPlan):
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
-
-
-def scatter_data(data: pd.DataFrame | pd.Series | pd.Index | pd.array) -> str:
-    """Scatter data to all workers and return the result ID"""
-    import bodo.spawn.spawner
-    from bodo.mpi4py import MPI
-    from bodo.spawn.spawner import CommandType
-
-    spawner = bodo.spawn.spawner.get_spawner()
-    bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-    spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
-    bodo.libs.distributed_api.scatterv(
-        data, root=bcast_root, comm=spawner.worker_intercomm
-    )
-    return spawner.worker_intercomm.recv(None, source=0)
