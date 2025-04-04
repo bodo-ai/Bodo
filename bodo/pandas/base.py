@@ -4,12 +4,14 @@ from pandas._libs import lib
 from bodo.ext import plan_optimizer
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
-from bodo.pandas.utils import LazyPlan
+from bodo.pandas.utils import LazyPlan, scatter_data
 
 
 def from_pandas(df):
     """Convert a Pandas DataFrame to a BodoDataFrame."""
     import pyarrow as pa
+
+    import bodo
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame")
@@ -18,8 +20,11 @@ def from_pandas(df):
     n_rows = len(df)
     arrow_schema = pa.Schema.from_pandas(df)
 
-    # TODO: distribute to workers and get result_id
-    plan = LazyPlan("LogicalGetPandasRead", df, arrow_schema)
+    if bodo.dataframe_library_run_parallel:
+        res_id = scatter_data(df)
+        plan = LazyPlan("LogicalGetPandasReadParallel", res_id, arrow_schema)
+    else:
+        plan = LazyPlan("LogicalGetPandasReadSeq", df, arrow_schema)
     # TODO: Add support for Index
 
     return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows)

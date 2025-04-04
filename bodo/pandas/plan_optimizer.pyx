@@ -247,7 +247,8 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
 
 cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema)
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_node(object df, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
@@ -408,15 +409,25 @@ cdef class LogicalGetDataframeRead(LogicalOperator):
         assert False & "Not implemented yet."
 
 
-cdef class LogicalGetPandasRead(LogicalOperator):
-    """Represents scan of a Pandas dataframe passed into from_pandas."""
+cdef class LogicalGetPandasReadSeq(LogicalOperator):
+    """Represents sequential scan of a Pandas dataframe passed into from_pandas."""
     cdef readonly object arrow_schema
     cdef readonly object df
 
     def __cinit__(self, object df, object arrow_schema):
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_node(df, arrow_schema)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_seq_node(df, arrow_schema)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
         self.df = df
+        self.arrow_schema = arrow_schema
+
+
+cdef class LogicalGetPandasReadParallel(LogicalOperator):
+    """Represents parallel scan of a Pandas dataframe passed into from_pandas."""
+    cdef readonly object arrow_schema
+
+    def __cinit__(self, str result_id, object arrow_schema):
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_parallel_node(result_id.encode(), arrow_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
         self.arrow_schema = arrow_schema
 
 

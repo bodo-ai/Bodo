@@ -1,7 +1,7 @@
 import pandas as pd
 
 import bodo.pandas as bd
-from bodo.tests.utils import _test_equal
+from bodo.tests.utils import _test_equal, temp_config_override
 
 
 def test_from_pandas(datapath):
@@ -14,12 +14,24 @@ def test_from_pandas(datapath):
             "c": ["a", "b", "c"],
         }
     )
+    # Sequential test
+    with temp_config_override("dataframe_library_run_parallel", False):
+        bdf = bd.from_pandas(df)
+        assert bdf._lazy
+        assert bdf.plan is not None
+        assert bdf.plan.plan_class == "LogicalGetPandasReadSeq"
+        duckdb_plan = bdf.plan.generate_duckdb()
+        _test_equal(duckdb_plan.df, df)
+        _test_equal(
+            bdf,
+            df,
+        )
+
+    # Parallel test
     bdf = bd.from_pandas(df)
     assert bdf._lazy
     assert bdf.plan is not None
-    duckdb_plan = bdf.plan.generate_duckdb()
-    _test_equal(duckdb_plan.df, df)
-
+    assert bdf.plan.plan_class == "LogicalGetPandasReadParallel"
     _test_equal(
         bdf,
         df,
