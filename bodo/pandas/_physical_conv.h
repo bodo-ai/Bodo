@@ -1,31 +1,40 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <vector>
 
-#include "_executor.h"
+#include "_pipeline.h"
+#include "duckdb/common/enums/logical_operator_type.hpp"
+#include "duckdb/planner/logical_operator.hpp"
+#include "duckdb/planner/operator/list.hpp"
 #include "physical/operator.h"
 
-class PipelineBuilder {
+class PhysicalPlanBuilder {
    private:
-    std::shared_ptr<PhysicalSource> source;
-    std::vector<std::shared_ptr<PhysicalSourceSink>> between_ops;
-    std::optional<std::shared_ptr<PhysicalSink>> sink;
+    std::vector<std::shared_ptr<Pipeline>> finished_pipelines;
+    std::shared_ptr<PipelineBuilder> active_pipelines;
 
    public:
-    explicit PipelineBuilder(std::shared_ptr<PhysicalSource> _source)
-        : source(std::move(_source)) {};
+    PhysicalPlanBuilder() : active_pipelines(nullptr) {}
 
-    // Add a physical operator to the pipeline
-    void AddOperator(std::shared_ptr<PhysicalOperator> op) {
-        operators.push_back(std::move(op));
-    }
+    void Visit(duckdb::LogicalGet& op);
+    void Visit(duckdb::LogicalProjection& op);
+    void Visit(duckdb::LogicalFilter& op);
+    void Visit(duckdb::LogicalComparisonJoin& op);
 
-    // Build the pipeline and return it
-    std::shared_ptr<Pipeline> Build() {
-        return std::make_shared<Pipeline>(operators);
+    void Visit(std::shared_ptr<duckdb::LogicalOperator> op) {
+        if (op->type == duckdb::LogicalOperatorType::LOGICAL_GET) {
+            Visit(op->Cast<duckdb::LogicalGet>());
+        } else if (op->type ==
+                   duckdb::LogicalOperatorType::LOGICAL_PROJECTION) {
+            Visit(op->Cast<duckdb::LogicalProjection>());
+        } else if (op->type == duckdb::LogicalOperatorType::LOGICAL_FILTER) {
+            Visit(op->Cast<duckdb::LogicalFilter>());
+        } else if (op->type ==
+                   duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+            Visit(op->Cast<duckdb::LogicalComparisonJoin>());
+        } else {
+            throw std::runtime_error("Unsupported logical operator type");
+        }
     }
 };
-
-class PhysicalConverter
