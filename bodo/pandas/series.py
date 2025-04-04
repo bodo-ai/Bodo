@@ -9,7 +9,7 @@ from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
-from bodo.pandas.utils import get_lazy_single_manager_class
+from bodo.pandas.utils import LazyPlan, get_lazy_single_manager_class
 
 
 class BodoSeries(pd.Series, BodoLazyWrapper):
@@ -53,12 +53,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(new_metadata, pd.Series)
         return plan_optimizer.wrap_plan(
             new_metadata,
-            plan=plan_optimizer.LazyPlan(
-                plan_optimizer.LogicalBinaryOp, self._plan, other, op
-            ),
+            plan=LazyPlan("LogicalBinaryOp", self._plan, other, op),
         )
-
-        return super()._cmp_method(other, op)
 
     @staticmethod
     def from_lazy_mgr(

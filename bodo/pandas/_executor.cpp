@@ -56,9 +56,17 @@ std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
     arrow::py::import_pyarrow_wrappers();
     PyObject* pyarrow_schema = arrow::py::wrap_schema(table->schema());
 
+    // Get this rank's portion of rows
+    int rank = dist_get_rank();
+    int num_ranks = dist_get_size();
+    int64_t start = dist_get_start(table->num_rows(), num_ranks, rank);
+    int64_t end = dist_get_end(table->num_rows(), num_ranks, rank);
+    int64_t length = end - start;
+    std::shared_ptr<arrow::Table> sliced_table = table->Slice(start, length);
+
     auto* bodo_pool = bodo::BufferPool::DefaultPtr();
     std::shared_ptr<table_info> out_table =
-        arrow_table_to_bodo(table, bodo_pool);
+        arrow_table_to_bodo(sliced_table, bodo_pool);
 
     return {reinterpret_cast<int64_t>(new table_info(*out_table)),
             pyarrow_schema};
