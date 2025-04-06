@@ -134,14 +134,14 @@ def get_overloads(cls_name):
 
 
 def check_args_fallback(
-    must_be_default, supported=False, package_name="pandas", fn_str=None, module_name=""
+    unsupported=None, supported=None, package_name="pandas", fn_str=None, module_name=""
 ):
     """Decorator to apply to dataframe or series member functions that handles
     argument checking, falling back to JIT compilation when it might work, and
     falling back to Pandas if necessary.
 
     Parameters:
-        must_be_default -
+        unsupported -
             1) Can be "all" which means that all the parameters that have
                a default value must have that default value.  In other
                words, we don't support anything but the default value.
@@ -151,14 +151,17 @@ def check_args_fallback(
             3) Can be a list of parameter names for which they must have their
                default value.  All non-listed parameters that have a default
                value are allowed to take on any allowed value.
-        supported - inverts the meaning of the functions listed in
-                    must_be_default.  This makes must_be_default a list of
-                    parameters that are allowed not to have their default
-                    value.  Cannot be used with "all" or "none".
+        supported - a list of parameter names for which they can have something
+               other than their default value.  All non-listed parameters that
+               have a default value are not allowed to take on anything other
+               than their default value.
         package_name - see bodo.utils.typing.check_unsupported_args_fallback
         fn_str - see bodo.utils.typing.check_unsupported_args_fallback
         module_name - see bodo.utils.typing.check_unsupported_args_fallback
     """
+    assert (unsupported is None) ^ (supported is None), (
+        "Exactly one of unsupported and supported must be specified."
+    )
 
     def decorator(func):
         if not bodo.dataframe_library_enabled:
@@ -171,34 +174,37 @@ def check_args_fallback(
                 )
         else:
             signature = inspect.signature(func)
-            if must_be_default == "all":
-                assert supported == False
-                must_be_default_args = {
+            if unsupported == "all":
+                unsupported_args = {
                     idx: param
                     for idx, (name, param) in enumerate(signature.parameters.items())
                     if param.default is not inspect.Parameter.empty
                 }
-                must_be_default_kwargs = {
+                unsupported_kwargs = {
                     name: param
                     for name, param in signature.parameters.items()
                     if param.default is not inspect.Parameter.empty
                 }
-            elif must_be_default == "none":
-                assert supported == False
-                must_be_default_args = {}
-                must_be_default_kwargs = {}
+            elif unsupported == "none":
+                unsupported_args = {}
+                unsupported_kwargs = {}
             else:
-                must_be_default_args = {
+                if supported is not None:
+                    inverted = True
+                    flist = supported
+                else:
+                    flist = unsupported
+                unsupported_args = {
                     idx: param
                     for idx, (name, param) in enumerate(signature.parameters.items())
                     if (param.default is not inspect.Parameter.empty)
-                    and (supported ^ (name in must_be_default))
+                    and (inverted ^ (name in flist))
                 }
-                must_be_default_kwargs = {
+                unsupported_kwargs = {
                     name: param
                     for name, param in signature.parameters.items()
                     if (param.default is not inspect.Parameter.empty)
-                    and (supported ^ (name in must_be_default))
+                    and (inverted ^ (name in flist))
                 }
 
             @functools.wraps(func)
@@ -207,8 +213,8 @@ def check_args_fallback(
 
                 error = check_unsupported_args_fallback(
                     func.__qualname__,
-                    must_be_default_args,
-                    must_be_default_kwargs,
+                    unsupported_args,
+                    unsupported_kwargs,
                     args,
                     kwargs,
                     package_name=package_name,
