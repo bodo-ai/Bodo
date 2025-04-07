@@ -1,7 +1,9 @@
 import functools
+import importlib
 import inspect
 
 import numba
+import pandas as pd
 from llvmlite import ir as lir
 from numba.extending import intrinsic
 
@@ -164,14 +166,36 @@ def check_args_fallback(
     )
 
     def decorator(func):
+        def to_bodo(val):
+            if isinstance(val, pd.DataFrame):
+                return bodo.pandas.DataFrame(val)
+            elif isinstance(val, pd.Series):
+                return bodo.pandas.Series(val)
+            else:
+                assert False, f"Unexpected val type {type(val)}"
+
+        # See if function is top-level or not by looking for a . in
+        # the full name.
+        toplevel = "." not in func.__qualname__
         if not bodo.dataframe_library_enabled:
             # Dataframe library not enabled so just call the Pandas super class version.
-            @functools.wraps(func)
-            def wrapper(self, *args, **kwargs):
-                # Call the same method in the base class.
-                return getattr(self.__class__.__bases__[0], func.__name__)(
-                    self, *args, **kwargs
-                )
+            if toplevel:
+                py_pkg = importlib.import_module(package_name)
+
+                @functools.wraps(func)
+                def wrapper(*args, **kwargs):
+                    # Call the same method in the base class.
+                    return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
+            else:
+
+                @functools.wraps(func)
+                def wrapper(self, *args, **kwargs):
+                    # Call the same method in the base class.
+                    return to_bodo(
+                        getattr(self.__class__.__bases__[0], func.__name__)(
+                            self, *args, **kwargs
+                        )
+                    )
         else:
             signature = inspect.signature(func)
             if unsupported == "all":
@@ -207,39 +231,69 @@ def check_args_fallback(
                     and (inverted ^ (name in flist))
                 }
 
-            @functools.wraps(func)
-            def wrapper(self, *args, **kwargs):
-                from bodo.pandas import BODO_PANDAS_FALLBACK
+            if toplevel:
+                py_pkg = importlib.import_module(package_name)
 
-                error = check_unsupported_args_fallback(
-                    func.__qualname__,
-                    unsupported_args,
-                    unsupported_kwargs,
-                    args,
-                    kwargs,
-                    package_name=package_name,
-                    fn_str=fn_str,
-                    module_name=module_name,
-                    raise_on_error=(BODO_PANDAS_FALLBACK == 0),
-                )
-                if error:
-                    # The dataframe library must not support some specified option.
-                    # Get overloaded functions for this dataframe/series in JIT mode.
-                    overloads = get_overloads(self.__class__.__name__)
-                    if func.__name__ in overloads:
-                        # TO-DO: Generate a function and bodo JIT it to do this
-                        # individual operation.  If the compile fails then fallthrough
-                        # to the pure Python code below.  If the compile works then
-                        # run the operation using the JITted function.
-                        pass
+                @functools.wraps(func)
+                def wrapper(*args, **kwargs):
+                    from bodo.pandas import BODO_PANDAS_FALLBACK
 
-                    # Fallback to Python. Call the same method in the base class.
-                    return getattr(self.__class__.__bases__[0], func.__name__)(
-                        self, *args, **kwargs
+                    error = check_unsupported_args_fallback(
+                        func.__qualname__,
+                        unsupported_args,
+                        unsupported_kwargs,
+                        args,
+                        kwargs,
+                        package_name=package_name,
+                        fn_str=fn_str,
+                        module_name=module_name,
+                        raise_on_error=(BODO_PANDAS_FALLBACK == 0),
                     )
-                else:
-                    result = func(self, *args, **kwargs)
-                return result
+                    if error:
+                        # Can we do a top-level override check?
+
+                        # Fallback to Python. Call the same method in the base class.
+                        return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
+                    else:
+                        result = func(*args, **kwargs)
+                    return result
+            else:
+
+                @functools.wraps(func)
+                def wrapper(self, *args, **kwargs):
+                    from bodo.pandas import BODO_PANDAS_FALLBACK
+
+                    error = check_unsupported_args_fallback(
+                        func.__qualname__,
+                        unsupported_args,
+                        unsupported_kwargs,
+                        args,
+                        kwargs,
+                        package_name=package_name,
+                        fn_str=fn_str,
+                        module_name=module_name,
+                        raise_on_error=(BODO_PANDAS_FALLBACK == 0),
+                    )
+                    if error:
+                        # The dataframe library must not support some specified option.
+                        # Get overloaded functions for this dataframe/series in JIT mode.
+                        overloads = get_overloads(self.__class__.__name__)
+                        if func.__name__ in overloads:
+                            # TO-DO: Generate a function and bodo JIT it to do this
+                            # individual operation.  If the compile fails then fallthrough
+                            # to the pure Python code below.  If the compile works then
+                            # run the operation using the JITted function.
+                            pass
+
+                        # Fallback to Python. Call the same method in the base class.
+                        return to_bodo(
+                            getattr(self.__class__.__bases__[0], func.__name__)(
+                                self, *args, **kwargs
+                            )
+                        )
+                    else:
+                        result = func(self, *args, **kwargs)
+                    return result
 
         return wrapper
 
