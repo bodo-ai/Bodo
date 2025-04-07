@@ -926,7 +926,7 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
             ).count()
         case "first":
             expected_df = df.groupby("A", as_index=False, dropna=False, sort=True).agg(
-                {column: "first" for column in df.columns[1:]}
+                dict.fromkeys(df.columns[1:], "first")
             )
 
             # We don't care if the value is actually the first element,
