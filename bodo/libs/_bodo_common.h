@@ -1818,6 +1818,25 @@ struct table_info {
         }
     }
 
+    /**
+     * @brief Create a new table_info with a subset of the columns.
+     *
+     * @param indices The column indices to include in the new table_info.
+     * @return The new table_info with the chosen columns.
+     */
+    std::shared_ptr<table_info> selectColumns(
+        const std::vector<int>& indices) const {
+        std::vector<std::shared_ptr<array_info>> selected_columns;
+        for (int i : indices) {
+            if ((unsigned)i >= columns.size()) {
+                throw std::runtime_error(
+                    "table_info selectColumns invalid index");
+            }
+            selected_columns.push_back(columns[i]);
+        }
+        return std::make_shared<table_info>(std::move(selected_columns));
+    }
+
     template <typename X, typename... Args>
     friend class ::bodo::pin_guard;
 };

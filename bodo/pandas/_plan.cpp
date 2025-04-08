@@ -290,8 +290,7 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
 }
 
 std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
-    auto plan_duck = to_duckdb(plan);
-    return plan_duck.get()->ToString(duckdb::ExplainFormat::GRAPHVIZ);
+    return plan.get()->ToString(duckdb::ExplainFormat::GRAPHVIZ);
 }
 
 #undef CHECK_ARROW

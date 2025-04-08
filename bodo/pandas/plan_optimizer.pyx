@@ -303,7 +303,7 @@ cdef class LogicalOperator:
         self.c_logical_operator.get().estimated_cardinality = estimated_cardinality
 
     def toGraphviz(self):
-        return plan_to_string(self.c_logical_operator)
+        return plan_to_string(self.c_logical_operator).decode("utf-8")
 
 cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.

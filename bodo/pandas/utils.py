@@ -145,14 +145,19 @@ def execute_plan(plan: LazyPlan):
     import bodo
 
     def _exec_plan(plan):
+        import bodo
         from bodo.ext import plan_optimizer
 
         duckdb_plan = plan.generate_duckdb()
-        pre_optimize_graphviz = duckdb_plan.toGraphviz()
-        print("pre_optimize:", pre_optimize_graphviz)
+        if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
+            pre_optimize_graphviz = duckdb_plan.toGraphviz()
+            with open("pre_optimize" + str(id(plan)) + ".dot", "w") as f:
+                print(pre_optimize_graphviz, file=f)
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
-        post_optimize_graphviz = optimized_plan.toGraphviz()
-        print("post_optimize:", post_optimize_graphviz)
+        if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
+            post_optimize_graphviz = optimized_plan.toGraphviz()
+            with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
+                print(post_optimize_graphviz, file=f)
         return plan_optimizer.py_execute_plan(optimized_plan)
 
     if bodo.dataframe_library_run_parallel:
