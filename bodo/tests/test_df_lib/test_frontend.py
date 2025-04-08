@@ -10,4 +10,4 @@ def test_read_join_filter_proj(datapath):
     df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))
     df3 = df1.merge(df2, on="A")
     df3 = df3[df3.A > 3]
-    df3["B", "C"]
+    df3[["B", "C"]]

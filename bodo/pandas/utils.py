@@ -1,10 +1,17 @@
+import functools
+import importlib
+import inspect
+
 import numba
+import pandas as pd
 from llvmlite import ir as lir
 from numba.extending import intrinsic
 
+import bodo
 from bodo.libs.array import cpp_table_to_py_table, delete_table, table_type
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
+from bodo.utils.typing import check_unsupported_args_fallback
 
 
 def get_data_manager_pandas() -> str:
@@ -91,6 +98,206 @@ def cpp_table_to_df(cpp_table, arrow_schema):
     if "__index_level_0__" in out_df.columns:
         out_df = out_df.drop(columns=["__index_level_0__"])
     return out_df
+
+
+@functools.lru_cache
+def get_dataframe_overloads():
+    """Return a list of the functions supported on BodoDataFrame objects
+    to some degree by bodo.jit.
+    """
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+    from bodo.numba_compat import get_method_overloads
+
+    return get_method_overloads(DataFrameType)
+
+
+@functools.lru_cache
+def get_series_overloads():
+    """Return a list of the functions supported on BodoSeries objects
+    to some degree by bodo.jit.
+    """
+    from bodo.hiframes.pd_series_ext import SeriesType
+    from bodo.numba_compat import get_method_overloads
+
+    return get_method_overloads(SeriesType)
+
+
+def get_overloads(cls_name):
+    """Use the class name of the __class__ attr of self parameter
+    to determine which of the above two functions to call to
+    get supported overloads for the current data type.
+    """
+    if cls_name == "BodoDataFrame":
+        return get_dataframe_overloads()
+    elif cls_name == "BodoSeries":
+        return get_series_overloads()
+    else:
+        assert False
+
+
+def check_args_fallback(
+    unsupported=None, supported=None, package_name="pandas", fn_str=None, module_name=""
+):
+    """Decorator to apply to dataframe or series member functions that handles
+    argument checking, falling back to JIT compilation when it might work, and
+    falling back to Pandas if necessary.
+
+    Parameters:
+        unsupported -
+            1) Can be "all" which means that all the parameters that have
+               a default value must have that default value.  In other
+               words, we don't support anything but the default value.
+            2) Can be "none" which means that we support all the parameters
+               that have a default value and you can set them to any allowed
+               value.
+            3) Can be a list of parameter names for which they must have their
+               default value.  All non-listed parameters that have a default
+               value are allowed to take on any allowed value.
+        supported - a list of parameter names for which they can have something
+               other than their default value.  All non-listed parameters that
+               have a default value are not allowed to take on anything other
+               than their default value.
+        package_name - see bodo.utils.typing.check_unsupported_args_fallback
+        fn_str - see bodo.utils.typing.check_unsupported_args_fallback
+        module_name - see bodo.utils.typing.check_unsupported_args_fallback
+    """
+    assert (unsupported is None) ^ (supported is None), (
+        "Exactly one of unsupported and supported must be specified."
+    )
+
+    def decorator(func):
+        def to_bodo(val):
+            if isinstance(val, pd.DataFrame):
+                return bodo.pandas.DataFrame(val)
+            elif isinstance(val, pd.Series):
+                return bodo.pandas.Series(val)
+            else:
+                assert False, f"Unexpected val type {type(val)}"
+
+        # See if function is top-level or not by looking for a . in
+        # the full name.
+        toplevel = "." not in func.__qualname__
+        if not bodo.dataframe_library_enabled:
+            # Dataframe library not enabled so just call the Pandas super class version.
+            if toplevel:
+                py_pkg = importlib.import_module(package_name)
+
+                @functools.wraps(func)
+                def wrapper(*args, **kwargs):
+                    # Call the same method in the base class.
+                    return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
+            else:
+
+                @functools.wraps(func)
+                def wrapper(self, *args, **kwargs):
+                    # Call the same method in the base class.
+                    return to_bodo(
+                        getattr(self.__class__.__bases__[0], func.__name__)(
+                            self, *args, **kwargs
+                        )
+                    )
+        else:
+            signature = inspect.signature(func)
+            if unsupported == "all":
+                unsupported_args = {
+                    idx: param
+                    for idx, (name, param) in enumerate(signature.parameters.items())
+                    if param.default is not inspect.Parameter.empty
+                }
+                unsupported_kwargs = {
+                    name: param
+                    for name, param in signature.parameters.items()
+                    if param.default is not inspect.Parameter.empty
+                }
+            elif unsupported == "none":
+                unsupported_args = {}
+                unsupported_kwargs = {}
+            else:
+                if supported is not None:
+                    inverted = True
+                    flist = supported
+                else:
+                    flist = unsupported
+                unsupported_args = {
+                    idx: param
+                    for idx, (name, param) in enumerate(signature.parameters.items())
+                    if (param.default is not inspect.Parameter.empty)
+                    and (inverted ^ (name in flist))
+                }
+                unsupported_kwargs = {
+                    name: param
+                    for name, param in signature.parameters.items()
+                    if (param.default is not inspect.Parameter.empty)
+                    and (inverted ^ (name in flist))
+                }
+
+            if toplevel:
+                py_pkg = importlib.import_module(package_name)
+
+                @functools.wraps(func)
+                def wrapper(*args, **kwargs):
+                    from bodo.pandas import BODO_PANDAS_FALLBACK
+
+                    error = check_unsupported_args_fallback(
+                        func.__qualname__,
+                        unsupported_args,
+                        unsupported_kwargs,
+                        args,
+                        kwargs,
+                        package_name=package_name,
+                        fn_str=fn_str,
+                        module_name=module_name,
+                        raise_on_error=(BODO_PANDAS_FALLBACK == 0),
+                    )
+                    if error:
+                        # Can we do a top-level override check?
+
+                        # Fallback to Python. Call the same method in the base class.
+                        return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
+                    else:
+                        result = func(*args, **kwargs)
+                    return result
+            else:
+
+                @functools.wraps(func)
+                def wrapper(self, *args, **kwargs):
+                    from bodo.pandas import BODO_PANDAS_FALLBACK
+
+                    error = check_unsupported_args_fallback(
+                        func.__qualname__,
+                        unsupported_args,
+                        unsupported_kwargs,
+                        args,
+                        kwargs,
+                        package_name=package_name,
+                        fn_str=fn_str,
+                        module_name=module_name,
+                        raise_on_error=(BODO_PANDAS_FALLBACK == 0),
+                    )
+                    if error:
+                        # The dataframe library must not support some specified option.
+                        # Get overloaded functions for this dataframe/series in JIT mode.
+                        overloads = get_overloads(self.__class__.__name__)
+                        if func.__name__ in overloads:
+                            # TO-DO: Generate a function and bodo JIT it to do this
+                            # individual operation.  If the compile fails then fallthrough
+                            # to the pure Python code below.  If the compile works then
+                            # run the operation using the JITted function.
+                            pass
+
+                        # Fallback to Python. Call the same method in the base class.
+                        return to_bodo(
+                            getattr(self.__class__.__bases__[0], func.__name__)(
+                                self, *args, **kwargs
+                            )
+                        )
+                    else:
+                        result = func(self, *args, **kwargs)
+                    return result
+
+        return wrapper
+
+    return decorator
 
 
 class LazyPlan:
