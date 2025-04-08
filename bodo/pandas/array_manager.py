@@ -247,6 +247,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             data = execute_plan(self._plan)
             self._plan = None
             self.arrays = data._mgr.arrays
+            self._axes = data._mgr._axes
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
@@ -457,6 +458,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             data = execute_plan(self._plan)
             self._plan = None
             self.arrays = data._mgr.arrays
+            self._axes = data._mgr._axes
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
