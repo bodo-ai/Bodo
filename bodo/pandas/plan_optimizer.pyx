@@ -506,4 +506,7 @@ cpdef py_execute_plan(object plan):
     cpp_table = exec_output.first
     arrow_schema = <object>exec_output.second
 
+    print("printing schema cython...")
+    print(arrow_schema)
+
     return cpp_table_to_df(cpp_table, arrow_schema)

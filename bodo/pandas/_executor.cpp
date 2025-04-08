@@ -68,6 +68,11 @@ std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
     std::shared_ptr<table_info> out_table =
         arrow_table_to_bodo(sliced_table, bodo_pool);
 
+    std::stringstream ss;
+    DEBUG_PrintTable(ss, out_table);
+
+    std::cout << "printing table " << ss.str() << std::endl;
+
     return {reinterpret_cast<int64_t>(new table_info(*out_table)),
             pyarrow_schema};
 }

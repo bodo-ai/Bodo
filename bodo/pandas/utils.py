@@ -96,7 +96,10 @@ def cpp_table_to_df(cpp_table, arrow_schema):
     out_df.columns = [f.name for f in arrow_schema]
     # TODO: handle Indexes properly
     if "__index_level_0__" in out_df.columns:
+        out_df.index = out_df["__index_level_0__"]
+        out_df.index.name = None
         out_df = out_df.drop(columns=["__index_level_0__"])
+
     return out_df
 
 
