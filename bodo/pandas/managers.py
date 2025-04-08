@@ -209,12 +209,15 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             )
             data = execute_plan(self._plan)
             self._plan = None
-            self.blocks = data._mgr.blocks
             self.axes = data._mgr.axes
-            self._md_result_id = None
-            self._md_nrows = None
-            self._md_head = None
-            BlockManager._rebuild_blknos_and_blklocs(self)
+            self._md_result_id = data._mgr._md_result_id
+            self._md_nrows = data._mgr._md_nrows
+            self._md_head = data._mgr._md_head
+            self._collect_func = data._mgr._collect_func
+            self._del_func = data._mgr._del_func
+
+            # avoid deleting function after it is collected
+            data._mgr._del_func = None
 
         if self._md_result_id is not None:
             debug_msg(self.logger, "[LazyBlockManager] Collecting data from workers...")

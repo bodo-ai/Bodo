@@ -43,6 +43,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             "Plan not available for this manager, recreate this dataframe with from_pandas"
         )
 
+    @property
+    def index(self):
+        if self.is_lazy_plan():
+            self._mgr._collect()
+        return super().index
+
     @staticmethod
     def from_lazy_mgr(
         lazy_mgr: LazyArrayManager | LazyBlockManager,
@@ -80,6 +86,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             plan=plan,
         )
         return cls.from_lazy_mgr(lazy_mgr, lazy_metadata.head)
+
+    def is_lazy_plan(self):
+        return getattr(self._mgr, "_plan", None) is not None
 
     def update_from_lazy_metadata(self, lazy_metadata: LazyMetadata):
         """

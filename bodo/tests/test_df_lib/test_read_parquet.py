@@ -11,10 +11,24 @@ def test_read_parquet(datapath):
     bodo_out = bd.read_parquet(path)
     py_out = pd.read_parquet(path)
 
-    # Evaluate LazyDataFrame to get correct shape
-    bodo_out._mgr._collect()
-
     _test_equal(
         bodo_out,
         py_out,
     )
+
+
+def test_read_parquet_md(datapath):
+    """Test to ensure we can access Metadata after executing plan while keeping
+    result distributed across workers.
+    """
+    path = datapath("example.parquet")
+
+    bodo_out = bd.read_parquet(path)
+    py_out = pd.read_parquet(path)
+
+    assert len(bodo_out) == len(py_out)
+    assert bodo_out.shape == py_out.shape
+
+    bodo_out.head()
+
+    assert bodo_out._lazy
