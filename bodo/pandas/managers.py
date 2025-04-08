@@ -219,7 +219,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             # avoid deleting function after it is collected
             data._mgr._del_func = None
 
-        if self._md_result_id is not None:
+        elif self._md_result_id is not None:
             debug_msg(self.logger, "[LazyBlockManager] Collecting data from workers...")
             assert self._md_nrows is not None
             assert self._md_head is not None
