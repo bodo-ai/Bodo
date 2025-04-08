@@ -80,7 +80,7 @@ def read_parquet(
 
     # Read Parquet schema and row count
     # TODO: Make this more robust (e.g. handle Index, etc.)
-    use_hive = kwargs.get("_bodo_use_hive", True)
+    use_hive = True
     pq_dataset = get_parquet_dataset(
         path,
         get_row_counts=False,
