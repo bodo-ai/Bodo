@@ -4,7 +4,7 @@ from pandas._libs import lib
 from bodo.ext import plan_optimizer
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
-from bodo.pandas.utils import LazyPlan
+from bodo.pandas.utils import LazyPlan, check_args_fallback
 
 
 def from_pandas(df):
@@ -37,6 +37,7 @@ def from_pandas(df):
     return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows)
 
 
+@check_args_fallback("all")
 def read_parquet(
     path,
     engine="auto",
@@ -51,32 +52,6 @@ def read_parquet(
     import pyarrow as pa
 
     from bodo.io.parquet_pio import get_parquet_dataset
-    from bodo.pandas import BODO_PANDAS_FALLBACK
-
-    if (
-        engine != "auto"
-        or columns != None
-        or storage_options != None
-        or use_nullable_dtypes != lib.no_default
-        or dtype_backend != lib.no_default
-        or filesystem != None
-        or filters != None
-        or len(kwargs) > 0
-    ):
-        if BODO_PANDAS_FALLBACK != 0:
-            return pd.read_parquet(
-                path,
-                engine=engine,
-                columns=columns,
-                storage_options=storage_options,
-                use_nullable_dtypes=use_nullable_dtypes,
-                dtype_backend=dtype_backend,
-                filesystem=filesystem,
-                filters=filters,
-                **kwargs,
-            )
-        else:
-            assert False and "Unsupported option to read_parquet"
 
     # Read Parquet schema and row count
     # TODO: Make this more robust (e.g. handle Index, etc.)

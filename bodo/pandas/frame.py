@@ -3,6 +3,7 @@ from collections.abc import Callable, Iterable
 
 import pandas as pd
 import pyarrow as pa
+from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -11,7 +12,11 @@ from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
-from bodo.pandas.utils import LazyPlan, get_lazy_manager_class
+from bodo.pandas.utils import (
+    LazyPlan,
+    check_args_fallback,
+    get_lazy_manager_class,
+)
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -400,64 +405,22 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], self, *args, **kwargs
         )
 
+    @check_args_fallback(supported=["on"])
     def merge(
         self,
-        right,  # BodoDataFrame | BodoSeries,
-        how="inner",  # MergeHow = "inner",
-        on=None,  # IndexLabel | AnyArrayLike | None = None,
-        left_on=None,  # IndexLabel | AnyArrayLike | None = None,
-        right_on=None,  # IndexLabel | AnyArrayLike | None = None,
-        left_index=False,  # bool = False,
-        right_index=False,  # bool = False,
-        sort=False,  # bool = False,
-        suffixes=("_x", "_y"),  # Suffixes = ("_x", "_y"),
-        copy=None,  # bool | None = None,
-        indicator=False,  # str | bool = False,
-        validate=None,  # MergeValidate | None = None,
+        right: "BodoDataFrame | BodoSeries",
+        how: MergeHow = "inner",
+        on: IndexLabel | AnyArrayLike | None = None,
+        left_on: IndexLabel | AnyArrayLike | None = None,
+        right_on: IndexLabel | AnyArrayLike | None = None,
+        left_index: bool = False,
+        right_index: bool = False,
+        sort: bool = False,
+        suffixes: Suffixes = ("_x", "_y"),
+        copy: bool | None = None,
+        indicator: str | bool = False,
+        validate: MergeValidate | None = None,
     ):  # -> BodoDataFrame:
-        if not bodo.dataframe_library_enabled:
-            return super().merge(
-                right,
-                how=how,
-                on=on,
-                left_on=left_on,
-                right_on=right_on,
-                left_index=left_index,
-                right_index=right_index,
-                sort=sort,
-                suffixes=suffixes,
-                copy=copy,
-                indicator=indicator,
-                validate=validate,
-            )
-
-        from bodo.pandas import BODO_PANDAS_FALLBACK
-
-        if (
-            isinstance(right, BodoSeries)
-            or how != "inner"
-            or indicator != False
-            or validate != None
-        ):
-            if BODO_PANDAS_FALLBACK != 0:
-                return pd.merge(
-                    self,
-                    right,
-                    how=how,
-                    on=on,
-                    left_on=left_on,
-                    right_on=right_on,
-                    left_index=left_index,
-                    right_index=right_index,
-                    sort=sort,
-                    suffixes=suffixes,
-                    copy=copy,
-                    indicator=indicator,
-                    validate=validate,
-                )
-            else:
-                assert False and "Unsupported option to DataFrame.merge"
-
         from bodo.pandas.base import _empty_like
 
         zero_size_self = _empty_like(self)
@@ -499,16 +462,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return plan_optimizer.wrap_plan(new_metadata, planComparisonJoin)
 
+    @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
-        if not bodo.dataframe_library_enabled:
-            return super().__getitem__(key)
-
         from bodo.pandas.base import _empty_like
 
         """ Create 0 length versions of the dataframe and the key and
             simulate the operation to see the resulting type. """
-
         zero_size_self = _empty_like(self)
         if isinstance(key, BodoSeries):
             """ This is a masking operation. """
