@@ -11,6 +11,8 @@ def test_read_parquet(datapath):
     bodo_out = bd.read_parquet(path)
     py_out = pd.read_parquet(path)
 
+    print(bodo_out)
+
     _test_equal(
         bodo_out,
         py_out,
