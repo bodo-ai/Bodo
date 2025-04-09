@@ -59,9 +59,8 @@ std::shared_ptr<PhysicalOperator> PhysicalProjection::make(
     std::shared_ptr<PhysicalOperator> physical_op =
         std::make_shared<PhysicalProjection>(source, selected_columns);
 
-    assert(pipelines.size())
-    executor->pipelines[executor->pipelines.size() - 1].operators.emplace_back(
-        physical_op);
+    assert(pipelines.size()) executor->pipelines[executor->pipelines.size() - 1]
+        .operators.emplace_back(physical_op);
     return physical_op;
 }
 
