@@ -39,6 +39,7 @@ class ParquetReader : public ArrowReader {
                         int32_t* _selected_part_cols,
                         int32_t num_partition_cols) {
         // initialize reader
+        std::cout << "__init pq reader!__" << std::endl;
         ArrowReader::init_arrow_reader(str_as_dict_cols, false);
         this->dict_builders = std::vector<std::shared_ptr<DictionaryBuilder>>(
             schema->num_fields());

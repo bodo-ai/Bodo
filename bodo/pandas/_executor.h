@@ -3,6 +3,9 @@
 #pragma once
 
 #include <Python.h>
+#include <object.h>
+#include <pytypedefs.h>
+#include "../io/parquet_reader.h"
 #include "duckdb/planner/operator/logical_get.hpp"
 
 /**
@@ -19,7 +22,7 @@ class PhysicalOperator {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    virtual std::pair<int64_t, PyObject*> execute() = 0;
+    virtual std::pair<int64_t, PyObject *> execute() = 0;
     virtual ~PhysicalOperator() = default;
 };
 
@@ -29,7 +32,16 @@ class PhysicalOperator {
  */
 class PhysicalReadParquet : public PhysicalOperator {
    public:
-    PhysicalReadParquet(std::string path) : path(path) {}
+    // TODO: Fill in the contents with info from the logical operator
+    PhysicalReadParquet(std::string path, PyObject *_pyarrow_schema,
+                        PyObject *storage_options)
+        : path(path), pyarrow_schema(_pyarrow_schema) {
+        py_path = PyUnicode_FromString(path.c_str());
+        internal_reader =
+            new ParquetReader(py_path, true, Py_None, storage_options,
+                              pyarrow_schema, -1, {0}, {true}, false, 4000);
+        internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
+    }
 
     /**
      * @brief Read parquet and return the result (placeholder for now).
@@ -37,10 +49,15 @@ class PhysicalReadParquet : public PhysicalOperator {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    std::pair<int64_t, PyObject*> execute() override;
+    std::pair<int64_t, PyObject *> execute() override;
+
+    ~PhysicalReadParquet() { Py_DECREF(py_path); }
 
    private:
     std::string path;
+    PyObject *py_path;
+    PyObject *pyarrow_schema;
+    ParquetReader *internal_reader;
 };
 
 /**
@@ -49,7 +66,7 @@ class PhysicalReadParquet : public PhysicalOperator {
  */
 class PhysicalReadPandas : public PhysicalOperator {
    public:
-    PhysicalReadPandas(PyObject* df) : df(df) {
+    PhysicalReadPandas(PyObject *df) : df(df) {
         Py_INCREF(df);
         num_rows = PyObject_Length(df);
     }
@@ -61,10 +78,10 @@ class PhysicalReadPandas : public PhysicalOperator {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    std::pair<int64_t, PyObject*> execute() override;
+    std::pair<int64_t, PyObject *> execute() override;
 
    private:
-    PyObject* df;
+    PyObject *df;
     int64_t current_row = 0;
     int64_t num_rows;
 };
@@ -84,7 +101,7 @@ class Pipeline {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    std::pair<int64_t, PyObject*> execute();
+    std::pair<int64_t, PyObject *> execute();
 
    private:
     std::vector<std::shared_ptr<PhysicalOperator>> operators;
@@ -105,7 +122,7 @@ class Executor {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    std::pair<int64_t, PyObject*> execute();
+    std::pair<int64_t, PyObject *> execute();
 
    private:
     std::vector<Pipeline> pipelines;

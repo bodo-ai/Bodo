@@ -70,7 +70,14 @@ def read_parquet(
     ).to_pandas()
     empty_df.index = pd.RangeIndex(0)
 
-    plan = LazyPlan("LogicalGetParquetRead", path.encode(), arrow_schema)
+    # TODO: add args here
+    if storage_options is None:
+        storage_options = {}
+    storage_options.update({"bodo_dummy": "dummy"})
+
+    plan = LazyPlan(
+        "LogicalGetParquetRead", path.encode(), arrow_schema, storage_options
+    )
     return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=None)
 
 

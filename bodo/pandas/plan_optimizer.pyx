@@ -246,7 +246,7 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
 
 
 cdef extern from "_plan.h" nogil:
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema, object storage_options)
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema)
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
@@ -387,8 +387,9 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly str path
     cdef readonly object arrow_schema
 
-    def __cinit__(self, c_string parquet_path, object arrow_schema):
-       cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, arrow_schema)
+    # Add extra arguments for parquet read here
+    def __cinit__(self, c_string parquet_path, object arrow_schema, object storage_options):
+       cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, arrow_schema, storage_options)
        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
        self.path = (<bytes>parquet_path).decode("utf-8")
        self.arrow_schema = arrow_schema
