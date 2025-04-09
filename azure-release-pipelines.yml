@@ -89,7 +89,7 @@ stages:
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
-      name: Bodo_Spawn_mode_tests
+      name: Bodo_df_library_tests
       test_type: DF_LIB
       pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
