@@ -22,24 +22,28 @@ std::shared_ptr<PhysicalOperator> Executor::processNode(
     // Convert logical plan to physical plan and create query pipelines
 
     // TODO: support all node types
-    duckdb::LogicalOperatorType ptype = plan.get()->type;
-    if (ptype == duckdb::LogicalOperatorType::LOGICAL_GET) {
-        duckdb::LogicalGet& get_plan = plan->Cast<duckdb::LogicalGet>();
+    duckdb::LogicalOperatorType ptype = plan->type;
+    switch (ptype) {
+        case duckdb::LogicalOperatorType::LOGICAL_GET: {
+            duckdb::LogicalGet& get_plan = plan->Cast<duckdb::LogicalGet>();
 
-        std::shared_ptr<PhysicalOperator> physical_op =
-            get_plan.bind_data->Cast<BodoScanFunctionData>()
-                .CreatePhysicalOperator();
+            std::shared_ptr<PhysicalOperator> physical_op =
+                get_plan.bind_data->Cast<BodoScanFunctionData>()
+                    .CreatePhysicalOperator();
 
-        pipelines.emplace_back(
-            std::vector<std::shared_ptr<PhysicalOperator>>({physical_op}));
-        return physical_op;
-    } else if (ptype == duckdb::LogicalOperatorType::LOGICAL_PROJECTION) {
-        return PhysicalProjection::make(plan->Cast<duckdb::LogicalProjection>(),
-                                        this);
-    } else {
-        throw std::runtime_error(
-            std::string("Executor doesn't handle logical operator of type ") +
-            std::to_string(static_cast<int>(ptype)));
+            pipelines.emplace_back(
+                std::vector<std::shared_ptr<PhysicalOperator>>({physical_op}));
+            return physical_op;
+        }
+        case duckdb::LogicalOperatorType::LOGICAL_PROJECTION: {
+            return PhysicalProjection::make(
+                plan->Cast<duckdb::LogicalProjection>(), this);
+        }
+        default:
+            throw std::runtime_error(
+                std::string(
+                    "Executor doesn't handle logical operator of type ") +
+                std::to_string(static_cast<int>(ptype)));
     }
 }
 
@@ -59,8 +63,9 @@ std::shared_ptr<PhysicalOperator> PhysicalProjection::make(
     std::shared_ptr<PhysicalOperator> physical_op =
         std::make_shared<PhysicalProjection>(source, selected_columns);
 
-    assert(pipelines.size()) executor->pipelines[executor->pipelines.size() - 1]
-        .operators.emplace_back(physical_op);
+    assert(pipelines.size());
+    executor->pipelines[executor->pipelines.size() - 1].operators.emplace_back(
+        physical_op);
     return physical_op;
 }
 
@@ -82,7 +87,7 @@ std::pair<int64_t, PyObject*> Pipeline::execute() {
         // nodes of the pipeline because some operators have
         // multiple sources.  The operators in the pipeline
         // are a post-order traversal of the operator tree.
-        operators[i].get()->result = last_result;
+        operators[i]->result = last_result;
     }
     return last_result;
 }
@@ -168,7 +173,7 @@ std::pair<int64_t, PyObject*> PhysicalReadPandas::execute() {
 
 std::pair<int64_t, PyObject*> PhysicalProjection::execute() {
     // Get result from the source of the projection.
-    std::pair<int64_t, PyObject*> src_result = src.get()->result;
+    std::pair<int64_t, PyObject*> src_result = src->result;
     // Get the table_info out of that result.
     table_info* src_table_info =
         reinterpret_cast<table_info*>(src_result.first);
