@@ -72,7 +72,7 @@ def test_read_parquet_len_shape(datapath):
 
 
 def test_projection(datapath):
-    """Very simple test to read a parquet file for sanity checking."""
+    """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
 
