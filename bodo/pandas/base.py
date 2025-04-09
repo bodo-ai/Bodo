@@ -53,18 +53,17 @@ def read_parquet(
 
     from bodo.io.parquet_pio import get_parquet_dataset
 
-    # Read Parquet schema and row count
+    # Read Parquet schema
     # TODO: Make this more robust (e.g. handle Index, etc.)
     use_hive = True
     pq_dataset = get_parquet_dataset(
         path,
-        get_row_counts=True,
+        get_row_counts=False,
         storage_options=storage_options,
         read_categories=True,
         partitioning="hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
-    nrows = pq_dataset._bodo_total_rows
 
     empty_df = pa.Table.from_pydict(
         {k: [] for k in arrow_schema.names}, schema=arrow_schema
@@ -72,7 +71,7 @@ def read_parquet(
     empty_df.index = pd.RangeIndex(0)
 
     plan = LazyPlan("LogicalGetParquetRead", path.encode(), arrow_schema)
-    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=nrows)
+    return plan_optimizer.wrap_plan(empty_df, plan=plan)
 
 
 def merge(lhs, rhs, *args, **kwargs):
