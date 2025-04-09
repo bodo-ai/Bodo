@@ -81,7 +81,7 @@ class PhysicalReadPandas : public PhysicalOperator {
 class PhysicalProjection : public PhysicalOperator {
    public:
     PhysicalProjection(std::shared_ptr<PhysicalOperator> src,
-                       std::vector<int> &cols)
+                       std::vector<long int> &cols)
         : src(src), selected_columns(cols) {}
 
     /**
@@ -97,7 +97,7 @@ class PhysicalProjection : public PhysicalOperator {
 
    private:
     std::shared_ptr<PhysicalOperator> src;
-    std::vector<int> selected_columns;
+    std::vector<long int> selected_columns;
 };
 
 /**

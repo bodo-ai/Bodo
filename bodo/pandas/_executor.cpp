@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include "../io/arrow_compat.h"
+#include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/streaming/_shuffle.h"
 #include "_plan.h"
@@ -47,7 +48,7 @@ std::shared_ptr<PhysicalOperator> PhysicalProjection::make(
     // Process the source of this projection.
     std::shared_ptr<PhysicalOperator> source =
         executor->processNode(proj_plan.children[0]);
-    std::vector<int> selected_columns;
+    std::vector<long int> selected_columns;
     // Convert BoundColumnRefExpressions in LogicalOperator.expresssions field
     // to integer selected columns.
     for (const auto& expr : proj_plan.expressions) {
@@ -177,7 +178,8 @@ std::pair<int64_t, PyObject*> PhysicalProjection::execute() {
 
     // Select columns from the actual data in Bodo table_info format.
     std::shared_ptr<table_info> out_table_info =
-        src_table_info->selectColumns(selected_columns);
+        ProjectTable(std::shared_ptr<table_info>(src_table_info),
+                     std::span<const long int>(selected_columns));
 
     // Select those columns in arrow for schema representation.
     std::vector<std::shared_ptr<arrow::Field>> selected_fields;
