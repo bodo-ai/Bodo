@@ -83,7 +83,7 @@ jobs:
               -m "$PYTEST_MARKER" bodo/tests/
 
             # Save Exit Code for Later
-            test_exit_code=$?
+            python_test_exit_code=$?
 
             # BodoSQL Tests
             cd BodoSQL
@@ -92,12 +92,22 @@ jobs:
               --store-durations --clean-durations \
               --durations-path=../buildscripts/github/test_dur_bodosql.json \
               -m "$PYTEST_MARKER" bodosql/tests/
+            sql_test_exit_code=$?
+
+            # Pytest exits code 5 if no tests are run. Some markers are only in python or sql
+            # so we suppress this.
+            if [ "$python_test_exit_code" -eq 5 ]; then
+              python_test_exit_code=0
+            fi
+            if [ "$sql_test_exit_code" -eq 5 ]; then
+              sql_test_exit_code=0
+            fi
 
             # Merge Exit Codes.
             # If neither Bodo nor BodoSQL fails, the exit code will be 0
             # If one fails, the exit code will be 1
             # If both fail, the exit code will be 2
-            exit $((test_exit_code + $?))
+            exit $((python_test_exit_code + sql_test_exit_code))
           shell: bash
           env:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
