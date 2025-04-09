@@ -536,3 +536,37 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         pa_schema,
                     ),
                 )
+
+    @check_args_fallback(supported=["func", "axis"])
+    def apply(
+        self,
+        func,
+        axis=0,
+        raw=False,
+        result_type=None,
+        args=(),
+        by_row="compat",
+        engine="python",
+        engine_kwargs=None,
+        **kwargs,
+    ):
+        """
+        Apply a function along the axis of the dataframe.
+        """
+        if axis != 1:
+            raise BodoError("DataFrame.apply(): only axis=1 supported")
+
+        # Get output data type by running the UDF on a sample of the data.
+        # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
+        # TODO: remove when LIMIT plan is properly supported for head().
+        mgr_plan = self._mgr._plan
+        df_sample = self.head()
+        self._mgr._plan = mgr_plan
+        out_sample = pd.DataFrame({"OUT": df_sample.apply(func, axis)})
+        arrow_schema = pa.Schema.from_pandas(out_sample)
+
+        empty_df = out_sample.iloc[:0]
+        empty_df.index = pd.RangeIndex(0)
+
+        plan = LazyPlan("LogicalProjectionUDF", self._plan, func, arrow_schema)
+        return plan_optimizer.wrap_plan(empty_df, plan=plan)
