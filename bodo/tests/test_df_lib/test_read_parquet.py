@@ -11,9 +11,6 @@ def test_read_parquet(datapath):
     bodo_out = bd.read_parquet(path)
     py_out = pd.read_parquet(path)
 
-    # Evaluate LazyDataFrame to get correct shape
-    bodo_out._mgr._collect()
-
     _test_equal(
         bodo_out,
         py_out,
