@@ -133,7 +133,7 @@ jobs:
 
   df-lib-ci:
     needs: [compile-bodo]
-    name: Test Spawn
+    name: Test DF Library
     uses: ./.github/workflows/_test_python_source.yml
     with:
       batch: 1
