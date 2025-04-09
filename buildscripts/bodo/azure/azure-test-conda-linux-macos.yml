@@ -141,7 +141,8 @@ jobs:
         pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       elif [[ "${{ parameters.test_type }}" == "DF_LIB" ]]; then
         export BODO_ENABLE_DATAFRAME_LIBRARY=1
-        pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        export BODO_NUM_WORKERS="$NP"
+        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-df-library.xml --test-run-title="${{ parameters.name }}"
       else
         pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       fi
