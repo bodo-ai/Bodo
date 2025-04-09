@@ -24,10 +24,10 @@ def test_read_parquet_len_shape(datapath):
     bodo_out = bd.read_parquet(path)
     py_out = pd.read_parquet(path)
 
-    len(bodo_out) == py_out
+    assert len(bodo_out) == len(py_out)
 
     # create a new lazy DF
     bodo_out2 = bd.read_parquet(path)
 
     # test shape
-    bodo_out2.shape == py_out.shape
+    assert bodo_out2.shape == py_out.shape
