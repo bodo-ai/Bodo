@@ -18,7 +18,7 @@ def test_read_parquet(datapath):
 
 
 def test_read_parquet_len_shape(datapath):
-    """Test length after read parquet is correct"""
+    """Test length/shape after read parquet is correct"""
     path = datapath("example.parquet")
 
     bodo_out = bd.read_parquet(path)
