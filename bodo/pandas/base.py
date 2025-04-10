@@ -28,13 +28,14 @@ def from_pandas(df):
     n_rows = len(df)
     arrow_schema = pa.Schema.from_pandas(df)
 
+    res_id = None
     if bodo.dataframe_library_run_parallel:
         res_id = bodo.spawn.utils.scatter_data(df)
         plan = LazyPlan("LogicalGetPandasReadParallel", res_id, arrow_schema)
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", df, arrow_schema)
 
-    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows)
+    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows, res_id=res_id)
 
 
 @check_args_fallback("all")
@@ -53,7 +54,7 @@ def read_parquet(
 
     from bodo.io.parquet_pio import get_parquet_dataset
 
-    # Read Parquet schema and row count
+    # Read Parquet schema
     # TODO: Make this more robust (e.g. handle Index, etc.)
     use_hive = True
     pq_dataset = get_parquet_dataset(

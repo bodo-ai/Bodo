@@ -325,3 +325,10 @@ arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema);
  */
 std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     const std::shared_ptr<arrow::Field> &field);
+
+/**
+ * @brief Convert a plan rooted at the given logical operator into graphviz.
+ *
+ * @param plan - the root of the plan to convert to graphviz
+ */
+std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan);

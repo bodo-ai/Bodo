@@ -210,6 +210,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             data = execute_plan(self._plan)
             self._plan = None
             self.blocks = data._mgr.blocks
+            # Update index here since the plan created a dummy index
             self.axes = data._mgr.axes
             self._md_result_id = None
             self._md_nrows = None
@@ -432,6 +433,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             data = execute_plan(self._plan)
             self._plan = None
             self.blocks = data._mgr.blocks
+            # Update index here since the plan created a dummy index
             self.axes = data._mgr.axes
             self._md_result_id = None
             self._md_nrows = None

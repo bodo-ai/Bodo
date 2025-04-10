@@ -94,6 +94,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         self._mgr._md_result_id = lazy_metadata.result_id
         self._mgr._md_head = lazy_metadata.head._mgr
 
+    def is_lazy_plan(self):
+        """Returns whether the BodoDataFrame is represented by a plan."""
+        return getattr(self._mgr, "_plan", None) is not None
+
     def head(self, n: int = 5):
         """
         Return the first n rows. If head_df is available and larger than n, then use it directly.
@@ -104,6 +108,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         else:
             # If head_df is available and larger than n, then use it directly.
             return self._head_df.head(n)
+
+    def __len__(self):
+        if self.is_lazy_plan():
+            self._mgr._collect()
+        return super().__len__()
+
+    @property
+    def shape(self):
+        if self.is_lazy_plan():
+            self._mgr._collect()
+        return super().shape
 
     def to_parquet(
         self,
