@@ -1,10 +1,13 @@
 import pandas as pd
 from pandas._libs import lib
 
-from bodo.ext import plan_optimizer
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
-from bodo.pandas.utils import LazyPlan, check_args_fallback
+from bodo.pandas.utils import (
+    LazyPlan,
+    check_args_fallback,
+    wrap_plan,
+)
 
 
 def from_pandas(df):
@@ -35,7 +38,7 @@ def from_pandas(df):
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", df, arrow_schema)
 
-    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows, res_id=res_id)
+    return wrap_plan(empty_df, plan=plan, nrows=n_rows, res_id=res_id)
 
 
 @check_args_fallback("all")
@@ -72,7 +75,7 @@ def read_parquet(
     empty_df.index = pd.RangeIndex(0)
 
     plan = LazyPlan("LogicalGetParquetRead", path.encode(), arrow_schema)
-    return plan_optimizer.wrap_plan(empty_df, plan=plan)
+    return wrap_plan(empty_df, plan=plan)
 
 
 def merge(lhs, rhs, *args, **kwargs):
