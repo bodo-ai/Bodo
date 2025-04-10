@@ -4,6 +4,7 @@ import inspect
 
 import numba
 import pandas as pd
+import pyarrow as pa
 from llvmlite import ir as lir
 from numba.extending import intrinsic
 
@@ -356,15 +357,21 @@ def execute_plan(plan: LazyPlan):
         from bodo.ext import plan_optimizer
 
         duckdb_plan = plan.generate_duckdb()
+
+        # Print the plan before optimization
         if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
             pre_optimize_graphviz = duckdb_plan.toGraphviz()
             with open("pre_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(pre_optimize_graphviz, file=f)
+
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
+
+        # Print the plan after optimization
         if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)
+
         return plan_optimizer.py_execute_plan(optimized_plan)
 
     if bodo.dataframe_library_run_parallel:
@@ -373,3 +380,39 @@ def execute_plan(plan: LazyPlan):
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
+
+
+@intrinsic
+def cast_table_ptr_to_int64(typingctx, val):
+    """Cast C++ table pointer to int64 (to pass to C++ later)"""
+
+    def codegen(context, builder, signature, args):
+        return builder.ptrtoint(args[0], lir.IntType(64))
+
+    return numba.core.types.int64(table_type), codegen
+
+
+def df_to_cpp_table(df):
+    """Convert a pandas DataFrame to a C++ table pointer and Arrow schema object."""
+    n_cols = len(df.columns)
+    in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_cols)))
+
+    @numba.jit
+    def impl_df_to_cpp_table(df):
+        table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
+        cpp_table = bodo.libs.array.py_data_to_cpp_table(table, (), in_col_inds, n_cols)
+        return cast_table_ptr_to_int64(cpp_table)
+
+    cpp_table = impl_df_to_cpp_table(df)
+    arrow_schema = pa.Schema.from_pandas(df)
+
+    return cpp_table, arrow_schema
+
+
+def run_apply_udf(cpp_table, arrow_schema, func):
+    """Run a user-defined function (UDF) on a DataFrame created from C++ table and
+    return the result as a C++ table and Arrow schema.
+    """
+    df = cpp_table_to_df(cpp_table, arrow_schema)
+    out_df = pd.DataFrame({"OUT": df.apply(func, axis=1)})
+    return df_to_cpp_table(out_df)
