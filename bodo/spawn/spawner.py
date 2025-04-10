@@ -292,6 +292,13 @@ class Spawner:
 
             signal.signal(signal.SIGUSR1, handler)
 
+        # If we get a df/series with a plan we need to execute it and get the result id
+        # so we can build the arg metadata
+        for arg in args:
+            if isinstance(arg, BodoLazyWrapper) and arg._plan is not None:
+                # execute the plan and replace the arg
+
+
         debug_msg(self.logger, "submit_func_to_workers")
         self.worker_intercomm.bcast(CommandType.EXEC_FUNCTION.value, self.bcast_root)
 
