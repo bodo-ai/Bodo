@@ -28,13 +28,14 @@ def from_pandas(df):
     n_rows = len(df)
     arrow_schema = pa.Schema.from_pandas(df)
 
+    res_id = None
     if bodo.dataframe_library_run_parallel:
         res_id = bodo.spawn.utils.scatter_data(df)
         plan = LazyPlan("LogicalGetPandasReadParallel", res_id, arrow_schema)
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", df, arrow_schema)
 
-    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows)
+    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows, res_id=res_id)
 
 
 @check_args_fallback("all")
