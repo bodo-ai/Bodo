@@ -355,6 +355,8 @@ def execute_plan(plan: LazyPlan):
         import bodo
         from bodo.ext import plan_optimizer
 
+        print("bodo tracing", bodo.tracing_level)
+
         duckdb_plan = plan.generate_duckdb()
         if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
             pre_optimize_graphviz = duckdb_plan.toGraphviz()
@@ -362,6 +364,7 @@ def execute_plan(plan: LazyPlan):
                 print(pre_optimize_graphviz, file=f)
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
         if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
+            print("visualizing plan...")
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)

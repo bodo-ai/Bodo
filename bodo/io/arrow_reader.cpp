@@ -1191,7 +1191,6 @@ void ArrowReader::distribute_pieces(PyObject* pieces_py) {
 
 void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
                                     const bool create_dict_from_string) {
-    std::cout << "__init arrow reader__" << std::endl;
     auto start = start_timer();
     if (initialized) {
         throw std::runtime_error("ArrowReader already initialized");

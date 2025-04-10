@@ -5,7 +5,6 @@
 #include "parquet_reader.h"
 
 #include <algorithm>
-#include <iostream>
 #include <span>
 
 #include <arrow/python/pyarrow.h>
@@ -117,7 +116,6 @@ void ParquetReader::add_piece(PyObject* piece, int64_t num_rows) {
 }
 
 PyObject* ParquetReader::get_dataset() {
-    std::cout << " ___get dataset___ " << std::endl;
     // partitioning = "hive" if use_hive else None
     PyObject* partitioning = use_hive ? PyUnicode_FromString("hive") : Py_None;
 
@@ -496,24 +494,6 @@ void ParquetReader::get_partition_info(PyObject* piece) {
     Py_DECREF(partition_keys_py);
 }
 
-void print_pyobject(PyObject* obj) {
-    if (!obj) {
-        std::cerr << "NULL PyObject*" << std::endl;
-        return;
-    }
-
-    PyObject* str_obj = PyObject_Repr(obj);  // or PyObject_Str(obj)
-    if (str_obj) {
-        const char* c_str = PyUnicode_AsUTF8(str_obj);
-        if (c_str) {
-            std::cout << c_str << std::endl;
-        }
-        Py_DECREF(str_obj);
-    } else {
-        PyErr_Print();  // If conversion failed
-    }
-}
-
 /**
  * Read a parquet dataset.
  *
@@ -557,53 +537,12 @@ table_info* pq_read_py_entry(
     int32_t num_str_as_dict_cols, int64_t* total_rows_out,
     bool input_file_name_col, bool use_hive) {
     try {
-        std::cout << "read parquet entry point" << std::endl;
-        PyObject* str_obj = PyObject_Repr(path);  // or PyObject_Str(obj)
-        print_pyobject(str_obj);
-        print_pyobject(expr_filters);
-        print_pyobject(storage_options);
-        print_pyobject(pyarrow_schema);
-        std::cout << "parallel: " << parallel << std::endl;
-        std::cout << "total rows read: " << tot_rows_to_read << std::endl;
-
         std::vector<int> selected_fields(
             {_selected_fields, _selected_fields + num_selected_fields});
         std::vector<bool> is_nullable(_is_nullable,
                                       _is_nullable + num_selected_fields);
         std::span<int32_t> str_as_dict_cols(_str_as_dict_cols,
                                             num_str_as_dict_cols);
-
-        std::cout << "selected fields: ";
-        for (auto field : selected_fields) {
-            std::cout << field << ", ";
-        }
-        std::cout << std::endl;
-
-        std::cout << "is nullable : ";
-        for (auto nullable : is_nullable) {
-            std::cout << nullable << ", ";
-        }
-        std::cout << std::endl;
-
-        std::cout << "str as dict cols : ";
-        for (auto strcol : str_as_dict_cols) {
-            std::cout << strcol << ", ";
-        }
-        std::cout << std::endl;
-
-        std::cout << "selected part cols: ";
-        for (int i = 0; i < num_partition_cols; i++) {
-            std::cout << selected_part_cols[i] << ", ";
-        }
-        std::cout << std::endl;
-
-        std::cout << "part col cat dtype: ";
-        for (int i = 0; i < num_partition_cols; i++) {
-            std::cout << part_cols_cat_dtype[i] << ", ";
-        }
-        std::cout << std::endl;
-
-        std::cout << "num_partition_cols " << num_partition_cols << std::endl;
 
         ParquetReader reader(path, parallel, expr_filters, storage_options,
                              pyarrow_schema, tot_rows_to_read, selected_fields,
@@ -671,7 +610,6 @@ ArrowReader* pq_reader_init_py_entry(
     int32_t num_str_as_dict_cols, bool input_file_name_col, int64_t batch_size,
     bool use_hive, int64_t op_id) {
     try {
-        std::cout << "init pq reader!!" << std::endl;
         std::vector<int> selected_fields(
             {_selected_fields, _selected_fields + num_selected_fields});
         std::vector<bool> is_nullable(_is_nullable,

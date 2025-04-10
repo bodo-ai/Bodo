@@ -28,9 +28,9 @@ std::shared_ptr<PhysicalOperator> Executor::processNode(
         case duckdb::LogicalOperatorType::LOGICAL_GET: {
             duckdb::LogicalGet& get_plan = plan->Cast<duckdb::LogicalGet>();
 
-            std::cout << "printing projection ids: (";
-            for (auto idx : get_plan.projection_ids) {
-                std::cout << idx << ", " << std::endl;
+            std::cout << "printing column names: (";
+            for (auto name : get_plan.names) {
+                std::cout << name << ", ";
             }
             std::cout << ")" << std::endl;
 

@@ -40,7 +40,7 @@ class PhysicalReadParquet : public PhysicalOperator {
     // TODO: Fill in the contents with info from the logical operator
     PhysicalReadParquet(std::string path, PyObject *_pyarrow_schema,
                         PyObject *storage_options)
-        : path(path), pyarrow_schema(_pyarrow_schema) {
+        : pyarrow_schema(_pyarrow_schema) {
         py_path = PyUnicode_FromString(path.c_str());
 
         std::shared_ptr<arrow::Schema> arrow_schema =
@@ -70,7 +70,6 @@ class PhysicalReadParquet : public PhysicalOperator {
     ~PhysicalReadParquet() { Py_DECREF(py_path); }
 
    private:
-    std::string path;
     PyObject *py_path;
     PyObject *pyarrow_schema;
     ParquetReader *internal_reader;
