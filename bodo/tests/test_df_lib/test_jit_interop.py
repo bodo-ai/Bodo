@@ -15,7 +15,7 @@ def test_bodo_df_to_jit():
     )
     bdf = bd.from_pandas(df)
 
-    @bodo.jit()
+    @bodo.jit(spawn=False)
     def f(df):
         return df
 
