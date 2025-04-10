@@ -74,6 +74,7 @@ jobs:
               ./vcredist_x64.exe -passive
             fi
 
+            set +o pipefail
             # Bodo Tests: Coverage is collected
             pytest -s -v -Wignore \
               --cov-report= --cov=bodo \
