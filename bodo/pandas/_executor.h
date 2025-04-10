@@ -81,7 +81,7 @@ class PhysicalReadPandas : public PhysicalOperator {
 class PhysicalProjection : public PhysicalOperator {
    public:
     PhysicalProjection(std::shared_ptr<PhysicalOperator> src,
-                       std::vector<long int> &cols)
+                       std::vector<int64_t> &cols)
         : src(src), selected_columns(cols) {}
 
     /**
@@ -93,11 +93,12 @@ class PhysicalProjection : public PhysicalOperator {
     std::pair<int64_t, PyObject *> execute() override;
 
     static std::shared_ptr<PhysicalOperator> make(
-        duckdb::LogicalProjection &proj_plan, Executor *executor);
+        const duckdb::LogicalProjection &proj_plan,
+        const std::shared_ptr<PhysicalOperator> &source);
 
    private:
     std::shared_ptr<PhysicalOperator> src;
-    std::vector<long int> selected_columns;
+    std::vector<int64_t> selected_columns;
 };
 
 /**
