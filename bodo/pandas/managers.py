@@ -425,6 +425,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self.axes = [mgr.axes[1]]
         elif isinstance(mgr, SingleBlockManager):
             self.axes = mgr.axes
+        else:
+            raise ValueError("Unknown manager type:", type(mgr))
 
     def _collect(self):
         """

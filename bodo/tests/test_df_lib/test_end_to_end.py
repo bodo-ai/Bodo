@@ -1,5 +1,4 @@
 import pandas as pd
-import pytest
 
 import bodo.pandas as bd
 from bodo.tests.utils import _test_equal, temp_config_override
@@ -72,7 +71,6 @@ def test_read_parquet_len_shape(datapath):
     assert bodo_out2.shape == py_out.shape
 
 
-@pytest.mark.skip
 def test_projection(datapath):
     """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
