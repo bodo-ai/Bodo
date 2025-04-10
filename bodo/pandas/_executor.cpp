@@ -31,13 +31,23 @@ std::shared_ptr<PhysicalOperator> Executor::processNode(
                 get_plan.bind_data->Cast<BodoScanFunctionData>()
                     .CreatePhysicalOperator();
 
-            pipelines.emplace_back(
+            this->pipelines.emplace_back(
                 std::vector<std::shared_ptr<PhysicalOperator>>({physical_op}));
             return physical_op;
         }
         case duckdb::LogicalOperatorType::LOGICAL_PROJECTION: {
-            return PhysicalProjection::make(
-                plan->Cast<duckdb::LogicalProjection>(), this);
+            duckdb::LogicalProjection& proj_plan =
+                plan->Cast<duckdb::LogicalProjection>();
+            std::shared_ptr<PhysicalOperator> source =
+                this->processNode(proj_plan.children[0]);
+
+            std::shared_ptr<PhysicalOperator> physical_op =
+                PhysicalProjection::make(proj_plan, source);
+
+            assert(this->pipelines.size());
+            this->pipelines[this->pipelines.size() - 1].operators.emplace_back(
+                physical_op);
+            return physical_op;
         }
         default:
             throw std::runtime_error(
@@ -48,11 +58,10 @@ std::shared_ptr<PhysicalOperator> Executor::processNode(
 }
 
 std::shared_ptr<PhysicalOperator> PhysicalProjection::make(
-    duckdb::LogicalProjection& proj_plan, Executor* executor) {
+    const duckdb::LogicalProjection& proj_plan,
+    const std::shared_ptr<PhysicalOperator>& source) {
     // Process the source of this projection.
-    std::shared_ptr<PhysicalOperator> source =
-        executor->processNode(proj_plan.children[0]);
-    std::vector<long int> selected_columns;
+    std::vector<int64_t> selected_columns;
     // Convert BoundColumnRefExpressions in LogicalOperator.expresssions field
     // to integer selected columns.
     for (const auto& expr : proj_plan.expressions) {
@@ -63,9 +72,6 @@ std::shared_ptr<PhysicalOperator> PhysicalProjection::make(
     std::shared_ptr<PhysicalOperator> physical_op =
         std::make_shared<PhysicalProjection>(source, selected_columns);
 
-    assert(pipelines.size());
-    executor->pipelines[executor->pipelines.size() - 1].operators.emplace_back(
-        physical_op);
     return physical_op;
 }
 
@@ -182,9 +188,8 @@ std::pair<int64_t, PyObject*> PhysicalProjection::execute() {
         arrow::py::unwrap_schema(src_result.second).ValueOrDie();
 
     // Select columns from the actual data in Bodo table_info format.
-    std::shared_ptr<table_info> out_table_info =
-        ProjectTable(std::shared_ptr<table_info>(src_table_info),
-                     std::span<const long int>(selected_columns));
+    std::shared_ptr<table_info> out_table_info = ProjectTable(
+        std::shared_ptr<table_info>(src_table_info), selected_columns);
 
     // Select those columns in arrow for schema representation.
     std::vector<std::shared_ptr<arrow::Field>> selected_fields;
