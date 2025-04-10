@@ -28,11 +28,11 @@ std::shared_ptr<PhysicalOperator> Executor::processNode(
         case duckdb::LogicalOperatorType::LOGICAL_GET: {
             duckdb::LogicalGet& get_plan = plan->Cast<duckdb::LogicalGet>();
 
-            std::cout << "printing column names: (";
-            for (auto name : get_plan.names) {
-                std::cout << name << ", ";
-            }
-            std::cout << ")" << std::endl;
+            // std::cout << "printing column names: (";
+            // for (auto name : get_plan.names) {
+            //     std::cout << name << ", ";
+            // }
+            // std::cout << ")" << std::endl;
 
             std::shared_ptr<PhysicalOperator> physical_op =
                 get_plan.bind_data->Cast<BodoScanFunctionData>()
@@ -114,11 +114,12 @@ std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
     auto batch = internal_reader->read_batch(is_last, total_rows, true);
     (void)batch;
 
-    std::stringstream ss;
-    DEBUG_PrintTable(ss, batch);
+    // std::stringstream ss;
+    // DEBUG_PrintTable(ss, batch);
 
-    std::cout << is_last << " | " << total_rows << " | read table: " << ss.str()
-              << std::endl;
+    // std::cout << is_last << " | " << total_rows << " | read table: " <<
+    // ss.str()
+    //           << std::endl;
 
     return {reinterpret_cast<int64_t>(new table_info(*batch)), pyarrow_schema};
 }

@@ -67,8 +67,6 @@ class PhysicalReadParquet : public PhysicalOperator {
      */
     std::pair<int64_t, PyObject *> execute() override;
 
-    ~PhysicalReadParquet() { Py_DECREF(py_path); }
-
    private:
     PyObject *py_path;
     PyObject *pyarrow_schema;
