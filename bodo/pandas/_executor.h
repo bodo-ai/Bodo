@@ -47,11 +47,10 @@ class PhysicalReadParquet : public PhysicalOperator {
             unwrap_schema(pyarrow_schema);
         int num_fields = arrow_schema->num_fields();
         std::vector<int> selected_fields(num_fields);
-        std::vector<bool> is_nullable(num_fields);
+        // setting nullable to true for all fields for now
+        std::vector<bool> is_nullable(num_fields, true);
         for (int i = 0; i < num_fields; i++) {
             selected_fields[i] = i;
-            // setting nullable to true for all fields for now
-            is_nullable[i] = true;
         }
 
         internal_reader = new ParquetReader(
