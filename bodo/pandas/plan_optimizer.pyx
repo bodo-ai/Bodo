@@ -257,6 +257,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_int_expr(int val)
     cdef unique_ptr[CExpression] make_col_ref_expr(object field, int col_idx)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator])
+    cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
 
 
 def join_type_to_string(CJoinType join_type):
@@ -300,6 +301,9 @@ cdef class LogicalOperator:
     def set_estimated_cardinality(self, estimated_cardinality):
         self.c_logical_operator.get().has_estimated_cardinality = True
         self.c_logical_operator.get().estimated_cardinality = estimated_cardinality
+
+    def toGraphviz(self):
+        return plan_to_string(self.c_logical_operator).decode("utf-8")
 
 cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
@@ -449,7 +453,7 @@ def _del_func(x):
     # Intentionally do nothing
     pass
 
-cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
+cpdef wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
     """ Create a BodoDataFrame or BodoSeries with the given
         schema and given plan node.
     """
@@ -474,11 +478,11 @@ cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
     if isinstance(schema, (dict, pd.DataFrame)):
         if isinstance(schema, dict):
             schema = pd.DataFrame(schema)
-        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
+        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class) if res_id is None else res_id, schema, nrows=nrows, index_data=index_data)
         mgr = get_lazy_manager_class()
         new_df = BodoDataFrame.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
     elif isinstance(schema, pd.Series):
-        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
+        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class) if res_id is None else res_id, schema, nrows=nrows, index_data=index_data)
         mgr = get_lazy_single_manager_class()
         new_df = BodoSeries.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
     else:

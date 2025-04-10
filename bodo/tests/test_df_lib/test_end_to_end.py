@@ -40,3 +40,43 @@ def test_from_pandas(datapath):
     )
     assert not bdf._lazy
     assert bdf._mgr._plan is None
+
+
+def test_read_parquet(datapath):
+    """Very simple test to read a parquet file for sanity checking."""
+    path = datapath("example.parquet")
+
+    bodo_out = bd.read_parquet(path)
+    py_out = pd.read_parquet(path)
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
+
+
+def test_read_parquet_len_shape(datapath):
+    """Test length/shape after read parquet is correct"""
+    path = datapath("example.parquet")
+
+    bodo_out = bd.read_parquet(path)
+    py_out = pd.read_parquet(path)
+
+    assert len(bodo_out) == len(py_out)
+
+    # create a new lazy DF
+    bodo_out2 = bd.read_parquet(path)
+
+    # test shape
+    assert bodo_out2.shape == py_out.shape
+
+
+def test_projection(datapath):
+    """Very simple test for projection for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1["D"]
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1["D"]
+
+    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
