@@ -417,6 +417,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             return super().__repr__()
 
     def _update_index_from_mgr(self, mgr):
+        """Update Index of Lazy Series according to manager.
+        Drops column index if present.
+        """
         if isinstance(mgr, BlockManager):
             # ignore first axis
             self.axes = [mgr.axes[1]]
