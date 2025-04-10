@@ -5,12 +5,12 @@
 
 #include <Python.h>
 #include <utility>
-#include "../io/arrow_reader.h"
-#include "_executor.h"
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "physical/read_pandas.h"
+// #include "physical/read_parquet.h"
 
 /**
  * @brief Superclass for Bodo's DuckDB TableFunction classes.
@@ -59,10 +59,9 @@ class BodoParquetScanFunction : public BodoScanFunction {
  */
 class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoParquetScanFunctionData(std::string path) : path(path) {}
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
-        return std::make_shared<PhysicalReadParquet>(path);
-    }
+    BodoParquetScanFunctionData(std::string path) : path(std::move(path)) {}
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override;
+
     // Parquet dataset path
     std::string path;
 };
@@ -80,13 +79,14 @@ class BodoDataFrameScanFunction : public BodoScanFunction {
 };
 
 /**
- * @brief Data for Bodo's DuckDB TableFunction for reading dataframe rows.
+ * @brief Data for Bodo's DuckDB TableFunction for reading dataframe rows on
+ * spawner sequentially.
  *
  */
-class BodoDataFrameScanFunctionData : public BodoScanFunctionData {
+class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoDataFrameScanFunctionData(PyObject *df) : df(df) { Py_INCREF(df); }
-    ~BodoDataFrameScanFunctionData() { Py_DECREF(df); }
+    BodoDataFrameSeqScanFunctionData(PyObject *df) : df(df) { Py_INCREF(df); }
+    ~BodoDataFrameSeqScanFunctionData() { Py_DECREF(df); }
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
      *
@@ -97,6 +97,63 @@ class BodoDataFrameScanFunctionData : public BodoScanFunctionData {
     }
 
     PyObject *df;
+};
+
+/**
+ * @brief Data for Bodo's DuckDB TableFunction for reading dataframe rows on
+ * workers in parallel.
+ *
+ */
+class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
+   public:
+    BodoDataFrameParallelScanFunctionData(std::string result_id)
+        : result_id(result_id) {}
+    ~BodoDataFrameParallelScanFunctionData() {}
+    /**
+     * @brief Create a PhysicalOperator for reading from the dataframe.
+     *
+     * @return std::shared_ptr<PhysicalOperator> dataframe read operator
+     */
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
+        // Read the dataframe from the result registry using
+        // sys.modules["__main__"].RESULT_REGISTRY since importing
+        // bodo.spawn.worker creates a new module with new empty registry.
+
+        // Import Python sys module
+        PyObject *sys_module = PyImport_ImportModule("sys");
+        if (!sys_module) {
+            throw std::runtime_error("Failed to import sys module");
+        }
+
+        // Get sys.modules dictionary
+        PyObject *modules_dict = PyObject_GetAttrString(sys_module, "modules");
+        if (!modules_dict) {
+            Py_DECREF(sys_module);
+            throw std::runtime_error("Failed to get sys.modules");
+        }
+
+        // Get __main__ module
+        PyObject *main_module = PyDict_GetItemString(modules_dict, "__main__");
+        if (!main_module) {
+            Py_DECREF(modules_dict);
+            Py_DECREF(sys_module);
+            throw std::runtime_error("Failed to get __main__ module");
+        }
+
+        // Get RESULT_REGISTRY[result_id]
+        PyObject *result_registry =
+            PyObject_GetAttrString(main_module, "RESULT_REGISTRY");
+        PyObject *df = PyDict_GetItemString(result_registry, result_id.c_str());
+        if (!df) {
+            throw std::runtime_error("Result ID not found in result registry");
+        }
+        Py_DECREF(result_registry);
+        Py_DECREF(modules_dict);
+        Py_DECREF(sys_module);
+
+        return std::make_shared<PhysicalReadPandas>(df);
+    }
+    std::string result_id;
 };
 
 /**
@@ -196,8 +253,25 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     std::string parquet_path, PyObject *pyarrow_schema);
 
-duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_node(
+/**
+ * @brief Create LogicalGet node for reading a dataframe sequentially
+ *
+ * @param df input dataframe to read
+ * @param pyarrow_schema schema of the dataframe
+ * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
+ */
+duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
     PyObject *df, PyObject *pyarrow_schema);
+
+/**
+ * @brief Create LogicalGet node for reading a dataframe in parallel
+ *
+ * @param result_id input dataframe id on workers to read
+ * @param pyarrow_schema schema of the dataframe
+ * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
+ */
+duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
+    std::string result_id, PyObject *pyarrow_schema);
 
 /**
  * @brief Returns a statically created DuckDB client context.
@@ -240,3 +314,10 @@ arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema);
  */
 std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     const std::shared_ptr<arrow::Field> &field);
+
+/**
+ * @brief Convert a plan rooted at the given logical operator into graphviz.
+ *
+ * @param plan - the root of the plan to convert to graphviz
+ */
+std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan);

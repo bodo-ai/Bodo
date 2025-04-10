@@ -202,26 +202,16 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         """
         # Execute the plan if we have one
         if self._plan is not None:
+            from bodo.pandas.utils import execute_plan
+
             debug_msg(
                 self.logger, "[LazyBlockManager] Executing Plan and collecting data..."
             )
-            from bodo.ext import plan_optimizer
-
-            optimized_plan = plan_optimizer.py_optimize_plan(
-                self._plan.generate_duckdb()
-            )
-
-            # TODO: run on workers
-            # def exec_plan(optimized_plan):
-            #     pass
-
-            # data = bodo.spawn.spawner.submit_func_to_workers(
-            #     exec_plan, [], optimized_plan
-            # )
-            data = plan_optimizer.py_execute_plan(optimized_plan)
-
+            data = execute_plan(self._plan)
             self._plan = None
             self.blocks = data._mgr.blocks
+            # Update index here since the plan created a dummy index
+            self.axes = data._mgr.axes
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
@@ -434,27 +424,17 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         """
         # Execute the plan if we have one
         if self._plan is not None:
+            from bodo.pandas.utils import execute_plan
+
             debug_msg(
                 self.logger,
                 "[LazySingleBlockManager] Executing Plan and collecting data...",
             )
-            from bodo.ext import plan_optimizer
-
-            optimized_plan = plan_optimizer.py_optimize_plan(
-                self._plan.generate_duckdb()
-            )
-
-            # TODO: run on workers
-            # def exec_plan(optimized_plan):
-            #     pass
-
-            # data = bodo.spawn.spawner.submit_func_to_workers(
-            #     exec_plan, [], optimized_plan
-            # )
-            data = plan_optimizer.py_execute_plan(optimized_plan)
-
+            data = execute_plan(self._plan)
             self._plan = None
             self.blocks = data._mgr.blocks
+            # Update index here since the plan created a dummy index
+            self.axes = data._mgr.axes
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None

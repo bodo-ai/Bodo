@@ -131,6 +131,18 @@ jobs:
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
     secrets: inherit
 
+  df-lib-ci:
+    needs: [compile-bodo]
+    name: Test DF Library
+    uses: ./.github/workflows/_test_python_source.yml
+    with:
+      batch: 1
+      total-batches: 1
+      pytest-marker: "df_lib"
+      collect-coverage: false
+      os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+    secrets: inherit
+
   java-ci:
     name: Test Java
     needs: [validate]

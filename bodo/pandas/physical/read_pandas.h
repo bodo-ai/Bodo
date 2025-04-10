@@ -2,7 +2,10 @@
 
 #include <memory>
 #include <utility>
-#include "../io/parquet_reader.h"
+
+#include <arrow/python/pyarrow.h>
+
+#include "../libs/_bodo_to_arrow.h"
 #include "operator.h"
 
 /// @brief Physical node for reading Parquet files in pipelines.
