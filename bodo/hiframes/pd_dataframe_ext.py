@@ -4570,6 +4570,75 @@ def to_csv_overload(
     # TODO: refactor when objmode() can understand global string constant
     # String output case
     if is_overload_none(path_or_buf):
+        # NOTE: using a separate path for _bodo_concat_str_output since gatherv fails
+        # for categorical arrays with non-constant categories so avoiding gatherv
+        # compilation as much as possible.
+        # See BSE-4713
+        assert is_overload_constant_bool(_bodo_concat_str_output), (
+            "to_csv: _bodo_concat_str_output should be constant bool"
+        )
+
+        if is_overload_true(_bodo_concat_str_output):
+
+            def _impl_concat_str(
+                df,
+                path_or_buf=None,
+                sep=",",
+                na_rep="",
+                float_format=None,
+                columns=None,
+                header=True,
+                index=True,
+                index_label=None,
+                mode="w",
+                encoding=None,
+                compression=None,  # this is different from pandas, default is 'infer'.
+                quoting=None,
+                quotechar='"',
+                lineterminator=None,
+                chunksize=None,
+                date_format=None,
+                doublequote=True,
+                escapechar=None,
+                decimal=".",
+                errors="strict",
+                storage_options=None,
+                _bodo_file_prefix="part-",
+                _bodo_concat_str_output=False,
+            ):  # pragma: no cover
+                # Return the concatenated string output on rank 0
+                # and empty string on all other ranks
+                df = bodo.gatherv(df)
+                if bodo.get_rank() != 0:
+                    return ""
+
+                with bodo.no_warning_objmode(D="unicode_type"):
+                    D = df.to_csv(
+                        path_or_buf,
+                        sep=sep,
+                        na_rep=na_rep,
+                        float_format=float_format,
+                        columns=columns,
+                        header=header,
+                        index=index,
+                        index_label=index_label,
+                        mode=mode,
+                        encoding=encoding,
+                        compression=compression,
+                        quoting=quoting,
+                        quotechar=quotechar,
+                        lineterminator=lineterminator,
+                        chunksize=chunksize,
+                        date_format=date_format,
+                        doublequote=doublequote,
+                        escapechar=escapechar,
+                        decimal=decimal,
+                        errors=errors,
+                        storage_options=storage_options,
+                    )
+                return D
+
+            return _impl_concat_str
 
         def _impl(
             df,
@@ -4597,13 +4666,6 @@ def to_csv_overload(
             _bodo_file_prefix="part-",
             _bodo_concat_str_output=False,
         ):  # pragma: no cover
-            if _bodo_concat_str_output:
-                # Return the concatenated string output on rank 0
-                # and empty string on all other ranks
-                df = bodo.gatherv(df)
-                if bodo.get_rank() != 0:
-                    return ""
-
             with bodo.no_warning_objmode(D="unicode_type"):
                 D = df.to_csv(
                     path_or_buf,
