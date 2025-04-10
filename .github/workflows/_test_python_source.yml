@@ -87,14 +87,14 @@ jobs:
             python_test_exit_code=$?
 
             # BodoSQL Tests
-            if [[ "$BODO_ENABLE_DATAFRAME_LIBRARY" != "1" ]]
+            if [[ "$BODO_ENABLE_DATAFRAME_LIBRARY" != "1" ]]; then
               cd BodoSQL
               pytest -s -v -Wignore \
                 --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
                 --store-durations --clean-durations \
                 --durations-path=../buildscripts/github/test_dur_bodosql.json \
                 -m "$PYTEST_MARKER" bodosql/tests/
-                sql_test_exit_code=$?
+              sql_test_exit_code=$?
             fi
 
             # Pytest exits code 5 if no tests are run. Some markers are only in python or sql
