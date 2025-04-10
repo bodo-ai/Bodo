@@ -95,8 +95,8 @@ jobs:
               -m "$PYTEST_MARKER" bodosql/tests/
             sql_test_exit_code=$?
 
-            echo sql_test_exit_code
-            echo python_test_exit_code
+            echo "$sql_test_exit_code"
+            echo "$python_test_exit_code"
 
             # Pytest exits code 5 if no tests are run. Some markers are only in python or sql
             # so we suppress this.
