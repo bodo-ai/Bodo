@@ -23,6 +23,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     _head_s: pd.Series | None = None
     _name: Hashable = None
 
+    @property
+    def _plan(self):
+        if hasattr(self._mgr, "_plan"):
+            if self._mgr._plan is not None:
+                return self._mgr._plan
+            else:
+                return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
+
+        raise NotImplementedError(
+            "Plan not available for this manager, recreate this series with from_pandas"
+        )
+
     @check_args_fallback("all")
     def _cmp_method(self, other, op):
         """Called when a BodoSeries is compared with a different entity (other)

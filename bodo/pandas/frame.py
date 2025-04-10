@@ -38,10 +38,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             if self._mgr._plan is not None:
                 return self._mgr._plan
             else:
-                return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
+                return plan_optimizer.LogicalGetDataFrameRead(self._mgr._md_result_id)
 
         raise NotImplementedError(
-            "Plan not available for this manager, recreate this series with from_pandas"
+            "Plan not available for this manager, recreate this dataframe with from_pandas"
         )
 
     @staticmethod
