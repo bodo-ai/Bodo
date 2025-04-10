@@ -32,6 +32,18 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     # use it directly when available.
     _head_df: pd.DataFrame | None = None
 
+    @property
+    def _plan(self):
+        if hasattr(self._mgr, "_plan"):
+            if self._mgr._plan is not None:
+                return self._mgr._plan
+            else:
+                return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
+
+        raise NotImplementedError(
+            "Plan not available for this manager, recreate this series with from_pandas"
+        )
+
     @staticmethod
     def from_lazy_mgr(
         lazy_mgr: LazyArrayManager | LazyBlockManager,
@@ -82,6 +94,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         self._mgr._md_nrows = lazy_metadata.nrows
         self._mgr._md_result_id = lazy_metadata.result_id
         self._mgr._md_head = lazy_metadata.head._mgr
+
+    def is_lazy_plan(self):
+        """Returns whether the BodoDataFrame is represented by a plan."""
+        return getattr(self._mgr, "_plan", None) is not None
 
     def head(self, n: int = 5):
         """
