@@ -6,11 +6,16 @@
 #include <memory>
 #include "../io/arrow_compat.h"
 #include "../libs/_array_utils.h"
+#include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/streaming/_shuffle.h"
 #include "_plan.h"
 #include "arrow/io/api.h"
+#include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/operator/logical_projection.hpp"
 #include "parquet/arrow/reader.h"
 
 Executor::Executor(std::unique_ptr<duckdb::LogicalOperator> plan) {
@@ -60,6 +65,17 @@ std::shared_ptr<PhysicalOperator> Executor::processNode(
 std::shared_ptr<PhysicalOperator> PhysicalProjection::make(
     const duckdb::LogicalProjection& proj_plan,
     const std::shared_ptr<PhysicalOperator>& source) {
+    // Handle UDF execution case
+    if (proj_plan.expressions.size() == 1 &&
+        proj_plan.expressions[0]->type ==
+            duckdb::ExpressionType::BOUND_FUNCTION) {
+        return std::make_shared<PhysicalRunUDF>(
+            source, proj_plan.expressions[0]
+                        ->Cast<duckdb::BoundFunctionExpression>()
+                        .bind_info->Cast<BodoUDFFunctionData>()
+                        .func);
+    }
+
     // Process the source of this projection.
     std::vector<int64_t> selected_columns;
     // Convert BoundColumnRefExpressions in LogicalOperator.expresssions field
@@ -207,4 +223,52 @@ std::pair<int64_t, PyObject*> PhysicalProjection::execute() {
     PyObject* pyarrow_schema = arrow::py::wrap_schema(out_schema);
     return {reinterpret_cast<int64_t>(new table_info(*out_table_info)),
             pyarrow_schema};
+}
+
+std::pair<int64_t, PyObject*> PhysicalRunUDF::execute() {
+    // Call bodo.pandas.utils.run_apply_udf() to run the UDF
+
+    // Get input data table from the input table of the projection.
+    std::pair<int64_t, PyObject*> src_result = source->result;
+
+    // Import the bodo.pandas.utils module
+    PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+    if (!bodo_module) {
+        PyErr_Print();
+        throw std::runtime_error("Failed to import bodo.pandas.utils module");
+    }
+
+    // Call the run_apply_udf() with the table_info pointer, Arrow schema and
+    // UDF function
+    PyObject* result =
+        PyObject_CallMethod(bodo_module, "run_apply_udf", "LOO",
+                            src_result.first, src_result.second, this->func);
+    if (!result) {
+        PyErr_Print();
+        Py_DECREF(bodo_module);
+        throw std::runtime_error("Error calling run_apply_udf");
+    }
+
+    // Parse the result (assuming it returns a tuple with (table_info,
+    // arrow_schema))
+    if (!PyTuple_Check(result) || PyTuple_Size(result) != 2) {
+        Py_DECREF(result);
+        Py_DECREF(bodo_module);
+        throw std::runtime_error(
+            "Expected a tuple of size 2 from run_apply_udf");
+    }
+
+    // Extract the table_info pointer and arrow schema from the result
+    PyObject* table_info_py = PyTuple_GetItem(result, 0);
+    PyObject* arrow_schema_py = PyTuple_GetItem(result, 1);
+
+    int64_t table_info_ptr = PyLong_AsLongLong(table_info_py);
+    // Increment arrow_schema_py reference count since PyTuple_GetItem returns a
+    // borrowed reference
+    Py_INCREF(arrow_schema_py);
+
+    Py_DECREF(bodo_module);
+    Py_DECREF(result);
+
+    return {table_info_ptr, arrow_schema_py};
 }

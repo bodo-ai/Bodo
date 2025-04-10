@@ -172,9 +172,6 @@ struct BodoUDFFunctionData : public duckdb::FunctionData {
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
         return duckdb::make_uniq<BodoUDFFunctionData>(this->func);
     }
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() {
-        return std::make_shared<PhysicalRunUDF>(func);
-    }
 
     PyObject *func;
 };

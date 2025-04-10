@@ -74,6 +74,27 @@ class PhysicalReadPandas : public PhysicalOperator {
     int64_t num_rows;
 };
 
+class PhysicalRunUDF : public PhysicalOperator {
+   public:
+    PhysicalRunUDF(std::shared_ptr<PhysicalOperator> source, PyObject *func)
+        : source(source), func(func) {
+        Py_INCREF(func);
+    }
+    ~PhysicalRunUDF() { Py_DECREF(func); }
+
+    /**
+     * @brief Run UDF and return the output as table.
+     *
+     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
+     * int64 (to pass to Cython easily), pyarrow schema object
+     */
+    std::pair<int64_t, PyObject *> execute() override;
+
+   private:
+    std::shared_ptr<PhysicalOperator> source;
+    PyObject *func;
+};
+
 /**
  * @brief Physical node for projection.
  *
