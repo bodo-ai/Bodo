@@ -453,7 +453,7 @@ def _del_func(x):
     # Intentionally do nothing
     pass
 
-cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
+cpdef wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
     """ Create a BodoDataFrame or BodoSeries with the given
         schema and given plan node.
     """
@@ -478,11 +478,11 @@ cpdef wrap_plan(schema, plan, nrows=None, index_data=None):
     if isinstance(schema, (dict, pd.DataFrame)):
         if isinstance(schema, dict):
             schema = pd.DataFrame(schema)
-        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
+        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class) if res_id is None else res_id, schema, nrows=nrows, index_data=index_data)
         mgr = get_lazy_manager_class()
         new_df = BodoDataFrame.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
     elif isinstance(schema, pd.Series):
-        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class), schema, nrows=nrows, index_data=index_data)
+        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class) if res_id is None else res_id, schema, nrows=nrows, index_data=index_data)
         mgr = get_lazy_single_manager_class()
         new_df = BodoSeries.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
     else:
