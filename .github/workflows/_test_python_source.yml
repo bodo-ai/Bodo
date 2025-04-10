@@ -87,12 +87,14 @@ jobs:
             python_test_exit_code=$?
 
             # BodoSQL Tests
-            cd BodoSQL
-            pytest -s -v -Wignore \
-              --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
-              --store-durations --clean-durations \
-              --durations-path=../buildscripts/github/test_dur_bodosql.json \
-              -m "$PYTEST_MARKER" bodosql/tests/
+            if [[ "$BODO_ENABLE_DATAFRAME_LIBRARY" != "1" ]]
+              cd BodoSQL
+              pytest -s -v -Wignore \
+                --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+                --store-durations --clean-durations \
+                --durations-path=../buildscripts/github/test_dur_bodosql.json \
+                -m "$PYTEST_MARKER" bodosql/tests/
+            fi
             sql_test_exit_code=$?
 
             echo "$sql_test_exit_code"
