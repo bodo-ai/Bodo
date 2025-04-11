@@ -110,11 +110,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         self._mgr._md_result_id = lazy_metadata.result_id
         self._mgr._md_head = lazy_metadata.head._mgr
 
+    def is_lazy_plan(self):
+        """Returns whether the BodoSeries is represented by a plan."""
+        return getattr(self._mgr, "_plan", None) is not None
+
     @property
     def shape(self):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
+        if self.is_lazy_plan():
+            self._mgr._collect()
+
         if isinstance(self._mgr, LazyMetadataMixin) and (
             self._mgr._md_nrows is not None
         ):
@@ -131,6 +138,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         else:
             # If head_s is available and larger than n, then use it directly.
             return self._head_s.head(n)
+
+    def __len__(self):
+        if self.is_lazy_plan():
+            self._mgr._collect()
+        return super().__len__()
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
