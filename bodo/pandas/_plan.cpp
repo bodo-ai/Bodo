@@ -1,6 +1,8 @@
 #include "_plan.h"
+#include <arrow/python/pyarrow.h>
 #include <utility>
 
+#include "_executor.h"
 #include "duckdb.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/unique_ptr.hpp"
@@ -12,6 +14,7 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 
+#include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
@@ -159,7 +162,10 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan) {
     Executor executor(std::move(plan));
-    return executor.execute();
+    auto output_table = executor.ExecutePipelines();
+
+    return {reinterpret_cast<int64_t>(output_table.get()),
+            arrow::py::wrap_schema(output_table->schema()->ToArrowSchema())};
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
@@ -296,7 +302,53 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
     return plan->ToString(duckdb::ExplainFormat::GRAPHVIZ);
 }
 
-std::shared_ptr<PhysicalOperator>
+std::shared_ptr<PhysicalSource>
+BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator() {
+    // Read the dataframe from the result registry using
+    // sys.modules["__main__"].RESULT_REGISTRY since importing
+    // bodo.spawn.worker creates a new module with new empty registry.
+
+    // Import Python sys module
+    PyObject *sys_module = PyImport_ImportModule("sys");
+    if (!sys_module) {
+        throw std::runtime_error("Failed to import sys module");
+    }
+
+    // Get sys.modules dictionary
+    PyObject *modules_dict = PyObject_GetAttrString(sys_module, "modules");
+    if (!modules_dict) {
+        Py_DECREF(sys_module);
+        throw std::runtime_error("Failed to get sys.modules");
+    }
+
+    // Get __main__ module
+    PyObject *main_module = PyDict_GetItemString(modules_dict, "__main__");
+    if (!main_module) {
+        Py_DECREF(modules_dict);
+        Py_DECREF(sys_module);
+        throw std::runtime_error("Failed to get __main__ module");
+    }
+
+    // Get RESULT_REGISTRY[result_id]
+    PyObject *result_registry =
+        PyObject_GetAttrString(main_module, "RESULT_REGISTRY");
+    PyObject *df = PyDict_GetItemString(result_registry, result_id.c_str());
+    if (!df) {
+        throw std::runtime_error("Result ID not found in result registry");
+    }
+    Py_DECREF(result_registry);
+    Py_DECREF(modules_dict);
+    Py_DECREF(sys_module);
+
+    return std::make_shared<PhysicalReadPandas>(df);
+}
+
+std::shared_ptr<PhysicalSource>
+BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator() {
+    return std::make_shared<PhysicalReadPandas>(df);
+}
+
+std::shared_ptr<PhysicalSource>
 BodoParquetScanFunctionData::CreatePhysicalOperator() {
     return std::make_shared<PhysicalReadParquet>(path);
 }

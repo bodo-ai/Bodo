@@ -8,15 +8,19 @@
 /// @brief Physical node for reading Parquet files in pipelines.
 class PhysicalReadParquet : public PhysicalSource {
    private:
+    std::string path;
     ParquetReader internal_reader;
 
    public:
     // TODO: Fill in the contents with info from the logical operator
-    PhysicalReadParquet()
-        : internal_reader(nullptr, false, nullptr, nullptr, nullptr, 0, {}, {},
+    explicit PhysicalReadParquet(std::string _path)
+        : path(std::move(_path)),
+          internal_reader(nullptr, false, nullptr, nullptr, nullptr, 0, {}, {},
                           false, 0) {
         internal_reader.init_pq_reader({}, nullptr, nullptr, 0);
     }
+
+    virtual ~PhysicalReadParquet() = default;
 
     void Finalize() override {}
 

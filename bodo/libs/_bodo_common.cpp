@@ -3,8 +3,10 @@
 #include <arrow/array.h>
 #include <complex>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
+#include <arrow/type.h>
 #include <fmt/format.h>
 #include "_bodo_to_arrow.h"
 #include "_datetime_utils.h"
@@ -390,6 +392,107 @@ void MapType::Serialize(std::vector<int8_t>& arr_array_types,
     value_type->Serialize(arr_array_types, arr_c_types);
 }
 
+std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
+    if (array_type == bodo_array_type::STRING) {
+        return std::make_shared<::arrow::Field>(name, arrow::large_utf8(),
+                                                true);
+    } else if (array_type == bodo_array_type::DICT) {
+        return std::make_shared<::arrow::Field>(
+            name, arrow::dictionary(arrow::int32(), arrow::large_utf8()), true);
+    } else if (array_type == bodo_array_type::TIMESTAMPTZ) {
+        throw std::runtime_error("TIMESTAMPTZ is not supported in Arrow");
+    }
+
+    bool is_nullable = array_type == bodo_array_type::NULLABLE_INT_BOOL;
+    std::shared_ptr<arrow::DataType> dtype;
+    switch (c_type) {
+        case Bodo_CTypes::INT8:
+            dtype = arrow::int8();
+            break;
+        case Bodo_CTypes::UINT8:
+            dtype = arrow::uint8();
+            break;
+        case Bodo_CTypes::INT16:
+            dtype = arrow::int16();
+            break;
+        case Bodo_CTypes::UINT16:
+            dtype = arrow::uint16();
+            break;
+        case Bodo_CTypes::INT32:
+            dtype = arrow::int32();
+            break;
+        case Bodo_CTypes::UINT32:
+            dtype = arrow::uint32();
+            break;
+        case Bodo_CTypes::INT64:
+            dtype = arrow::int64();
+            break;
+        case Bodo_CTypes::UINT64:
+            dtype = arrow::uint64();
+            break;
+        case Bodo_CTypes::FLOAT32:
+            dtype = arrow::float32();
+            break;
+        case Bodo_CTypes::FLOAT64:
+            dtype = arrow::float64();
+            break;
+        case Bodo_CTypes::_BOOL:
+            dtype = arrow::boolean();
+            break;
+        case Bodo_CTypes::DATE:
+            dtype = arrow::date32();
+            break;
+        case Bodo_CTypes::TIME:
+            dtype = arrow::time64(arrow::TimeUnit::SECOND);
+            break;
+        // TODO: Is there a way to get timezone?
+        case Bodo_CTypes::DATETIME:
+            dtype = arrow::timestamp(arrow::TimeUnit::NANO);
+            break;
+        case Bodo_CTypes::BINARY:
+            dtype = arrow::binary();
+            break;
+        case Bodo_CTypes::DECIMAL:
+            dtype = arrow::decimal128(precision, scale);
+            break;
+        default: {
+            throw std::runtime_error("Unsupported dtype");
+        }
+    }
+
+    return std::make_shared<::arrow::Field>(name, dtype, is_nullable);
+}
+
+std::shared_ptr<::arrow::Field> ArrayType::ToArrowType(
+    std::string& name) const {
+    std::string element_name = "element";
+    return std::make_shared<::arrow::Field>(
+        name, arrow::large_list(this->value_type->ToArrowType(element_name)),
+        true);
+}
+
+std::shared_ptr<::arrow::Field> StructType::ToArrowType(
+    std::string& name) const {
+    std::vector<std::shared_ptr<::arrow::Field>> fields;
+    for (size_t i = 0; i < child_types.size(); i++) {
+        std::string field_name = fmt::format("field_{}", i);
+        fields.push_back(child_types[i]->ToArrowType(field_name));
+    }
+
+    return std::make_shared<::arrow::Field>(name, arrow::struct_(fields), true);
+}
+
+std::shared_ptr<::arrow::Field> MapType::ToArrowType(std::string& name) const {
+    std::string key_name = "key";
+    std::string value_name = "value";
+
+    return std::make_shared<::arrow::Field>(
+        name,
+        arrow::map(this->key_type->ToArrowType(key_name)->type(),
+                   this->value_type->ToArrowType(value_name)),
+        true);
+}
+
 static std::unique_ptr<DataType> from_byte_helper(
     const std::span<const int8_t> arr_array_types,
     const std::span<const int8_t> arr_c_types, size_t& i) {
@@ -534,6 +637,19 @@ std::unique_ptr<Schema> Schema::Project(
         dtypes.push_back(this->column_types[col_idx]->copy());
     }
     return std::make_unique<Schema>(std::move(dtypes));
+}
+
+std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
+    std::vector<std::shared_ptr<::arrow::Field>> fields;
+    fields.reserve(this->column_types.size());
+
+    uint32_t idx = 0;
+    for (const auto& col : this->column_types) {
+        std::string name = fmt::format("field_{}", idx);
+        fields.push_back(col->ToArrowType(name));
+        idx++;
+    }
+    return std::make_shared<arrow::Schema>(fields);
 }
 
 }  // namespace bodo

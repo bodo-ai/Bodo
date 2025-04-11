@@ -16,10 +16,12 @@ class PhysicalReadPandas : public PhysicalSource {
     int64_t num_rows;
 
    public:
-    PhysicalReadPandas(PyObject* _df) : df(_df) {
+    explicit PhysicalReadPandas(PyObject* _df) : df(_df) {
         Py_INCREF(df);
         num_rows = PyObject_Length(df);
     }
+
+    virtual ~PhysicalReadPandas() = default;
 
     void Finalize() override {}
 

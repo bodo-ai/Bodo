@@ -4,19 +4,17 @@
 #include <vector>
 
 #include "duckdb/common/enums/logical_operator_type.hpp"
-#include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/list.hpp"
 
 #include "_pipeline.h"
-#include "physical/operator.h"
 
 class PhysicalPlanBuilder {
-   private:
+   public:
+    // TODO: Make private properties later
     std::vector<std::shared_ptr<Pipeline>> finished_pipelines;
     std::shared_ptr<PipelineBuilder> active_pipeline;
 
-   public:
     PhysicalPlanBuilder() : active_pipeline(nullptr) {}
 
     void Visit(duckdb::LogicalGet& op);

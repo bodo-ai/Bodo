@@ -8,6 +8,7 @@
 #endif
 
 #include <Python.h>
+#include <arrow/type.h>
 #include <vector>
 
 #include "_meminfo.h"
@@ -639,6 +640,10 @@ struct DataType {
     virtual void Serialize(std::vector<int8_t>& arr_array_types,
                            std::vector<int8_t>& arr_c_types) const;
 
+    /// @brief Convert to the equivalent Arrow field type
+    virtual std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const;
+
     ///@brief Deep copy the Datatype, returns the proper child type if
     /// appropriate
     std::unique_ptr<DataType> copy() const;
@@ -661,6 +666,9 @@ struct ArrayType final : public DataType {
 
     void Serialize(std::vector<int8_t>& arr_array_types,
                    std::vector<int8_t>& arr_c_types) const override;
+
+    std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const override;
 };
 
 /// @brief Wrapper class for Representing the Type of Struct Arrays
@@ -676,6 +684,9 @@ struct StructType final : public DataType {
 
     void Serialize(std::vector<int8_t>& arr_array_types,
                    std::vector<int8_t>& arr_c_types) const override;
+
+    std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const override;
 };
 
 /// @brief Wrapper class for representing the type of Map Arrays
@@ -694,6 +705,9 @@ struct MapType final : public DataType {
 
     void Serialize(std::vector<int8_t>& arr_array_types,
                    std::vector<int8_t>& arr_c_types) const override;
+
+    std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const override;
 };
 
 /**
@@ -791,6 +805,9 @@ struct Schema {
      */
     std::unique_ptr<Schema> Project(
         const std::span<const int64_t> column_indices) const;
+
+    /// @brief Convert to an Arrow schema
+    std::shared_ptr<::arrow::Schema> ToArrowSchema() const;
 };
 
 }  // namespace bodo

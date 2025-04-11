@@ -1,5 +1,6 @@
 #include "_pipeline.h"
-#include "physical/operator.h"
+
+#include "physical/result_collector.h"
 
 void Pipeline::Execute() {
     // TODO: Do we need an explicit Init phase to measure initialization time
@@ -37,4 +38,19 @@ void Pipeline::Execute() {
         op->Finalize();
     }
     sink->Finalize();
+}
+
+std::shared_ptr<Pipeline> PipelineBuilder::Build(
+    std::shared_ptr<PhysicalSink> sink) {
+    auto pipeline = std::make_shared<Pipeline>();
+    pipeline->source = source;
+    pipeline->between_ops = std::move(between_ops);
+    pipeline->sink = sink;
+    return pipeline;
+}
+
+std::shared_ptr<Pipeline> PipelineBuilder::BuildEnd() {
+    auto sink = std::make_shared<PhysicalResultCollector>(
+        std::make_shared<bodo::Schema>());
+    return Build(sink);
 }

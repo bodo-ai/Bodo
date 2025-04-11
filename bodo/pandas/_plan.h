@@ -9,8 +9,7 @@
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
-#include "physical/read_pandas.h"
-// #include "physical/read_parquet.h"
+#include "physical/operator.h"
 
 /**
  * @brief Superclass for Bodo's DuckDB TableFunction classes.
@@ -28,13 +27,13 @@ class BodoScanFunction : public duckdb::TableFunction {
  */
 class BodoScanFunctionData : public duckdb::TableFunctionData {
    public:
-    BodoScanFunctionData() {}
+    BodoScanFunctionData() = default;
     /**
      * @brief Create a PhysicalOperator for reading data from this source.
      *
      * @return std::shared_ptr<PhysicalOperator> read operator
      */
-    virtual std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() = 0;
+    virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator() = 0;
 };
 
 /**
@@ -60,7 +59,7 @@ class BodoParquetScanFunction : public BodoScanFunction {
 class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
     BodoParquetScanFunctionData(std::string path) : path(std::move(path)) {}
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override;
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator() override;
 
     // Parquet dataset path
     std::string path;
@@ -92,9 +91,7 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
-        return std::make_shared<PhysicalReadPandas>(df);
-    }
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator() override;
 
     PyObject *df;
 };
@@ -114,45 +111,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
-        // Read the dataframe from the result registry using
-        // sys.modules["__main__"].RESULT_REGISTRY since importing
-        // bodo.spawn.worker creates a new module with new empty registry.
-
-        // Import Python sys module
-        PyObject *sys_module = PyImport_ImportModule("sys");
-        if (!sys_module) {
-            throw std::runtime_error("Failed to import sys module");
-        }
-
-        // Get sys.modules dictionary
-        PyObject *modules_dict = PyObject_GetAttrString(sys_module, "modules");
-        if (!modules_dict) {
-            Py_DECREF(sys_module);
-            throw std::runtime_error("Failed to get sys.modules");
-        }
-
-        // Get __main__ module
-        PyObject *main_module = PyDict_GetItemString(modules_dict, "__main__");
-        if (!main_module) {
-            Py_DECREF(modules_dict);
-            Py_DECREF(sys_module);
-            throw std::runtime_error("Failed to get __main__ module");
-        }
-
-        // Get RESULT_REGISTRY[result_id]
-        PyObject *result_registry =
-            PyObject_GetAttrString(main_module, "RESULT_REGISTRY");
-        PyObject *df = PyDict_GetItemString(result_registry, result_id.c_str());
-        if (!df) {
-            throw std::runtime_error("Result ID not found in result registry");
-        }
-        Py_DECREF(result_registry);
-        Py_DECREF(modules_dict);
-        Py_DECREF(sys_module);
-
-        return std::make_shared<PhysicalReadPandas>(df);
-    }
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator() override;
     std::string result_id;
 };
 

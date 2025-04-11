@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "physical/operator.h"
-#include "physical/result_collector.h"
 
 /// @brief Pipeline class for executing a sequence of physical operators.
 class Pipeline {
@@ -21,7 +20,10 @@ class Pipeline {
      * @brief Execute the pipeline and return the result (placeholder for now).
      */
     void Execute();
-    PyObject* GetResult();
+
+    /// @brief Get the final result. Should be anything because of write, but
+    /// stick to table_info for now
+    std::shared_ptr<table_info> GetResult();
 };
 
 class PipelineBuilder {
@@ -38,19 +40,10 @@ class PipelineBuilder {
         between_ops.emplace_back(op);
     }
 
-    // Build the pipeline and return it
-    std::shared_ptr<Pipeline> Build(std::shared_ptr<PhysicalSink> sink) {
-        auto pipeline = std::make_shared<Pipeline>();
-        pipeline->source = source;
-        pipeline->between_ops = std::move(between_ops);
-        pipeline->sink = sink;
-        return pipeline;
-    }
+    /// @brief Build the pipeline and return it
+    std::shared_ptr<Pipeline> Build(std::shared_ptr<PhysicalSink> sink);
 
     /// @brief Build the last pipeline for a plan, using a result collector as
     /// the sink.
-    std::shared_ptr<Pipeline> BuildEnd() {
-        auto sink = std::make_shared<PhysicalResultCollector>();
-        return Build(sink);
-    }
+    std::shared_ptr<Pipeline> BuildEnd();
 };

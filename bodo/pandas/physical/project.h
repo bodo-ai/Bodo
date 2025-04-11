@@ -11,9 +11,10 @@
  */
 class PhysicalProjection : public PhysicalSourceSink {
    public:
-    PhysicalProjection(std::shared_ptr<PhysicalOperator> src,
-                       std::vector<int64_t> &cols)
-        : src(src), selected_columns(cols) {}
+    explicit PhysicalProjection(std::vector<int64_t> &cols)
+        : selected_columns(cols) {}
+
+    virtual ~PhysicalProjection() = default;
 
     void Finalize() override {}
 
@@ -32,6 +33,5 @@ class PhysicalProjection : public PhysicalSourceSink {
     }
 
    private:
-    std::shared_ptr<PhysicalOperator> src;
     std::vector<int64_t> selected_columns;
 };

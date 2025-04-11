@@ -544,7 +544,8 @@ ExternalProject_Add(
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
   "bodo/pandas/_plan.cpp"
-  "bodo/pandas/_executor.cpp"
+  "bodo/pandas/_pipeline.cpp"
+  "bodo/pandas/_physical_conv.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"
