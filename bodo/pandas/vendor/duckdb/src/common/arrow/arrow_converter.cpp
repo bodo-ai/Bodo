@@ -79,12 +79,6 @@ void SetArrowMapFormat(DuckDBArrowSchemaHolder &root_holder, ArrowSchema &child,
 
 bool SetArrowExtension(DuckDBArrowSchemaHolder &root_holder, ArrowSchema &child, const LogicalType &type,
                        ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	if (config.HasArrowExtension(type)) {
-		auto arrow_extension = config.GetArrowExtension(type);
-		arrow_extension.PopulateArrowSchema(root_holder, child, type, context, arrow_extension);
-		return true;
-	}
 	return false;
 }
 

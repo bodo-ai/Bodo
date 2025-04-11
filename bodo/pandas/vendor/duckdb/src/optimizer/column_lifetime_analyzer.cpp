@@ -4,6 +4,7 @@
 #include "duckdb/optimizer/column_binding_replacer.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/optimizer/topn_optimizer.hpp"
+#include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression_iterator.hpp"

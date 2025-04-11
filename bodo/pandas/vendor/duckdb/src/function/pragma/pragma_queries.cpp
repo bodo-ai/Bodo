@@ -6,7 +6,6 @@
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/database_manager.hpp"
-#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/qualified_name.hpp"
 #include "duckdb/parser/statement/copy_statement.hpp"

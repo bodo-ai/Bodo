@@ -1,3 +1,4 @@
+#include "duckdb/common/typedefs.hpp"
 #include "duckdb/common/bitpacking.hpp"
 #include "duckdb/storage/string_uncompressed.hpp"
 #include "duckdb/function/compression/compression.hpp"
@@ -42,7 +43,7 @@ static int32_t GetCompressionLevel() {
 	return duckdb_zstd::ZSTD_defaultCLevel();
 }
 
-static constexpr idx_t ZSTD_VECTOR_SIZE = STANDARD_VECTOR_SIZE > 2048 ? STANDARD_VECTOR_SIZE : 2048;
+static constexpr uint64_t ZSTD_VECTOR_SIZE = STANDARD_VECTOR_SIZE > 2048 ? STANDARD_VECTOR_SIZE : 2048;
 
 namespace duckdb {
 

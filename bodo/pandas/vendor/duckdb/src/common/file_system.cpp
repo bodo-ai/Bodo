@@ -10,7 +10,6 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/database.hpp"
-#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/common/windows_util.hpp"
 #include "duckdb/common/operator/multiply.hpp"
 
@@ -490,39 +489,9 @@ bool FileSystem::CanHandleFile(const string &fpath) {
 	throw NotImplementedException("%s: CanHandleFile is not implemented!", GetName());
 }
 
-static string LookupExtensionForPattern(const string &pattern) {
-	for (const auto &entry : EXTENSION_FILE_PREFIXES) {
-		if (StringUtil::StartsWith(pattern, entry.name)) {
-			return entry.extension;
-		}
-	}
-	return "";
-}
-
 vector<string> FileSystem::GlobFiles(const string &pattern, ClientContext &context, FileGlobOptions options) {
 	auto result = Glob(pattern);
 	if (result.empty()) {
-		string required_extension = LookupExtensionForPattern(pattern);
-		if (!required_extension.empty() && !context.db->ExtensionIsLoaded(required_extension)) {
-			auto &dbconfig = DBConfig::GetConfig(context);
-			if (!ExtensionHelper::CanAutoloadExtension(required_extension) ||
-			    !dbconfig.options.autoload_known_extensions) {
-				auto error_message =
-				    "File " + pattern + " requires the extension " + required_extension + " to be loaded";
-				error_message =
-				    ExtensionHelper::AddExtensionInstallHintToErrorMsg(context, error_message, required_extension);
-				throw MissingExtensionException(error_message);
-			}
-			// an extension is required to read this file, but it is not loaded - try to load it
-			ExtensionHelper::AutoLoadExtension(context, required_extension);
-			// success! glob again
-			// check the extension is loaded just in case to prevent an infinite loop here
-			if (!context.db->ExtensionIsLoaded(required_extension)) {
-				throw InternalException("Extension load \"%s\" did not throw but somehow the extension was not loaded",
-				                        required_extension);
-			}
-			return GlobFiles(pattern, context, options);
-		}
 		if (options == FileGlobOptions::DISALLOW_EMPTY) {
 			throw IOException("No files found that match the pattern \"%s\"", pattern);
 		}
@@ -654,12 +623,6 @@ bool FileSystem::IsRemoteFile(const string &path) {
 }
 
 bool FileSystem::IsRemoteFile(const string &path, string &extension) {
-	for (const auto &entry : EXTENSION_FILE_PREFIXES) {
-		if (StringUtil::StartsWith(path, entry.name)) {
-			extension = entry.extension;
-			return true;
-		}
-	}
 	return false;
 }
 

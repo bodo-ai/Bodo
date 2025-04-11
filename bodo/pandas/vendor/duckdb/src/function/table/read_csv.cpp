@@ -15,7 +15,6 @@
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/database.hpp"
-#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
@@ -169,10 +168,7 @@ unique_ptr<TableRef> ReadCSVReplacement(ClientContext &context, ReplacementScanI
 	if (StringUtil::EndsWith(lower_name, CompressionExtensionFromType(FileCompressionType::GZIP))) {
 		lower_name = lower_name.substr(0, lower_name.size() - 3);
 	} else if (StringUtil::EndsWith(lower_name, CompressionExtensionFromType(FileCompressionType::ZSTD))) {
-		if (!Catalog::TryAutoLoad(context, "parquet")) {
-			throw MissingExtensionException("parquet extension is required for reading zst compressed file");
-		}
-		lower_name = lower_name.substr(0, lower_name.size() - 4);
+		throw MissingExtensionException("parquet extension is required for reading zst compressed file");
 	}
 	if (!StringUtil::EndsWith(lower_name, ".csv") && !StringUtil::Contains(lower_name, ".csv?") &&
 	    !StringUtil::EndsWith(lower_name, ".tsv") && !StringUtil::Contains(lower_name, ".tsv?")) {

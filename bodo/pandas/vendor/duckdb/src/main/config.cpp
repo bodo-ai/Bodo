@@ -62,24 +62,17 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_GLOBAL(AllocatorBackgroundThreadsSetting),
     DUCKDB_GLOBAL(AllocatorBulkDeallocationFlushThresholdSetting),
     DUCKDB_GLOBAL(AllocatorFlushThresholdSetting),
-    DUCKDB_GLOBAL(AllowCommunityExtensionsSetting),
-    DUCKDB_GLOBAL(AllowExtensionsMetadataMismatchSetting),
     DUCKDB_GLOBAL(AllowPersistentSecretsSetting),
     DUCKDB_GLOBAL(AllowUnredactedSecretsSetting),
-    DUCKDB_GLOBAL(AllowUnsignedExtensionsSetting),
     DUCKDB_GLOBAL(AllowedDirectoriesSetting),
     DUCKDB_GLOBAL(AllowedPathsSetting),
     DUCKDB_GLOBAL(ArrowLargeBufferSizeSetting),
     DUCKDB_GLOBAL(ArrowLosslessConversionSetting),
     DUCKDB_GLOBAL(ArrowOutputListViewSetting),
     DUCKDB_LOCAL(AsofLoopJoinThresholdSetting),
-    DUCKDB_GLOBAL(AutoinstallExtensionRepositorySetting),
-    DUCKDB_GLOBAL(AutoinstallKnownExtensionsSetting),
-    DUCKDB_GLOBAL(AutoloadKnownExtensionsSetting),
     DUCKDB_GLOBAL(CatalogErrorMaxSchemasSetting),
     DUCKDB_GLOBAL(CheckpointThresholdSetting),
     DUCKDB_GLOBAL_ALIAS("wal_autocheckpoint", CheckpointThresholdSetting),
-    DUCKDB_GLOBAL(CustomExtensionRepositorySetting),
     DUCKDB_LOCAL(CustomProfilingSettingsSetting),
     DUCKDB_GLOBAL(CustomUserAgentSetting),
     DUCKDB_LOCAL(DebugAsofIejoinSetting),
@@ -114,7 +107,6 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_GLOBAL(EnabledLogTypes),
     DUCKDB_LOCAL(ErrorsAsJSONSetting),
     DUCKDB_LOCAL(ExplainOutputSetting),
-    DUCKDB_GLOBAL(ExtensionDirectorySetting),
     DUCKDB_GLOBAL(ExternalThreadsSetting),
     DUCKDB_LOCAL(FileSearchPathSetting),
     DUCKDB_GLOBAL(ForceBitpackingModeSetting),
@@ -232,13 +224,7 @@ void DBConfig::SetOptionByName(const string &name, const Value &value) {
 		return;
 	}
 
-	auto param = extension_parameters.find(name);
-	if (param != extension_parameters.end()) {
-		Value target_value = value.DefaultCastAs(param->second.type);
-		SetOption(name, std::move(target_value));
-	} else {
-		options.unrecognized_options[name] = value;
-	}
+	options.unrecognized_options[name] = value;
 }
 
 void DBConfig::SetOptionsByName(const case_insensitive_map_t<Value> &values) {
@@ -273,19 +259,7 @@ void DBConfig::SetOption(const string &name, Value value) {
 	options.set_variables[name] = std::move(value);
 }
 
-void DBConfig::ResetOption(const string &name) {
-	lock_guard<mutex> l(config_lock);
-	auto extension_option = extension_parameters.find(name);
-	D_ASSERT(extension_option != extension_parameters.end());
-	auto &default_value = extension_option->second.default_value;
-	if (!default_value.IsNull()) {
-		// Default is not NULL, override the setting
-		options.set_variables[name] = default_value;
-	} else {
-		// Otherwise just remove it from the 'set_variables' map
-		options.set_variables.erase(name);
-	}
-}
+void DBConfig::ResetOption(const string &name) {}
 
 LogicalType DBConfig::ParseLogicalType(const string &type) {
 	if (StringUtil::EndsWith(type, "[]")) {
@@ -375,22 +349,6 @@ LogicalType DBConfig::ParseLogicalType(const string &type) {
 		                        type);
 	}
 	return type_id;
-}
-
-void DBConfig::AddExtensionOption(const string &name, string description, LogicalType parameter,
-                                  const Value &default_value, set_option_callback_t function) {
-	extension_parameters.insert(
-	    make_pair(name, ExtensionOption(std::move(description), std::move(parameter), function, default_value)));
-	// copy over unrecognized options, if they match the new extension option
-	auto iter = options.unrecognized_options.find(name);
-	if (iter != options.unrecognized_options.end()) {
-		options.set_variables[name] = iter->second;
-		options.unrecognized_options.erase(iter);
-	}
-	if (!default_value.IsNull() && options.set_variables.find(name) == options.set_variables.end()) {
-		// Default value is set, insert it into the 'set_variables' list
-		options.set_variables[name] = default_value;
-	}
 }
 
 bool DBConfig::IsInMemoryDatabase(const char *database_path) {

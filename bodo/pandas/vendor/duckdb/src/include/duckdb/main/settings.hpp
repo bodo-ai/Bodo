@@ -105,28 +105,6 @@ struct AllocatorFlushThresholdSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
-struct AllowCommunityExtensionsSetting {
-	using RETURN_TYPE = bool;
-	static constexpr const char *Name = "allow_community_extensions";
-	static constexpr const char *Description = "Allow to load community built extensions";
-	static constexpr const char *InputType = "BOOLEAN";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
-	static bool OnGlobalSet(DatabaseInstance *db, DBConfig &config, const Value &input);
-	static bool OnGlobalReset(DatabaseInstance *db, DBConfig &config);
-	static Value GetSetting(const ClientContext &context);
-};
-
-struct AllowExtensionsMetadataMismatchSetting {
-	using RETURN_TYPE = bool;
-	static constexpr const char *Name = "allow_extensions_metadata_mismatch";
-	static constexpr const char *Description = "Allow to load extensions with not compatible metadata";
-	static constexpr const char *InputType = "BOOLEAN";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
-	static Value GetSetting(const ClientContext &context);
-};
-
 struct AllowPersistentSecretsSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "allow_persistent_secrets";
@@ -142,18 +120,6 @@ struct AllowUnredactedSecretsSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "allow_unredacted_secrets";
 	static constexpr const char *Description = "Allow printing unredacted secrets";
-	static constexpr const char *InputType = "BOOLEAN";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
-	static bool OnGlobalSet(DatabaseInstance *db, DBConfig &config, const Value &input);
-	static bool OnGlobalReset(DatabaseInstance *db, DBConfig &config);
-	static Value GetSetting(const ClientContext &context);
-};
-
-struct AllowUnsignedExtensionsSetting {
-	using RETURN_TYPE = bool;
-	static constexpr const char *Name = "allow_unsigned_extensions";
-	static constexpr const char *Description = "Allow to load extensions with invalid or missing signatures";
 	static constexpr const char *InputType = "BOOLEAN";
 	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
 	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
@@ -229,39 +195,6 @@ struct AsofLoopJoinThresholdSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
-struct AutoinstallExtensionRepositorySetting {
-	using RETURN_TYPE = string;
-	static constexpr const char *Name = "autoinstall_extension_repository";
-	static constexpr const char *Description =
-	    "Overrides the custom endpoint for extension installation on autoloading";
-	static constexpr const char *InputType = "VARCHAR";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
-	static Value GetSetting(const ClientContext &context);
-};
-
-struct AutoinstallKnownExtensionsSetting {
-	using RETURN_TYPE = bool;
-	static constexpr const char *Name = "autoinstall_known_extensions";
-	static constexpr const char *Description =
-	    "Whether known extensions are allowed to be automatically installed when a query depends on them";
-	static constexpr const char *InputType = "BOOLEAN";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
-	static Value GetSetting(const ClientContext &context);
-};
-
-struct AutoloadKnownExtensionsSetting {
-	using RETURN_TYPE = bool;
-	static constexpr const char *Name = "autoload_known_extensions";
-	static constexpr const char *Description =
-	    "Whether known extensions are allowed to be automatically loaded when a query depends on them";
-	static constexpr const char *InputType = "BOOLEAN";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
-	static Value GetSetting(const ClientContext &context);
-};
-
 struct CatalogErrorMaxSchemasSetting {
 	using RETURN_TYPE = idx_t;
 	static constexpr const char *Name = "catalog_error_max_schemas";
@@ -278,16 +211,6 @@ struct CheckpointThresholdSetting {
 	static constexpr const char *Name = "checkpoint_threshold";
 	static constexpr const char *Description =
 	    "The WAL size threshold at which to automatically trigger a checkpoint (e.g. 1GB)";
-	static constexpr const char *InputType = "VARCHAR";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
-	static Value GetSetting(const ClientContext &context);
-};
-
-struct CustomExtensionRepositorySetting {
-	using RETURN_TYPE = string;
-	static constexpr const char *Name = "custom_extension_repository";
-	static constexpr const char *Description = "Overrides the custom endpoint for remote extension installation";
 	static constexpr const char *InputType = "VARCHAR";
 	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
 	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
@@ -640,16 +563,6 @@ struct ExplainOutputSetting {
 	static constexpr const char *InputType = "VARCHAR";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
-	static Value GetSetting(const ClientContext &context);
-};
-
-struct ExtensionDirectorySetting {
-	using RETURN_TYPE = string;
-	static constexpr const char *Name = "extension_directory";
-	static constexpr const char *Description = "Set the directory to store extensions in";
-	static constexpr const char *InputType = "VARCHAR";
-	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
-	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
 	static Value GetSetting(const ClientContext &context);
 };
 
