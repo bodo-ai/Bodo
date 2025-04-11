@@ -83,8 +83,7 @@ def read_parquet(
 
     if len(index_cols) == 0:
         is_supported_index = True
-
-    if len(index_cols) == 1:
+    elif len(index_cols) == 1:
         index_col = index_cols[0]
         # RangeIndex case
         if (

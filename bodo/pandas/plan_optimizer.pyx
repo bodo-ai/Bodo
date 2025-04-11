@@ -409,7 +409,6 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly str path
     cdef readonly object arrow_schema
 
-    # Add extra arguments for parquet read here
     def __cinit__(self, c_string parquet_path, object arrow_schema, object storage_options):
         cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, arrow_schema, storage_options)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())

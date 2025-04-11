@@ -115,7 +115,7 @@ std::pair<int64_t, PyObject*> Pipeline::execute() {
 }
 
 std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
-    // TODO: replace with proper streaming and parallel Parquet read
+    // TODO: replace with streaming Parquet read.
 
     auto batch = internal_reader->read_all();
 
