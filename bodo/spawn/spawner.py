@@ -31,6 +31,7 @@ from bodo.pandas import (
     LazyMetadata,
 )
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.utils import execute_plan
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
@@ -276,6 +277,22 @@ class Spawner:
         **kwargs,
     ):
         """Send func to be compiled and executed on spawned process"""
+        # If we get a df/series with a plan we need to execute it and get the result id
+        # so we can build the arg metadata.
+        # We do this first so nothing is already running when we execute the plan.
+        args = [
+            execute_plan(arg._plan)
+            if isinstance(arg, BodoLazyWrapper) and arg._mgr._plan is not None
+            else arg
+            for arg in args
+        ]
+        kwargs = {
+            k: execute_plan(v._plan)
+            if isinstance(v, BodoLazyWrapper) and v._mgr._plan is not None
+            else v
+            for k, v in kwargs.items()
+        }
+
         assert not self._is_running, "submit_func_to_workers: already running"
         self._is_running = True
 
@@ -443,9 +460,9 @@ class Spawner:
         """
         dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
+            dist_flags.append(arg_name)
             if arg._lazy:
                 return ArgMetadata.LAZY
-            dist_flags.append(arg_name)
             return dist_comm_meta
 
         # Handle distributed data inside tuples
