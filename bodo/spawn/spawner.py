@@ -460,9 +460,9 @@ class Spawner:
         """
         dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
+            dist_flags.append(arg_name)
             if arg._lazy:
                 return ArgMetadata.LAZY
-            dist_flags.append(arg_name)
             return dist_comm_meta
 
         # Handle distributed data inside tuples
