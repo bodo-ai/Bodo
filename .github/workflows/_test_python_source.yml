@@ -111,7 +111,7 @@ jobs:
             exit $((python_test_exit_code + sql_test_exit_code))
           shell: bash
           env:
-            BODO_TESTING_ONLY_RUN_1D_VAR: true
+            BODO_TESTING_ONLY_RUN_1D_VAR: ${{ inputs.pytest-marker != 'df_lib' }}
             PYTEST_MARKER: ${{ inputs.pytest-marker }}
             BODO_TEST_SPAWN_MODE: ${{ inputs.pytest-marker == 'spawn_mode' && '1' || '0' }}
             BODO_ENABLE_DATAFRAME_LIBRARY: ${{ inputs.pytest-marker == 'df_lib' && '1' || '0' }}
