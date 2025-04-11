@@ -64,6 +64,8 @@ jobs:
         # Run Tests
         - name: Run Tests
           run: |
+            set -eo pipefail
+
             if [[ "$RUNNER_OS" == "Windows" ]]; then
               # On Windows we set HADOOP_HOME to a dummy directory.
               # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
@@ -74,7 +76,6 @@ jobs:
               ./vcredist_x64.exe -passive
             fi
 
-            set +o pipefail
             # Bodo Tests: Coverage is collected
             pytest -s -v -Wignore \
               --cov-report= --cov=bodo \
@@ -82,9 +83,6 @@ jobs:
               --store-durations --clean-durations \
               --durations-path=buildscripts/github/test_dur_bodo.json \
               -m "$PYTEST_MARKER" bodo/tests/
-
-            # Save Exit Code for Later
-            python_test_exit_code=$?
 
             # BodoSQL Tests
             if [[ "$BODO_ENABLE_DATAFRAME_LIBRARY" != "1" ]]; then
@@ -94,20 +92,7 @@ jobs:
                 --store-durations --clean-durations \
                 --durations-path=../buildscripts/github/test_dur_bodosql.json \
                 -m "$PYTEST_MARKER" bodosql/tests/
-              sql_test_exit_code=$?
             fi
-
-            # Pytest exits code 5 if no tests are run. Some markers are only in python or sql
-            # so we suppress this.
-            if [ "$python_test_exit_code" -eq 5 ]; then
-              python_test_exit_code=0
-            fi
-
-            # Merge Exit Codes.
-            # If neither Bodo nor BodoSQL fails, the exit code will be 0
-            # If one fails, the exit code will be 1
-            # If both fail, the exit code will be 2
-            exit $((python_test_exit_code + sql_test_exit_code))
           shell: bash
           env:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
@@ -115,7 +100,7 @@ jobs:
             BODO_TEST_SPAWN_MODE: ${{ inputs.pytest-marker == 'spawn_mode' && '1' || '0' }}
             BODO_ENABLE_DATAFRAME_LIBRARY: ${{ inputs.pytest-marker == 'df_lib' && '1' || '0' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"
-            BODO_SPAWN_MODE: "${{ inputs.pytest-marker == 'df_lib' && '1' || '0' }}"
+            BODO_SPAWN_MODE: "0"
             BODO_BUFFER_POOL_REMOTE_MODE: "1"
             BODO_BUFFER_POOL_DEBUG_MODE: "1"
             # Testing Credentials
