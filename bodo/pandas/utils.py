@@ -319,7 +319,7 @@ class LazyPlan:
         self.plan_class = plan_class
         self.args = args
         self.kwargs = kwargs
-        self.dataframe_output = None  # filled in by wrap_plan
+        self.output_func = None  # filled in by wrap_plan
 
     def generate_duckdb(self, cache=None):
         from bodo.ext import plan_optimizer
@@ -374,7 +374,7 @@ def execute_plan(plan: LazyPlan):
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)
-        return plan_optimizer.py_execute_plan(optimized_plan, plan.dataframe_output)
+        return plan_optimizer.py_execute_plan(optimized_plan, plan.output_func)
 
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner
@@ -428,7 +428,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
         new_df = BodoDataFrame.from_lazy_metadata(
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
-        plan.dataframe_output = True
+        plan.output_func = cpp_table_to_df
     elif isinstance(schema, pd.Series):
         metadata = LazyMetadata(
             "LazyPlan_" + str(plan.plan_class) if res_id is None else res_id,
@@ -440,7 +440,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
         new_df = BodoSeries.from_lazy_metadata(
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
-        plan.dataframe_output = False
+        plan.output_func = cpp_table_to_series
     else:
         assert False
 

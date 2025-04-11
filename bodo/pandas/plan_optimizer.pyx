@@ -449,7 +449,7 @@ cpdef py_optimize_plan(object plan):
     optimized_plan.c_logical_operator = optimize_plan(move(wrapped_operator.c_logical_operator))
     return optimized_plan
 
-cpdef py_execute_plan(object plan, bint dataframe_output):
+cpdef py_execute_plan(object plan, output_func):
     """Execute a logical plan in the C++ backend
     """
     cdef LogicalOperator wrapped_operator
@@ -464,10 +464,5 @@ cpdef py_execute_plan(object plan, bint dataframe_output):
     exec_output = execute_plan(move(wrapped_operator.c_logical_operator))
     cpp_table = exec_output.first
     arrow_schema = <object>exec_output.second
-    assert dataframe_output is not None
-    if dataframe_output:
-        from bodo.pandas.utils import cpp_table_to_df
-        return cpp_table_to_df(cpp_table, arrow_schema)
-    else:
-        from bodo.pandas.utils import cpp_table_to_series
-        return cpp_table_to_series(cpp_table, arrow_schema)
+    assert output_func is not None
+    return output_func(cpp_table, arrow_schema)
