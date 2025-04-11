@@ -161,14 +161,16 @@ std::pair<int64_t, PyObject *> execute_plan(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     std::string parquet_path, PyObject *pyarrow_schema,
-    PyObject *storage_options) {
+    PyObject *storage_options, std::vector<int> selected_fields,
+    std::vector<bool> is_nullable) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     BodoParquetScanFunction table_function = BodoParquetScanFunction();
     // TODO: Add extra arguments here
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoParquetScanFunctionData>(
-            parquet_path, pyarrow_schema, storage_options);
+            parquet_path, pyarrow_schema, storage_options, selected_fields,
+            is_nullable);
 
     // Convert Arrow schema to DuckDB
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);

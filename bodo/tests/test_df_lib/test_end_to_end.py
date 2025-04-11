@@ -44,7 +44,7 @@ def test_from_pandas(datapath):
 
 def test_read_parquet(datapath):
     """Very simple test to read a parquet file for sanity checking."""
-    path = datapath("example.parquet")
+    path = datapath("example_no_index.parquet")
 
     bodo_out = bd.read_parquet(path)
     py_out = pd.read_parquet(path)
@@ -77,8 +77,6 @@ def test_projection(datapath):
     bodo_df2 = bodo_df1["D"]
 
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df1["D"]
+    py_df2 = py_df1["D"]
 
-    print(bodo_df2)
-
-    # _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
