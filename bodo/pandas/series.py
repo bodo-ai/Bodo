@@ -111,7 +111,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         self._mgr._md_head = lazy_metadata.head._mgr
 
     def is_lazy_plan(self):
-        """Returns whether the BodoDataFrame is represented by a plan."""
+        """Returns whether the BodoSeries is represented by a plan."""
         return getattr(self._mgr, "_plan", None) is not None
 
     @property
