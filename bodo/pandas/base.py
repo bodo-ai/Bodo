@@ -1,10 +1,13 @@
 import pandas as pd
 from pandas._libs import lib
 
-from bodo.ext import plan_optimizer
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
-from bodo.pandas.utils import LazyPlan, check_args_fallback
+from bodo.pandas.utils import (
+    LazyPlan,
+    check_args_fallback,
+    wrap_plan,
+)
 
 
 def from_pandas(df):
@@ -35,7 +38,7 @@ def from_pandas(df):
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", df, arrow_schema)
 
-    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows, res_id=res_id)
+    return wrap_plan(empty_df, plan=plan, nrows=n_rows, res_id=res_id)
 
 
 @check_args_fallback("all")
@@ -52,99 +55,32 @@ def read_parquet(
 ):
     import pyarrow as pa
 
-    from bodo.ir.parquet_ext import parquet_file_schema, pq_reader_params
+    from bodo.io.parquet_pio import get_parquet_dataset
+
+    if storage_options is None:
+        storage_options = {}
 
     # Read Parquet schema
     # TODO: Make this more robust (e.g. handle Index, etc.)
     use_hive = True
-    input_file_name_col = None
-    read_as_dict_cols = None
-
-    (
-        col_names,
-        col_types,
-        index_cols,
-        col_indices,
-        partition_names,
-        _,
-        _,
-        arrow_schema,
-    ) = parquet_file_schema(
+    pq_dataset = get_parquet_dataset(
         path,
-        columns,
-        storage_options,
-        input_file_name_col,
-        read_as_dict_cols,
-        use_hive,
+        get_row_counts=False,
+        storage_options=storage_options,
+        read_categories=True,
+        partitioning="hive" if use_hive else None,
     )
-
-    if len(index_cols) > 0:
-        raise NotImplementedError(
-            "bd.read_parquet: Read parquet with index not supported yet."
-        )
-
-    index_info = {}
-    (
-        _,
-        _,
-        _,
-        _,
-        selected_fields,
-        _,
-        selected_partition_cols,
-        partition_col_cat_dtypes,
-        str_as_dict_cols,
-        nullable_cols,
-        _,
-        _,
-        _,
-        _,
-    ) = pq_reader_params(
-        None,
-        col_names,
-        col_indices,
-        partition_names,
-        input_file_name_col,
-        col_indices,
-        index_info,
-        col_types,
-    )
-
-    if len(selected_partition_cols) > 1:
-        raise NotImplementedError(
-            "bd.read_parquet: Reading parquet with partition columns not supported yet."
-        )
-
-    if len(str_as_dict_cols) > 1:
-        raise NotImplementedError(
-            "bd.read_parquet: Reading parquet with dictionary encoded string columns not supported yet."
-        )
-
-    print(
-        selected_fields,
-        selected_partition_cols,
-        str_as_dict_cols,
-        nullable_cols,
-        partition_col_cat_dtypes,
-    )
+    arrow_schema = pq_dataset.schema
 
     empty_df = pa.Table.from_pydict(
         {k: [] for k in arrow_schema.names}, schema=arrow_schema
     ).to_pandas()
     empty_df.index = pd.RangeIndex(0)
 
-    if storage_options is None:
-        storage_options = {}
-
     plan = LazyPlan(
-        "LogicalGetParquetRead",
-        path.encode(),
-        arrow_schema,
-        storage_options,
-        selected_fields,
-        nullable_cols,
+        "LogicalGetParquetRead", path.encode(), arrow_schema, storage_options
     )
-    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=None)
+    return wrap_plan(empty_df, plan=plan)
 
 
 def merge(lhs, rhs, *args, **kwargs):

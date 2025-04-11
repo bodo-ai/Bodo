@@ -40,12 +40,23 @@ class PhysicalOperator {
 class PhysicalReadParquet : public PhysicalOperator {
    public:
     // TODO: Fill in the contents with info from the logical operator
-    PhysicalReadParquet(std::string path, PyObject *_pyarrow_schema,
-                        PyObject *storage_options,
-                        std::vector<int> selected_fields,
-                        std::vector<bool> is_nullable)
-        : pyarrow_schema(_pyarrow_schema) {
+    PhysicalReadParquet(std::string path, PyObject *pyarrow_schema,
+                        PyObject *storage_options)
+        : pyarrow_schema(pyarrow_schema) {
         py_path = PyUnicode_FromString(path.c_str());
+
+        std::shared_ptr<arrow::Schema> arrow_schema =
+            unwrap_schema(pyarrow_schema);
+
+        int num_fields = arrow_schema->num_fields();
+        std::vector<int> selected_fields(num_fields);
+        // Arrow schema fields are always nullable
+        std::vector<bool> is_nullable(num_fields, true);
+        // Select all fields for now, TODO: get selected fields from Logical
+        // Node.
+        for (int i = 0; i < num_fields; i++) {
+            selected_fields[i] = i;
+        }
 
         internal_reader = new ParquetReader(
             py_path, true, Py_None, storage_options, pyarrow_schema, -1,

@@ -62,24 +62,18 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
     // TODO: Add parquet reader args here
     BodoParquetScanFunctionData(std::string path, PyObject *pyarrow_schema,
-                                PyObject *storage_options,
-                                std::vector<int> selected_cols,
-                                std::vector<bool> is_nullable)
+                                PyObject *storage_options)
         : path(path),
           pyarrow_schema(pyarrow_schema),
-          storage_options(storage_options),
-          selected_cols(selected_cols),
-          is_nullable(is_nullable) {}
+          storage_options(storage_options) {}
     std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
-        return std::make_shared<PhysicalReadParquet>(
-            path, pyarrow_schema, storage_options, selected_cols, is_nullable);
+        return std::make_shared<PhysicalReadParquet>(path, pyarrow_schema,
+                                                     storage_options);
     }
     // Parquet dataset path
     std::string path;
     PyObject *pyarrow_schema;
     PyObject *storage_options;
-    std::vector<int> selected_cols;
-    std::vector<bool> is_nullable;
 };
 
 /**
@@ -268,8 +262,7 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     std::string parquet_path, PyObject *pyarrow_schema,
-    PyObject *storage_options, std::vector<int> selected_fields,
-    std::vector<bool> is_nullable);
+    PyObject *storage_options);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe sequentially
