@@ -129,7 +129,7 @@ def test_apply(datapath):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
         {
-            "a": pd.array([1, 2, 3], "Int64"),
+            "a": pd.array([1, 2, 3] * 10, "Int64"),
             # TODO: uncomment when segfault in from_pandas is fixed when running all
             # tests
             # "b": pd.array([4, 5, 6], "Int64"),
