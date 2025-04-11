@@ -9,8 +9,6 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 
-#define BATCHSIZE 4000
-
 class Executor;
 class Pipeline;
 
@@ -43,14 +41,14 @@ class PhysicalReadParquet : public PhysicalOperator {
     PhysicalReadParquet(std::string path, PyObject *pyarrow_schema,
                         PyObject *storage_options)
         : pyarrow_schema(pyarrow_schema) {
-        py_path = PyUnicode_FromString(path.c_str());
+        PyObject *py_path = PyUnicode_FromString(path.c_str());
 
         std::shared_ptr<arrow::Schema> arrow_schema =
             unwrap_schema(pyarrow_schema);
 
         int num_fields = arrow_schema->num_fields();
         std::vector<int> selected_fields(num_fields);
-        // Arrow schema fields are always nullable
+        // TODO: Arrow fields are always nullable?
         std::vector<bool> is_nullable(num_fields, true);
         // Select all fields for now, TODO: get selected fields from Logical
         // Node.
@@ -73,7 +71,6 @@ class PhysicalReadParquet : public PhysicalOperator {
     std::pair<int64_t, PyObject *> execute() override;
 
    private:
-    PyObject *py_path;
     PyObject *pyarrow_schema;
     ParquetReader *internal_reader;
 };

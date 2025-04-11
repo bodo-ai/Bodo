@@ -87,7 +87,7 @@ def test_read_parquet(datapath):
         ),
     ],
 )
-def test_read_parquet_index(df: pd.DataFrame, index: bool):
+def test_read_parquet_index(df: pd.DataFrame, index: bool | None):
     """Test reading parquet with index column works as expected."""
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "example.pq")

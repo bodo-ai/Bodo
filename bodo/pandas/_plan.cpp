@@ -225,7 +225,6 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     BodoParquetScanFunction table_function = BodoParquetScanFunction();
-    // TODO: Add extra arguments here
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoParquetScanFunctionData>(
             parquet_path, pyarrow_schema, storage_options);

@@ -377,7 +377,6 @@ def execute_plan(plan: LazyPlan):
 
         # Print the plan after optimization
         if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
-            print("visualizing plan...")
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)

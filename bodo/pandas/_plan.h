@@ -60,7 +60,6 @@ class BodoParquetScanFunction : public BodoScanFunction {
  */
 class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
-    // TODO: Add parquet reader args here
     BodoParquetScanFunctionData(std::string path, PyObject *pyarrow_schema,
                                 PyObject *storage_options)
         : path(path),
