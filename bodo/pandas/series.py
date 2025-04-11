@@ -12,6 +12,7 @@ from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
     get_lazy_single_manager_class,
+    wrap_plan,
 )
 
 
@@ -52,7 +53,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Compute schema of new series.
         new_metadata = zero_size_self._cmp_method(zero_size_other, op)
         assert isinstance(new_metadata, pd.Series)
-        return plan_optimizer.wrap_plan(
+        return wrap_plan(
             new_metadata,
             plan=LazyPlan("LogicalBinaryOp", self._plan, other, op),
         )

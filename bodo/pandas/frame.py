@@ -16,6 +16,7 @@ from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
     get_lazy_manager_class,
+    wrap_plan,
 )
 from bodo.utils.typing import (
     BodoError,
@@ -476,7 +477,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ],
         )
 
-        return plan_optimizer.wrap_plan(new_metadata, planComparisonJoin)
+        return wrap_plan(new_metadata, planComparisonJoin)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
@@ -495,7 +496,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             )
             zero_size_key = _empty_like(key)
             new_metadata = zero_size_self.__getitem__(zero_size_key)
-            return plan_optimizer.wrap_plan(
+            return wrap_plan(
                 new_metadata,
                 plan=LazyPlan("LogicalFilter", self._plan, key_plan),
             )
@@ -517,7 +518,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     complain. """
                 key = key[0]
                 new_metadata = zero_size_self.__getitem__(key)
-                return plan_optimizer.wrap_plan(
+                return wrap_plan(
                     new_metadata,
                     plan=LazyPlan(
                         "LogicalProjection",
@@ -528,7 +529,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
             else:
                 new_metadata = zero_size_self.__getitem__(key)
-                return plan_optimizer.wrap_plan(
+                return wrap_plan(
                     new_metadata,
                     plan=LazyPlan(
                         "LogicalProjection",

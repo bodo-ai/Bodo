@@ -100,6 +100,14 @@ def cpp_table_to_df(cpp_table, arrow_schema):
     return out_df
 
 
+def cpp_table_to_series(cpp_table, arrow_schema):
+    """Convert a C++ table (table_info) to a pandas Series."""
+
+    as_df = cpp_table_to_df(cpp_table, arrow_schema)
+    assert len(arrow_schema) == 1
+    return as_df[arrow_schema[0].name]
+
+
 @functools.lru_cache
 def get_dataframe_overloads():
     """Return a list of the functions supported on BodoDataFrame objects
@@ -311,6 +319,7 @@ class LazyPlan:
         self.plan_class = plan_class
         self.args = args
         self.kwargs = kwargs
+        self.output_func = None  # filled in by wrap_plan
 
     def generate_duckdb(self, cache=None):
         from bodo.ext import plan_optimizer
@@ -365,7 +374,7 @@ def execute_plan(plan: LazyPlan):
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)
-        return plan_optimizer.py_execute_plan(optimized_plan)
+        return plan_optimizer.py_execute_plan(optimized_plan, plan.output_func)
 
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner
@@ -373,3 +382,67 @@ def execute_plan(plan: LazyPlan):
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
+
+
+def _del_func(x):
+    # Intentionally do nothing
+    pass
+
+
+def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
+    """Create a BodoDataFrame or BodoSeries with the given
+    schema and given plan node.
+    """
+    import pandas as pd
+
+    from bodo.pandas.frame import BodoDataFrame
+    from bodo.pandas.lazy_metadata import LazyMetadata
+    from bodo.pandas.series import BodoSeries
+    from bodo.pandas.utils import (
+        LazyPlan,
+        get_lazy_manager_class,
+        get_lazy_single_manager_class,
+    )
+
+    assert isinstance(plan, LazyPlan), "wrap_plan: LazyPlan expected"
+
+    if isinstance(schema, dict):
+        schema = {
+            col: pd.Series(dtype=col_type.dtype) for col, col_type in schema.items()
+        }
+
+    if nrows is None:
+        # Fake non-zero rows.  nrows should be overwritten upon plan execution.
+        nrows = 1
+
+    if isinstance(schema, (dict, pd.DataFrame)):
+        if isinstance(schema, dict):
+            schema = pd.DataFrame(schema)
+        metadata = LazyMetadata(
+            "LazyPlan_" + str(plan.plan_class) if res_id is None else res_id,
+            schema,
+            nrows=nrows,
+            index_data=index_data,
+        )
+        mgr = get_lazy_manager_class()
+        new_df = BodoDataFrame.from_lazy_metadata(
+            metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
+        )
+        plan.output_func = cpp_table_to_df
+    elif isinstance(schema, pd.Series):
+        metadata = LazyMetadata(
+            "LazyPlan_" + str(plan.plan_class) if res_id is None else res_id,
+            schema,
+            nrows=nrows,
+            index_data=index_data,
+        )
+        mgr = get_lazy_single_manager_class()
+        new_df = BodoSeries.from_lazy_metadata(
+            metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
+        )
+        plan.output_func = cpp_table_to_series
+    else:
+        assert False
+
+    new_df.plan = plan
+    return new_df
