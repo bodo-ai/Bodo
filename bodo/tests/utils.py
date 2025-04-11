@@ -173,7 +173,6 @@ def check_func(
     only_1D=False,
     only_1DVar=None,
     only_spawn=None,
-    only_df_lib=None,
     check_categorical=False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
@@ -213,7 +212,6 @@ def check_func(
     - only_1D: Run just the check on a 1D Distributed input.
     - only_1DVar: Run just the check on a 1DVar Distributed input.
     - only_spawn: Run just the check with spawn mode.
-    - only_df_lib: Run the check using the dataframe library as opposed to jit.
     - check_categorical: Argument to pass to Pandas assert_frame_equals. We use this if we want to disable
     the check_dtype with a categorical input (as otherwise it will still raise an error).
     - atol: Argument to pass to Pandas assert equals functions. This argument will be used if
@@ -241,7 +239,7 @@ def check_func(
     # If BODO_ENABLE_DATAFRAME_LIBRARY then run compiler tests as df library tests
     # (replaces import pandas as pd with import bodo.pandas as pd)
     # NOTE: This variable takes precedence over other variables
-    only_df_lib = os.environ.get("BODO_ENABLE_DATAFRAME_LIBRARY", None) is not None
+    only_df_lib = bodo.dataframe_library_enabled
 
     run_seq, run_1D, run_1DVar, run_spawn, run_df_lib = (
         False,
