@@ -3,9 +3,12 @@
 #include "duckdb.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/function/scalar_function.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
@@ -119,6 +122,63 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
             table_idx, std::move(projection_expressions));
 
     // Add the sources to be joined.
+    proj->children.push_back(std::move(source_duck));
+
+    return proj;
+}
+
+/**
+ * @brief Dummy function to pass to DuckDB for UDFs. DuckDB runs some functions
+ * during optimization for constant folding, but we avoid it by throwing an
+ * exception.
+ *
+ */
+static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
+                        duckdb::Vector &result) {
+    throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
+}
+
+duckdb::unique_ptr<duckdb::LogicalProjection> make_projection_udf(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *func,
+    PyObject *out_schema_py) {
+    // Output table index
+    duckdb::idx_t table_idx = get_duckdb_binder()->GenerateTableIndex();
+
+    // Get output data type (UDF output is a single column)
+    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
+    auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
+    assert(out_types.size() == 1);
+    duckdb::LogicalType out_type = out_types[0];
+
+    // Create ScalarFunction for UDF
+    duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
+        "bodo_udf", source->types, out_type, RunFunction);
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
+        duckdb::make_uniq<BodoUDFFunctionData>(func);
+
+    // Add all input columns as UDF inputs
+    std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
+    for (size_t i = 0; i < source->types.size(); ++i) {
+        auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+            source->types[i], duckdb::ColumnBinding(table_idx, i));
+        udf_in_exprs.emplace_back(std::move(expr));
+    }
+
+    // Create UDF expression
+    duckdb::unique_ptr<duckdb::BoundFunctionExpression> scalar_expr =
+        make_uniq<duckdb::BoundFunctionExpression>(out_type, scalar_function,
+                                                   std::move(udf_in_exprs),
+                                                   std::move(bind_data1));
+
+    // Create projection node
+    std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
+    projection_expressions.push_back(std::move(scalar_expr));
+    duckdb::unique_ptr<duckdb::LogicalProjection> proj =
+        duckdb::make_uniq<duckdb::LogicalProjection>(
+            table_idx, std::move(projection_expressions));
+
+    // Add the input source
+    auto source_duck = to_duckdb(source);
     proj->children.push_back(std::move(source_duck));
 
     return proj;

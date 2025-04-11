@@ -400,12 +400,27 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
                             uint64_t* n_bytes, char** data, char** null_bitmap,
                             NRT_MemInfo** meminfo,
                             NRT_MemInfo** meminfo_bitmask) {
-    if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
+    if ((info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) &&
+        (info->arr_type != bodo_array_type::NUMPY)) {
         PyErr_SetString(PyExc_RuntimeError,
                         "_array.cpp::info_to_nullable_array: "
                         "info_to_nullable_array requires nullable input");
         return;
     }
+
+    // Handle Numpy arrays by creating a null bitmap. Necessary since dataframe
+    // library uses Arrow schemas which are always nullable.
+    if (info->arr_type == bodo_array_type::NUMPY) {
+        // Allocate null bitmask and set all bits to 1
+        size_t n_bytes = ((info->length + 7) >> 3);
+        std::unique_ptr<BodoBuffer> buffer_bitmask =
+            AllocateBodoBuffer(n_bytes * sizeof(uint8_t));
+        memset(buffer_bitmask->mutable_data(), 0xff, n_bytes);
+        // Keep the buffer in the same array_info struct for consistent memory
+        // management (TODO: convert to nullable in upstream)
+        info->buffers.push_back(std::move(buffer_bitmask));
+    }
+
     if (info->dtype == Bodo_CTypes::DATETIME) {
         // Temporary fix to set invalid entries to NaT
         std::uint8_t* bitmap =
