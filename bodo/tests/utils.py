@@ -232,11 +232,10 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
-
     # We allow the environment variable BODO_CHECK_FUNC_TESTING_MODE to change the default
     # testing behavior, to test with only 1D_var or dataframe library. This environment variable
     # is set in our PR CI environment.
-    test_mode = os.environ.get("BODO_CHECK_FUNC_TESTING_MODE", None) is not None
+    test_mode = os.environ.get("BODO_CHECK_FUNC_TESTING_MODE", None)
 
     if test_mode == "1d_var":
         only_1DVar = only_1DVar is None and not (
