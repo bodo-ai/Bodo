@@ -108,11 +108,8 @@ std::pair<int64_t, PyObject*> Pipeline::execute() {
 std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
     // TODO: replace with proper streaming and parallel Parquet read (using
     // Arrow for now)
-    uint64_t total_rows;
-    bool is_last;
 
-    auto batch = internal_reader->read_batch(is_last, total_rows, true);
-    (void)batch;
+    auto batch = internal_reader->read_all();
 
     // std::stringstream ss;
     // DEBUG_PrintTable(ss, batch);

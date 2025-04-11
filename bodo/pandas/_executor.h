@@ -9,6 +9,8 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 
+#define BATCHSIZE 4000
+
 class Executor;
 class Pipeline;
 
@@ -47,7 +49,7 @@ class PhysicalReadParquet : public PhysicalOperator {
 
         internal_reader = new ParquetReader(
             py_path, true, Py_None, storage_options, pyarrow_schema, -1,
-            selected_fields, is_nullable, false, 4000);
+            selected_fields, is_nullable, false, -1);
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
     }
 
