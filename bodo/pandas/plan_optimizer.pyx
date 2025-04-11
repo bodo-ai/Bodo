@@ -246,12 +246,13 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
 
 
 cdef extern from "_plan.h" nogil:
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema, object storage_options)
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema)
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
+    cdef unique_ptr[CLogicalProjection] make_projection_udf(unique_ptr[CLogicalOperator] source, object func, object out_schema)
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
     cdef unique_ptr[CExpression] make_const_int_expr(int val)
@@ -338,6 +339,23 @@ cdef class LogicalProjection(LogicalOperator):
     def __str__(self):
         return f"LogicalProjection({self.select_vec}, {self.out_schema})"
 
+
+cdef class LogicalProjectionUDF(LogicalOperator):
+    """Wrapper around DuckDB's LogicalProjection with a UDF inside to provide access in Python.
+    """
+
+    cdef readonly out_schema
+
+    def __cinit__(self, LogicalOperator source, object func, object out_schema):
+        self.out_schema = out_schema
+
+        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection_udf(source.c_logical_operator, func, self.out_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
+
+    def __str__(self):
+        return f"LogicalProjectionUDF({self.out_schema})"
+
+
 cdef unique_ptr[CExpression] make_expr(val):
     if isinstance(val, int):
         return make_const_int_expr(val)
@@ -391,11 +409,11 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly str path
     cdef readonly object arrow_schema
 
-    def __cinit__(self, c_string parquet_path, object arrow_schema):
-       cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, arrow_schema)
-       self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
-       self.path = (<bytes>parquet_path).decode("utf-8")
-       self.arrow_schema = arrow_schema
+    def __cinit__(self, c_string parquet_path, object arrow_schema, object storage_options):
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, arrow_schema, storage_options)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
+        self.path = (<bytes>parquet_path).decode("utf-8")
+        self.arrow_schema = arrow_schema
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
@@ -449,54 +467,9 @@ cpdef py_optimize_plan(object plan):
     optimized_plan.c_logical_operator = optimize_plan(move(wrapped_operator.c_logical_operator))
     return optimized_plan
 
-def _del_func(x):
-    # Intentionally do nothing
-    pass
-
-cpdef wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
-    """ Create a BodoDataFrame or BodoSeries with the given
-        schema and given plan node.
-    """
-    import pandas as pd
-    from bodo.pandas.utils import LazyPlan
-    from bodo.pandas.frame import BodoDataFrame
-    from bodo.pandas.series import BodoSeries
-    from bodo.pandas.lazy_metadata import LazyMetadata
-    from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
-
-    assert isinstance(plan, LazyPlan), "wrap_plan: LazyPlan expected"
-
-    if isinstance(schema, dict):
-        schema = {
-            col: pd.Series(dtype=col_type.dtype) for col, col_type in schema.items()
-        }
-
-    if nrows is None:
-        # Fake non-zero rows.  nrows should be overwritten upon plan execution.
-        nrows = 1
-
-    if isinstance(schema, (dict, pd.DataFrame)):
-        if isinstance(schema, dict):
-            schema = pd.DataFrame(schema)
-        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class) if res_id is None else res_id, schema, nrows=nrows, index_data=index_data)
-        mgr = get_lazy_manager_class()
-        new_df = BodoDataFrame.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
-    elif isinstance(schema, pd.Series):
-        metadata = LazyMetadata("LazyPlan_" + str(plan.plan_class) if res_id is None else res_id, schema, nrows=nrows, index_data=index_data)
-        mgr = get_lazy_single_manager_class()
-        new_df = BodoSeries.from_lazy_metadata(metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan)
-    else:
-        assert False
-
-    new_df.plan = plan
-    return new_df
-
-
-cpdef py_execute_plan(object plan):
+cpdef py_execute_plan(object plan, output_func):
     """Execute a logical plan in the C++ backend
     """
-    from bodo.pandas.utils import cpp_table_to_df
-
     cdef LogicalOperator wrapped_operator
     cdef pair[int64_t, PyObjectPtr] exec_output
     cdef int64_t cpp_table
@@ -509,5 +482,5 @@ cpdef py_execute_plan(object plan):
     exec_output = execute_plan(move(wrapped_operator.c_logical_operator))
     cpp_table = exec_output.first
     arrow_schema = <object>exec_output.second
-
-    return cpp_table_to_df(cpp_table, arrow_schema)
+    assert output_func is not None
+    return output_func(cpp_table, arrow_schema)

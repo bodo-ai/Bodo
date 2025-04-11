@@ -12,6 +12,7 @@ from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
     get_lazy_single_manager_class,
+    wrap_plan,
 )
 
 
@@ -52,7 +53,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Compute schema of new series.
         new_metadata = zero_size_self._cmp_method(zero_size_other, op)
         assert isinstance(new_metadata, pd.Series)
-        return plan_optimizer.wrap_plan(
+        return wrap_plan(
             new_metadata,
             plan=LazyPlan("LogicalBinaryOp", self._plan, other, op),
         )
@@ -109,11 +110,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         self._mgr._md_result_id = lazy_metadata.result_id
         self._mgr._md_head = lazy_metadata.head._mgr
 
+    def is_lazy_plan(self):
+        """Returns whether the BodoSeries is represented by a plan."""
+        return getattr(self._mgr, "_plan", None) is not None
+
     @property
     def shape(self):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
+        if self.is_lazy_plan():
+            self._mgr._collect()
+
         if isinstance(self._mgr, LazyMetadataMixin) and (
             self._mgr._md_nrows is not None
         ):
@@ -130,6 +138,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         else:
             # If head_s is available and larger than n, then use it directly.
             return self._head_s.head(n)
+
+    def __len__(self):
+        if self.is_lazy_plan():
+            self._mgr._collect()
+        return super().__len__()
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):

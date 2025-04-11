@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Python.h>
+#include <pytypedefs.h>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
@@ -58,11 +59,16 @@ class BodoParquetScanFunction : public BodoScanFunction {
  */
 class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoParquetScanFunctionData(std::string path) : path(std::move(path)) {}
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator() override;
+    BodoParquetScanFunctionData(std::string path, PyObject *pyarrow_schema,
+                                PyObject *storage_options)
+        : path(path),
+          pyarrow_schema(pyarrow_schema),
+          storage_options(storage_options) {}
 
     // Parquet dataset path
     std::string path;
+    PyObject *pyarrow_schema;
+    PyObject *storage_options;
 };
 
 /**
@@ -116,6 +122,25 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
 };
 
 /**
+ * @brief UDF plan node data to pass around in DuckDB plans in
+ * BoundFunctionExpression.
+ *
+ */
+struct BodoUDFFunctionData : public duckdb::FunctionData {
+    BodoUDFFunctionData(PyObject *func) : func(func) {}
+    ~BodoUDFFunctionData() override {}
+    bool Equals(const FunctionData &other_p) const override {
+        const BodoUDFFunctionData &other = other_p.Cast<BodoUDFFunctionData>();
+        return other.func == this->func;
+    }
+    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
+        return duckdb::make_uniq<BodoUDFFunctionData>(this->func);
+    }
+
+    PyObject *func;
+};
+
+/**
  * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
  *
  * @param plan input logical plan to be optimized
@@ -159,6 +184,18 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> &select_vec, PyObject *out_schema_py);
+
+/**
+ * @brief Creates a LogicalProjection node with a UDF inside.
+ *
+ * @param source input table plan
+ * @param func UDF function to execute
+ * @param out_schema_py output data type (single column for df.apply)
+ * @return duckdb::unique_ptr<duckdb::LogicalProjection> Projection node for UDF
+ */
+duckdb::unique_ptr<duckdb::LogicalProjection> make_projection_udf(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *func,
+    PyObject *out_schema_py);
 
 /**
  * @brief Create an expression from a constant integer.
@@ -210,7 +247,8 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path, PyObject *pyarrow_schema);
+    std::string parquet_path, PyObject *pyarrow_schema,
+    PyObject *storage_options);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe sequentially

@@ -3,11 +3,9 @@
 #pragma once
 
 #include <Python.h>
-
-#include "duckdb/planner/logical_operator.hpp"
-
 #include "_physical_conv.h"
 #include "_pipeline.h"
+#include "duckdb/planner/logical_operator.hpp"
 
 /**
  * @brief Executor class for executing a DuckDB logical plan in streaming

@@ -1,3 +1,7 @@
+import os
+import tempfile
+
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -45,7 +49,7 @@ def test_from_pandas(datapath):
 
 def test_read_parquet(datapath):
     """Very simple test to read a parquet file for sanity checking."""
-    path = datapath("example.parquet")
+    path = datapath("example_no_index.parquet")
 
     bodo_out = bd.read_parquet(path)
     py_out = pd.read_parquet(path)
@@ -56,9 +60,52 @@ def test_read_parquet(datapath):
     )
 
 
+@pytest.mark.parametrize(
+    "df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+                    "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
+                    "three": [True, False, True, True, True, False, False],
+                    "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
+                    "five": ["foo", "bar", "baz", None, "bar", "baz", "foo"],
+                }
+            ),
+            id="df1",
+        )
+    ],
+)
+@pytest.mark.parametrize(
+    "index",
+    [
+        pytest.param(None, id="index_None"),
+        pytest.param(False, id="index_False"),
+        pytest.param(
+            True, id="index_True", marks=pytest.mark.xfail(raises=NotImplementedError)
+        ),
+    ],
+)
+def test_read_parquet_index(df: pd.DataFrame, index: bool | None):
+    """Test reading parquet with index column works as expected."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "example.pq")
+
+        df.to_parquet(path, index=index)
+
+        bodo_out = bd.read_parquet(path)
+        py_out = pd.read_parquet(path)
+
+        _test_equal(
+            bodo_out,
+            py_out,
+        )
+
+
 def test_read_parquet_len_shape(datapath):
     """Test length/shape after read parquet is correct"""
-    path = datapath("example.parquet")
+    path = datapath("example_no_index.parquet")
 
     bodo_out = bd.read_parquet(path)
     py_out = pd.read_parquet(path)
@@ -72,7 +119,6 @@ def test_read_parquet_len_shape(datapath):
     assert bodo_out2.shape == py_out.shape
 
 
-@pytest.mark.skip
 def test_projection(datapath):
     """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -82,3 +128,22 @@ def test_projection(datapath):
     py_df2 = py_df1["D"]
 
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+
+
+def test_apply(datapath):
+    """Very simple test for df.apply() for sanity checking."""
+    df = pd.DataFrame(
+        {
+            "a": pd.array([1, 2, 3] * 10, "Int64"),
+            # TODO: uncomment when segfault in from_pandas is fixed when running all
+            # tests
+            # "b": pd.array([4, 5, 6], "Int64"),
+            # "c": ["a", "b", "c"],
+        }
+    )
+    bdf = bd.from_pandas(df)
+    out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
+    out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
+    # TODO: remove when Series output handling is fixed
+    out_pd = out_pd.to_frame("OUT")
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
