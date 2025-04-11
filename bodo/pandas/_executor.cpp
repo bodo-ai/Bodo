@@ -115,40 +115,11 @@ std::pair<int64_t, PyObject*> Pipeline::execute() {
 }
 
 std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
-    // TODO: replace with proper streaming and parallel Parquet read (using
-    // Arrow for now)
+    // TODO: replace with streaming Parquet read.
 
-    arrow::MemoryPool* pool = arrow::default_memory_pool();
-    std::shared_ptr<arrow::io::RandomAccessFile> input;
-    input = arrow::io::ReadableFile::Open(path).ValueOrDie();
+    auto batch = internal_reader->read_all();
 
-    // Open Parquet file reader
-    std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-    arrow_reader = parquet::arrow::OpenFile(input, pool).ValueOrDie();
-
-    // Read entire file as a single Arrow table
-    std::shared_ptr<arrow::Table> table;
-    if (arrow_reader->ReadTable(&table) != arrow::Status::OK()) {
-        throw std::runtime_error("Failed to read Parquet file");
-    }
-
-    arrow::py::import_pyarrow_wrappers();
-    PyObject* pyarrow_schema = arrow::py::wrap_schema(table->schema());
-
-    // Get this rank's portion of rows
-    int rank = dist_get_rank();
-    int num_ranks = dist_get_size();
-    int64_t start = dist_get_start(table->num_rows(), num_ranks, rank);
-    int64_t end = dist_get_end(table->num_rows(), num_ranks, rank);
-    int64_t length = end - start;
-    std::shared_ptr<arrow::Table> sliced_table = table->Slice(start, length);
-
-    auto* bodo_pool = bodo::BufferPool::DefaultPtr();
-    std::shared_ptr<table_info> out_table =
-        arrow_table_to_bodo(sliced_table, bodo_pool);
-
-    return {reinterpret_cast<int64_t>(new table_info(*out_table)),
-            pyarrow_schema};
+    return {reinterpret_cast<int64_t>(new table_info(*batch)), pyarrow_schema};
 }
 
 std::pair<int64_t, PyObject*> PhysicalReadPandas::execute() {
