@@ -570,4 +570,4 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_df.index = pd.RangeIndex(0)
 
         plan = LazyPlan("LogicalProjectionUDF", self._plan, func, arrow_schema)
-        return plan_optimizer.wrap_plan(empty_df, plan=plan)
+        return wrap_plan(empty_df, plan=plan)
