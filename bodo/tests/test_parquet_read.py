@@ -60,6 +60,7 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
     check_func(test_impl, (), check_dtype=False)
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize(
     "fname",
     [

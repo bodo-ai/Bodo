@@ -172,6 +172,7 @@ def check_func(
     only_1D=False,
     only_1DVar=None,
     only_spawn=None,
+    only_df_lib=None,
     check_categorical=False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
@@ -211,6 +212,7 @@ def check_func(
     - only_1D: Run just the check on a 1D Distributed input.
     - only_1DVar: Run just the check on a 1DVar Distributed input.
     - only_spawn: Run just the check with spawn mode.
+    - only_df_lib: Run the check using the dataframe library as opposed to jit.
     - check_categorical: Argument to pass to Pandas assert_frame_equals. We use this if we want to disable
     the check_dtype with a categorical input (as otherwise it will still raise an error).
     - atol: Argument to pass to Pandas assert equals functions. This argument will be used if
@@ -236,7 +238,17 @@ def check_func(
     if only_1DVar is None and not (only_seq or only_1D):
         only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 
-    run_seq, run_1D, run_1DVar, run_spawn = False, False, False, False
+    if only_df_lib is None:
+        only_df_lib == os.environ.get("BODO_ENABLE_DATAFRAME_LIBRARY", None) is not None
+
+    run_seq, run_1D, run_1DVar, run_spawn, run_df_lib = (
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+    )
     if only_seq:
         if only_1D or only_1DVar:
             warnings.warn(
@@ -252,6 +264,8 @@ def check_func(
         run_1DVar = True
     elif only_spawn:
         run_spawn = True
+    elif only_df_lib:
+        run_df_lib = True
     else:
         run_seq, run_1D, run_1DVar = True, True, True
 
@@ -474,6 +488,30 @@ def check_func(
                 check_pandas_types,
             )
             bodo_funcs["spawn"] = bodo_func
+        if run_df_lib:
+            bodo_func = check_func_df_lib(
+                func,
+                args,
+                py_output,
+                is_out_distributed,
+                distributed,
+                copy_input,
+                sort_output,
+                check_names,
+                check_dtype,
+                reset_index,
+                check_typing_issues,
+                convert_columns_to_pandas,
+                additional_compiler_arguments,
+                set_columns_name_to_none,
+                reorder_columns,
+                n_pes,
+                check_categorical,
+                atol,
+                rtol,
+                check_pandas_types,
+            )
+            bodo_funcs["df_lib"] = bodo_func
     finally:
         set_config(
             "bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD", saved_TABLE_FORMAT_THRESHOLD
@@ -914,6 +952,27 @@ def check_func_spawn(
         rtol,
         check_pandas_types,
     )
+
+
+def check_func_df_lib(
+    func,
+    args,
+    py_output,
+    copy_input,
+    sort_output,
+    check_names,
+    check_dtype,
+    reset_index,
+    convert_columns_to_pandas,
+    set_columns_name_to_none,
+    reorder_columns,
+    n_pes,
+    check_categorical,
+    atol,
+    rtol,
+    check_pandas_types,
+):
+    pass
 
 
 def _get_arg(a, copy=False):
