@@ -158,6 +158,25 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
 };
 
 /**
+ * @brief UDF plan node data to pass around in DuckDB plans in
+ * BoundFunctionExpression.
+ *
+ */
+struct BodoUDFFunctionData : public duckdb::FunctionData {
+    BodoUDFFunctionData(PyObject *func) : func(func) {}
+    ~BodoUDFFunctionData() override {}
+    bool Equals(const FunctionData &other_p) const override {
+        const BodoUDFFunctionData &other = other_p.Cast<BodoUDFFunctionData>();
+        return other.func == this->func;
+    }
+    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
+        return duckdb::make_uniq<BodoUDFFunctionData>(this->func);
+    }
+
+    PyObject *func;
+};
+
+/**
  * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
  *
  * @param plan input logical plan to be optimized
@@ -201,6 +220,18 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> &select_vec, PyObject *out_schema_py);
+
+/**
+ * @brief Creates a LogicalProjection node with a UDF inside.
+ *
+ * @param source input table plan
+ * @param func UDF function to execute
+ * @param out_schema_py output data type (single column for df.apply)
+ * @return duckdb::unique_ptr<duckdb::LogicalProjection> Projection node for UDF
+ */
+duckdb::unique_ptr<duckdb::LogicalProjection> make_projection_udf(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *func,
+    PyObject *out_schema_py);
 
 /**
  * @brief Create an expression from a constant integer.

@@ -80,3 +80,22 @@ def test_projection(datapath):
     py_df2 = py_df1["D"]
 
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+
+
+def test_apply(datapath):
+    """Very simple test for df.apply() for sanity checking."""
+    df = pd.DataFrame(
+        {
+            "a": pd.array([1, 2, 3], "Int64"),
+            # TODO: uncomment when segfault in from_pandas is fixed when running all
+            # tests
+            # "b": pd.array([4, 5, 6], "Int64"),
+            # "c": ["a", "b", "c"],
+        }
+    )
+    bdf = bd.from_pandas(df)
+    out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
+    out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
+    # TODO: remove when Series output handling is fixed
+    out_pd = out_pd.to_frame("OUT")
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
