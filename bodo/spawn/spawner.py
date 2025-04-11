@@ -282,13 +282,13 @@ class Spawner:
         # We do this first so nothing is already running when we execute the plan.
         args = [
             execute_plan(arg._plan)
-            if isinstance(arg, BodoLazyWrapper) and arg._plan is not None
+            if isinstance(arg, BodoLazyWrapper) and arg._mgr._plan is not None
             else arg
             for arg in args
         ]
         kwargs = {
             k: execute_plan(v._plan)
-            if isinstance(v, BodoLazyWrapper) and v._plan is not None
+            if isinstance(v, BodoLazyWrapper) and v._mgr._plan is not None
             else v
             for k, v in kwargs.items()
         }
