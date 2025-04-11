@@ -20,4 +20,6 @@ class PhysicalResultCollector : public PhysicalSink {
     }
 
     void Finalize() override {}
+
+    std::shared_ptr<table_info> GetResult() { return buffer.data_table; }
 };
