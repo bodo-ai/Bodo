@@ -416,18 +416,6 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         else:
             return super().__repr__()
 
-    def _update_index_from_mgr(self, mgr):
-        """Update Index of Lazy Series according to manager.
-        Drops column index if present.
-        """
-        if isinstance(mgr, BlockManager):
-            # ignore first axis
-            self.axes = [mgr.axes[1]]
-        elif isinstance(mgr, SingleBlockManager):
-            self.axes = mgr.axes
-        else:
-            raise ValueError("Unknown manager type:", type(mgr))
-
     def _collect(self):
         """
         Collect the data onto the spawner.
@@ -446,7 +434,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self._plan = None
             self.blocks = data._mgr.blocks
             # Update index here since the plan created a dummy index
-            self._update_index_from_mgr(data._mgr)
+            self.axes = data._mgr.axes
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
