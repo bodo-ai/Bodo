@@ -17,14 +17,15 @@ class Executor {
     std::vector<std::shared_ptr<Pipeline>> pipelines;
 
    public:
-    explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan) {
+    explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
+                      std::shared_ptr<arrow::Schema> out_schema) {
         // Convert the logical plan to a physical plan
         PhysicalPlanBuilder builder;
         builder.Visit(*plan);
         pipelines = std::move(builder.finished_pipelines);
 
         if (builder.active_pipeline != nullptr) {
-            pipelines.push_back(builder.active_pipeline->BuildEnd());
+            pipelines.push_back(builder.active_pipeline->BuildEnd(out_schema));
         }
     }
 

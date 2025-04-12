@@ -220,8 +220,9 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 }
 
 std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan) {
-    Executor executor(std::move(plan));
+    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
+    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
+    Executor executor(std::move(plan), out_schema);
     auto output_table = executor.ExecutePipelines();
 
     return {reinterpret_cast<int64_t>(output_table.get()),
@@ -412,7 +413,8 @@ BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator() {
 
 std::shared_ptr<PhysicalSource>
 BodoParquetScanFunctionData::CreatePhysicalOperator() {
-    return std::make_shared<PhysicalReadParquet>(path);
+    return std::make_shared<PhysicalReadParquet>(path, pyarrow_schema,
+                                                 storage_options);
 }
 
 #undef CHECK_ARROW

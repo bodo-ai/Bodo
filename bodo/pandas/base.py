@@ -5,6 +5,7 @@ from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     LazyPlan,
+    arrow_to_empty_df,
     check_args_fallback,
     wrap_plan,
 )
@@ -12,7 +13,6 @@ from bodo.pandas.utils import (
 
 def from_pandas(df):
     """Convert a Pandas DataFrame to a BodoDataFrame."""
-    import pyarrow as pa
 
     import bodo
 
@@ -29,14 +29,13 @@ def from_pandas(df):
 
     empty_df = df.iloc[:0]
     n_rows = len(df)
-    arrow_schema = pa.Schema.from_pandas(df)
 
     res_id = None
     if bodo.dataframe_library_run_parallel:
         res_id = bodo.spawn.utils.scatter_data(df)
-        plan = LazyPlan("LogicalGetPandasReadParallel", res_id, arrow_schema)
+        plan = LazyPlan("LogicalGetPandasReadParallel", res_id)
     else:
-        plan = LazyPlan("LogicalGetPandasReadSeq", df, arrow_schema)
+        plan = LazyPlan("LogicalGetPandasReadSeq", df)
 
     return wrap_plan(empty_df, plan=plan, nrows=n_rows, res_id=res_id)
 
@@ -53,8 +52,6 @@ def read_parquet(
     filters=None,
     **kwargs,
 ):
-    import pyarrow as pa
-
     from bodo.io.parquet_pio import get_pandas_metadata, get_parquet_dataset
 
     if storage_options is None:
@@ -98,14 +95,9 @@ def read_parquet(
             "bd.read_parquet: Reading parquet files with index columns is not supported yet."
         )
 
-    empty_df = pa.Table.from_pydict(
-        {k: [] for k in arrow_schema.names}, schema=arrow_schema
-    ).to_pandas()
-    empty_df.index = pd.RangeIndex(0)
+    empty_df = arrow_to_empty_df(arrow_schema)
 
-    plan = LazyPlan(
-        "LogicalGetParquetRead", path.encode(), arrow_schema, storage_options
-    )
+    plan = LazyPlan("LogicalGetParquetRead", path.encode(), storage_options)
     return wrap_plan(empty_df, plan=plan)
 
 

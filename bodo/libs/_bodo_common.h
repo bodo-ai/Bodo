@@ -531,6 +531,8 @@ struct bodo_array_type {
     };
 };
 
+bodo_array_type::arr_type_enum type_to_array_type(Bodo_CTypes::CTypeEnum typ);
+
 /**
  * @brief Is typ a nested type (STRUCT, ARRAY_ITEM/LIST or MAP)?
  *
@@ -808,6 +810,9 @@ struct Schema {
 
     /// @brief Convert to an Arrow schema
     std::shared_ptr<::arrow::Schema> ToArrowSchema() const;
+
+    static std::shared_ptr<Schema> make(
+        std::shared_ptr<::arrow::Schema> schema);
 };
 
 }  // namespace bodo

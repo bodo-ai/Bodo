@@ -2,7 +2,6 @@ import typing as pt
 from collections.abc import Callable, Iterable
 
 import pandas as pd
-import pyarrow as pa
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
@@ -511,7 +510,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             key = list(key)
             # convert column name to index
             key_indices = [self.columns.get_loc(x) for x in key]
-            pa_schema = pa.Schema.from_pandas(zero_size_self[key])
             if len(key) == 1:
                 """ If just one element then have to extract that singular
                     element for the metadata call to Pandas so it doesn't
@@ -524,7 +522,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         "LogicalProjection",
                         self._plan,
                         key_indices,
-                        pa_schema,
                     ),
                 )
             else:
@@ -535,7 +532,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         "LogicalProjection",
                         self._plan,
                         key_indices,
-                        pa_schema,
                     ),
                 )
 
@@ -565,10 +561,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         df_sample = self.head()
         self._mgr._plan = mgr_plan
         out_sample = pd.DataFrame({"OUT": df_sample.apply(func, axis)})
-        arrow_schema = pa.Schema.from_pandas(out_sample)
 
         empty_df = out_sample.iloc[:0]
         empty_df.index = pd.RangeIndex(0)
 
-        plan = LazyPlan("LogicalProjectionUDF", self._plan, func, arrow_schema)
+        plan = LazyPlan("LogicalProjectionUDF", self._plan, func)
         return wrap_plan(empty_df, plan=plan)

@@ -45,5 +45,6 @@ class PipelineBuilder {
 
     /// @brief Build the last pipeline for a plan, using a result collector as
     /// the sink.
-    std::shared_ptr<Pipeline> BuildEnd();
+    std::shared_ptr<Pipeline> BuildEnd(
+        std::shared_ptr<arrow::Schema> out_schema);
 };

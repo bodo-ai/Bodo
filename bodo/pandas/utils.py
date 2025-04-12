@@ -5,6 +5,7 @@ import inspect
 import numba
 import pandas as pd
 import pyarrow as pa
+import pyarrow.types as patypes
 from llvmlite import ir as lir
 from numba.extending import intrinsic
 
@@ -321,6 +322,7 @@ class LazyPlan:
         self.args = args
         self.kwargs = kwargs
         self.output_func = None  # filled in by wrap_plan
+        self.out_schema = None  # filled in by wrap_plan
 
     def generate_duckdb(self, cache=None):
         from bodo.ext import plan_optimizer
@@ -344,7 +346,8 @@ class LazyPlan:
         args = [recursive_check(x) for x in self.args]
         kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
         # Create real duckdb class.
-        ret = getattr(plan_optimizer, self.plan_class)(*args, **kwargs)
+        pa_schema = pa.Schema.from_pandas(self.out_schema)
+        ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret
         return ret
@@ -380,7 +383,9 @@ def execute_plan(plan: LazyPlan):
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)
-        return plan_optimizer.py_execute_plan(optimized_plan, plan.output_func)
+        return plan_optimizer.py_execute_plan(
+            optimized_plan, plan.output_func, duckdb_plan.out_schema
+        )
 
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner
@@ -457,6 +462,8 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
         # Fake non-zero rows.  nrows should be overwritten upon plan execution.
         nrows = 1
 
+    plan.out_schema = schema
+
     if isinstance(schema, (dict, pd.DataFrame)):
         if isinstance(schema, dict):
             schema = pd.DataFrame(schema)
@@ -488,3 +495,16 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
 
     new_df.plan = plan
     return new_df
+
+
+def arrow_to_empty_df(arrow_schema):
+    empty_df = pd.DataFrame(columns=[field.name for field in arrow_schema])
+    type_dict = {
+        field.name: field.type.to_pandas_dtype()
+        if not patypes.is_string(field.type)
+        else "string"
+        for field in arrow_schema
+    }
+    empty_df = empty_df.astype(type_dict)
+    empty_df.index = pd.RangeIndex(0)
+    return empty_df

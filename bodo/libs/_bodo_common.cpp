@@ -47,6 +47,7 @@ const std::vector<size_t> numpy_item_size({
     0,                             // MAP
     sizeof(int64_t),               // TIMESTAMPTZ data1
 });
+
 void bodo_common_init() {
     static bool initialized = false;
     if (initialized) {
@@ -141,6 +142,14 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
             // TODO: Construct the type from the id
             throw std::runtime_error("arrow_to_bodo_type");
         }
+    }
+}
+
+bodo_array_type::arr_type_enum type_to_array_type(Bodo_CTypes::CTypeEnum typ) {
+    if (typ == Bodo_CTypes::STRING) {
+        return bodo_array_type::arr_type_enum::STRING;
+    } else {
+        return bodo_array_type::arr_type_enum::NUMPY;
     }
 }
 
@@ -650,6 +659,16 @@ std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
         idx++;
     }
     return std::make_shared<arrow::Schema>(fields);
+}
+
+std::shared_ptr<Schema> Schema::make(std::shared_ptr<::arrow::Schema> schema) {
+    std::vector<std::unique_ptr<DataType>> column_types;
+    for (const auto& field : schema->fields()) {
+        auto bodo_type = arrow_to_bodo_type(field->type()->id());
+        column_types.push_back(std::make_unique<DataType>(
+            type_to_array_type(bodo_type), bodo_type));
+    }
+    return std::make_shared<Schema>(std::move(column_types));
 }
 
 }  // namespace bodo

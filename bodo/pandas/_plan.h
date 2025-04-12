@@ -65,6 +65,8 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options) {}
 
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator() override;
+
     // Parquet dataset path
     std::string path;
     PyObject *pyarrow_schema;
@@ -158,7 +160,7 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
  * pyarrow schema object
  */
 std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan);
+    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py);
 
 /**
  * @brief Creates a LogicalComparisonJoin node.
