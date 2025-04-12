@@ -104,11 +104,11 @@ df.to_parquet("my_data.pq")
 
 @bodo.jit(cache=True)
 def computation():
-    t1 = time.time()
+    t1 = time.perf_counter()
     df = pd.read_parquet("my_data.pq")
     df2 = pd.DataFrame({"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)})
     df2.to_parquet("out.pq")
-    print("Execution time:", time.time() - t1)
+    print("Execution time:", time.perf_counter() - t1)
 
 computation()
 ```
