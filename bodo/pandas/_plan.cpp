@@ -9,6 +9,7 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
@@ -134,6 +135,22 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     proj->children.push_back(std::move(source_duck));
 
     return proj;
+}
+
+std::vector<int> get_projection_pushed_down_columns(
+    std::unique_ptr<duckdb::LogicalOperator> &proj) {
+    if (proj->children.size() != 1) {
+        throw std::runtime_error(
+            "Only one child operator expected in LogicalProjection");
+    }
+    duckdb::LogicalGet &get_plan =
+        proj->children[0]->Cast<duckdb::LogicalGet>();
+
+    std::vector<int> selected_columns;
+    for (auto &ci : get_plan.GetColumnIds()) {
+        selected_columns.push_back(ci.GetPrimaryIndex());
+    }
+    return selected_columns;
 }
 
 /**

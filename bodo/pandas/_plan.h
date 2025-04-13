@@ -234,6 +234,16 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::vector<int> &select_vec, PyObject *out_schema_py);
 
 /**
+ * @brief Get column indices that are pushed down from a projection node to its
+ * source. Used for testing.
+ *
+ * @param proj input projection node
+ * @return std::vector<int> pushed down column indices
+ */
+std::vector<int> get_projection_pushed_down_columns(
+    std::unique_ptr<duckdb::LogicalOperator> &proj);
+
+/**
  * @brief Creates a LogicalProjection node with a UDF inside.
  *
  * @param source input table plan
