@@ -269,7 +269,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     // Column ids need to be added separately.
     // DuckDB column id initialization example:
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
-    for (int i = 0; i < return_names.size(); i++) {
+    for (size_t i = 0; i < return_names.size(); i++) {
         out_get->AddColumnId(i);
     }
 
