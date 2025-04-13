@@ -126,7 +126,8 @@ std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
 
     auto batch = internal_reader->read_all();
 
-    return {reinterpret_cast<int64_t>(new table_info(*batch)), pyarrow_schema};
+    return {reinterpret_cast<int64_t>(new table_info(*batch)),
+            selected_pyarrow_schema};
 }
 
 std::pair<int64_t, PyObject*> PhysicalReadPandas::execute() {

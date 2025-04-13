@@ -40,21 +40,34 @@ class PhysicalReadParquet : public PhysicalOperator {
     // TODO: Fill in the contents with info from the logical operator
     PhysicalReadParquet(std::string path, PyObject *pyarrow_schema,
                         PyObject *storage_options,
-                        std::vector<int> &selected_columns)
-        : pyarrow_schema(pyarrow_schema) {
+                        std::vector<int> &selected_columns) {
         PyObject *py_path = PyUnicode_FromString(path.c_str());
 
         std::shared_ptr<arrow::Schema> arrow_schema =
             unwrap_schema(pyarrow_schema);
 
-        int num_fields = arrow_schema->num_fields();
         // TODO: Arrow fields are always nullable?
-        std::vector<bool> is_nullable(num_fields, true);
+        std::vector<bool> is_nullable(selected_columns.size(), true);
 
         internal_reader = new ParquetReader(
             py_path, true, Py_None, storage_options, pyarrow_schema, -1,
             selected_columns, is_nullable, false, -1);
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
+
+        // Create a new PyArrow schema with the selected columns
+        std::shared_ptr<arrow::Schema> schema =
+            arrow::py::unwrap_schema(pyarrow_schema).ValueOrDie();
+        std::vector<std::shared_ptr<arrow::Field>> selected_fields;
+        for (int i : selected_columns) {
+            if (i >= schema->num_fields()) {
+                throw std::runtime_error("Column index out of bounds: " +
+                                         std::to_string(i));
+            }
+            selected_fields.push_back(schema->field(i));
+        }
+        std::shared_ptr<arrow::Schema> new_schema =
+            arrow::schema(selected_fields);
+        selected_pyarrow_schema = arrow::py::wrap_schema(new_schema);
     }
 
     /**
@@ -66,7 +79,7 @@ class PhysicalReadParquet : public PhysicalOperator {
     std::pair<int64_t, PyObject *> execute() override;
 
    private:
-    PyObject *pyarrow_schema;
+    PyObject *selected_pyarrow_schema;
     ParquetReader *internal_reader;
 };
 
