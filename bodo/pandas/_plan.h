@@ -35,7 +35,8 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> read operator
      */
-    virtual std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() = 0;
+    virtual std::shared_ptr<PhysicalOperator> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) = 0;
 };
 
 /**
@@ -65,9 +66,10 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         : path(path),
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options) {}
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
-        return std::make_shared<PhysicalReadParquet>(path, pyarrow_schema,
-                                                     storage_options);
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) override {
+        return std::make_shared<PhysicalReadParquet>(
+            path, pyarrow_schema, storage_options, selected_columns);
     }
     // Parquet dataset path
     std::string path;
@@ -101,7 +103,8 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) override {
         return std::make_shared<PhysicalReadPandas>(df);
     }
 
@@ -123,7 +126,8 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) override {
         // Read the dataframe from the result registry using
         // sys.modules["__main__"].RESULT_REGISTRY since importing
         // bodo.spawn.worker creates a new module with new empty registry.
