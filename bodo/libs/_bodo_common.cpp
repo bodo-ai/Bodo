@@ -149,7 +149,7 @@ bodo_array_type::arr_type_enum type_to_array_type(Bodo_CTypes::CTypeEnum typ) {
     if (typ == Bodo_CTypes::STRING) {
         return bodo_array_type::arr_type_enum::STRING;
     } else {
-        return bodo_array_type::arr_type_enum::NUMPY;
+        return bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL;
     }
 }
 
