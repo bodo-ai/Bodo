@@ -17,9 +17,6 @@ class PhysicalReadParquet : public PhysicalSource {
                                  std::vector<int> &selected_columns) {
         PyObject *py_path = PyUnicode_FromString(_path.c_str());
 
-        std::shared_ptr<arrow::Schema> arrow_schema =
-            unwrap_schema(pyarrow_schema);
-
         std::vector<bool> is_nullable(selected_columns.size(), true);
 
         internal_reader = std::make_shared<ParquetReader>(
