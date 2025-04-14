@@ -692,6 +692,7 @@ std::shared_ptr<Schema> Schema::FromArrowSchema(
     std::shared_ptr<::arrow::Schema> schema) {
     std::vector<std::unique_ptr<DataType>> column_types;
     for (const auto& field : schema->fields()) {
+        // TODO: support dictionary-encoded arrays
         auto bodo_type = arrow_to_bodo_type(field->type()->id());
         column_types.push_back(std::make_unique<DataType>(
             type_to_array_type(bodo_type), bodo_type));
