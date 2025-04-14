@@ -3,6 +3,9 @@
 #pragma once
 
 #include <Python.h>
+#include <object.h>
+#include <pytypedefs.h>
+#include "../io/parquet_reader.h"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 
@@ -34,7 +37,38 @@ class PhysicalOperator {
  */
 class PhysicalReadParquet : public PhysicalOperator {
    public:
-    PhysicalReadParquet(std::string path) : path(path) {}
+    // TODO: Fill in the contents with info from the logical operator
+    PhysicalReadParquet(std::string path, PyObject *pyarrow_schema,
+                        PyObject *storage_options,
+                        std::vector<int> &selected_columns) {
+        PyObject *py_path = PyUnicode_FromString(path.c_str());
+
+        std::shared_ptr<arrow::Schema> arrow_schema =
+            unwrap_schema(pyarrow_schema);
+
+        // TODO: Arrow fields are always nullable?
+        std::vector<bool> is_nullable(selected_columns.size(), true);
+
+        internal_reader = new ParquetReader(
+            py_path, true, Py_None, storage_options, pyarrow_schema, -1,
+            selected_columns, is_nullable, false, -1);
+        internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
+
+        // Create a new PyArrow schema with the selected columns
+        std::shared_ptr<arrow::Schema> schema =
+            arrow::py::unwrap_schema(pyarrow_schema).ValueOrDie();
+        std::vector<std::shared_ptr<arrow::Field>> selected_fields;
+        for (int i : selected_columns) {
+            if (i >= schema->num_fields()) {
+                throw std::runtime_error("Column index out of bounds: " +
+                                         std::to_string(i));
+            }
+            selected_fields.push_back(schema->field(i));
+        }
+        std::shared_ptr<arrow::Schema> new_schema =
+            arrow::schema(selected_fields);
+        selected_pyarrow_schema = arrow::py::wrap_schema(new_schema);
+    }
 
     /**
      * @brief Read parquet and return the result (placeholder for now).
@@ -45,7 +79,8 @@ class PhysicalReadParquet : public PhysicalOperator {
     std::pair<int64_t, PyObject *> execute() override;
 
    private:
-    std::string path;
+    PyObject *selected_pyarrow_schema;
+    ParquetReader *internal_reader;
 };
 
 /**

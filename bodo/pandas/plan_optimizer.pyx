@@ -246,7 +246,7 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
 
 
 cdef extern from "_plan.h" nogil:
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema, object storage_options)
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema)
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
@@ -259,6 +259,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_col_ref_expr(object field, int col_idx)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator])
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
+    cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
 
 
 def join_type_to_string(CJoinType join_type):
@@ -340,6 +341,14 @@ cdef class LogicalProjection(LogicalOperator):
         return f"LogicalProjection({self.select_vec}, {self.out_schema})"
 
 
+cpdef get_pushed_down_columns(proj):
+    """Get column indices that are pushed down from projection to its source node. Used for testing.
+    """
+    cdef LogicalOperator wrapped_operator = proj
+    cdef vector[int] pushed_down_columns = get_projection_pushed_down_columns(wrapped_operator.c_logical_operator)
+    return pushed_down_columns
+
+
 cdef class LogicalProjectionUDF(LogicalOperator):
     """Wrapper around DuckDB's LogicalProjection with a UDF inside to provide access in Python.
     """
@@ -409,11 +418,11 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly str path
     cdef readonly object arrow_schema
 
-    def __cinit__(self, c_string parquet_path, object arrow_schema):
-       cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, arrow_schema)
-       self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
-       self.path = (<bytes>parquet_path).decode("utf-8")
-       self.arrow_schema = arrow_schema
+    def __cinit__(self, c_string parquet_path, object arrow_schema, object storage_options):
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, arrow_schema, storage_options)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
+        self.path = (<bytes>parquet_path).decode("utf-8")
+        self.arrow_schema = arrow_schema
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
