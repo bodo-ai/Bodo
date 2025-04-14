@@ -56,6 +56,6 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(
 std::shared_ptr<Pipeline> PipelineBuilder::BuildEnd(
     std::shared_ptr<arrow::Schema> out_schema) {
     auto sink = std::make_shared<PhysicalResultCollector>(
-        bodo::Schema::make(out_schema));
+        bodo::Schema::FromArrowSchema(out_schema));
     return Build(sink);
 }

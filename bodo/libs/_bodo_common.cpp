@@ -458,9 +458,6 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
         case Bodo_CTypes::DATETIME:
             dtype = arrow::timestamp(arrow::TimeUnit::NANO);
             break;
-        case Bodo_CTypes::BINARY:
-            dtype = arrow::binary();
-            break;
         case Bodo_CTypes::DECIMAL:
             dtype = arrow::decimal128(precision, scale);
             break;
@@ -564,7 +561,7 @@ Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_)
     : column_types(std::move(column_types_)) {}
 
 Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
-               std::vector<std::string>& column_names)
+               std::vector<std::string> column_names)
     : column_types(std::move(column_types_)), column_names(column_names) {}
 
 void Schema::insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
@@ -671,14 +668,16 @@ std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
     return std::make_shared<arrow::Schema>(fields);
 }
 
-std::shared_ptr<Schema> Schema::make(std::shared_ptr<::arrow::Schema> schema) {
+std::shared_ptr<Schema> Schema::FromArrowSchema(
+    std::shared_ptr<::arrow::Schema> schema) {
     std::vector<std::unique_ptr<DataType>> column_types;
     for (const auto& field : schema->fields()) {
         auto bodo_type = arrow_to_bodo_type(field->type()->id());
         column_types.push_back(std::make_unique<DataType>(
             type_to_array_type(bodo_type), bodo_type));
     }
-    return std::make_shared<Schema>(std::move(column_types));
+    return std::make_shared<Schema>(std::move(column_types),
+                                    schema->field_names());
 }
 
 }  // namespace bodo

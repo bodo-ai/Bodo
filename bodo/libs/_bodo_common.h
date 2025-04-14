@@ -724,7 +724,7 @@ struct Schema {
     Schema(Schema&& other);
     Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_);
     Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
-           std::vector<std::string>& column_names);
+           std::vector<std::string> column_names);
     /** @brief Return the number of columns in the schema
      *
      * @return void The number of columns in the schema
@@ -814,7 +814,8 @@ struct Schema {
     /// @brief Convert to an Arrow schema
     std::shared_ptr<::arrow::Schema> ToArrowSchema() const;
 
-    static std::shared_ptr<Schema> make(
+    /// @brief Convert from an Arrow schema to a Bodo schema
+    static std::shared_ptr<Schema> FromArrowSchema(
         std::shared_ptr<::arrow::Schema> schema);
 };
 
