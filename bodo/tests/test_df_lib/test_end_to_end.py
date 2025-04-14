@@ -22,7 +22,6 @@ def test_from_pandas(datapath):
     # Sequential test
     with temp_config_override("dataframe_library_run_parallel", False):
         bdf = bd.from_pandas(df)
-        print("create")
         assert bdf._lazy
         assert bdf.plan is not None
         assert bdf.plan.plan_class == "LogicalGetPandasReadSeq"
