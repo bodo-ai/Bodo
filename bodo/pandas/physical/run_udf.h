@@ -65,9 +65,6 @@ class PhysicalRunUDF : public PhysicalSourceSink {
 
         int64_t table_info_ptr = PyLong_AsLongLong(table_info_py);
 
-        Py_DECREF(bodo_module);
-        Py_DECREF(result);
-
         std::shared_ptr<table_info> out_batch(
             reinterpret_cast<table_info*>(table_info_ptr));
 
@@ -93,6 +90,9 @@ class PhysicalRunUDF : public PhysicalSourceSink {
 
             out_batch->column_names.push_back(std::string(utf8_name));
         }
+
+        Py_DECREF(bodo_module);
+        Py_DECREF(result);
 
         return {out_batch, OperatorResult::FINISHED};
     }
