@@ -8,6 +8,9 @@
 
 #pragma once
 
+#include <iostream>
+#include <stacktrace>
+
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/shared_ptr.hpp"
 #include "duckdb/common/unique_ptr.hpp"
@@ -31,6 +34,7 @@ public:
 	void CheckValid() const {
 		if (MemorySafety<SAFE>::ENABLED) {
 			if (!ptr) {
+    			std::cerr << std::stacktrace::current();
 				throw InternalException("Attempting to dereference an optional pointer that is not set");
 			}
 		}
