@@ -50,7 +50,6 @@ public:
 		return *ptr;
 	}
 	T *operator->() {
-		std::cerr << "optional_ptr operator->" << '\n';
 		CheckValid();
 		return ptr;
 	}
