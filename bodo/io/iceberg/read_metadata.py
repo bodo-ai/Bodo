@@ -128,7 +128,11 @@ def _get_total_num_pq_files_in_table(table: Table) -> int:
 
 @run_rank0
 def get_iceberg_file_list_parallel(
-    conn_str: str, table_id: str, filters: BooleanExpression
+    conn_str: str,
+    table_id: str,
+    filters: BooleanExpression,
+    snapshot_id: int = -1,
+    snapshot_timestamp_ms: int = -1,
 ) -> tuple[list[IcebergParquetInfo], dict, int, FileIO, int]:
     """
     Wrapper around 'get_iceberg_file_list' which calls it
@@ -157,8 +161,31 @@ def get_iceberg_file_list_parallel(
     try:
         catalog = conn_str_to_catalog(conn_str)
         table = catalog.load_table(table_id)
+
+        # Figure out what snapshot to read
+        assert not (snapshot_id != -1 and snapshot_timestamp_ms != -1), (
+            "get_iceberg_file_list_parallel: Cannot specify both snapshot_id and snapshot_timestamp_ms"
+        )
+        snapshot = table.current_snapshot()
+        if snapshot_timestamp_ms != -1:
+            snapshot = table.snapshot_as_of_timestamp(snapshot_timestamp_ms)
+            if snapshot is None:
+                raise BodoError(
+                    f"Snapshot with timestamp {snapshot_timestamp_ms} not found in table {table_id}"
+                )
+        elif snapshot_id != -1:
+            snapshot = table.snapshot_by_id(snapshot_id)
+            if snapshot is None:
+                raise BodoError(
+                    f"Snapshot with ID {snapshot_id} not found in table {table_id}"
+                )
+        snapshot_id = snapshot.snapshot_id if snapshot else -1
+
         pq_infos, get_file_to_schema_us = _construct_parquet_infos(
-            table, table.scan(filters).plan_files()
+            table,
+            table.scan(
+                filters, snapshot_id=snapshot_id if snapshot_id > -1 else None
+            ).plan_files(),
         )
 
         if tracing.is_tracing():  # pragma: no cover
@@ -206,7 +233,7 @@ def get_iceberg_file_list_parallel(
     return (
         pq_infos,
         {i: schema_to_pyarrow(s) for i, s in table.schemas().items()},
-        snap.snapshot_id if (snap := table.current_snapshot()) else -1,
+        snapshot_id,
         table.io,
         get_file_to_schema_us,
     )

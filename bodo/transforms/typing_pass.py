@@ -4104,6 +4104,25 @@ class TypingTransforms:
                 "Cannot provide rtjf_terms in a non-streaming read"
             )
 
+        _snapshot_id_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_snapshot_id",
+            default=ir.Const(-1, rhs.loc),
+            use_default=True,
+        )
+        _snapshot_timestamp_ms_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_snapshot_timestamp_ms",
+            default=ir.Const(-1, rhs.loc),
+            use_default=True,
+        )
+
         nodes = [
             bodo.ir.iceberg_ext.IcebergReader(
                 table_id,
@@ -4121,6 +4140,8 @@ class TypingTransforms:
                 _bodo_merge_into,  # is_merge_into
                 file_list_type,  # file_list_type
                 snapshot_id_type,  # snapshot_id_type
+                _snapshot_id_arg,  # snapshot_id
+                _snapshot_timestamp_ms_arg,  # snapshot_timestamp_ms
                 chunksize=chunksize,
                 used_cols=columns_obj,
                 initial_filter=filter_obj,
