@@ -236,7 +236,6 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	config.secret_manager->Initialize(*this);
 
 	// resolve the type of teh database we are opening
-	strlen
 	std::cerr << "config database_path: '" << config.options.database_path << "'\n";
 	auto &fs = FileSystem::GetFileSystem(*this);
 	DBPathAndType::ResolveDatabaseType(fs, config.options.database_path, config.options.database_type);
