@@ -26,6 +26,7 @@
 #include "duckdb/transaction/transaction_manager.hpp"
 #include "duckdb/storage/compression/empty_validity.hpp"
 #include "duckdb/logging/logger.hpp"
+#include <ios>
 
 #ifndef DUCKDB_NO_THREADS
 #include "duckdb/common/thread.hpp"
@@ -213,7 +214,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		config_ptr = user_config;
 	}
 
-	std::cerr << "base database_path: '" << database_path << "'\n";
+	std::cerr << std::boolalpha << "base database_path: " << (database_path == nullptr) << "\n";
 	Configure(*config_ptr, database_path);
 
 	db_file_system = make_uniq<DatabaseFileSystem>(*this);
@@ -235,6 +236,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	config.secret_manager->Initialize(*this);
 
 	// resolve the type of teh database we are opening
+	strlen
 	std::cerr << "config database_path: '" << config.options.database_path << "'\n";
 	auto &fs = FileSystem::GetFileSystem(*this);
 	DBPathAndType::ResolveDatabaseType(fs, config.options.database_path, config.options.database_type);
