@@ -409,7 +409,6 @@ cdef class LogicalFilter(LogicalOperator):
 
 class LogicalBinaryOp(LogicalOperator):
     def __init__(self, out_schema, lhs, rhs, binop):
-        self.out_schema = out_schema
         self.lhs = lhs
         self.rhs = rhs
         self.binop = binop
