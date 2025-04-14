@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Python.h>
+#include <pytypedefs.h>
 #include <utility>
 #include "../io/arrow_reader.h"
 #include "_executor.h"
@@ -34,7 +35,8 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> read operator
      */
-    virtual std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() = 0;
+    virtual std::shared_ptr<PhysicalOperator> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) = 0;
 };
 
 /**
@@ -59,12 +61,20 @@ class BodoParquetScanFunction : public BodoScanFunction {
  */
 class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoParquetScanFunctionData(std::string path) : path(path) {}
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
-        return std::make_shared<PhysicalReadParquet>(path);
+    BodoParquetScanFunctionData(std::string path, PyObject *pyarrow_schema,
+                                PyObject *storage_options)
+        : path(path),
+          pyarrow_schema(pyarrow_schema),
+          storage_options(storage_options) {}
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) override {
+        return std::make_shared<PhysicalReadParquet>(
+            path, pyarrow_schema, storage_options, selected_columns);
     }
     // Parquet dataset path
     std::string path;
+    PyObject *pyarrow_schema;
+    PyObject *storage_options;
 };
 
 /**
@@ -93,7 +103,8 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) override {
         return std::make_shared<PhysicalReadPandas>(df);
     }
 
@@ -115,7 +126,8 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator() override {
+    std::shared_ptr<PhysicalOperator> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) override {
         // Read the dataframe from the result registry using
         // sys.modules["__main__"].RESULT_REGISTRY since importing
         // bodo.spawn.worker creates a new module with new empty registry.
@@ -222,6 +234,16 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::vector<int> &select_vec, PyObject *out_schema_py);
 
 /**
+ * @brief Get column indices that are pushed down from a projection node to its
+ * source. Used for testing.
+ *
+ * @param proj input projection node
+ * @return std::vector<int> pushed down column indices
+ */
+std::vector<int> get_projection_pushed_down_columns(
+    std::unique_ptr<duckdb::LogicalOperator> &proj);
+
+/**
  * @brief Creates a LogicalProjection node with a UDF inside.
  *
  * @param source input table plan
@@ -283,7 +305,8 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path, PyObject *pyarrow_schema);
+    std::string parquet_path, PyObject *pyarrow_schema,
+    PyObject *storage_options);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe sequentially
