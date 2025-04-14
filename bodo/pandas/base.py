@@ -27,7 +27,10 @@ def from_pandas(df):
     ):
         raise ValueError("Only RangeIndex with start=0 and step=1 is supported")
 
-    empty_df = df.iloc[:0]
+    # Make sure empty_df has proper dtypes since used in the plan output schema.
+    # Using sampling to avoid large memory usage.
+    sample_size = 100
+    empty_df = df.iloc[:sample_size].convert_dtypes(dtype_backend="pyarrow").iloc[:0]
     n_rows = len(df)
 
     res_id = None

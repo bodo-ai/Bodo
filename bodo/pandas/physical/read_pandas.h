@@ -21,7 +21,7 @@ class PhysicalReadPandas : public PhysicalSource {
         num_rows = PyObject_Length(df);
     }
 
-    virtual ~PhysicalReadPandas() = default;
+    ~PhysicalReadPandas() { Py_DECREF(df); }
 
     void Finalize() override {}
 
