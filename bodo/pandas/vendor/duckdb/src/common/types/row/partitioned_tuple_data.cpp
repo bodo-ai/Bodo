@@ -364,9 +364,7 @@ string PartitionedTupleData::ToString() {
 	return result;
 }
 
-void PartitionedTupleData::Print() {
-	Printer::Print(ToString());
-}
+void PartitionedTupleData::Print() {}
 // LCOV_EXCL_STOP
 
 void PartitionedTupleData::CreateAllocator() {
