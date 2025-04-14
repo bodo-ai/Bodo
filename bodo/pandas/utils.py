@@ -406,7 +406,7 @@ def cast_table_ptr_to_int64(typingctx, val):
 
 
 def df_to_cpp_table(df):
-    """Convert a pandas DataFrame to a C++ table pointer and Arrow schema object."""
+    """Convert a pandas DataFrame to a C++ table pointer and column names."""
     n_cols = len(df.columns)
     in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_cols)))
 
@@ -417,14 +417,12 @@ def df_to_cpp_table(df):
         return cast_table_ptr_to_int64(cpp_table)
 
     cpp_table = impl_df_to_cpp_table(df)
-    arrow_schema = pa.Schema.from_pandas(df)
-
-    return cpp_table, arrow_schema
+    return cpp_table, list(df.columns)
 
 
 def run_apply_udf(cpp_table, arrow_schema, func):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
-    return the result as a C++ table and Arrow schema.
+    return the result as a C++ table and column names.
     """
     df = cpp_table_to_df(cpp_table, arrow_schema)
     out_df = pd.DataFrame({"OUT": df.apply(func, axis=1)})

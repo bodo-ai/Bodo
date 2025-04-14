@@ -59,21 +59,40 @@ class PhysicalRunUDF : public PhysicalSourceSink {
                 "Expected a tuple of size 2 from run_apply_udf");
         }
 
-        // Extract the table_info pointer and arrow schema from the result
+        // Extract the table_info pointer and column names from the result
         PyObject* table_info_py = PyTuple_GetItem(result, 0);
-        PyObject* arrow_schema_py = PyTuple_GetItem(result, 1);
+        PyObject* col_names_py = PyTuple_GetItem(result, 1);
 
         int64_t table_info_ptr = PyLong_AsLongLong(table_info_py);
-        // Increment arrow_schema_py reference count since PyTuple_GetItem
-        // returns a borrowed reference
-        Py_INCREF(arrow_schema_py);
-        // TODO: remove arrow_schema_py
 
         Py_DECREF(bodo_module);
         Py_DECREF(result);
 
         std::shared_ptr<table_info> out_batch(
             reinterpret_cast<table_info*>(table_info_ptr));
+
+        // Verify col_names_py is a list
+        if (!PyList_Check(col_names_py)) {
+            throw std::runtime_error("Expected a list of column names");
+        }
+
+        // Clear existing column names and copy from Python list
+        out_batch->column_names.clear();
+        Py_ssize_t num_cols = PyList_Size(col_names_py);
+        for (Py_ssize_t i = 0; i < num_cols; i++) {
+            PyObject* col_name = PyList_GetItem(col_names_py, i);
+            if (!PyUnicode_Check(col_name)) {
+                throw std::runtime_error("Column name must be a string");
+            }
+
+            const char* utf8_name = PyUnicode_AsUTF8(col_name);
+            if (!utf8_name) {
+                throw std::runtime_error(
+                    "Failed to convert column name to UTF-8");
+            }
+
+            out_batch->column_names.push_back(std::string(utf8_name));
+        }
 
         return {out_batch, OperatorResult::FINISHED};
     }
