@@ -9,7 +9,9 @@
 #pragma once
 
 #include <iostream>
-#include <stacktrace>
+
+#define BOOST_STACKTRACE_USE_ADDR2LINE
+#include <boost/stacktrace.hpp>
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/shared_ptr.hpp"
@@ -34,7 +36,7 @@ public:
 	void CheckValid() const {
 		if (MemorySafety<SAFE>::ENABLED) {
 			if (!ptr) {
-    			std::cerr << std::stacktrace::current();
+    			std::cerr << boost::stacktrace::stacktrace();
 				throw InternalException("Attempting to dereference an optional pointer that is not set");
 			}
 		}
