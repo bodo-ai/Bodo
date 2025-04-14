@@ -5,7 +5,6 @@ import inspect
 import numba
 import pandas as pd
 import pyarrow as pa
-import pyarrow.types as patypes
 from llvmlite import ir as lir
 from numba.extending import intrinsic
 
@@ -497,13 +496,9 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
 
 
 def arrow_to_empty_df(arrow_schema):
+    """Create an empty dataframe with the same schema as the Arrow schema"""
     empty_df = pd.DataFrame(columns=[field.name for field in arrow_schema])
-    type_dict = {
-        field.name: field.type.to_pandas_dtype()
-        if not patypes.is_string(field.type)
-        else "string"
-        for field in arrow_schema
-    }
+    type_dict = {field.name: pd.ArrowDtype(field.type) for field in arrow_schema}
     empty_df = empty_df.astype(type_dict)
     empty_df.index = pd.RangeIndex(0)
     return empty_df
