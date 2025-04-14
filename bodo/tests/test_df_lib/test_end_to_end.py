@@ -22,31 +22,34 @@ def test_from_pandas(datapath):
     # Sequential test
     with temp_config_override("dataframe_library_run_parallel", False):
         bdf = bd.from_pandas(df)
+        print("create")
         assert bdf._lazy
         assert bdf.plan is not None
         assert bdf.plan.plan_class == "LogicalGetPandasReadSeq"
+        print("gen")
         duckdb_plan = bdf.plan.generate_duckdb()
+        print("test")
         _test_equal(duckdb_plan.df, df)
         _test_equal(
             bdf,
             df,
         )
+        print("done")
         assert not bdf._lazy
         assert bdf._mgr._plan is None
 
     # Parallel test
     bdf = bd.from_pandas(df)
+    print("create parallel")
     assert bdf._lazy
     assert bdf.plan is not None
-    assert bdf.plan.plan_class == (
-        "LogicalGetPandasReadParallel"
-        if os.environ.get("BODO_DATAFRAME_LIBRARY_RUN_PARALLEL", "1") != "0"
-        else "LogicalGetPandasReadSeq"
-    )
+    assert bdf.plan.plan_class == "LogicalGetPandasReadParallel"
+    print("test parallel")
     _test_equal(
         bdf,
         df,
     )
+    print("done parallel")
     assert not bdf._lazy
     assert bdf._mgr._plan is None
 
