@@ -213,6 +213,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		config_ptr = user_config;
 	}
 
+	std::cerr << "database_path: " << database_path << '\n';
 	Configure(*config_ptr, database_path);
 
 	db_file_system = make_uniq<DatabaseFileSystem>(*this);
@@ -234,6 +235,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	config.secret_manager->Initialize(*this);
 
 	// resolve the type of teh database we are opening
+	std::cerr << "database_path: " << config.options.database_path << '\n';
 	auto &fs = FileSystem::GetFileSystem(*this);
 	DBPathAndType::ResolveDatabaseType(fs, config.options.database_path, config.options.database_type);
 
@@ -247,6 +249,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		}
 	}
 
+	std::cerr << "LoadExtensionSettings" << '\n';
 	LoadExtensionSettings();
 
 	if (!db_manager->HasDefaultDatabase()) {
@@ -256,6 +259,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	// only increase thread count after storage init because we get races on catalog otherwise
 	scheduler->SetThreads(config.options.maximum_threads, config.options.external_threads);
 	scheduler->RelaunchThreads();
+	std::cerr << "done" << '\n';
 }
 
 DuckDB::DuckDB(const char *path, DBConfig *new_config) : instance(make_shared_ptr<DatabaseInstance>()) {
