@@ -32,9 +32,16 @@ std::shared_ptr<PhysicalOperator> Executor::processNode(
         case duckdb::LogicalOperatorType::LOGICAL_GET: {
             duckdb::LogicalGet& get_plan = plan->Cast<duckdb::LogicalGet>();
 
+            // Get selected columns from LogicalGet to pass to physical
+            // operators
+            std::vector<int> selected_columns;
+            for (auto& ci : get_plan.GetColumnIds()) {
+                selected_columns.push_back(ci.GetPrimaryIndex());
+            }
+
             std::shared_ptr<PhysicalOperator> physical_op =
                 get_plan.bind_data->Cast<BodoScanFunctionData>()
-                    .CreatePhysicalOperator();
+                    .CreatePhysicalOperator(selected_columns);
 
             this->pipelines.emplace_back(
                 std::vector<std::shared_ptr<PhysicalOperator>>({physical_op}));
@@ -119,7 +126,8 @@ std::pair<int64_t, PyObject*> PhysicalReadParquet::execute() {
 
     auto batch = internal_reader->read_all();
 
-    return {reinterpret_cast<int64_t>(new table_info(*batch)), pyarrow_schema};
+    return {reinterpret_cast<int64_t>(new table_info(*batch)),
+            selected_pyarrow_schema};
 }
 
 std::pair<int64_t, PyObject*> PhysicalReadPandas::execute() {
