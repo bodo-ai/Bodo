@@ -5,8 +5,15 @@
 #include "physical/project.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
+    // Get selected columns from LogicalGet to pass to physical
+    // operators
+    std::vector<int> selected_columns;
+    for (auto& ci : op.GetColumnIds()) {
+        selected_columns.push_back(ci.GetPrimaryIndex());
+    }
     auto physical_op =
-        op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator();
+        op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
+            selected_columns);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");

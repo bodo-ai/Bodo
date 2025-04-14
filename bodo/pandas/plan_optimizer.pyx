@@ -259,6 +259,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_col_ref_expr(object field, int col_idx)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
+    cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
 
 
 def join_type_to_string(CJoinType join_type):
@@ -339,6 +340,14 @@ cdef class LogicalProjection(LogicalOperator):
 
     def __str__(self):
         return f"LogicalProjection({self.select_vec}, {self.out_schema})"
+
+
+cpdef get_pushed_down_columns(proj):
+    """Get column indices that are pushed down from projection to its source node. Used for testing.
+    """
+    cdef LogicalOperator wrapped_operator = proj
+    cdef vector[int] pushed_down_columns = get_projection_pushed_down_columns(wrapped_operator.c_logical_operator)
+    return pushed_down_columns
 
 
 cdef class LogicalProjectionUDF(LogicalOperator):

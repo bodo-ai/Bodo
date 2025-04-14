@@ -32,9 +32,10 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
     /**
      * @brief Create a PhysicalOperator for reading data from this source.
      *
-     * @return std::shared_ptr<PhysicalOperator> read operator
+     * @return std::shared_ptr<PhysicalSource> read operator
      */
-    virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator() = 0;
+    virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) = 0;
 };
 
 /**
@@ -65,7 +66,8 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options) {}
 
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator() override;
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) override;
 
     // Parquet dataset path
     std::string path;
@@ -99,7 +101,8 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator() override;
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) override;
 
     PyObject *df;
 };
@@ -119,7 +122,8 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator() override;
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+        std::vector<int> &selected_columns) override;
     std::string result_id;
 };
 
@@ -186,6 +190,16 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> &select_vec, PyObject *out_schema_py);
+
+/**
+ * @brief Get column indices that are pushed down from a projection node to its
+ * source. Used for testing.
+ *
+ * @param proj input projection node
+ * @return std::vector<int> pushed down column indices
+ */
+std::vector<int> get_projection_pushed_down_columns(
+    std::unique_ptr<duckdb::LogicalOperator> &proj);
 
 /**
  * @brief Creates a LogicalProjection node with a UDF inside.

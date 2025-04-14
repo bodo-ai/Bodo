@@ -60,6 +60,19 @@ def test_read_parquet(datapath):
     )
 
 
+def test_read_parquet_projection_pushdown(datapath):
+    """Make sure basic projection pushdown works for Parquet read end to end."""
+    path = datapath("example_no_index.parquet")
+
+    bodo_out = bd.read_parquet(path)[["three", "four"]]
+    py_out = pd.read_parquet(path)[["three", "four"]]
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
+
+
 @pytest.mark.parametrize(
     "df",
     [

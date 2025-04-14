@@ -53,3 +53,26 @@ def test_optimize_call():
     )
     B = plan_optimizer.py_optimize_plan(A)
     assert str(B) == "LogicalOperator()"
+
+
+def test_parquet_projection_pushdown():
+    """Make sure Projection pushdown works for Parquet read."""
+    A = plan_optimizer.LogicalGetParquetRead(
+        b"example.parquet",
+        pa.schema(
+            [
+                ("A", pa.int64()),
+                ("B", pa.string()),
+                ("C", pa.int32()),
+                ("D", pa.int32()),
+            ]
+        ),
+        {},
+    )
+    B = plan_optimizer.LogicalProjection(
+        A, [0, 2], pa.schema([("A", pa.int64()), ("C", pa.int32())])
+    )
+    C = plan_optimizer.py_optimize_plan(B)
+    assert plan_optimizer.get_pushed_down_columns(C) == [0, 2], (
+        "Invalid projection pushdown"
+    )

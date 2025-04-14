@@ -12,6 +12,7 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
@@ -54,7 +55,9 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
-    return optimizer.Optimize(std::move(in_plan));
+    duckdb::unique_ptr<duckdb::LogicalOperator> out_plan =
+        optimizer.Optimize(std::move(in_plan));
+    return out_plan;
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val) {
@@ -112,13 +115,20 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     // We only care about the types, not the field names
     auto [_, type_vec] = arrow_schema_to_duckdb(out_schema);
 
+    if (source_duck->GetTableIndex().size() != 1) {
+        throw std::runtime_error(
+            "Only one table index expected in source operator to "
+            "LogicalProjection");
+    }
+    duckdb::idx_t source_index = source_duck->GetTableIndex()[0];
+
     assert(select_vec.size() == type_vec.size());
     std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
     for (size_t i = 0; i < select_vec.size(); ++i) {
         auto selection = select_vec[i];
         auto stype = type_vec[i];
         auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            stype, duckdb::ColumnBinding(table_idx, selection));
+            stype, duckdb::ColumnBinding(source_index, selection));
         projection_expressions.emplace_back(std::move(expr));
     }
 
@@ -131,6 +141,22 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     proj->children.push_back(std::move(source_duck));
 
     return proj;
+}
+
+std::vector<int> get_projection_pushed_down_columns(
+    std::unique_ptr<duckdb::LogicalOperator> &proj) {
+    if (proj->children.size() != 1) {
+        throw std::runtime_error(
+            "Only one child operator expected in LogicalProjection");
+    }
+    duckdb::LogicalGet &get_plan =
+        proj->children[0]->Cast<duckdb::LogicalGet>();
+
+    std::vector<int> selected_columns;
+    for (auto &ci : get_plan.GetColumnIds()) {
+        selected_columns.push_back(ci.GetPrimaryIndex());
+    }
+    return selected_columns;
 }
 
 /**
@@ -247,9 +273,19 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
 
     duckdb::virtual_column_map_t virtual_columns;
 
-    return duckdb::make_uniq<duckdb::LogicalGet>(
-        binder->GenerateTableIndex(), table_function, std::move(bind_data1),
-        return_types, return_names, virtual_columns);
+    duckdb::unique_ptr<duckdb::LogicalGet> out_get =
+        duckdb::make_uniq<duckdb::LogicalGet>(
+            binder->GenerateTableIndex(), table_function, std::move(bind_data1),
+            return_types, return_names, virtual_columns);
+
+    // Column ids need to be added separately.
+    // DuckDB column id initialization example:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
+    for (size_t i = 0; i < return_names.size(); i++) {
+        out_get->AddColumnId(i);
+    }
+
+    return out_get;
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
@@ -368,7 +404,8 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
 }
 
 std::shared_ptr<PhysicalSource>
-BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator() {
+BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
+    std::vector<int> &selected_columns) {
     // Read the dataframe from the result registry using
     // sys.modules["__main__"].RESULT_REGISTRY since importing
     // bodo.spawn.worker creates a new module with new empty registry.
@@ -409,14 +446,16 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator() {
 }
 
 std::shared_ptr<PhysicalSource>
-BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator() {
+BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
+    std::vector<int> &selected_columns) {
     return std::make_shared<PhysicalReadPandas>(df);
 }
 
 std::shared_ptr<PhysicalSource>
-BodoParquetScanFunctionData::CreatePhysicalOperator() {
-    return std::make_shared<PhysicalReadParquet>(path, pyarrow_schema,
-                                                 storage_options);
+BodoParquetScanFunctionData::CreatePhysicalOperator(
+    std::vector<int> &selected_columns) {
+    return std::make_shared<PhysicalReadParquet>(
+        path, pyarrow_schema, storage_options, selected_columns);
 }
 
 #undef CHECK_ARROW

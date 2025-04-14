@@ -13,25 +13,18 @@ class PhysicalReadParquet : public PhysicalSource {
    public:
     // TODO: Fill in the contents with info from the logical operator
     explicit PhysicalReadParquet(std::string _path, PyObject *pyarrow_schema,
-                                 PyObject *storage_options) {
+                                 PyObject *storage_options,
+                                 std::vector<int> &selected_columns) {
         PyObject *py_path = PyUnicode_FromString(_path.c_str());
 
         std::shared_ptr<arrow::Schema> arrow_schema =
             unwrap_schema(pyarrow_schema);
 
-        int num_fields = arrow_schema->num_fields();
-        std::vector<int> selected_fields(num_fields);
-        // TODO: Arrow fields are always nullable?
-        std::vector<bool> is_nullable(num_fields, true);
-        // Select all fields for now, TODO: get selected fields from Logical
-        // Node.
-        for (int i = 0; i < num_fields; i++) {
-            selected_fields[i] = i;
-        }
+        std::vector<bool> is_nullable(selected_columns.size(), true);
 
         internal_reader = std::make_shared<ParquetReader>(
             py_path, true, Py_None, storage_options, pyarrow_schema, -1,
-            selected_fields, is_nullable, false, -1);
+            selected_columns, is_nullable, false, -1);
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
     }
     virtual ~PhysicalReadParquet() = default;
