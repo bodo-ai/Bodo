@@ -462,7 +462,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
         # Fake non-zero rows.  nrows should be overwritten upon plan execution.
         nrows = 1
 
-    plan.out_schema = schema
+    plan.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
 
     if isinstance(schema, (dict, pd.DataFrame)):
         if isinstance(schema, dict):
