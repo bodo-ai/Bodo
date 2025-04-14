@@ -5,9 +5,9 @@
 
 duckdb::ClientContext &get_duckdb_context() {
     std::cerr << "get_duckdb_context" << '\n';
-    static duckdb::DuckDB db(nullptr);
+    duckdb::DuckDB db(nullptr);
     std::cerr << "get_duckdb_context context" << '\n';
-    static duckdb::ClientContext context(db.instance);
+    duckdb::ClientContext context(db.instance);
     std::cerr << "get_duckdb_context done" << '\n';
     return context;
 }

@@ -253,10 +253,12 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	std::cerr << "LoadExtensionSettings" << '\n';
 	LoadExtensionSettings();
 
+	std::cerr << "InitializeDatabase" << '\n';
 	if (!db_manager->HasDefaultDatabase()) {
 		CreateMainDatabase();
 	}
 
+	std::cerr << "Set Threads" << '\n';
 	// only increase thread count after storage init because we get races on catalog otherwise
 	scheduler->SetThreads(config.options.maximum_threads, config.options.external_threads);
 	scheduler->RelaunchThreads();
