@@ -224,9 +224,11 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
     auto output_table = executor.ExecutePipelines();
+    PyObject *pyarrow_schema =
+        arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
-    return {reinterpret_cast<int64_t>(output_table.get()),
-            arrow::py::wrap_schema(output_table->schema()->ToArrowSchema())};
+    return {reinterpret_cast<int64_t>(new table_info(*output_table)),
+            pyarrow_schema};
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
