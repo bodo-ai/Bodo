@@ -50,7 +50,6 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
-    std::cerr << "Optimizing plan" << '\n';
     return optimizer.Optimize(std::move(in_plan));
 }
 
@@ -219,7 +218,6 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan) {
     Executor executor(std::move(plan));
-    std::cerr << "Execute plan" << '\n';
     return executor.execute();
 }
 
@@ -251,22 +249,18 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_bind.hpp#L19
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/pandas/scan.cpp#L185
 
-    std::cerr << "make_dataframe_get_seq_node" << '\n';
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
-    std::cerr << "bind func" << '\n';
     BodoDataFrameScanFunction table_function = BodoDataFrameScanFunction();
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoDataFrameSeqScanFunctionData>(df);
 
     // Convert Arrow schema to DuckDB
-    std::cerr << "schema" << '\n';
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
 
     duckdb::virtual_column_map_t virtual_columns;
 
-    std::cerr << "make get node" << '\n';
     return duckdb::make_uniq<duckdb::LogicalGet>(
         binder->GenerateTableIndex(), table_function, std::move(bind_data1),
         return_types, return_names, virtual_columns);
@@ -292,19 +286,14 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 }
 
 duckdb::ClientContext &get_duckdb_context() {
-    std::cerr << "get_duckdb_context" << '\n';
     static duckdb::DuckDB db(nullptr);
-    std::cerr << "get_duckdb_context context" << '\n';
     static duckdb::ClientContext context(db.instance);
-    std::cerr << "get_duckdb_context done" << '\n';
     return context;
 }
 
 duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder() {
-    std::cerr << "get_duckdb_binder" << '\n';
     static duckdb::shared_ptr<duckdb::Binder> binder =
         duckdb::Binder::CreateBinder(get_duckdb_context());
-    std::cerr << "get_duckdb_binder done" << '\n';
     return binder;
 }
 
