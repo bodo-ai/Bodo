@@ -180,11 +180,6 @@ void DatabaseInstance::CreateMainDatabase() {
 	AttachInfo info;
 	info.name = AttachedDatabase::ExtractDatabaseName(config.options.database_path, GetFileSystem());
 	info.path = config.options.database_path;
-
-	optional_ptr<AttachedDatabase> initial_database;
-	AttachOptions options(config.options);
-
-	initial_database->SetInitialDatabase();
 }
 
 static void ThrowExtensionSetUnrecognizedOptions(const case_insensitive_map_t<Value> &unrecognized_options) {
