@@ -182,26 +182,6 @@ void DatabaseInstance::CreateMainDatabase() {
 	info.path = config.options.database_path;
 }
 
-static void ThrowExtensionSetUnrecognizedOptions(const case_insensitive_map_t<Value> &unrecognized_options) {
-	D_ASSERT(!unrecognized_options.empty());
-
-	vector<string> options;
-	for (auto &kv : unrecognized_options) {
-		options.push_back(kv.first);
-	}
-	auto concatenated = StringUtil::Join(options, ", ");
-	throw InvalidInputException("The following options were not recognized: " + concatenated);
-}
-
-void DatabaseInstance::LoadExtensionSettings() {
-	// copy the map, to protect against modifications during
-	auto unrecognized_options_copy = config.options.unrecognized_options;
-
-	if (!config.options.unrecognized_options.empty()) {
-		ThrowExtensionSetUnrecognizedOptions(config.options.unrecognized_options);
-	}
-}
-
 void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_config) {
 	DBConfig default_config;
 	DBConfig *config_ptr = &default_config;
@@ -209,7 +189,6 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		config_ptr = user_config;
 	}
 
-	std::cerr << std::boolalpha << "base database_path: " << (database_path == nullptr) << "\n";
 	Configure(*config_ptr, database_path);
 
 	db_file_system = make_uniq<DatabaseFileSystem>(*this);
@@ -231,7 +210,6 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	config.secret_manager->Initialize(*this);
 
 	// resolve the type of teh database we are opening
-	std::cerr << "config database_path: '" << config.options.database_path << "'\n";
 	auto &fs = FileSystem::GetFileSystem(*this);
 	DBPathAndType::ResolveDatabaseType(fs, config.options.database_path, config.options.database_type);
 
@@ -245,19 +223,13 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		}
 	}
 
-	std::cerr << "LoadExtensionSettings" << '\n';
-	LoadExtensionSettings();
-
-	std::cerr << "InitializeDatabase" << '\n';
 	if (!db_manager->HasDefaultDatabase()) {
 		CreateMainDatabase();
 	}
 
-	std::cerr << "Set Threads" << '\n';
 	// only increase thread count after storage init because we get races on catalog otherwise
 	scheduler->SetThreads(config.options.maximum_threads, config.options.external_threads);
 	scheduler->RelaunchThreads();
-	std::cerr << "done" << '\n';
 }
 
 DuckDB::DuckDB(const char *path, DBConfig *new_config) : instance(make_shared_ptr<DatabaseInstance>()) {
