@@ -403,8 +403,15 @@ void MapType::Serialize(std::vector<int8_t>& arr_array_types,
 
 std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
     if (array_type == bodo_array_type::STRING) {
-        return std::make_shared<::arrow::Field>(name, arrow::large_utf8(),
-                                                true);
+        if (c_type == Bodo_CTypes::STRING) {
+            return std::make_shared<::arrow::Field>(name, arrow::large_utf8(),
+                                                    true);
+        } else {
+            assert(c_type == Bodo_CTypes::BINARY);
+            return std::make_shared<::arrow::Field>(name, arrow::large_binary(),
+                                                    true);
+        }
+
     } else if (array_type == bodo_array_type::DICT) {
         return std::make_shared<::arrow::Field>(
             name, arrow::dictionary(arrow::int32(), arrow::large_utf8()), true);
@@ -458,11 +465,15 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
         case Bodo_CTypes::DATETIME:
             dtype = arrow::timestamp(arrow::TimeUnit::NANO);
             break;
+        case Bodo_CTypes::TIMEDELTA:
+            dtype = arrow::duration(arrow::TimeUnit::NANO);
+            break;
         case Bodo_CTypes::DECIMAL:
             dtype = arrow::decimal128(precision, scale);
             break;
         default: {
-            throw std::runtime_error("Unsupported dtype");
+            throw std::runtime_error("ToArrowType: unsupported dtype " +
+                                     std::string(dtype_to_str(c_type)));
         }
     }
 
