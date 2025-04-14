@@ -230,16 +230,16 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
-    # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
-    # testing behavior, to test with only 1D_var. This environment variable is set in our
-    # PR CI environment
-    if only_1DVar is None and not (only_seq or only_1D):
-        only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
-
-    # If BODO_ENABLE_DATAFRAME_LIBRARY then run compiler tests as df library tests
+    # If dataframe_library_enabled then run compiler tests as df library tests
     # (replaces import pandas as pd with import bodo.pandas as pd)
     # NOTE: This variable takes precedence over other variables
     only_df_lib = bodo.dataframe_library_enabled
+
+    # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
+    # testing behavior, to test with only 1D_var. This environment variable is set in our
+    # PR CI environment
+    if only_1DVar is None and not (only_seq or only_1D or only_df_lib):
+        only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 
     run_seq, run_1D, run_1DVar, run_spawn, run_df_lib = (
         False,
