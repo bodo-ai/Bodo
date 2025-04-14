@@ -64,7 +64,15 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
                                 PyObject *storage_options)
         : path(path),
           pyarrow_schema(pyarrow_schema),
-          storage_options(storage_options) {}
+          storage_options(storage_options) {
+        Py_INCREF(pyarrow_schema);
+        Py_INCREF(storage_options);
+    }
+
+    ~BodoParquetScanFunctionData() {
+        Py_DECREF(pyarrow_schema);
+        Py_DECREF(storage_options);
+    }
 
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns) override;

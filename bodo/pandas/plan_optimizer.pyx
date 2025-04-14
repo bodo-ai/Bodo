@@ -492,4 +492,4 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
     cpp_table = exec_output.first
     arrow_schema = <object>exec_output.second
     assert output_func is not None
-    return output_func(cpp_table, arrow_schema)
+    return output_func(cpp_table, out_schema)
