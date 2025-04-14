@@ -12,8 +12,6 @@
 #include "duckdb/common/shared_ptr.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 
-#include <iostream>
-
 namespace duckdb {
 
 template <class T, bool SAFE = true>
