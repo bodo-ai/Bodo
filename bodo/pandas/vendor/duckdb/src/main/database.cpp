@@ -26,7 +26,6 @@
 #include "duckdb/transaction/transaction_manager.hpp"
 #include "duckdb/storage/compression/empty_validity.hpp"
 #include "duckdb/logging/logger.hpp"
-#include <ios>
 
 #ifndef DUCKDB_NO_THREADS
 #include "duckdb/common/thread.hpp"

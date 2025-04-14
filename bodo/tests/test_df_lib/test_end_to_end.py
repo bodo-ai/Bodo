@@ -25,30 +25,24 @@ def test_from_pandas(datapath):
         assert bdf._lazy
         assert bdf.plan is not None
         assert bdf.plan.plan_class == "LogicalGetPandasReadSeq"
-        print("gen")
         duckdb_plan = bdf.plan.generate_duckdb()
-        print("test")
         _test_equal(duckdb_plan.df, df)
         _test_equal(
             bdf,
             df,
         )
-        print("done")
         assert not bdf._lazy
         assert bdf._mgr._plan is None
 
     # Parallel test
     bdf = bd.from_pandas(df)
-    print("create parallel")
     assert bdf._lazy
     assert bdf.plan is not None
     assert bdf.plan.plan_class == "LogicalGetPandasReadParallel"
-    print("test parallel")
     _test_equal(
         bdf,
         df,
     )
-    print("done parallel")
     assert not bdf._lazy
     assert bdf._mgr._plan is None
 

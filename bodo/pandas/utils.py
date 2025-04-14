@@ -344,9 +344,7 @@ class LazyPlan:
         args = [recursive_check(x) for x in self.args]
         kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
         # Create real duckdb class.
-        print("Creating plan", self.plan_class)
         ret = getattr(plan_optimizer, self.plan_class)(*args, **kwargs)
-        print("Created plan", self.plan_class)
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret
         return ret
