@@ -213,7 +213,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		config_ptr = user_config;
 	}
 
-	std::cerr << "database_path: " << database_path << '\n';
+	std::cerr << "base database_path: '" << database_path << "'\n";
 	Configure(*config_ptr, database_path);
 
 	db_file_system = make_uniq<DatabaseFileSystem>(*this);
@@ -235,7 +235,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	config.secret_manager->Initialize(*this);
 
 	// resolve the type of teh database we are opening
-	std::cerr << "database_path: " << config.options.database_path << '\n';
+	std::cerr << "config database_path: '" << config.options.database_path << "'\n";
 	auto &fs = FileSystem::GetFileSystem(*this);
 	DBPathAndType::ResolveDatabaseType(fs, config.options.database_path, config.options.database_type);
 
