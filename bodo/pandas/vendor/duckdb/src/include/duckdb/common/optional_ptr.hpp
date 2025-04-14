@@ -8,14 +8,11 @@
 
 #pragma once
 
-#include <iostream>
-
-#define BOOST_STACKTRACE_USE_ADDR2LINE
-#include <boost/stacktrace.hpp>
-
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/shared_ptr.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+
+#include <iostream>
 
 namespace duckdb {
 
@@ -36,7 +33,6 @@ public:
 	void CheckValid() const {
 		if (MemorySafety<SAFE>::ENABLED) {
 			if (!ptr) {
-    			std::cerr << boost::stacktrace::stacktrace();
 				throw InternalException("Attempting to dereference an optional pointer that is not set");
 			}
 		}
@@ -46,18 +42,22 @@ public:
 		return ptr;
 	}
 	T &operator*() {
+		std::cerr << "optional_ptr dereference" << '\n';
 		CheckValid();
 		return *ptr;
 	}
 	const T &operator*() const {
+		std::cerr << "optional_ptr dereference const" << '\n';
 		CheckValid();
 		return *ptr;
 	}
 	T *operator->() {
+		std::cerr << "optional_ptr operator->" << '\n';
 		CheckValid();
 		return ptr;
 	}
 	const T *operator->() const {
+		std::cerr << "optional_ptr operator-> const" << '\n';
 		CheckValid();
 		return ptr;
 	}
