@@ -1,4 +1,7 @@
 #include "_plan.h"
+#include <arrow/type.h>
+#include <parquet/properties.h>
+#include <memory>
 #include <utility>
 #include "duckdb.hpp"
 #include "duckdb/common/types.hpp"
@@ -365,24 +368,51 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     // TODO: handle all types
     duckdb::LogicalType duckdb_type;
     const std::shared_ptr<arrow::DataType> &arrow_type = field->type();
-    if ((arrow_type->id() == arrow::Type::STRING) ||
-        (arrow_type->id() == arrow::Type::LARGE_STRING)) {
-        duckdb_type = duckdb::LogicalType::VARCHAR;
-    } else if (arrow_type->id() == arrow::Type::INT32) {
-        duckdb_type = duckdb::LogicalType::INTEGER;
-    } else if (arrow_type->id() == arrow::Type::INT64) {
-        duckdb_type = duckdb::LogicalType::BIGINT;
-    } else if (arrow_type->id() == arrow::Type::FLOAT) {
-        duckdb_type = duckdb::LogicalType::FLOAT;
-    } else if (arrow_type->id() == arrow::Type::DOUBLE) {
-        duckdb_type = duckdb::LogicalType::DOUBLE;
-    } else if (arrow_type->id() == arrow::Type::BOOL) {
-        duckdb_type = duckdb::LogicalType::BOOLEAN;
-    } else {
-        throw std::runtime_error(
-            "Unsupported Arrow type: " + arrow_type->ToString() +
-            ". Please extend the arrow_schema_to_duckdb function to handle "
-            "this type.");
+    switch (arrow_type->id()) {
+        case arrow::Type::STRING:
+        case arrow::Type::LARGE_STRING: {
+            duckdb_type = duckdb::LogicalType::VARCHAR;
+            break;
+        }
+        case arrow::Type::INT32: {
+            duckdb_type = duckdb::LogicalType::INTEGER;
+            break;
+        }
+        case arrow::Type::INT64: {
+            duckdb_type = duckdb::LogicalType::BIGINT;
+            break;
+        }
+        case arrow::Type::FLOAT: {
+            duckdb_type = duckdb::LogicalType::FLOAT;
+            break;
+        }
+        case arrow::Type::DOUBLE: {
+            duckdb_type = duckdb::LogicalType::DOUBLE;
+            break;
+        }
+        case arrow::Type::BOOL: {
+            duckdb_type = duckdb::LogicalType::BOOLEAN;
+            break;
+        }
+        case arrow::Type::DATE32:
+        case arrow::Type::DATE64: {
+            duckdb_type = duckdb::LogicalType::DATE;
+            break;
+        }
+        case arrow::Type::DECIMAL128: {
+            auto decimal_type =
+                std::static_pointer_cast<arrow::DecimalType>(arrow_type);
+            int32_t precision = decimal_type->precision();
+            int32_t scale = decimal_type->scale();
+
+            duckdb_type = duckdb::LogicalType::DECIMAL(precision, scale);
+            break;
+        }
+        default:
+            throw std::runtime_error(
+                "Unsupported Arrow type: " + arrow_type->ToString() +
+                ". Please extend the arrow_schema_to_duckdb function to handle "
+                "this type.");
     }
     return {field->name(), duckdb_type};
 }
