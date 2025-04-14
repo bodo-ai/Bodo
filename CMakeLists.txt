@@ -538,6 +538,7 @@ ExternalProject_Add(
     duckdb_build
     PREFIX ${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/vendor/duckdb
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     CONFIGURE_COMMAND ""
     BUILD_COMMAND make
     INSTALL_COMMAND ""
