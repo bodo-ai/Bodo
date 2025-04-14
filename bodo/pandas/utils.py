@@ -426,6 +426,7 @@ def run_apply_udf(cpp_table, arrow_schema, func):
     """
     df = cpp_table_to_df(cpp_table, arrow_schema)
     out_df = pd.DataFrame({"OUT": df.apply(func, axis=1)})
+    out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
     return df_to_cpp_table(out_df)
 
 

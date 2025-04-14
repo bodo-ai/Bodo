@@ -12,7 +12,8 @@ void Pipeline::Execute() {
         std::shared_ptr<table_info> batch;
 
         // Execute the source to get the base batch
-        auto result = source->ProduceBatch();
+        std::pair<std::shared_ptr<table_info>, ProducerResult> result =
+            source->ProduceBatch();
         batch = result.first;
         ProducerResult produce_result = result.second;
         if (produce_result == ProducerResult::HAVE_MORE_OUTPUT) {
@@ -20,7 +21,8 @@ void Pipeline::Execute() {
         }
 
         for (std::shared_ptr<PhysicalSourceSink>& op : between_ops) {
-            auto result = op->ProcessBatch(batch);
+            std::pair<std::shared_ptr<table_info>, OperatorResult> result =
+                op->ProcessBatch(batch);
             batch = result.first;
             OperatorResult op_result = result.second;
 
@@ -29,7 +31,7 @@ void Pipeline::Execute() {
             }
         }
 
-        sink->ConsumeBatch(result.first);
+        sink->ConsumeBatch(batch);
     }
 
     // Finalize
