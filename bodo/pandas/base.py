@@ -1,31 +1,47 @@
 import pandas as pd
 from pandas._libs import lib
 
-from bodo.ext import plan_optimizer
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
+from bodo.pandas.utils import (
+    LazyPlan,
+    check_args_fallback,
+    wrap_plan,
+)
 
 
 def from_pandas(df):
     """Convert a Pandas DataFrame to a BodoDataFrame."""
     import pyarrow as pa
 
+    import bodo
+
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame")
+
+    # TODO: Add support for Index
+    if (
+        not isinstance(df.index, pd.RangeIndex)
+        or df.index.start != 0
+        or df.index.step != 1
+    ):
+        raise ValueError("Only RangeIndex with start=0 and step=1 is supported")
 
     empty_df = df.iloc[:0]
     n_rows = len(df)
     arrow_schema = pa.Schema.from_pandas(df)
 
-    # TODO: distribute to workers and get result_id
-    plan = plan_optimizer.LazyPlan(
-        plan_optimizer.LogicalGetPandasRead, df, arrow_schema
-    )
-    # TODO: Add support for Index
+    res_id = None
+    if bodo.dataframe_library_run_parallel:
+        res_id = bodo.spawn.utils.scatter_data(df)
+        plan = LazyPlan("LogicalGetPandasReadParallel", res_id, arrow_schema)
+    else:
+        plan = LazyPlan("LogicalGetPandasReadSeq", df, arrow_schema)
 
-    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=n_rows)
+    return wrap_plan(empty_df, plan=plan, nrows=n_rows, res_id=res_id)
 
 
+@check_args_fallback("all")
 def read_parquet(
     path,
     engine="auto",
@@ -39,56 +55,58 @@ def read_parquet(
 ):
     import pyarrow as pa
 
-    from bodo.io.parquet_pio import get_parquet_dataset
-    from bodo.pandas import BODO_PANDAS_FALLBACK
+    from bodo.io.parquet_pio import get_pandas_metadata, get_parquet_dataset
 
-    if (
-        engine != "auto"
-        or columns != None
-        or storage_options != None
-        or use_nullable_dtypes != lib.no_default
-        or dtype_backend != lib.no_default
-        or filesystem != None
-        or filters != None
-        or len(kwargs) > 0
-    ):
-        if BODO_PANDAS_FALLBACK != 0:
-            return pd.read_parquet(
-                path,
-                engine=engine,
-                columns=columns,
-                storage_options=storage_options,
-                use_nullable_dtypes=use_nullable_dtypes,
-                dtype_backend=dtype_backend,
-                filesystem=filesystem,
-                filters=filters,
-                **kwargs,
-            )
-        else:
-            assert False and "Unsupported option to read_parquet"
+    if storage_options is None:
+        storage_options = {}
 
-    # Read Parquet schema and row count
+    # Read Parquet schema
     # TODO: Make this more robust (e.g. handle Index, etc.)
     use_hive = True
     pq_dataset = get_parquet_dataset(
         path,
-        get_row_counts=True,
+        get_row_counts=False,
         storage_options=storage_options,
         read_categories=True,
         partitioning="hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
-    nrows = pq_dataset._bodo_total_rows
+    partition_names = pq_dataset.partition_names
+
+    if len(partition_names) > 0:
+        raise NotImplementedError(
+            "bd.read_parquet: Reading parquet with partition column not supported yet."
+        )
+
+    index_cols, _ = get_pandas_metadata(arrow_schema)
+    is_supported_index = False
+
+    if len(index_cols) == 0:
+        is_supported_index = True
+    elif len(index_cols) == 1:
+        index_col = index_cols[0]
+        # RangeIndex case
+        if (
+            isinstance(index_col, dict)
+            and index_col["start"] == 0
+            and index_col["step"] == 1
+        ):
+            is_supported_index = True
+
+    if not is_supported_index:
+        raise NotImplementedError(
+            "bd.read_parquet: Reading parquet files with index columns is not supported yet."
+        )
 
     empty_df = pa.Table.from_pydict(
         {k: [] for k in arrow_schema.names}, schema=arrow_schema
     ).to_pandas()
     empty_df.index = pd.RangeIndex(0)
 
-    plan = plan_optimizer.LazyPlan(
-        plan_optimizer.LogicalGetParquetRead, path.encode(), arrow_schema
+    plan = LazyPlan(
+        "LogicalGetParquetRead", path.encode(), arrow_schema, storage_options
     )
-    return plan_optimizer.wrap_plan(empty_df, plan=plan, nrows=nrows)
+    return wrap_plan(empty_df, plan=plan)
 
 
 def merge(lhs, rhs, *args, **kwargs):

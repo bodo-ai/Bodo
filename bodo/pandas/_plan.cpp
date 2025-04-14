@@ -2,12 +2,15 @@
 #include <utility>
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
@@ -126,6 +129,63 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     return proj;
 }
 
+/**
+ * @brief Dummy function to pass to DuckDB for UDFs. DuckDB runs some functions
+ * during optimization for constant folding, but we avoid it by throwing an
+ * exception.
+ *
+ */
+static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
+                        duckdb::Vector &result) {
+    throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
+}
+
+duckdb::unique_ptr<duckdb::LogicalProjection> make_projection_udf(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *func,
+    PyObject *out_schema_py) {
+    // Output table index
+    duckdb::idx_t table_idx = get_duckdb_binder()->GenerateTableIndex();
+
+    // Get output data type (UDF output is a single column)
+    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
+    auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
+    assert(out_types.size() == 1);
+    duckdb::LogicalType out_type = out_types[0];
+
+    // Create ScalarFunction for UDF
+    duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
+        "bodo_udf", source->types, out_type, RunFunction);
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
+        duckdb::make_uniq<BodoUDFFunctionData>(func);
+
+    // Add all input columns as UDF inputs
+    std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
+    for (size_t i = 0; i < source->types.size(); ++i) {
+        auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+            source->types[i], duckdb::ColumnBinding(table_idx, i));
+        udf_in_exprs.emplace_back(std::move(expr));
+    }
+
+    // Create UDF expression
+    duckdb::unique_ptr<duckdb::BoundFunctionExpression> scalar_expr =
+        make_uniq<duckdb::BoundFunctionExpression>(out_type, scalar_function,
+                                                   std::move(udf_in_exprs),
+                                                   std::move(bind_data1));
+
+    // Create projection node
+    std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
+    projection_expressions.push_back(std::move(scalar_expr));
+    duckdb::unique_ptr<duckdb::LogicalProjection> proj =
+        duckdb::make_uniq<duckdb::LogicalProjection>(
+            table_idx, std::move(projection_expressions));
+
+    // Add the input source
+    auto source_duck = to_duckdb(source);
+    proj->children.push_back(std::move(source_duck));
+
+    return proj;
+}
+
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
@@ -162,12 +222,14 @@ std::pair<int64_t, PyObject *> execute_plan(
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path, PyObject *pyarrow_schema) {
+    std::string parquet_path, PyObject *pyarrow_schema,
+    PyObject *storage_options) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     BodoParquetScanFunction table_function = BodoParquetScanFunction();
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoParquetScanFunctionData>(parquet_path);
+        duckdb::make_uniq<BodoParquetScanFunctionData>(
+            parquet_path, pyarrow_schema, storage_options);
 
     // Convert Arrow schema to DuckDB
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
@@ -180,7 +242,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
         return_types, return_names, virtual_columns);
 }
 
-duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_node(
+duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
     PyObject *df, PyObject *pyarrow_schema) {
     // See DuckDB Pandas scan code:
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_scan.hpp#L19
@@ -191,7 +253,26 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_node(
 
     BodoDataFrameScanFunction table_function = BodoDataFrameScanFunction();
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoDataFrameScanFunctionData>(df);
+        duckdb::make_uniq<BodoDataFrameSeqScanFunctionData>(df);
+
+    // Convert Arrow schema to DuckDB
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+    auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
+
+    duckdb::virtual_column_map_t virtual_columns;
+
+    return duckdb::make_uniq<duckdb::LogicalGet>(
+        binder->GenerateTableIndex(), table_function, std::move(bind_data1),
+        return_types, return_names, virtual_columns);
+}
+
+duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
+    std::string result_id, PyObject *pyarrow_schema) {
+    duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+
+    BodoDataFrameScanFunction table_function = BodoDataFrameScanFunction();
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
+        duckdb::make_uniq<BodoDataFrameParallelScanFunctionData>(result_id);
 
     // Convert Arrow schema to DuckDB
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
@@ -270,6 +351,10 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             "this type.");
     }
     return {field->name(), duckdb_type};
+}
+
+std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
+    return plan->ToString(duckdb::ExplainFormat::GRAPHVIZ);
 }
 
 #undef CHECK_ARROW

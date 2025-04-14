@@ -775,47 +775,22 @@ def ensure_constant_values(fname, arg_name, val, const_values):
         )
 
 
-def check_unsupported_args(
-    fname,
-    args_dict,
-    arg_defaults_dict,
-    package_name="pandas",
-    fn_str=None,
-    module_name="",
-):
-    """Check for unsupported arguments for function 'fname', and raise an error if any
-    value other than the default is provided.
-    'args_dict' is a dictionary of provided arguments in overload.
-    'arg_defaults_dict' is a dictionary of default values for unsupported arguments.
-
-    'package_name' is used to differentiate by various libraries in documentation links (i.e. numpy, pandas)
-
-    'module_name' is used for libraries that are split into multiple different files per module.
-    """
+def single_arg_check(v1, v2):
     from bodo.hiframes.datetime_timedelta_ext import _no_input
 
-    assert len(args_dict) == len(arg_defaults_dict)
-    if fn_str == None:
-        fn_str = f"{fname}()"
-    error_message = ""
-    unsupported = False
-    for a in args_dict:
-        v1 = get_overload_const(args_dict[a])
-        v2 = arg_defaults_dict[a]
-        if (
-            v1 is NOT_CONSTANT
-            or (v1 is not None and v2 is None)
-            or (v1 is None and v2 is not None)
-            or (v1 is not np.nan and v1 != v2)
-            or (v1 is np.nan and v2 is not np.nan)
-            or (v1 is not np.nan and v2 is np.nan)
-            or (v1 is not _no_input and v2 is _no_input)
-            or (v1 is _no_input and v2 is not _no_input)
-        ):
-            error_message = f"{fn_str}: {a} parameter only supports default value {v2}"
-            unsupported = True
-            break
+    return (
+        v1 is NOT_CONSTANT
+        or (v1 is not None and v2 is None)
+        or (v1 is None and v2 is not None)
+        or (v1 is not np.nan and v1 != v2)
+        or (v1 is np.nan and v2 is not np.nan)
+        or (v1 is not np.nan and v2 is np.nan)
+        or (v1 is not _no_input and v2 is _no_input)
+        or (v1 is _no_input and v2 is not _no_input)
+    )
 
+
+def raise_unsupported_arg(unsupported, package_name, module_name, error_message):
     if unsupported and package_name == "pandas":
         if module_name == "IO":
             error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/io/).\n"
@@ -846,6 +821,105 @@ def check_unsupported_args(
         error_message += "\nPlease check supported Numpy operations here (https://docs.bodo.ai/latest/api_docs/numpy/).\n"
     if unsupported:
         raise BodoError(error_message)
+
+
+def check_unsupported_args(
+    fname,
+    args_dict,
+    arg_defaults_dict,
+    package_name="pandas",
+    fn_str=None,
+    module_name="",
+):
+    """Check for unsupported arguments for function 'fname', and raise an error if any
+    value other than the default is provided.
+    'args_dict' is a dictionary of provided arguments in overload.
+    'arg_defaults_dict' is a dictionary of default values for unsupported arguments.
+
+    'package_name' is used to differentiate by various libraries in documentation links (i.e. numpy, pandas)
+
+    'module_name' is used for libraries that are split into multiple different files per module.
+    """
+
+    assert len(args_dict) == len(arg_defaults_dict)
+    if fn_str == None:
+        fn_str = f"{fname}()"
+    error_message = ""
+    unsupported = False
+    for a in args_dict:
+        v1 = get_overload_const(args_dict[a])
+        v2 = arg_defaults_dict[a]
+        if single_arg_check(v1, v2):
+            error_message = f"{fn_str}: {a} parameter only supports default value {v2}"
+            unsupported = True
+            break
+
+    raise_unsupported_arg(unsupported, package_name, module_name, error_message)
+
+
+def check_unsupported_args_fallback(
+    fname,
+    must_be_default_args,
+    must_be_default_kwargs,
+    args,
+    kwargs,
+    package_name="pandas",
+    fn_str=None,
+    module_name="",
+    raise_on_error=False,
+):
+    """Check for unsupported arguments for function 'fname', and raise an error if any
+    value other than the default is provided.
+    'args_dict' is a dictionary of provided arguments in overload.
+    'arg_defaults_dict' is a dictionary of default values for unsupported arguments.
+
+    'package_name' is used to differentiate by various libraries in documentation links (i.e. numpy, pandas)
+
+    'module_name' is used for libraries that are split into multiple different files per module.
+
+    'raise_on_error' to generate exception on unsupported usage else return whether unsupported usage occurred.
+    """
+
+    if fn_str == None:
+        fn_str = f"{fname}()"
+    error_message = ""
+    unsupported = False
+
+    # Check all the arguments given positionally that have to have their default values.
+    for idx, param in must_be_default_args.items():
+        # If parameter index is greater than number of args then nothing left to check.
+        if idx >= len(args):
+            break
+        v1 = args[idx]  # Get the actual value.
+        v2 = param.default  # Get the default value.
+        # Flexible check for not matching.
+        if single_arg_check(v1, v2):
+            error_message = (
+                f"{fn_str}: {param.name} parameter only supports default value {v2}"
+            )
+            unsupported = True
+            break
+
+    # Check all the keyword arguments that have to have their default values if we
+    # haven't already found an error.
+    if not unsupported:
+        for name, param in must_be_default_kwargs.items():
+            if name not in kwargs:
+                continue
+            v1 = kwargs[name]  # Get the actual value.
+            v2 = param.default  # Get the default value.
+            # Flexible check for not matching.
+            if single_arg_check(v1, v2):
+                error_message = (
+                    f"{fn_str}: {name} parameter only supports default value {v2}"
+                )
+                unsupported = True
+                break
+
+    if not raise_on_error:
+        return unsupported
+
+    raise_unsupported_arg(unsupported, package_name, module_name, error_message)
 
 
 def get_overload_const_tuple(val) -> tuple | None:

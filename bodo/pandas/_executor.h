@@ -3,7 +3,14 @@
 #pragma once
 
 #include <Python.h>
+#include <object.h>
+#include <pytypedefs.h>
+#include "../io/parquet_reader.h"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/planner/operator/logical_projection.hpp"
+
+class Executor;
+class Pipeline;
 
 /**
  * @brief Physical operators to be used in the execution pipelines (NOTE: they
@@ -19,8 +26,9 @@ class PhysicalOperator {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    virtual std::pair<int64_t, PyObject*> execute() = 0;
+    virtual std::pair<int64_t, PyObject *> execute() = 0;
     virtual ~PhysicalOperator() = default;
+    std::pair<int64_t, PyObject *> result;
 };
 
 /**
@@ -29,7 +37,30 @@ class PhysicalOperator {
  */
 class PhysicalReadParquet : public PhysicalOperator {
    public:
-    PhysicalReadParquet(std::string path) : path(path) {}
+    // TODO: Fill in the contents with info from the logical operator
+    PhysicalReadParquet(std::string path, PyObject *pyarrow_schema,
+                        PyObject *storage_options)
+        : pyarrow_schema(pyarrow_schema) {
+        PyObject *py_path = PyUnicode_FromString(path.c_str());
+
+        std::shared_ptr<arrow::Schema> arrow_schema =
+            unwrap_schema(pyarrow_schema);
+
+        int num_fields = arrow_schema->num_fields();
+        std::vector<int> selected_fields(num_fields);
+        // TODO: Arrow fields are always nullable?
+        std::vector<bool> is_nullable(num_fields, true);
+        // Select all fields for now, TODO: get selected fields from Logical
+        // Node.
+        for (int i = 0; i < num_fields; i++) {
+            selected_fields[i] = i;
+        }
+
+        internal_reader = new ParquetReader(
+            py_path, true, Py_None, storage_options, pyarrow_schema, -1,
+            selected_fields, is_nullable, false, -1);
+        internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
+    }
 
     /**
      * @brief Read parquet and return the result (placeholder for now).
@@ -37,10 +68,11 @@ class PhysicalReadParquet : public PhysicalOperator {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    std::pair<int64_t, PyObject*> execute() override;
+    std::pair<int64_t, PyObject *> execute() override;
 
    private:
-    std::string path;
+    PyObject *pyarrow_schema;
+    ParquetReader *internal_reader;
 };
 
 /**
@@ -49,7 +81,7 @@ class PhysicalReadParquet : public PhysicalOperator {
  */
 class PhysicalReadPandas : public PhysicalOperator {
    public:
-    PhysicalReadPandas(PyObject* df) : df(df) {
+    PhysicalReadPandas(PyObject *df) : df(df) {
         Py_INCREF(df);
         num_rows = PyObject_Length(df);
     }
@@ -61,12 +93,60 @@ class PhysicalReadPandas : public PhysicalOperator {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    std::pair<int64_t, PyObject*> execute() override;
+    std::pair<int64_t, PyObject *> execute() override;
 
    private:
-    PyObject* df;
+    PyObject *df;
     int64_t current_row = 0;
     int64_t num_rows;
+};
+
+class PhysicalRunUDF : public PhysicalOperator {
+   public:
+    PhysicalRunUDF(std::shared_ptr<PhysicalOperator> source, PyObject *func)
+        : source(source), func(func) {
+        Py_INCREF(func);
+    }
+    ~PhysicalRunUDF() { Py_DECREF(func); }
+
+    /**
+     * @brief Run UDF and return the output as table.
+     *
+     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
+     * int64 (to pass to Cython easily), pyarrow schema object
+     */
+    std::pair<int64_t, PyObject *> execute() override;
+
+   private:
+    std::shared_ptr<PhysicalOperator> source;
+    PyObject *func;
+};
+
+/**
+ * @brief Physical node for projection.
+ *
+ */
+class PhysicalProjection : public PhysicalOperator {
+   public:
+    PhysicalProjection(std::shared_ptr<PhysicalOperator> src,
+                       std::vector<int64_t> &cols)
+        : src(src), selected_columns(cols) {}
+
+    /**
+     * @brief Do projection.
+     *
+     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
+     * int64 (to pass to Cython easily), pyarrow schema object
+     */
+    std::pair<int64_t, PyObject *> execute() override;
+
+    static std::shared_ptr<PhysicalOperator> make(
+        const duckdb::LogicalProjection &proj_plan,
+        const std::shared_ptr<PhysicalOperator> &source);
+
+   private:
+    std::shared_ptr<PhysicalOperator> src;
+    std::vector<int64_t> selected_columns;
 };
 
 /**
@@ -84,9 +164,8 @@ class Pipeline {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    std::pair<int64_t, PyObject*> execute();
+    std::pair<int64_t, PyObject *> execute();
 
-   private:
     std::vector<std::shared_ptr<PhysicalOperator>> operators;
 };
 
@@ -105,8 +184,8 @@ class Executor {
      * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
      * int64 (to pass to Cython easily), pyarrow schema object
      */
-    std::pair<int64_t, PyObject*> execute();
-
-   private:
+    std::pair<int64_t, PyObject *> execute();
+    std::shared_ptr<PhysicalOperator> processNode(
+        std::unique_ptr<duckdb::LogicalOperator> &plan);
     std::vector<Pipeline> pipelines;
 };
