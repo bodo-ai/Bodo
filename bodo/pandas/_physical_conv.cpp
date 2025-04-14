@@ -2,7 +2,9 @@
 #include <stdexcept>
 #include "_plan.h"
 
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "physical/project.h"
+#include "physical/run_udf.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -24,6 +26,17 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
 void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     // Process the source of this projection.
     this->Visit(*op.children[0]);
+
+    // Handle UDF execution case
+    if (op.expressions.size() == 1 &&
+        op.expressions[0]->type == duckdb::ExpressionType::BOUND_FUNCTION) {
+        this->active_pipeline->AddOperator(std::make_shared<PhysicalRunUDF>(
+            op.expressions[0]
+                ->Cast<duckdb::BoundFunctionExpression>()
+                .bind_info->Cast<BodoUDFFunctionData>()
+                .func));
+        return;
+    }
 
     std::vector<int64_t> selected_columns;
 
