@@ -562,6 +562,11 @@ Schema::Schema(Schema&& other) {
 
 Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_)
     : column_types(std::move(column_types_)) {}
+
+Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+               std::vector<std::string>& column_names)
+    : column_types(std::move(column_types_)), column_names(column_names) {}
+
 void Schema::insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
                            const size_t idx) {
     size_t i = 0;
@@ -653,9 +658,14 @@ std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
     fields.reserve(this->column_types.size());
 
     uint32_t idx = 0;
-    for (const auto& col : this->column_types) {
+    for (size_t i = 0; i < this->column_types.size(); i++) {
+        const std::unique_ptr<DataType>& data_type = this->column_types[i];
         std::string name = fmt::format("field_{}", idx);
-        fields.push_back(col->ToArrowType(name));
+        // Use table name if available
+        if (this->column_names.size() > 0) {
+            name = this->column_names[i];
+        }
+        fields.push_back(data_type->ToArrowType(name));
         idx++;
     }
     return std::make_shared<arrow::Schema>(fields);

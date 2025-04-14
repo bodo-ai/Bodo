@@ -23,6 +23,28 @@ class PhysicalReadParquet : public PhysicalSource {
             py_path, true, Py_None, storage_options, pyarrow_schema, -1,
             selected_columns, is_nullable, false, -1);
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
+
+        // Extract column names from pyarrow schema using selected columns
+        PyObject *schema_fields =
+            PyObject_GetAttrString(pyarrow_schema, "names");
+        if (schema_fields && PyList_Check(schema_fields)) {
+            int num_fields = PyList_Size(schema_fields);
+            out_column_names.reserve(selected_columns.size());
+
+            for (int col_idx : selected_columns) {
+                if (col_idx >= 0 && col_idx < num_fields) {
+                    PyObject *name = PyList_GetItem(schema_fields, col_idx);
+                    if (name && PyUnicode_Check(name)) {
+                        out_column_names.push_back(PyUnicode_AsUTF8(name));
+                    } else {
+                        out_column_names.push_back("column_" +
+                                                   std::to_string(col_idx));
+                    }
+                }
+            }
+
+            Py_DECREF(schema_fields);
+        }
     }
     virtual ~PhysicalReadParquet() = default;
 
@@ -33,10 +55,14 @@ class PhysicalReadParquet : public PhysicalSource {
         uint64_t total_rows;
         bool is_last;
 
-        auto batch = internal_reader->read_batch(is_last, total_rows, true);
+        table_info *batch =
+            internal_reader->read_batch(is_last, total_rows, true);
         auto result = is_last ? ProducerResult::FINISHED
                               : ProducerResult::HAVE_MORE_OUTPUT;
 
+        batch->column_names = out_column_names;
         return std::make_pair(std::shared_ptr<table_info>(batch), result);
     }
+
+    std::vector<std::string> out_column_names;
 };

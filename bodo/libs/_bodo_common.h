@@ -718,10 +718,13 @@ struct MapType final : public DataType {
  */
 struct Schema {
     std::vector<std::unique_ptr<DataType>> column_types;
+    std::vector<std::string> column_names;
     Schema();
     Schema(const Schema& other);
     Schema(Schema&& other);
     Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_);
+    Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+           std::vector<std::string>& column_names);
     /** @brief Return the number of columns in the schema
      *
      * @return void The number of columns in the schema
@@ -1792,6 +1795,7 @@ struct mpi_str_comm_info {
 
 struct table_info {
     std::vector<std::shared_ptr<array_info>> columns;
+    std::vector<std::string> column_names;
     // keep shuffle info to be able to reverse the shuffle if necessary
     // currently used in groupby apply
     // TODO: refactor out?
@@ -1825,7 +1829,8 @@ struct table_info {
             column_types.push_back(col->data_type());
         }
 
-        return std::make_unique<bodo::Schema>(std::move(column_types));
+        return std::make_unique<bodo::Schema>(std::move(column_types),
+                                              column_names);
     }
 
     void pin() {
