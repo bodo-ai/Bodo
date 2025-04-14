@@ -42,12 +42,10 @@ public:
 		return ptr;
 	}
 	T &operator*() {
-		std::cerr << "optional_ptr dereference" << '\n';
 		CheckValid();
 		return *ptr;
 	}
 	const T &operator*() const {
-		std::cerr << "optional_ptr dereference const" << '\n';
 		CheckValid();
 		return *ptr;
 	}
@@ -57,7 +55,6 @@ public:
 		return ptr;
 	}
 	const T *operator->() const {
-		std::cerr << "optional_ptr operator-> const" << '\n';
 		CheckValid();
 		return ptr;
 	}

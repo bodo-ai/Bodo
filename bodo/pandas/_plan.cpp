@@ -50,6 +50,7 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     // Input is using std since Cython supports it
     auto in_plan = to_duckdb(plan);
 
+    std::cerr << "Optimizing plan" << '\n';
     return optimizer.Optimize(std::move(in_plan));
 }
 
@@ -218,6 +219,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan) {
     Executor executor(std::move(plan));
+    std::cerr << "Execute plan" << '\n';
     return executor.execute();
 }
 
