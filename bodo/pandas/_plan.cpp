@@ -394,8 +394,7 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::BOOLEAN;
             break;
         }
-        case arrow::Type::DATE32:
-        case arrow::Type::DATE64: {
+        case arrow::Type::DATE32: {
             duckdb_type = duckdb::LogicalType::DATE;
             break;
         }
@@ -406,6 +405,14 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             int32_t scale = decimal_type->scale();
 
             duckdb_type = duckdb::LogicalType::DECIMAL(precision, scale);
+            break;
+        }
+        case arrow::Type::LIST: {
+            auto list_type =
+                std::static_pointer_cast<arrow::ListType>(arrow_type);
+            auto [name, child_type] =
+                arrow_field_to_duckdb(list_type->field(0));
+            duckdb_type = duckdb::LogicalType::LIST(child_type);
             break;
         }
         default:

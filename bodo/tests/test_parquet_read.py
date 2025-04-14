@@ -65,8 +65,10 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
     "fname",
     [
         pytest.param("bool_nulls.pq", id="bool_with_nulls"),
-        pytest.param("list_str_arr.pq", id="list_str_arr"),  # list<item: string>
-        pytest.param("list_str_parts.pq", id="list_str_parts"),  # list<element: string>
+        pytest.param("list_str_arr.pq", id="list_str_arr", marks=pytest.mark.df_lib),
+        pytest.param(
+            "list_str_parts.pq", id="list_str_parts", marks=pytest.mark.df_lib
+        ),
         pytest.param("decimal1.pq", id="decimal", marks=pytest.mark.df_lib),
         pytest.param("date32_1.pq", id="date32", marks=pytest.mark.df_lib),
         pytest.param(
