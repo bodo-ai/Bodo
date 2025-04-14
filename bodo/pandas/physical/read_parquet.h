@@ -27,24 +27,30 @@ class PhysicalReadParquet : public PhysicalSource {
         // Extract column names from pyarrow schema using selected columns
         PyObject *schema_fields =
             PyObject_GetAttrString(pyarrow_schema, "names");
-        if (schema_fields && PyList_Check(schema_fields)) {
-            int num_fields = PyList_Size(schema_fields);
-            out_column_names.reserve(selected_columns.size());
-
-            for (int col_idx : selected_columns) {
-                if (col_idx >= 0 && col_idx < num_fields) {
-                    PyObject *name = PyList_GetItem(schema_fields, col_idx);
-                    if (name && PyUnicode_Check(name)) {
-                        out_column_names.push_back(PyUnicode_AsUTF8(name));
-                    } else {
-                        out_column_names.push_back("column_" +
-                                                   std::to_string(col_idx));
-                    }
-                }
-            }
-
-            Py_DECREF(schema_fields);
+        if (!schema_fields || !PyList_Check(schema_fields)) {
+            throw std::runtime_error(
+                "PhysicalReadParquet(): failed to get schema fields from "
+                "pyarrow schema");
         }
+        int num_fields = PyList_Size(schema_fields);
+        out_column_names.reserve(selected_columns.size());
+
+        for (int col_idx : selected_columns) {
+            if (!(col_idx >= 0 && col_idx < num_fields)) {
+                throw std::runtime_error(
+                    "PhysicalReadParquet(): invalid column index " +
+                    std::to_string(col_idx) + " for schema with " +
+                    std::to_string(num_fields) + " fields");
+            }
+            PyObject *name = PyList_GetItem(schema_fields, col_idx);
+            if (name && PyUnicode_Check(name)) {
+                out_column_names.push_back(PyUnicode_AsUTF8(name));
+            } else {
+                out_column_names.push_back("column_" + std::to_string(col_idx));
+            }
+        }
+
+        Py_DECREF(schema_fields);
     }
     virtual ~PhysicalReadParquet() = default;
 
