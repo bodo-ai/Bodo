@@ -30,10 +30,7 @@
 #include "duckdb/function/cast/default_casts.hpp"
 #include "duckdb/function/replacement_scan.hpp"
 #include "duckdb/main/client_properties.hpp"
-#include "duckdb/optimizer/optimizer_extension.hpp"
 #include "duckdb/parser/parsed_data/create_info.hpp"
-#include "duckdb/parser/parser_extension.hpp"
-#include "duckdb/planner/operator_extension.hpp"
 #include "duckdb/storage/compression/bitpacking.hpp"
 #include "duckdb/function/encoding_function.hpp"
 #include "duckdb/logging/log_manager.hpp"
@@ -48,9 +45,6 @@ class ClientContext;
 class ErrorManager;
 class CompressionFunction;
 class TableFunctionRef;
-class OperatorExtension;
-class StorageExtension;
-class ExtensionCallback;
 class SecretManager;
 class CompressionInfo;
 class EncryptionUtil;
@@ -84,20 +78,6 @@ struct ConfigurationOption {
 };
 
 typedef void (*set_option_callback_t)(ClientContext &context, SetScope scope, Value &parameter);
-
-struct ExtensionOption {
-	// NOLINTNEXTLINE: work around bug in clang-tidy
-	ExtensionOption(string description_p, LogicalType type_p, set_option_callback_t set_function_p,
-	                Value default_value_p)
-	    : description(std::move(description_p)), type(std::move(type_p)), set_function(set_function_p),
-	      default_value(std::move(default_value_p)) {
-	}
-
-	string description;
-	LogicalType type;
-	set_option_callback_t set_function;
-	Value default_value;
-};
 
 class SerializationCompatibility {
 public:
@@ -133,24 +113,6 @@ struct DBConfigOptions {
 	idx_t checkpoint_wal_size = 1 << 24;
 	//! Whether or not to use Direct IO, bypassing operating system buffers
 	bool use_direct_io = false;
-	//! Whether extensions should be loaded on start-up
-	bool load_extensions = true;
-#ifdef DUCKDB_EXTENSION_AUTOLOAD_DEFAULT
-	//! Whether known extensions are allowed to be automatically loaded when a query depends on them
-	bool autoload_known_extensions = DUCKDB_EXTENSION_AUTOLOAD_DEFAULT;
-#else
-	bool autoload_known_extensions = false;
-#endif
-#ifdef DUCKDB_EXTENSION_AUTOINSTALL_DEFAULT
-	//! Whether known extensions are allowed to be automatically installed when a query depends on them
-	bool autoinstall_known_extensions = DUCKDB_EXTENSION_AUTOINSTALL_DEFAULT;
-#else
-	bool autoinstall_known_extensions = false;
-#endif
-	//! Override for the default extension repository
-	string custom_extension_repo = "";
-	//! Override for the default autoload extension repository
-	string autoinstall_extension_repo = "";
 	//! The maximum memory used by the database system (in bytes). Default: 80% of System available memory
 	idx_t maximum_memory = DConstants::INVALID_INDEX;
 	//! The maximum size of the 'temp_directory' folder when set (in bytes). Default: 90% of available disk space.
@@ -225,14 +187,6 @@ struct DBConfigOptions {
 	case_insensitive_map_t<Value> set_variables;
 	//! Database configuration variable default values;
 	case_insensitive_map_t<Value> set_variable_defaults;
-	//! Directory to store extension binaries in
-	string extension_directory;
-	//! Whether unsigned extensions should be loaded
-	bool allow_unsigned_extensions = false;
-	//! Whether community extensions should be loaded
-	bool allow_community_extensions = true;
-	//! Whether extensions with missing metadata should be loaded
-	bool allow_extensions_metadata_mismatch = false;
 	//! Enable emitting FSST Vectors
 	bool enable_fsst_vectors = false;
 	//! Enable VIEWs to create dependencies
@@ -305,8 +259,6 @@ public:
 	//! Replacement table scans are automatically attempted when a table name cannot be found in the schema
 	vector<ReplacementScan> replacement_scans;
 
-	//! Extra parameters that can be SET for loaded extensions
-	case_insensitive_map_t<ExtensionOption> extension_parameters;
 	//! The FileSystem to use, can be overwritten to allow for injecting custom file systems for testing purposes (e.g.
 	//! RamFS or something similar)
 	unique_ptr<FileSystem> file_system;
@@ -316,24 +268,14 @@ public:
 	unique_ptr<Allocator> allocator;
 	//! Database configuration options
 	DBConfigOptions options;
-	//! Extensions made to the parser
-	vector<ParserExtension> parser_extensions;
-	//! Extensions made to the optimizer
-	vector<OptimizerExtension> optimizer_extensions;
 	//! Error manager
 	unique_ptr<ErrorManager> error_manager;
 	//! A reference to the (shared) default allocator (Allocator::DefaultAllocator)
 	shared_ptr<Allocator> default_allocator;
-	//! Extensions made to binder
-	vector<unique_ptr<OperatorExtension>> operator_extensions;
-	//! Extensions made to storage
-	case_insensitive_map_t<duckdb::unique_ptr<StorageExtension>> storage_extensions;
 	//! A buffer pool can be shared across multiple databases (if desired).
 	shared_ptr<BufferPool> buffer_pool;
 	//! Provide a custom buffer manager implementation (if desired).
 	shared_ptr<BufferManager> buffer_manager;
-	//! Set of callbacks that can be installed by extensions
-	vector<unique_ptr<ExtensionCallback>> extension_callbacks;
 	//! Encryption Util for OpenSSL
 	shared_ptr<EncryptionUtil> encryption_util;
 	//! Reference to the database cache entry (if any)
@@ -350,8 +292,6 @@ public:
 	DUCKDB_API static vector<string> GetOptionNames();
 	DUCKDB_API static bool IsInMemoryDatabase(const char *database_path);
 
-	DUCKDB_API void AddExtensionOption(const string &name, string description, LogicalType parameter,
-	                                   const Value &default_value = Value(), set_option_callback_t function = nullptr);
 	//! Fetch an option by index. Returns a pointer to the option, or nullptr if out of range
 	DUCKDB_API static optional_ptr<const ConfigurationOption> GetOptionByIndex(idx_t index);
 	//! Fetch an option by name. Returns a pointer to the option, or nullptr if none exists.
@@ -380,12 +320,6 @@ public:
 	DUCKDB_API void RegisterEncodeFunction(const EncodingFunction &function) const;
 	//! Returns the encode function names.
 	DUCKDB_API vector<reference<EncodingFunction>> GetLoadedEncodedFunctions() const;
-	//! Returns the encode function matching the encoding name.
-	DUCKDB_API ArrowTypeExtension GetArrowExtension(ArrowExtensionMetadata info) const;
-	DUCKDB_API ArrowTypeExtension GetArrowExtension(const LogicalType &type) const;
-	DUCKDB_API bool HasArrowExtension(const LogicalType &type) const;
-	DUCKDB_API bool HasArrowExtension(ArrowExtensionMetadata info) const;
-	DUCKDB_API void RegisterArrowExtension(const ArrowTypeExtension &extension) const;
 
 	bool operator==(const DBConfig &other);
 	bool operator!=(const DBConfig &other);
@@ -423,7 +357,6 @@ public:
 private:
 	unique_ptr<CompressionFunctionSet> compression_functions;
 	unique_ptr<EncodingFunctionSet> encoding_functions;
-	unique_ptr<ArrowTypeExtensionSet> arrow_extensions;
 	unique_ptr<CastFunctionSet> cast_functions;
 	unique_ptr<CollationBinding> collation_bindings;
 	unique_ptr<IndexTypeSet> index_types;

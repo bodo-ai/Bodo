@@ -15,7 +15,6 @@
 namespace duckdb {
 
 struct DBConfig;
-struct ExtensionOption;
 
 //! PhysicalReset represents a RESET operation (e.g. RESET a = 42)
 class PhysicalReset : public PhysicalOperator {
@@ -39,9 +38,6 @@ public:
 public:
 	const std::string name;
 	const SetScope scope;
-
-private:
-	void ResetExtensionVariable(ExecutionContext &context, DBConfig &config, ExtensionOption &extension_option) const;
 };
 
 } // namespace duckdb

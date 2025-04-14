@@ -6,7 +6,6 @@
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/database_path_and_type.hpp"
-#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 
 namespace duckdb {
@@ -169,12 +168,6 @@ void DatabaseManager::GetDatabaseType(ClientContext &context, AttachInfo &info, 
 
 	// If we are loading a database type from an extension, then we need to check if that extension is loaded.
 	if (!options.db_type.empty()) {
-		if (!Catalog::TryAutoLoad(context, options.db_type)) {
-			// FIXME: Here it might be preferable to use an AutoLoadOrThrow kind of function
-			// so that either there will be success or a message to throw, and load will be
-			// attempted only once respecting the auto-loading options
-			ExtensionHelper::LoadExternalExtension(context, options.db_type);
-		}
 		return;
 	}
 }

@@ -1,7 +1,3 @@
-if(NOT CLANG_TIDY)
-  add_subdirectory(capi)
-endif()
-add_subdirectory(extension)
 add_subdirectory(relation)
 add_subdirectory(secret)
 add_subdirectory(settings)
@@ -32,8 +28,6 @@ add_library_unity(
   database_manager.cpp
   db_instance_cache.cpp
   error_manager.cpp
-  extension.cpp
-  extension_install_info.cpp
   materialized_query_result.cpp
   pending_query_result.cpp
   prepared_statement.cpp

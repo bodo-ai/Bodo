@@ -26,13 +26,7 @@ void LogicalExtensionOperator::Serialize(Serializer &serializer) const {
 }
 
 unique_ptr<LogicalOperator> LogicalExtensionOperator::Deserialize(Deserializer &deserializer) {
-	auto &config = DBConfig::GetConfig(deserializer.Get<ClientContext &>());
 	auto extension_name = deserializer.ReadProperty<string>(200, "extension_name");
-	for (auto &extension : config.operator_extensions) {
-		if (extension->GetName() == extension_name) {
-			return extension->Deserialize(deserializer);
-		}
-	}
 	throw SerializationException("No deserialization method exists for extension: " + extension_name);
 }
 

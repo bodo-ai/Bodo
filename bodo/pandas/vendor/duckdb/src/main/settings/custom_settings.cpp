@@ -113,29 +113,6 @@ Value AllocatorFlushThresholdSetting::GetSetting(const ClientContext &context) {
 	return Value(StringUtil::BytesToHumanReadableString(config.options.allocator_flush_threshold));
 }
 
-//===----------------------------------------------------------------------===//
-// Allow Community Extensions
-//===----------------------------------------------------------------------===//
-bool AllowCommunityExtensionsSetting::OnGlobalSet(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	if (db && !config.options.allow_community_extensions) {
-		auto new_value = input.GetValue<bool>();
-		if (new_value) {
-			throw InvalidInputException("Cannot upgrade allow_community_extensions setting while database is running");
-		}
-		return false;
-	}
-	return true;
-}
-
-bool AllowCommunityExtensionsSetting::OnGlobalReset(DatabaseInstance *db, DBConfig &config) {
-	if (db && !config.options.allow_community_extensions) {
-		if (DBConfig().options.allow_community_extensions) {
-			throw InvalidInputException("Cannot upgrade allow_community_extensions setting while database is running");
-		}
-		return false;
-	}
-	return true;
-}
 
 //===----------------------------------------------------------------------===//
 // Allow Persistent Secrets
@@ -167,23 +144,6 @@ bool AllowUnredactedSecretsSetting::OnGlobalSet(DatabaseInstance *db, DBConfig &
 bool AllowUnredactedSecretsSetting::OnGlobalReset(DatabaseInstance *db, DBConfig &config) {
 	if (db) {
 		throw InvalidInputException("Cannot change allow_unredacted_secrets setting while database is running");
-	}
-	return true;
-}
-
-//===----------------------------------------------------------------------===//
-// Allow Unsigned Extensions
-//===----------------------------------------------------------------------===//
-bool AllowUnsignedExtensionsSetting::OnGlobalSet(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	if (db && input.GetValue<bool>()) {
-		throw InvalidInputException("Cannot change allow_unsigned_extensions setting while database is running");
-	}
-	return true;
-}
-
-bool AllowUnsignedExtensionsSetting::OnGlobalReset(DatabaseInstance *db, DBConfig &config) {
-	if (db) {
-		throw InvalidInputException("Cannot change allow_unsigned_extensions setting while database is running");
 	}
 	return true;
 }

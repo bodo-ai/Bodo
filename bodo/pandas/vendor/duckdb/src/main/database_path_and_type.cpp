@@ -1,18 +1,10 @@
 #include "duckdb/main/database_path_and_type.hpp"
 
-#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/storage/magic_bytes.hpp"
 
 namespace duckdb {
 
-void DBPathAndType::ExtractExtensionPrefix(string &path, string &db_type) {
-	auto extension = ExtensionHelper::ExtractExtensionPrefixFromPath(path);
-	if (!extension.empty()) {
-		// path is prefixed with an extension - remove the first occurence of it
-		path = path.substr(extension.length() + 1);
-		db_type = ExtensionHelper::ApplyExtensionAlias(extension);
-	}
-}
+void DBPathAndType::ExtractExtensionPrefix(string &path, string &db_type) {}
 
 void DBPathAndType::CheckMagicBytes(FileSystem &fs, string &path, string &db_type) {
 	// if there isn't - check the magic bytes of the file (if any)

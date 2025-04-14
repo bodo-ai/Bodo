@@ -54,12 +54,8 @@ private:
 	void RegisterArrowFunctions();
 	void RegisterSnifferFunction();
 
-	void RegisterExtensionOverloads();
-
 	// pragmas
 	void RegisterPragmaFunctions();
-
-	void AddExtensionFunction(ScalarFunctionSet set);
 };
 
 } // namespace duckdb

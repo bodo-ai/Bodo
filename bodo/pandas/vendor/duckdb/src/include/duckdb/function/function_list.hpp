@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include "duckdb.hpp"
-
 namespace duckdb {
 
 typedef ScalarFunction (*get_scalar_function_t)();

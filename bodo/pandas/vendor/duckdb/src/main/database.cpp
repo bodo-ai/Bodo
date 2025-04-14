@@ -14,7 +14,6 @@
 #include "duckdb/main/database_path_and_type.hpp"
 #include "duckdb/main/db_instance_cache.hpp"
 #include "duckdb/main/error_manager.hpp"
-#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
@@ -25,7 +24,6 @@
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
-#include "duckdb/main/capi/extension_api.hpp"
 #include "duckdb/storage/compression/empty_validity.hpp"
 #include "duckdb/logging/logger.hpp"
 
@@ -39,8 +37,6 @@ DBConfig::DBConfig() {
 	compression_functions = make_uniq<CompressionFunctionSet>();
 	encoding_functions = make_uniq<EncodingFunctionSet>();
 	encoding_functions->Initialize(*this);
-	arrow_extensions = make_uniq<ArrowTypeExtensionSet>();
-	arrow_extensions->Initialize(*this);
 	cast_functions = make_uniq<CastFunctionSet>(*this);
 	collation_bindings = make_uniq<CollationBinding>();
 	index_types = make_uniq<IndexTypeSet>();
@@ -63,7 +59,6 @@ DBConfig::~DBConfig() {
 
 DatabaseInstance::DatabaseInstance() {
 	config.is_user_config = false;
-	create_api_v1 = nullptr;
 }
 
 DatabaseInstance::~DatabaseInstance() {
@@ -172,22 +167,7 @@ unique_ptr<AttachedDatabase> DatabaseInstance::CreateAttachedDatabase(ClientCont
 	auto &catalog = Catalog::GetSystemCatalog(*this);
 
 	if (!options.db_type.empty()) {
-		// Find the storage extension for this database file.
-		auto extension_name = ExtensionHelper::ApplyExtensionAlias(options.db_type);
-		auto entry = config.storage_extensions.find(extension_name);
-		if (entry == config.storage_extensions.end()) {
-			throw BinderException("Unrecognized storage type \"%s\"", options.db_type);
-		}
-
-		if (entry->second->attach != nullptr && entry->second->create_transaction_manager != nullptr) {
-			// Use the storage extension to create the initial database.
-			attached_database =
-			    make_uniq<AttachedDatabase>(*this, catalog, *entry->second, context, info.name, info, options);
-			return attached_database;
-		}
-
-		attached_database = make_uniq<AttachedDatabase>(*this, catalog, info.name, info.path, options);
-		return attached_database;
+		throw BinderException("Unrecognized storage type \"%s\"", options.db_type);
 	}
 
 	// An empty db_type defaults to a duckdb database file.
@@ -199,76 +179,6 @@ void DatabaseInstance::CreateMainDatabase() {
 	AttachInfo info;
 	info.name = AttachedDatabase::ExtractDatabaseName(config.options.database_path, GetFileSystem());
 	info.path = config.options.database_path;
-
-	optional_ptr<AttachedDatabase> initial_database;
-	Connection con(*this);
-	con.BeginTransaction();
-	AttachOptions options(config.options);
-	initial_database = db_manager->AttachDatabase(*con.context, info, options);
-
-	initial_database->SetInitialDatabase();
-	initial_database->Initialize(*con.context);
-	con.Commit();
-}
-
-static void ThrowExtensionSetUnrecognizedOptions(const case_insensitive_map_t<Value> &unrecognized_options) {
-	D_ASSERT(!unrecognized_options.empty());
-
-	vector<string> options;
-	for (auto &kv : unrecognized_options) {
-		options.push_back(kv.first);
-	}
-	auto concatenated = StringUtil::Join(options, ", ");
-	throw InvalidInputException("The following options were not recognized: " + concatenated);
-}
-
-void DatabaseInstance::LoadExtensionSettings() {
-	// copy the map, to protect against modifications during
-	auto unrecognized_options_copy = config.options.unrecognized_options;
-
-	if (config.options.autoload_known_extensions) {
-		if (unrecognized_options_copy.empty()) {
-			// Nothing to do
-			return;
-		}
-
-		Connection con(*this);
-		con.BeginTransaction();
-
-		vector<string> extension_options;
-		for (auto &option : unrecognized_options_copy) {
-			auto &name = option.first;
-			auto &value = option.second;
-
-			auto extension_name = ExtensionHelper::FindExtensionInEntries(name, EXTENSION_SETTINGS);
-			if (extension_name.empty()) {
-				continue;
-			}
-			if (!ExtensionHelper::TryAutoLoadExtension(*this, extension_name)) {
-				throw InvalidInputException(
-				    "To set the %s setting, the %s extension needs to be loaded. But it could not be autoloaded.", name,
-				    extension_name);
-			}
-			auto it = config.extension_parameters.find(name);
-			if (it == config.extension_parameters.end()) {
-				throw InternalException("Extension %s did not provide the '%s' config setting", extension_name, name);
-			}
-			// if the extension provided the option, it should no longer be unrecognized.
-			D_ASSERT(config.options.unrecognized_options.find(name) == config.options.unrecognized_options.end());
-			auto &context = *con.context;
-			PhysicalSet::SetExtensionVariable(context, it->second, name, SetScope::GLOBAL, value);
-			extension_options.push_back(name);
-		}
-
-		con.Commit();
-	}
-	if (!config.options.unrecognized_options.empty()) {
-		ThrowExtensionSetUnrecognizedOptions(config.options.unrecognized_options);
-	}
-}
-
-static duckdb_ext_api_v1 CreateAPIv1Wrapper() {
-	return CreateAPIv1();
 }
 
 void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_config) {
@@ -279,8 +189,6 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	}
 
 	Configure(*config_ptr, database_path);
-
-	create_api_v1 = CreateAPIv1Wrapper;
 
 	db_file_system = make_uniq<DatabaseFileSystem>(*this);
 	db_manager = make_uniq<DatabaseManager>(*this);
@@ -312,10 +220,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		if (!config.file_system) {
 			throw InternalException("No file system!?");
 		}
-		ExtensionHelper::LoadExternalExtension(*this, *config.file_system, config.options.database_type);
 	}
-
-	LoadExtensionSettings();
 
 	if (!db_manager->HasDefaultDatabase()) {
 		CreateMainDatabase();
@@ -328,9 +233,6 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 
 DuckDB::DuckDB(const char *path, DBConfig *new_config) : instance(make_shared_ptr<DatabaseInstance>()) {
 	instance->Initialize(path, new_config);
-	if (instance->config.options.load_extensions) {
-		ExtensionHelper::LoadAllExtensions(*this);
-	}
 }
 
 DuckDB::DuckDB(const string &path, DBConfig *config) : DuckDB(path.c_str(), config) {
@@ -418,7 +320,6 @@ void DatabaseInstance::Configure(DBConfig &new_config, const char *database_path
 	if (config.options.access_mode == AccessMode::UNDEFINED) {
 		config.options.access_mode = AccessMode::READ_WRITE;
 	}
-	config.extension_parameters = new_config.extension_parameters;
 	if (new_config.file_system) {
 		config.file_system = std::move(new_config.file_system);
 	} else {
@@ -445,7 +346,6 @@ void DatabaseInstance::Configure(DBConfig &new_config, const char *database_path
 		config.allocator = make_uniq<Allocator>();
 	}
 	config.replacement_scans = std::move(new_config.replacement_scans);
-	config.parser_extensions = std::move(new_config.parser_extensions);
 	config.error_manager = std::move(new_config.error_manager);
 	if (!config.error_manager) {
 		config.error_manager = make_uniq<ErrorManager>();
@@ -475,38 +375,8 @@ idx_t DatabaseInstance::NumberOfThreads() {
 	return NumericCast<idx_t>(scheduler->NumberOfThreads());
 }
 
-const unordered_map<string, ExtensionInfo> &DatabaseInstance::GetExtensions() {
-	return loaded_extensions_info;
-}
-
-void DatabaseInstance::AddExtensionInfo(const string &name, const ExtensionLoadedInfo &info) {
-	loaded_extensions_info[name].load_info = make_uniq<ExtensionLoadedInfo>(info);
-}
-
 idx_t DuckDB::NumberOfThreads() {
 	return instance->NumberOfThreads();
-}
-
-bool DatabaseInstance::ExtensionIsLoaded(const std::string &name) {
-	auto extension_name = ExtensionHelper::GetExtensionName(name);
-	auto it = loaded_extensions_info.find(extension_name);
-	return it != loaded_extensions_info.end() && it->second.is_loaded;
-}
-
-bool DuckDB::ExtensionIsLoaded(const std::string &name) {
-	return instance->ExtensionIsLoaded(name);
-}
-
-void DatabaseInstance::SetExtensionLoaded(const string &name, ExtensionInstallInfo &install_info) {
-	auto extension_name = ExtensionHelper::GetExtensionName(name);
-	loaded_extensions_info[extension_name].is_loaded = true;
-	loaded_extensions_info[extension_name].install_info = make_uniq<ExtensionInstallInfo>(install_info);
-
-	auto &callbacks = DBConfig::GetConfig(*this).extension_callbacks;
-	for (auto &callback : callbacks) {
-		callback->OnExtensionLoaded(*this, name);
-	}
-	DUCKDB_LOG_INFO(*this, "duckdb.Extensions.ExtensionLoaded", name);
 }
 
 SettingLookupResult DatabaseInstance::TryGetCurrentSetting(const std::string &key, Value &result) const {
@@ -525,11 +395,6 @@ SettingLookupResult DatabaseInstance::TryGetCurrentSetting(const std::string &ke
 
 ValidChecker &DatabaseInstance::GetValidChecker() {
 	return db_validity;
-}
-
-const duckdb_ext_api_v1 DatabaseInstance::GetExtensionAPIV1() {
-	D_ASSERT(create_api_v1);
-	return create_api_v1();
 }
 
 LogManager &DatabaseInstance::GetLogManager() const {
