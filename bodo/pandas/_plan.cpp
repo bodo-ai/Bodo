@@ -249,7 +249,7 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
-    auto output_table = executor.ExecutePipelines();
+    std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 

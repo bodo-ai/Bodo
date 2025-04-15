@@ -5,14 +5,22 @@
 
 #include "../libs/_bodo_common.h"
 
-/// TODO
+/// Specifies physical operator types in the execution pipeline:
+// 1. Source means the first operator of the pipeline that only produces batchs
+// 2. Sink means the last operator of the pipeline that only consumes batches
+// 3. SourceAndSink means operators in the middle of the pipeline that both
+// produce and consume batches
 enum class OperatorType : uint8_t {
     SOURCE,
     SINK,
     SOURCE_AND_SINK,
 };
 
-/// TODO
+/// Specifies the status of the physical operator in the execution:
+/// 1. NEED_MORE_INPUT means the operator needs more input to produce output
+/// 2. HAVE_MORE_OUTPUT means the operator has more output to produce in later
+/// iterations
+/// 3. FINISHED means the operator has finished processing
 enum class OperatorResult : uint8_t {
     NEED_MORE_INPUT,
     HAVE_MORE_OUTPUT,

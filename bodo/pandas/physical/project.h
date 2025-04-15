@@ -21,8 +21,9 @@ class PhysicalProjection : public PhysicalSourceSink {
     /**
      * @brief Do projection.
      *
-     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
-     * int64 (to pass to Cython easily), pyarrow schema object
+     * @return std::pair<int64_t, OperatorResult> Bodo C++ table pointer cast to
+     * int64 (to pass to Cython easily), state of operator after processing the
+     * batch
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override {
