@@ -114,7 +114,7 @@ class ParquetReader : public ArrowReader {
     }
 
     /// a piece is a single parquet file in the context of parquet
-    virtual size_t get_num_pieces() const override { return file_paths.size(); }
+    size_t get_num_pieces() const override { return file_paths.size(); }
 
     /// returns output partition columns
     std::vector<std::shared_ptr<array_info>>& get_partition_cols() {
@@ -126,19 +126,18 @@ class ParquetReader : public ArrowReader {
     }
 
    protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows) override;
+    void add_piece(PyObject* piece, int64_t num_rows) override;
 
-    virtual PyObject* get_dataset() override;
+    PyObject* get_dataset() override;
 
-    virtual std::tuple<table_info*, bool, uint64_t> read_inner_row_level()
-        override;
+    std::tuple<table_info*, bool, uint64_t> read_inner_row_level() override;
 
     std::tuple<table_info*, bool, uint64_t> read_inner_piece_level() override {
         throw std::runtime_error(
             "ParquetReader::read_inner_piece_level: Not supported!");
     }
 
-    virtual std::shared_ptr<table_info> get_empty_out_table() override;
+    std::shared_ptr<table_info> get_empty_out_table() override;
 
     std::shared_ptr<table_info> empty_out_table;
 

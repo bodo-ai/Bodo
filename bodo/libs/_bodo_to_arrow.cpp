@@ -1493,7 +1493,10 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
             arrow_array_to_bodo(arr, src_pool);
         out_arrs.push_back(out_arr);
     }
-    return std::make_shared<table_info>(out_arrs);
+    std::shared_ptr<table_info> out_table =
+        std::make_shared<table_info>(out_arrs);
+    out_table->column_names = table->ColumnNames();
+    return out_table;
 }
 
 std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(

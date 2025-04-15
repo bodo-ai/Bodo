@@ -321,6 +321,7 @@ class LazyPlan:
         self.args = args
         self.kwargs = kwargs
         self.output_func = None  # filled in by wrap_plan
+        self.out_schema = None  # filled in by wrap_plan
 
     def generate_duckdb(self, cache=None):
         from bodo.ext import plan_optimizer
@@ -344,7 +345,8 @@ class LazyPlan:
         args = [recursive_check(x) for x in self.args]
         kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
         # Create real duckdb class.
-        ret = getattr(plan_optimizer, self.plan_class)(*args, **kwargs)
+        pa_schema = pa.Schema.from_pandas(self.out_schema)
+        ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret
         return ret
@@ -380,7 +382,9 @@ def execute_plan(plan: LazyPlan):
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)
-        return plan_optimizer.py_execute_plan(optimized_plan, plan.output_func)
+        return plan_optimizer.py_execute_plan(
+            optimized_plan, plan.output_func, duckdb_plan.out_schema
+        )
 
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner
@@ -401,7 +405,7 @@ def cast_table_ptr_to_int64(typingctx, val):
 
 
 def df_to_cpp_table(df):
-    """Convert a pandas DataFrame to a C++ table pointer and Arrow schema object."""
+    """Convert a pandas DataFrame to a C++ table pointer and column names."""
     n_cols = len(df.columns)
     in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_cols)))
 
@@ -412,17 +416,16 @@ def df_to_cpp_table(df):
         return cast_table_ptr_to_int64(cpp_table)
 
     cpp_table = impl_df_to_cpp_table(df)
-    arrow_schema = pa.Schema.from_pandas(df)
-
-    return cpp_table, arrow_schema
+    return cpp_table, list(df.columns)
 
 
 def run_apply_udf(cpp_table, arrow_schema, func):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
-    return the result as a C++ table and Arrow schema.
+    return the result as a C++ table and column names.
     """
     df = cpp_table_to_df(cpp_table, arrow_schema)
     out_df = pd.DataFrame({"OUT": df.apply(func, axis=1)})
+    out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
     return df_to_cpp_table(out_df)
 
 
@@ -457,6 +460,8 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
         # Fake non-zero rows.  nrows should be overwritten upon plan execution.
         nrows = 1
 
+    plan.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
+
     if isinstance(schema, (dict, pd.DataFrame)):
         if isinstance(schema, dict):
             schema = pd.DataFrame(schema)
@@ -488,3 +493,12 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
 
     new_df.plan = plan
     return new_df
+
+
+def arrow_to_empty_df(arrow_schema):
+    """Create an empty dataframe with the same schema as the Arrow schema"""
+    empty_df = pd.DataFrame(columns=[field.name for field in arrow_schema])
+    type_dict = {field.name: pd.ArrowDtype(field.type) for field in arrow_schema}
+    empty_df = empty_df.astype(type_dict)
+    empty_df.index = pd.RangeIndex(0)
+    return empty_df
