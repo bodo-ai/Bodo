@@ -7,7 +7,6 @@
 #include <arrow/builder.h>
 #include <arrow/compute/cast.h>
 #include <arrow/table.h>
-#include <arrow/type.h>
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -1563,7 +1562,7 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
                 bodo_array_type::NULLABLE_INT_BOOL,
                 arrow_to_bodo_type(arrow_type->id()));
         }
-        // decimal needs to pass scale/precision
+        // decimal array
         case arrow::Type::DECIMAL128: {
             auto arrow_decimal_type =
                 std::static_pointer_cast<arrow::Decimal128Type>(arrow_type);
