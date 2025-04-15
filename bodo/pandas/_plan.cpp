@@ -1,5 +1,8 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
+#include <arrow/type.h>
+#include <arrow/type_fwd.h>
+#include <memory>
 #include <utility>
 
 #include "_executor.h"
@@ -408,6 +411,18 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
         case arrow::Type::DATE32: {
             duckdb_type = duckdb::LogicalType::DATE;
             break;
+        }
+        case arrow::Type::TIMESTAMP: {
+            auto timestamp_type =
+                std::static_pointer_cast<arrow::TimestampType>(arrow_type);
+            arrow::TimeUnit::type unit = timestamp_type->unit();
+            std::string tz = timestamp_type->timezone();
+            if (unit == arrow::TimeUnit::NANO && tz == "") {
+                duckdb_type = duckdb::LogicalType::TIMESTAMP_NS;
+                break;
+            }
+            // TODO other units and timezones
+            [[fallthrough]];
         }
         default:
             throw std::runtime_error(
