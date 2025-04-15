@@ -719,17 +719,13 @@ target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
 )
 target_link_libraries(ext PRIVATE
   duckdb_static
-  duckdb_fsst
   duckdb_fmt
   duckdb_pg_query
   duckdb_re2
-  duckdb_miniz
   duckdb_utf8proc
   duckdb_hyperloglog
   duckdb_fastpforlib
-  duckdb_mbedtls
   duckdb_yyjson
-  duckdb_zstd
 )
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
