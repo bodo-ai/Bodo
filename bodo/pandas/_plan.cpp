@@ -252,10 +252,8 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
     std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
-    std::cout << " execute done: converting to arrow schema " << std::endl;
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
-    std::cout << "converting to arrow done " << std::endl;
 
     return {reinterpret_cast<int64_t>(new table_info(*output_table)),
             pyarrow_schema};
@@ -412,13 +410,10 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             break;
         }
         case arrow::Type::DECIMAL128: {
-            std::cout << "decimal case " << std::endl;
             auto decimal_type =
                 std::static_pointer_cast<arrow::DecimalType>(arrow_type);
             int32_t precision = decimal_type->precision();
             int32_t scale = decimal_type->scale();
-            std::cout << "prec, scale: (" << precision << ", " << scale << ")"
-                      << std::endl;
             duckdb_type = duckdb::LogicalType::DECIMAL(precision, scale);
             break;
         }

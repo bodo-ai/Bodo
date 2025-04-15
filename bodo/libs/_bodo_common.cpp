@@ -486,8 +486,6 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
             dtype = arrow::duration(arrow::TimeUnit::NANO);
             break;
         case Bodo_CTypes::DECIMAL:
-            std::cout << "prec, scale: (" << (int)precision << ", "
-                      << (int)scale << ")" << std::endl;
             dtype = arrow::decimal128(precision, scale);
             break;
         default: {
