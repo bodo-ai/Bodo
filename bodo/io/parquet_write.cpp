@@ -253,7 +253,7 @@ int64_t pq_write(const char *_path_name,
         // This is ugly and should be moved to python, abfs_get_fs
         // when we upgrade to Arrow 20.
         std::regex r(".*[?&]sv=.*&sig=.*");
-        regex_search(path_name, match, r);
+        regex_search(orig_path, match, r);
         if (fs_option == Bodo_Fs::abfs && match.size() != 0) {
 #ifndef _WIN32
             arrow::fs::AzureOptions options;

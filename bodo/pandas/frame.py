@@ -1,14 +1,22 @@
 import typing as pt
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import pandas as pd
+from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
+from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
-from bodo.pandas.utils import get_lazy_manager_class
+from bodo.pandas.series import BodoSeries
+from bodo.pandas.utils import (
+    LazyPlan,
+    check_args_fallback,
+    get_lazy_manager_class,
+    wrap_plan,
+)
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -23,6 +31,18 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     # so some methods like head will still trigger data pull if we don't store head_df and
     # use it directly when available.
     _head_df: pd.DataFrame | None = None
+
+    @property
+    def _plan(self):
+        if hasattr(self._mgr, "_plan"):
+            if self._mgr._plan is not None:
+                return self._mgr._plan
+            else:
+                return plan_optimizer.LogicalGetDataFrameRead(self._mgr._md_result_id)
+
+        raise NotImplementedError(
+            "Plan not available for this manager, recreate this dataframe with from_pandas"
+        )
 
     @staticmethod
     def from_lazy_mgr(
@@ -43,6 +63,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         lazy_metadata: LazyMetadata,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: plan_optimizer.LogicalOperator | None = None,
     ) -> "BodoDataFrame":
         """
         Create a BodoDataFrame from a lazy metadata object.
@@ -57,6 +78,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             collect_func=collect_func,
             del_func=del_func,
             index_data=lazy_metadata.index_data,
+            plan=plan,
         )
         return cls.from_lazy_mgr(lazy_mgr, lazy_metadata.head)
 
@@ -73,6 +95,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         self._mgr._md_result_id = lazy_metadata.result_id
         self._mgr._md_head = lazy_metadata.head._mgr
 
+    def is_lazy_plan(self):
+        """Returns whether the BodoDataFrame is represented by a plan."""
+        return getattr(self._mgr, "_plan", None) is not None
+
     def head(self, n: int = 5):
         """
         Return the first n rows. If head_df is available and larger than n, then use it directly.
@@ -83,6 +109,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         else:
             # If head_df is available and larger than n, then use it directly.
             return self._head_df.head(n)
+
+    def __len__(self):
+        if self.is_lazy_plan():
+            self._mgr._collect()
+        return super().__len__()
+
+    @property
+    def shape(self):
+        if self.is_lazy_plan():
+            self._mgr._collect()
+        return super().shape
 
     def to_parquet(
         self,
@@ -132,7 +169,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 + get_overload_const_str(compression)
             )
 
-        to_parquet_wrapper(
+        return to_parquet_wrapper(
             self,
             path,
             engine,
@@ -186,7 +223,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 method,
             )
 
-        to_sql_wrapper(
+        return to_sql_wrapper(
             self,
             name,
             con,
@@ -264,6 +301,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 doublequote=doublequote,
                 escapechar=escapechar,
                 decimal=decimal,
+                _bodo_concat_str_output=True,
             )
 
         # checks string arguments before jit performs conversion to unicode
@@ -286,7 +324,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             module_name="IO",
         )
 
-        to_csv_wrapper(
+        return to_csv_wrapper(
             self,
             path_or_buf,
             sep=sep,
@@ -355,9 +393,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 indent=indent,
                 storage_options=storage_options,
                 mode=mode,
+                _bodo_concat_str_output=True,
             )
 
-        to_json_wrapper(
+        return to_json_wrapper(
             self,
             path_or_buf,
             date_format=date_format,
@@ -381,3 +420,150 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return bodo.spawn.spawner.submit_func_to_workers(
             func, [], self, *args, **kwargs
         )
+
+    @check_args_fallback(supported=["on"])
+    def merge(
+        self,
+        right: "BodoDataFrame | BodoSeries",
+        how: MergeHow = "inner",
+        on: IndexLabel | AnyArrayLike | None = None,
+        left_on: IndexLabel | AnyArrayLike | None = None,
+        right_on: IndexLabel | AnyArrayLike | None = None,
+        left_index: bool = False,
+        right_index: bool = False,
+        sort: bool = False,
+        suffixes: Suffixes = ("_x", "_y"),
+        copy: bool | None = None,
+        indicator: str | bool = False,
+        validate: MergeValidate | None = None,
+    ):  # -> BodoDataFrame:
+        from bodo.pandas.base import _empty_like
+
+        zero_size_self = _empty_like(self)
+        zero_size_right = _empty_like(right)
+        new_metadata = zero_size_self.merge(
+            zero_size_right,
+            how=how,
+            on=on,
+            left_on=left_on,
+            right_on=right_on,
+            left_index=left_index,
+            right_index=right_index,
+            sort=sort,
+            suffixes=suffixes,
+        )
+
+        if on is None:
+            if left_on is None:
+                on = tuple(set(self.columns).intersection(set(right.columns)))
+            else:
+                on = []
+        elif not isinstance(on, list):
+            on = (on,)
+        if left_on is None:
+            left_on = []
+        if right_on is None:
+            right_on = []
+        planComparisonJoin = LazyPlan(
+            "LogicalComparisonJoin",
+            self._plan,
+            right._plan,
+            plan_optimizer.CJoinType.INNER,
+            [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
+            + [
+                (self.columns.get_loc(a), right.columns.get_loc(b))
+                for a, b in zip(left_on, right_on)
+            ],
+        )
+
+        return wrap_plan(new_metadata, planComparisonJoin)
+
+    @check_args_fallback("all")
+    def __getitem__(self, key):
+        """Called when df[key] is used."""
+        from bodo.pandas.base import _empty_like
+
+        """ Create 0 length versions of the dataframe and the key and
+            simulate the operation to see the resulting type. """
+        zero_size_self = _empty_like(self)
+        if isinstance(key, BodoSeries):
+            """ This is a masking operation. """
+            key_plan = (
+                key._plan
+                if key._plan is not None
+                else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
+            )
+            zero_size_key = _empty_like(key)
+            new_metadata = zero_size_self.__getitem__(zero_size_key)
+            return wrap_plan(
+                new_metadata,
+                plan=LazyPlan("LogicalFilter", self._plan, key_plan),
+            )
+        else:
+            """ This is selecting one or more columns. Be a bit more
+                lenient than Pandas here which says that if you have
+                an iterable it has to be 2+ elements. We will allow
+                just one element. """
+            if isinstance(key, str):
+                key = [key]
+            assert isinstance(key, Iterable)
+            key = list(key)
+            # convert column name to index
+            key_indices = [self.columns.get_loc(x) for x in key]
+            if len(key) == 1:
+                """ If just one element then have to extract that singular
+                    element for the metadata call to Pandas so it doesn't
+                    complain. """
+                key = key[0]
+                new_metadata = zero_size_self.__getitem__(key)
+                return wrap_plan(
+                    new_metadata,
+                    plan=LazyPlan(
+                        "LogicalProjection",
+                        self._plan,
+                        key_indices,
+                    ),
+                )
+            else:
+                new_metadata = zero_size_self.__getitem__(key)
+                return wrap_plan(
+                    new_metadata,
+                    plan=LazyPlan(
+                        "LogicalProjection",
+                        self._plan,
+                        key_indices,
+                    ),
+                )
+
+    @check_args_fallback(supported=["func", "axis"])
+    def apply(
+        self,
+        func,
+        axis=0,
+        raw=False,
+        result_type=None,
+        args=(),
+        by_row="compat",
+        engine="python",
+        engine_kwargs=None,
+        **kwargs,
+    ):
+        """
+        Apply a function along the axis of the dataframe.
+        """
+        if axis != 1:
+            raise BodoError("DataFrame.apply(): only axis=1 supported")
+
+        # Get output data type by running the UDF on a sample of the data.
+        # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
+        # TODO: remove when LIMIT plan is properly supported for head().
+        mgr_plan = self._mgr._plan
+        df_sample = self.head()
+        self._mgr._plan = mgr_plan
+        out_sample = pd.DataFrame({"OUT": df_sample.apply(func, axis)})
+
+        empty_df = out_sample.iloc[:0]
+        empty_df.index = pd.RangeIndex(0)
+
+        plan = LazyPlan("LogicalProjectionUDF", self._plan, func)
+        return wrap_plan(empty_df, plan=plan)

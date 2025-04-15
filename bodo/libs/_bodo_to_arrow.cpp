@@ -1478,6 +1478,27 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
     }
 }
 
+std::shared_ptr<table_info> arrow_table_to_bodo(
+    std::shared_ptr<arrow::Table> table, bodo::IBufferPool *src_pool) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(table->num_columns());
+    for (int64_t i = 0; i < table->num_columns(); i++) {
+        if (table->column(i)->num_chunks() != 1) {
+            throw std::runtime_error("arrow_table_to_bodo(): Column " +
+                                     std::to_string(i) +
+                                     " does not have exactly one chunk");
+        }
+        std::shared_ptr<arrow::Array> arr = table->column(i)->chunk(0);
+        std::shared_ptr<array_info> out_arr =
+            arrow_array_to_bodo(arr, src_pool);
+        out_arrs.push_back(out_arr);
+    }
+    std::shared_ptr<table_info> out_table =
+        std::make_shared<table_info>(out_arrs);
+    out_table->column_names = table->ColumnNames();
+    return out_table;
+}
+
 std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
     const std::shared_ptr<arrow::DataType> arrow_type) {
     switch (arrow_type->id()) {

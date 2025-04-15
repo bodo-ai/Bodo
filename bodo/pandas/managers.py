@@ -17,6 +17,7 @@ from pandas.core.internals.managers import (
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
+from bodo.pandas.plan_optimizer import LogicalOperator
 from bodo.spawn.utils import debug_msg
 
 
@@ -38,6 +39,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             collect_func = kwargs["collect_func"]
             del_func = kwargs["del_func"]
             index_data = kwargs.get("index_data", None)
+            plan = kwargs.get("plan", None)
             dummy_blocks = head.blocks
             # XXX Copy?
             col_index = [head.axes[0]]
@@ -119,6 +121,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                 col_index + row_indexes,
                 verify_integrity=False,
             )
+            obj._plan = plan
             obj._md_nrows = nrows
             obj._md_head = head
             obj._md_result_id = result_id
@@ -128,6 +131,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         else:
             # This is the normal BlockManager case
             obj = super().__new__(*args, **kwargs)
+            obj._plan = None
             obj._md_nrows = None
             obj._md_head = None
             obj._md_result_id = None
@@ -146,6 +150,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         result_id=None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
@@ -191,8 +196,27 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
 
     def _collect(self):
         """
-        Collect data from workers if needed.
+        Collect the data onto the spawner.
+        If we have a plan, execute it and replace the blocks with the result.
+        If the data is on the workers, collect it.
         """
+        # Execute the plan if we have one
+        if self._plan is not None:
+            from bodo.pandas.utils import execute_plan
+
+            debug_msg(
+                self.logger, "[LazyBlockManager] Executing Plan and collecting data..."
+            )
+            data = execute_plan(self._plan)
+            self._plan = None
+            self.blocks = data._mgr.blocks
+            # Update index here since the plan created a dummy index
+            self.axes = data._mgr.axes
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
+            BlockManager._rebuild_blknos_and_blklocs(self)
+
         if self._md_result_id is not None:
             debug_msg(self.logger, "[LazyBlockManager] Collecting data from workers...")
             assert self._md_nrows is not None
@@ -268,6 +292,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         head=None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
@@ -280,6 +305,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         self._md_head = head
         self._collect_func = collect_func
         self._del_func = del_func
+        self._plan = plan
         if result_id is not None:
             assert nrows is not None
             assert result_id is not None
@@ -392,8 +418,27 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
 
     def _collect(self):
         """
-        Collect data from workers if needed.
+        Collect the data onto the spawner.
+        If we have a plan, execute it and replace the blocks with the result.
+        If the data is on the workers, collect it.
         """
+        # Execute the plan if we have one
+        if self._plan is not None:
+            from bodo.pandas.utils import execute_plan
+
+            debug_msg(
+                self.logger,
+                "[LazySingleBlockManager] Executing Plan and collecting data...",
+            )
+            data = execute_plan(self._plan)
+            self._plan = None
+            self.blocks = data._mgr.blocks
+            # Update index here since the plan created a dummy index
+            self.axes = data._mgr.axes
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
+
         if self._md_result_id is not None:
             assert self._md_nrows is not None
             assert self._md_head is not None

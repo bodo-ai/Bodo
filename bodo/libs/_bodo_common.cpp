@@ -3,8 +3,10 @@
 #include <arrow/array.h>
 #include <complex>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
+#include <arrow/type.h>
 #include <fmt/format.h>
 #include "_bodo_to_arrow.h"
 #include "_datetime_utils.h"
@@ -45,6 +47,7 @@ const std::vector<size_t> numpy_item_size({
     0,                             // MAP
     sizeof(int64_t),               // TIMESTAMPTZ data1
 });
+
 void bodo_common_init() {
     static bool initialized = false;
     if (initialized) {
@@ -139,6 +142,31 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
             // TODO: Construct the type from the id
             throw std::runtime_error("arrow_to_bodo_type");
         }
+    }
+}
+
+bodo_array_type::arr_type_enum type_to_array_type(Bodo_CTypes::CTypeEnum typ) {
+    // TODO: support other types
+    switch (typ) {
+        case Bodo_CTypes::STRUCT:
+            return bodo_array_type::STRUCT;
+        case Bodo_CTypes::LIST:
+            return bodo_array_type::ARRAY_ITEM;
+        case Bodo_CTypes::MAP:
+            return bodo_array_type::MAP;
+        case Bodo_CTypes::COMPLEX64:
+        case Bodo_CTypes::COMPLEX128:
+        case Bodo_CTypes::TIMESTAMPTZ:
+            throw std::runtime_error(
+                fmt::format("Unsupported type for array type conversion: {}",
+                            GetDtype_as_string(typ)));
+
+        case Bodo_CTypes::STRING:
+        case Bodo_CTypes::BINARY:
+            return bodo_array_type::STRING;
+
+        default:
+            return bodo_array_type::NULLABLE_INT_BOOL;
     }
 }
 
@@ -390,6 +418,115 @@ void MapType::Serialize(std::vector<int8_t>& arr_array_types,
     value_type->Serialize(arr_array_types, arr_c_types);
 }
 
+std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
+    if (array_type == bodo_array_type::STRING) {
+        if (c_type == Bodo_CTypes::STRING) {
+            return std::make_shared<::arrow::Field>(name, arrow::large_utf8(),
+                                                    true);
+        } else {
+            assert(c_type == Bodo_CTypes::BINARY);
+            return std::make_shared<::arrow::Field>(name, arrow::large_binary(),
+                                                    true);
+        }
+
+    } else if (array_type == bodo_array_type::DICT) {
+        return std::make_shared<::arrow::Field>(
+            name, arrow::dictionary(arrow::int32(), arrow::large_utf8()), true);
+    } else if (array_type == bodo_array_type::TIMESTAMPTZ) {
+        throw std::runtime_error("TIMESTAMPTZ is not supported in Arrow");
+    }
+
+    bool is_nullable = array_type == bodo_array_type::NULLABLE_INT_BOOL;
+    std::shared_ptr<arrow::DataType> dtype;
+    switch (c_type) {
+        case Bodo_CTypes::INT8:
+            dtype = arrow::int8();
+            break;
+        case Bodo_CTypes::UINT8:
+            dtype = arrow::uint8();
+            break;
+        case Bodo_CTypes::INT16:
+            dtype = arrow::int16();
+            break;
+        case Bodo_CTypes::UINT16:
+            dtype = arrow::uint16();
+            break;
+        case Bodo_CTypes::INT32:
+            dtype = arrow::int32();
+            break;
+        case Bodo_CTypes::UINT32:
+            dtype = arrow::uint32();
+            break;
+        case Bodo_CTypes::INT64:
+            dtype = arrow::int64();
+            break;
+        case Bodo_CTypes::UINT64:
+            dtype = arrow::uint64();
+            break;
+        case Bodo_CTypes::FLOAT32:
+            dtype = arrow::float32();
+            break;
+        case Bodo_CTypes::FLOAT64:
+            dtype = arrow::float64();
+            break;
+        case Bodo_CTypes::_BOOL:
+            dtype = arrow::boolean();
+            break;
+        case Bodo_CTypes::DATE:
+            dtype = arrow::date32();
+            break;
+        case Bodo_CTypes::TIME:
+            dtype = arrow::time64(arrow::TimeUnit::SECOND);
+            break;
+        // TODO: Is there a way to get timezone?
+        case Bodo_CTypes::DATETIME:
+            dtype = arrow::timestamp(arrow::TimeUnit::NANO);
+            break;
+        case Bodo_CTypes::TIMEDELTA:
+            dtype = arrow::duration(arrow::TimeUnit::NANO);
+            break;
+        case Bodo_CTypes::DECIMAL:
+            dtype = arrow::decimal128(precision, scale);
+            break;
+        default: {
+            throw std::runtime_error("ToArrowType: unsupported dtype " +
+                                     std::string(dtype_to_str(c_type)));
+        }
+    }
+
+    return std::make_shared<::arrow::Field>(name, dtype, is_nullable);
+}
+
+std::shared_ptr<::arrow::Field> ArrayType::ToArrowType(
+    std::string& name) const {
+    std::string element_name = "element";
+    return std::make_shared<::arrow::Field>(
+        name, arrow::large_list(this->value_type->ToArrowType(element_name)),
+        true);
+}
+
+std::shared_ptr<::arrow::Field> StructType::ToArrowType(
+    std::string& name) const {
+    std::vector<std::shared_ptr<::arrow::Field>> fields;
+    for (size_t i = 0; i < child_types.size(); i++) {
+        std::string field_name = fmt::format("field_{}", i);
+        fields.push_back(child_types[i]->ToArrowType(field_name));
+    }
+
+    return std::make_shared<::arrow::Field>(name, arrow::struct_(fields), true);
+}
+
+std::shared_ptr<::arrow::Field> MapType::ToArrowType(std::string& name) const {
+    std::string key_name = "key";
+    std::string value_name = "value";
+
+    return std::make_shared<::arrow::Field>(
+        name,
+        arrow::map(this->key_type->ToArrowType(key_name)->type(),
+                   this->value_type->ToArrowType(value_name)),
+        true);
+}
+
 static std::unique_ptr<DataType> from_byte_helper(
     const std::span<const int8_t> arr_array_types,
     const std::span<const int8_t> arr_c_types, size_t& i) {
@@ -450,6 +587,11 @@ Schema::Schema(Schema&& other) {
 
 Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_)
     : column_types(std::move(column_types_)) {}
+
+Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+               std::vector<std::string> column_names)
+    : column_types(std::move(column_types_)), column_names(column_names) {}
+
 void Schema::insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
                            const size_t idx) {
     size_t i = 0;
@@ -534,6 +676,37 @@ std::unique_ptr<Schema> Schema::Project(
         dtypes.push_back(this->column_types[col_idx]->copy());
     }
     return std::make_unique<Schema>(std::move(dtypes));
+}
+
+std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
+    std::vector<std::shared_ptr<::arrow::Field>> fields;
+    fields.reserve(this->column_types.size());
+
+    uint32_t idx = 0;
+    for (size_t i = 0; i < this->column_types.size(); i++) {
+        const std::unique_ptr<DataType>& data_type = this->column_types[i];
+        std::string name = fmt::format("field_{}", idx);
+        // Use table name if available
+        if (this->column_names.size() > 0) {
+            name = this->column_names[i];
+        }
+        fields.push_back(data_type->ToArrowType(name));
+        idx++;
+    }
+    return std::make_shared<arrow::Schema>(fields);
+}
+
+std::shared_ptr<Schema> Schema::FromArrowSchema(
+    std::shared_ptr<::arrow::Schema> schema) {
+    std::vector<std::unique_ptr<DataType>> column_types;
+    for (const auto& field : schema->fields()) {
+        // TODO: support dictionary-encoded arrays
+        auto bodo_type = arrow_to_bodo_type(field->type()->id());
+        column_types.push_back(std::make_unique<DataType>(
+            type_to_array_type(bodo_type), bodo_type));
+    }
+    return std::make_shared<Schema>(std::move(column_types),
+                                    schema->field_names());
 }
 
 }  // namespace bodo
@@ -1854,6 +2027,61 @@ std::string get_bodo_version() {
 
 extern "C" {
 
+/**
+ * @brief Get the Cython-generated plan_optimizer module, which requires special
+ * initialization.
+ *
+ * @return PyObject* plan_optimizer module object or nullptr on failure.
+ */
+PyObject* get_plan_optimizer_module() {
+    // Cython uses multi-phase initialization which needs
+    // PyModule_FromDefAndSpec(). See:
+    // https://docs.python.org/3/c-api/module.html#c.PyModuleDef
+    PyModuleDef* moddef = (PyModuleDef*)PyInit_plan_optimizer();
+
+    PyObject* machinery = PyImport_ImportModule("importlib.machinery");
+    if (!machinery) {
+        PyErr_Print();
+        return nullptr;
+    }
+
+    PyObject* module_spec_cls = PyObject_GetAttrString(machinery, "ModuleSpec");
+    Py_DECREF(machinery);
+    if (!module_spec_cls) {
+        PyErr_Print();
+        return nullptr;
+    }
+
+    PyObject* args = Py_BuildValue("sO", "plan_optimizer", Py_None);
+    if (!args) {
+        PyErr_Print();
+        Py_DECREF(module_spec_cls);
+        return nullptr;
+    }
+
+    PyObject* spec = PyObject_CallObject(module_spec_cls, args);
+    Py_DECREF(module_spec_cls);
+    Py_DECREF(args);
+    if (!spec) {
+        PyErr_Print();
+        return nullptr;
+    }
+
+    PyObject* mod = PyModule_FromDefAndSpec(moddef, spec);
+    Py_DECREF(spec);
+    if (!mod) {
+        PyErr_Print();
+        return nullptr;
+    }
+
+    if (PyModule_ExecDef(mod, moddef) < 0) {
+        PyErr_Print();
+        Py_DECREF(mod);
+        return nullptr;
+    }
+    return mod;
+}
+
 PyMODINIT_FUNC PyInit_ext(void) {
     PyObject* m;
     MOD_DEF(m, "ext", "No docs", nullptr);
@@ -1902,6 +2130,20 @@ PyMODINIT_FUNC PyInit_ext(void) {
 
     SetAttrStringFromPyInit(m, listagg);
     SetAttrStringFromPyInit(m, memory_cpp);
+
+    // Setup the Cython-generated plan_optimizer module
+    PyObject* plan_opt_mod = get_plan_optimizer_module();
+    if (!plan_opt_mod) {
+        PyErr_Print();
+        return nullptr;
+    }
+    if (PyObject_SetAttrString(m, "plan_optimizer", plan_opt_mod) < 0) {
+        PyErr_Print();
+        Py_DECREF(plan_opt_mod);
+        return nullptr;
+    }
+    Py_DECREF(plan_opt_mod);
+
     return m;
 }
 

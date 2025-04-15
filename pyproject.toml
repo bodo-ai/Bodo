@@ -7,8 +7,7 @@ requires = [
     # Build Libraries
     "numpy>=1.24,<2.2",
     "pyarrow==19.0.0",
-    "mpi4py~=4.0; sys_platform == 'win32'",
-    "mpi4py~=3.1; sys_platform != 'win32'",
+    "mpi4py~=4.0",
     "pip"
 ]
 build-backend = "scikit_build_core.build"
@@ -72,7 +71,7 @@ huggingface_hub = ["huggingface_hub"]
 [tool.setuptools_scm]
 
 [tool.scikit-build]
-cmake.version = ">=3.23"
+cmake.version = ">=3.23,<4.0"
 strict-config = true
 experimental = false
 ninja.make-fallback = false

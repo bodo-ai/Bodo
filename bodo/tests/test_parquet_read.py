@@ -47,7 +47,9 @@ pytestmark = pytest.mark.parquet
 @pytest.mark.parametrize(
     "fname",
     [
-        pytest.param("int_nulls_single.pq", id="int_single"),  # single piece
+        pytest.param(
+            "int_nulls_single.pq", id="int_single", marks=pytest.mark.df_lib
+        ),  # single piece
         pytest.param("int_nulls_multi.pq", id="int_multi"),  # multi piece
     ],
 )
