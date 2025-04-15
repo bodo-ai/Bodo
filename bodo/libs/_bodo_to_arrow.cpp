@@ -7,6 +7,7 @@
 #include <arrow/builder.h>
 #include <arrow/compute/cast.h>
 #include <arrow/table.h>
+#include <arrow/type.h>
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -1493,7 +1494,10 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
             arrow_array_to_bodo(arr, src_pool);
         out_arrs.push_back(out_arr);
     }
-    return std::make_shared<table_info>(out_arrs);
+    std::shared_ptr<table_info> out_table =
+        std::make_shared<table_info>(out_arrs);
+    out_table->column_names = table->ColumnNames();
+    return out_table;
 }
 
 std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
@@ -1540,7 +1544,6 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
             return std::make_unique<bodo::StructType>(std::move(field_types));
         }
         // all fixed-size nullable types
-        case arrow::Type::DECIMAL128:
         case arrow::Type::DOUBLE:
         case arrow::Type::FLOAT:
         case arrow::Type::BOOL:
@@ -1559,6 +1562,15 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
             return std::make_unique<bodo::DataType>(
                 bodo_array_type::NULLABLE_INT_BOOL,
                 arrow_to_bodo_type(arrow_type->id()));
+        }
+        // decimal needs to pass scale/precision
+        case arrow::Type::DECIMAL128: {
+            auto arrow_decimal_type =
+                std::static_pointer_cast<arrow::Decimal128Type>(arrow_type);
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()),
+                arrow_decimal_type->precision(), arrow_decimal_type->scale());
         }
         // dictionary-encoded array
         case arrow::Type::DICTIONARY: {

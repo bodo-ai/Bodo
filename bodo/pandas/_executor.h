@@ -3,179 +3,9 @@
 #pragma once
 
 #include <Python.h>
-#include <object.h>
-#include <pytypedefs.h>
-#include "../io/parquet_reader.h"
-#include "duckdb/planner/operator/logical_get.hpp"
-#include "duckdb/planner/operator/logical_projection.hpp"
-
-class Executor;
-class Pipeline;
-
-/**
- * @brief Physical operators to be used in the execution pipelines (NOTE: they
- * are Bodo classes and not using DuckDB).
- *
- */
-class PhysicalOperator {
-   public:
-    /**
-     * @brief Execute the physical operator and return the result (placeholder
-     * for now).
-     *
-     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
-     * int64 (to pass to Cython easily), pyarrow schema object
-     */
-    virtual std::pair<int64_t, PyObject *> execute() = 0;
-    virtual ~PhysicalOperator() = default;
-    std::pair<int64_t, PyObject *> result;
-};
-
-/**
- * @brief Physical node for reading Parquet files in pipelines.
- *
- */
-class PhysicalReadParquet : public PhysicalOperator {
-   public:
-    // TODO: Fill in the contents with info from the logical operator
-    PhysicalReadParquet(std::string path, PyObject *pyarrow_schema,
-                        PyObject *storage_options,
-                        std::vector<int> &selected_columns) {
-        PyObject *py_path = PyUnicode_FromString(path.c_str());
-
-        std::shared_ptr<arrow::Schema> arrow_schema =
-            unwrap_schema(pyarrow_schema);
-
-        // TODO: Arrow fields are always nullable?
-        std::vector<bool> is_nullable(selected_columns.size(), true);
-
-        internal_reader = new ParquetReader(
-            py_path, true, Py_None, storage_options, pyarrow_schema, -1,
-            selected_columns, is_nullable, false, -1);
-        internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
-
-        // Create a new PyArrow schema with the selected columns
-        std::shared_ptr<arrow::Schema> schema =
-            arrow::py::unwrap_schema(pyarrow_schema).ValueOrDie();
-        std::vector<std::shared_ptr<arrow::Field>> selected_fields;
-        for (int i : selected_columns) {
-            if (i >= schema->num_fields()) {
-                throw std::runtime_error("Column index out of bounds: " +
-                                         std::to_string(i));
-            }
-            selected_fields.push_back(schema->field(i));
-        }
-        std::shared_ptr<arrow::Schema> new_schema =
-            arrow::schema(selected_fields);
-        selected_pyarrow_schema = arrow::py::wrap_schema(new_schema);
-    }
-
-    /**
-     * @brief Read parquet and return the result (placeholder for now).
-     *
-     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
-     * int64 (to pass to Cython easily), pyarrow schema object
-     */
-    std::pair<int64_t, PyObject *> execute() override;
-
-   private:
-    PyObject *selected_pyarrow_schema;
-    ParquetReader *internal_reader;
-};
-
-/**
- * @brief Physical node for reading Parquet files in pipelines.
- *
- */
-class PhysicalReadPandas : public PhysicalOperator {
-   public:
-    PhysicalReadPandas(PyObject *df) : df(df) {
-        Py_INCREF(df);
-        num_rows = PyObject_Length(df);
-    }
-    ~PhysicalReadPandas() { Py_DECREF(df); }
-
-    /**
-     * @brief Read parquet and return the result (placeholder for now).
-     *
-     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
-     * int64 (to pass to Cython easily), pyarrow schema object
-     */
-    std::pair<int64_t, PyObject *> execute() override;
-
-   private:
-    PyObject *df;
-    int64_t current_row = 0;
-    int64_t num_rows;
-};
-
-class PhysicalRunUDF : public PhysicalOperator {
-   public:
-    PhysicalRunUDF(std::shared_ptr<PhysicalOperator> source, PyObject *func)
-        : source(source), func(func) {
-        Py_INCREF(func);
-    }
-    ~PhysicalRunUDF() { Py_DECREF(func); }
-
-    /**
-     * @brief Run UDF and return the output as table.
-     *
-     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
-     * int64 (to pass to Cython easily), pyarrow schema object
-     */
-    std::pair<int64_t, PyObject *> execute() override;
-
-   private:
-    std::shared_ptr<PhysicalOperator> source;
-    PyObject *func;
-};
-
-/**
- * @brief Physical node for projection.
- *
- */
-class PhysicalProjection : public PhysicalOperator {
-   public:
-    PhysicalProjection(std::shared_ptr<PhysicalOperator> src,
-                       std::vector<int64_t> &cols)
-        : src(src), selected_columns(cols) {}
-
-    /**
-     * @brief Do projection.
-     *
-     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
-     * int64 (to pass to Cython easily), pyarrow schema object
-     */
-    std::pair<int64_t, PyObject *> execute() override;
-
-    static std::shared_ptr<PhysicalOperator> make(
-        const duckdb::LogicalProjection &proj_plan,
-        const std::shared_ptr<PhysicalOperator> &source);
-
-   private:
-    std::shared_ptr<PhysicalOperator> src;
-    std::vector<int64_t> selected_columns;
-};
-
-/**
- * @brief Pipeline class for executing a sequence of physical operators.
- *
- */
-class Pipeline {
-   public:
-    Pipeline(std::vector<std::shared_ptr<PhysicalOperator>> operators)
-        : operators(operators) {}
-
-    /**
-     * @brief Execute the pipeline and return the result (placeholder for now).
-     *
-     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
-     * int64 (to pass to Cython easily), pyarrow schema object
-     */
-    std::pair<int64_t, PyObject *> execute();
-
-    std::vector<std::shared_ptr<PhysicalOperator>> operators;
-};
+#include "_physical_conv.h"
+#include "_pipeline.h"
+#include "duckdb/planner/logical_operator.hpp"
 
 /**
  * @brief Executor class for executing a DuckDB logical plan in streaming
@@ -183,17 +13,29 @@ class Pipeline {
  *
  */
 class Executor {
+   private:
+    std::vector<std::shared_ptr<Pipeline>> pipelines;
+
    public:
-    Executor(std::unique_ptr<duckdb::LogicalOperator> plan);
+    explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
+                      std::shared_ptr<arrow::Schema> out_schema) {
+        // Convert the logical plan to a physical plan
+        PhysicalPlanBuilder builder;
+        builder.Visit(*plan);
+        pipelines = std::move(builder.finished_pipelines);
+
+        if (builder.active_pipeline != nullptr) {
+            pipelines.push_back(builder.active_pipeline->BuildEnd(out_schema));
+        }
+    }
 
     /**
      * @brief Execute the plan and return the result (placeholder for now).
-     *
-     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
-     * int64 (to pass to Cython easily), pyarrow schema object
      */
-    std::pair<int64_t, PyObject *> execute();
-    std::shared_ptr<PhysicalOperator> processNode(
-        std::unique_ptr<duckdb::LogicalOperator> &plan);
-    std::vector<Pipeline> pipelines;
+    std::shared_ptr<table_info> ExecutePipelines() {
+        // TODO: support multiple pipelines
+        pipelines[0]->Execute();
+
+        return pipelines[0]->GetResult();
+    }
 };

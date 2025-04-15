@@ -36,9 +36,7 @@ SinkResultType PhysicalArrowCollector::Sink(ExecutionContext &context, DataChunk
 			// Create the appender if we haven't started this chunk yet
 			auto properties = context.client.GetClientProperties();
 			D_ASSERT(processed < count);
-			auto initial_capacity = MinValue(record_batch_size, count - processed);
-			appender = make_uniq<ArrowAppender>(types, initial_capacity, properties,
-			                                    ArrowTypeExtensionData::GetExtensionTypes(context.client, types));
+			appender = nullptr;
 		}
 
 		// Figure out how much we can still append to this chunk

@@ -369,11 +369,6 @@ unique_ptr<ArrowType> ArrowType::GetTypeFromSchema(DBConfig &config, ArrowSchema
 	auto arrow_type = GetTypeFromFormat(config, schema, format);
 	if (schema_metadata.HasExtension()) {
 		auto extension_info = schema_metadata.GetExtensionInfo(string(format));
-		if (config.HasArrowExtension(extension_info)) {
-			auto extension = config.GetArrowExtension(extension_info);
-			arrow_type = extension.GetType(schema, schema_metadata);
-			arrow_type->extension_data = extension.GetTypeExtension();
-		}
 	}
 
 	return arrow_type;
@@ -381,18 +376,6 @@ unique_ptr<ArrowType> ArrowType::GetTypeFromSchema(DBConfig &config, ArrowSchema
 
 LogicalType ArrowTypeExtensionData::GetInternalType() const {
 	return internal_type;
-}
-
-unordered_map<idx_t, const shared_ptr<ArrowTypeExtensionData>>
-ArrowTypeExtensionData::GetExtensionTypes(ClientContext &context, const vector<LogicalType> &duckdb_types) {
-	unordered_map<idx_t, const shared_ptr<ArrowTypeExtensionData>> extension_types;
-	const auto &db_config = DBConfig::GetConfig(context);
-	for (idx_t i = 0; i < duckdb_types.size(); i++) {
-		if (db_config.HasArrowExtension(duckdb_types[i])) {
-			extension_types.insert({i, db_config.GetArrowExtension(duckdb_types[i]).GetTypeExtension()});
-		}
-	}
-	return extension_types;
 }
 
 LogicalType ArrowTypeExtensionData::GetDuckDBType() const {

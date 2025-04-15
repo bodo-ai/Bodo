@@ -1,12 +1,14 @@
 #include "_plan.h"
-#include <arrow/type.h>
-#include <parquet/properties.h>
-#include <memory>
+#include <arrow/python/pyarrow.h>
 #include <utility>
-#include "duckdb.hpp"
+
+#include "_executor.h"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/function/scalar_function.hpp"
+#include "duckdb/main/client_context.hpp"
+#include "duckdb/main/database.hpp"
+#include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -17,6 +19,9 @@
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
+
+#include "physical/read_pandas.h"
+#include "physical/read_parquet.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
@@ -243,9 +248,17 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 }
 
 std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan) {
-    Executor executor(std::move(plan));
-    return executor.execute();
+    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
+    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
+    Executor executor(std::move(plan), out_schema);
+    std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
+    std::cout << " execute done: converting to arrow schema " << std::endl;
+    PyObject *pyarrow_schema =
+        arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
+    std::cout << "converting to arrow done " << std::endl;
+
+    return {reinterpret_cast<int64_t>(new table_info(*output_table)),
+            pyarrow_schema};
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
@@ -399,11 +412,13 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             break;
         }
         case arrow::Type::DECIMAL128: {
+            std::cout << "decimal case " << std::endl;
             auto decimal_type =
                 std::static_pointer_cast<arrow::DecimalType>(arrow_type);
             int32_t precision = decimal_type->precision();
             int32_t scale = decimal_type->scale();
-
+            std::cout << "prec, scale: (" << precision << ", " << scale << ")"
+                      << std::endl;
             duckdb_type = duckdb::LogicalType::DECIMAL(precision, scale);
             break;
         }
@@ -426,6 +441,61 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
 
 std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
     return plan->ToString(duckdb::ExplainFormat::GRAPHVIZ);
+}
+
+std::shared_ptr<PhysicalSource>
+BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
+    std::vector<int> &selected_columns) {
+    // Read the dataframe from the result registry using
+    // sys.modules["__main__"].RESULT_REGISTRY since importing
+    // bodo.spawn.worker creates a new module with new empty registry.
+
+    // Import Python sys module
+    PyObject *sys_module = PyImport_ImportModule("sys");
+    if (!sys_module) {
+        throw std::runtime_error("Failed to import sys module");
+    }
+
+    // Get sys.modules dictionary
+    PyObject *modules_dict = PyObject_GetAttrString(sys_module, "modules");
+    if (!modules_dict) {
+        Py_DECREF(sys_module);
+        throw std::runtime_error("Failed to get sys.modules");
+    }
+
+    // Get __main__ module
+    PyObject *main_module = PyDict_GetItemString(modules_dict, "__main__");
+    if (!main_module) {
+        Py_DECREF(modules_dict);
+        Py_DECREF(sys_module);
+        throw std::runtime_error("Failed to get __main__ module");
+    }
+
+    // Get RESULT_REGISTRY[result_id]
+    PyObject *result_registry =
+        PyObject_GetAttrString(main_module, "RESULT_REGISTRY");
+    PyObject *df = PyDict_GetItemString(result_registry, result_id.c_str());
+    if (!df) {
+        throw std::runtime_error("Result ID not found in result registry");
+    }
+    Py_DECREF(result_registry);
+    Py_DECREF(modules_dict);
+    Py_DECREF(sys_module);
+
+    return std::make_shared<PhysicalReadPandas>(df);
+}
+
+std::shared_ptr<PhysicalSource>
+BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
+    std::vector<int> &selected_columns) {
+    return std::make_shared<PhysicalReadPandas>(df);
+}
+
+std::shared_ptr<PhysicalSource>
+BodoParquetScanFunctionData::CreatePhysicalOperator(
+    std::vector<int> &selected_columns) {
+    return std::make_shared<PhysicalReadParquet>(
+        path, pyarrow_schema, storage_options, selected_columns);
 }
 
 #undef CHECK_ARROW

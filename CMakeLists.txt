@@ -520,10 +520,7 @@ target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(native_typer PRIVATE fmt::fmt)
 install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
-
-
 # ---------------------- Cython Target - plan_optimizer -----------------------
-
 add_custom_command(
   OUTPUT bodo/pandas/plan_optimizer.cpp
   DEPENDS bodo/pandas/plan_optimizer.pyx
@@ -532,7 +529,6 @@ add_custom_command(
   COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/plan_optimizer.cpp" "bodo/pandas/plan_optimizer.pyx"
   COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
 )
-
 
 ExternalProject_Add(
     duckdb_build
@@ -544,12 +540,12 @@ ExternalProject_Add(
     BUILD_IN_SOURCE 1
 )
 
-
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
   "bodo/pandas/_plan.cpp"
-  "bodo/pandas/_executor.cpp"
+  "bodo/pandas/_pipeline.cpp"
+  "bodo/pandas/_physical_conv.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"
