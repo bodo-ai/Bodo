@@ -20,13 +20,91 @@ pytestmark = [
 ] + pytest_spawn_mode
 
 
-def test_basic_apply_example():
+@pytest.fixture(
+    params=(
+        pytest.param(bodo.jit, id="jit_no_kwargs"),
+        pytest.param(bodo.jit(spawn=False, distributed=False), id="jit_no_spawn"),
+        pytest.param(bodo.jit(cache=True), id="jit_with_cache"),
+    ),
+    scope="module",
+)
+def engine(request):
+    return request.param
+
+
+def test_apply_basic(engine):
     """Simplest test to check Pandas UDF apply hook is set up properly"""
 
     df = pd.DataFrame({"A": np.arange(30)})
 
-    bodo_result = df.apply(lambda x: x.A, axis=1, engine=bodo.jit)
+    bodo_result = df.apply(lambda x: x.A, axis=1, engine=engine)
 
     pandas_result = df.apply(lambda x: x.A, axis=1)
 
     _test_equal(bodo_result, pandas_result, check_pandas_types=False)
+
+
+def test_apply_raw_error():
+    """Test passing raw=True raises appropriate error message."""
+
+    df = pd.DataFrame({"A": np.arange(30)})
+
+    with pytest.raises(
+        ValueError,
+        match="Bodo engine does not support the raw=True for DataFrame.apply.",
+    ):
+        df.apply(lambda x: x.A, axis=1, engine=bodo.jit, raw=True)
+
+
+def test_udf_args():
+    engine = bodo.jit(spawn=False, distributed=False)
+
+    df = pd.DataFrame({"A": np.arange(30)})
+
+    def udf(x, a):
+        return x.A + a
+
+    bodo_result = df.apply(udf, axis=1, engine=engine, args=(1,))
+
+    pandas_result = df.apply(udf, axis=1, args=(1,))
+
+    _test_equal(bodo_result, pandas_result)
+
+
+def test_udf_kwargs():
+    df = pd.DataFrame({"A": np.arange(30), "B": ["hi", "hello", "goodbye"] * 10})
+
+    def udf(x, a=1, b="goodbye", d=3):
+        if b == x.B:
+            return x.A + a
+        else:
+            return x.A + d
+
+    # args and kwargs
+    bodo_result = df.apply(udf, axis=1, args=(4, "hi"), d=16, engine=bodo.jit)
+    pandas_result = df.apply(udf, axis=1, args=(4, "hi"), d=16)
+
+    _test_equal(bodo_result, pandas_result)
+
+    # kwargs only
+    bodo_result = df.apply(udf, axis=1, d=16, a=4, engine=bodo.jit)
+    pandas_result = df.apply(udf, axis=1, d=16, a=4)
+
+    _test_equal(bodo_result, pandas_result)
+
+
+def test_udf_cache():
+    df = pd.DataFrame({"A": np.arange(30)})
+
+    def udf(x, a):
+        return x.A + a
+
+    bodo_result = df.apply(udf, axis=1, engine=bodo.jit(cache=True), args=(1,))
+
+    pandas_result = df.apply(udf, axis=1, args=(1,))
+
+    _test_equal(bodo_result, pandas_result)
+
+    bodo_result = df.apply(udf, axis=1, engine=bodo.jit(cache=True), args=(1,))
+
+    _test_equal(bodo_result, pandas_result)

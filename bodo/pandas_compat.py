@@ -270,7 +270,7 @@ if pandas_version >= (3, 0):
             decorator: Callable | None,
             skip_na: bool,
         ):
-            raise NotImplementedError("TODO: map")
+            raise NotImplementedError("BodoExecutionEngine: map not implemented yet.")
 
         @staticmethod
         def apply(
@@ -284,15 +284,15 @@ if pandas_version >= (3, 0):
             # raw = True converts data to ndarray first
             if isinstance(data, np.ndarray):
                 raise ValueError(
-                    "Bodo engine does not support the raw=True in DataFrame.apply."
+                    "Bodo engine does not support the raw=True for DataFrame.apply."
                 )
 
             jitted_func = decorator(func)
 
             @decorator
-            def apply_func(data):
-                return data.apply(jitted_func, axis=axis, args=args)
+            def apply_func(data, args):
+                return data.apply(jitted_func, axis=axis, args=(1,))
 
-            return apply_func(data)
+            return apply_func(data, args)
 
     bodo_pandas_udf_execution_engine = BodoExecutionEngine
