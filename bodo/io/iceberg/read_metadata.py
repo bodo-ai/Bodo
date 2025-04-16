@@ -213,7 +213,7 @@ def get_iceberg_file_list_parallel(
     return (
         pq_infos,
         {i: schema_to_pyarrow(s) for i, s in table.schemas().items()},
-        snapshot_id,
+        snapshot_id if snapshot_id > -1 else table.current_snapshot().snapshot_id,
         table.io,
         get_file_to_schema_us,
     )

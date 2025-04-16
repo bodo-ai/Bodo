@@ -135,7 +135,8 @@ def _determine_str_as_dict_columns(
     #     to avoid retrieving millions of files for no reason
     all_file_tasks = list(
         table.scan(
-            selected_fields=tuple(str_col_names_to_check), snapshot_id=snapshot_id
+            selected_fields=tuple(str_col_names_to_check),
+            snapshot_id=snapshot_id if snapshot_id != -1 else None,
         ).plan_files()
     )
 
@@ -333,7 +334,7 @@ def resolve_snapshot_id(
 ) -> int:
     """
     Resolve the snapshot ID of an Iceberg table.
-    If `snapshot_id` is -1, and snapshot_timestamp_ms is -1 the latest snapshot ID is returned.
+    If `snapshot_id` is -1, and snapshot_timestamp_ms is -1, -1 is returned.
     If `snapshot_id` is -1 and snapshot_timestamp_ms is not -1, the snapshot ID corresponding to the
     given timestamp is returned.
     If `snapshot_id` is not -1, it is validated and returned.
@@ -360,8 +361,7 @@ def resolve_snapshot_id(
         raise BodoError(
             "resolve_snapshot_id: Cannot specify both snapshot_id and snapshot_timestamp_ms"
         )
-
-    snapshot = table.current_snapshot()
+    snapshot = None
     if snapshot_timestamp_ms != -1:
         snapshot = table.snapshot_as_of_timestamp(snapshot_timestamp_ms)
         if snapshot is None:
@@ -374,5 +374,5 @@ def resolve_snapshot_id(
             raise BodoError(
                 f"Snapshot with ID {snapshot_id} not found in table {table_id}"
             )
-    snapshot_id = snapshot.snapshot_id if snapshot else -1
+    snapshot_id = snapshot.snapshot_id if snapshot is not None else -1
     return snapshot_id
