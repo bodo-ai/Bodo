@@ -376,6 +376,18 @@ std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
     const std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+inline Bodo_CTypes::CTypeEnum ctypeFromVal(int val) {
+    return Bodo_CTypes::CTypeEnum::INT32;
+}
+
+inline Bodo_CTypes::CTypeEnum ctypeFromVal(float val) {
+    return Bodo_CTypes::CTypeEnum::FLOAT32;
+}
+
+inline Bodo_CTypes::CTypeEnum ctypeFromVal(double val) {
+    return Bodo_CTypes::CTypeEnum::FLOAT64;
+}
+
 constexpr inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
     if (typ == Bodo_CTypes::UINT8) {
         return true;

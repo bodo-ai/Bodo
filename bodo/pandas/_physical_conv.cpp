@@ -2,7 +2,11 @@
 #include <stdexcept>
 #include "_plan.h"
 
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/bound_comparison_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "physical/filter.h"
 #include "physical/project.h"
 #include "physical/run_udf.h"
 
@@ -52,9 +56,90 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     this->active_pipeline->AddOperator(physical_op);
 }
 
+// Generic dynamic_cast for std::unique_ptr
+template <typename Derived, typename Base>
+duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
+    duckdb::unique_ptr<Base>& base_ptr) {
+    // Perform dynamic_cast on the raw pointer
+    if (Derived* derived_raw = dynamic_cast<Derived*>(base_ptr.get())) {
+        // Release ownership from the base_ptr and transfer it to a new
+        // unique_ptr
+        base_ptr.release();  // Release the ownership of the raw pointer
+        return duckdb::unique_ptr<Derived>(derived_raw);
+    }
+    // If the cast fails, return a nullptr unique_ptr
+    return nullptr;
+}
+
+std::variant<int, float, double> extractValue(const duckdb::Value& value) {
+    duckdb::LogicalTypeId type = value.type().id();
+    switch (type) {
+        case duckdb::LogicalTypeId::INTEGER:
+            return value.GetValue<int>();
+        case duckdb::LogicalTypeId::FLOAT:
+            return value.GetValue<float>();
+        case duckdb::LogicalTypeId::DOUBLE:
+            return value.GetValue<double>();
+        default:
+            throw std::runtime_error("extractValue unhandled type.");
+    }
+}
+
+std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
+    duckdb::unique_ptr<duckdb::Expression>& expr) {
+    duckdb::ExpressionClass expr_class = expr->GetExpressionClass();
+    duckdb::ExpressionType expr_type = expr->GetExpressionType();
+
+    switch (expr_class) {
+        case duckdb::ExpressionClass::BOUND_COMPARISON: {
+            auto bce =
+                dynamic_cast_unique_ptr<duckdb::BoundComparisonExpression>(
+                    expr);
+            return std::static_pointer_cast<PhysicalExpression>(
+                std::make_shared<PhysicalComparisonExpression>(
+                    buildPhysicalExprTree(bce->left),
+                    buildPhysicalExprTree(bce->right), expr_type));
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
+            auto bce =
+                dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(expr);
+            auto binding = bce->binding;
+            return std::static_pointer_cast<PhysicalExpression>(
+                std::make_shared<PhysicalColumnRefExpression>(
+                    binding.table_index, binding.column_index));
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CONSTANT: {
+            auto bce =
+                dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(expr);
+            auto extracted_value = extractValue(bce->value);
+            return std::visit(
+                [](const auto& value) {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalConstantExpression<
+                            std::decay_t<decltype(value)>>>(value));
+                },
+                extracted_value);
+        } break;  // suppress wrong fallthrough error
+        default:
+            throw std::runtime_error(
+                "Unsupported duckdb expression type" +
+                std::to_string(static_cast<int>(expr_class)));
+    }
+    throw std::logic_error("Control should never reach here");
+}
+
 void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
-    throw std::runtime_error(
-        "Not supported on the physical side yet: LogicalFilter");
+    // Process the source of this projection.
+    this->Visit(*op.children[0]);
+
+    if (op.expressions.size() != 1) {
+        throw std::runtime_error(
+            "LogicalFilter only supports expressions of size 1");
+    }
+
+    auto physExprTree = buildPhysicalExprTree(op.expressions[0]);
+    auto physical_op = std::make_shared<PhysicalFilter>(physExprTree);
+    this->active_pipeline->AddOperator(physical_op);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {

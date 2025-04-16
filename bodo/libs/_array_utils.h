@@ -926,7 +926,8 @@ constexpr inline bool isnan_alltype(T const& val) {
  * @return 1 if *ptr1 < *ptr2
  */
 template <typename T>
-int NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
+int NumericComparison_int(const char* ptr1, const char* ptr2,
+                          bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     if (*ptr1_T > *ptr2_T) {
@@ -947,7 +948,7 @@ int NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
  * used)
  * @return 1 if *ptr1 < *ptr2
  */
-inline int NumericComparison_decimal(char* ptr1, char* ptr2,
+inline int NumericComparison_decimal(const char* ptr1, const char* ptr2,
                                      bool const& na_position) {
     __int128_t* ptr1_dec = (__int128_t*)ptr1;
     __int128_t* ptr2_dec = (__int128_t*)ptr2;
@@ -972,7 +973,8 @@ inline int NumericComparison_decimal(char* ptr1, char* ptr2,
  * @return 1 if *ptr1 < *ptr2
  */
 template <typename T>
-int NumericComparison_float(char* ptr1, char* ptr2, bool const& na_position) {
+int NumericComparison_float(const char* ptr1, const char* ptr2,
+                            bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     T val1 = *ptr1_T;
@@ -1011,7 +1013,8 @@ int NumericComparison_float(char* ptr1, char* ptr2, bool const& na_position) {
  * @return 1 if *ptr1 < *ptr2
  */
 template <typename T>
-int NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
+int NumericComparison_date(const char* ptr1, const char* ptr2,
+                           bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     T val1 = *ptr1_T;
@@ -1051,8 +1054,9 @@ int NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
  * @param na_position: true for NaN being last, false for NaN being first
  * @return 1 if *ptr1 < *ptr2, 0 if equal and -1 if >
  */
-inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
-                             char* ptr2, bool const& na_position) {
+inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype,
+                             const char* ptr1, const char* ptr2,
+                             bool const& na_position) {
     if (dtype == Bodo_CTypes::_BOOL)
         return NumericComparison_int<bool>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::INT8)

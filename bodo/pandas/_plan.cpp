@@ -96,6 +96,13 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     auto filter_expr_duck = to_duckdb(filter_expr);
+    duckdb::LogicalOperatorType source_type = source_duck->type;
+    if (source_type != duckdb::LogicalOperatorType::LOGICAL_PROJECTION) {
+        throw std::runtime_error(
+            "make_filter source must currently be a LogicalProjection");
+    }
+    // The unique_ptr ends up in the projection so extract it.
+    source_duck = std::move(source_duck->children[0]);
     auto logical_filter =
         duckdb::make_uniq<duckdb::LogicalFilter>(std::move(filter_expr_duck));
 

@@ -29,7 +29,7 @@ void Pipeline::Execute() {
             }
         }
 
-        sink->ConsumeBatch(result.first);
+        sink->ConsumeBatch(batch);
     }
 
     // Finalize
