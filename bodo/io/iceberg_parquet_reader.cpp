@@ -767,14 +767,12 @@ class IcebergParquetReader : public ArrowReader {
         //          conn, table_id, pyarrow_schema, iceberg_filter,
         //          expr_filter_f_str, filter_scalars, snapshot_id,
         //      )
-        static_assert(std::is_same_v<int64_t, long long>,
-                      "IcebergParquetReader::get_dataset: int64_t and long "
-                      "long are not the same type!");
         PyObject* ds = PyObject_CallMethod(
             iceberg_mod, "get_iceberg_pq_dataset", "ssOOOsOOL", this->conn,
             this->table_id, this->pyarrow_schema, str_as_dict_cols_py,
             this->iceberg_filter, this->expr_filter_f_str.c_str(),
-            this->filter_scalars, force_row_level_py, this->snapshot_id);
+            this->filter_scalars, force_row_level_py,
+            static_cast<long long>(this->snapshot_id));
         if (ds == nullptr && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
