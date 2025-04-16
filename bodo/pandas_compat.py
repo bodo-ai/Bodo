@@ -3,8 +3,9 @@ import inspect
 import warnings
 
 import numpy as np
-import pandas as pd
 import pyarrow as pa
+
+import pandas as pd
 
 pandas_version = tuple(map(int, pd.__version__.split(".")[:2]))
 
@@ -62,6 +63,7 @@ if pandas_version < (1, 4):
 # Pandas code: https://github.com/pandas-dev/pandas/blob/ca60aab7340d9989d9428e11a51467658190bb6b/pandas/core/arrays/string_arrow.py#L141
 def ArrowStringArray__init__(self, values):
     import pyarrow as pa
+
     from pandas.core.arrays.string_ import StringDtype
     from pandas.core.arrays.string_arrow import ArrowStringArray
 
@@ -244,3 +246,53 @@ def get_conversion_factor_to_ns(in_reso: str) -> int:
     else:
         raise ValueError(f"Unsupported resolution {in_reso}")
     return factor * value
+
+
+# Class responsible for executing UDFs using Bodo as the engine in
+# newer version of pandas.
+# https://github.com/pandas-dev/pandas/pull/61032
+bodo_pandas_udf_execution_engine = None
+
+if pandas_version >= (3, 0):
+    from collections.abc import Callable
+    from typing import Any
+
+    from pandas._typing import AggFuncType, Axis
+    from pandas.core.apply import BaseExecutionEngine
+
+    class BodoExecutionEngine(BaseExecutionEngine):
+        @staticmethod
+        def map(
+            data: pd.Series | pd.DataFrame | np.ndarray,
+            func: AggFuncType,
+            args: tuple,
+            kwargs: dict[str, Any],
+            decorator: Callable | None,
+            skip_na: bool,
+        ):
+            raise NotImplementedError("TODO: map")
+
+        @staticmethod
+        def apply(
+            data: pd.Series | pd.DataFrame | np.ndarray,
+            func: AggFuncType,
+            args: tuple,
+            kwargs: dict[str, Any],
+            decorator: Callable,
+            axis: Axis,
+        ):
+            # raw = True converts data to ndarray first
+            if isinstance(data, np.ndarray):
+                raise ValueError(
+                    "Bodo engine does not support the raw=True in DataFrame.apply."
+                )
+
+            jitted_func = decorator(func)
+
+            @decorator
+            def apply_func(data):
+                return data.apply(jitted_func, axis=axis, args=args)
+
+            return apply_func(data)
+
+    bodo_pandas_udf_execution_engine = BodoExecutionEngine

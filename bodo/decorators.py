@@ -16,6 +16,7 @@ from numba.core.typing.templates import signature
 from numba.extending import lower_builtin, models, register_model
 
 import bodo
+from bodo.pandas_compat import bodo_pandas_udf_execution_engine
 
 # Add Bodo's options to Numba's allowed options/flags
 numba.core.cpu.CPUTargetOptions.all_args_distributed_block = _mapping(
@@ -350,6 +351,8 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
             py_func = signature_or_function
             return return_wrapped_fn(py_func)
 
+        return_wrapped_fn.__pandas_udf__ = bodo_pandas_udf_execution_engine
+
         return return_wrapped_fn
 
     elif "propagate_env" in options:
@@ -358,6 +361,9 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
         )
 
     return _jit(signature_or_function, pipeline_class, **options)
+
+
+jit.__pandas_udf__ = bodo_pandas_udf_execution_engine
 
 
 def _jit(signature_or_function=None, pipeline_class=None, **options):
