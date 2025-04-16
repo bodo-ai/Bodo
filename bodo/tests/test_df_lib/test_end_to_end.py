@@ -143,6 +143,17 @@ def test_projection(datapath):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
+def test_filter(datapath):
+    """Very simple test for projection for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[bodo_df1.A < 20]
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[py_df1.A < 20]
+
+    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+
+
 def test_apply(datapath):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
