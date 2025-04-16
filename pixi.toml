@@ -70,6 +70,7 @@ pip = "*"
 # Core Python Deps
 numba = "==0.61.0"
 numpy = ">=1.24,<2.2"
+pandas = ">=2.2,<2.3"
 pyarrow = { version = "==19.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"

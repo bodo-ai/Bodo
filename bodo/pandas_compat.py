@@ -288,12 +288,12 @@ if pandas_version >= (3, 0):
             # raw = True converts data to ndarray first
             if isinstance(data, np.ndarray):
                 raise ValueError(
-                    "Bodo engine does not support the raw=True for DataFrame.apply."
+                    "BodoExecutionEngine: does not support the raw=True for DataFrame.apply."
                 )
 
             if kwargs:
                 raise ValueError(
-                    "Bodo engine does not support passing keyword arguments to UDF, please use args instead."
+                    "BodoExecutionEngine: does not support passing keyword arguments to UDF. Use args instead."
                 )
 
             jitted_udf = decorator(func)

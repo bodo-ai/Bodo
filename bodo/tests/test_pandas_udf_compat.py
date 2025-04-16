@@ -51,7 +51,7 @@ def test_apply_raw_error():
 
     with pytest.raises(
         ValueError,
-        match="Bodo engine does not support the raw=True for DataFrame.apply.",
+        match="BodoExecutionEngine: does not support the raw=True for DataFrame.apply.",
     ):
         df.apply(lambda x: x.A, axis=1, engine=bodo.jit, raw=True)
 
@@ -83,7 +83,7 @@ def test_udf_kwargs():
     # args and kwargs
     with pytest.raises(
         ValueError,
-        match="Bodo engine does not support passing keyword arguments to UDF, please use args instead.",
+        match="BodoExecutionEngine: does not support passing keyword arguments to UDF. Use args instead.",
     ):
         df.apply(udf, axis=1, args=(4, "hi"), d=16, engine=bodo.jit)
 
