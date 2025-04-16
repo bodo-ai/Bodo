@@ -145,31 +145,6 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
     }
 }
 
-bodo_array_type::arr_type_enum type_to_array_type(Bodo_CTypes::CTypeEnum typ) {
-    // TODO: support other types
-    switch (typ) {
-        case Bodo_CTypes::STRUCT:
-            return bodo_array_type::STRUCT;
-        case Bodo_CTypes::LIST:
-            return bodo_array_type::ARRAY_ITEM;
-        case Bodo_CTypes::MAP:
-            return bodo_array_type::MAP;
-        case Bodo_CTypes::COMPLEX64:
-        case Bodo_CTypes::COMPLEX128:
-        case Bodo_CTypes::TIMESTAMPTZ:
-            throw std::runtime_error(
-                fmt::format("Unsupported type for array type conversion: {}",
-                            GetDtype_as_string(typ)));
-
-        case Bodo_CTypes::STRING:
-        case Bodo_CTypes::BINARY:
-            return bodo_array_type::STRING;
-
-        default:
-            return bodo_array_type::NULLABLE_INT_BOOL;
-    }
-}
-
 int32_t decimal_precision_to_integer_bytes(int32_t precision) {
     if (precision < 3) {
         return 1;
@@ -701,9 +676,8 @@ std::shared_ptr<Schema> Schema::FromArrowSchema(
     std::vector<std::unique_ptr<DataType>> column_types;
     for (const auto& field : schema->fields()) {
         // TODO: support dictionary-encoded arrays
-        auto bodo_type = arrow_to_bodo_type(field->type()->id());
-        column_types.push_back(std::make_unique<DataType>(
-            type_to_array_type(bodo_type), bodo_type));
+        auto bodo_type = arrow_type_to_bodo_data_type(field->type());
+        column_types.push_back(bodo_type->copy());
     }
     return std::make_shared<Schema>(std::move(column_types),
                                     schema->field_names());
