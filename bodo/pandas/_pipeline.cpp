@@ -12,7 +12,8 @@ void Pipeline::Execute() {
         std::shared_ptr<table_info> batch;
 
         // Execute the source to get the base batch
-        auto result = source->ProduceBatch();
+        std::pair<std::shared_ptr<table_info>, ProducerResult> result =
+            source->ProduceBatch();
         batch = result.first;
         ProducerResult produce_result = result.second;
         if (produce_result == ProducerResult::HAVE_MORE_OUTPUT) {
@@ -20,7 +21,8 @@ void Pipeline::Execute() {
         }
 
         for (std::shared_ptr<PhysicalSourceSink>& op : between_ops) {
-            auto result = op->ProcessBatch(batch);
+            std::pair<std::shared_ptr<table_info>, OperatorResult> result =
+                op->ProcessBatch(batch);
             batch = result.first;
             OperatorResult op_result = result.second;
 
@@ -54,6 +56,6 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(
 std::shared_ptr<Pipeline> PipelineBuilder::BuildEnd(
     std::shared_ptr<arrow::Schema> out_schema) {
     auto sink = std::make_shared<PhysicalResultCollector>(
-        bodo::Schema::make(out_schema));
+        bodo::Schema::FromArrowSchema(out_schema));
     return Build(sink);
 }

@@ -3,10 +3,12 @@
 #include <utility>
 
 #include "_executor.h"
-#include "duckdb.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/function/scalar_function.hpp"
+#include "duckdb/main/client_context.hpp"
+#include "duckdb/main/database.hpp"
+#include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -256,7 +258,7 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
-    auto output_table = executor.ExecutePipelines();
+    std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 

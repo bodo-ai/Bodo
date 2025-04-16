@@ -57,44 +57,6 @@ Value AllocatorBackgroundThreadsSetting::GetSetting(const ClientContext &context
 }
 
 //===----------------------------------------------------------------------===//
-// Allow Community Extensions
-//===----------------------------------------------------------------------===//
-void AllowCommunityExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	if (!OnGlobalSet(db, config, input)) {
-		return;
-	}
-	config.options.allow_community_extensions = input.GetValue<bool>();
-}
-
-void AllowCommunityExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	if (!OnGlobalReset(db, config)) {
-		return;
-	}
-	config.options.allow_community_extensions = DBConfig().options.allow_community_extensions;
-}
-
-Value AllowCommunityExtensionsSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BOOLEAN(config.options.allow_community_extensions);
-}
-
-//===----------------------------------------------------------------------===//
-// Allow Extensions Metadata Mismatch
-//===----------------------------------------------------------------------===//
-void AllowExtensionsMetadataMismatchSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.allow_extensions_metadata_mismatch = input.GetValue<bool>();
-}
-
-void AllowExtensionsMetadataMismatchSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.allow_extensions_metadata_mismatch = DBConfig().options.allow_extensions_metadata_mismatch;
-}
-
-Value AllowExtensionsMetadataMismatchSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BOOLEAN(config.options.allow_extensions_metadata_mismatch);
-}
-
-//===----------------------------------------------------------------------===//
 // Allow Unredacted Secrets
 //===----------------------------------------------------------------------===//
 void AllowUnredactedSecretsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
@@ -114,28 +76,6 @@ void AllowUnredactedSecretsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &
 Value AllowUnredactedSecretsSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BOOLEAN(config.options.allow_unredacted_secrets);
-}
-
-//===----------------------------------------------------------------------===//
-// Allow Unsigned Extensions
-//===----------------------------------------------------------------------===//
-void AllowUnsignedExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	if (!OnGlobalSet(db, config, input)) {
-		return;
-	}
-	config.options.allow_unsigned_extensions = input.GetValue<bool>();
-}
-
-void AllowUnsignedExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	if (!OnGlobalReset(db, config)) {
-		return;
-	}
-	config.options.allow_unsigned_extensions = DBConfig().options.allow_unsigned_extensions;
-}
-
-Value AllowUnsignedExtensionsSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BOOLEAN(config.options.allow_unsigned_extensions);
 }
 
 //===----------------------------------------------------------------------===//
@@ -195,54 +135,6 @@ Value AsofLoopJoinThresholdSetting::GetSetting(const ClientContext &context) {
 }
 
 //===----------------------------------------------------------------------===//
-// Autoinstall Extension Repository
-//===----------------------------------------------------------------------===//
-void AutoinstallExtensionRepositorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.autoinstall_extension_repo = input.GetValue<string>();
-}
-
-void AutoinstallExtensionRepositorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.autoinstall_extension_repo = DBConfig().options.autoinstall_extension_repo;
-}
-
-Value AutoinstallExtensionRepositorySetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value(config.options.autoinstall_extension_repo);
-}
-
-//===----------------------------------------------------------------------===//
-// Autoinstall Known Extensions
-//===----------------------------------------------------------------------===//
-void AutoinstallKnownExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.autoinstall_known_extensions = input.GetValue<bool>();
-}
-
-void AutoinstallKnownExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.autoinstall_known_extensions = DBConfig().options.autoinstall_known_extensions;
-}
-
-Value AutoinstallKnownExtensionsSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BOOLEAN(config.options.autoinstall_known_extensions);
-}
-
-//===----------------------------------------------------------------------===//
-// Autoload Known Extensions
-//===----------------------------------------------------------------------===//
-void AutoloadKnownExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.autoload_known_extensions = input.GetValue<bool>();
-}
-
-void AutoloadKnownExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.autoload_known_extensions = DBConfig().options.autoload_known_extensions;
-}
-
-Value AutoloadKnownExtensionsSetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BOOLEAN(config.options.autoload_known_extensions);
-}
-
-//===----------------------------------------------------------------------===//
 // Catalog Error Max Schemas
 //===----------------------------------------------------------------------===//
 void CatalogErrorMaxSchemasSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
@@ -263,22 +155,6 @@ Value CatalogErrorMaxSchemasSetting::GetSetting(const ClientContext &context) {
 //===----------------------------------------------------------------------===//
 void CheckpointThresholdSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	config.options.checkpoint_wal_size = DBConfig().options.checkpoint_wal_size;
-}
-
-//===----------------------------------------------------------------------===//
-// Custom Extension Repository
-//===----------------------------------------------------------------------===//
-void CustomExtensionRepositorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.custom_extension_repo = input.GetValue<string>();
-}
-
-void CustomExtensionRepositorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.custom_extension_repo = DBConfig().options.custom_extension_repo;
-}
-
-Value CustomExtensionRepositorySetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value(config.options.custom_extension_repo);
 }
 
 //===----------------------------------------------------------------------===//
@@ -585,22 +461,6 @@ void ExplainOutputSetting::ResetLocal(ClientContext &context) {
 Value ExplainOutputSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value(StringUtil::Lower(EnumUtil::ToString(config.explain_output_type)));
-}
-
-//===----------------------------------------------------------------------===//
-// Extension Directory
-//===----------------------------------------------------------------------===//
-void ExtensionDirectorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.extension_directory = input.GetValue<string>();
-}
-
-void ExtensionDirectorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.extension_directory = DBConfig().options.extension_directory;
-}
-
-Value ExtensionDirectorySetting::GetSetting(const ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value(config.options.extension_directory);
 }
 
 //===----------------------------------------------------------------------===//

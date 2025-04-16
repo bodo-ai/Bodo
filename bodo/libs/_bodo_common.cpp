@@ -146,10 +146,27 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
 }
 
 bodo_array_type::arr_type_enum type_to_array_type(Bodo_CTypes::CTypeEnum typ) {
-    if (typ == Bodo_CTypes::STRING) {
-        return bodo_array_type::arr_type_enum::STRING;
-    } else {
-        return bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL;
+    // TODO: support other types
+    switch (typ) {
+        case Bodo_CTypes::STRUCT:
+            return bodo_array_type::STRUCT;
+        case Bodo_CTypes::LIST:
+            return bodo_array_type::ARRAY_ITEM;
+        case Bodo_CTypes::MAP:
+            return bodo_array_type::MAP;
+        case Bodo_CTypes::COMPLEX64:
+        case Bodo_CTypes::COMPLEX128:
+        case Bodo_CTypes::TIMESTAMPTZ:
+            throw std::runtime_error(
+                fmt::format("Unsupported type for array type conversion: {}",
+                            GetDtype_as_string(typ)));
+
+        case Bodo_CTypes::STRING:
+        case Bodo_CTypes::BINARY:
+            return bodo_array_type::STRING;
+
+        default:
+            return bodo_array_type::NULLABLE_INT_BOOL;
     }
 }
 
@@ -403,8 +420,15 @@ void MapType::Serialize(std::vector<int8_t>& arr_array_types,
 
 std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
     if (array_type == bodo_array_type::STRING) {
-        return std::make_shared<::arrow::Field>(name, arrow::large_utf8(),
-                                                true);
+        if (c_type == Bodo_CTypes::STRING) {
+            return std::make_shared<::arrow::Field>(name, arrow::large_utf8(),
+                                                    true);
+        } else {
+            assert(c_type == Bodo_CTypes::BINARY);
+            return std::make_shared<::arrow::Field>(name, arrow::large_binary(),
+                                                    true);
+        }
+
     } else if (array_type == bodo_array_type::DICT) {
         return std::make_shared<::arrow::Field>(
             name, arrow::dictionary(arrow::int32(), arrow::large_utf8()), true);
@@ -458,14 +482,15 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
         case Bodo_CTypes::DATETIME:
             dtype = arrow::timestamp(arrow::TimeUnit::NANO);
             break;
-        case Bodo_CTypes::BINARY:
-            dtype = arrow::binary();
+        case Bodo_CTypes::TIMEDELTA:
+            dtype = arrow::duration(arrow::TimeUnit::NANO);
             break;
         case Bodo_CTypes::DECIMAL:
             dtype = arrow::decimal128(precision, scale);
             break;
         default: {
-            throw std::runtime_error("Unsupported dtype");
+            throw std::runtime_error("ToArrowType: unsupported dtype " +
+                                     std::string(dtype_to_str(c_type)));
         }
     }
 
@@ -564,7 +589,7 @@ Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_)
     : column_types(std::move(column_types_)) {}
 
 Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
-               std::vector<std::string>& column_names)
+               std::vector<std::string> column_names)
     : column_types(std::move(column_types_)), column_names(column_names) {}
 
 void Schema::insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
@@ -671,14 +696,17 @@ std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
     return std::make_shared<arrow::Schema>(fields);
 }
 
-std::shared_ptr<Schema> Schema::make(std::shared_ptr<::arrow::Schema> schema) {
+std::shared_ptr<Schema> Schema::FromArrowSchema(
+    std::shared_ptr<::arrow::Schema> schema) {
     std::vector<std::unique_ptr<DataType>> column_types;
     for (const auto& field : schema->fields()) {
+        // TODO: support dictionary-encoded arrays
         auto bodo_type = arrow_to_bodo_type(field->type()->id());
         column_types.push_back(std::make_unique<DataType>(
             type_to_array_type(bodo_type), bodo_type));
     }
-    return std::make_shared<Schema>(std::move(column_types));
+    return std::make_shared<Schema>(std::move(column_types),
+                                    schema->field_names());
 }
 
 }  // namespace bodo

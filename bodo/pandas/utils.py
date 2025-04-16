@@ -5,7 +5,6 @@ import inspect
 import numba
 import pandas as pd
 import pyarrow as pa
-import pyarrow.types as patypes
 from llvmlite import ir as lir
 from numba.extending import intrinsic
 
@@ -406,7 +405,7 @@ def cast_table_ptr_to_int64(typingctx, val):
 
 
 def df_to_cpp_table(df):
-    """Convert a pandas DataFrame to a C++ table pointer and Arrow schema object."""
+    """Convert a pandas DataFrame to a C++ table pointer and column names."""
     n_cols = len(df.columns)
     in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_cols)))
 
@@ -417,17 +416,16 @@ def df_to_cpp_table(df):
         return cast_table_ptr_to_int64(cpp_table)
 
     cpp_table = impl_df_to_cpp_table(df)
-    arrow_schema = pa.Schema.from_pandas(df)
-
-    return cpp_table, arrow_schema
+    return cpp_table, list(df.columns)
 
 
 def run_apply_udf(cpp_table, arrow_schema, func):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
-    return the result as a C++ table and Arrow schema.
+    return the result as a C++ table and column names.
     """
     df = cpp_table_to_df(cpp_table, arrow_schema)
     out_df = pd.DataFrame({"OUT": df.apply(func, axis=1)})
+    out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
     return df_to_cpp_table(out_df)
 
 
@@ -498,13 +496,9 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
 
 
 def arrow_to_empty_df(arrow_schema):
+    """Create an empty dataframe with the same schema as the Arrow schema"""
     empty_df = pd.DataFrame(columns=[field.name for field in arrow_schema])
-    type_dict = {
-        field.name: field.type.to_pandas_dtype()
-        if not patypes.is_string(field.type)
-        else "string"
-        for field in arrow_schema
-    }
+    type_dict = {field.name: pd.ArrowDtype(field.type) for field in arrow_schema}
     empty_df = empty_df.astype(type_dict)
     empty_df.index = pd.RangeIndex(0)
     return empty_df
