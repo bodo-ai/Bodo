@@ -281,6 +281,8 @@ if pandas_version >= (3, 0):
             decorator: Callable,
             axis: Axis,
         ):
+            from bodo.utils.utils import bodo_exec
+
             # raw = True converts data to ndarray first
             if isinstance(data, np.ndarray):
                 raise ValueError(
@@ -289,10 +291,25 @@ if pandas_version >= (3, 0):
 
             jitted_func = decorator(func)
 
-            @decorator
-            def apply_func(data, args):
-                return data.apply(jitted_func, axis=axis, args=(1,))
+            args_str, kwargs_str = "", ""
+            if len(args):
+                args_str = ", ".join(f"args[{i}]" for i in range(len(args)))
+                args_str += ","
 
-            return apply_func(data, args)
+            if len(kwargs):
+                kwargs_str = ", ".join(
+                    f"{arg_name}=kwargs['{arg_name}']" for arg_name in kwargs.keys()
+                )
+            else:
+                # for typing purposes
+                kwargs = {"bodo_dummy": "bodo_dummy"}
+
+            apply_func_text = "def apply_func(data, axis, args, kwargs):\n"
+            apply_func_text += f"  return data.apply(jitted_func, axis=axis, args=({args_str}), {kwargs_str})"
+
+            gbls = {"jitted_func": jitted_func}
+            apply_func = decorator(bodo_exec(apply_func_text, gbls, {}, __name__))
+
+            return apply_func(data, axis, args, kwargs)
 
     bodo_pandas_udf_execution_engine = BodoExecutionEngine
