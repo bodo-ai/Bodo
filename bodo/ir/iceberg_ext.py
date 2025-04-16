@@ -100,7 +100,6 @@ def iceberg_pq_read_py_entry(
     create_dict_from_string,
     is_merge_into_cow,
     snapshot_id,
-    snapshot_timestamp_ms,
 ):
     """Perform a read from an Iceberg Table using a the C++
     iceberg_pq_read_py_entry function. That function returns a C++ Table
@@ -159,7 +158,6 @@ def iceberg_pq_read_py_entry(
                 lir.IntType(1),  # bool
                 lir.IntType(1),  # bool
                 lir.IntType(64).as_pointer(),  # int64_t*
-                lir.IntType(64),  # int64_t
                 lir.IntType(64).as_pointer(),  # int64_t*
                 lir.IntType(8).as_pointer().as_pointer(),  # PyObject**
             ],
@@ -224,7 +222,6 @@ def iceberg_pq_read_py_entry(
         types.int32,
         types.boolean,
         types.boolean,
-        types.int64,
         types.int64,
     )
     return sig, codegen
@@ -360,8 +357,7 @@ class IcebergReader(Connector):
         is_merge_into: bool,
         file_list_type: types.Type,
         snapshot_id_type: types.Type,
-        snapshot_id: ir.Var,
-        snapshot_timestamp_ms: ir.Var,
+        snapshot_id: int = -1,
         # Batch size to read chunks in, or none, to read the entire table together
         # Only supported for Snowflake
         # Treated as compile-time constant for simplicity
@@ -455,7 +451,6 @@ class IcebergReader(Connector):
         self.rtjf_terms = rtjf_terms
 
         self.snapshot_id = snapshot_id
-        self.snapshot_timestamp_ms = snapshot_timestamp_ms
 
     def __repr__(self) -> str:  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
@@ -468,7 +463,7 @@ class IcebergReader(Connector):
             f"{self.index_column_type=}, {self.out_used_cols=}, "
             f"{self.pyarrow_schema=}, {self.is_merge_into=}, "
             f"{self.sql_op_id=}, {self.dict_encode_in_bodo=}, {runtime_join_filters=}, "
-            f"{self.snapshot_id=}, {self.snapshot_timestamp_ms=}, "
+            f"{self.snapshot_id=},"
         )
 
     def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
@@ -751,7 +746,7 @@ def iceberg_distributed_run(
         )
 
     extra_args = ", ".join(list(filter_map.values()) + list(rtjf_states_vars_names))
-    func_text = f"def sql_impl(table_id, conn_wrapper, snapshot_id, snapshot_timestamp_ms, {extra_args}):\n"
+    func_text = f"def sql_impl(table_id, conn_wrapper, {extra_args}):\n"
     if isinstance(iceberg_node.connection, ir.Var) and isinstance(
         typemap[iceberg_node.connection.name], IcebergConnectionType
     ):
@@ -769,7 +764,7 @@ def iceberg_distributed_run(
     if iceberg_node.is_streaming:  # pragma: no cover
         func_text += f"    reader = _iceberg_reader_py(table_id, conn, {extra_args})\n"
     else:
-        func_text += f"    (total_rows, table_var, index_var, file_list, snapshot_id) = _iceberg_reader_py(table_id, conn, snapshot_id, snapshot_timestamp_ms, {filter_args})\n"
+        func_text += f"    (total_rows, table_var, index_var, file_list, snapshot_id) = _iceberg_reader_py(table_id, conn, {iceberg_node.snapshot_id}, {filter_args})\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -817,7 +812,7 @@ def iceberg_distributed_run(
         },
         typingctx=typingctx,
         targetctx=targetctx,
-        arg_typs=(string_type, conn_type, types.int64, types.int64)
+        arg_typs=(string_type, conn_type)
         + tuple(typemap[v.name] for v in filter_vars)
         + tuple(typemap[v.name] for v in rtjf_states_vars),
         typemap=typemap,
@@ -828,8 +823,6 @@ def iceberg_distributed_run(
         [
             ir.Const(iceberg_node.table_id, iceberg_node.loc),
             iceberg_node.connection,
-            iceberg_node.snapshot_id,
-            iceberg_node.snapshot_timestamp_ms,
         ]
         + filter_vars
         + rtjf_states_vars,
@@ -1545,7 +1538,7 @@ def _gen_iceberg_reader_py(
     # Generate a temporary one for codegen:
     comma = "," if filter_args else ""
     func_text = (
-        f"def sql_reader_py(table_id, conn, snapshot_id, snapshot_timestamp_ms, {filter_args}):\n"
+        f"def sql_reader_py(table_id, conn, snapshot_id, {filter_args}):\n"
         f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
         f'  iceberg_filters = get_filters_pyobject("{filter_str}", ({filter_args}{comma}))\n'
         f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
@@ -1568,7 +1561,6 @@ def _gen_iceberg_reader_py(
         f"    {dict_encode_in_bodo},\n"  # create_dict_from_string
         f"    {is_merge_into},\n"
         f"    snapshot_id,\n"
-        f"    snapshot_timestamp_ms,\n"
         f"  )\n"
     )
 

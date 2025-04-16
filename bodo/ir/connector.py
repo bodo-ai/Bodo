@@ -270,6 +270,10 @@ def connector_usedefs(node: Connector, use_set=None, def_set=None):
     if node.connector_typ == "iceberg":
         if isinstance(node.connection, numba.core.ir.Var):
             use_set.add(node.connection.name)
+        # if isinstance(node.snapshot_id, numba.core.ir.Var):
+        #    use_set.add(node.snapshot_id.name)
+        # if isinstance(node.snapshot_timestamp_ms, numba.core.ir.Var):
+        #    use_set.add(node.snapshot_timestamp_ms.name)
 
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 

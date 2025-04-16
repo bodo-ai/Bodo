@@ -1,4 +1,5 @@
 import io
+import time
 from datetime import date
 
 import numba
@@ -10,6 +11,7 @@ from numba.core import types
 
 import bodo
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers import spark_reader
 from bodo.tests.iceberg_database_helpers.utils import (
@@ -1350,3 +1352,123 @@ def test_filter_pushdown_complex(
             stream,
             "Iceberg Filter Pushed Down:\npie.Or(pie.And(pie.GreaterThan('A', literal(f0)), pie.Not(pie.StartsWith('TY', literal(f1)))), pie.In('B', literal(f2)))",
         )
+
+
+def test_time_travel_snapshot_id(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    table_name = "TIME_TRAVEL_SNAPSHOT_ID"
+
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    spark = get_spark()
+
+    # Create a table and append to it
+    snap_one = pd.DataFrame(
+        {
+            "A": np.arange(1000),
+        }
+    )
+    sql_schema = [
+        ("A", "int", True),
+    ]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(snap_one, sql_schema, table_name, spark)
+    bodo.barrier()
+    # Get the snapshot id to read
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+    catalog = conn_str_to_catalog(conn)
+    table = catalog.load_table(f"{db_schema}.{table_name}")
+    snapshot_id = table.current_snapshot().snapshot_id
+
+    # Add a new column to make sure read works if the schema changes
+    # between the latest and the snapshot being read
+    if bodo.get_rank() == 0:
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{db_schema}.{table_name} ADD COLUMN B string"
+        )
+        snap_two = pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": ["awe", "awv2"] * 500,
+            }
+        )
+        spark_schema = spark_types.StructType(
+            [
+                spark_types.StructField("A", spark_types.IntegerType(), True),
+                spark_types.StructField("B", spark_types.StringType(), False),
+            ]
+        )
+        sdf = spark.createDataFrame(snap_two, schema=spark_schema)
+        sdf.writeTo(f"hadoop_prod.{db_schema}.{table_name}").append()
+
+    def impl(table_name, conn, db_schema, snapshot_id):
+        return pd.read_sql_table(table_name, conn, db_schema, _snapshot_id=snapshot_id)
+
+    check_func(
+        impl,
+        (table_name, conn, db_schema, snapshot_id),
+        py_output=snap_one,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_time_travel_timestamp(iceberg_database, iceberg_table_conn, memory_leak_check):
+    table_name = "TIME_TRAVEL_TIMESTAMP"
+
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    spark = get_spark()
+
+    # Create a table and append to it
+    snap_one = pd.DataFrame(
+        {
+            "A": np.arange(1000),
+        }
+    )
+    sql_schema = [
+        ("A", "int", True),
+    ]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(snap_one, sql_schema, table_name, spark)
+    bodo.barrier()
+    # Get the timestamp to read
+    timestamp_ms = int(time.time() * 1000)
+    bodo.barrier()
+
+    # Add a new column to make sure read works if the schema changes
+    # between the latest and the snapshot being read
+    if bodo.get_rank() == 0:
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{db_schema}.{table_name} ADD COLUMN B string"
+        )
+        snap_two = pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": ["awe", "awv2"] * 500,
+            }
+        )
+        spark_schema = spark_types.StructType(
+            [
+                spark_types.StructField("A", spark_types.IntegerType(), True),
+                spark_types.StructField("B", spark_types.StringType(), False),
+            ]
+        )
+        sdf = spark.createDataFrame(snap_two, schema=spark_schema)
+        sdf.writeTo(f"hadoop_prod.{db_schema}.{table_name}").append()
+
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema, timestamp_ms):
+        return pd.read_sql_table(
+            table_name, conn, db_schema, _snapshot_timestamp_ms=timestamp_ms
+        )
+
+    check_func(
+        impl,
+        (table_name, conn, db_schema, timestamp_ms),
+        py_output=snap_one,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
