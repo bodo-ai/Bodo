@@ -119,6 +119,7 @@ def _determine_str_as_dict_columns(
         str_col_names_to_check (list[str]): List of column names to check.
         final_schema (pa.Schema): The target/final Arrow
             schema of the Iceberg table.
+        snapshot_id (int): Snapshot ID to use for the scan.
 
     Returns:
         set[str]: Set of column names that should be dict-encoded

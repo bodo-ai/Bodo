@@ -136,6 +136,7 @@ def iceberg_pq_read_py_entry(
         create_dict_from_string (bool): Whether the dict-encoding should be done in Bodo instead
             of Arrow.
         is_merge_into_cow (bool): Are we doing a merge?
+        snapshot_id (int): The snapshot id to use for the read. If -1, the latest snapshot is used.
     """
 
     def codegen(context, builder, signature, args):

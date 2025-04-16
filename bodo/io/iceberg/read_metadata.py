@@ -144,6 +144,7 @@ def get_iceberg_file_list_parallel(
         conn (str): Iceberg connection string
         table_id (str): Iceberg table identifier
         filters (optional): Filters for file pruning. Defaults to None.
+        snapshot_id (int, optional): Snapshot ID to read from. Defaults to -1.
 
     Returns:
         tuple[IcebergParquetInfo, int, dict[int, pa.Schema]]:

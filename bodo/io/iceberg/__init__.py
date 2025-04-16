@@ -97,6 +97,8 @@ def get_iceberg_pq_dataset(
             scalars used in the expression filter. See description of
             'generate_expr_filter' for more details. Defaults to None.
         force_row_level_read (bool, default: true): TODO
+        snapshot_id (int, default: -1): The snapshot ID to use for the Iceberg
+            table. If -1, the latest snapshot will be used.
 
     Returns:
         IcebergParquetDataset: Contains all the pieces to read, along
