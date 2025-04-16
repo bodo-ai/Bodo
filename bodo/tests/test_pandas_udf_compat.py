@@ -6,10 +6,10 @@ This feature is only availible on newer versions of Pandas (>=3.0)
 """
 
 import numpy as np
+import pandas as pd
 import pytest
 
 import bodo
-import pandas as pd
 from bodo.pandas_compat import pandas_version
 from bodo.tests.utils import _test_equal, pytest_spawn_mode
 
