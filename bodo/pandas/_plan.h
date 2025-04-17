@@ -140,18 +140,21 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
  * BoundFunctionExpression.
  *
  */
-struct BodoUDFFunctionData : public duckdb::FunctionData {
-    BodoUDFFunctionData(PyObject *func) : func(func) {}
-    ~BodoUDFFunctionData() override {}
+struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
+    BodoPythonScalarFunctionData(PyObject *args) : args(args) {
+        Py_INCREF(args);
+    }
+    ~BodoPythonScalarFunctionData() override { Py_DECREF(args); }
     bool Equals(const FunctionData &other_p) const override {
-        const BodoUDFFunctionData &other = other_p.Cast<BodoUDFFunctionData>();
-        return other.func == this->func;
+        const BodoPythonScalarFunctionData &other =
+            other_p.Cast<BodoPythonScalarFunctionData>();
+        return (other.args == this->args);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoUDFFunctionData>(this->func);
+        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args);
     }
 
-    PyObject *func;
+    PyObject *args;
 };
 
 /**
@@ -217,9 +220,10 @@ std::vector<int> get_projection_pushed_down_columns(
  * @param out_schema_py output data type (single column for df.apply)
  * @return duckdb::unique_ptr<duckdb::LogicalProjection> Projection node for UDF
  */
-duckdb::unique_ptr<duckdb::LogicalProjection> make_projection_udf(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *func,
-    PyObject *out_schema_py);
+duckdb::unique_ptr<duckdb::LogicalProjection>
+make_projection_python_scalar_func(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
+    PyObject *args);
 
 /**
  * @brief Create an expression from a constant integer.
@@ -237,8 +241,9 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val);
  * @return duckdb::unique_ptr<duckdb::Expression> - the column reference
  * expression
  */
-duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(PyObject *field_py,
-                                                         int col_idx);
+duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    int col_idx);
 
 /**
  * @brief Create an expression from two sources and an operator.
@@ -342,3 +347,12 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
  * @param plan - the root of the plan to convert to graphviz
  */
 std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan);
+
+/**
+ * @brief Get the table index of operator assuming there is only one table
+ *
+ * @param op input operator
+ * @return duckdb::idx_t table index of operator
+ */
+duckdb::idx_t get_operator_table_index(
+    std::unique_ptr<duckdb::LogicalOperator> &op);

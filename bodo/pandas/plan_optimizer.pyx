@@ -262,11 +262,11 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
-    cdef unique_ptr[CLogicalProjection] make_projection_udf(unique_ptr[CLogicalOperator] source, object func, object out_schema)
+    cdef unique_ptr[CLogicalProjection] make_projection_python_scalar_func(unique_ptr[CLogicalOperator] source, object out_schema, object args)
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
     cdef unique_ptr[CExpression] make_const_int_expr(int val)
-    cdef unique_ptr[CExpression] make_col_ref_expr(object field, int col_idx)
+    cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
@@ -362,29 +362,32 @@ cpdef get_pushed_down_columns(proj):
     return pushed_down_columns
 
 
-cdef class LogicalProjectionUDF(LogicalOperator):
-    """Wrapper around DuckDB's LogicalProjection with a UDF inside to provide access in Python.
+cdef class LogicalProjectionPythonScalarFunc(LogicalOperator):
+    """Wrapper around DuckDB's LogicalProjection with a ScalarFunc inside to provide access in Python.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, object func):
+    def __cinit__(self, object out_schema, LogicalOperator source, object args):
         self.out_schema = out_schema
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection_udf(source.c_logical_operator, func, self.out_schema)
+        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection_python_scalar_func(source.c_logical_operator, self.out_schema, args)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
 
     def __str__(self):
-        return f"LogicalProjectionUDF({self.out_schema})"
+        return f"LogicalProjectionPythonScalarFunc({self.out_schema})"
 
 
 cdef unique_ptr[CExpression] make_expr(val):
+    cdef LogicalOperator source
+
     if isinstance(val, int):
         return make_const_int_expr(val)
     elif isinstance(val, LogicalProjection):
         select_vec = val.select_vec
         field = val.out_schema.field(0)
         assert len(select_vec) == 1
-        return make_col_ref_expr(field, select_vec[0])
+        source = val
+        return make_col_ref_expr(source.c_logical_operator, field, select_vec[0])
     else:
         assert False
 

@@ -8,7 +8,7 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "physical/filter.h"
 #include "physical/project.h"
-#include "physical/run_udf.h"
+#include "physical/python_scalar_func.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -34,11 +34,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     // Handle UDF execution case
     if (op.expressions.size() == 1 &&
         op.expressions[0]->type == duckdb::ExpressionType::BOUND_FUNCTION) {
-        this->active_pipeline->AddOperator(std::make_shared<PhysicalRunUDF>(
+        BodoPythonScalarFunctionData& scalar_func_data =
             op.expressions[0]
                 ->Cast<duckdb::BoundFunctionExpression>()
-                .bind_info->Cast<BodoUDFFunctionData>()
-                .func));
+                .bind_info->Cast<BodoPythonScalarFunctionData>();
+        this->active_pipeline->AddOperator(
+            std::make_shared<PhysicalPythonScalarFunc>(scalar_func_data.args));
         return;
     }
 

@@ -172,6 +172,21 @@ def test_apply(datapath):
     bdf = bd.from_pandas(df)
     out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
     out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
-    # TODO: remove when Series output handling is fixed
-    out_pd = out_pd.to_frame("OUT")
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_str_lower(datapath):
+    """Very simple test for Series.str.lower for sanity checking."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int64"),
+            "B": ["A1", "B1", "C1"],
+            "C": pd.array([4, 5, 6], "Int64"),
+        }
+    )
+    bdf = bd.from_pandas(df)
+    out_pd = df.B.str.lower()
+    out_bodo = bdf.B.str.lower()
+    assert out_bodo._lazy
+    assert out_bodo.plan is not None
     _test_equal(out_bodo, out_pd, check_pandas_types=False)

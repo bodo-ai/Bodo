@@ -544,14 +544,6 @@ struct bodo_array_type {
 };
 
 /**
- * @brief Get array type for a given Bodo_CTypes::CTypeEnum (assuming nullable)
- *
- * @param typ input Bodo_CTypes::CTypeEnum
- * @return bodo_array_type::arr_type_enum array type that can hold it
- */
-bodo_array_type::arr_type_enum type_to_array_type(Bodo_CTypes::CTypeEnum typ);
-
-/**
  * @brief Is typ a nested type (STRUCT, ARRAY_ITEM/LIST or MAP)?
  *
  */
