@@ -262,7 +262,7 @@ if pandas_version >= (3, 0):
         func: Callable, args: tuple, kwargs: dict, *, num_required_args: int
     ) -> tuple[tuple, dict]:
         """
-        Prepare arguments for jitted function. by trying to move keyword arguments inside
+        Prepare arguments for jitted function by trying to move keyword arguments inside
         of args to eliminate kwargs.
 
         This simplifies typing as well as catches keyword-only arguments,
