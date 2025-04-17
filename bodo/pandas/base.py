@@ -36,7 +36,9 @@ def from_pandas(df):
     res_id = None
     if bodo.dataframe_library_run_parallel:
         res_id = bodo.spawn.utils.scatter_data(df)
+        print("Build plan")
         plan = LazyPlan("LogicalGetPandasReadParallel", res_id)
+        print("Post plan", plan)
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", df)
 
