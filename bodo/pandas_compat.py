@@ -333,10 +333,6 @@ if pandas_version >= (3, 0):
             if len(args):
                 args_str = ", ".join(f"args[{i}]" for i in range(len(args)))
                 args_str += ","
-            else:
-                # Add dummy value for args for spawn mode compatibility.
-                # TODO: fix in spawn mode.
-                args = (0,)
 
             apply_func_text = "def bodo_apply_func(data, axis, args):\n"
             apply_func_text += f"  return data.apply(udf, axis=axis, args=({args_str}))"
