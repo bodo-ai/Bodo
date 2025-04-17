@@ -428,9 +428,17 @@ def run_apply_udf(cpp_table, arrow_schema, func):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
+    if bodo.get_rank() == 0:
+        print("Pre", cpp_table, arrow_schema)
     df = cpp_table_to_df(cpp_table, arrow_schema)
+    if bodo.get_rank() == 0:
+        print("Post", df)
     out_df = pd.DataFrame({"OUT": df.apply(func, axis=1)})
+    if bodo.get_rank() == 0:
+        print("Post apply", out_df)
     out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
+    if bodo.get_rank() == 0:
+        print("Post convert", out_df)
     return df_to_cpp_table(out_df)
 
 
