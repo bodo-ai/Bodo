@@ -421,6 +421,22 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             // TODO other units and timezones
             [[fallthrough]];
         }
+        case arrow::Type::DECIMAL128: {
+            auto decimal_type =
+                std::static_pointer_cast<arrow::DecimalType>(arrow_type);
+            int32_t precision = decimal_type->precision();
+            int32_t scale = decimal_type->scale();
+            duckdb_type = duckdb::LogicalType::DECIMAL(precision, scale);
+            break;
+        }
+        case arrow::Type::LIST: {
+            auto list_type =
+                std::static_pointer_cast<arrow::ListType>(arrow_type);
+            auto [name, child_type] =
+                arrow_field_to_duckdb(list_type->field(0));
+            duckdb_type = duckdb::LogicalType::LIST(child_type);
+            break;
+        }
         default:
             throw std::runtime_error(
                 "Unsupported Arrow type: " + arrow_type->ToString() +

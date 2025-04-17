@@ -1543,7 +1543,6 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
             return std::make_unique<bodo::StructType>(std::move(field_types));
         }
         // all fixed-size nullable types
-        case arrow::Type::DECIMAL128:
         case arrow::Type::DOUBLE:
         case arrow::Type::FLOAT:
         case arrow::Type::BOOL:
@@ -1562,6 +1561,15 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
             return std::make_unique<bodo::DataType>(
                 bodo_array_type::NULLABLE_INT_BOOL,
                 arrow_to_bodo_type(arrow_type->id()));
+        }
+        // decimal array
+        case arrow::Type::DECIMAL128: {
+            auto arrow_decimal_type =
+                std::static_pointer_cast<arrow::Decimal128Type>(arrow_type);
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()),
+                arrow_decimal_type->precision(), arrow_decimal_type->scale());
         }
         // dictionary-encoded array
         case arrow::Type::DICTIONARY: {
