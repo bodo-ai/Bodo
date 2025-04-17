@@ -4,7 +4,7 @@
 
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "physical/project.h"
-#include "physical/run_udf.h"
+#include "physical/python_scalar_func.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
