@@ -96,6 +96,8 @@ def _recv_arg(
 
     # Handle distributed data nested inside tuples
     if isinstance(arg, tuple):
+        if len(arg) == 0:
+            return arg, ()
         args, args_meta = zip(*[_recv_arg(v, spawner_intercomm) for v in arg])
         return args, args_meta
 
