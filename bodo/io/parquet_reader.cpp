@@ -206,7 +206,6 @@ void ParquetReader::init_pq_scanner() {
     Py_DECREF(pq_mod);
     Py_DECREF(this->expr_filters);
     Py_DECREF(selected_fields_py);
-    Py_DECREF(this->storage_options);
     Py_DECREF(this->filesystem);
     Py_DECREF(fnames_list_py);
     Py_DECREF(str_as_dict_cols_py);
