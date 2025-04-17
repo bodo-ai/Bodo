@@ -328,7 +328,7 @@ def are_schemas_compatible(
         mismatched_fields = [
             field.name
             for idx, field in enumerate(df_schema)
-            if field.equals(table_schema.field(idx))
+            if not field.equals(table_schema.field(idx))
         ]
         return (
             False,
