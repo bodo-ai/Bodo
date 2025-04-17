@@ -418,6 +418,7 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                 break;
             }
 
+            // TODO other units and timezones
             throw std::runtime_error(
                 "Unsupported Arrow TIMESTAMP type: " + arrow_type->ToString() +
                 ". Please extend the arrow_schema_to_duckdb function to handle "
