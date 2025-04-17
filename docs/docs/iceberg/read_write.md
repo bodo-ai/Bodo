@@ -125,7 +125,10 @@ def example_read_iceberg() -> pd.DataFrame:
     return pd.read_sql_table(
         table_name="<... Name of the Iceberg Table ...>",
         con="<... Connection String. See previous section ...>",
-        schema="<... Namespace Path to Iceberg Table ...>"
+        schema="<... Namespace Path to Iceberg Table ...>",
+        _snapshot_id="<... Optional (int): Snapshot ID to read the table from ...>",
+        _snapshot_timestamp_ms="<... Optional (int): Timestamp to read the table from ...>"
+
     )
 ```
 

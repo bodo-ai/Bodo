@@ -63,11 +63,22 @@ def is_snowflake_managed_iceberg_wh(con: str) -> bool:
 def _get_table_schema(
     table: Table,
     is_merge_into_cow: bool = False,
+    snapshot_id: int = -1,
 ) -> tuple[list[str], list[types.ArrayCompatible], pa.Schema]:
     from pyiceberg.io.pyarrow import schema_to_pyarrow
 
-    # Base PyArrow Schema
-    pa_schema: pa.Schema = schema_to_pyarrow(table.schema())
+    table_schema = table.schema()
+
+    # Get the schema for the snapshot we're reading if it's not the latest
+    snapshot = table.snapshot_by_id(snapshot_id) if snapshot_id != -1 else None
+    if snapshot is not None:
+        assert snapshot.schema_id is not None, (
+            "_get_table_schema: Snapshot schema ID is None"
+        )
+        table_schema = table.schemas()[snapshot.schema_id]
+
+    # Base PyArrow Schema for the snapshot we're reading
+    pa_schema: pa.Schema = schema_to_pyarrow(table_schema)
 
     # Column Names to Scan
     col_names = pa_schema.names.copy()
@@ -90,6 +101,7 @@ def _determine_str_as_dict_columns(
     table: Table,
     str_col_names_to_check: list[str],
     final_schema: pa.Schema,
+    snapshot_id: int = -1,
 ) -> set[str]:
     """
     Determine the set of string columns in an Iceberg table
@@ -107,6 +119,7 @@ def _determine_str_as_dict_columns(
         str_col_names_to_check (list[str]): List of column names to check.
         final_schema (pa.Schema): The target/final Arrow
             schema of the Iceberg table.
+        snapshot_id (int): Snapshot ID to use for the scan.
 
     Returns:
         set[str]: Set of column names that should be dict-encoded
@@ -122,7 +135,10 @@ def _determine_str_as_dict_columns(
     # XXX We should push down some type of file limit to the scanner
     #     to avoid retrieving millions of files for no reason
     all_file_tasks = list(
-        table.scan(selected_fields=tuple(str_col_names_to_check)).plan_files()
+        table.scan(
+            selected_fields=tuple(str_col_names_to_check),
+            snapshot_id=snapshot_id if snapshot_id != -1 else None,
+        ).plan_files()
     )
 
     # Take a sample of N files where N is the number of ranks. Each rank looks at
@@ -239,6 +255,7 @@ def get_orig_and_runtime_schema(
     read_as_dict_cols: list[str] = EMPTY_LIST,
     detect_dict_cols: bool = False,
     is_merge_into_cow: bool = False,
+    snapshot_id: int = -1,
 ) -> tuple[
     # Original Schemas
     list[str],
@@ -259,7 +276,7 @@ def get_orig_and_runtime_schema(
         raise BodoError("No such Iceberg table found") from e
 
     orig_col_names, orig_col_types, pa_schema = _get_table_schema(
-        table, is_merge_into_cow
+        table, is_merge_into_cow, snapshot_id=snapshot_id
     )
 
     orig_col_name_to_type = dict(zip(orig_col_names, orig_col_types))
@@ -301,6 +318,7 @@ def get_orig_and_runtime_schema(
             table,
             str_columns,
             pa_schema,
+            snapshot_id=snapshot_id,
         )
         all_dict_str_cols.update(dict_str_cols)
 
@@ -310,3 +328,52 @@ def get_orig_and_runtime_schema(
         col_types[col_name_to_idx[c]] = bodo.dict_str_arr_type
 
     return orig_col_names, orig_col_types, pa_schema, col_names, col_types
+
+
+def resolve_snapshot_id(
+    con_str: str, table_id: str, snapshot_id: int = -1, snapshot_timestamp_ms: int = -1
+) -> int:
+    """
+    Resolve the snapshot ID of an Iceberg table.
+    If `snapshot_id` is -1, and snapshot_timestamp_ms is -1, -1 is returned.
+    If `snapshot_id` is -1 and snapshot_timestamp_ms is not -1, the snapshot ID corresponding to the
+    given timestamp is returned.
+    If `snapshot_id` is not -1, it is validated and returned.
+
+    Args:
+        con_str (str): Iceberg connection string
+        table_id (str): Iceberg table ID
+        snapshot_id (int): Snapshot ID to resolve. Default is -1.
+        snapshot_timestamp_ms (int): Snapshot timestamp in milliseconds to resolve. Default is -1.
+
+    Returns:
+        int: Snapshot ID to use
+    """
+    _ = verify_pyiceberg_installed()
+
+    import pyiceberg.exceptions
+
+    try:
+        catalog = conn_str_to_catalog(con_str)
+        table = catalog.load_table(table_id)
+    except pyiceberg.exceptions.NoSuchTableError as e:
+        raise BodoError("No such Iceberg table found") from e
+    if snapshot_id != -1 and snapshot_timestamp_ms != -1:
+        raise BodoError(
+            "resolve_snapshot_id: Cannot specify both snapshot_id and snapshot_timestamp_ms"
+        )
+    snapshot = None
+    if snapshot_timestamp_ms != -1:
+        snapshot = table.snapshot_as_of_timestamp(snapshot_timestamp_ms)
+        if snapshot is None:
+            raise BodoError(
+                f"Snapshot with timestamp {snapshot_timestamp_ms} not found in table {table_id}"
+            )
+    elif snapshot_id != -1:
+        snapshot = table.snapshot_by_id(snapshot_id)
+        if snapshot is None:
+            raise BodoError(
+                f"Snapshot with ID {snapshot_id} not found in table {table_id}"
+            )
+    snapshot_id = snapshot.snapshot_id if snapshot is not None else -1
+    return snapshot_id

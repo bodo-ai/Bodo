@@ -4034,6 +4034,44 @@ class TypingTransforms:
         table_id: str = (
             f"{database_schema}.{table_name}" if database_schema else table_name
         )
+
+        _snapshot_id_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_snapshot_id",
+            default=None,
+            use_default=True,
+        )
+        _snapshot_timestamp_ms_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_snapshot_timestamp_ms",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_snapshot_id', if provided, must be a constant integer."
+        snapshot_id = (
+            self._get_const_value(_snapshot_id_arg, label, rhs.loc, err_msg=err_msg)
+            if _snapshot_id_arg is not None
+            else -1
+        )
+        err_msg = "pandas.read_sql_table(): '_snapshot_timestamp_ms', if provided, must be a constant integer."
+        snapshot_timestamp_ms = (
+            self._get_const_value(
+                _snapshot_timestamp_ms_arg, label, rhs.loc, err_msg=err_msg
+            )
+            if _snapshot_timestamp_ms_arg is not None
+            else -1
+        )
+
+        snapshot_id = bodo.io.iceberg.resolve_snapshot_id(
+            con_str, table_id, snapshot_id, snapshot_timestamp_ms
+        )
+
         (orig_col_names, orig_arr_types, pyarrow_table_schema, col_names, arr_types) = (
             bodo.io.iceberg.get_orig_and_runtime_schema(
                 con_str,
@@ -4042,6 +4080,7 @@ class TypingTransforms:
                 read_as_dict_cols=_bodo_read_as_dict,
                 detect_dict_cols=detect_dict_cols,
                 is_merge_into_cow=_bodo_merge_into,
+                snapshot_id=snapshot_id,
             )
         )
 
@@ -4121,6 +4160,7 @@ class TypingTransforms:
                 _bodo_merge_into,  # is_merge_into
                 file_list_type,  # file_list_type
                 snapshot_id_type,  # snapshot_id_type
+                snapshot_id,  # snapshot_id
                 chunksize=chunksize,
                 used_cols=columns_obj,
                 initial_filter=filter_obj,
