@@ -92,6 +92,7 @@ def cpp_table_to_df(cpp_table, arrow_schema):
     table_type = TableType(
         tuple([pyarrow_type_to_numba(field.type) for field in arrow_schema])
     )
+
     out_df = cpp_table_to_py(cpp_table, out_cols_arr, table_type).to_pandas()
     out_df.columns = [f.name for f in arrow_schema]
     # TODO: handle Indexes properly
