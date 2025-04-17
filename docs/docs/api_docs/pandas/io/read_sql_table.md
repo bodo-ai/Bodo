@@ -15,5 +15,7 @@
     in the warehouse (specified by `con`) where your table exists.
 -   Arguments `index_col`, `coerce_float`, `parse_dates`, `columns` and `chunksize` are
     not supported.
-
+-   Arguments `_snapshot_id` and `_snapshot_timestamp_ms` are only available for Iceberg tables. These Arguments
+    are experimental and may change without warning. These arguments may be used to read a table from
+    a specific snapshot or point in time, which is known as "time travel" in Iceberg.
 
