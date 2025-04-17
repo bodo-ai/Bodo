@@ -3,8 +3,9 @@ import inspect
 import warnings
 
 import numpy as np
-import pandas as pd
 import pyarrow as pa
+
+import pandas as pd
 
 pandas_version = tuple(map(int, pd.__version__.split(".")[:2]))
 
@@ -62,6 +63,7 @@ if pandas_version < (1, 4):
 # Pandas code: https://github.com/pandas-dev/pandas/blob/ca60aab7340d9989d9428e11a51467658190bb6b/pandas/core/arrays/string_arrow.py#L141
 def ArrowStringArray__init__(self, values):
     import pyarrow as pa
+
     from pandas.core.arrays.string_ import StringDtype
     from pandas.core.arrays.string_arrow import ArrowStringArray
 
@@ -265,8 +267,8 @@ if pandas_version >= (3, 0):
         Prepare arguments for jitted function. by trying to move keyword arguments inside
         of args to eliminate kwargs.
 
-        This simplifies typing as well as detects keyword-only
-        arguments which lead to unexpected behavior in Bodo. Copied from:
+        This simplifies typing as well as catches keyword-only arguments,
+        which lead to unexpected behavior in Bodo. Copied from:
         https://github.com/pandas-dev/pandas/blob/5fef9793dd23867e7b227a1df7aa60a283f6204e/pandas/core/util/numba_.py#L97
         """
         _sentinel = object()
