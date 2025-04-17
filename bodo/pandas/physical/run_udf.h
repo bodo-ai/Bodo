@@ -41,8 +41,6 @@ class PhysicalRunUDF : public PhysicalSourceSink {
         // and UDF function
         PyObject* pyarrow_schema =
             arrow::py::wrap_schema(input_batch->schema()->ToArrowSchema());
-        std::cerr << "Calling run_apply_udf with table_info: "
-                  << reinterpret_cast<int64_t>(input_batch.get()) << std::endl;
         PyObject* result = PyObject_CallMethod(
             bodo_module, "run_apply_udf", "LOO",
             reinterpret_cast<int64_t>(new table_info(*input_batch)),
@@ -67,7 +65,6 @@ class PhysicalRunUDF : public PhysicalSourceSink {
         PyObject* col_names_py = PyTuple_GetItem(result, 1);
 
         int64_t table_info_ptr = PyLong_AsLongLong(table_info_py);
-        std::cerr << "Return table info ptr: " << table_info_ptr << std::endl;
         std::shared_ptr<table_info> out_batch(
             reinterpret_cast<table_info*>(table_info_ptr));
 

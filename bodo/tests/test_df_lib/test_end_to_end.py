@@ -154,9 +154,14 @@ def test_apply(datapath):
             # "c": ["a", "b", "c"],
         }
     )
+    print("A")
     bdf = bd.from_pandas(df)
+    print("B")
     out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
+    print("C")
     out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
+    print("D")
     # TODO: remove when Series output handling is fixed
     out_pd = out_pd.to_frame("OUT")
+    print("E")
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
