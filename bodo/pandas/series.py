@@ -2,6 +2,7 @@ import typing as pt
 from collections.abc import Callable, Hashable
 
 import pandas as pd
+import pyarrow as pa
 
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
@@ -148,3 +149,33 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if isinstance(self._mgr, LazyMetadataMixin):
             return self._mgr._md_result_id
         return None
+
+    @property
+    def str(self):
+        return StringMethods(self)
+
+
+class StringMethods:
+    """Support Series.str string processing methods same as Pandas."""
+
+    def __init__(self, series):
+        self._series = series
+
+    def lower(self):
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.large_string()), name=self._series.name
+        )
+        return wrap_plan(
+            new_metadata,
+            plan=LazyPlan(
+                "LogicalProjectionPythonScalarFunc",
+                self._series._plan,
+                (
+                    "str.lower",
+                    True,  # is_series
+                    True,  # is_method
+                    (),  # args
+                    {},  # kwargs
+                ),
+            ),
+        )
