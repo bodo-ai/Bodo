@@ -103,12 +103,24 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
         throw std::runtime_error(
             "make_filter source must currently be a LogicalProjection");
     }
-    // The unique_ptr ends up in the projection so extract it.
-    source_duck = std::move(source_duck->children[0]);
+
     auto logical_filter =
         duckdb::make_uniq<duckdb::LogicalFilter>(std::move(filter_expr_duck));
 
-    logical_filter->children.push_back(std::move(source_duck));
+    // If you have df[df.col < 20] then df.col is a projection and
+    // that node is what comes into this function.  LogicalFilter
+    // in plan_optimizer.pyx calls this function and that constructor
+    // checks that the projection is operating on the same source table
+    // as filter (__getitem__ in the dataframe API).  Due to the use of
+    // uniq_ptr, the projection node for df.col will end up owning the
+    // pointer for the operation that first generates the table.
+    // However, the duckdb LogicalFilter node has no need for this
+    // intermediate projection node and it needs to own the LogicalOperator
+    // that is the source of the table.  The source table of the projection
+    // is stored as child 0 of projection node.  So, in this line make
+    // the source of the new filter node the same as the source of the
+    // projection and transfer ownership of the pointer to the filter node.
+    logical_filter->children.push_back(std::move(source_duck->children[0]));
     return logical_filter;
 }
 

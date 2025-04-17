@@ -148,6 +148,10 @@ def test_filter(datapath):
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1[bodo_df1.A < 20]
 
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2._lazy
+    assert bodo_df2.plan is not None
+
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1[py_df1.A < 20]
 

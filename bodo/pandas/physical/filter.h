@@ -21,28 +21,33 @@ class PhysicalFilter : public PhysicalSourceSink {
     void Finalize() override {}
 
     /**
-     * @brief Do filter
+     * @brief The logic for filtering input batches.
      *
-     * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to
-     * int64 (to pass to Cython easily), pyarrow schema object
+     * @param input_batch - the input data to be filtered
+     * @return the filtered batch from applying the expression to the input.
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override {
+        // Evaluate the Physical expression tree with the given input batch.
         std::shared_ptr<ExprResult> expr_output =
             expression->ProcessBatch(input_batch);
+        // Make sure that the output of the expression tree is a bitmask in
+        // the form of a boolean array.
         std::shared_ptr<ArrayExprResult> arr_output =
             std::dynamic_pointer_cast<ArrayExprResult>(expr_output);
         if (!arr_output) {
             throw std::runtime_error(
                 "Filter expression tree did not result in an array");
         }
-        auto bitmask = arr_output->result;
+        std::shared_ptr<array_info> bitmask = arr_output->result;
         if (bitmask->dtype != Bodo_CTypes::_BOOL) {
             throw std::runtime_error(
                 "Filter expression tree did not result in a boolean array");
         }
 
-        auto out_table = RetrieveTable(input_batch, bitmask);
+        // Apply the bitmask to the input_batch to do row filtering.
+        std::shared_ptr<table_info> out_table =
+            RetrieveTable(input_batch, bitmask);
 
         return {out_table, OperatorResult::FINISHED};
     }
