@@ -348,7 +348,9 @@ if pandas_version >= (3, 0):
                 def f(func_text, glbls, loc_vars, __name__):
                     bodo_exec(func_text, glbls, loc_vars, __name__)
 
-            spawner.submit_func_to_workers(f, [], apply_func_text, glbls, {}, __name__)
+                spawner.submit_func_to_workers(
+                    f, [], apply_func_text, glbls, {}, __name__
+                )
             apply_func = decorator(bodo_exec(apply_func_text, glbls, {}, __name__))
 
             return apply_func(data, axis, args)
