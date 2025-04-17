@@ -15,14 +15,16 @@ from copy import deepcopy
 import cloudpickle
 import numba
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 from numba import typed
 from numba.core import types
+from pandas.core.arrays.arrow import ArrowExtensionArray
+from pandas.core.base import ExtensionArray
 
 import bodo
 import bodo.hiframes
 import bodo.hiframes.table
-import pandas as pd
 from bodo.mpi4py import MPI
 from bodo.pandas import LazyMetadata
 from bodo.spawn.spawner import BodoSQLContextMetadata, env_var_prefix
@@ -36,8 +38,6 @@ from bodo.spawn.utils import (
 from bodo.spawn.worker_state import set_is_worker
 from bodo.utils.typing import BodoWarning
 from bodo.utils.utils import is_distributable_typ
-from pandas.core.arrays.arrow import ArrowExtensionArray
-from pandas.core.base import ExtensionArray
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 

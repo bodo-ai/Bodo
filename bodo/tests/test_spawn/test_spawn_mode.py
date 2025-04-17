@@ -3,10 +3,10 @@ import subprocess
 import sys
 
 import numpy as np
+import pandas as pd
 import pytest
 
 import bodo
-import pandas as pd
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
