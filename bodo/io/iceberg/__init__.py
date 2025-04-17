@@ -34,6 +34,7 @@ from .read_compilation import (
     get_iceberg_orig_schema,
     get_orig_and_runtime_schema,
     is_snowflake_managed_iceberg_wh,
+    resolve_snapshot_id,  # noqa: F401
 )
 from .read_metadata import (
     get_iceberg_file_list_parallel,
@@ -70,6 +71,7 @@ def get_iceberg_pq_dataset(
     expr_filter_f_str: str | None = None,
     filter_scalars: list[tuple[str, pt.Any]] | None = None,
     force_row_level_read: bool = True,
+    snapshot_id: int = -1,
 ) -> IcebergParquetDataset:
     """
     Top-Level Function for Planning Iceberg Parquet Files at Runtime
@@ -95,6 +97,8 @@ def get_iceberg_pq_dataset(
             scalars used in the expression filter. See description of
             'generate_expr_filter' for more details. Defaults to None.
         force_row_level_read (bool, default: true): TODO
+        snapshot_id (int, default: -1): The snapshot ID to use for the Iceberg
+            table. If -1, the latest snapshot will be used.
 
     Returns:
         IcebergParquetDataset: Contains all the pieces to read, along
@@ -125,6 +129,7 @@ def get_iceberg_pq_dataset(
         conn,
         table_id,
         iceberg_filter,
+        snapshot_id,
     )
     metrics.file_to_schema_time_us = get_file_to_schema_us
     metrics.file_list_time += int((time.monotonic() - start_time) * 1_000_000)

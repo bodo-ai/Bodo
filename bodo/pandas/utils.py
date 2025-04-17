@@ -419,12 +419,49 @@ def df_to_cpp_table(df):
     return cpp_table, list(df.columns)
 
 
-def run_apply_udf(cpp_table, arrow_schema, func):
+def _get_function_from_path(path_str: str):
+    """Get a function object from its fully qualified path string.
+
+    Args:
+        path_str (str): The function path in format 'module.submodule.function'
+
+    Returns:
+        callable: The function object
+
+    Raises:
+        ImportError: If the module cannot be imported
+        AttributeError: If the function doesn't exist in the module
+    """
+    parts = path_str.split(".")
+    module_path = ".".join(parts[:-1])
+    func_name = parts[-1]
+
+    module = importlib.import_module(module_path)
+    return getattr(module, func_name)
+
+
+def run_func_on_table(cpp_table, arrow_schema, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
-    df = cpp_table_to_df(cpp_table, arrow_schema)
-    out_df = pd.DataFrame({"OUT": df.apply(func, axis=1)})
+    input = cpp_table_to_df(cpp_table, arrow_schema)
+    func_path_str, is_series, is_method, args, kwargs = in_args
+
+    if is_series:
+        assert input.shape[1] == 1, "run_func_on_table: single column expected"
+        input = input.iloc[:, 0]
+
+    if is_method:
+        func = input
+        for atr in func_path_str.split("."):
+            func = getattr(func, atr)
+        out = func(*args, **kwargs)
+    else:
+        # TODO: test this path
+        func = _get_function_from_path(func_path_str)
+        out = func(input, *args, **kwargs)
+
+    out_df = pd.DataFrame({"OUT": out})
     out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
     return df_to_cpp_table(out_df)
 
