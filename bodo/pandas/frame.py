@@ -560,7 +560,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         mgr_plan = self._mgr._plan
         df_sample = self.head()
         self._mgr._plan = mgr_plan
-        out_sample = pd.DataFrame({"OUT": df_sample.apply(func, axis)})
+        out_sample = df_sample.apply(func, axis)
 
         empty_df = out_sample.iloc[:0]
         empty_df.index = pd.RangeIndex(0)
