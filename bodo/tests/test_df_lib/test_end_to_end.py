@@ -1,3 +1,4 @@
+import gc
 import os
 import tempfile
 
@@ -155,13 +156,18 @@ def test_apply(datapath):
         }
     )
     print("A")
+    gc.collect()
     bdf = bd.from_pandas(df)
     print("B")
+    gc.collect()
     out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
     print("C")
+    gc.collect()
     out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
     print("D")
+    gc.collect()
     # TODO: remove when Series output handling is fixed
     out_pd = out_pd.to_frame("OUT")
     print("E")
+    gc.collect()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
