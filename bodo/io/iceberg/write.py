@@ -263,7 +263,7 @@ def _update_field(
 
 def are_schemas_compatible(
     table_schema: pa.Schema, df_schema: pa.Schema, allow_downcasting: bool = False
-) -> bool:
+) -> tuple[bool, str | None]:
     """
     Check if the input DataFrame schema is compatible with the Iceberg table's
     schema for append-like operations (including MERGE INTO). Compatibility
@@ -281,13 +281,17 @@ def are_schemas_compatible(
 
     Note that allow_downcasting should be used if the output DataFrame df will be
     casted to fit pa_schema (making sure there are no nulls, downcasting arrays).
+
+    Returns:
+        - True if the schemas are compatible
+        - False if the schemas are not compatible
+        - A string describing the incompatibility
     """
     # Note that PyIceberg has a similar function
     # pyiceberg.schema._check_schema_compatible
     # but it does not support downcasting checks
-
     if table_schema.equals(df_schema):
-        return True
+        return True, None
 
     # If the schemas are not the same size, it is still possible that the DataFrame
     # can be appended iff the DataFrame schema is a subset of the iceberg schema and
@@ -307,7 +311,10 @@ def are_schemas_compatible(
         df_schema = pa.schema(kept_fields)
 
     if len(df_schema) != len(table_schema):
-        return False
+        return (
+            False,
+            f"Mismatched number of fields, append data has {len(df_schema)} fields, table has {len(table_schema)} fields",
+        )
 
     # Compare each field individually for "compatibility"
     # Only the DataFrame schema is potentially modified during this step
@@ -316,8 +323,18 @@ def are_schemas_compatible(
         pa_field = table_schema.field(idx)
         new_field = _update_field(df_field, pa_field, allow_downcasting)
         df_schema = df_schema.set(idx, new_field)
-
-    return df_schema.equals(table_schema)
+    equals = df_schema.equals(table_schema)
+    if not equals:
+        mismatched_fields = [
+            field.name
+            for idx, field in enumerate(df_schema)
+            if field.equals(table_schema.field(idx))
+        ]
+        return (
+            False,
+            f"Mismatched schemas, fields {mismatched_fields} are not compatible",
+        )
+    return True, None
 
 
 def generate_data_file_info(
@@ -525,21 +542,18 @@ def validate_append_target(
             f"Iceberg Sort column {col_name} not found in dataframe"
         )
 
-    if not are_schemas_compatible(
+    schemas_compatible, err_msg = are_schemas_compatible(
         table_schema.as_arrow(), df_schema, allow_downcasting
-    ):
+    )
+    if not schemas_compatible:
         # TODO: https://bodo.atlassian.net/browse/BE-4019
         # for improving docs on Iceberg write support
-        if numba.core.config.DEVELOPER_MODE:
-            raise BodoError(
-                f"DataFrame schema needs to be an ordered subset of Iceberg table for append\n\n"
-                f"Iceberg:\n{table_schema}\n\n"
-                f"DataFrame:\n{df_schema}\n"
-            )
-        else:
-            raise BodoError(
-                "DataFrame schema needs to be an ordered subset of Iceberg table for append"
-            )
+        raise BodoError(
+            f"DataFrame schema needs to be an ordered subset of Iceberg table for append\n\n"
+            f"Iceberg:\n{table_schema}\n\n"
+            f"DataFrame:\n{df_schema}\n"
+            f"Error: {err_msg}\n"
+        )
 
 
 def build_partition_sort_tuples(
