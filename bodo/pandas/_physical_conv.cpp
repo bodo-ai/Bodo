@@ -154,7 +154,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
-    // Process the source of this projection.
+    // Process the source of this filter.
     this->Visit(*op.children[0]);
 
     if (op.expressions.size() != 1) {
