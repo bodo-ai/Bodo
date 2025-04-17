@@ -3,10 +3,10 @@ import subprocess
 import sys
 
 import numpy as np
-import pandas as pd
 import pytest
 
 import bodo
+import pandas as pd
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
@@ -297,6 +297,15 @@ def test_args_tuple_list_dict():
     arg = [df, df]
     _test_equal(impl(arg), arg)
     arg = {"k1": df, "k23": df}
+    _test_equal(impl(arg), arg)
+
+
+def test_args_empty_tuple():
+    @bodo.jit(spawn=True)
+    def impl(A):
+        return A
+
+    arg = ()
     _test_equal(impl(arg), arg)
 
 
