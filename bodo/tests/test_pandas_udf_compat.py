@@ -78,9 +78,9 @@ def test_udf_kwargs(engine):
         else:
             return x.A + d
 
-    bodo_out = df.apply(udf, axis=1, args=(4,), b="hi", d=16, engine=engine)
+    bodo_out = df.apply(udf, axis=1, args=(4,), d=16, b="hi", engine=engine)
 
-    pandas_out = df.apply(udf, axis=1, args=(4,), b="hi", d=16)
+    pandas_out = df.apply(udf, axis=1, args=(4,), d=16, b="hi")
 
     _test_equal(bodo_out, pandas_out, check_pandas_types=False)
 

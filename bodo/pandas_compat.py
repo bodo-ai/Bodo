@@ -260,6 +260,39 @@ if pandas_version >= (3, 0):
     from pandas._typing import AggFuncType, Axis
     from pandas.core.apply import BaseExecutionEngine
 
+    def _prepare_function_arguments(
+        func: Callable, args: tuple, kwargs: dict, *, num_required_args: int
+    ) -> tuple[tuple, dict]:
+        """
+        Prepare arguments for jitted function. by trying to move keyword arguments inside
+        of args to eliminate kwargs.
+
+        This simplifies typing as well as detects keyword-only
+        arguments which lead to unexpected behavior in Bodo. Copied from:
+        https://github.com/pandas-dev/pandas/blob/5fef9793dd23867e7b227a1df7aa60a283f6204e/pandas/core/util/numba_.py#L97
+        """
+        _sentinel = object()
+
+        if not kwargs:
+            return args, kwargs
+
+        # the udf should have this pattern: def udf(arg1, arg2, ..., *args, **kwargs):...
+        signature = inspect.signature(func)
+        arguments = signature.bind(*[_sentinel] * num_required_args, *args, **kwargs)
+        arguments.apply_defaults()
+        # Ref: https://peps.python.org/pep-0362/
+        # Arguments which could be passed as part of either *args or **kwargs
+        # will be included only in the BoundArguments.args attribute.
+        args = arguments.args
+        kwargs = arguments.kwargs
+
+        if kwargs:
+            # Bodo change: error message
+            raise ValueError("Bodo does not support keyword only arguments.")
+
+        args = args[num_required_args:]
+        return args, kwargs
+
     class BodoExecutionEngine(BaseExecutionEngine):
         @staticmethod
         def map(
@@ -291,6 +324,11 @@ if pandas_version >= (3, 0):
                     "BodoExecutionEngine: does not support the raw=True for DataFrame.apply."
                 )
 
+            if isinstance(func, Callable):
+                args, _ = _prepare_function_arguments(
+                    func, args, kwargs, num_required_args=1
+                )
+
             # Embed args as a string e.g. (args[0], args[1], ...) in func text
             # to avoid typing issues with Bodo.
             args_str = ""
@@ -302,23 +340,8 @@ if pandas_version >= (3, 0):
                 # TODO: fix in spawn mode.
                 args = (0,)
 
-            # Convert kwargs dict to a tuple for typing and embed as a string i.e.
-            # "keyword0=kwarg_values[0], keyword1=kwarg_values[1], ..." in func text.
-            kwargs_str = ""
-            if len(kwargs):
-                kwargs_list = []
-                for i, (k, v) in enumerate(kwargs.items()):
-                    kwargs_str += f"{k}=kwarg_values[{i}], "
-                    kwargs_list.append(v)
-                kwargs_values = tuple(kwargs_list)
-            else:
-                # Dummy value, see args
-                kwargs_values = (0,)
-
-            apply_func_text = "def bodo_apply_func(data, axis, args, kwarg_values):\n"
-            apply_func_text += (
-                f"  return data.apply(udf, axis=axis, args=({args_str}), {kwargs_str})"
-            )
+            apply_func_text = "def bodo_apply_func(data, axis, args):\n"
+            apply_func_text += f"  return data.apply(udf, axis=axis, args=({args_str}))"
 
             glbls = {"udf": func}
             if spawn_mode:
@@ -330,6 +353,6 @@ if pandas_version >= (3, 0):
             spawner.submit_func_to_workers(f, [], apply_func_text, glbls, {}, __name__)
             apply_func = decorator(bodo_exec(apply_func_text, glbls, {}, __name__))
 
-            return apply_func(data, axis, args, kwargs_values)
+            return apply_func(data, axis, args)
 
     bodo_pandas_udf_execution_engine = BodoExecutionEngine
