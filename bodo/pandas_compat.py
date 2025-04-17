@@ -3,8 +3,9 @@ import inspect
 import warnings
 
 import numpy as np
-import pandas as pd
 import pyarrow as pa
+
+import pandas as pd
 
 pandas_version = tuple(map(int, pd.__version__.split(".")[:2]))
 
@@ -62,6 +63,7 @@ if pandas_version < (1, 4):
 # Pandas code: https://github.com/pandas-dev/pandas/blob/ca60aab7340d9989d9428e11a51467658190bb6b/pandas/core/arrays/string_arrow.py#L141
 def ArrowStringArray__init__(self, values):
     import pyarrow as pa
+
     from pandas.core.arrays.string_ import StringDtype
     from pandas.core.arrays.string_arrow import ArrowStringArray
 
@@ -247,7 +249,7 @@ def get_conversion_factor_to_ns(in_reso: str) -> int:
 
 
 # Class responsible for executing UDFs using Bodo as the engine in
-# newer version of pandas.
+# newer version of Pandas. See:
 # https://github.com/pandas-dev/pandas/pull/61032
 bodo_pandas_udf_execution_engine = None
 
@@ -289,27 +291,36 @@ if pandas_version >= (3, 0):
                     "BodoExecutionEngine: does not support the raw=True for DataFrame.apply."
                 )
 
-            if kwargs:
-                raise ValueError(
-                    "BodoExecutionEngine: does not support passing keyword arguments to UDF. Use args instead."
-                )
-
-            jitted_udf = decorator(func)
-
+            # Embed args as a string e.g. (args[0], args[1], ...) in func text
+            # to avoid typing issues with Bodo.
             args_str = ""
             if len(args):
                 args_str = ", ".join(f"args[{i}]" for i in range(len(args)))
                 args_str += ","
             else:
-                # add dummy value for args for spawn mode compat (TODO: fix in spawn mode).
+                # Add dummy value for args for spawn mode compatibility.
+                # TODO: fix in spawn mode.
                 args = (0,)
 
-            apply_func_text = "def bodo_apply_func(data, axis, args):\n"
+            # Convert kwargs dict to a tuple for typing and embed as a string i.e.
+            # "keyword0=kwarg_values[0], keyword1=kwarg_values[1], ..." in func text.
+            kwargs_str = ""
+            if len(kwargs):
+                kwargs_list = []
+                for i, (k, v) in enumerate(kwargs.items()):
+                    kwargs_str += f"{k}=kwarg_values[{i}], "
+                    kwargs_list.append(v)
+                kwargs_values = tuple(kwargs_list)
+            else:
+                # Dummy value, see args
+                kwargs_values = (0,)
+
+            apply_func_text = "def bodo_apply_func(data, axis, args, kwarg_values):\n"
             apply_func_text += (
-                f"  return data.apply(jitted_udf, axis=axis, args=({args_str}))"
+                f"  return data.apply(udf, axis=axis, args=({args_str}), {kwargs_str})"
             )
 
-            glbls = {"jitted_udf": jitted_udf}
+            glbls = {"udf": func}
             if spawn_mode:
                 # In the spawn mode case we need to bodo_exec on the workers as well
                 # so the code object is available to the caching infra.
@@ -319,6 +330,6 @@ if pandas_version >= (3, 0):
             spawner.submit_func_to_workers(f, [], apply_func_text, glbls, {}, __name__)
             apply_func = decorator(bodo_exec(apply_func_text, glbls, {}, __name__))
 
-            return apply_func(data, axis, args)
+            return apply_func(data, axis, args, kwargs_values)
 
     bodo_pandas_udf_execution_engine = BodoExecutionEngine

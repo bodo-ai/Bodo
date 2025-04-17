@@ -4302,7 +4302,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.4.1-h7b32b05_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/orc-2.0.3-h12ee42a_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-24.2-pyhd8ed1ab_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/pandas-2.2.3-py312hf9745cd_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pandoc-2.19.2-h32600fe_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pandocfilters-1.5.0-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/parso-0.8.4-pyhd8ed1ab_1.conda
@@ -4348,7 +4347,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/python-dotenv-1.0.1-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python-fastjsonschema-2.21.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python-multipart-0.0.20-pyhff2d567_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/python-tzdata-2025.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/python_abi-3.12-5_cp312.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pytz-2024.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyyaml-6.0.2-py312h178313f_2.conda
@@ -15169,8 +15167,6 @@ packages:
   - mpich >=3.4.3,<5.0a0
   - python >=3.12,<3.13.0a0
   - python_abi 3.12.* *_cp312
-  arch: x86_64
-  platform: linux
   license: BSD-3-Clause
   license_family: BSD
   size: 877620
@@ -15184,8 +15180,6 @@ packages:
   - python >=3.12,<3.13.0a0
   - python >=3.12,<3.13.0a0 *_cpython
   - python_abi 3.12.* *_cp312
-  arch: aarch64
-  platform: linux
   license: BSD-3-Clause
   license_family: BSD
   size: 802981
@@ -15198,8 +15192,6 @@ packages:
   - mpich >=3.4.3,<5.0a0
   - python >=3.12,<3.13.0a0
   - python_abi 3.12.* *_cp312
-  arch: x86_64
-  platform: osx
   license: BSD-3-Clause
   license_family: BSD
   size: 772673
@@ -15213,8 +15205,6 @@ packages:
   - python >=3.12,<3.13.0a0
   - python >=3.12,<3.13.0a0 *_cpython
   - python_abi 3.12.* *_cp312
-  arch: arm64
-  platform: osx
   license: BSD-3-Clause
   license_family: BSD
   size: 735759
