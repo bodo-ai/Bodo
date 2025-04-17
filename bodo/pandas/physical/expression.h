@@ -324,9 +324,7 @@ class PhysicalConstantExpression : public PhysicalExpression {
 class PhysicalColumnRefExpression : public PhysicalExpression {
    public:
     PhysicalColumnRefExpression(duckdb::idx_t table, duckdb::idx_t column)
-        : table_index(table) {
-        selected_columns.push_back(column);
-    }
+        : table_index(table), selected_columns({column}) {}
     virtual ~PhysicalColumnRefExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
