@@ -93,9 +93,12 @@ def cpp_table_to_df(cpp_table, arrow_schema):
         tuple([pyarrow_type_to_numba(field.type) for field in arrow_schema])
     )
 
-    print("Before", cpp_table, out_cols_arr, table_type)
+    if bodo.get_rank() == 0:
+        print("Before", cpp_table, out_cols_arr, table_type)
     out_df = cpp_table_to_py(cpp_table, out_cols_arr, table_type).to_pandas()
-    print("After", out_df)
+    if bodo.get_rank() == 0:
+        print("After", out_df)
+
     out_df.columns = [f.name for f in arrow_schema]
     # TODO: handle Indexes properly
     if "__index_level_0__" in out_df.columns:
