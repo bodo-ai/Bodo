@@ -81,6 +81,8 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
             "nullable_float.pq", id="nullable_float", marks=pytest.mark.df_lib
         ),
         pytest.param("datetime64_1.pq", id="datetime64", marks=pytest.mark.df_lib),
+        pytest.param("struct_1.pq", id="struct", marks=pytest.mark.df_lib),
+        pytest.param("map_1.pq", id="map", marks=pytest.mark.df_lib),
     ],
 )
 def test_pq_read_types(fname, datapath, memory_leak_check):
