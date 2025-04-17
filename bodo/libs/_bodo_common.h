@@ -543,8 +543,6 @@ struct bodo_array_type {
     };
 };
 
-bodo_array_type::arr_type_enum type_to_array_type(Bodo_CTypes::CTypeEnum typ);
-
 /**
  * @brief Get array type for a given Bodo_CTypes::CTypeEnum (assuming nullable)
  *
