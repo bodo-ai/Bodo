@@ -314,7 +314,7 @@ class PhysicalConstantExpression : public PhysicalExpression {
     }
 
    private:
-    T constant;
+    const T constant;
 };
 
 /**
