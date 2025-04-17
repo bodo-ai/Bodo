@@ -145,31 +145,6 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
     }
 }
 
-bodo_array_type::arr_type_enum type_to_array_type(Bodo_CTypes::CTypeEnum typ) {
-    // TODO: support other types
-    switch (typ) {
-        case Bodo_CTypes::STRUCT:
-            return bodo_array_type::STRUCT;
-        case Bodo_CTypes::LIST:
-            return bodo_array_type::ARRAY_ITEM;
-        case Bodo_CTypes::MAP:
-            return bodo_array_type::MAP;
-        case Bodo_CTypes::COMPLEX64:
-        case Bodo_CTypes::COMPLEX128:
-        case Bodo_CTypes::TIMESTAMPTZ:
-            throw std::runtime_error(
-                fmt::format("Unsupported type for array type conversion: {}",
-                            GetDtype_as_string(typ)));
-
-        case Bodo_CTypes::STRING:
-        case Bodo_CTypes::BINARY:
-            return bodo_array_type::STRING;
-
-        default:
-            return bodo_array_type::NULLABLE_INT_BOOL;
-    }
-}
-
 int32_t decimal_precision_to_integer_bytes(int32_t precision) {
     if (precision < 3) {
         return 1;
