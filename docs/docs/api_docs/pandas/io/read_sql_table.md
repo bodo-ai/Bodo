@@ -17,5 +17,5 @@
     not supported.
 -   Arguments `_snapshot_id` and `_snapshot_timestamp_ms` are only available for Iceberg tables. These Arguments
     are experimental and may change without warning. These arguments may be used to read a table from
-    a specific snapshot or point in time, in Iceberg this is known as "time travel."
+    a specific snapshot or point in time, which is known as "time travel" in Iceberg.
 
