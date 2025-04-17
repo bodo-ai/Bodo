@@ -16,6 +16,7 @@ from numba.core.typing.templates import signature
 from numba.extending import lower_builtin, models, register_model
 
 import bodo
+from bodo.pandas_compat import bodo_pandas_udf_execution_engine
 
 # Add Bodo's options to Numba's allowed options/flags
 numba.core.cpu.CPUTargetOptions.all_args_distributed_block = _mapping(
@@ -328,6 +329,11 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
     # precedence)
     disable_jit = os.environ.get("NUMBA_DISABLE_JIT", "0") == "1"
     dist_mode = options.get("distributed", True) is not False
+
+    py_func = None
+    if isinstance(signature_or_function, pytypes.FunctionType):
+        py_func = signature_or_function
+
     if options.get("spawn", bodo.spawn_mode) and not disable_jit and dist_mode:
         from bodo.spawn.spawner import SpawnDispatcher
         from bodo.spawn.worker_state import is_worker
@@ -346,18 +352,26 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
             submit_jit_args["pipeline_class"] = pipeline_class
             return SpawnDispatcher(py_func, submit_jit_args)
 
-        if isinstance(signature_or_function, pytypes.FunctionType):
-            py_func = signature_or_function
+        if py_func is not None:
             return return_wrapped_fn(py_func)
 
-        return return_wrapped_fn
-
+        bodo_jit = return_wrapped_fn
     elif "propagate_env" in options:
         raise bodo.utils.typing.BodoError(
             "spawn=False while propagate_env is set. No worker to propagate env vars."
         )
+    else:
+        bodo_jit = _jit(signature_or_function, pipeline_class, **options)
 
-    return _jit(signature_or_function, pipeline_class, **options)
+    # Return jit decorator that can be used in Pandas UDF function. See definition of
+    # bodo_pandas_udf_execution_engine for more details.
+    if py_func is None:
+        bodo_jit.__pandas_udf__ = bodo_pandas_udf_execution_engine
+
+    return bodo_jit
+
+
+jit.__pandas_udf__ = bodo_pandas_udf_execution_engine
 
 
 def _jit(signature_or_function=None, pipeline_class=None, **options):
