@@ -1,5 +1,6 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
+#include <arrow/type.h>
 #include <utility>
 
 #include "_executor.h"
@@ -431,12 +432,30 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                 std::static_pointer_cast<arrow::TimestampType>(arrow_type);
             arrow::TimeUnit::type unit = timestamp_type->unit();
             std::string tz = timestamp_type->timezone();
-            if (unit == arrow::TimeUnit::NANO && tz == "") {
-                duckdb_type = duckdb::LogicalType::TIMESTAMP_NS;
-                break;
+            if (tz == "") {
+                switch (unit) {
+                    case arrow::TimeUnit::NANO:
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP_NS;
+                        break;
+                    // TODO: Support these types in Bodo
+                    case arrow::TimeUnit::MICRO:
+                        // microseconds
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP;
+                        break;
+                    case arrow::TimeUnit::MILLI:
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP_MS;
+                        break;
+                    case arrow::TimeUnit::SECOND:
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP_S;
+                        break;
+                }
+            } else {
+                // TODO: Do we need to check units here?
+                // Technically this is supposed to be in microseconds like
+                // TIMESTAMP
+                duckdb_type = duckdb::LogicalType::TIMESTAMP_TZ;
             }
-            // TODO other units and timezones
-            [[fallthrough]];
+            break;
         }
         case arrow::Type::DECIMAL128: {
             auto decimal_type =
@@ -450,8 +469,28 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             auto list_type =
                 std::static_pointer_cast<arrow::ListType>(arrow_type);
             auto [name, child_type] =
-                arrow_field_to_duckdb(list_type->field(0));
+                arrow_field_to_duckdb(list_type->value_field());
             duckdb_type = duckdb::LogicalType::LIST(child_type);
+            break;
+        }
+        case arrow::Type::STRUCT: {
+            duckdb::child_list_t<duckdb::LogicalType> children;
+            for (std::shared_ptr<arrow::Field> field : arrow_type->fields()) {
+                auto [field_name, duckdb_type] = arrow_field_to_duckdb(field);
+                children.push_back({field_name, duckdb_type});
+            }
+            duckdb_type = duckdb::LogicalType::STRUCT(children);
+            break;
+        }
+        case arrow::Type::MAP: {
+            auto map_type =
+                std::static_pointer_cast<arrow::MapType>(arrow_type);
+            auto [key_name, duckdb_key_type] =
+                arrow_field_to_duckdb(map_type->key_field());
+            auto [item_name, duckdb_value_type] =
+                arrow_field_to_duckdb(map_type->item_field());
+            duckdb_type =
+                duckdb::LogicalType::MAP(duckdb_key_type, duckdb_value_type);
             break;
         }
         default:
