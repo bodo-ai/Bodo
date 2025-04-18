@@ -787,6 +787,12 @@ def test_df_apply_args(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(n)})
     check_func(test_impl, (df, 3))
 
+    # Test passing args as non-constant tuple
+    def test_impl2(df, args, v):
+        return df.apply(lambda r, a, c: r.A == a + c, axis=1, args=args, c=v)
+
+    check_func(test_impl2, (df, (1,), 2))
+
 
 def test_df_apply_kws(memory_leak_check):
     """test passing extra keyword args to apply UDF"""
