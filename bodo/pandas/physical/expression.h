@@ -22,7 +22,7 @@ class TableExprResult : public ExprResult {
    public:
     TableExprResult(std::shared_ptr<table_info> val) : result(val) {}
     virtual ~TableExprResult() = default;
-    std::shared_ptr<table_info> result;
+    const std::shared_ptr<table_info> result;
 };
 
 /**
@@ -34,7 +34,7 @@ class ArrayExprResult : public ExprResult {
    public:
     ArrayExprResult(std::shared_ptr<array_info> val) : result(val) {}
     virtual ~ArrayExprResult() = default;
-    std::shared_ptr<array_info> result;
+    const std::shared_ptr<array_info> result;
 };
 
 /**
@@ -50,7 +50,7 @@ class ScalarExprResult : public ExprResult {
         assert(val.length == 1);
     }
     virtual ~ScalarExprResult() = default;
-    std::shared_ptr<array_info> result;
+    const std::shared_ptr<array_info> result;
 };
 
 /**
@@ -79,16 +79,16 @@ class PhysicalExpression {
 };
 
 /**
- * @brief These functions convert NumericComparison output to the
+ * @brief These lambdas convert NumericComparison output to the
  *        equivalent for the given operator.
  *
  */
-bool equal_test(int test) { return test == 0; }
-bool not_equal_test(int test) { return test != 0; }
-bool greater_test(int test) { return test == -1; }
-bool less_test(int test) { return test == 1; }
-bool greater_equal_test(int test) { return test != 1; }
-bool less_equal_test(int test) { return test != -1; }
+auto equal_test = [](int test) { return test == 0; };
+auto not_equal_test = [](int test) { return test != 0; };
+auto greater_test = [](int test) { return test == -1; };
+auto less_test = [](int test) { return test == 1; };
+auto greater_equal_test = [](int test) { return test != 1; };
+auto less_equal_test = [](int test) { return test != -1; };
 
 /**
  * @brief If we switch left and right operands then we need in some cases to
@@ -126,17 +126,17 @@ duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype) {
  */
 template <typename T>
 void compare_one_array(std::shared_ptr<array_info> arr1, const T data2,
-                       uint8_t *output, bool (*comparator)(int)) {
+                       uint8_t *output, const std::function<bool(int)>& comparator) {
     int64_t n_rows = arr1->length;
     uint64_t arr1_siztype = numpy_item_size[arr1->dtype];
     char *arr1_data1 = arr1->data1();
     char *arr1_data1_end = arr1_data1 + (n_rows * arr1_siztype);
     bool na_position = false;
 
+    std::function<int(const char *, const char *, bool const&)> ncfunc = getNumericComparisonFunc(arr1->dtype);
     for (uint64_t i = 0; arr1_data1 < arr1_data1_end;
          arr1_data1 += arr1_siztype, ++i) {
-        int test =
-            NumericComparison(arr1->dtype, arr1_data1, data2, na_position);
+        int test = ncfunc(arr1_data1, data2, na_position);
         SetBitTo(output, i, comparator(test));
     }
 }
@@ -152,7 +152,7 @@ void compare_one_array(std::shared_ptr<array_info> arr1, const T data2,
  */
 void compare_two_array(std::shared_ptr<array_info> arr1,
                        const std::shared_ptr<array_info> arr2, uint8_t *output,
-                       bool (*comparator)(int)) {
+                       const std::function<bool(int)>& comparator) {
     int64_t n_rows = arr1->length;
     uint64_t arr1_siztype = numpy_item_size[arr1->dtype];
     char *arr1_data1 = arr1->data1();
@@ -163,10 +163,10 @@ void compare_two_array(std::shared_ptr<array_info> arr1,
     assert(arr1->dtype == arr2->dtype);
     bool na_position = false;
 
+    std::function<int(const char *, const char *, bool const&)> ncfunc = getNumericComparisonFunc(arr1->dtype);
     for (uint64_t i = 0; arr1_data1 < arr1_data1_end;
          arr1_data1 += arr1_siztype, arr2_data1 += arr2_siztype, ++i) {
-        int test =
-            NumericComparison(arr1->dtype, arr1_data1, arr2_data1, na_position);
+        int test = ncfunc(arr1_data1, arr2_data1, na_position);
         SetBitTo(output, i, comparator(test));
     }
 }
@@ -290,7 +290,7 @@ class PhysicalComparisonExpression : public PhysicalExpression {
     bool first_time;
     bool switchLeftRight;
     bool two_source;
-    bool (*comparator)(int);
+    std::function<bool(int)> comparator;
 };
 
 /**
@@ -307,7 +307,7 @@ class PhysicalConstantExpression : public PhysicalExpression {
         std::shared_ptr<table_info> input_batch) {
         // Create 1 element array with same type as constant.
         std::unique_ptr<array_info> result =
-            alloc_nullable_array_no_nulls(1, ctypeFromVal(constant));
+            alloc_nullable_array_no_nulls(1, typeToDtype(constant));
         // Copy constant into the array.
         std::memcpy(result->data1(), &constant, sizeof(T));
         return std::make_shared<ScalarExprResult>(std::move(result));
@@ -324,7 +324,7 @@ class PhysicalConstantExpression : public PhysicalExpression {
 class PhysicalColumnRefExpression : public PhysicalExpression {
    public:
     PhysicalColumnRefExpression(duckdb::idx_t table, duckdb::idx_t column)
-        : table_index(table), selected_columns({column}) {}
+        : table_index(table), selected_columns({(int64_t)column}) {}
     virtual ~PhysicalColumnRefExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -338,5 +338,5 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
 
    protected:
     duckdb::idx_t table_index;
-    std::vector<int64_t> selected_columns;
+    const std::vector<int64_t> selected_columns;
 };

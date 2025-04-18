@@ -106,7 +106,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // type.
             duckdb::unique_ptr<duckdb::BoundComparisonExpression> bce =
                 dynamic_cast_unique_ptr<duckdb::BoundComparisonExpression>(
-                    expr);
+                    std::move(expr));
             // This node type has left and right children which are recursively
             // processed first and then the resulting Bodo Physical expression
             // subtrees are combined with the expression sub-type (e.g., equal,
@@ -120,7 +120,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             duckdb::unique_ptr<duckdb::BoundColumnRefExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(expr);
+                dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(std::move(expr));
             duckdb::ColumnBinding binding = bce->binding;
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalColumnRefExpression>(
@@ -130,7 +130,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             duckdb::unique_ptr<duckdb::BoundConstantExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(expr);
+                dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(std::move(expr));
             // Get the constant out of the duckdb node.  It could be any
             // of the following types.
             std::variant<int, float, double> extracted_value =
