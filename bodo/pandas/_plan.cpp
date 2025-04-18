@@ -413,16 +413,30 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                 std::static_pointer_cast<arrow::TimestampType>(arrow_type);
             arrow::TimeUnit::type unit = timestamp_type->unit();
             std::string tz = timestamp_type->timezone();
-            if (unit == arrow::TimeUnit::NANO && tz == "") {
-                duckdb_type = duckdb::LogicalType::TIMESTAMP_NS;
-                break;
+            if (tz == "") {
+                switch (unit) {
+                    case arrow::TimeUnit::NANO:
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP_NS;
+                        break;
+                    // TODO: Support these types in Bodo
+                    case arrow::TimeUnit::MICRO:
+                        // microseconds
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP;
+                        break;
+                    case arrow::TimeUnit::MILLI:
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP_MS;
+                        break;
+                    case arrow::TimeUnit::SECOND:
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP_S;
+                        break;
+                }
+            } else {
+                // TODO: Do we need to check units here?
+                // Technically this is supposed to be in microseconds like
+                // TIMESTAMP
+                duckdb_type = duckdb::LogicalType::TIMESTAMP_TZ;
             }
-
-            // TODO other units and timezones
-            throw std::runtime_error(
-                "Unsupported Arrow TIMESTAMP type: " + arrow_type->ToString() +
-                ". Please extend the arrow_schema_to_duckdb function to handle "
-                "this type.");
+            break;
         }
         case arrow::Type::DECIMAL128: {
             auto decimal_type =
@@ -436,7 +450,7 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             auto list_type =
                 std::static_pointer_cast<arrow::ListType>(arrow_type);
             auto [name, child_type] =
-                arrow_field_to_duckdb(list_type->field(0));
+                arrow_field_to_duckdb(list_type->value_field());
             duckdb_type = duckdb::LogicalType::LIST(child_type);
             break;
         }
