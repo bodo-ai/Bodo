@@ -25,6 +25,7 @@ import numba.core.boxing
 import numba.core.dispatcher
 import numba.core.funcdesc
 import numba.core.inline_closurecall
+import numba.core.ir_utils
 import numba.core.lowering
 import numba.core.runtime.context
 import numba.core.typed_passes
@@ -6909,3 +6910,97 @@ def get_method_overloads(typ):
     # Not all templates are for method so filter for
     # methods by presence of _attr attribute.
     return [x._attr for x in attr_templates if hasattr(x, "_attr")]
+
+
+def find_callname(func_ir, expr, typemap=None, definition_finder=get_definition):
+    """Try to find a call expression's function and module names and return
+    them as strings for unbounded calls. If the call is a bounded call, return
+    the self object instead of module name. Raise GuardException if failed.
+
+    Providing typemap can make the call matching more accurate in corner cases
+    such as bounded call on an object which is inside another object.
+    """
+    from numba.core.extending import _Intrinsic
+    from numba.core.ir_utils import GuardException
+    import numpy
+
+    require(isinstance(expr, ir.Expr) and expr.op == 'call')
+    callee = expr.func
+    callee_def = definition_finder(func_ir, callee)
+    attrs = []
+    obj = None
+    while True:
+        if isinstance(callee_def, (ir.Global, ir.FreeVar)):
+            # require(callee_def.value == numpy)
+            # these checks support modules like numpy, numpy.random as well as
+            # calls like len() and intrinsics like assertEquiv
+            keys = ['name', '_name', '__name__']
+            value = None
+            for key in keys:
+                if hasattr(callee_def.value, key):
+                    value = getattr(callee_def.value, key)
+                    break
+            if not value or not isinstance(value, str):
+                raise GuardException
+            attrs.append(value)
+            def_val = callee_def.value
+            # get the underlying definition of Intrinsic object to be able to
+            # find the module effectively.
+            # Otherwise, it will return numba.extending
+            if isinstance(def_val, _Intrinsic):
+                def_val = def_val._defn
+            if hasattr(def_val, '__module__'):
+                mod_name = def_val.__module__
+                # The reason for first checking if the function is in NumPy's
+                # top level name space by module is that some functions are
+                # deprecated in NumPy but the functions' names are aliased with
+                # other common names. This prevents deprecation warnings on
+                # e.g. getattr(numpy, 'bool') were a bool the target.
+                # For context see #6175, impacts NumPy>=1.20.
+                mod_not_none = mod_name is not None
+                numpy_toplevel = (mod_not_none and
+                                  (mod_name == 'numpy'
+                                   or mod_name.startswith('numpy.')))
+                # it might be a numpy function imported directly
+                if (numpy_toplevel and hasattr(numpy, value)
+                        and def_val == getattr(numpy, value)):
+                    attrs += ['numpy']
+                # it might be a np.random function imported directly
+                elif (hasattr(numpy.random, value)
+                        and def_val == getattr(numpy.random, value)):
+                    attrs += ['random', 'numpy']
+                elif mod_not_none:
+                    attrs.append(mod_name)
+            else:
+                class_name = def_val.__class__.__name__
+                if class_name == 'builtin_function_or_method':
+                    class_name = 'builtin'
+                if class_name != 'module':
+                    attrs.append(class_name)
+            break
+        elif isinstance(callee_def, ir.Expr) and callee_def.op == 'getattr':
+            obj = callee_def.value
+            attrs.append(callee_def.attr)
+            if typemap and obj.name in typemap:
+                typ = typemap[obj.name]
+                if not isinstance(typ, types.Module):
+                    return attrs[0], obj
+            callee_def = definition_finder(func_ir, obj)
+        else:
+            # obj.func calls where obj is not np array
+            if obj is not None:
+                return '.'.join(reversed(attrs)), obj
+            raise GuardException
+    return attrs[0], '.'.join(reversed(attrs[1:]))
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.ir_utils.find_callname)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "c2dc61dc03c9d93f16f7d66417f02fd146f0b190a2db2c5be1f2aa290ee83656"
+    ):
+        warnings.warn("numba.core.ir_utils.find_callname has changed")
+
+
+numba.core.ir_utils.find_callname = find_callname
