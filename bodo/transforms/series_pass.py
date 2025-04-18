@@ -1472,6 +1472,8 @@ class SeriesPass:
             tuple(self.typemap[v.name] for v in rhs.args),
             {k: self.typemap[v.name] for k, v in dict(rhs.kws).items()},
         ):
+            assert rhs.vararg is None, "vararg not supported for inlining UDFs"
+            assert rhs.varkwarg is None, "varkwarg not supported for inlining UDFs"
             return replace_func(
                 self,
                 func_type.dispatcher.py_func,
