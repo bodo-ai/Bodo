@@ -67,11 +67,9 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val) {
         duckdb::Value(val));
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(PyObject *field_py,
-                                                         int col_idx) {
-    auto binder = get_duckdb_binder();
-    auto table_idx = binder.get()->GenerateTableIndex();
-
+duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    int col_idx) {
     auto field_res = arrow::py::unwrap_field(field_py);
     std::shared_ptr<arrow::Field> field;
     CHECK_ARROW_AND_ASSIGN(field_res,
@@ -79,7 +77,8 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(PyObject *field_py,
     auto [_, ctype] = arrow_field_to_duckdb(field);
 
     return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-        ctype, duckdb::ColumnBinding(table_idx, col_idx));
+        ctype,
+        duckdb::ColumnBinding(get_operator_table_index(source), col_idx));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_binop_expr(
@@ -108,6 +107,7 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> &select_vec, PyObject *out_schema_py) {
+    duckdb::idx_t source_index = get_operator_table_index(source);
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     auto binder = get_duckdb_binder();
@@ -116,13 +116,6 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     // We only care about the types, not the field names
     auto [_, type_vec] = arrow_schema_to_duckdb(out_schema);
-
-    if (source_duck->GetTableIndex().size() != 1) {
-        throw std::runtime_error(
-            "Only one table index expected in source operator to "
-            "LogicalProjection");
-    }
-    duckdb::idx_t source_index = source_duck->GetTableIndex()[0];
 
     assert(select_vec.size() == type_vec.size());
     std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
@@ -172,9 +165,10 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
     throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
 }
 
-duckdb::unique_ptr<duckdb::LogicalProjection> make_projection_udf(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *func,
-    PyObject *out_schema_py) {
+duckdb::unique_ptr<duckdb::LogicalProjection>
+make_projection_python_scalar_func(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
+    PyObject *args) {
     // Output table index
     duckdb::idx_t table_idx = get_duckdb_binder()->GenerateTableIndex();
 
@@ -188,13 +182,17 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection_udf(
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
         "bodo_udf", source->types, out_type, RunFunction);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoUDFFunctionData>(func);
+        duckdb::make_uniq<BodoPythonScalarFunctionData>(args);
+
+    // Necessary before accessing source->types attribute
+    source->ResolveOperatorTypes();
 
     // Add all input columns as UDF inputs
     std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
     for (size_t i = 0; i < source->types.size(); ++i) {
         auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            source->types[i], duckdb::ColumnBinding(table_idx, i));
+            source->types[i],
+            duckdb::ColumnBinding(get_operator_table_index(source), i));
         udf_in_exprs.emplace_back(std::move(expr));
     }
 
@@ -379,24 +377,69 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     // TODO: handle all types
     duckdb::LogicalType duckdb_type;
     const std::shared_ptr<arrow::DataType> &arrow_type = field->type();
-    if ((arrow_type->id() == arrow::Type::STRING) ||
-        (arrow_type->id() == arrow::Type::LARGE_STRING)) {
-        duckdb_type = duckdb::LogicalType::VARCHAR;
-    } else if (arrow_type->id() == arrow::Type::INT32) {
-        duckdb_type = duckdb::LogicalType::INTEGER;
-    } else if (arrow_type->id() == arrow::Type::INT64) {
-        duckdb_type = duckdb::LogicalType::BIGINT;
-    } else if (arrow_type->id() == arrow::Type::FLOAT) {
-        duckdb_type = duckdb::LogicalType::FLOAT;
-    } else if (arrow_type->id() == arrow::Type::DOUBLE) {
-        duckdb_type = duckdb::LogicalType::DOUBLE;
-    } else if (arrow_type->id() == arrow::Type::BOOL) {
-        duckdb_type = duckdb::LogicalType::BOOLEAN;
-    } else {
-        throw std::runtime_error(
-            "Unsupported Arrow type: " + arrow_type->ToString() +
-            ". Please extend the arrow_schema_to_duckdb function to handle "
-            "this type.");
+    switch (arrow_type->id()) {
+        case arrow::Type::STRING:
+        case arrow::Type::LARGE_STRING: {
+            duckdb_type = duckdb::LogicalType::VARCHAR;
+            break;
+        }
+        case arrow::Type::INT32: {
+            duckdb_type = duckdb::LogicalType::INTEGER;
+            break;
+        }
+        case arrow::Type::INT64: {
+            duckdb_type = duckdb::LogicalType::BIGINT;
+            break;
+        }
+        case arrow::Type::FLOAT: {
+            duckdb_type = duckdb::LogicalType::FLOAT;
+            break;
+        }
+        case arrow::Type::DOUBLE: {
+            duckdb_type = duckdb::LogicalType::DOUBLE;
+            break;
+        }
+        case arrow::Type::BOOL: {
+            duckdb_type = duckdb::LogicalType::BOOLEAN;
+            break;
+        }
+        case arrow::Type::DATE32: {
+            duckdb_type = duckdb::LogicalType::DATE;
+            break;
+        }
+        case arrow::Type::TIMESTAMP: {
+            auto timestamp_type =
+                std::static_pointer_cast<arrow::TimestampType>(arrow_type);
+            arrow::TimeUnit::type unit = timestamp_type->unit();
+            std::string tz = timestamp_type->timezone();
+            if (unit == arrow::TimeUnit::NANO && tz == "") {
+                duckdb_type = duckdb::LogicalType::TIMESTAMP_NS;
+                break;
+            }
+            // TODO other units and timezones
+            [[fallthrough]];
+        }
+        case arrow::Type::DECIMAL128: {
+            auto decimal_type =
+                std::static_pointer_cast<arrow::DecimalType>(arrow_type);
+            int32_t precision = decimal_type->precision();
+            int32_t scale = decimal_type->scale();
+            duckdb_type = duckdb::LogicalType::DECIMAL(precision, scale);
+            break;
+        }
+        case arrow::Type::LIST: {
+            auto list_type =
+                std::static_pointer_cast<arrow::ListType>(arrow_type);
+            auto [name, child_type] =
+                arrow_field_to_duckdb(list_type->field(0));
+            duckdb_type = duckdb::LogicalType::LIST(child_type);
+            break;
+        }
+        default:
+            throw std::runtime_error(
+                "Unsupported Arrow type: " + arrow_type->ToString() +
+                ". Please extend the arrow_schema_to_duckdb function to handle "
+                "this type.");
     }
     return {field->name(), duckdb_type};
 }
@@ -458,6 +501,14 @@ BodoParquetScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns) {
     return std::make_shared<PhysicalReadParquet>(
         path, pyarrow_schema, storage_options, selected_columns);
+}
+
+duckdb::idx_t get_operator_table_index(
+    std::unique_ptr<duckdb::LogicalOperator> &op) {
+    if (op->GetTableIndex().size() != 1) {
+        throw std::runtime_error("Only one table index expected in operator");
+    }
+    return op->GetTableIndex()[0];
 }
 
 #undef CHECK_ARROW

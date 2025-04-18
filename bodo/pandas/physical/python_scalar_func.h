@@ -11,11 +11,13 @@
  * @brief Physical node for projection.
  *
  */
-class PhysicalRunUDF : public PhysicalSourceSink {
+class PhysicalPythonScalarFunc : public PhysicalSourceSink {
    public:
-    explicit PhysicalRunUDF(PyObject* func) : func(func) { Py_INCREF(func); }
+    explicit PhysicalPythonScalarFunc(PyObject* args) : args(args) {
+        Py_INCREF(args);
+    }
 
-    virtual ~PhysicalRunUDF() { Py_DECREF(func); }
+    virtual ~PhysicalPythonScalarFunc() { Py_DECREF(args); }
 
     void Finalize() override {}
 
@@ -42,9 +44,9 @@ class PhysicalRunUDF : public PhysicalSourceSink {
         PyObject* pyarrow_schema =
             arrow::py::wrap_schema(input_batch->schema()->ToArrowSchema());
         PyObject* result = PyObject_CallMethod(
-            bodo_module, "run_apply_udf", "LOO",
+            bodo_module, "run_func_on_table", "LOO",
             reinterpret_cast<int64_t>(new table_info(*input_batch)),
-            pyarrow_schema, this->func);
+            pyarrow_schema, this->args);
         if (!result) {
             PyErr_Print();
             Py_DECREF(bodo_module);
@@ -98,5 +100,5 @@ class PhysicalRunUDF : public PhysicalSourceSink {
     }
 
    private:
-    PyObject* func;
+    PyObject* args;
 };
