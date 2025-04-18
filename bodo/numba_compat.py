@@ -6978,6 +6978,7 @@ def find_callname(func_ir, expr, typemap=None, definition_finder=get_definition)
                 elif (hasattr(numpy.random, value)
                         and def_val == getattr(numpy.random, value)):
                     attrs += ['random', 'numpy']
+                # Bodo change: handle pandas
                 elif (pandas_toplevel and hasattr(pandas, value)
                         and def_val == getattr(pandas, value)):
                     attrs += ['pandas']
@@ -7016,3 +7017,7 @@ if _check_numba_change:  # pragma: no cover
 
 
 numba.core.ir_utils.find_callname = find_callname
+numba.core.inline_closurecall.find_callname = find_callname
+numba.parfors.array_analysis.find_callname = find_callname
+numba.parfors.parfor.find_callname = find_callname
+numba.stencils.stencilparfor.find_callname = find_callname
