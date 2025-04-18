@@ -300,6 +300,15 @@ def test_args_tuple_list_dict():
     _test_equal(impl(arg), arg)
 
 
+def test_args_empty_tuple():
+    @bodo.jit(spawn=True)
+    def impl(A):
+        return A
+
+    arg = ()
+    _test_equal(impl(arg), arg)
+
+
 def test_dist_false():
     """Make sure distributed=False disables spawn"""
 
