@@ -16,7 +16,6 @@ from numba.core.ir_utils import (
     build_definitions,
     compile_to_numba_ir,
     dprint_func_ir,
-    find_build_sequence,
     find_callname,
     find_const,
     find_topo_order,
@@ -97,6 +96,7 @@ from bodo.utils.transform import (
     avoid_udf_inline,
     compile_func_single_block,
     extract_keyvals_from_struct_map,
+    get_build_sequence_vars,
     get_call_expr_arg,
     replace_func,
     set_2nd_to_last_arg_to_true,
@@ -3500,14 +3500,16 @@ class SeriesPass:
             return self._handle_series_combine(assign, lhs, rhs, series_var)
 
         if func_name in ("map", "apply"):
+            nodes = []
             kws = dict(rhs.kws)
             extra_args = []
             if func_name == "apply":
                 func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
                 extra_args = get_call_expr_arg("apply", rhs.args, kws, 2, "args", [])
                 if extra_args:
-                    extra_args = guard(find_build_sequence, self.func_ir, extra_args)
-                    extra_args = [] if extra_args is None else extra_args[0]
+                    extra_args = get_build_sequence_vars(
+                        self.func_ir, self.typemap, self.calltypes, extra_args, nodes
+                    )
             else:
                 func_var = get_call_expr_arg("map", rhs.args, kws, 0, "arg")
             if func_name == "map":
@@ -3518,7 +3520,7 @@ class SeriesPass:
                 kws.pop("convert_dtype", None)
             kws.pop("args", None)
             return self._handle_series_map(
-                assign, lhs, rhs, series_var, func_var, extra_args, kws
+                assign, lhs, rhs, series_var, func_var, extra_args, kws, nodes
             )
 
         # astype with string output
@@ -3550,12 +3552,11 @@ class SeriesPass:
         return [assign]
 
     def _handle_series_map(
-        self, assign, lhs, rhs, series_var, func_var, extra_args, kws
+        self, assign, lhs, rhs, series_var, func_var, extra_args, kws, nodes
     ):
         """translate df.A.map(lambda a:...) to prange()"""
         # get the function object (ir.Expr.make_function or actual python function)
         func_type = self.typemap[func_var.name]
-        nodes = []
         data = self._get_series_data(series_var, nodes)
         index = self._get_series_index(series_var, nodes)
         name = self._get_series_name(series_var, nodes)

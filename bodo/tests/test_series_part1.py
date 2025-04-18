@@ -2737,6 +2737,12 @@ def test_series_apply_extra_arg(memory_leak_check):
     S = pd.Series(["A", "C", "FF", "AA", "CC", "B", "DD", "ABC", "A"])
     check_func(test_impl, (S, d))
 
+    # Test with a non-constant argument
+    def test_impl2(S, D):
+        return S.apply(lambda a, d: a not in d, args=D)
+
+    check_func(test_impl2, (S, (d,)))
+
 
 @pytest.mark.slow
 def test_series_apply_kwargs(memory_leak_check):
