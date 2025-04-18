@@ -1789,7 +1789,7 @@ def _show_views_snowflake_sample_data_output(terse=True):
     if terse:
         return pd.DataFrame(
             {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 41,
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 47,
                 "NAME": [
                     "APPLICABLE_ROLES",
                     "CLASSES",
@@ -1822,6 +1822,12 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "REPLICATION_DATABASES",
                     "REPLICATION_GROUPS",
                     "SCHEMATA",
+                    "SEMANTIC_DIMENSIONS",
+                    "SEMANTIC_FACTS",
+                    "SEMANTIC_METRICS",
+                    "SEMANTIC_RELATIONSHIPS",
+                    "SEMANTIC_TABLES",
+                    "SEMANTIC_VIEWS",
                     "SEQUENCES",
                     "SERVICES",
                     "STAGES",
@@ -1833,14 +1839,14 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "USAGE_PRIVILEGES",
                     "VIEWS",
                 ],
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 41,
-                "KIND": ["VIEW"] * 41,
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 47,
+                "KIND": ["VIEW"] * 47,
             }
         )
     else:
         return pd.DataFrame(
             {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 41,
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 47,
                 "NAME": [
                     "APPLICABLE_ROLES",
                     "CLASSES",
@@ -1873,6 +1879,12 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "REPLICATION_DATABASES",
                     "REPLICATION_GROUPS",
                     "SCHEMATA",
+                    "SEMANTIC_DIMENSIONS",
+                    "SEMANTIC_FACTS",
+                    "SEMANTIC_METRICS",
+                    "SEMANTIC_RELATIONSHIPS",
+                    "SEMANTIC_TABLES",
+                    "SEMANTIC_VIEWS",
                     "SEQUENCES",
                     "SERVICES",
                     "STAGES",
@@ -1884,8 +1896,8 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "USAGE_PRIVILEGES",
                     "VIEWS",
                 ],
-                "RESERVED": [""] * 41,
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 41,
+                "RESERVED": [""] * 47,
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 47,
                 "COMMENT": [
                     "The roles that can be applied to the current user.",
                     "The BUNDLE CLASS that the current user has privileges to view.",
@@ -1918,6 +1930,12 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "The databases for replication that are accessible to the current user's role.",
                     "The replication groups that are accessible to the current user's role.",
                     "The schemas defined in this database that are accessible to the current user's role.",
+                    "The dimensions of Semantic Views defined in this database that are accessible to the current user's role.",
+                    "The facts of Semantic Views defined in this database that are accessible to the current user's role.",
+                    "The metrics of Semantic Views defined in this database that are accessible to the current user's role.",
+                    "The relationships of Semantic Views defined in this database that are accessible to the current user's role.",
+                    "The tables of Semantic Views defined in this database that are accessible to the current user's role.",
+                    "The Semantic Views defined in this database that are accessible to the current user's role.",
                     "The sequences defined in this database that are accessible to the current user's role.",
                     "The services in this database that are accessible to the current user's role.",
                     "Stages in this database that are accessible by the current user's role",
@@ -1929,12 +1947,12 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "The usage privileges on sequences defined in this database that are accessible to the current user's role.",
                     "The views defined in this database that are accessible to the current user's role.",
                 ],
-                "OWNER": [""] * 41,
-                "TEXT": [""] * 41,
-                "IS_SECURE": ["false"] * 41,
-                "IS_MATERIALIZED": ["false"] * 41,
-                "OWNER_ROLE_TYPE": [""] * 41,
-                "CHANGE_TRACKING": ["OFF"] * 41,
+                "OWNER": [""] * 47,
+                "TEXT": [""] * 47,
+                "IS_SECURE": ["false"] * 47,
+                "IS_MATERIALIZED": ["false"] * 47,
+                "OWNER_ROLE_TYPE": [""] * 47,
+                "CHANGE_TRACKING": ["OFF"] * 47,
             }
         )
 
