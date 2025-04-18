@@ -450,6 +450,8 @@ def _numba_to_pyarrow_type(
         # for timezone aware types, and for timezone
         # naive, it won't matter.
         tz = numba_type.tz if isinstance(numba_type, bodo.DatetimeArrayType) else None
+        if isinstance(tz, int):
+            tz = bodo.libs.pd_datetime_arr_ext.nanoseconds_to_offset(tz)
         dtype = pa.timestamp("us", "UTC") if is_iceberg else pa.timestamp("ns", tz)
 
     # TODO: Figure out how to raise an error here for Iceberg (is_iceberg is set to True).
