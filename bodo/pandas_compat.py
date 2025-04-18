@@ -3,8 +3,9 @@ import inspect
 import warnings
 
 import numpy as np
-import pandas as pd
 import pyarrow as pa
+
+import pandas as pd
 
 pandas_version = tuple(map(int, pd.__version__.split(".")[:2]))
 
@@ -62,6 +63,7 @@ if pandas_version < (1, 4):
 # Pandas code: https://github.com/pandas-dev/pandas/blob/ca60aab7340d9989d9428e11a51467658190bb6b/pandas/core/arrays/string_arrow.py#L141
 def ArrowStringArray__init__(self, values):
     import pyarrow as pa
+
     from pandas.core.arrays.string_ import StringDtype
     from pandas.core.arrays.string_arrow import ArrowStringArray
 
@@ -312,10 +314,6 @@ if pandas_version >= (3, 0):
             decorator: Callable,
             axis: Axis,
         ):
-            from bodo import spawn_mode
-            from bodo.spawn import spawner
-            from bodo.utils.utils import bodo_exec
-
             # raw = True converts data to ndarray first
             if isinstance(data, np.ndarray):
                 raise ValueError(
@@ -327,28 +325,11 @@ if pandas_version >= (3, 0):
                     func, args, kwargs, num_required_args=1
                 )
 
-            # Embed args as a string e.g. (args[0], args[1], ...) in func text
-            # to avoid typing issues with Bodo.
-            args_str = ""
-            if len(args):
-                args_str = ", ".join(f"args[{i}]" for i in range(len(args)))
-                args_str += ","
+            def apply_func(data, axis, args):
+                return data.apply(func, axis=axis, args=args)
 
-            apply_func_text = "def bodo_apply_func(data, axis, args):\n"
-            apply_func_text += f"  return data.apply(udf, axis=axis, args=({args_str}))"
+            apply_func_jit = decorator(apply_func)
 
-            glbls = {"udf": func}
-            if spawn_mode:
-                # In the spawn mode case we need to bodo_exec on the workers as well
-                # so the code object is available to the caching infra.
-                def f(func_text, glbls, loc_vars, __name__):
-                    bodo_exec(func_text, glbls, loc_vars, __name__)
-
-                spawner.submit_func_to_workers(
-                    f, [], apply_func_text, glbls, {}, __name__
-                )
-            apply_func = decorator(bodo_exec(apply_func_text, glbls, {}, __name__))
-
-            return apply_func(data, axis, args)
+            return apply_func_jit(data, axis, args)
 
     bodo_pandas_udf_execution_engine = BodoExecutionEngine
