@@ -6923,6 +6923,7 @@ def find_callname(func_ir, expr, typemap=None, definition_finder=get_definition)
     from numba.core.extending import _Intrinsic
     from numba.core.ir_utils import GuardException
     import numpy
+    import pandas
 
     require(isinstance(expr, ir.Expr) and expr.op == 'call')
     callee = expr.func
@@ -6939,6 +6940,10 @@ def find_callname(func_ir, expr, typemap=None, definition_finder=get_definition)
             for key in keys:
                 if hasattr(callee_def.value, key):
                     value = getattr(callee_def.value, key)
+                    # Bodo change: try other keys if not a valid value
+                    # e.g. pandas.Series has a "name" property that is not a string
+                    if not value or not isinstance(value, str):
+                        continue
                     break
             if not value or not isinstance(value, str):
                 raise GuardException
@@ -6961,6 +6966,10 @@ def find_callname(func_ir, expr, typemap=None, definition_finder=get_definition)
                 numpy_toplevel = (mod_not_none and
                                   (mod_name == 'numpy'
                                    or mod_name.startswith('numpy.')))
+                # Bodo change: add Pandas toplevel check
+                pandas_toplevel = (mod_not_none and
+                    (mod_name == 'pandas'
+                    or mod_name.startswith('pandas.')))
                 # it might be a numpy function imported directly
                 if (numpy_toplevel and hasattr(numpy, value)
                         and def_val == getattr(numpy, value)):
@@ -6969,6 +6978,9 @@ def find_callname(func_ir, expr, typemap=None, definition_finder=get_definition)
                 elif (hasattr(numpy.random, value)
                         and def_val == getattr(numpy.random, value)):
                     attrs += ['random', 'numpy']
+                elif (pandas_toplevel and hasattr(pandas, value)
+                        and def_val == getattr(pandas, value)):
+                    attrs += ['pandas']
                 elif mod_not_none:
                     attrs.append(mod_name)
             else:
