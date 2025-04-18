@@ -565,7 +565,5 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_df = out_sample.iloc[:0]
         empty_df.index = pd.RangeIndex(0)
 
-        print("Build LogicalProjectionUDF")
         plan = LazyPlan("LogicalProjectionUDF", self._plan, func)
-        print("Post LogicalProjectionUDF", plan, empty_df)
         return wrap_plan(empty_df, plan=plan)
