@@ -126,14 +126,16 @@ duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype) {
  */
 template <typename T>
 void compare_one_array(std::shared_ptr<array_info> arr1, const T data2,
-                       uint8_t *output, const std::function<bool(int)>& comparator) {
+                       uint8_t *output,
+                       const std::function<bool(int)> &comparator) {
     int64_t n_rows = arr1->length;
     uint64_t arr1_siztype = numpy_item_size[arr1->dtype];
     char *arr1_data1 = arr1->data1();
     char *arr1_data1_end = arr1_data1 + (n_rows * arr1_siztype);
     bool na_position = false;
 
-    std::function<int(const char *, const char *, bool const&)> ncfunc = getNumericComparisonFunc(arr1->dtype);
+    std::function<int(const char *, const char *, bool const &)> ncfunc =
+        getNumericComparisonFunc(arr1->dtype);
     for (uint64_t i = 0; arr1_data1 < arr1_data1_end;
          arr1_data1 += arr1_siztype, ++i) {
         int test = ncfunc(arr1_data1, data2, na_position);
@@ -152,7 +154,7 @@ void compare_one_array(std::shared_ptr<array_info> arr1, const T data2,
  */
 void compare_two_array(std::shared_ptr<array_info> arr1,
                        const std::shared_ptr<array_info> arr2, uint8_t *output,
-                       const std::function<bool(int)>& comparator) {
+                       const std::function<bool(int)> &comparator) {
     int64_t n_rows = arr1->length;
     uint64_t arr1_siztype = numpy_item_size[arr1->dtype];
     char *arr1_data1 = arr1->data1();
@@ -163,7 +165,8 @@ void compare_two_array(std::shared_ptr<array_info> arr1,
     assert(arr1->dtype == arr2->dtype);
     bool na_position = false;
 
-    std::function<int(const char *, const char *, bool const&)> ncfunc = getNumericComparisonFunc(arr1->dtype);
+    std::function<int(const char *, const char *, bool const &)> ncfunc =
+        getNumericComparisonFunc(arr1->dtype);
     for (uint64_t i = 0; arr1_data1 < arr1_data1_end;
          arr1_data1 += arr1_siztype, arr2_data1 += arr2_siztype, ++i) {
         int test = ncfunc(arr1_data1, arr2_data1, na_position);

@@ -120,7 +120,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             duckdb::unique_ptr<duckdb::BoundColumnRefExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(std::move(expr));
+                dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(
+                    std::move(expr));
             duckdb::ColumnBinding binding = bce->binding;
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalColumnRefExpression>(
@@ -130,7 +131,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             duckdb::unique_ptr<duckdb::BoundConstantExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(std::move(expr));
+                dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(
+                    std::move(expr));
             // Get the constant out of the duckdb node.  It could be any
             // of the following types.
             std::variant<int, float, double> extracted_value =

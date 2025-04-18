@@ -61,13 +61,14 @@ DTYPE_TO_C_TYPE(std::complex<float>, Bodo_CTypes::COMPLEX64)
 
 template <typename T>
 struct _type_to_dtype {
-    static constexpr Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::CTypeEnum::INT8;
+    static constexpr Bodo_CTypes::CTypeEnum dtype =
+        Bodo_CTypes::CTypeEnum::INT8;
 };
 
 #ifndef C_TYPE_TO_DTYPE
-#define C_TYPE_TO_DTYPE(Id, Type) \
-    template <>                   \
-    struct _type_to_dtype<Id> {    \
+#define C_TYPE_TO_DTYPE(Id, Type)                             \
+    template <>                                               \
+    struct _type_to_dtype<Id> {                               \
         static constexpr Bodo_CTypes::CTypeEnum dtype = Type; \
     };
 #endif
@@ -1085,7 +1086,8 @@ int NumericComparison_date(const char* ptr1, const char* ptr2,
  *
  * @param dtype: the type to get the function for
  */
-inline std::function<int(const char *, const char *, bool const&)> getNumericComparisonFunc(Bodo_CTypes::CTypeEnum const& dtype) {
+inline std::function<int(const char*, const char*, bool const&)>
+getNumericComparisonFunc(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::_BOOL)
         return NumericComparison_int<bool>;
     if (dtype == Bodo_CTypes::INT8)
@@ -1118,7 +1120,8 @@ inline std::function<int(const char *, const char *, bool const&)> getNumericCom
     if (dtype == Bodo_CTypes::DECIMAL)
         return NumericComparison_decimal;
     throw std::runtime_error(
-        "_array_utils.h::getNumericComparisonFunc: Invalid dtype put on input to "
+        "_array_utils.h::getNumericComparisonFunc: Invalid dtype put on input "
+        "to "
         "getNumericComparisonFunc.");
 }
 
