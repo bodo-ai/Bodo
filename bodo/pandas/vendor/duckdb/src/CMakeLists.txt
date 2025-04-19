@@ -96,17 +96,13 @@ else()
 
   set(DUCKDB_LINK_LIBS
       ${DUCKDB_SYSTEM_LIBS}
-      duckdb_fsst
       duckdb_fmt
       duckdb_pg_query
       duckdb_re2
-      duckdb_miniz
       duckdb_utf8proc
       duckdb_hyperloglog
       duckdb_fastpforlib
-      duckdb_mbedtls
-      duckdb_yyjson
-      duckdb_zstd)
+      duckdb_yyjson)
 
   add_library(duckdb SHARED ${ALL_OBJECT_FILES})
 
