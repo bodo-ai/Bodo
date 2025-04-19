@@ -269,8 +269,8 @@ class PhysicalComparisonExpression : public PhysicalExpression {
         }
         // Create output boolean array same size as input.
         std::shared_ptr<array_info> result =
-            std::move(alloc_nullable_array_no_nulls(input_batch->nrows(),
-                                                    Bodo_CTypes::_BOOL));
+            alloc_nullable_array_no_nulls(input_batch->nrows(),
+                                                    Bodo_CTypes::_BOOL);
         // Get uint8_t raw data pointer for the boolean output array.
         uint8_t *result_data1 =
             result->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
