@@ -45,6 +45,7 @@ from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.transform import (
     compile_func_single_block,
     gen_const_tup,
+    get_build_sequence_vars,
     get_call_expr_arg,
     get_const_value,
     get_const_value_inner,
@@ -720,9 +721,11 @@ class DataFramePass:
         out_arr_types = out_arr_types if is_df_output else [out_arr_types]
         n_out_cols = len(out_arr_types)
         extra_args = get_call_expr_arg("apply", rhs.args, kws, 4, "args", [])
+        nodes = []
         if extra_args:
-            extra_args = guard(find_build_sequence, self.func_ir, extra_args)
-            extra_args = [] if extra_args is None else extra_args[0]
+            extra_args = get_build_sequence_vars(
+                self.func_ir, self.typemap, self.calltypes, extra_args, nodes
+            )
 
         # find kw arguments to UDF (pop apply() args first)
         kws.pop("func", None)
@@ -808,7 +811,6 @@ class DataFramePass:
         exec(func_text, glbls, loc_vars)
         f = loc_vars["f"]
 
-        nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
         df_index_var = self._get_dataframe_index(df_var, nodes)
         map_func = bodo.compiler.udf_jit(func)
