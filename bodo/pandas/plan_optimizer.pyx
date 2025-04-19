@@ -219,6 +219,7 @@ cdef extern from "duckdb/planner/expression.hpp" namespace "duckdb" nogil:
 
 cdef extern from "duckdb/planner/logical_operator.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalOperator "duckdb::LogicalOperator":
+        vector[unique_ptr[CLogicalOperator]] children
         idx_t estimated_cardinality
         bint has_estimated_cardinality
 
@@ -387,7 +388,7 @@ cdef unique_ptr[CExpression] make_expr(val):
         field = val.out_schema.field(0)
         assert len(select_vec) == 1
         source = val
-        return make_col_ref_expr(source.c_logical_operator, field, select_vec[0])
+        return make_col_ref_expr(source.c_logical_operator.get().children[0], field, select_vec[0])
     else:
         assert False
 
