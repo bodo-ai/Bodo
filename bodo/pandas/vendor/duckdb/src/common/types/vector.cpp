@@ -3,7 +3,6 @@
 #include "duckdb/common/algorithm.hpp"
 #include "duckdb/common/assert.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/fsst.hpp"
 #include "duckdb/common/operator/comparison_operators.hpp"
 #include "duckdb/common/pair.hpp"
 #include "duckdb/common/printer.hpp"
@@ -22,7 +21,6 @@
 #include "duckdb/function/scalar/nested_functions.hpp"
 #include "duckdb/storage/buffer/buffer_handle.hpp"
 #include "duckdb/storage/string_uncompressed.hpp"
-#include "fsst.h"
 
 #include <cstring> // strlen() on Solaris
 
@@ -247,11 +245,6 @@ void Vector::Slice(const SelectionVector &sel, idx_t count) {
 			dict_buffer.SetDictionarySize(dictionary_size.GetIndex());
 			dict_buffer.SetDictionaryId(std::move(dictionary_id));
 		}
-		return;
-	}
-
-	if (GetVectorType() == VectorType::FSST_VECTOR) {
-		Flatten(sel, count);
 		return;
 	}
 
@@ -565,9 +558,6 @@ Value Vector::GetValueInternal(const Vector &v_p, idx_t index_p) {
 		case VectorType::FLAT_VECTOR:
 			finished = true;
 			break;
-		case VectorType::FSST_VECTOR:
-			finished = true;
-			break;
 		// dictionary: apply dictionary and forward to child
 		case VectorType::DICTIONARY_VECTOR: {
 			auto &sel_vector = DictionaryVector::SelVector(*vector);
@@ -591,25 +581,6 @@ Value Vector::GetValueInternal(const Vector &v_p, idx_t index_p) {
 
 	if (!validity.RowIsValid(index)) {
 		return Value(vector->GetType());
-	}
-
-	if (vector->GetVectorType() == VectorType::FSST_VECTOR) {
-		if (vector->GetType().InternalType() != PhysicalType::VARCHAR) {
-			throw InternalException("FSST Vector with non-string datatype found!");
-		}
-		auto str_compressed = reinterpret_cast<string_t *>(data)[index];
-		auto decoder = FSSTVector::GetDecoder(*vector);
-		auto &decompress_buffer = FSSTVector::GetDecompressBuffer(*vector);
-		auto string_val = FSSTPrimitives::DecompressValue(decoder, str_compressed.GetData(), str_compressed.GetSize(),
-		                                                  decompress_buffer);
-		switch (vector->GetType().id()) {
-		case LogicalTypeId::VARCHAR:
-			return Value(std::move(string_val));
-		case LogicalTypeId::BLOB:
-			return Value::BLOB_RAW(string_val);
-		default:
-			throw InternalException("Unsupported vector type for FSST vector");
-		}
 	}
 
 	switch (vector->GetType().id()) {
@@ -787,8 +758,6 @@ string VectorTypeToString(VectorType type) {
 	switch (type) {
 	case VectorType::FLAT_VECTOR:
 		return "FLAT";
-	case VectorType::FSST_VECTOR:
-		return "FSST";
 	case VectorType::SEQUENCE_VECTOR:
 		return "SEQUENCE";
 	case VectorType::DICTIONARY_VECTOR:
@@ -810,16 +779,6 @@ string Vector::ToString(idx_t count) const {
 			retval += GetValue(i).ToString() + (i == count - 1 ? "" : ", ");
 		}
 		break;
-	case VectorType::FSST_VECTOR: {
-		for (idx_t i = 0; i < count; i++) {
-			string_t compressed_string = reinterpret_cast<string_t *>(data)[i];
-			auto decoder = FSSTVector::GetDecoder(*this);
-			auto &decompress_buffer = FSSTVector::GetDecompressBuffer(*this);
-			Value val = FSSTPrimitives::DecompressValue(decoder, compressed_string.GetData(),
-			                                            compressed_string.GetSize(), decompress_buffer);
-			retval += GetValue(i).ToString() + (i == count - 1 ? "" : ", ");
-		}
-	} break;
 	case VectorType::CONSTANT_VECTOR:
 		retval += GetValue(0).ToString();
 		break;
@@ -920,18 +879,6 @@ void Vector::Flatten(idx_t count) {
 	case VectorType::FLAT_VECTOR:
 		// already a flat vector
 		break;
-	case VectorType::FSST_VECTOR: {
-		// Even though count may only be a part of the vector, we need to flatten the whole thing due to the way
-		// ToUnifiedFormat uses flatten
-		idx_t total_count = FSSTVector::GetCount(*this);
-		// create vector to decompress into
-		Vector other(GetType(), total_count);
-		// now copy the data of this vector to the other vector, decompressing the strings in the process
-		VectorOperations::Copy(*this, other, total_count, 0, 0);
-		// create a reference to the data in the other vector
-		this->Reference(other);
-		break;
-	}
 	case VectorType::DICTIONARY_VECTOR: {
 		// create a new flat vector of this type
 		Vector other(GetType(), count);
@@ -1105,15 +1052,6 @@ void Vector::Flatten(const SelectionVector &sel, idx_t count) {
 	case VectorType::FLAT_VECTOR:
 		// already a flat vector
 		break;
-	case VectorType::FSST_VECTOR: {
-		// create a new flat vector of this type
-		Vector other(GetType(), count);
-		// copy the data of this vector to the other vector, removing compression and selection vector in the process
-		VectorOperations::Copy(*this, other, sel, count, 0, 0);
-		// create a reference to the data in the other vector
-		this->Reference(other);
-		break;
-	}
 	case VectorType::SEQUENCE_VECTOR: {
 		int64_t start, increment;
 		SequenceVector::GetSequence(*this, start, increment);
@@ -2100,106 +2038,6 @@ void StringVector::AddHeapReference(Vector &vector, Vector &other) {
 		return;
 	}
 	StringVector::AddBuffer(vector, other.auxiliary);
-}
-
-//===--------------------------------------------------------------------===//
-// FSSTVector
-//===--------------------------------------------------------------------===//
-string_t FSSTVector::AddCompressedString(Vector &vector, const char *data, idx_t len) {
-	return FSSTVector::AddCompressedString(vector, string_t(data, UnsafeNumericCast<uint32_t>(len)));
-}
-
-string_t FSSTVector::AddCompressedString(Vector &vector, string_t data) {
-	D_ASSERT(vector.GetType().InternalType() == PhysicalType::VARCHAR);
-	if (data.IsInlined()) {
-		// string will be inlined: no need to store in string heap
-		return data;
-	}
-	if (!vector.auxiliary) {
-		vector.auxiliary = make_buffer<VectorFSSTStringBuffer>();
-	}
-	D_ASSERT(vector.auxiliary->GetBufferType() == VectorBufferType::FSST_BUFFER);
-	auto &fsst_string_buffer = vector.auxiliary.get()->Cast<VectorFSSTStringBuffer>();
-	return fsst_string_buffer.AddBlob(data);
-}
-
-void *FSSTVector::GetDecoder(const Vector &vector) {
-	D_ASSERT(vector.GetType().InternalType() == PhysicalType::VARCHAR);
-	if (!vector.auxiliary) {
-		throw InternalException("GetDecoder called on FSST Vector without registered buffer");
-	}
-	D_ASSERT(vector.auxiliary->GetBufferType() == VectorBufferType::FSST_BUFFER);
-	auto &fsst_string_buffer = vector.auxiliary->Cast<VectorFSSTStringBuffer>();
-	return fsst_string_buffer.GetDecoder();
-}
-
-vector<unsigned char> &FSSTVector::GetDecompressBuffer(const Vector &vector) {
-	D_ASSERT(vector.GetType().InternalType() == PhysicalType::VARCHAR);
-	if (!vector.auxiliary) {
-		throw InternalException("GetDecompressBuffer called on FSST Vector without registered buffer");
-	}
-	D_ASSERT(vector.auxiliary->GetBufferType() == VectorBufferType::FSST_BUFFER);
-	auto &fsst_string_buffer = vector.auxiliary->Cast<VectorFSSTStringBuffer>();
-	return fsst_string_buffer.GetDecompressBuffer();
-}
-
-void FSSTVector::RegisterDecoder(Vector &vector, buffer_ptr<void> &duckdb_fsst_decoder,
-                                 const idx_t string_block_limit) {
-	D_ASSERT(vector.GetType().InternalType() == PhysicalType::VARCHAR);
-
-	if (!vector.auxiliary) {
-		vector.auxiliary = make_buffer<VectorFSSTStringBuffer>();
-	}
-	D_ASSERT(vector.auxiliary->GetBufferType() == VectorBufferType::FSST_BUFFER);
-
-	auto &fsst_string_buffer = vector.auxiliary->Cast<VectorFSSTStringBuffer>();
-	fsst_string_buffer.AddDecoder(duckdb_fsst_decoder, string_block_limit);
-}
-
-void FSSTVector::SetCount(Vector &vector, idx_t count) {
-	D_ASSERT(vector.GetType().InternalType() == PhysicalType::VARCHAR);
-
-	if (!vector.auxiliary) {
-		vector.auxiliary = make_buffer<VectorFSSTStringBuffer>();
-	}
-	D_ASSERT(vector.auxiliary->GetBufferType() == VectorBufferType::FSST_BUFFER);
-
-	auto &fsst_string_buffer = vector.auxiliary->Cast<VectorFSSTStringBuffer>();
-	fsst_string_buffer.SetCount(count);
-}
-
-idx_t FSSTVector::GetCount(Vector &vector) {
-	D_ASSERT(vector.GetType().InternalType() == PhysicalType::VARCHAR);
-
-	if (!vector.auxiliary) {
-		vector.auxiliary = make_buffer<VectorFSSTStringBuffer>();
-	}
-	D_ASSERT(vector.auxiliary->GetBufferType() == VectorBufferType::FSST_BUFFER);
-
-	auto &fsst_string_buffer = vector.auxiliary->Cast<VectorFSSTStringBuffer>();
-	return fsst_string_buffer.GetCount();
-}
-
-void FSSTVector::DecompressVector(const Vector &src, Vector &dst, idx_t src_offset, idx_t dst_offset, idx_t copy_count,
-                                  const SelectionVector *sel) {
-	D_ASSERT(src.GetVectorType() == VectorType::FSST_VECTOR);
-	D_ASSERT(dst.GetVectorType() == VectorType::FLAT_VECTOR);
-	auto dst_mask = FlatVector::Validity(dst);
-	auto ldata = FSSTVector::GetCompressedData<string_t>(src);
-	auto tdata = FlatVector::GetData<string_t>(dst);
-	auto &str_buffer = StringVector::GetStringBuffer(dst);
-	for (idx_t i = 0; i < copy_count; i++) {
-		auto source_idx = sel->get_index(src_offset + i);
-		auto target_idx = dst_offset + i;
-		string_t compressed_string = ldata[source_idx];
-		if (dst_mask.RowIsValid(target_idx) && compressed_string.GetSize() > 0) {
-			auto decoder = FSSTVector::GetDecoder(src);
-			tdata[target_idx] = FSSTPrimitives::DecompressValue(decoder, str_buffer, compressed_string.GetData(),
-			                                                    compressed_string.GetSize());
-		} else {
-			tdata[target_idx] = string_t(nullptr, 0);
-		}
-	}
 }
 
 //===--------------------------------------------------------------------===//

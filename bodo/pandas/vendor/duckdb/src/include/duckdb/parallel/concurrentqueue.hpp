@@ -8,10 +8,6 @@
 
 #pragma once
 
-#ifndef DUCKDB_NO_THREADS
-#include "concurrentqueue.h"
-#else
-
 #include <cstddef>
 #include <deque>
 #include <queue>
@@ -87,5 +83,3 @@ public:
 };
 
 } // namespace duckdb_moodycamel
-
-#endif

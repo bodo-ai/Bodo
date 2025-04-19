@@ -468,20 +468,6 @@ void Executor::SignalTaskRescheduled(lock_guard<mutex> &) {
 }
 
 void Executor::WaitForTask() {
-#ifndef DUCKDB_NO_THREADS
-	static constexpr std::chrono::milliseconds WAIT_TIME_MS = std::chrono::milliseconds(WAIT_TIME);
-	std::unique_lock<mutex> l(executor_lock);
-	if (to_be_rescheduled_tasks.empty()) {
-		return;
-	}
-	if (ResultCollectorIsBlocked()) {
-		// If the result collector is blocked, it won't get unblocked until the connection calls Fetch
-		return;
-	}
-
-	blocked_thread_time++;
-	task_reschedule.wait_for(l, WAIT_TIME_MS);
-#endif
 }
 
 void Executor::RescheduleTask(shared_ptr<Task> &task_p) {

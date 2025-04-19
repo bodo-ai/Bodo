@@ -40,8 +40,6 @@ add_library_unity(
   file_buffer.cpp
   file_system.cpp
   filename_pattern.cpp
-  fsst.cpp
-  gzip_file_system.cpp
   hive_partitioning.cpp
   http_util.cpp
   pipe_file_system.cpp
