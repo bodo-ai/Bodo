@@ -6,6 +6,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -874,6 +875,10 @@ def test_to_timestamp_format_str(
     """
     data, format_str, answer = to_timestamp_string_data_format_str
     query = f"SELECT {to_timestamp_fn}(t, '{format_str}') FROM table1"
+
+    # Set proper timezone for the answer if LTZ
+    if to_timestamp_fn in ("TO_TIMESTAMP_LTZ", "TRY_TO_TIMESTAMP_LTZ"):
+        answer = answer.astype(pd.ArrowDtype(pa.timestamp("ns", "UTC")))
 
     ctx = {"TABLE1": pd.DataFrame({"T": data})}
     expected_output = pd.DataFrame({0: answer})
