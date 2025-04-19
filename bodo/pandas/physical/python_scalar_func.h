@@ -1,7 +1,6 @@
 #pragma once
 
 #include <arrow/python/pyarrow.h>
-#include <iostream>
 #include <memory>
 #include <utility>
 #include "../libs/_array_utils.h"
