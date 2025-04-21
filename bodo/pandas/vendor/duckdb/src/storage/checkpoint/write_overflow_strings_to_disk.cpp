@@ -14,30 +14,7 @@ WriteOverflowStringsToDisk::~WriteOverflowStringsToDisk() {
 	D_ASSERT(Exception::UncaughtException() || offset == 0);
 }
 
-shared_ptr<BlockHandle> UncompressedStringSegmentState::GetHandle(BlockManager &manager, block_id_t block_id) {
-	lock_guard<mutex> lock(block_lock);
-	auto entry = handles.find(block_id);
-	if (entry != handles.end()) {
-		return entry->second;
-	}
-	auto result = manager.RegisterBlock(block_id);
-	handles.insert(make_pair(block_id, result));
-	return result;
-}
-
-void UncompressedStringSegmentState::RegisterBlock(BlockManager &manager, block_id_t block_id) {
-	lock_guard<mutex> lock(block_lock);
-	auto entry = handles.find(block_id);
-	if (entry != handles.end()) {
-		throw InternalException("UncompressedStringSegmentState::RegisterBlock - block id %llu already exists",
-		                        block_id);
-	}
-	auto result = manager.RegisterBlock(block_id);
-	handles.insert(make_pair(block_id, std::move(result)));
-	on_disk_blocks.push_back(block_id);
-}
-
-void WriteOverflowStringsToDisk::WriteString(UncompressedStringSegmentState &state, string_t string,
+void WriteOverflowStringsToDisk::WriteString(string_t string,
                                              block_id_t &result_block, int32_t &result_offset) {
 	auto &block_manager = partial_block_manager.GetBlockManager();
 	auto &buffer_manager = block_manager.buffer_manager;
@@ -46,7 +23,7 @@ void WriteOverflowStringsToDisk::WriteString(UncompressedStringSegmentState &sta
 	}
 	// first write the length of the string
 	if (block_id == INVALID_BLOCK || offset + 2 * sizeof(uint32_t) >= GetStringSpace()) {
-		AllocateNewBlock(state, block_manager.GetFreeBlockId());
+		// AllocateNewBlock(state, block_manager.GetFreeBlockId());
 	}
 	result_block = block_id;
 	result_offset = UnsafeNumericCast<int32_t>(offset);
@@ -73,7 +50,7 @@ void WriteOverflowStringsToDisk::WriteString(UncompressedStringSegmentState &sta
 			D_ASSERT(offset == GetStringSpace());
 			// there is still remaining stuff to write
 			// now write the current block to disk and allocate a new block
-			AllocateNewBlock(state, block_manager.GetFreeBlockId());
+			// AllocateNewBlock(state, block_manager.GetFreeBlockId());
 		}
 	}
 }
@@ -92,7 +69,7 @@ void WriteOverflowStringsToDisk::Flush() {
 	offset = 0;
 }
 
-void WriteOverflowStringsToDisk::AllocateNewBlock(UncompressedStringSegmentState &state, block_id_t new_block_id) {
+void WriteOverflowStringsToDisk::AllocateNewBlock(block_id_t new_block_id) {
 	if (block_id != INVALID_BLOCK) {
 		// there is an old block, write it first
 		// write the new block id at the end of the previous block
@@ -101,8 +78,6 @@ void WriteOverflowStringsToDisk::AllocateNewBlock(UncompressedStringSegmentState
 	}
 	offset = 0;
 	block_id = new_block_id;
-	auto &block_manager = partial_block_manager.GetBlockManager();
-	state.RegisterBlock(block_manager, new_block_id);
 }
 
 idx_t WriteOverflowStringsToDisk::GetStringSpace() const {

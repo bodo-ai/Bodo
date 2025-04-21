@@ -22,7 +22,6 @@
 #include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/query_profiler.hpp"
 #include "duckdb/main/query_result.hpp"
-#include "duckdb/main/relation.hpp"
 #include "duckdb/main/stream_query_result.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
@@ -34,7 +33,6 @@
 #include "duckdb/parser/statement/execute_statement.hpp"
 #include "duckdb/parser/statement/explain_statement.hpp"
 #include "duckdb/parser/statement/prepare_statement.hpp"
-#include "duckdb/parser/statement/relation_statement.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/planner/operator/logical_execute.hpp"
 #include "duckdb/planner/planner.hpp"
@@ -1223,26 +1221,6 @@ void ClientContext::Append(TableDescription &description, ColumnDataCollection &
 	});
 }
 
-void ClientContext::InternalTryBindRelation(Relation &relation, vector<ColumnDefinition> &result_columns) {
-	// bind the expressions
-	auto binder = Binder::CreateBinder(*this);
-	auto result = relation.Bind(*binder);
-	D_ASSERT(result.names.size() == result.types.size());
-
-	result_columns.reserve(result_columns.size() + result.names.size());
-	for (idx_t i = 0; i < result.names.size(); i++) {
-		result_columns.emplace_back(result.names[i], result.types[i]);
-	}
-}
-
-void ClientContext::TryBindRelation(Relation &relation, vector<ColumnDefinition> &result_columns) {
-#ifdef DEBUG
-	D_ASSERT(!relation.GetAlias().empty());
-	D_ASSERT(!relation.ToString().empty());
-#endif
-	RunFunctionInTransaction([&]() { InternalTryBindRelation(relation, result_columns); });
-}
-
 unordered_set<string> ClientContext::GetTableNames(const string &query) {
 	auto lock = LockContext();
 
@@ -1260,80 +1238,6 @@ unordered_set<string> ClientContext::GetTableNames(const string &query) {
 		result = binder->GetTableNames();
 	});
 	return result;
-}
-
-unique_ptr<PendingQueryResult> ClientContext::PendingQueryInternal(ClientContextLock &lock,
-                                                                   const shared_ptr<Relation> &relation,
-                                                                   bool allow_stream_result) {
-	InitialCleanup(lock);
-
-	string query;
-	if (config.query_verification_enabled) {
-		// run the ToString method of any relation we run, mostly to ensure it doesn't crash
-		relation->ToString();
-		relation->GetAlias();
-		if (relation->IsReadOnly()) {
-			// verify read only statements by running a select statement
-			auto select = make_uniq<SelectStatement>();
-			select->node = relation->GetQueryNode();
-			RunStatementInternal(lock, query, std::move(select), false, nullptr);
-		}
-	}
-
-	auto relation_stmt = make_uniq<RelationStatement>(relation);
-	PendingQueryParameters parameters;
-	parameters.allow_stream_result = allow_stream_result;
-	return PendingQueryInternal(lock, std::move(relation_stmt), parameters);
-}
-
-unique_ptr<PendingQueryResult> ClientContext::PendingQuery(const shared_ptr<Relation> &relation,
-                                                           bool allow_stream_result) {
-	auto lock = LockContext();
-	return PendingQueryInternal(*lock, relation, allow_stream_result);
-}
-
-unique_ptr<QueryResult> ClientContext::Execute(const shared_ptr<Relation> &relation) {
-	auto lock = LockContext();
-	auto &expected_columns = relation->Columns();
-	auto pending = PendingQueryInternal(*lock, relation, false);
-	if (!pending->success) {
-		return ErrorResult<MaterializedQueryResult>(pending->GetErrorObject());
-	}
-
-	unique_ptr<QueryResult> result;
-	result = ExecutePendingQueryInternal(*lock, *pending);
-	if (result->HasError()) {
-		return result;
-	}
-	// verify that the result types and result names of the query match the expected result types/names
-	if (result->types.size() == expected_columns.size()) {
-		bool mismatch = false;
-		for (idx_t i = 0; i < result->types.size(); i++) {
-			if (result->types[i] != expected_columns[i].Type() || result->names[i] != expected_columns[i].Name()) {
-				mismatch = true;
-				break;
-			}
-		}
-		if (!mismatch) {
-			// all is as expected: return the result
-			return result;
-		}
-	}
-	// result mismatch
-	string err_str = "Result mismatch in query!\nExpected the following columns: [";
-	for (idx_t i = 0; i < expected_columns.size(); i++) {
-		if (i > 0) {
-			err_str += ", ";
-		}
-		err_str += expected_columns[i].Name() + " " + expected_columns[i].Type().ToString();
-	}
-	err_str += "]\nBut result contained the following: ";
-	for (idx_t i = 0; i < result->types.size(); i++) {
-		err_str += i == 0 ? "[" : ", ";
-		err_str += result->names[i] + " " + result->types[i].ToString();
-	}
-	err_str += "]";
-	return ErrorResult<MaterializedQueryResult>(ErrorData(err_str));
 }
 
 SettingLookupResult ClientContext::TryGetCurrentSetting(const std::string &key, Value &result) const {
