@@ -40,6 +40,7 @@ class ZipFileWithPermissions(ZipFile):
 
 def patch_lib(fpath):
     # clear rpath from library
+    print("Patching: ", fpath)
     check_call(["patchelf", "--remove-rpath", fpath])
 
     # set rpath that points to libmpi location (of mpi4py_mpich package).
