@@ -13,7 +13,7 @@ import bodo
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.mpi4py import MPI
-from bodo.tests.iceberg_database_helpers import spark_reader
+from bodo.tests.iceberg_database_helpers import pyiceberg_reader, spark_reader
 from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
@@ -83,7 +83,7 @@ def test_simple_table_read(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -119,7 +119,7 @@ def test_read_zero_cols(iceberg_database, iceberg_table_conn, table_name):
         df = pd.read_sql_table(table_name, conn, db_schema)
         return len(df)
 
-    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -162,7 +162,7 @@ def test_simple_tz_aware_table_read(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out = spark_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
     check_func(
         impl,
         (table_name, conn, db_schema),
