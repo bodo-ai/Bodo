@@ -57,21 +57,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     this->active_pipeline->AddOperator(physical_op);
 }
 
-// Generic dynamic_cast for std::unique_ptr
-template <typename Derived, typename Base>
-duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
-    duckdb::unique_ptr<Base>&& base_ptr) noexcept {
-    // Perform dynamic_cast on the raw pointer
-    if (Derived* derived_raw = dynamic_cast<Derived*>(base_ptr.get())) {
-        // Release ownership from the base_ptr and transfer it to a new
-        // unique_ptr
-        base_ptr.release();  // Release the ownership of the raw pointer
-        return duckdb::unique_ptr<Derived>(derived_raw);
-    }
-    // If the cast fails, return a nullptr unique_ptr
-    return nullptr;
-}
-
 std::variant<int, float, double> extractValue(const duckdb::Value& value) {
     duckdb::LogicalTypeId type = value.type().id();
     switch (type) {

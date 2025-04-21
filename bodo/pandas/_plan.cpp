@@ -81,12 +81,46 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
         duckdb::ColumnBinding(get_operator_table_index(source), col_idx));
 }
 
+/**
+ * @brief Change the type of a constant to match the type of the other side
+ *        of a binary op expr.
+ *
+ * params series - the non-constant part of the binary op expr
+ * params constant - the constant part of the binary op expr
+ * returns a BinaryConstantExpression where the internal value has been changed
+ *         to match the type of the other side of the binary op
+ */
+duckdb::unique_ptr<duckdb::Expression> matchType(duckdb::unique_ptr<duckdb::Expression> &series, duckdb::unique_ptr<duckdb::Expression> &constant) {
+    // Cast to constant to BoundConstantExpression.
+    duckdb::unique_ptr<duckdb::BoundConstantExpression> bce_constant =
+        dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(
+            std::move(constant));
+
+    // Get the type to convert the constant to.
+    duckdb::LogicalType series_type = series->return_type;
+    // Change the value to the given type.
+    // Will throw an exception if such a conversion is not possible.
+    bce_constant->value = bce_constant->value.DefaultCastAs(series_type);
+    // Change the expression's return type to match.
+    bce_constant->return_type = series_type;
+    return bce_constant;
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_binop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
+
+    // If the left and right side of a binary op expression don't have
+    // matching types then filter pushdown will be skipped.  Here we force
+    // the constant to have the type as the other side of the binary op.
+    if (lhs_duck->GetExpressionClass() == duckdb::ExpressionClass::BOUND_CONSTANT) {
+        lhs_duck = matchType(rhs_duck, lhs_duck);
+    } else if (rhs_duck->GetExpressionClass() == duckdb::ExpressionClass::BOUND_CONSTANT) {
+        rhs_duck = matchType(lhs_duck, rhs_duck);
+    }
     return duckdb::make_uniq<duckdb::BoundComparisonExpression>(
         etype, std::move(lhs_duck), std::move(rhs_duck));
 }
