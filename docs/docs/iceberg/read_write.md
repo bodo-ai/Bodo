@@ -158,8 +158,9 @@ def write_iceberg_table(df: pandas.DataFrame):
       are provided, they will be ignored.
     - `chunksize`, `dtype` and `method` arguments are not supported and will be ignored if provided.
 
-#### Table Sorting and Partitioning {#iceberg-sorting-partitioning}
+#### Table Partitioning and Sorting {#iceberg-partitioning-sorting}
 Bodo supports reading and writing Iceberg tables with partitioning and sorting. Bodo doesn't support creating a new table with partitioning or sorting yet. We recommend using PyIceberg to create a new empty table with partitioning and sorting specified and using Bodo for read and write of actual data. PyIceberg is a dependency of Bodo and is automatically installed when you install Bodo.
+
 Example:  
 ```py
 import pandas as pd
