@@ -41,7 +41,13 @@ class ZipFileWithPermissions(ZipFile):
 def patch_lib(fpath):
     # clear rpath from library
     print("Patching: ", fpath)
-    check_call(["patchelf", "--remove-rpath", fpath])
+    try:
+        check_call(["patchelf", "--remove-rpath", fpath])
+    except Exception:
+        # Patchelf doesn't like libraries that are just links to other libraries
+        # so we just ignore them
+        print("Error removing rpath from", fpath)
+        return
 
     # set rpath that points to libmpi location (of mpi4py_mpich package).
     # Note that this is a relative path and requires mpi4py_mpich package to be
