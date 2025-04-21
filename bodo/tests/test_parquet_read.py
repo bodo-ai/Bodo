@@ -44,6 +44,7 @@ pytestmark = pytest.mark.parquet
 
 
 # ---------------------------- Test Different DataTypes ---------------------------- #
+@pytest.mark.df_lib
 @pytest.mark.parametrize(
     "fname",
     [
@@ -64,13 +65,22 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
     "fname",
     [
         pytest.param("bool_nulls.pq", id="bool_with_nulls"),
-        pytest.param("list_str_arr.pq", id="list_str_arr"),
-        pytest.param("list_str_parts.pq", id="list_str_parts"),
-        pytest.param("decimal1.pq", id="decimal"),
-        pytest.param("date32_1.pq", id="date32"),
-        pytest.param("small_strings.pq", id="processes_greater_than_string_rows"),
+        pytest.param("list_str_arr.pq", id="list_str_arr", marks=pytest.mark.df_lib),
+        pytest.param(
+            "list_str_parts.pq", id="list_str_parts", marks=pytest.mark.df_lib
+        ),
+        pytest.param("decimal1.pq", id="decimal", marks=pytest.mark.df_lib),
+        pytest.param("date32_1.pq", id="date32", marks=pytest.mark.df_lib),
+        pytest.param(
+            "small_strings.pq",
+            id="processes_greater_than_string_rows",
+            marks=pytest.mark.df_lib,
+        ),
         pytest.param("parquet_data_nonascii1.parquet", id="nonascii"),
-        pytest.param("nullable_float.pq", id="nullable_float"),
+        pytest.param(
+            "nullable_float.pq", id="nullable_float", marks=pytest.mark.df_lib
+        ),
+        pytest.param("datetime64_1.pq", id="datetime64", marks=pytest.mark.df_lib),
     ],
 )
 def test_pq_read_types(fname, datapath, memory_leak_check):

@@ -8,12 +8,14 @@ parameters:
 - name: pool_name
   type: string
   default: 'ScalingVMSet'
-- name: CACHE_TEST
-  type: boolean
-  default: false
-- name: SPAWN_MODE_TEST
-  type: boolean
-  default: false
+- name: test_type
+  type: string
+  default: NORMAL
+  values: 
+    - NORMAL
+    - SPAWN
+    - CACHE
+    - DF_LIB
 
 jobs:
 - job: ${{ parameters.name }}
@@ -111,9 +113,9 @@ jobs:
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
-      if [[ "${{ parameters.CACHE_TEST }}" == "True" ]]; then
+      if [[ "${{ parameters.test_type }}" == "CACHE" ]]; then
         pixi run -e azure python -u -m bodosql.runtests_caching "${{ parameters.name }}" "$(NP)" bodosql/tests/caching_tests/
-      elif [[ "${{ parameters.SPAWN_MODE_TEST }}" == "True" ]]; then
+      elif [[ "${{ parameters.test_type }}" == "SPAWN" ]]; then
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
         pixi run -e azure pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"

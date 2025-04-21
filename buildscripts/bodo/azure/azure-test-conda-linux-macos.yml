@@ -5,12 +5,14 @@ parameters:
 - name: matrix
   type: object
   default: []
-- name: caching_test
-  type: boolean
-  default: false
-- name: spawn_mode_test
-  type: boolean
-  default: false
+- name: test_type
+  type: string
+  default: NORMAL
+  values: 
+    - NORMAL
+    - SPAWN
+    - CACHE
+    - DF_LIB
 - name: pool_name
   type: string
   default: 'ScalingVMSet'
@@ -131,12 +133,16 @@ jobs:
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/buildscripts/decompress_traces.py"`
-      if [[ "${{ parameters.caching_test }}" == "True" ]]; then
+      if [[ "${{ parameters.test_type }}" == "CACHE" ]]; then
         pixi run -e azure python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
-      elif [[ "${{ parameters.spawn_mode_test }}" == "True" ]]; then
+      elif [[ "${{ parameters.test_type }}" == "SPAWN" ]]; then
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
         pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
+      elif [[ "${{ parameters.test_type }}" == "DF_LIB" ]]; then
+        export BODO_ENABLE_DATAFRAME_LIBRARY=1
+        export BODO_NUM_WORKERS="$NP"
+        pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-df-library.xml --test-run-title="${{ parameters.name }}"
       else
         pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       fi

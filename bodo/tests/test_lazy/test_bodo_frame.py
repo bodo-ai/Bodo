@@ -563,6 +563,20 @@ def test_csv(collect_func):
 
 
 @pytest_mark_spawn_mode
+def test_csv_str(collect_func):
+    """Tests that to_csv() with string output works properly (returns all string data to spawner)"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    assert bodo_df.to_csv(index=False) == df.to_csv(index=False)
+    assert bodo_df._lazy
+
+
+@pytest_mark_spawn_mode
 def test_csv_param(collect_func):
     """Tests that to_csv() raises an error on unsupported parameters"""
 
@@ -624,6 +638,22 @@ def test_json(collect_func):
         df,
         check_dtype=False,
     )
+
+
+@pytest_mark_spawn_mode
+def test_json_str(collect_func):
+    """Tests that to_json() with string output works properly (returns all string data to spawner)"""
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    df = collect_func(0)
+    bodo_df = _get_bodo_df(df)
+    assert bodo_df.to_json(orient="records", lines=True) == df.to_json(
+        orient="records", lines=True
+    )
+    assert bodo_df._lazy
 
 
 @pytest_mark_spawn_mode

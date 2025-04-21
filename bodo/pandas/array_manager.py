@@ -8,6 +8,8 @@ import pandas as pd
 from pandas.core.arrays import ExtensionArray
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
+from bodo.pandas.plan_optimizer import LogicalOperator
+
 try:
     from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
 except ModuleNotFoundError:
@@ -38,6 +40,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         "_collect_func",
         "_del_func",
         "logger",
+        "_plan",
     ]
 
     def __init__(
@@ -53,6 +56,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         head: ArrayManager | None = None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
@@ -68,6 +72,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         self.logger = bodo.user_logging.get_current_bodo_verbose_logger()
         self._collect_func = collect_func
         self._del_func = del_func
+        self._plan = plan
 
         if result_id is not None:
             # This is the lazy case, we don't have the full data yet
@@ -229,8 +234,25 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
 
     def _collect(self):
         """
-        Collect the data from the workers if we don't have it and clear metadata.
+        Collect the data onto the spawner.
+        If we have a plan, execute it and replace the blocks with the result.
+        If the data is on the workers, collect it.
         """
+        if self._plan is not None:
+            from bodo.pandas.utils import execute_plan
+
+            debug_msg(
+                self.logger, "[LazyArrayManager] Executing Plan and collecting data..."
+            )
+            data = execute_plan(self._plan)
+            self._plan = None
+            self.arrays = data._mgr.arrays
+            # Update index here since the plan created a dummy index
+            self._axes = data._mgr._axes
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
+
         if self._md_result_id is not None:
             assert self._md_head is not None
             assert self._md_nrows is not None
@@ -302,6 +324,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         "_collect_func",
         "_del_func",
         "logger",
+        "_plan",
     ]
 
     def __init__(
@@ -316,6 +339,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         head: SingleArrayManager | None = None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        plan: LogicalOperator | None = None,
         # Can be used for lazy index data
         index_data: ArrowExtensionArray
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
@@ -332,6 +356,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         self.logger = bodo.user_logging.get_current_bodo_verbose_logger()
         self._collect_func = collect_func
         self._del_func = del_func
+        self._plan = plan
 
         if result_id is not None:
             # This is the lazy case, we don't have the full data yet
@@ -420,8 +445,26 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
 
     def _collect(self):
         """
-        Collect the data from the workers if we don't have it and clear metadata.
+        Collect the data onto the spawner.
+        If we have a plan, execute it and replace the blocks with the result.
+        If the data is on the workers, collect it.
         """
+        if self._plan is not None:
+            from bodo.pandas.utils import execute_plan
+
+            debug_msg(
+                self.logger,
+                "[LazySingleArrayManager] Executing Plan and collecting data...",
+            )
+            data = execute_plan(self._plan)
+            self._plan = None
+            self.arrays = data._mgr.arrays
+            # Update index here since the plan created a dummy index
+            self._axes = data._mgr._axes
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
+
         if self._md_result_id is not None:
             debug_msg(self.logger, "[LazySingleArrayManager] Collecting data...")
             assert self._md_head is not None

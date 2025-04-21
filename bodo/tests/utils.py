@@ -35,6 +35,7 @@ from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
 
 import bodo
+import bodo.pandas as bodo_pd
 from bodo.mpi4py import MPI
 from bodo.utils.typing import BodoWarning, dtype_to_array_type, is_bodosql_context_type
 from bodo.utils.utils import (
@@ -229,15 +230,31 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
+    # If dataframe_library_enabled then run compiler tests as df library tests
+    # (replaces import pandas as pd with import bodo.pandas as pd)
+    # NOTE: This variable takes precedence over other variables
+    only_df_lib = bodo.dataframe_library_enabled
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
     # PR CI environment
-    if only_1DVar is None and not (only_seq or only_1D):
+    if only_1DVar is None and not (only_seq or only_1D or only_df_lib):
         only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 
-    run_seq, run_1D, run_1DVar, run_spawn = False, False, False, False
-    if only_seq:
+    run_seq, run_1D, run_1DVar, run_spawn, run_df_lib = (
+        False,
+        False,
+        False,
+        False,
+        False,
+    )
+    if only_df_lib:
+        if only_1D or only_1DVar or only_seq:
+            warnings.warn(
+                "Multiple select only options specified, running only df library."
+            )
+        run_df_lib = True
+    elif only_seq:
         if only_1D or only_1DVar:
             warnings.warn(
                 "Multiple select only options specified, running only sequential."
@@ -474,6 +491,26 @@ def check_func(
                 check_pandas_types,
             )
             bodo_funcs["spawn"] = bodo_func
+        if run_df_lib:
+            bodo_func = check_func_df_lib(
+                func,
+                args,
+                py_output,
+                copy_input,
+                sort_output,
+                check_names,
+                check_dtype,
+                reset_index,
+                convert_columns_to_pandas,
+                set_columns_name_to_none,
+                reorder_columns,
+                n_pes,
+                check_categorical,
+                atol,
+                rtol,
+                check_pandas_types,
+            )
+            bodo_funcs["df_lib"] = bodo_func
     finally:
         set_config(
             "bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD", saved_TABLE_FORMAT_THRESHOLD
@@ -876,9 +913,7 @@ def check_func_spawn(
     rtol,
     check_pandas_types,
 ):
-    """Check function output against Python while setting the inputs/outputs as
-    1D distributed
-    """
+    """Check function output against Python while running Jit in Spawn Mode."""
 
     # Skip spawn testing if the test requires specific data distributions which may
     # confict with spawn's defaults
@@ -895,6 +930,59 @@ def check_func_spawn(
 
     bodo_func = bodo.jit(func, **kwargs)
     bodo_output = bodo_func(*args)
+    if convert_columns_to_pandas:
+        bodo_output = convert_non_pandas_columns(bodo_output)
+    if set_columns_name_to_none:
+        bodo_output.columns.name = None
+    if reorder_columns:
+        bodo_output.sort_index(axis=1, inplace=True)
+
+    _test_equal(
+        bodo_output,
+        py_output,
+        sort_output,
+        check_names,
+        check_dtype,
+        reset_index,
+        check_categorical,
+        atol,
+        rtol,
+        check_pandas_types,
+    )
+
+
+def check_func_df_lib(
+    func,
+    args,
+    py_output,
+    copy_input,
+    sort_output,
+    check_names,
+    check_dtype,
+    reset_index,
+    convert_columns_to_pandas,
+    set_columns_name_to_none,
+    reorder_columns,
+    n_pes,
+    check_categorical,
+    atol,
+    rtol,
+    check_pandas_types,
+):
+    """Check function output against Python while running DataFrame library."""
+    assert n_pes == 1, "Dataframe library tests should only run with 1 rank"
+
+    args = tuple(_get_arg(a, copy_input) for a in args)
+
+    df_lib_aliases = {"pd": bodo_pd, "pandas": bodo_pd}
+
+    # copy and then restore func's globals in case it is used in another check_func call.
+    func_globals = func.__globals__.copy()
+
+    func.__globals__.update(df_lib_aliases)
+    bodo_output = func(*args)
+    func.__globals__.update(func_globals)
+
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
     if set_columns_name_to_none:
@@ -1258,8 +1346,7 @@ def _test_equal(
         and not isinstance(bodo_out, pd.arrays.ArrowStringArray)
         and not isinstance(py_out, pd.arrays.ArrowExtensionArray)
     ):
-        py_out = _to_pa_array(py_out, bodo.typeof(bodo_out))
-        py_out = pd.Series(py_out)
+        py_out = _to_pa_array(py_out, bodo.typeof(bodo_out)).to_pandas()
         bodo_out = pd.Series(bodo_out)
         if sort_output:
             py_out = py_out.sort_values().reset_index(drop=True)

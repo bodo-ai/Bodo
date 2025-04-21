@@ -8,6 +8,7 @@
 #endif
 
 #include <Python.h>
+#include <arrow/type.h>
 #include <vector>
 
 #include "_meminfo.h"
@@ -639,6 +640,10 @@ struct DataType {
     virtual void Serialize(std::vector<int8_t>& arr_array_types,
                            std::vector<int8_t>& arr_c_types) const;
 
+    /// @brief Convert to the equivalent Arrow field type
+    virtual std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const;
+
     ///@brief Deep copy the Datatype, returns the proper child type if
     /// appropriate
     std::unique_ptr<DataType> copy() const;
@@ -661,6 +666,9 @@ struct ArrayType final : public DataType {
 
     void Serialize(std::vector<int8_t>& arr_array_types,
                    std::vector<int8_t>& arr_c_types) const override;
+
+    std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const override;
 };
 
 /// @brief Wrapper class for Representing the Type of Struct Arrays
@@ -676,6 +684,9 @@ struct StructType final : public DataType {
 
     void Serialize(std::vector<int8_t>& arr_array_types,
                    std::vector<int8_t>& arr_c_types) const override;
+
+    std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const override;
 };
 
 /// @brief Wrapper class for representing the type of Map Arrays
@@ -694,6 +705,9 @@ struct MapType final : public DataType {
 
     void Serialize(std::vector<int8_t>& arr_array_types,
                    std::vector<int8_t>& arr_c_types) const override;
+
+    std::shared_ptr<::arrow::Field> ToArrowType(
+        std::string& name) const override;
 };
 
 /**
@@ -702,10 +716,13 @@ struct MapType final : public DataType {
  */
 struct Schema {
     std::vector<std::unique_ptr<DataType>> column_types;
+    std::vector<std::string> column_names;
     Schema();
     Schema(const Schema& other);
     Schema(Schema&& other);
     Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_);
+    Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+           std::vector<std::string> column_names);
     /** @brief Return the number of columns in the schema
      *
      * @return void The number of columns in the schema
@@ -791,6 +808,13 @@ struct Schema {
      */
     std::unique_ptr<Schema> Project(
         const std::span<const int64_t> column_indices) const;
+
+    /// @brief Convert to an Arrow schema
+    std::shared_ptr<::arrow::Schema> ToArrowSchema() const;
+
+    /// @brief Convert from an Arrow schema to a Bodo schema
+    static std::shared_ptr<Schema> FromArrowSchema(
+        std::shared_ptr<::arrow::Schema> schema);
 };
 
 }  // namespace bodo
@@ -1770,6 +1794,7 @@ struct mpi_str_comm_info {
 
 struct table_info {
     std::vector<std::shared_ptr<array_info>> columns;
+    std::vector<std::string> column_names;
     // keep shuffle info to be able to reverse the shuffle if necessary
     // currently used in groupby apply
     // TODO: refactor out?
@@ -1803,7 +1828,8 @@ struct table_info {
             column_types.push_back(col->data_type());
         }
 
-        return std::make_unique<bodo::Schema>(std::move(column_types));
+        return std::make_unique<bodo::Schema>(std::move(column_types),
+                                              column_names);
     }
 
     void pin() {
@@ -2193,4 +2219,5 @@ PyMODINIT_FUNC PyInit_memory_cpp(void);
 #ifdef IS_TESTING
 PyMODINIT_FUNC PyInit_test_cpp(void);
 #endif
+PyMODINIT_FUNC PyInit_plan_optimizer(void);
 }  // extern "C"

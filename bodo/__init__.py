@@ -178,6 +178,18 @@ sql_plan_cache_loc = os.environ.get("BODO_SQL_PLAN_CACHE_DIR")
 
 # -------------------------- End SQL Caching Config --------------------------
 
+# ---------------------------- DataFrame Library Config ----------------------------
+
+# Directory where sql plans generated during compilation should be stored.
+# This is expected to be a distributed filesystem which all nodes have access to.
+dataframe_library_enabled = os.environ.get("BODO_ENABLE_DATAFRAME_LIBRARY", "0") != "0"
+
+# Runs the DataFrame library in parallel mode if enabled (disable for debugging on a
+# single core).
+dataframe_library_run_parallel = os.environ.get("BODO_DATAFRAME_LIBRARY_RUN_PARALLEL", "1") != "0"
+
+# -------------------------- End DataFrame Library Config --------------------------
+
 bodo_use_native_type_inference = (
     os.environ.get("BODO_NATIVE_TYPE_INFERENCE_ENABLED", "0") != "0"
 )
