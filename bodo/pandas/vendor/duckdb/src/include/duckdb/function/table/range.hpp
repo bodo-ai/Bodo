@@ -33,14 +33,6 @@ struct RepeatRowTableFunction {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
 
-struct UnnestTableFunction {
-	static void RegisterFunction(BuiltinFunctions &set);
-};
-
-struct CSVSnifferFunction {
-	static void RegisterFunction(BuiltinFunctions &set);
-};
-
 struct ReadBlobFunction {
 	static void RegisterFunction(BuiltinFunctions &set);
 };

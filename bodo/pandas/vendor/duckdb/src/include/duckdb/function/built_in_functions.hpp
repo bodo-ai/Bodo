@@ -49,10 +49,8 @@ private:
 	// table-producing functions
 	void RegisterTableScanFunctions();
 	void RegisterSQLiteFunctions();
-	void RegisterReadFunctions();
 	void RegisterTableFunctions();
 	void RegisterArrowFunctions();
-	void RegisterSnifferFunction();
 
 	// pragmas
 	void RegisterPragmaFunctions();

@@ -1,6 +1,7 @@
 #include "duckdb/common/fast_mem.hpp"
 #include "duckdb/common/sort/comparators.hpp"
 #include "duckdb/common/sort/sort.hpp"
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 

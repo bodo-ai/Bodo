@@ -8,8 +8,6 @@ add_library_unity(
   arrow_query_result.cpp
   arrow_util.cpp
   arrow_wrapper.cpp
-  physical_arrow_collector.cpp
-  physical_arrow_batch_collector.cpp
   schema_metadata.cpp)
 add_subdirectory(appender)
 set(ALL_OBJECT_FILES
