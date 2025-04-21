@@ -1,6 +1,4 @@
 import pandas as pd
-from pandas._libs import lib
-
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
@@ -9,6 +7,7 @@ from bodo.pandas.utils import (
     check_args_fallback,
     wrap_plan,
 )
+from pandas._libs import lib
 
 
 def from_pandas(df):
@@ -71,12 +70,6 @@ def read_parquet(
         partitioning="hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
-    partition_names = pq_dataset.partition_names
-
-    if len(partition_names) > 0:
-        raise NotImplementedError(
-            "bd.read_parquet: Reading parquet with partition column not supported yet."
-        )
 
     index_cols, _ = get_pandas_metadata(arrow_schema)
     is_supported_index = False

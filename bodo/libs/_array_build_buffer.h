@@ -1,4 +1,5 @@
 #pragma once
+#include <iostream>
 #include "_array_utils.h"
 #include "_dict_builder.h"
 

@@ -873,6 +873,7 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         if (arrow::is_primitive(type) || arrow::is_decimal(type) ||
             is_categorical) {
             if (is_categorical) {
+                std::cout << "Creating column from index type!!" << std::endl;
                 auto dict_type =
                     std::dynamic_pointer_cast<arrow::DictionaryType>(
                         field->type());

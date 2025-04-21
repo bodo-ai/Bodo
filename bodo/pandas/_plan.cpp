@@ -1,5 +1,7 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
+#include <arrow/type_fwd.h>
+#include <memory>
 #include <utility>
 
 #include "_executor.h"
@@ -452,6 +454,14 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             auto [name, child_type] =
                 arrow_field_to_duckdb(list_type->field(0));
             duckdb_type = duckdb::LogicalType::LIST(child_type);
+            break;
+        }
+        case arrow::Type::DICTIONARY: {
+            auto dict_type =
+                std::static_pointer_cast<arrow::DictionaryType>(arrow_type);
+            std::shared_ptr<arrow::Field> value_field =
+                arrow::field("name", dict_type->value_type());
+            auto [field_name, duckdb_type] = arrow_field_to_duckdb(value_field);
             break;
         }
         default:

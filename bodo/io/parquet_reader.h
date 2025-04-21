@@ -2,6 +2,7 @@
 // Implementation of ParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading parquet datasets
 
+#include <sstream>
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_distributed.h"
 #include "arrow_reader.h"
@@ -98,12 +99,18 @@ class ParquetReader : public ArrowReader {
             // dictionary.
             for (int str_as_dict_col : str_as_dict_cols) {
                 int32_t index = str_as_dict_cols_map[str_as_dict_col];
+                std::cout << index << std::endl;
                 this->dict_builders[index] = create_dict_builder_for_array(
                     std::make_unique<bodo::DataType>(bodo_array_type::DICT,
                                                      Bodo_CTypes::STRING),
                     false);
             }
             auto empty_table = get_empty_out_table();
+
+            std::stringstream ss;
+            DEBUG_PrintTable(ss, empty_table);
+            std::cout << "empty table: " << ss.str() << std::endl;
+
             this->out_batches = std::make_shared<ChunkedTableBuilder>(
                 empty_table->schema(), this->dict_builders, (size_t)batch_size);
         }
