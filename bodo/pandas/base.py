@@ -1,4 +1,6 @@
 import pandas as pd
+from pandas._libs import lib
+
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
@@ -7,7 +9,6 @@ from bodo.pandas.utils import (
     check_args_fallback,
     wrap_plan,
 )
-from pandas._libs import lib
 
 
 def from_pandas(df):
