@@ -474,6 +474,26 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::LIST(child_type);
             break;
         }
+        case arrow::Type::STRUCT: {
+            duckdb::child_list_t<duckdb::LogicalType> children;
+            for (std::shared_ptr<arrow::Field> field : arrow_type->fields()) {
+                auto [field_name, duckdb_type] = arrow_field_to_duckdb(field);
+                children.push_back({field_name, duckdb_type});
+            }
+            duckdb_type = duckdb::LogicalType::STRUCT(children);
+            break;
+        }
+        case arrow::Type::MAP: {
+            auto map_type =
+                std::static_pointer_cast<arrow::MapType>(arrow_type);
+            auto [key_name, duckdb_key_type] =
+                arrow_field_to_duckdb(map_type->key_field());
+            auto [item_name, duckdb_value_type] =
+                arrow_field_to_duckdb(map_type->item_field());
+            duckdb_type =
+                duckdb::LogicalType::MAP(duckdb_key_type, duckdb_value_type);
+            break;
+        }
         case arrow::Type::DICTIONARY: {
             auto dict_type =
                 std::static_pointer_cast<arrow::DictionaryType>(arrow_type);
