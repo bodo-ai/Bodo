@@ -184,7 +184,7 @@ schema = schema.Schema(
 
 # Create the Iceberg table if it doesn't already exist
 if not catalog.table_exists("default.test_table"):
-        # Specify partitioning: bucket by ID and partition by day for timestamp
+    # Specify partitioning: bucket by ID and partition by day for timestamp
     partition_spec = PartitionSpec(
                 PartitionField(
                         transform=BucketTransform(3),  # Bucketing with 3 buckets
@@ -207,7 +207,7 @@ if not catalog.table_exists("default.test_table"):
 
 @bodo.jit()
 def append(df):
-        # Append a DataFrame to the Iceberg table
+    # Append a DataFrame to the Iceberg table
     df.to_sql("test_table", schema="default", con="iceberg+file://iceberg_db", if_exists="append")
 
 # Example data to append: two rows with IDs, timestamps, and string data
