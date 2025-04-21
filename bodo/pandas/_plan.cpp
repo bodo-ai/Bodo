@@ -2,6 +2,7 @@
 #include <arrow/python/pyarrow.h>
 #include <arrow/type_fwd.h>
 #include <memory>
+#include <sstream>
 #include <utility>
 
 #include "_executor.h"
@@ -271,6 +272,11 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
     std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
+
+    std::stringstream ss;
+    DEBUG_PrintTable(ss, output_table);
+    std::cout << "ouput table!" << ss.str() << std::endl;
+
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 

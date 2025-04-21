@@ -1,7 +1,9 @@
 #include "_bodo_to_arrow.h"
 
 #include <cassert>
+#include <iostream>
 #include <memory>
+#include <sstream>
 
 #include <arrow/array.h>
 #include <arrow/builder.h>
@@ -321,6 +323,15 @@ std::shared_ptr<arrow::Array> bodo_array_to_arrow(
             // C++ dictionary arrays in Bodo are dictionary arrays in Arrow.
             // We construct the array using arrow::DictionaryArray::FromArrays
             // https://arrow.apache.org/docs/cpp/api/array.html#_CPPv4N5arrow15DictionaryArray10FromArraysERKNSt10shared_ptrI8DataTypeEERKNSt10shared_ptrI5ArrayEERKNSt10shared_ptrI5ArrayEE
+            std::stringstream ss1, ss2, ss3;
+            DEBUG_PrintColumn(ss1, array->child_arrays[0]);
+            std::cout << "dictionary: " << ss1.str() << std::endl;
+
+            DEBUG_PrintColumn(ss2, array->child_arrays[1]);
+            std::cout << "index: " << ss2.str() << std::endl;
+
+            DEBUG_PrintColumn(ss3, array);
+            std::cout << "dictionary: " << ss3.str() << std::endl;
 
             // Recurse on the dictionary
             auto dictionary = bodo_array_to_arrow(
