@@ -706,30 +706,22 @@ target_include_directories(ext PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOU
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/src/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fmt/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fsst/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/libpg_query/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/re2/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/miniz/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/utf8proc/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/hyperloglog/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fastpforlib/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/mbedtls/"
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/yyjson/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/zstd/"
 )
 target_link_libraries(ext PRIVATE
   duckdb_static
-  duckdb_fsst
   duckdb_fmt
   duckdb_pg_query
   duckdb_re2
-  duckdb_miniz
   duckdb_utf8proc
   duckdb_hyperloglog
   duckdb_fastpforlib
-  duckdb_mbedtls
   duckdb_yyjson
-  duckdb_zstd
 )
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")

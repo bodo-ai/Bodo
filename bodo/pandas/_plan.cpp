@@ -1,5 +1,6 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
+#include <arrow/type.h>
 #include <utility>
 
 #include "_executor.h"
@@ -97,10 +98,29 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     auto filter_expr_duck = to_duckdb(filter_expr);
+    duckdb::LogicalOperatorType source_type = source_duck->type;
+    if (source_type != duckdb::LogicalOperatorType::LOGICAL_PROJECTION) {
+        throw std::runtime_error(
+            "make_filter source must currently be a LogicalProjection");
+    }
+
     auto logical_filter =
         duckdb::make_uniq<duckdb::LogicalFilter>(std::move(filter_expr_duck));
 
-    logical_filter->children.push_back(std::move(source_duck));
+    // If you have df[df.col < 20] then df.col is a projection and
+    // that node is what comes into this function.  LogicalFilter
+    // in plan_optimizer.pyx calls this function and that constructor
+    // checks that the projection is operating on the same source table
+    // as filter (__getitem__ in the dataframe API).  Due to the use of
+    // uniq_ptr, the projection node for df.col will end up owning the
+    // pointer for the operation that first generates the table.
+    // However, the duckdb LogicalFilter node has no need for this
+    // intermediate projection node and it needs to own the LogicalOperator
+    // that is the source of the table.  The source table of the projection
+    // is stored as child 0 of projection node.  So, in this line make
+    // the source of the new filter node the same as the source of the
+    // projection and transfer ownership of the pointer to the filter node.
+    logical_filter->children.push_back(std::move(source_duck->children[0]));
     return logical_filter;
 }
 
@@ -412,12 +432,30 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                 std::static_pointer_cast<arrow::TimestampType>(arrow_type);
             arrow::TimeUnit::type unit = timestamp_type->unit();
             std::string tz = timestamp_type->timezone();
-            if (unit == arrow::TimeUnit::NANO && tz == "") {
-                duckdb_type = duckdb::LogicalType::TIMESTAMP_NS;
-                break;
+            if (tz == "") {
+                switch (unit) {
+                    case arrow::TimeUnit::NANO:
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP_NS;
+                        break;
+                    // TODO: Support these types in Bodo
+                    case arrow::TimeUnit::MICRO:
+                        // microseconds
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP;
+                        break;
+                    case arrow::TimeUnit::MILLI:
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP_MS;
+                        break;
+                    case arrow::TimeUnit::SECOND:
+                        duckdb_type = duckdb::LogicalType::TIMESTAMP_S;
+                        break;
+                }
+            } else {
+                // TODO: Do we need to check units here?
+                // Technically this is supposed to be in microseconds like
+                // TIMESTAMP
+                duckdb_type = duckdb::LogicalType::TIMESTAMP_TZ;
             }
-            // TODO other units and timezones
-            [[fallthrough]];
+            break;
         }
         case arrow::Type::DECIMAL128: {
             auto decimal_type =
@@ -431,8 +469,28 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             auto list_type =
                 std::static_pointer_cast<arrow::ListType>(arrow_type);
             auto [name, child_type] =
-                arrow_field_to_duckdb(list_type->field(0));
+                arrow_field_to_duckdb(list_type->value_field());
             duckdb_type = duckdb::LogicalType::LIST(child_type);
+            break;
+        }
+        case arrow::Type::STRUCT: {
+            duckdb::child_list_t<duckdb::LogicalType> children;
+            for (std::shared_ptr<arrow::Field> field : arrow_type->fields()) {
+                auto [field_name, duckdb_type] = arrow_field_to_duckdb(field);
+                children.push_back({field_name, duckdb_type});
+            }
+            duckdb_type = duckdb::LogicalType::STRUCT(children);
+            break;
+        }
+        case arrow::Type::MAP: {
+            auto map_type =
+                std::static_pointer_cast<arrow::MapType>(arrow_type);
+            auto [key_name, duckdb_key_type] =
+                arrow_field_to_duckdb(map_type->key_field());
+            auto [item_name, duckdb_value_type] =
+                arrow_field_to_duckdb(map_type->item_field());
+            duckdb_type =
+                duckdb::LogicalType::MAP(duckdb_key_type, duckdb_value_type);
             break;
         }
         default:

@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from numba.core.utils import PYVERSION
+from pandas import Series
 
 import bodo
 import bodo.tests.dataframe_common
@@ -605,6 +606,18 @@ def test_df_apply_name_homogeneous(memory_leak_check):
 
     def test_impl(df):
         return df.apply(lambda x: x.name, axis=1)
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 1]})
+    check_func(test_impl, (df,))
+
+
+def test_df_apply_direct_import(memory_leak_check):
+    """
+    Check that Series class works if imported directly instead of pd.Series.
+    """
+
+    def test_impl(df):
+        return df.apply(lambda x: Series([1, 2, 3]), axis=1)
 
     df = pd.DataFrame({"A": [1, 2, 3, 4, 1]})
     check_func(test_impl, (df,))

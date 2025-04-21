@@ -148,8 +148,18 @@ cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" no
         BOUND_EXPANDED "duckdb::ExpressionType::BOUND_EXPANDED"
 
 def str_to_expr_type(val):
-    if val is operator.gt:
+    if val is operator.eq:
+        return CExpressionType.COMPARE_EQUAL
+    elif val is operator.ne:
+        return CExpressionType.COMPARE_NOTEQUAL
+    elif val is operator.gt:
         return CExpressionType.COMPARE_GREATERTHAN
+    elif val is operator.lt:
+        return CExpressionType.COMPARE_LESSTHAN
+    elif val is operator.ge:
+        return CExpressionType.COMPARE_GREATERTHANOREQUALTO
+    elif val is operator.le:
+        return CExpressionType.COMPARE_LESSTHANOREQUALTO
     else:
         assert False
 
@@ -297,6 +307,7 @@ cdef class LogicalOperator:
     """
     cdef unique_ptr[CLogicalOperator] c_logical_operator
     cdef readonly out_schema
+    cdef public list sources
 
     def __str__(self):
         return "LogicalOperator()"
@@ -334,6 +345,7 @@ cdef class LogicalProjection(LogicalOperator):
     def __cinit__(self, object out_schema, LogicalOperator source, select_idxs):
         self.out_schema = out_schema
         self.select_vec = select_idxs
+        self.sources = [source]
 
         cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, self.select_vec, self.out_schema)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
@@ -356,6 +368,7 @@ cdef class LogicalProjectionPythonScalarFunc(LogicalOperator):
 
     def __cinit__(self, object out_schema, LogicalOperator source, object args):
         self.out_schema = out_schema
+        self.sources = [source]
 
         cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection_python_scalar_func(source.c_logical_operator, self.out_schema, args)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
@@ -388,30 +401,40 @@ def get_source(val):
 
 cdef class LogicalFilter(LogicalOperator):
     def __cinit__(self, out_schema, LogicalOperator source, key):
-       self.out_schema = out_schema
+        self.out_schema = out_schema
+        self.sources = [source]
 
-       cdef unique_ptr[CExpression] c_filter_expr
-       if isinstance(key, LogicalBinaryOp):
+        cdef unique_ptr[CExpression] c_filter_expr
+        if isinstance(key, LogicalBinaryOp):
             lhs_expr = make_expr(key.lhs)
             rhs_expr = make_expr(key.rhs)
             lhs_source = get_source(key.lhs)
             rhs_source = get_source(key.rhs)
             c_filter_expr = make_binop_expr(lhs_expr, rhs_expr, str_to_expr_type(key.binop))
             if lhs_source is not None:
+                if source is not lhs_source.sources[0]:
+                    assert False, "Filtering with mask created from different source not supported."
                 source = lhs_source
             elif rhs_source is not None:
+                if source is not rhs_source.sources[0]:
+                    assert False, "Filtering with mask created from different source not supported."
                 source = rhs_source
-       else:
+        else:
             assert False & "Unimplemented"
 
-       cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, c_filter_expr)
-       self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
+        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, c_filter_expr)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
 
     def __str__(self):
         return f"LogicalFilter()"
 
-class LogicalBinaryOp(LogicalOperator):
-    def __init__(self, out_schema, lhs, rhs, binop):
+cdef class LogicalBinaryOp(LogicalOperator):
+    cdef public object lhs
+    cdef public object rhs
+    cdef public object binop
+
+    def __cinit__(self, out_schema, lhs, rhs, binop):
+        self.out_schema = out_schema
         self.lhs = lhs
         self.rhs = rhs
         self.binop = binop
