@@ -47,7 +47,7 @@ class ArrayExprResult : public ExprResult {
 class ScalarExprResult : public ExprResult {
    public:
     ScalarExprResult(std::shared_ptr<array_info> val) : result(val) {
-        assert(val.length == 1);
+        assert(val->length == 1);
     }
     virtual ~ScalarExprResult() = default;
     const std::shared_ptr<array_info> result;

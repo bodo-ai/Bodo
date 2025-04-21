@@ -17,6 +17,7 @@ from numba.core.ir_utils import (
     build_definitions,
     compile_to_numba_ir,
     compute_cfg_from_blocks,
+    find_build_sequence,
     find_callname,
     find_const,
     get_definition,
@@ -47,7 +48,7 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     raise_bodo_error,
 )
-from bodo.utils.utils import is_array_typ, is_assign, is_call, is_expr
+from bodo.utils.utils import gen_getitem, is_array_typ, is_assign, is_call, is_expr
 
 ReplaceFunc = namedtuple(
     "ReplaceFunc",
@@ -2241,3 +2242,32 @@ def create_nested_run_pass_event(pass_name: str, state, pass_obj):
     ev_details = {"name": f"{pass_name} [...]"}
     with event.trigger_event("numba:run_pass", data=ev_details):
         pass_obj.run_pass(state)
+
+
+def get_build_sequence_vars(func_ir, typemap, calltypes, seq_var, nodes):
+    """Get the list of variables from a build sequence expression like a build_tuple or
+    build_list.
+    If the sequence is not constant but is a tuple, generate a new variable for each
+    item in the tuple and return a list of those variables.
+    Otherwise, throw an error.
+    """
+    items = guard(find_build_sequence, func_ir, seq_var)
+    if items is not None:
+        return items[0]
+
+    typ = typemap[seq_var.name]
+
+    if not isinstance(typ, types.BaseTuple):
+        raise BodoError(
+            f"Expected a constant sequence or tuple type for {seq_var.name}, but got {typ}.",
+            loc=seq_var.loc,
+        )
+
+    out_vars = []
+    for i in range(len(typ)):
+        var = ir.Var(seq_var.scope, mk_unique_var("build_seq"), seq_var.loc)
+        typemap[var.name] = typ[i]
+        gen_getitem(var, seq_var, i, calltypes, nodes)
+        out_vars.append(var)
+
+    return out_vars
