@@ -9,7 +9,6 @@ add_library_unity(
   physical_explain_analyze.cpp
   physical_limit.cpp
   physical_limit_percent.cpp
-  physical_load.cpp
   physical_materialized_collector.cpp
   physical_pragma.cpp
   physical_prepare.cpp
@@ -21,7 +20,6 @@ add_library_unity(
   physical_streaming_limit.cpp
   physical_streaming_sample.cpp
   physical_transaction.cpp
-  physical_update_extensions.cpp
   physical_vacuum.cpp
   physical_verify_vector.cpp)
 set(ALL_OBJECT_FILES
