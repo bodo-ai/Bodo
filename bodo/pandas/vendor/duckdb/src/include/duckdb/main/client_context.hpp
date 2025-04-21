@@ -39,7 +39,6 @@ class DatabaseInstance;
 class FileOpener;
 class LogicalOperator;
 class PreparedStatementData;
-class Relation;
 class BufferedFileWriter;
 class QueryProfiler;
 class ClientContextLock;
@@ -134,18 +133,6 @@ public:
 	//! Appends a DataChunk and its default columns to the specified table.
 	DUCKDB_API void Append(TableDescription &description, ColumnDataCollection &collection,
 	                       optional_ptr<const vector<LogicalIndex>> column_ids = nullptr);
-
-	//! Try to bind a relation in the current client context; either throws an exception or fills the result_columns
-	//! list with the set of returned columns
-	DUCKDB_API void TryBindRelation(Relation &relation, vector<ColumnDefinition> &result_columns);
-
-	//! Internal function for try bind relation. It does not require a client-context lock.
-	DUCKDB_API void InternalTryBindRelation(Relation &relation, vector<ColumnDefinition> &result_columns);
-
-	//! Execute a relation
-	DUCKDB_API unique_ptr<PendingQueryResult> PendingQuery(const shared_ptr<Relation> &relation,
-	                                                       bool allow_stream_result);
-	DUCKDB_API unique_ptr<QueryResult> Execute(const shared_ptr<Relation> &relation);
 
 	//! Prepare a query
 	DUCKDB_API unique_ptr<PreparedStatement> Prepare(const string &query);
@@ -286,9 +273,6 @@ private:
 	unique_ptr<PendingQueryResult> PendingQueryPreparedInternal(ClientContextLock &lock, const string &query,
 	                                                            shared_ptr<PreparedStatementData> &prepared,
 	                                                            const PendingQueryParameters &parameters);
-
-	unique_ptr<PendingQueryResult> PendingQueryInternal(ClientContextLock &, const shared_ptr<Relation> &relation,
-	                                                    bool allow_stream_result);
 
 	void RebindPreparedStatement(ClientContextLock &lock, const string &query,
 	                             shared_ptr<PreparedStatementData> &prepared, const PendingQueryParameters &parameters);

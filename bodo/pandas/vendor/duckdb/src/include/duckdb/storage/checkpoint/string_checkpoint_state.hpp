@@ -8,20 +8,18 @@
 
 #pragma once
 
-#include "duckdb/common/common.hpp"
 #include "duckdb/storage/storage_info.hpp"
 #include "duckdb/storage/buffer/block_handle.hpp"
 #include "duckdb/function/compression_function.hpp"
 
 namespace duckdb {
-struct UncompressedStringSegmentState;
 
 class OverflowStringWriter {
 public:
 	virtual ~OverflowStringWriter() {
 	}
 
-	virtual void WriteString(UncompressedStringSegmentState &state, string_t string, block_id_t &result_block,
+	virtual void WriteString(string_t string, block_id_t &result_block,
 	                         int32_t &result_offset) = 0;
 	virtual void Flush() = 0;
 };
@@ -34,8 +32,6 @@ struct StringBlock {
 };
 
 struct UncompressedStringSegmentState : public CompressedSegmentState {
-	~UncompressedStringSegmentState() override;
-
 	//! The string block holding strings that do not fit in the main block
 	//! FIXME: this should be replaced by a heap that also allows freeing of unused strings
 	unique_ptr<StringBlock> head;

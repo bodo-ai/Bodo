@@ -31,7 +31,6 @@
 #include "duckdb/function/replacement_scan.hpp"
 #include "duckdb/main/client_properties.hpp"
 #include "duckdb/parser/parsed_data/create_info.hpp"
-#include "duckdb/storage/compression/bitpacking.hpp"
 #include "duckdb/function/encoding_function.hpp"
 #include "duckdb/logging/log_manager.hpp"
 
@@ -168,8 +167,6 @@ struct DBConfigOptions {
 	CompressionType force_compression = CompressionType::COMPRESSION_AUTO;
 	//! The set of disabled compression methods (default empty)
 	set<CompressionType> disabled_compression_methods;
-	//! Force a specific bitpacking mode to be used when using the bitpacking compression method
-	BitpackingMode force_bitpacking_mode = BitpackingMode::AUTO;
 	//! Debug setting for window aggregation mode: (window, combine, separate)
 	WindowAggregationMode window_mode = WindowAggregationMode::WINDOW;
 	//! Whether preserving insertion order should be preserved
@@ -187,8 +184,6 @@ struct DBConfigOptions {
 	case_insensitive_map_t<Value> set_variables;
 	//! Database configuration variable default values;
 	case_insensitive_map_t<Value> set_variable_defaults;
-	//! Enable emitting FSST Vectors
-	bool enable_fsst_vectors = false;
 	//! Enable VIEWs to create dependencies
 	bool enable_view_dependencies = false;
 	//! Enable macros to create dependencies

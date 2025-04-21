@@ -66,7 +66,6 @@ class PhysicalPythonScalarFunc : public PhysicalSourceSink {
         PyObject* col_names_py = PyTuple_GetItem(result, 1);
 
         int64_t table_info_ptr = PyLong_AsLongLong(table_info_py);
-
         std::shared_ptr<table_info> out_batch(
             reinterpret_cast<table_info*>(table_info_ptr));
 

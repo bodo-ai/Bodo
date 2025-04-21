@@ -47,7 +47,7 @@ class ArrayExprResult : public ExprResult {
 class ScalarExprResult : public ExprResult {
    public:
     ScalarExprResult(std::shared_ptr<array_info> val) : result(val) {
-        assert(val.length == 1);
+        assert(val->length == 1);
     }
     virtual ~ScalarExprResult() = default;
     const std::shared_ptr<array_info> result;
@@ -268,9 +268,8 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             std::swap(left_as_scalar, right_as_scalar);
         }
         // Create output boolean array same size as input.
-        std::shared_ptr<array_info> result =
-            alloc_nullable_array_no_nulls(input_batch->nrows(),
-                                                    Bodo_CTypes::_BOOL);
+        std::shared_ptr<array_info> result = alloc_nullable_array_no_nulls(
+            input_batch->nrows(), Bodo_CTypes::_BOOL);
         // Get uint8_t raw data pointer for the boolean output array.
         uint8_t *result_data1 =
             result->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
