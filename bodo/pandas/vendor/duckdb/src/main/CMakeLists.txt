@@ -1,4 +1,3 @@
-add_subdirectory(relation)
 add_subdirectory(secret)
 add_subdirectory(settings)
 add_subdirectory(buffered_data)
@@ -33,7 +32,6 @@ add_library_unity(
   prepared_statement.cpp
   prepared_statement_data.cpp
   profiling_info.cpp
-  relation.cpp
   query_profiler.cpp
   query_result.cpp
   stream_query_result.cpp
