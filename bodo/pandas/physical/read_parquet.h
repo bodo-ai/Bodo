@@ -8,7 +8,6 @@
 #include <arrow/compute/api.h>
 #include <arrow/python/pyarrow.h>
 #include "_duckdb_util.h"
-#include "../io/pyarrow_wrappers.h"
 
 // When generating the PyObject filter expression for passing to the internal
 // read parquet function, we can either generate Python objects directly or

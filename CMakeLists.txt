@@ -560,7 +560,6 @@ set(sources_list
   "bodo/io/json_col_parser.cpp"
   "bodo/io/parquet_reader.cpp"
   "bodo/io/parquet_write.cpp"
-  "bodo/io/pyarrow_wrappers.cpp"
   "bodo/io/snowflake_reader.cpp"
   "bodo/io/timestamptz_parser.cpp"
   "bodo/io/arrow_compat.cpp"
