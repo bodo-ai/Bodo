@@ -25120,8 +25120,11 @@
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql_table</span><span class="p">(</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>        <span class="n">table_name</span><span class="o">=</span><span class="s2">&quot;&lt;... Name of the Iceberg Table ...&gt;&quot;</span><span class="p">,</span>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="n">con</span><span class="o">=</span><span class="s2">&quot;&lt;... Connection String. See previous section ...&gt;&quot;</span><span class="p">,</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">schema</span><span class="o">=</span><span class="s2">&quot;&lt;... Namespace Path to Iceberg Table ...&gt;&quot;</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="p">)</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">schema</span><span class="o">=</span><span class="s2">&quot;&lt;... Namespace Path to Iceberg Table ...&gt;&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>        <span class="n">_snapshot_id</span><span class="o">=</span><span class="s2">&quot;&lt;... Optional (int): Snapshot ID to read the table from ...&gt;&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        <span class="n">_snapshot_timestamp_ms</span><span class="o">=</span><span class="s2">&quot;&lt;... Optional (int): Timestamp to read the table from ...&gt;&quot;</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="p">)</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
