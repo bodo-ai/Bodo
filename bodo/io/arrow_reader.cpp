@@ -872,10 +872,12 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         auto type = field->type()->id();
         bool is_categorical =
             arrow::is_dictionary(type) &&
-            std::dynamic_pointer_cast<arrow::DictionaryType>(field->type())
+            !arrow::is_string(
+                std::dynamic_pointer_cast<arrow::DictionaryType>(field->type())
                     ->value_type()
-                    ->id() != arrow::Type::STRING;
-        if (arrow::is_primitive(type) || arrow::is_decimal(type)) {
+                    ->id());
+        if (arrow::is_primitive(type) || arrow::is_decimal(type) ||
+            is_categorical) {
             if (is_categorical) {
                 auto dict_type =
                     std::dynamic_pointer_cast<arrow::DictionaryType>(
