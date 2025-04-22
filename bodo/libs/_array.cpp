@@ -366,6 +366,20 @@ void info_to_string_array(array_info* info, int64_t* length,
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                          NRT_MemInfo** meminfo) {
+    // arrow_array_to_bodo() always produces a nullable array but
+    // Python may expect a Numpy array
+    if ((info->arr_type != bodo_array_type::NUMPY) &&
+        (info->arr_type != bodo_array_type::CATEGORICAL) &&
+        (info->arr_type != bodo_array_type::DICT) &&
+        (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)) {
+        // TODO: print array type in the error
+        PyErr_Format(PyExc_RuntimeError,
+                     "_array.cpp::info_to_numpy_array: info_to_numpy_array "
+                     "requires numpy input but got %s",
+                     GetArrType_as_string(info->arr_type).c_str());
+        return;
+    }
+
     // Treat DICT as categorical data, extract the indices
     // TODO: convert indices when index type is != int32
     if (info->arr_type == bodo_array_type::DICT) {
@@ -381,21 +395,7 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                 codes_data[i] = -1;
             }
         }
-        info_to_numpy_array(codes_info.get(), n_items, data, meminfo);
-        return;
-    }
-
-    // arrow_array_to_bodo() always produces a nullable array but
-    // Python may expect a Numpy array
-    if ((info->arr_type != bodo_array_type::NUMPY) &&
-        (info->arr_type != bodo_array_type::CATEGORICAL) &&
-        (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)) {
-        // TODO: print array type in the error
-        PyErr_Format(PyExc_RuntimeError,
-                     "_array.cpp::info_to_numpy_array: info_to_numpy_array "
-                     "requires numpy input but got %s",
-                     GetArrType_as_string(info->arr_type).c_str());
-        return;
+        info = codes_info.get();
     }
 
     *n_items = info->length;
