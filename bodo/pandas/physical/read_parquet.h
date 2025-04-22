@@ -85,6 +85,9 @@ PyObject * valueToPyObject(const duckdb::Value& value) {
 
 PyObject * tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters, PyObject *schema_fields) {
     PyObject *ret = Py_None;
+    if (filters.filters.size() == 0) {
+        return ret;
+    }
 #ifdef GEN_PYTHON
     std::vector<PyObject *> to_be_freed;
 
@@ -96,7 +99,7 @@ PyObject * tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters, PyObjec
     to_be_freed.push_back(pyarrow_compute);
 #endif
 
-    if (filters.filters.size() != 1) {
+    if (filters.filters.size() > 1) {
         throw std::runtime_error("tableFilterSetToPhysicalExpression currently supports only a single filter.");
     }
 

@@ -489,10 +489,16 @@ cdef class LogicalGetPandasReadParallel(LogicalOperator):
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
 
-cpdef int count_nodes(object root):
-    #cdef LogicalOperator wrapped_operator = root
-    #return planCountNodes(wrapped_operator.c_logical_operator)
-    return 1
+cpdef count_nodes(object root):
+    cdef LogicalOperator wrapped_operator
+
+    if not isinstance(root, LogicalOperator):
+        raise TypeError("Expected a LogicalOperator instance")
+
+    wrapped_operator = root
+
+    return planCountNodes(wrapped_operator.c_logical_operator)
+
 
 cpdef py_optimize_plan(object plan):
     """Optimize a logical plan using DuckDB's optimizer
