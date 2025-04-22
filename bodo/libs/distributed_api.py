@@ -1978,7 +1978,10 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
 
     # DatetimeArray
     if isinstance(dtype, DatetimeArrayType):
-        return pd.array([pd.Timestamp("2024/1/1", tz=dtype.tz)])
+        return pd.array(
+            [pd.Timestamp("2024/1/1", tz=dtype.tz)],
+            pd.ArrowDtype(pa.timestamp("ns", tz=dtype.tz)),
+        )
 
     # TimestampTZ array
     if dtype == bodo.timestamptz_array_type:
