@@ -1,6 +1,8 @@
 #include <Python.h>
 #include <datetime.h>
 #include <iostream>
+#include <memory>
+#include <sstream>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <arrow/api.h>
@@ -364,6 +366,25 @@ void info_to_string_array(array_info* info, int64_t* length,
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                          NRT_MemInfo** meminfo) {
+    // Treat DICT as categorical data, extract the indices
+    // TODO: convert indices when index type is != int32
+    if (info->arr_type == bodo_array_type::DICT) {
+        std::shared_ptr<array_info> codes_info = info->child_arrays[1];
+
+        // Convert data at NA positions to -1
+        uint8_t* bitmap =
+            reinterpret_cast<uint8_t*>(codes_info->null_bitmask());
+        int32_t* codes_data = reinterpret_cast<int32_t*>(
+            codes_info->data1<bodo_array_type::NULLABLE_INT_BOOL>());
+        for (uint64_t i = 0; i < codes_info->length; ++i) {
+            if (!GetBit(bitmap, i)) {
+                codes_data[i] = -1;
+            }
+        }
+        info_to_numpy_array(codes_info.get(), n_items, data, meminfo);
+        return;
+    }
+
     // arrow_array_to_bodo() always produces a nullable array but
     // Python may expect a Numpy array
     if ((info->arr_type != bodo_array_type::NUMPY) &&
