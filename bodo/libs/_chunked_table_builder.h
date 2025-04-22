@@ -770,8 +770,6 @@ struct ChunkedTableArrayBuilder {
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
-        std::cout << (this->data_array->child_arrays.size()) << std::endl;
-        std::cout << in_arr->child_arrays.size() << std::endl;
         if (!is_matching_dictionary(this->data_array->child_arrays[0],
                                     in_arr->child_arrays[0])) {
             throw std::runtime_error(

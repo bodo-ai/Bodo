@@ -10,6 +10,7 @@
 #include <arrow/dataset/scanner.h>
 #include <arrow/io/interfaces.h>
 #include <arrow/status.h>
+#include <arrow/type_fwd.h>
 #include <arrow/util/future.h>
 #include <fmt/format.h>
 #include <listobject.h>
@@ -869,10 +870,13 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         // is a single field)
         auto field = schema->field(i);
         auto type = field->type()->id();
-        bool is_categorical = arrow::is_dictionary(type);
+        bool is_categorical =
+            arrow::is_dictionary(type) &&
+            std::dynamic_pointer_cast<arrow::DictionaryType>(field->type())
+                    ->value_type()
+                    ->id() != arrow::Type::STRING;
         if (arrow::is_primitive(type) || arrow::is_decimal(type)) {
             if (is_categorical) {
-                std::cout << "Creating column from index type!!" << std::endl;
                 auto dict_type =
                     std::dynamic_pointer_cast<arrow::DictionaryType>(
                         field->type());

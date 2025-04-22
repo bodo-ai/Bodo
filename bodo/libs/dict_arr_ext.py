@@ -328,7 +328,6 @@ def box_dict_arr(typ, val, c):
                 lir.IntType(32),
             ],
         )
-        cgutils.printf(c.builder, "calling pd_pyarrow_array_from_string_array\n")
         box_fname = "pd_pyarrow_array_from_string_array"
         fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
         arr = c.builder.call(

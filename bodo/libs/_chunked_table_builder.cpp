@@ -1,10 +1,7 @@
 #include "_chunked_table_builder.h"
-#include <iostream>
 #include <numeric>
-#include <sstream>
 #include <utility>
 
-#include "_array_utils.h"
 #include "_dict_builder.h"
 #include "_query_profile_collector.h"
 #include "_table_builder_utils.h"
@@ -613,11 +610,6 @@ AbstractChunkedTableBuilder::AbstractChunkedTableBuilder(
       mm(mm) {
     assert(chunk_size > 0);
     this->active_chunk_array_builders.reserve(active_chunk->ncols());
-    std::stringstream ss;
-    DEBUG_PrintTable(ss, this->active_chunk);
-    std::cout << ss.str() << std::endl;
-    std::cout << this->active_chunk->columns[0]->child_arrays.size()
-              << std::endl;
     for (size_t i = 0; i < active_chunk->ncols(); i++) {
         // Set the dictionary to the one from the dict builder
         set_array_dict_from_builder(active_chunk->columns[i], dict_builders[i]);
@@ -1749,25 +1741,14 @@ void AbstractChunkedTableBuilder::UnifyDictionariesAndAppend(
     for (uint64_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info> col = this->dummy_output_chunk->columns[i];
         if (this->dict_builders[i] != nullptr) {
-            std::cout << "unifying dict" << std::endl;
             out_arrs.emplace_back(this->dict_builders[i]->UnifyDictionaryArray(
                 in_table->columns[i]));
         } else {
             out_arrs.emplace_back(in_table->columns[i]);
         }
     }
-
-    std::stringstream ss, ss1;
-    DEBUG_PrintTable(ss, in_table);
-    std::cout << "in table: " << ss.str() << std::endl;
-
-    DEBUG_PrintColumn(ss1, out_arrs[0]);
-    std::cout << "out_arrs[0]: " << ss1.str() << std::endl;
-
-    std::cout << "appending batch " << std::endl;
     this->AppendBatch(
         std::make_shared<table_info>(out_arrs, in_table->nrows()));
-    std::cout << "done appending batch " << std::endl;
 }
 /* ------------------------------------------------------------------------
  */

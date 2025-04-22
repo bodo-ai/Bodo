@@ -1,20 +1,9 @@
 #pragma once
 
 #include <memory>
-#include <sstream>
 #include <utility>
 #include "../io/parquet_reader.h"
 #include "operator.h"
-
-std::pair<std::vector<int>, std::vector<int>> get_partition_col_indices() {
-    std::vector<int> selected_non_part_cols, selected_part_cols;
-
-    // TODO hard-coded
-    selected_non_part_cols = {0, 1, 2, 3, 4};
-    selected_part_cols = {};
-
-    return std::tie(selected_non_part_cols, selected_part_cols);
-}
 
 /// @brief Physical node for reading Parquet files in pipelines.
 class PhysicalReadParquet : public PhysicalSource {
@@ -32,7 +21,7 @@ class PhysicalReadParquet : public PhysicalSource {
 
         internal_reader = std::make_shared<ParquetReader>(
             py_path, true, Py_None, storage_options, pyarrow_schema, -1,
-            selected_columns, is_nullable, false, 4000);
+            selected_columns, is_nullable, false, -1);
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
 
         // Extract column names from pyarrow schema using selected columns
@@ -76,10 +65,6 @@ class PhysicalReadParquet : public PhysicalSource {
             internal_reader->read_batch(is_last, total_rows, true);
         auto result = is_last ? ProducerResult::FINISHED
                               : ProducerResult::HAVE_MORE_OUTPUT;
-
-        std::stringstream ss;
-        DEBUG_PrintTable(ss, batch);
-        std::cout << "read batch: " << ss.str() << std::endl;
 
         batch->column_names = out_column_names;
         return std::make_pair(std::shared_ptr<table_info>(batch), result);

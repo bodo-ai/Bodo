@@ -86,6 +86,9 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
         ),
         pytest.param("struct_1.pq", id="struct", marks=pytest.mark.df_lib),
         pytest.param("map_1.pq", id="map", marks=pytest.mark.df_lib),
+        pytest.param(
+            "dictionary_string_1.pq", id="dictionary_string", marks=pytest.mark.df_lib
+        ),
     ],
 )
 def test_pq_read_types(fname, datapath, memory_leak_check):
