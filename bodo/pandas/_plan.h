@@ -383,3 +383,10 @@ duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
     return nullptr;
 }
 
+/**
+ * @brief Count the number of nodes in the expression tree.
+ *
+ * @param op root of expression tree
+ * @return number of nodes in that tree
+ */
+int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op);

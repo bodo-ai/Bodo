@@ -67,6 +67,11 @@ def test_read_parquet_projection_pushdown(datapath):
     bodo_out = bd.read_parquet(path)[["three", "four"]]
     py_out = pd.read_parquet(path)[["three", "four"]]
 
+    assert bodo_out.plan is not None
+    pre, post = bd.utils.getPlanStatistics(bodo_out.plan)
+    _test_equal(pre, 2)
+    _test_equal(post, 1)
+
     _test_equal(
         bodo_out,
         py_out,

@@ -606,5 +606,13 @@ duckdb::idx_t get_operator_table_index(
     return op->GetTableIndex()[0];
 }
 
+int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op) {
+    int ret = 1; // count yourself
+    for (auto &child : op->children) {
+        ret += planCountNodes(child);
+    }
+    return ret;
+}
+
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN

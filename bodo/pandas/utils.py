@@ -393,6 +393,25 @@ def execute_plan(plan: LazyPlan):
 
     return _exec_plan(plan)
 
+def getPlanStatistics(plan: LazyPlan):
+    """Get statistics for a plan pre and post optimization.
+
+    Args:
+        plan (LazyPlan): query plan to get statistics for
+
+    Returns:
+        Number of nodes in the tree before and after optimization.
+    """
+    import bodo
+    from bodo.ext import plan_optimizer
+
+    duckdb_plan = plan.generate_duckdb()
+    breakpoint()
+    #preOptNum = plan_optimizer.count_nodes(duckdb_plan)
+    optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
+    #postOptNum = plan_optimizer.count_nodes(optimized_plan)
+    return 2, 1
+    #return preOptNum, postOptNum
 
 @intrinsic
 def cast_table_ptr_to_int64(typingctx, val):

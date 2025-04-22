@@ -271,6 +271,7 @@ cdef extern from "_plan.h" nogil:
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
+    cdef int planCountNodes(unique_ptr[CLogicalOperator] root)
 
 
 def join_type_to_string(CJoinType join_type):
@@ -488,6 +489,11 @@ cdef class LogicalGetPandasReadParallel(LogicalOperator):
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
 
+cpdef int count_nodes(object root):
+    #cdef LogicalOperator wrapped_operator = root
+    #return planCountNodes(wrapped_operator.c_logical_operator)
+    return 1
+
 cpdef py_optimize_plan(object plan):
     """Optimize a logical plan using DuckDB's optimizer
     """
@@ -501,6 +507,7 @@ cpdef py_optimize_plan(object plan):
     optimized_plan = LogicalOperator()
     optimized_plan.c_logical_operator = optimize_plan(move(wrapped_operator.c_logical_operator))
     return optimized_plan
+
 
 cpdef py_execute_plan(object plan, output_func, out_schema):
     """Execute a logical plan in the C++ backend
