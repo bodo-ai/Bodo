@@ -9,6 +9,8 @@
 #include "physical/filter.h"
 #include "physical/project.h"
 #include "physical/python_scalar_func.h"
+#include "_duckdb_util.h"
+
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -17,9 +19,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     for (auto& ci : op.GetColumnIds()) {
         selected_columns.push_back(ci.GetPrimaryIndex());
     }
+
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
-            selected_columns);
+            selected_columns, op.table_filters);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");
@@ -55,20 +58,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
 
     auto physical_op = std::make_shared<PhysicalProjection>(selected_columns);
     this->active_pipeline->AddOperator(physical_op);
-}
-
-std::variant<int, float, double> extractValue(const duckdb::Value& value) {
-    duckdb::LogicalTypeId type = value.type().id();
-    switch (type) {
-        case duckdb::LogicalTypeId::INTEGER:
-            return value.GetValue<int>();
-        case duckdb::LogicalTypeId::FLOAT:
-            return value.GetValue<float>();
-        case duckdb::LogicalTypeId::DOUBLE:
-            return value.GetValue<double>();
-        default:
-            throw std::runtime_error("extractValue unhandled type.");
-    }
 }
 
 /**
@@ -118,10 +107,9 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             duckdb::unique_ptr<duckdb::BoundConstantExpression> bce =
                 dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(
                     std::move(expr));
-            // Get the constant out of the duckdb node.  It could be any
-            // of the following types.
-            std::variant<int, float, double> extracted_value =
-                extractValue(bce->value);
+            // Get the constant out of the duckdb node as a C++ variant.
+            // Using auto since variant set will be extended.
+            auto extracted_value = extractValue(bce->value);
             // Return a PhysicalConstantExpression<T> where T is the actual
             // type of the value contained within bce->value.
             return std::visit(

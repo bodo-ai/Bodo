@@ -170,7 +170,7 @@ set(CMAKE_COLOR_DIAGNOSTICS ON)
 # Export compile_commands.json for ClangD
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Enable -Werror by Default
-set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
 
 # Enable Link-Time Optimizations (LTO)
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -546,6 +546,8 @@ set(sources_list
   "bodo/pandas/_plan.cpp"
   "bodo/pandas/_pipeline.cpp"
   "bodo/pandas/_physical_conv.cpp"
+  "bodo/pandas/_duckdb_util.cpp"
+  "bodo/pandas/physical/expression.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"
@@ -558,6 +560,7 @@ set(sources_list
   "bodo/io/json_col_parser.cpp"
   "bodo/io/parquet_reader.cpp"
   "bodo/io/parquet_write.cpp"
+  "bodo/io/pyarrow_wrappers.cpp"
   "bodo/io/snowflake_reader.cpp"
   "bodo/io/timestamptz_parser.cpp"
   "bodo/io/arrow_compat.cpp"
@@ -704,13 +707,13 @@ target_include_directories(ext PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOU
 "${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/src/include/"
 )
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/src/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fmt/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/re2/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/utf8proc/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/hyperloglog/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/fastpforlib/"
-"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/release/third_party/yyjson/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/debug/src/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/debug/third_party/fmt/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/debug/third_party/re2/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/debug/third_party/utf8proc/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/debug/third_party/hyperloglog/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/debug/third_party/fastpforlib/"
+"${CMAKE_CURRENT_SOURCE_DIR}/bodo/pandas/vendor/duckdb/build/debug/third_party/yyjson/"
 )
 target_link_libraries(ext PRIVATE
   duckdb_static

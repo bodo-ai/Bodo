@@ -542,7 +542,8 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns) {
+    std::vector<int> &selected_columns,
+    duckdb::TableFilterSet &filter_exprs) {
     // Read the dataframe from the result registry using
     // sys.modules["__main__"].RESULT_REGISTRY since importing
     // bodo.spawn.worker creates a new module with new empty registry.
@@ -584,15 +585,17 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns) {
+    std::vector<int> &selected_columns,
+    duckdb::TableFilterSet &filter_exprs) {
     return std::make_shared<PhysicalReadPandas>(df);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoParquetScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns) {
+    std::vector<int> &selected_columns,
+    duckdb::TableFilterSet &filter_exprs) {
     return std::make_shared<PhysicalReadParquet>(
-        path, pyarrow_schema, storage_options, selected_columns);
+        path, pyarrow_schema, storage_options, selected_columns, filter_exprs);
 }
 
 duckdb::idx_t get_operator_table_index(

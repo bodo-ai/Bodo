@@ -11,6 +11,7 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "physical/operator.h"
+#include "physical/expression.h"
 
 /**
  * @brief Superclass for Bodo's DuckDB TableFunction classes.
@@ -35,7 +36,8 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
      * @return std::shared_ptr<PhysicalSource> read operator
      */
     virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns) = 0;
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs) = 0;
 };
 
 /**
@@ -75,7 +77,8 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
     }
 
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns) override;
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs) override;
 
     // Parquet dataset path
     std::string path;
@@ -110,7 +113,8 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns) override;
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs) override;
 
     PyObject *df;
 };
@@ -131,7 +135,8 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns) override;
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs) override;
     std::string result_id;
 };
 
