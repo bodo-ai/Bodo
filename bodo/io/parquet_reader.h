@@ -104,7 +104,6 @@ class ParquetReader : public ArrowReader {
                     false);
             }
             auto empty_table = get_empty_out_table();
-
             this->out_batches = std::make_shared<ChunkedTableBuilder>(
                 empty_table->schema(), this->dict_builders, (size_t)batch_size);
         }

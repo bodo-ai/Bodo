@@ -71,6 +71,12 @@ def read_parquet(
         partitioning="hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
+    partition_names = pq_dataset.partition_names
+
+    if len(partition_names) > 0:
+        raise NotImplementedError(
+            "bd.read_parquet: Reading parquet with partition column not supported yet."
+        )
 
     index_cols, _ = get_pandas_metadata(arrow_schema)
     is_supported_index = False

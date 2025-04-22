@@ -300,7 +300,6 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
             batch = batch->Slice(batch_offset, length);
             std::shared_ptr<table_info> bodo_table =
                 arrow_recordbatch_to_bodo(batch, length);
-
             // Append the partition columns to the final output table
             if (part_cols.size() > 0) {
                 std::vector<std::shared_ptr<array_info>> batch_part_cols;
@@ -344,7 +343,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
                 // We are reading less than a full batch. We need to append
                 // to the chunked table builder. Assuming we are prefetching
                 // then its likely more efficient to read the next full
-                // batch than to output a partial batch that could be
+                // batch then to output a partial batch that could be
                 // extremely small.
                 this->out_batches->UnifyDictionariesAndAppend(bodo_table);
             }
