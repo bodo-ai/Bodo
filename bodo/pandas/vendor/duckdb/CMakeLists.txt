@@ -916,7 +916,7 @@ function(build_loadable_extension_directory NAME ABI_TYPE OUTPUT_DIRECTORY EXTEN
     endif()
   else()
     if (WIN32)
-      target_link_libraries(${TARGET_NAME} duckdb ${DUCKDB_EXTRA_LINK_FLAGS})
+      # target_link_libraries(${TARGET_NAME} duckdb ${DUCKDB_EXTRA_LINK_FLAGS})
     elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang$")
       if (APPLE)
         set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
@@ -1422,57 +1422,6 @@ if(${EXTENSION_CONFIG_BUILD})
   endforeach()
 
   return()
-endif()
-
-if(BUILD_PYTHON)
-  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(ALL_COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG}")
-  elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(ALL_COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
-  elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    set(ALL_COMPILE_FLAGS
-            "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
-  else()
-    set(ALL_COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
-  endif()
-
-  # Check for MSVC compiler and set the correct C++ standard flag
-  if(MSVC)
-    # MSVC does not support `-std=c++11` or `-std=c++14`, use `/std:c++14`
-    set(ALL_COMPILE_FLAGS "${ALL_COMPILE_FLAGS} /std:c++14")
-  else()
-    # For non-MSVC compilers, use the `-std=c++11`
-    set(ALL_COMPILE_FLAGS "${ALL_COMPILE_FLAGS} -std=c++11")
-  endif()
-
-  get_target_property(duckdb_libs duckdb LINK_LIBRARIES)
-
-  set(PIP_COMMAND
-      cmake
-      -E
-      env
-      DUCKDB_BINARY_DIR=${PROJECT_BINARY_DIR}
-      DUCKDB_COMPILE_FLAGS=${ALL_COMPILE_FLAGS}
-      DUCKDB_LIBS="${duckdb_libs}"
-    )
-
-  if(PYTHON_EDITABLE_BUILD)
-    set(PIP_COMMAND ${PIP_COMMAND} ${Python3_EXECUTABLE} -m pip install --editable .)
-  else()
-    set(PIP_COMMAND ${PIP_COMMAND} ${Python3_EXECUTABLE} -m pip install .)
-  endif()
-
-  if(USER_SPACE)
-    set(PIP_COMMAND ${PIP_COMMAND} --user)
-  endif()
-  add_custom_target(
-    duckdb_python ALL
-    COMMAND ${PIP_COMMAND}
-    DEPENDS duckdb duckdb_static
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools/pythonpkg
-    COMMENT Build
-    Python package)
-  add_extension_dependencies(duckdb_python)
 endif()
 
 # Bodo change: avoid building duckdb_platform_binary
