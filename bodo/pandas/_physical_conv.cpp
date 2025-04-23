@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include "_plan.h"
 
+#include "_duckdb_util.h"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -9,8 +10,6 @@
 #include "physical/filter.h"
 #include "physical/project.h"
 #include "physical/python_scalar_func.h"
-#include "_duckdb_util.h"
-
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical

@@ -10,8 +10,8 @@
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
-#include "physical/operator.h"
 #include "physical/expression.h"
+#include "physical/operator.h"
 
 /**
  * @brief Superclass for Bodo's DuckDB TableFunction classes.
@@ -371,9 +371,9 @@ duckdb::idx_t get_operator_table_index(
  */
 template <typename Derived, typename Base>
 duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
-    duckdb::unique_ptr<Base>&& base_ptr) noexcept {
+    duckdb::unique_ptr<Base> &&base_ptr) noexcept {
     // Perform dynamic_cast on the raw pointer
-    if (Derived* derived_raw = dynamic_cast<Derived*>(base_ptr.get())) {
+    if (Derived *derived_raw = dynamic_cast<Derived *>(base_ptr.get())) {
         // Release ownership from the base_ptr and transfer it to a new
         // unique_ptr
         base_ptr.release();  // Release the ownership of the raw pointer

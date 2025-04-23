@@ -91,7 +91,9 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
  * returns a BinaryConstantExpression where the internal value has been changed
  *         to match the type of the other side of the binary op
  */
-duckdb::unique_ptr<duckdb::Expression> matchType(duckdb::unique_ptr<duckdb::Expression> &series, duckdb::unique_ptr<duckdb::Expression> &constant) {
+duckdb::unique_ptr<duckdb::Expression> matchType(
+    duckdb::unique_ptr<duckdb::Expression> &series,
+    duckdb::unique_ptr<duckdb::Expression> &constant) {
     // Cast to constant to BoundConstantExpression.
     duckdb::unique_ptr<duckdb::BoundConstantExpression> bce_constant =
         dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(
@@ -117,9 +119,11 @@ duckdb::unique_ptr<duckdb::Expression> make_binop_expr(
     // If the left and right side of a binary op expression don't have
     // matching types then filter pushdown will be skipped.  Here we force
     // the constant to have the type as the other side of the binary op.
-    if (lhs_duck->GetExpressionClass() == duckdb::ExpressionClass::BOUND_CONSTANT) {
+    if (lhs_duck->GetExpressionClass() ==
+        duckdb::ExpressionClass::BOUND_CONSTANT) {
         lhs_duck = matchType(rhs_duck, lhs_duck);
-    } else if (rhs_duck->GetExpressionClass() == duckdb::ExpressionClass::BOUND_CONSTANT) {
+    } else if (rhs_duck->GetExpressionClass() ==
+               duckdb::ExpressionClass::BOUND_CONSTANT) {
         rhs_duck = matchType(lhs_duck, rhs_duck);
     }
     return duckdb::make_uniq<duckdb::BoundComparisonExpression>(
@@ -542,8 +546,7 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns,
-    duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
     // Read the dataframe from the result registry using
     // sys.modules["__main__"].RESULT_REGISTRY since importing
     // bodo.spawn.worker creates a new module with new empty registry.
@@ -585,15 +588,13 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns,
-    duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
     return std::make_shared<PhysicalReadPandas>(df);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoParquetScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns,
-    duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
     return std::make_shared<PhysicalReadParquet>(
         path, pyarrow_schema, storage_options, selected_columns, filter_exprs);
 }
@@ -607,7 +608,7 @@ duckdb::idx_t get_operator_table_index(
 }
 
 int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op) {
-    int ret = 1; // count yourself
+    int ret = 1;  // count yourself
     for (auto &child : op->children) {
         ret += planCountNodes(child);
     }

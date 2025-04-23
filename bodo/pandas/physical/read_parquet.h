@@ -1,13 +1,13 @@
 #pragma once
 
-#include <memory>
-#include <utility>
-#include "../io/parquet_reader.h"
-#include "operator.h"
 #include <Python.h>
 #include <arrow/compute/api.h>
 #include <arrow/python/pyarrow.h>
+#include <memory>
+#include <utility>
+#include "../io/parquet_reader.h"
 #include "_duckdb_util.h"
+#include "operator.h"
 
 // When generating the PyObject filter expression for passing to the internal
 // read parquet function, we can either generate Python objects directly or
@@ -19,7 +19,9 @@
 
 #ifndef GEN_PYTHON
 
-std::function<arrow::compute::Expression(arrow::compute::Expression, arrow::compute::Expression)> expressionTypeToArrowCompute(duckdb::ExpressionType &expr_type) {
+std::function<arrow::compute::Expression(arrow::compute::Expression,
+                                         arrow::compute::Expression)>
+expressionTypeToArrowCompute(duckdb::ExpressionType &expr_type) {
     switch (expr_type) {
         case duckdb::ExpressionType::COMPARE_EQUAL:
             return arrow::compute::equal;
@@ -34,8 +36,7 @@ std::function<arrow::compute::Expression(arrow::compute::Expression, arrow::comp
         case duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO:
             return arrow::compute::less_equal;
         default:
-            throw std::runtime_error(
-                "Unhandled comparison expression type.");
+            throw std::runtime_error("Unhandled comparison expression type.");
     }
 }
 
@@ -56,12 +57,11 @@ std::string expressionTypeToArrowCompute(duckdb::ExpressionType &expr_type) {
         case duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO:
             return "less_equal";
         default:
-            throw std::runtime_error(
-                "Unhandled comparison expression type.");
+            throw std::runtime_error("Unhandled comparison expression type.");
     }
 }
 
-PyObject * valueToPyObject(const duckdb::Value& value) {
+PyObject *valueToPyObject(const duckdb::Value &value) {
     duckdb::LogicalTypeId type = value.type().id();
     switch (type) {
         case duckdb::LogicalTypeId::TINYINT:
@@ -77,13 +77,15 @@ PyObject * valueToPyObject(const duckdb::Value& value) {
         case duckdb::LogicalTypeId::DOUBLE:
             return PyFloat_FromDouble(value.GetValue<double>());
         default:
-            throw std::runtime_error("valueToPyObject unhandled type" + std::to_string(static_cast<int>(type)));
+            throw std::runtime_error("valueToPyObject unhandled type" +
+                                     std::to_string(static_cast<int>(type)));
     }
 }
 
 #endif
 
-PyObject * tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters, PyObject *schema_fields) {
+PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
+                                       PyObject *schema_fields) {
     PyObject *ret = Py_None;
     if (filters.filters.size() == 0) {
         return ret;
@@ -100,67 +102,96 @@ PyObject * tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters, PyObjec
 #endif
 
     if (filters.filters.size() > 1) {
-        throw std::runtime_error("tableFilterSetToPhysicalExpression currently supports only a single filter.");
+        throw std::runtime_error(
+            "tableFilterSetToPhysicalExpression currently supports only a "
+            "single filter.");
     }
 
-    for (auto& tf : filters.filters) {
-        switch(tf.second->filter_type) {
-          case duckdb::TableFilterType::CONSTANT_COMPARISON: {
-            duckdb::unique_ptr<duckdb::ConstantFilter> constantFilter =
-                dynamic_cast_unique_ptr<duckdb::ConstantFilter>(
-                    std::move(tf.second));
-            PyObject * py_selected_field = PyList_GetItem(schema_fields, tf.first);
-            if (!PyUnicode_Check(py_selected_field)) {
-                throw std::runtime_error("tableFilterSetToPhysicalExpression selected field is not unicode object.");
-            } 
+    for (auto &tf : filters.filters) {
+        switch (tf.second->filter_type) {
+            case duckdb::TableFilterType::CONSTANT_COMPARISON: {
+                duckdb::unique_ptr<duckdb::ConstantFilter> constantFilter =
+                    dynamic_cast_unique_ptr<duckdb::ConstantFilter>(
+                        std::move(tf.second));
+                PyObject *py_selected_field =
+                    PyList_GetItem(schema_fields, tf.first);
+                if (!PyUnicode_Check(py_selected_field)) {
+                    throw std::runtime_error(
+                        "tableFilterSetToPhysicalExpression selected field is "
+                        "not unicode object.");
+                }
 #ifndef GEN_PYTHON
-            auto column_ref = arrow::compute::field_ref(PyUnicode_AsUTF8(py_selected_field));
-            auto scalar_val = std::visit([](const auto& value) {
-                return arrow::compute::literal(value); }, extractValue(constantFilter->constant));
-            auto expr = expressionTypeToArrowCompute(constantFilter->comparison_type)(column_ref, scalar_val); 
+                auto column_ref = arrow::compute::field_ref(
+                    PyUnicode_AsUTF8(py_selected_field));
+                auto scalar_val = std::visit(
+                    [](const auto &value) {
+                        return arrow::compute::literal(value);
+                    },
+                    extractValue(constantFilter->constant));
+                auto expr = expressionTypeToArrowCompute(
+                    constantFilter->comparison_type)(column_ref, scalar_val);
 
-            ret = pyarrow_wrap_expression(expr);
+                ret = pyarrow_wrap_expression(expr);
 #else
-            PyObject *field_func = PyObject_GetAttrString(pyarrow_compute, "field");
-            PyObject *scalar_func = PyObject_GetAttrString(pyarrow_compute, "scalar");
-            PyObject *comp_func = PyObject_GetAttrString(pyarrow_compute, expressionTypeToArrowCompute(constantFilter->comparison_type).c_str());
-            if (!field_func || !scalar_func || !comp_func) {
-                throw std::runtime_error("tableFilterSetToPhysicalExpression failed to create field, scalar, or comp.");
-            }
-            to_be_freed.push_back(field_func);
-            to_be_freed.push_back(scalar_func);
-            to_be_freed.push_back(comp_func);
+                PyObject *field_func =
+                    PyObject_GetAttrString(pyarrow_compute, "field");
+                PyObject *scalar_func =
+                    PyObject_GetAttrString(pyarrow_compute, "scalar");
+                PyObject *comp_func = PyObject_GetAttrString(
+                    pyarrow_compute, expressionTypeToArrowCompute(
+                                         constantFilter->comparison_type)
+                                         .c_str());
+                if (!field_func || !scalar_func || !comp_func) {
+                    throw std::runtime_error(
+                        "tableFilterSetToPhysicalExpression failed to create "
+                        "field, scalar, or comp.");
+                }
+                to_be_freed.push_back(field_func);
+                to_be_freed.push_back(scalar_func);
+                to_be_freed.push_back(comp_func);
 
-            // Create "column_name" field object
-            PyObject *field_obj = PyObject_CallFunctionObjArgs(field_func, PyList_GetItem(schema_fields, tf.first), NULL);
-            if (!field_obj) {
-                throw std::runtime_error("tableFilterSetToPhysicalExpression failed to create field_obj.");
-            }
-            PyObject *scalar_obj = PyObject_CallFunctionObjArgs(scalar_func, valueToPyObject(constantFilter->constant), NULL);
-            if (!scalar_obj) {
-                throw std::runtime_error("tableFilterSetToPhysicalExpression failed to create scalar_obj.");
-            }
-            to_be_freed.push_back(field_obj);
-            to_be_freed.push_back(scalar_obj);
+                // Create "column_name" field object
+                PyObject *field_obj = PyObject_CallFunctionObjArgs(
+                    field_func, PyList_GetItem(schema_fields, tf.first), NULL);
+                if (!field_obj) {
+                    throw std::runtime_error(
+                        "tableFilterSetToPhysicalExpression failed to create "
+                        "field_obj.");
+                }
+                PyObject *scalar_obj = PyObject_CallFunctionObjArgs(
+                    scalar_func, valueToPyObject(constantFilter->constant),
+                    NULL);
+                if (!scalar_obj) {
+                    throw std::runtime_error(
+                        "tableFilterSetToPhysicalExpression failed to create "
+                        "scalar_obj.");
+                }
+                to_be_freed.push_back(field_obj);
+                to_be_freed.push_back(scalar_obj);
 
-            // Create final arrow.compute expression
-            PyObject *expr_obj = PyObject_CallFunctionObjArgs(comp_func, field_obj, scalar_obj, NULL);
+                // Create final arrow.compute expression
+                PyObject *expr_obj = PyObject_CallFunctionObjArgs(
+                    comp_func, field_obj, scalar_obj, NULL);
 
-            if (!expr_obj) {
-                throw std::runtime_error("tableFilterSetToPhysicalExpression failed to create expression.");
-            }
-            ret = expr_obj;
+                if (!expr_obj) {
+                    throw std::runtime_error(
+                        "tableFilterSetToPhysicalExpression failed to create "
+                        "expression.");
+                }
+                ret = expr_obj;
 #endif
-          }
-            break;
-          default:
-            throw std::runtime_error("tableFilterSetToPhysicalExpression unsupported filter type " + std::to_string(static_cast<int>(tf.second->filter_type)));
+            } break;
+            default:
+                throw std::runtime_error(
+                    "tableFilterSetToPhysicalExpression unsupported filter "
+                    "type " +
+                    std::to_string(static_cast<int>(tf.second->filter_type)));
         }
     }
 
 #ifdef GEN_PYTHON
     // Clean up Python objects
-    for(auto& pyo : to_be_freed) {
+    for (auto &pyo : to_be_freed) {
         Py_DECREF(pyo);
     }
 #endif
@@ -191,7 +222,8 @@ class PhysicalReadParquet : public PhysicalSource {
                 "pyarrow schema");
         }
 
-        PyObject *arrowFilterExpr = tableFilterSetToArrowCompute(filter_exprs, schema_fields);
+        PyObject *arrowFilterExpr =
+            tableFilterSetToArrowCompute(filter_exprs, schema_fields);
 
         internal_reader = std::make_shared<ParquetReader>(
             py_path, true, arrowFilterExpr, storage_options, pyarrow_schema, -1,

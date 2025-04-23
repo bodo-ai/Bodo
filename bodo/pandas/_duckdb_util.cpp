@@ -1,6 +1,7 @@
 #include "_duckdb_util.h"
 
-std::variant<int8_t, int16_t, int32_t, int64_t, float, double> extractValue(const duckdb::Value& value) {
+std::variant<int8_t, int16_t, int32_t, int64_t, float, double> extractValue(
+    const duckdb::Value& value) {
     duckdb::LogicalTypeId type = value.type().id();
     switch (type) {
         case duckdb::LogicalTypeId::TINYINT:
@@ -19,4 +20,3 @@ std::variant<int8_t, int16_t, int32_t, int64_t, float, double> extractValue(cons
             throw std::runtime_error("extractValue unhandled type.");
     }
 }
-
