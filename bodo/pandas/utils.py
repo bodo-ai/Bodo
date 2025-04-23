@@ -469,7 +469,27 @@ def _del_func(x):
     pass
 
 
-def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
+def _get_index_data(index):
+    """Get the index data from a pandas Index object to be passed to BodoDataFrame or
+    BodoSeries.
+    Roughly similar to spawn worker handling of Index:
+    https://github.com/bodo-ai/Bodo/blob/452ba4c5f18fcc531822827f1aed0e212b09c595/bodo/spawn/worker.py#L124
+    """
+    from pandas.core.arrays.arrow import ArrowExtensionArray
+
+    if isinstance(index, pd.RangeIndex):
+        data = None
+    elif isinstance(index, pd.MultiIndex):
+        data = index.to_frame(index=False, allow_duplicates=True)
+    elif isinstance(index, pd.Index):
+        data = ArrowExtensionArray(pa.array(index._data))
+    else:
+        raise TypeError(f"Invalid index type: {type(index)}")
+
+    return data
+
+
+def wrap_plan(schema, plan, res_id=None, nrows=None):
     """Create a BodoDataFrame or BodoSeries with the given
     schema and given plan node.
     """
@@ -491,6 +511,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
         nrows = 1
 
     plan.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
+    index_data = _get_index_data(schema.index)
 
     if isinstance(schema, pd.DataFrame):
         metadata = LazyMetadata(
