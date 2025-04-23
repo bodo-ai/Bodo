@@ -561,6 +561,18 @@ inline std::string GetArrType_as_string(int8_t arr_type) {
         static_cast<bodo_array_type::arr_type_enum>(arr_type));
 }
 
+/**
+ * @brief Table metadata similar to Arrow's:
+ * https://github.com/apache/arrow/blob/5e9fce493f21098d616f08034bc233fcc529b3ad/cpp/src/arrow/util/key_value_metadata.h#L36
+ * Currently, the only key should be "pandas", which is used only to reconstruct
+ * Index columns on the Python side (passed to Python with
+ * table->schema()->ToArrowSchema()).
+ */
+struct TableMetadata {
+    const std::vector<std::string> keys;
+    const std::vector<std::string> values;
+};
+
 namespace bodo {
 
 /**
@@ -717,12 +729,16 @@ struct MapType final : public DataType {
 struct Schema {
     std::vector<std::unique_ptr<DataType>> column_types;
     std::vector<std::string> column_names;
+    std::shared_ptr<TableMetadata> metadata;
     Schema();
     Schema(const Schema& other);
     Schema(Schema&& other);
     Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_);
     Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
            std::vector<std::string> column_names);
+    Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+           std::vector<std::string> column_names,
+           std::shared_ptr<TableMetadata> metadata);
     /** @brief Return the number of columns in the schema
      *
      * @return void The number of columns in the schema
@@ -1795,6 +1811,7 @@ struct mpi_str_comm_info {
 struct table_info {
     std::vector<std::shared_ptr<array_info>> columns;
     std::vector<std::string> column_names;
+    std::shared_ptr<TableMetadata> metadata;
     // keep shuffle info to be able to reverse the shuffle if necessary
     // currently used in groupby apply
     // TODO: refactor out?
@@ -1810,6 +1827,13 @@ struct table_info {
     explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
                         uint64_t nrows)
         : columns(_columns), _nrows(nrows) {}
+    explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
+                        uint64_t nrows, std::vector<std::string> column_names,
+                        std::shared_ptr<TableMetadata> metadata)
+        : columns(_columns),
+          column_names(column_names),
+          metadata(metadata),
+          _nrows(nrows) {}
     uint64_t ncols() const { return columns.size(); }
     uint64_t nrows() const {
         // TODO: Replace with _nrows always.
@@ -1829,7 +1853,7 @@ struct table_info {
         }
 
         return std::make_unique<bodo::Schema>(std::move(column_types),
-                                              column_names);
+                                              column_names, metadata);
     }
 
     void pin() {
