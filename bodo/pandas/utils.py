@@ -486,20 +486,13 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
 
     assert isinstance(plan, LazyPlan), "wrap_plan: LazyPlan expected"
 
-    if isinstance(schema, dict):
-        schema = {
-            col: pd.Series(dtype=col_type.dtype) for col, col_type in schema.items()
-        }
-
     if nrows is None:
-        # Fake non-zero rows.  nrows should be overwritten upon plan execution.
+        # Fake non-zero rows. nrows should be overwritten upon plan execution.
         nrows = 1
 
     plan.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
 
-    if isinstance(schema, (dict, pd.DataFrame)):
-        if isinstance(schema, dict):
-            schema = pd.DataFrame(schema)
+    if isinstance(schema, pd.DataFrame):
         metadata = LazyMetadata(
             "LazyPlan_" + str(plan.plan_class) if res_id is None else res_id,
             schema,
@@ -524,7 +517,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
         )
         plan.output_func = cpp_table_to_series
     else:
-        assert False
+        raise TypeError(f"Invalid schema type: {type(schema)}")
 
     new_df.plan = plan
     return new_df
