@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../libs/_array_utils.h"
-#include "operator.h"
 #include "duckdb/common/enums/expression_type.hpp"
+#include "operator.h"
 
 /**
  * @brief Superclass for possible results returned by nodes in Bodo

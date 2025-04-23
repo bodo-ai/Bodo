@@ -1,11 +1,11 @@
+import operator
 import os
 import tempfile
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
-import operator
-import numba
 
 import bodo.pandas as bd
 from bodo.tests.utils import _test_equal, temp_config_override
@@ -147,7 +147,9 @@ def test_projection(datapath):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
-@pytest.mark.parametrize("op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le])
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
 def test_filter_pushdown(datapath, op):
     """Very simple test for filter for sanity checking."""
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
@@ -169,7 +171,9 @@ def test_filter_pushdown(datapath, op):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
-@pytest.mark.parametrize("op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le])
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
 @pytest.mark.skip(reason="Using dataframe as source not yet implemented.")
 def test_filter(datapath, op):
     """Very simple test for filter for sanity checking."""

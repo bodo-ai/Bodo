@@ -46,5 +46,7 @@ std::function<bool(int)> equal_test = [](int test) { return test == 0; };
 std::function<bool(int)> not_equal_test = [](int test) { return test != 0; };
 std::function<bool(int)> greater_test = [](int test) { return test == -1; };
 std::function<bool(int)> less_test = [](int test) { return test == 1; };
-std::function<bool(int)> greater_equal_test = [](int test) { return test != 1; };
+std::function<bool(int)> greater_equal_test = [](int test) {
+    return test != 1;
+};
 std::function<bool(int)> less_equal_test = [](int test) { return test != -1; };
