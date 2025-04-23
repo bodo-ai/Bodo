@@ -68,9 +68,6 @@ def test_read_parquet_projection_pushdown(datapath):
     py_out = pd.read_parquet(path)[["three", "four"]]
 
     assert bodo_out.plan is not None
-    pre, post = bd.utils.getPlanStatistics(bodo_out.plan)
-    _test_equal(pre, 2)
-    _test_equal(post, 1)
 
     _test_equal(
         bodo_out,
@@ -148,7 +145,7 @@ def test_projection(datapath):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
-def test_filter(datapath):
+def test_filter_pushdown(datapath):
     """Very simple test for filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1[bodo_df1.A < 20]
@@ -157,7 +154,29 @@ def test_filter(datapath):
     assert bodo_df2._lazy
     assert bodo_df2.plan is not None
 
+    pre, post = bd.utils.getPlanStatistics(bodo_df2.plan)
+    _test_equal(pre, 2)
+    _test_equal(post, 1)
+
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[py_df1.A < 20]
+
+    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+
+
+def test_filter(datapath):
+    """Very simple test for filter for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+
+    _test_equal(bodo_df1, py_df1, check_pandas_types=False)
+
+    bodo_df2 = bodo_df1[bodo_df1.A < 20]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2._lazy
+    assert bodo_df2.plan is not None
+
     py_df2 = py_df1[py_df1.A < 20]
 
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
