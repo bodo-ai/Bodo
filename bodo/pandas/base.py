@@ -19,14 +19,6 @@ def from_pandas(df):
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame")
 
-    # TODO: Add support for Index
-    if (
-        not isinstance(df.index, pd.RangeIndex)
-        or df.index.start != 0
-        or df.index.step != 1
-    ):
-        raise ValueError("Only RangeIndex with start=0 and step=1 is supported")
-
     # Make sure empty_df has proper dtypes since used in the plan output schema.
     # Using sampling to avoid large memory usage.
     sample_size = 100
