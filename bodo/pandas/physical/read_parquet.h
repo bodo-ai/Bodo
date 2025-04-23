@@ -42,7 +42,8 @@ expressionTypeToArrowCompute(const duckdb::ExpressionType &expr_type) {
 
 #else
 
-std::string expressionTypeToArrowCompute(const duckdb::ExpressionType &expr_type) {
+std::string expressionTypeToArrowCompute(
+    const duckdb::ExpressionType &expr_type) {
     switch (expr_type) {
         case duckdb::ExpressionType::COMPARE_EQUAL:
             return "equal";
