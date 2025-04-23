@@ -563,9 +563,16 @@ def _reconstruct_pandas_index(df, arrow_schema):
             df = df.drop(columns=[descr])
         elif descr["kind"] == "range":
             index_name = descr["name"]
-            index_level = pd.RangeIndex(
-                descr["start"], descr["stop"], step=descr["step"], name=index_name
-            )
+            # We only handle RangeIndex with start=0 and step=1 and
+            # don't carry stop value throughout the code for simplicity.
+            start = descr["start"]
+            step = descr["step"]
+            if start != 0 or step != 1:
+                raise ValueError(
+                    f"Unsupported RangeIndex with start={start} and step={step}"
+                )
+            stop = len(df)
+            index_level = pd.RangeIndex(start, stop, step, name=index_name)
         else:
             raise ValueError(f"Unrecognized index kind: {descr['kind']}")
         index_arrays.append(index_level)
