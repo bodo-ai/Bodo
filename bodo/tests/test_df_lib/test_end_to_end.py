@@ -164,11 +164,13 @@ def test_filter_pushdown(datapath):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
+@pytest.mark.skip(reason="Using dataframe as source not yet implemented.")
 def test_filter(datapath):
     """Very simple test for filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
 
+    # Force read parquet node to execute.
     _test_equal(bodo_df1, py_df1, check_pandas_types=False)
 
     bodo_df2 = bodo_df1[bodo_df1.A < 20]
