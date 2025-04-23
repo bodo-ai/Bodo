@@ -3,6 +3,7 @@
 #include <memory>
 #include <utility>
 #include "../io/parquet_reader.h"
+#include "arrow/util/key_value_metadata.h"
 #include "operator.h"
 
 /// @brief Physical node for reading Parquet files in pipelines.
@@ -23,6 +24,12 @@ class PhysicalReadParquet : public PhysicalSource {
             py_path, true, Py_None, storage_options, pyarrow_schema, -1,
             selected_columns, is_nullable, false, -1);
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
+
+        // Extract metadata from pyarrow schema (for Pandas Index reconstruction
+        // of dataframe later)
+        std::shared_ptr<arrow::Schema> schema = unwrap_schema(pyarrow_schema);
+        this->out_metadata = std::make_shared<TableMetadata>(
+            schema->metadata()->keys(), schema->metadata()->values());
 
         // Extract column names from pyarrow schema using selected columns
         PyObject *schema_fields =
@@ -67,8 +74,12 @@ class PhysicalReadParquet : public PhysicalSource {
                               : ProducerResult::HAVE_MORE_OUTPUT;
 
         batch->column_names = out_column_names;
+        batch->metadata = out_metadata;
         return std::make_pair(std::shared_ptr<table_info>(batch), result);
     }
 
+    // Column names and metadata (Pandas Index info) used for dataframe
+    // construction
+    std::shared_ptr<TableMetadata> out_metadata;
     std::vector<std::string> out_column_names;
 };
