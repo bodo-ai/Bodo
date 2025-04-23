@@ -95,18 +95,16 @@ def cpp_table_to_df(cpp_table, arrow_schema):
 
     out_df = cpp_table_to_py(cpp_table, out_cols_arr, table_type).to_pandas()
     out_df.columns = [f.name for f in arrow_schema]
-    # TODO: handle Indexes properly
-    if "__index_level_0__" in out_df.columns:
-        out_df = out_df.drop(columns=["__index_level_0__"])
-    return out_df
+    return _reconstruct_pandas_index(out_df, arrow_schema)
 
 
 def cpp_table_to_series(cpp_table, arrow_schema):
     """Convert a C++ table (table_info) to a pandas Series."""
+    assert len(arrow_schema) == 1, "cpp_table_to_series: single column expected"
 
     as_df = cpp_table_to_df(cpp_table, arrow_schema)
-    assert len(arrow_schema) == 1
-    return as_df[arrow_schema[0].name]
+    as_df = _reconstruct_pandas_index(as_df, arrow_schema)
+    return as_df.iloc[:, 0]
 
 
 @functools.lru_cache
@@ -532,10 +530,51 @@ def wrap_plan(schema, plan, res_id=None, nrows=None, index_data=None):
     return new_df
 
 
+def _reconstruct_pandas_index(df, arrow_schema):
+    """Reconstruct the pandas Index from the metadata in Arrow schema (some columns may
+    be moved to Index/MultiIndex).
+    Similar to PyArrow, but simpler since we don't support all backward compatibility:
+    https://github.com/apache/arrow/blob/5e9fce493f21098d616f08034bc233fcc529b3ad/python/pyarrow/pandas_compat.py#L974
+    """
+
+    if arrow_schema.pandas_metadata is None:
+        return df
+
+    index_arrays = []
+    index_names = []
+    for descr in arrow_schema.pandas_metadata.get("index_columns", []):
+        if isinstance(descr, str):
+            index_name = descr
+            index_level = df[descr]
+            df = df.drop(columns=[descr])
+        elif descr["kind"] == "range":
+            index_name = descr["name"]
+            index_level = pd.RangeIndex(
+                descr["start"], descr["stop"], step=descr["step"], name=index_name
+            )
+        else:
+            raise ValueError(f"Unrecognized index kind: {descr['kind']}")
+        index_arrays.append(index_level)
+        index_names.append(index_name)
+
+    # Reconstruct the row index
+    if len(index_arrays) > 1:
+        index = pd.MultiIndex.from_arrays(index_arrays, names=index_names)
+    elif len(index_arrays) == 1:
+        index = index_arrays[0]
+        if not isinstance(index, pd.Index):
+            # Box anything that wasn't boxed above
+            index = pd.Index(index, name=index_names[0])
+    else:
+        index = pd.RangeIndex(len(df))
+
+    df.index = index
+    return df
+
+
 def arrow_to_empty_df(arrow_schema):
     """Create an empty dataframe with the same schema as the Arrow schema"""
     empty_df = pd.DataFrame(columns=[field.name for field in arrow_schema])
     type_dict = {field.name: pd.ArrowDtype(field.type) for field in arrow_schema}
     empty_df = empty_df.astype(type_dict)
-    empty_df.index = pd.RangeIndex(0)
-    return empty_df
+    return _reconstruct_pandas_index(empty_df, arrow_schema)
