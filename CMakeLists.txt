@@ -170,7 +170,7 @@ set(CMAKE_COLOR_DIAGNOSTICS ON)
 # Export compile_commands.json for ClangD
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Enable -Werror by Default
-set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
 # Enable Link-Time Optimizations (LTO)
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
