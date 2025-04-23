@@ -95,9 +95,7 @@ def test_read_parquet_projection_pushdown(datapath):
     [
         pytest.param(None, id="index_None"),
         pytest.param(False, id="index_False"),
-        pytest.param(
-            True, id="index_True", marks=pytest.mark.xfail(raises=NotImplementedError)
-        ),
+        pytest.param(True, id="index_True"),
     ],
 )
 def test_read_parquet_index(df: pd.DataFrame, index: bool | None):

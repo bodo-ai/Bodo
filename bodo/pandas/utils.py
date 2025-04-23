@@ -544,6 +544,16 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
     return new_df
 
 
+def _is_generated_index_name(name):
+    """Check if the Index name is a generated name similar to PyArrow:
+    https://github.com/apache/arrow/blob/5e9fce493f21098d616f08034bc233fcc529b3ad/python/pyarrow/pandas_compat.py#L1071
+    """
+    import re
+
+    pattern = r"^__index_level_\d+__$"
+    return re.match(pattern, name) is not None
+
+
 def _reconstruct_pandas_index(df, arrow_schema):
     """Reconstruct the pandas Index from the metadata in Arrow schema (some columns may
     be moved to Index/MultiIndex).
@@ -558,7 +568,7 @@ def _reconstruct_pandas_index(df, arrow_schema):
     index_names = []
     for descr in arrow_schema.pandas_metadata.get("index_columns", []):
         if isinstance(descr, str):
-            index_name = descr
+            index_name = None if _is_generated_index_name(descr) else descr
             index_level = df[descr]
             df = df.drop(columns=[descr])
         elif descr["kind"] == "range":
@@ -585,7 +595,10 @@ def _reconstruct_pandas_index(df, arrow_schema):
         index = index_arrays[0]
         if not isinstance(index, pd.Index):
             # Box anything that wasn't boxed above
-            index = pd.Index(index, name=index_names[0])
+            index = pd.Index(index)
+            # Setting name outside of the constructor since it prioritizes Series name
+            # from input Series.
+            index.name = index_names[0]
     else:
         index = pd.RangeIndex(len(df))
 
