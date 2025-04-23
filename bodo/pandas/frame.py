@@ -2,6 +2,7 @@ import typing as pt
 from collections.abc import Callable, Iterable
 
 import pandas as pd
+import pyarrow as pa
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
@@ -38,7 +39,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             if self._mgr._plan is not None:
                 return self._mgr._plan
             else:
-                return plan_optimizer.LogicalGetDataframeRead(self._mgr._md_result_id)
+                from bodo.pandas.base import _empty_like
+                return plan_optimizer.LogicalGetDataframeRead(pa.Schema.from_pandas(_empty_like(self)), self._mgr._md_result_id)
 
         raise NotImplementedError(
             "Plan not available for this manager, recreate this dataframe with from_pandas"
