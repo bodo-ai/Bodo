@@ -1290,7 +1290,13 @@ std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
         throw std::runtime_error(
             "arrow_dictionary_array_to_bodo(): Expected dict_array->dtype to "
             "be string, but found " +
-            std::to_string(dict_array->dtype));
+            GetDtype_as_string(dict_array->dtype));
+    }
+    if (idx_array->dtype != Bodo_CTypes::INT32) {
+        throw std::runtime_error(
+            "arrow_dictionary_array_to_bodo(): Expected idx_array->dtype to "
+            "be int32, but found " +
+            GetDtype_as_string(idx_array->dtype));
     }
     return create_dict_string_array(dict_array, idx_array);
 }

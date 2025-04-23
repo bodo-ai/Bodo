@@ -1,6 +1,5 @@
 #pragma once
 
-#include <sstream>
 #include "../libs/_table_builder.h"
 
 #include "physical/operator.h"
@@ -8,10 +7,10 @@
 class PhysicalResultCollector : public PhysicalSink {
    private:
     std::shared_ptr<TableBuildBuffer> buffer;
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
 
    public:
     explicit PhysicalResultCollector(std::shared_ptr<bodo::Schema> schema) {
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
         for (auto& col : schema->column_types) {
             // Note that none of the columns are "keys" from the perspective of
             // the dictionary builder, which is referring to keys for
@@ -25,7 +24,8 @@ class PhysicalResultCollector : public PhysicalSink {
     virtual ~PhysicalResultCollector() = default;
 
     void ConsumeBatch(std::shared_ptr<table_info> input_batch) override {
-        buffer->UnifyTablesAndAppend(input_batch, dict_builders);
+        buffer->ReserveTable(input_batch);
+        buffer->UnsafeAppendBatch(input_batch);
     }
 
     void Finalize() override {}
