@@ -1174,7 +1174,9 @@ std::shared_ptr<table_info> ProjectTable(
     for (size_t i_col : column_indices) {
         out_arrs.emplace_back(in_table->columns[i_col]);
     }
-    return std::make_shared<table_info>(out_arrs, in_table->nrows());
+    return std::make_shared<table_info>(out_arrs, in_table->nrows(),
+                                        in_table->column_names,
+                                        in_table->metadata);
 }
 
 std::shared_ptr<table_info> ProjectTable(
