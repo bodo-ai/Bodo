@@ -21,7 +21,7 @@
 
 std::function<arrow::compute::Expression(arrow::compute::Expression,
                                          arrow::compute::Expression)>
-expressionTypeToArrowCompute(duckdb::ExpressionType &expr_type) {
+expressionTypeToArrowCompute(const duckdb::ExpressionType &expr_type) {
     switch (expr_type) {
         case duckdb::ExpressionType::COMPARE_EQUAL:
             return arrow::compute::equal;
