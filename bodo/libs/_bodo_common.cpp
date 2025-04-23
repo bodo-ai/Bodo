@@ -649,7 +649,9 @@ std::unique_ptr<Schema> Schema::Project(size_t first_n) const {
     std::vector<std::unique_ptr<DataType>> dtypes;
     std::vector<std::string> col_names;
     dtypes.reserve(first_n);
-    col_names.reserve(first_n);
+    if (this->column_names.size() > 0) {
+        col_names.reserve((first_n);
+    }
     for (size_t i = 0; i < std::min(first_n, this->column_types.size()); i++) {
         dtypes.push_back(this->column_types[i]->copy());
         if (this->column_names.size() > 0) {
@@ -665,7 +667,9 @@ std::unique_ptr<Schema> Schema::Project(
     std::vector<std::unique_ptr<DataType>> dtypes;
     std::vector<std::string> col_names;
     dtypes.reserve(column_indices.size());
-    col_names.reserve(column_indices.size());
+    if (this->column_names.size() > 0) {
+        col_names.reserve(column_indices.size());
+    }
     for (int64_t col_idx : column_indices) {
         assert((size_t)col_idx < this->column_types.size());
         dtypes.push_back(this->column_types[col_idx]->copy());
