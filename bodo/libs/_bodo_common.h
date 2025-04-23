@@ -1828,6 +1828,10 @@ struct table_info {
                         uint64_t nrows)
         : columns(_columns), _nrows(nrows) {}
     explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
+                        std::vector<std::string> column_names,
+                        std::shared_ptr<TableMetadata> metadata)
+        : columns(_columns), column_names(column_names), metadata(metadata) {}
+    explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
                         uint64_t nrows, std::vector<std::string> column_names,
                         std::shared_ptr<TableMetadata> metadata)
         : columns(_columns),
