@@ -650,7 +650,7 @@ std::unique_ptr<Schema> Schema::Project(size_t first_n) const {
     std::vector<std::string> col_names;
     dtypes.reserve(first_n);
     if (this->column_names.size() > 0) {
-        col_names.reserve((first_n);
+        col_names.reserve(first_n);
     }
     for (size_t i = 0; i < std::min(first_n, this->column_types.size()); i++) {
         dtypes.push_back(this->column_types[i]->copy());
