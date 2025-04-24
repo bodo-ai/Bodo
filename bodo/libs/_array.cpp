@@ -1,8 +1,6 @@
 #include <Python.h>
 #include <datetime.h>
 #include <iostream>
-#include <memory>
-#include <sstream>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <arrow/api.h>
