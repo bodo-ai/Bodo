@@ -2,7 +2,6 @@ import typing as pt
 from collections.abc import Callable, Iterable
 
 import pandas as pd
-import pyarrow as pa
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
@@ -42,6 +41,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 if hasattr(self, "source_plan") and self.source_plan is not None:
                     return self.source_plan
                 from bodo.pandas.base import _empty_like
+
                 out_schema = _empty_like(self)
                 if bodo.dataframe_library_run_parallel:
                     res_id = bodo.spawn.utils.scatter_data(self)
