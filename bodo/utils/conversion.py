@@ -2268,7 +2268,7 @@ def overload_index_to_array_list(I, gen_range_index_array=True):
     if (
         isinstance(I, RangeIndexType)
         and is_overload_constant_bool(gen_range_index_array)
-        and get_overload_const_bool(gen_range_index_array)
+        and not get_overload_const_bool(gen_range_index_array)
     ):
         return lambda I, gen_range_index_array=True: ()  # pragma: no cover
 
