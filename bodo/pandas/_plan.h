@@ -10,6 +10,7 @@
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "physical/expression.h"
 #include "physical/operator.h"
 
 /**
@@ -35,7 +36,8 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
      * @return std::shared_ptr<PhysicalSource> read operator
      */
     virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns) = 0;
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs) = 0;
 };
 
 /**
@@ -75,7 +77,8 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
     }
 
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns) override;
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs) override;
 
     // Parquet dataset path
     std::string path;
@@ -110,7 +113,8 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns) override;
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs) override;
 
     PyObject *df;
 };
@@ -131,7 +135,8 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns) override;
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs) override;
     std::string result_id;
 };
 
@@ -356,3 +361,32 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan);
  */
 duckdb::idx_t get_operator_table_index(
     std::unique_ptr<duckdb::LogicalOperator> &op);
+
+/**
+ * @brief Dynamic cast of base pointer to derived pointer.
+ *
+ * @param base_ptr - the base pointer to cast from
+ * @return a non-NULL pointer of the derived type if the cast is possible else
+ *         NULL
+ */
+template <typename Derived, typename Base>
+duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
+    duckdb::unique_ptr<Base> &&base_ptr) noexcept {
+    // Perform dynamic_cast on the raw pointer
+    if (Derived *derived_raw = dynamic_cast<Derived *>(base_ptr.get())) {
+        // Release ownership from the base_ptr and transfer it to a new
+        // unique_ptr
+        base_ptr.release();  // Release the ownership of the raw pointer
+        return duckdb::unique_ptr<Derived>(derived_raw);
+    }
+    // If the cast fails, return a nullptr unique_ptr
+    return nullptr;
+}
+
+/**
+ * @brief Count the number of nodes in the expression tree.
+ *
+ * @param op root of expression tree
+ * @return number of nodes in that tree
+ */
+int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op);

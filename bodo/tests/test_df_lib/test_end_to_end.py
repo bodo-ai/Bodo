@@ -1,6 +1,8 @@
+import operator
 import os
 import tempfile
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
@@ -66,6 +68,8 @@ def test_read_parquet_projection_pushdown(datapath):
 
     bodo_out = bd.read_parquet(path)[["three", "four"]]
     py_out = pd.read_parquet(path)[["three", "four"]]
+
+    assert bodo_out.plan is not None
 
     _test_equal(
         bodo_out,
@@ -143,17 +147,51 @@ def test_projection(datapath):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
-def test_filter(datapath):
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_filter_pushdown(datapath, op):
     """Very simple test for filter for sanity checking."""
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bodo_df1[bodo_df1.A < 20]
+    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2._lazy
     assert bodo_df2.plan is not None
 
+    pre, post = bd.utils.getPlanStatistics(bodo_df2.plan)
+    _test_equal(pre, 2)
+    _test_equal(post, 1)
+
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1[py_df1.A < 20]
+    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
+
+    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+
+
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+@pytest.mark.skip(reason="Using dataframe as source not yet implemented.")
+def test_filter(datapath, op):
+    """Very simple test for filter for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    # Force read parquet node to execute.
+    _test_equal(bodo_df1, py_df1, check_pandas_types=False)
+
+    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2._lazy
+    assert bodo_df2.plan is not None
+
+    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 

@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include "_plan.h"
 
+#include "_duckdb_util.h"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -17,9 +18,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     for (auto& ci : op.GetColumnIds()) {
         selected_columns.push_back(ci.GetPrimaryIndex());
     }
+
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
-            selected_columns);
+            selected_columns, op.table_filters);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");
@@ -55,35 +57,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
 
     auto physical_op = std::make_shared<PhysicalProjection>(selected_columns);
     this->active_pipeline->AddOperator(physical_op);
-}
-
-// Generic dynamic_cast for std::unique_ptr
-template <typename Derived, typename Base>
-duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
-    duckdb::unique_ptr<Base>&& base_ptr) noexcept {
-    // Perform dynamic_cast on the raw pointer
-    if (Derived* derived_raw = dynamic_cast<Derived*>(base_ptr.get())) {
-        // Release ownership from the base_ptr and transfer it to a new
-        // unique_ptr
-        base_ptr.release();  // Release the ownership of the raw pointer
-        return duckdb::unique_ptr<Derived>(derived_raw);
-    }
-    // If the cast fails, return a nullptr unique_ptr
-    return nullptr;
-}
-
-std::variant<int, float, double> extractValue(const duckdb::Value& value) {
-    duckdb::LogicalTypeId type = value.type().id();
-    switch (type) {
-        case duckdb::LogicalTypeId::INTEGER:
-            return value.GetValue<int>();
-        case duckdb::LogicalTypeId::FLOAT:
-            return value.GetValue<float>();
-        case duckdb::LogicalTypeId::DOUBLE:
-            return value.GetValue<double>();
-        default:
-            throw std::runtime_error("extractValue unhandled type.");
-    }
 }
 
 /**
@@ -133,10 +106,9 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             duckdb::unique_ptr<duckdb::BoundConstantExpression> bce =
                 dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(
                     std::move(expr));
-            // Get the constant out of the duckdb node.  It could be any
-            // of the following types.
-            std::variant<int, float, double> extracted_value =
-                extractValue(bce->value);
+            // Get the constant out of the duckdb node as a C++ variant.
+            // Using auto since variant set will be extended.
+            auto extracted_value = extractValue(bce->value);
             // Return a PhysicalConstantExpression<T> where T is the actual
             // type of the value contained within bce->value.
             return std::visit(
