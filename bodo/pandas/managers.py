@@ -32,8 +32,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
     @classmethod
     # BlockManager is implemented in Cython so we can't override __init__ directly
     def __new__(cls, *args, **kwargs):
-        if result_id := kwargs.get("result_id"):
+        if "result_id" in kwargs or "plan" in kwargs:
             # This is the lazy case
+            result_id = kwargs.get("result_id", None)
             head = kwargs["head"]
             nrows = kwargs["nrows"]
             collect_func = kwargs["collect_func"]
@@ -194,6 +195,17 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         else:
             return super().__repr__()
 
+    def execute_plan(self):
+        from bodo.pandas.utils import execute_plan
+
+        data = execute_plan(self._plan)
+        self._plan = None
+        self._md_result_id = data._mgr._md_result_id
+        data._mgr._md_result_id = None
+        self._md_nrows = data._mgr._md_nrows
+        self._md_head = data._mgr._md_head
+        return data
+        
     def _collect(self):
         """
         Collect the data onto the spawner.
@@ -202,13 +214,10 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         """
         # Execute the plan if we have one
         if self._plan is not None:
-            from bodo.pandas.utils import execute_plan
-
             debug_msg(
                 self.logger, "[LazyBlockManager] Executing Plan and collecting data..."
             )
-            data = execute_plan(self._plan)
-            self._plan = None
+            data = self.execute_plan()
             self.blocks = data._mgr.blocks
             # Update index here since the plan created a dummy index
             self.axes = data._mgr.axes
@@ -259,6 +268,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             "__reduce__",
             "__setstate__",
             "_slice_mgr_rows",
+            "axes",
         }:
             self._collect()
         return super().__getattribute__(name)
@@ -271,6 +281,15 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
+
+    def _len(self) -> int:
+        """
+        Get length of the arrays in the manager.
+        Uses nrows if we don't have the data yet, otherwise uses the super implementation.
+        """
+        if self._md_head is not None:
+            return self._md_nrows
+        return super().__len__()
 
 
 class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockManager]):
@@ -416,6 +435,17 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         else:
             return super().__repr__()
 
+    def execute_plan(self):
+        from bodo.pandas.utils import execute_plan
+
+        data = execute_plan(self._plan)
+        self._plan = None
+        self._md_result_id = data._mgr._md_result_id
+        data._mgr._md_result_id = None
+        self._md_nrows = data._mgr._md_nrows
+        self._md_head = data._mgr._md_head
+        return data
+
     def _collect(self):
         """
         Collect the data onto the spawner.
@@ -424,14 +454,11 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         """
         # Execute the plan if we have one
         if self._plan is not None:
-            from bodo.pandas.utils import execute_plan
-
             debug_msg(
                 self.logger,
                 "[LazySingleBlockManager] Executing Plan and collecting data...",
             )
-            data = execute_plan(self._plan)
-            self._plan = None
+            data = self.execute_plan()
             self.blocks = data._mgr.blocks
             # Update index here since the plan created a dummy index
             self.axes = data._mgr.axes
@@ -467,6 +494,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "logger",
             "_collect_func",
             "_del_func",
+            "_len",
         }:
             return object.__getattribute__(self, name)
         if name == "blocks":
@@ -483,6 +511,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self._del_func = None
 
     def __len__(self) -> int:
+        return self._len()
+
+    def _len(self) -> int:
         """
         Get length of the arrays in the manager.
         Uses nrows if we don't have the data yet, otherwise uses the super implementation.

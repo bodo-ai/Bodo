@@ -232,6 +232,17 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
 
         return type(self)(arrays, new_axes, verify_integrity=False)
 
+    def execute_plan(self):
+        from bodo.pandas.utils import execute_plan
+
+        data = execute_plan(self._plan)
+        self._plan = None
+        self._md_result_id = data._mgr._md_result_id
+        data._mgr._md_result_id = None
+        self._md_nrows = data._mgr._md_nrows
+        self._md_head = data._mgr._md_head
+        return data
+
     def _collect(self):
         """
         Collect the data onto the spawner.
@@ -239,13 +250,10 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         If the data is on the workers, collect it.
         """
         if self._plan is not None:
-            from bodo.pandas.utils import execute_plan
-
             debug_msg(
                 self.logger, "[LazyArrayManager] Executing Plan and collecting data..."
             )
-            data = execute_plan(self._plan)
-            self._plan = None
+            data = self.execute_plan()
             self.arrays = data._mgr.arrays
             # Update index here since the plan created a dummy index
             self._axes = data._mgr._axes
@@ -443,6 +451,17 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             return self._md_head.dtype
         return super().dtype
 
+    def execute_plan(self):
+        from bodo.pandas.utils import execute_plan
+
+        data = execute_plan(self._plan)
+        self._plan = None
+        self._md_result_id = data._mgr._md_result_id
+        data._mgr._md_result_id = None
+        self._md_nrows = data._mgr._md_nrows
+        self._md_head = data._mgr._md_head
+        return data
+
     def _collect(self):
         """
         Collect the data onto the spawner.
@@ -450,14 +469,11 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         If the data is on the workers, collect it.
         """
         if self._plan is not None:
-            from bodo.pandas.utils import execute_plan
-
             debug_msg(
                 self.logger,
                 "[LazySingleArrayManager] Executing Plan and collecting data...",
             )
-            data = execute_plan(self._plan)
-            self._plan = None
+            data = self.execute_plan()
             self.arrays = data._mgr.arrays
             # Update index here since the plan created a dummy index
             self._axes = data._mgr._axes

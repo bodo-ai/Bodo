@@ -2,14 +2,14 @@ import operator
 import os
 import tempfile
 
+import bodo
 import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo.pandas as bd
-from bodo.tests.utils import _test_equal, temp_config_override
-
+from bodo.tests.utils import _test_equal, temp_config_override, pytest_mark_spawn_mode
 
 def test_from_pandas(datapath):
     """Very simple test to scan a dataframe passed into from_pandas."""
@@ -171,6 +171,40 @@ def test_filter_pushdown(datapath, op):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
+@pytest_mark_spawn_mode
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_filter_distributed(datapath, op):
+    bodo.set_verbose_level(2)
+    """Very simple test for filter for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+
+    @bodo.jit(spawn=True)
+    def f(df):
+        return df
+
+    # Force plan to execute but keep distributed.
+    f(bodo_df1)
+
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    print("py_df1", py_df1)
+
+    _test_equal(bodo_df1, py_df1, check_pandas_types=False)
+    """
+    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2._lazy
+    assert bodo_df2.plan is not None
+
+    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
+
+    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+    """
+
+
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
@@ -179,10 +213,10 @@ def test_filter(datapath, op):
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
 
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-
     # Force read parquet node to execute.
     _test_equal(bodo_df1, py_df1, check_pandas_types=False)
+
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
     bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
