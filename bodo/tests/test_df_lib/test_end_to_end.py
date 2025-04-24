@@ -160,16 +160,26 @@ def test_projection(datapath):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
-def test_filter(datapath):
+@pytest.mark.parametrize(
+    "file_path",
+    [
+        "dataframe_library/df1.parquet",
+        pytest.param("dataframe_library/df1_index.parquet", marks=pytest.mark.skip),
+        pytest.param(
+            "dataframe_library/df1_multi_index.parquet", marks=pytest.mark.skip
+        ),
+    ],
+)
+def test_filter(datapath, file_path):
     """Very simple test for filter for sanity checking."""
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df1 = bd.read_parquet(datapath(file_path))
     bodo_df2 = bodo_df1[bodo_df1.A < 20]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2._lazy
     assert bodo_df2.plan is not None
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath(file_path))
     py_df2 = py_df1[py_df1.A < 20]
 
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
