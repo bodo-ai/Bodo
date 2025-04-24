@@ -1,6 +1,8 @@
+import operator
 import os
 import tempfile
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
@@ -8,8 +10,25 @@ import pytest
 import bodo.pandas as bd
 from bodo.tests.utils import _test_equal, temp_config_override
 
+# Various Index kinds to use in test data (assuming maximum size of 100 in input)
+MAX_DATA_SIZE = 100
 
-def test_from_pandas(datapath):
+
+@pytest.fixture(
+    params=[
+        pd.RangeIndex(MAX_DATA_SIZE),
+        pd.date_range("1998-01-01", periods=MAX_DATA_SIZE),
+        pd.MultiIndex.from_arrays(
+            (np.arange(MAX_DATA_SIZE) * 2, np.arange(MAX_DATA_SIZE) * 4),
+            names=["first", "second"],
+        ),
+    ]
+)
+def index_val(request):
+    return request.param
+
+
+def test_from_pandas(datapath, index_val):
     """Very simple test to scan a dataframe passed into from_pandas."""
 
     df = pd.DataFrame(
@@ -17,7 +36,8 @@ def test_from_pandas(datapath):
             "a": [1, 2, 3],
             "b": [4, 5, 6],
             "c": ["a", "b", "c"],
-        }
+        },
+        index=index_val[:3],
     )
     # Sequential test
     with temp_config_override("dataframe_library_run_parallel", False):
@@ -60,12 +80,22 @@ def test_read_parquet(datapath):
     )
 
 
-def test_read_parquet_projection_pushdown(datapath):
+@pytest.mark.parametrize(
+    "file_path",
+    [
+        "example_no_index.parquet",
+        "example_single_index.parquet",
+        "example_multi_index.parquet",
+    ],
+)
+def test_read_parquet_projection_pushdown(datapath, file_path):
     """Make sure basic projection pushdown works for Parquet read end to end."""
-    path = datapath("example_no_index.parquet")
+    path = datapath(file_path)
 
     bodo_out = bd.read_parquet(path)[["three", "four"]]
     py_out = pd.read_parquet(path)[["three", "four"]]
+
+    assert bodo_out.plan is not None
 
     _test_equal(
         bodo_out,
@@ -90,22 +120,13 @@ def test_read_parquet_projection_pushdown(datapath):
         )
     ],
 )
-@pytest.mark.parametrize(
-    "index",
-    [
-        pytest.param(None, id="index_None"),
-        pytest.param(False, id="index_False"),
-        pytest.param(
-            True, id="index_True", marks=pytest.mark.xfail(raises=NotImplementedError)
-        ),
-    ],
-)
-def test_read_parquet_index(df: pd.DataFrame, index: bool | None):
+def test_read_parquet_index(df: pd.DataFrame, index_val):
     """Test reading parquet with index column works as expected."""
+    df.index = index_val[: len(df)]
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "example.pq")
 
-        df.to_parquet(path, index=index)
+        df.to_parquet(path)
 
         bodo_out = bd.read_parquet(path)
         py_out = pd.read_parquet(path)
@@ -143,31 +164,74 @@ def test_projection(datapath):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
-def test_filter(datapath):
+@pytest.mark.parametrize(
+    "file_path",
+    [
+        "dataframe_library/df1.parquet",
+        pytest.param("dataframe_library/df1_index.parquet", marks=pytest.mark.skip),
+        pytest.param(
+            "dataframe_library/df1_multi_index.parquet", marks=pytest.mark.skip
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_filter_pushdown(datapath, file_path, op):
     """Very simple test for filter for sanity checking."""
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bodo_df1[bodo_df1.A < 20]
+    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2._lazy
     assert bodo_df2.plan is not None
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1[py_df1.A < 20]
+    pre, post = bd.utils.getPlanStatistics(bodo_df2.plan)
+    _test_equal(pre, 2)
+    _test_equal(post, 1)
+
+    py_df1 = pd.read_parquet(datapath(file_path))
+    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
-def test_apply(datapath):
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+@pytest.mark.skip(reason="Using dataframe as source not yet implemented.")
+def test_filter(datapath, op):
+    """Very simple test for filter for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    # Force read parquet node to execute.
+    _test_equal(bodo_df1, py_df1, check_pandas_types=False)
+
+    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2._lazy
+    assert bodo_df2.plan is not None
+
+    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
+
+    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+
+
+def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
         {
             "a": pd.array([1, 2, 3] * 10, "Int64"),
-            # TODO: uncomment when segfault in from_pandas is fixed when running all
-            # tests
-            # "b": pd.array([4, 5, 6], "Int64"),
-            # "c": ["a", "b", "c"],
-        }
+            "b": pd.array([4, 5, 6] * 10, "Int64"),
+            "c": ["a", "b", "c"] * 10,
+        },
+        index=index_val[:30],
     )
     bdf = bd.from_pandas(df)
     out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
@@ -175,14 +239,15 @@ def test_apply(datapath):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_lower(datapath):
+def test_str_lower(datapath, index_val):
     """Very simple test for Series.str.lower for sanity checking."""
     df = pd.DataFrame(
         {
             "A": pd.array([1, 2, 3], "Int64"),
             "B": ["A1", "B1", "C1"],
             "C": pd.array([4, 5, 6], "Int64"),
-        }
+        },
+        index=index_val[:3],
     )
     bdf = bd.from_pandas(df)
     out_pd = df.B.str.lower()
