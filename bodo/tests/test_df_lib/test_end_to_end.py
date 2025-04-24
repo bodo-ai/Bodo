@@ -8,8 +8,25 @@ import pytest
 import bodo.pandas as bd
 from bodo.tests.utils import _test_equal, temp_config_override
 
+# Various Index kinds to use in test data (assuming maximum size of 100 in input)
+MAX_DATA_SIZE = 100
 
-def test_from_pandas(datapath):
+
+@pytest.fixture(
+    params=[
+        pd.RangeIndex(MAX_DATA_SIZE),
+        pd.date_range("1998-01-01", periods=MAX_DATA_SIZE),
+        pd.MultiIndex.from_arrays(
+            (np.arange(MAX_DATA_SIZE) * 2, np.arange(MAX_DATA_SIZE) * 4),
+            names=["first", "second"],
+        ),
+    ]
+)
+def index_val(request):
+    return request.param
+
+
+def test_from_pandas(datapath, index_val):
     """Very simple test to scan a dataframe passed into from_pandas."""
 
     df = pd.DataFrame(
@@ -17,7 +34,8 @@ def test_from_pandas(datapath):
             "a": [1, 2, 3],
             "b": [4, 5, 6],
             "c": ["a", "b", "c"],
-        }
+        },
+        index=index_val[:3],
     )
     # Sequential test
     with temp_config_override("dataframe_library_run_parallel", False):
@@ -90,20 +108,13 @@ def test_read_parquet_projection_pushdown(datapath):
         )
     ],
 )
-@pytest.mark.parametrize(
-    "index",
-    [
-        pytest.param(None, id="index_None"),
-        pytest.param(False, id="index_False"),
-        pytest.param(True, id="index_True"),
-    ],
-)
-def test_read_parquet_index(df: pd.DataFrame, index: bool | None):
+def test_read_parquet_index(df: pd.DataFrame, index_val):
     """Test reading parquet with index column works as expected."""
+    df.index = index_val[: len(df)]
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "example.pq")
 
-        df.to_parquet(path, index=index)
+        df.to_parquet(path)
 
         bodo_out = bd.read_parquet(path)
         py_out = pd.read_parquet(path)
