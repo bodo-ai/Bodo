@@ -161,10 +161,8 @@ def test_apply(datapath):
     df = pd.DataFrame(
         {
             "a": pd.array([1, 2, 3] * 10, "Int64"),
-            # TODO: uncomment when segfault in from_pandas is fixed when running all
-            # tests
-            # "b": pd.array([4, 5, 6], "Int64"),
-            # "c": ["a", "b", "c"],
+            "b": pd.array([4, 5, 6] * 10, "Int64"),
+            "c": ["a", "b", "c"] * 10,
         }
     )
     bdf = bd.from_pandas(df)
