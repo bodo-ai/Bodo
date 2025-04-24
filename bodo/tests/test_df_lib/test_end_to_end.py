@@ -174,7 +174,6 @@ def test_filter_pushdown(datapath, op):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-@pytest.mark.skip(reason="Using dataframe as source not yet implemented.")
 def test_filter(datapath, op):
     """Very simple test for filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))

@@ -39,8 +39,18 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             if self._mgr._plan is not None:
                 return self._mgr._plan
             else:
+                if hasattr(self, "source_plan") and self.source_plan is not None:
+                    return self.source_plan
                 from bodo.pandas.base import _empty_like
-                return plan_optimizer.LogicalGetDataframeRead(pa.Schema.from_pandas(_empty_like(self)), self._mgr._md_result_id)
+                out_schema = _empty_like(self)
+                if bodo.dataframe_library_run_parallel:
+                    res_id = bodo.spawn.utils.scatter_data(self)
+                    self.source_plan = LazyPlan("LogicalGetPandasReadParallel", res_id)
+                else:
+                    self.source_plan = LazyPlan("LogicalGetPandasReadSeq", self)
+                self.source_plan.out_schema = out_schema
+
+                return self.source_plan
 
         raise NotImplementedError(
             "Plan not available for this manager, recreate this dataframe with from_pandas"
