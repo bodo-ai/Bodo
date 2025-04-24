@@ -157,3 +157,63 @@ def write_iceberg_table(df: pandas.DataFrame):
     - Writing a Pandas Dataframe index to an Iceberg table is not supported. If `index` and `index_label`
       are provided, they will be ignored.
     - `chunksize`, `dtype` and `method` arguments are not supported and will be ignored if provided.
+
+#### Table Partitioning and Sorting {#iceberg-partitioning-sorting}
+Bodo supports reading and writing Iceberg tables with partitioning and sorting. Bodo doesn't support creating a new table with partitioning or sorting yet. We recommend using PyIceberg to create a new empty table with partitioning and sorting specified and using Bodo for read and write of actual data. PyIceberg is a dependency of Bodo and is automatically installed when you install Bodo.
+
+Example:  
+```py
+import pandas as pd
+from pyiceberg import schema, types
+from pyiceberg.partitioning import PartitionField, PartitionSpec
+from pyiceberg.transforms import BucketTransform, DayTransform
+
+import bodo
+from bodo.io.iceberg.catalog import conn_str_to_catalog
+
+# Establish a connection to the Iceberg catalog
+catalog = conn_str_to_catalog("iceberg+file://iceberg_db")
+
+# Define the schema for the Iceberg table
+schema = schema.Schema(
+        types.NestedField(0, "id", types.LongType()),  
+        types.NestedField(1, "timestamp", types.TimestamptzType()),  
+        types.NestedField(2, "data", types.StringType()),  # 
+)
+
+
+# Create the Iceberg table if it doesn't already exist
+if not catalog.table_exists("default.test_table"):
+    # Specify partitioning: bucket by ID and partition by day for timestamp
+    partition_spec = PartitionSpec(
+                PartitionField(
+                        transform=BucketTransform(3),  # Bucketing with 3 buckets
+                        source_id=0,
+                        field_id=1000,
+                        name="bucket",
+                    ),
+                PartitionField(
+                        transform=DayTransform(),  # Partitioning by day
+                        source_id=1,
+                        field_id=1001,
+                        name="day",
+                    ),
+            )
+        table = catalog.create_table(
+                "default.test_table",
+                schema=schema,
+                partition_spec=partition_spec,
+            )
+
+@bodo.jit()
+def append(df):
+    # Append a DataFrame to the Iceberg table
+    df.to_sql("test_table", schema="default", con="iceberg+file://iceberg_db", if_exists="append")
+
+# Example data to append: two rows with IDs, timestamps, and string data
+append(pd.DataFrame({
+        "id": [1, 2],
+        "timestamp": [pd.Timestamp.now(), pd.Timestamp.now() + pd.Timedelta(3, "days")],
+        "data": ["a",]
+}))
+```

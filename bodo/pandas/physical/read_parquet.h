@@ -54,7 +54,6 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
                         std::move(tf.second));
                 PyObject *py_selected_field =
                     PyList_GetItem(schema_fields, tf.first);
-                to_be_freed.push_back(py_selected_field);
                 if (!PyUnicode_Check(py_selected_field)) {
                     throw std::runtime_error(
                         "tableFilterSetToPhysicalExpression selected field is "

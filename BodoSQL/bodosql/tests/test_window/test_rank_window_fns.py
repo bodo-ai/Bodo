@@ -83,9 +83,6 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
     first/last are parametrized so that each test can have total
     fusion into a single closure"""
     is_binary = isinstance(all_types_window_df["TABLE1"]["A"].iloc[0], bytes)
-    is_tz_aware = (
-        getattr(all_types_window_df["TABLE1"]["A"].dtype, "tz", None) is not None
-    )
     selects = []
     funcs = [
         "RANK()",
@@ -97,8 +94,7 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
         "ROW_NUMBER()",
     ]
     convert_columns_bytearray = ["A"] if is_binary else None
-    # Convert the spark input to tz-naive bc it can't handle timezones
-    convert_columns_tz_naive = ["A"] if is_tz_aware else None
+    convert_columns_tz_naive = None
     for i, func in enumerate(funcs):
         selects.append(f"{func} OVER (PARTITION BY W2 ORDER BY {order_clause}) AS C{i}")
     query = f"SELECT W2, A, {', '.join(selects)} FROM table1"

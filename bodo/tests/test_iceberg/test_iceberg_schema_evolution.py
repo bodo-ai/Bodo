@@ -11,7 +11,7 @@ import pytest
 import bodo
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.mpi4py import MPI
-from bodo.tests.iceberg_database_helpers import spark_reader
+from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     SORT_ORDER as partsort_order,
 )
@@ -83,7 +83,7 @@ def test_read_schema_evolved_table(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out, _, _ = run_rank0(spark_reader.read_iceberg_table)(table_name, db_schema)
+    py_out = run_rank0(pyiceberg_reader.read_iceberg_table)(table_name, db_schema)
     if "STRUCT_FIELD_ADD" in table_name:
         # In the STRUCT FIELD ADD case, Spark returns integers
         # in the new_column_one sub-field as floats since there
@@ -167,10 +167,7 @@ def test_write_schema_evolved_table(
 
     passed = 1
     if bodo.get_rank() == 0:
-        spark = get_spark()
-        spark.sql("CLEAR CACHE;")
-        spark.sql(f"REFRESH TABLE hadoop_prod.iceberg_db.{table_name};")
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema, spark)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
 
         # For easier comparison, convert semi-structured columns in
         # both tables to comparable types:
@@ -970,7 +967,7 @@ def test_read_partition_schema_evolved_table(
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    py_out, _, _ = run_rank0(spark_reader.read_iceberg_table)(table_name, db_schema)
+    py_out = run_rank0(pyiceberg_reader.read_iceberg_table)(table_name, db_schema)
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -1044,10 +1041,7 @@ def test_write_partition_schema_evolved_table(
 
     passed = 1
     if bodo.get_rank() == 0:
-        spark = get_spark()
-        spark.sql("CLEAR CACHE;")
-        spark.sql(f"REFRESH TABLE hadoop_prod.iceberg_db.{table_name};")
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
 
         # For easier comparison, convert semi-structured columns in
         # both tables to comparable types:
@@ -1174,7 +1168,7 @@ def test_mixed_partition_schema_evolution(
             f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} DROP PARTITION FIELD Bucket(30, A)"
         )
         append_to_iceberg_table(df, sql_schema, table_name, spark)
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         return py_out
 
     py_out = setup(df, sql_schema)
@@ -1436,7 +1430,7 @@ def test_evolved_struct_fields_within_list_and_map(
         """
         )
 
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         py_out["F"] = py_out["F"].astype(
             pd.ArrowDtype(
                 pa.large_list(pa.struct([("A", pa.int32()), ("C", pa.string())]))
@@ -1649,7 +1643,7 @@ def test_rename_and_swap_struct_fields(
         """
         )
 
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         return py_out
 
     py_out = setup()
@@ -1924,7 +1918,7 @@ def test_rename_and_swap_struct_fields_inside_other_semi_types(
         """
         )
 
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         return py_out
 
     py_out = setup()
@@ -2117,7 +2111,7 @@ def test_drop_and_readd_struct_field(
         """
         )
 
-        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out = pyiceberg_reader.read_iceberg_table(table_name, db_schema)
         py_out["A"] = py_out["A"].astype(
             pd.ArrowDtype(pa.struct([("a", pa.int32()), ("b", pa.string())]))
         )
