@@ -101,7 +101,6 @@ def cpp_table_to_df(cpp_table, arrow_schema):
 def cpp_table_to_series(cpp_table, arrow_schema):
     """Convert a C++ table (table_info) to a pandas Series."""
     as_df = cpp_table_to_df(cpp_table, arrow_schema)
-    as_df = _reconstruct_pandas_index(as_df, arrow_schema)
     return as_df.iloc[:, 0]
 
 
