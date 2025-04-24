@@ -1070,11 +1070,15 @@ std::shared_ptr<table_info> DoRetrieveTable(
     const bool use_nullable_arr, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
+    std::vector<std::string> col_names;
     size_t n_cols;
     if (n_cols_arg == -1) {
         n_cols = (size_t)in_table->ncols();
     } else {
         n_cols = n_cols_arg;
+    }
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(n_cols);
     }
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
@@ -1083,8 +1087,12 @@ std::shared_ptr<table_info> DoRetrieveTable(
         // Release reference (and potentially memory) for the column from this
         // table if this is the last table reference.
         reset_col_if_last_table_ref(in_table, i_col);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i_col]);
+        }
     }
-    return std::make_shared<table_info>(out_arrs);
+    return std::make_shared<table_info>(out_arrs, col_names,
+                                        in_table->metadata);
 }
 
 std::shared_ptr<table_info> RetrieveTable(
@@ -1112,6 +1120,10 @@ std::shared_ptr<table_info> DoRetrieveTable(
     const bool use_nullable_arr, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
+    std::vector<std::string> col_names;
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(colInds.size());
+    }
     for (size_t i_col : colInds) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
         out_arrs.emplace_back(RetrieveArray_SingleColumn(
@@ -1119,8 +1131,12 @@ std::shared_ptr<table_info> DoRetrieveTable(
         // Release reference (and potentially memory) for the column from this
         // table if this is the last table reference.
         reset_col_if_last_table_ref(in_table, i_col);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i_col]);
+        }
     }
-    return std::make_shared<table_info>(out_arrs);
+    return std::make_shared<table_info>(out_arrs, col_names,
+                                        in_table->metadata);
 }
 
 std::shared_ptr<table_info> RetrieveTable(
@@ -1171,20 +1187,37 @@ std::shared_ptr<table_info> ProjectTable(
     std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> column_indices) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
+    std::vector<std::string> col_names;
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(column_indices.size());
+    }
     for (size_t i_col : column_indices) {
         out_arrs.emplace_back(in_table->columns[i_col]);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i_col]);
+        }
     }
-    return std::make_shared<table_info>(out_arrs, in_table->nrows());
+    return std::make_shared<table_info>(out_arrs, in_table->nrows(), col_names,
+                                        in_table->metadata);
 }
 
 std::shared_ptr<table_info> ProjectTable(
     std::shared_ptr<table_info> const in_table, size_t first_n_cols) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
-    for (size_t i = 0; i < std::min(first_n_cols, in_table->columns.size());
-         i++) {
-        out_arrs.emplace_back(in_table->columns[i]);
+    size_t n_cols = std::min(first_n_cols, in_table->columns.size());
+    std::vector<std::string> col_names;
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(n_cols);
     }
-    return std::make_shared<table_info>(out_arrs, in_table->nrows());
+
+    for (size_t i = 0; i < n_cols; i++) {
+        out_arrs.emplace_back(in_table->columns[i]);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i]);
+        }
+    }
+    return std::make_shared<table_info>(out_arrs, in_table->nrows(), col_names,
+                                        in_table->metadata);
 }
 
 // @brief Compare the bitmap of two arrow arrays at a given position

@@ -76,7 +76,8 @@ std::shared_ptr<table_info> alloc_table(
             dict_builders == nullptr ? nullptr : (*dict_builders)[i]));
     }
 
-    return std::make_shared<table_info>(arrays);
+    return std::make_shared<table_info>(arrays, 0, schema->column_names,
+                                        schema->metadata);
 }
 
 std::shared_ptr<table_info> alloc_table_like(
@@ -87,5 +88,6 @@ std::shared_ptr<table_info> alloc_table_like(
     for (auto& in_arr : table->columns) {
         arrays.push_back(alloc_array_like(in_arr, true, pool, mm));
     }
-    return std::make_shared<table_info>(arrays);
+    return std::make_shared<table_info>(arrays, table->nrows(),
+                                        table->column_names, table->metadata);
 }

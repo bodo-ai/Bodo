@@ -2250,18 +2250,31 @@ def index_to_array_list(data):  # pragma: no cover
 
 
 @overload(index_to_array_list, no_unliteral=True, jit_options={"cache": True})
-def overload_index_to_array_list(I):
+def overload_index_to_array_list(I, gen_range_index_array=True):
     """
-    convert Index object to data array.
+    Convert Index to a tuple of data array(s).
+    gen_range_index_array is used to determine if an array should be generated for
+    range Index or not.
     """
+    from bodo.hiframes.pd_index_ext import RangeIndexType
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
     if isinstance(I, MultiIndexType):
-        return lambda I: bodo.hiframes.pd_index_ext.get_index_data(
-            I
+        return (
+            lambda I,
+            gen_range_index_array=True: bodo.hiframes.pd_index_ext.get_index_data(I)
         )  # pragma: no cover
 
-    return lambda I: (bodo.utils.conversion.index_to_array(I),)  # pragma: no cover
+    if (
+        isinstance(I, RangeIndexType)
+        and is_overload_constant_bool(gen_range_index_array)
+        and not get_overload_const_bool(gen_range_index_array)
+    ):
+        return lambda I, gen_range_index_array=True: ()  # pragma: no cover
+
+    return lambda I, gen_range_index_array=True: (
+        bodo.utils.conversion.index_to_array(I),
+    )  # pragma: no cover
 
 
 def false_if_none(val):  # pragma: no cover
