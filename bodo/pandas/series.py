@@ -154,6 +154,38 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def str(self):
         return StringMethods(self)
 
+    @check_args_fallback(supported=["arg"])
+    def map(self, arg, na_action=None):
+        """
+        Apply function to elements in a Series
+        """
+        from bodo.pandas.utils import arrow_to_empty_df
+
+        # Get output data type by running the UDF on a sample of the data.
+        # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
+        # TODO: remove when LIMIT plan is properly supported for head().
+        mgr_plan = self._mgr._plan
+        series_sample = self.head()
+        self._mgr._plan = mgr_plan
+        out_sample = series_sample.map(arg)
+
+        if isinstance(out_sample, pd.Series):
+            out_sample = out_sample.to_frame()
+        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample))
+
+        plan = LazyPlan(
+            "LogicalProjectionPythonScalarFunc",
+            self._plan,
+            (
+                "map",
+                True,  # is_series
+                True,  # is_method
+                (arg,),  # args
+                {},  # kwargs
+            ),
+        )
+        return wrap_plan(empty_df, plan=plan)
+
 
 class StringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -175,6 +207,29 @@ class StringMethods:
                 self._series._plan,
                 (
                     "str.lower",
+                    True,  # is_series
+                    True,  # is_method
+                    (),  # args
+                    {},  # kwargs
+                ),
+            ),
+        )
+
+    @check_args_fallback(supported=[])
+    def strip(self, to_strip=None):
+        index = self._series.head(0).index
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.large_string()),
+            name=self._series.name,
+            index=index,
+        )
+        return wrap_plan(
+            new_metadata,
+            plan=LazyPlan(
+                "LogicalProjectionPythonScalarFunc",
+                self._series._plan,
+                (
+                    "str.strip",
                     True,  # is_series
                     True,  # is_method
                     (),  # args

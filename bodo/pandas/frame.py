@@ -562,6 +562,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """
         Apply a function along the axis of the dataframe.
         """
+        import pyarrow as pa
+
+        from bodo.pandas.utils import arrow_to_empty_df
+
         if axis != 1:
             raise BodoError("DataFrame.apply(): only axis=1 supported")
 
@@ -573,7 +577,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         self._mgr._plan = mgr_plan
         out_sample = df_sample.apply(func, axis)
 
-        empty_df = out_sample.iloc[:0]
+        if isinstance(out_sample, pd.Series):
+            out_sample = out_sample.to_frame()
+        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample))
+
+        # empty_df = out_sample.iloc[:0]
 
         plan = LazyPlan(
             "LogicalProjectionPythonScalarFunc",
