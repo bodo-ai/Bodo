@@ -185,14 +185,15 @@ def test_filter(datapath, file_path):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
-def test_apply(datapath):
+def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
         {
             "a": pd.array([1, 2, 3] * 10, "Int64"),
             "b": pd.array([4, 5, 6] * 10, "Int64"),
             "c": ["a", "b", "c"] * 10,
-        }
+        },
+        index=index_val[:30],
     )
     bdf = bd.from_pandas(df)
     out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
@@ -200,14 +201,15 @@ def test_apply(datapath):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_lower(datapath):
+def test_str_lower(datapath, index_val):
     """Very simple test for Series.str.lower for sanity checking."""
     df = pd.DataFrame(
         {
             "A": pd.array([1, 2, 3], "Int64"),
             "B": ["A1", "B1", "C1"],
             "C": pd.array([4, 5, 6], "Int64"),
-        }
+        },
+        index=index_val[:3],
     )
     bdf = bd.from_pandas(df)
     out_pd = df.B.str.lower()

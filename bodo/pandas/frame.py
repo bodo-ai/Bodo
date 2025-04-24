@@ -574,7 +574,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         out_sample = df_sample.apply(func, axis)
 
         empty_df = out_sample.iloc[:0]
-        empty_df.index = pd.RangeIndex(0)
 
         plan = LazyPlan(
             "LogicalProjectionPythonScalarFunc",
