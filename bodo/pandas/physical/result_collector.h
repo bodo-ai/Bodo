@@ -1,6 +1,5 @@
 #pragma once
 
-#include <sstream>
 #include "../libs/_table_builder.h"
 
 #include "physical/operator.h"
