@@ -1187,23 +1187,36 @@ std::shared_ptr<table_info> ProjectTable(
     std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> column_indices) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
+    std::vector<std::string> col_names;
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(column_indices.size());
+    }
     for (size_t i_col : column_indices) {
         out_arrs.emplace_back(in_table->columns[i_col]);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i_col]);
+        }
     }
-    return std::make_shared<table_info>(out_arrs, in_table->nrows(),
-                                        in_table->column_names,
+    return std::make_shared<table_info>(out_arrs, in_table->nrows(), col_names,
                                         in_table->metadata);
 }
 
 std::shared_ptr<table_info> ProjectTable(
     std::shared_ptr<table_info> const in_table, size_t first_n_cols) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
-    for (size_t i = 0; i < std::min(first_n_cols, in_table->columns.size());
-         i++) {
-        out_arrs.emplace_back(in_table->columns[i]);
+    size_t n_cols = std::min(first_n_cols, in_table->columns.size());
+    std::vector<std::string> col_names;
+    if (in_table->column_names.size() > 0) {
+        col_names.reserve(n_cols);
     }
-    return std::make_shared<table_info>(out_arrs, in_table->nrows(),
-                                        in_table->column_names,
+
+    for (size_t i = 0; i < n_cols; i++) {
+        out_arrs.emplace_back(in_table->columns[i]);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back(in_table->column_names[i]);
+        }
+    }
+    return std::make_shared<table_info>(out_arrs, in_table->nrows(), col_names,
                                         in_table->metadata);
 }
 
