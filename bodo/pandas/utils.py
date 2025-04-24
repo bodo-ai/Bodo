@@ -399,15 +399,33 @@ def cast_table_ptr_to_int64(typingctx, val):
     return numba.core.types.int64(table_type), codegen
 
 
+def _get_n_index_arrays(index):
+    """Get the number of arrays that can hold the Index data in a table."""
+    if isinstance(index, pd.RangeIndex):
+        return 0
+    elif isinstance(index, pd.MultiIndex):
+        return index.nlevels
+    elif isinstance(index, pd.Index):
+        return 1
+    else:
+        raise TypeError(f"Invalid index type: {type(index)}")
+
+
 def df_to_cpp_table(df):
     """Convert a pandas DataFrame to a C++ table pointer and column names."""
-    n_cols = len(df.columns)
-    in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_cols)))
+    n_table_cols = len(df.columns)
+    n_index_arrs = _get_n_index_arrays(df.index)
+    n_all_cols = n_table_cols + n_index_arrs
+    in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_all_cols)))
 
     @numba.jit
     def impl_df_to_cpp_table(df):
         table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
-        cpp_table = bodo.libs.array.py_data_to_cpp_table(table, (), in_col_inds, n_cols)
+        index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
+        index_arrs = bodo.utils.conversion.index_to_array_list(index, False)
+        cpp_table = bodo.libs.array.py_data_to_cpp_table(
+            table, index_arrs, in_col_inds, n_table_cols
+        )
         return cast_table_ptr_to_int64(cpp_table)
 
     cpp_table = impl_df_to_cpp_table(df)
