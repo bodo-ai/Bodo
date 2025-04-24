@@ -24711,6 +24711,48 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#202542" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.4.2
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.4.2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#highlights_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🎉 Highlights
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -24819,6 +24861,48 @@
       2025.4.1
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#202542" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.4.2
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.4.2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#highlights_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🎉 Highlights
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -24934,12 +25018,26 @@
 </ul>
 <h3 id="bug-fixes">🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Fix caching in BodoSQLContext.sql </li>
+<li>Fix caching in BodoSQLContext.sql</li>
 <li>Fix <code>BodoDataFrame.to_csv()/to_json()</code> string output in spawn mode.</li>
 <li>Fix error in writing parquet files with Snowflake.</li>
 </ul>
 <h2 id="202541">2025.4.1<a class="headerlink" href="#202541" title="Permanent link">&para;</a></h2>
 <p>Mini release adding experimental support for Iceberg time travel in Python reader</p>
+<h2 id="202542">2025.4.2<a class="headerlink" href="#202542" title="Permanent link">&para;</a></h2>
+<h3 id="highlights_1">🎉 Highlights<a class="headerlink" href="#highlights_1" title="Permanent link">&para;</a></h3>
+<p>In this release, we are exited to add hooks for Bodo to accelerate User Defined Functions (UDFs) in Pandas. We also fixed several bugs related to our Pandas support in the compiler.</p>
+<h3 id="new-features_1">✨ New Features<a class="headerlink" href="#new-features_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added hooks for accelerating Pandas UDFs with Bodo. Starting in Pandas 3.0, you will be able to use Bodo to automatically jit compile your UDFs and execute them over a DataFrame in parallel by passing <code>engine=bodo.jit</code> to <code>DataFrame.apply()</code>.</li>
+</ul>
+<h3 id="bug-fixes_1">🐛 Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Use Arrow for boxing/unboxing Datetime arrays.</li>
+<li>Support passing an empty tuple as an argument to a function in Spawn-mode.</li>
+<li>Support passing non-constant UDF <code>args</code> in <code>DataFrame.apply()</code>.</li>
+<li>Support handling Pandas classes imported directly in the compiler.</li>
+</ul>
 
 
 

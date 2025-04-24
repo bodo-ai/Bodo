@@ -24899,9 +24899,9 @@ Overall, 82 code patches were merged since the last release.</p>
 <p>Added a compiler optimizations for forcing the columns in a DataFrame
     to match a DataFrame with an existing schema via <code>DataFrame.dtypes</code>.
     In particular when Bodo encounters code like:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nd">@bodo</span><span class="o">.</span><span class="n">jit</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">df1</span><span class="p">,</span> <span class="n">df2</span><span class="p">):</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="k">return</span> <span class="n">df1</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">df2</span><span class="o">.</span><span class="n">dtypes</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>@bodo.jit
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>def f(df1, df2):
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    return df1.astype(df2.dtypes)
 </code></pre></div>
 <p>Bodo will automatically use the internal Bodo types for all columns in
 <code>df2</code>. This enables using astypes for conversions that are typically not

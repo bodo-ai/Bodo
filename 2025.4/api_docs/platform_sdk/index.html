@@ -26647,7 +26647,7 @@
 
 
 <h4 id="bodosdk.clients.cluster.ClusterClient.create" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">create</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">instance_type</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">workers_quantity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">bodo_version</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_stop</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pause</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_upgrade</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_az</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_spot_instance</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">aws_deployment_subnet_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">availability_zone</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">instance_role</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">custom_tags</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">create</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">instance_type</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">workers_quantity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">bodo_version</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_stop</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pause</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_upgrade</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_az</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_spot_instance</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">aws_deployment_subnet_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">availability_zone</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">instance_role</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">custom_tags</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">memory_report_enabled</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#bodosdk.clients.cluster.ClusterClient.create" class="headerlink" title="Permanent link">&para;</a></h4>
 
@@ -28133,7 +28133,7 @@ the latest Bodo version on restart.</p>
 
 
 <h4 id="bodosdk.clients.instance_role.InstanceRoleClient.create" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">create</span><span class="p">(</span><span class="n">role_arn</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">create</span><span class="p">(</span><span class="n">role_arn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">identity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#bodosdk.clients.instance_role.InstanceRoleClient.create" class="headerlink" title="Permanent link">&para;</a></h4>
 
@@ -28161,11 +28161,25 @@ the latest Bodo version on restart.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The ARN of the role.</p>
+                <p>The ARN of the role (for aws).</p>
               </div>
             </td>
             <td>
-                <em>required</em>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>identity</code></td>
+            <td>
+                  <code><autoref identifier="str" optional>str</autoref></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The identity of the role (for azure).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -28179,7 +28193,7 @@ the latest Bodo version on restart.</p>
               </div>
             </td>
             <td>
-                <em>required</em>
+                  <code>None</code>
             </td>
           </tr>
           <tr class="doc-section-item">
