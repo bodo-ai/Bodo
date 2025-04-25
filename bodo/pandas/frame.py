@@ -522,6 +522,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             key = list(key)
             # convert column name to index
             key_indices = [self.columns.get_loc(x) for x in key]
+
+            # Add Index column numbers to select as well if any,
+            # assuming Index columns are always at the end of the table (same as Arrow).
+            if isinstance(zero_size_self.index, pd.RangeIndex):
+                pass
+            elif isinstance(zero_size_self.index, pd.MultiIndex):
+                nlevels = zero_size_self.index.nlevels
+                key_indices += [len(self.columns) + i for i in range(nlevels)]
+            else:
+                key_indices.append(len(self.columns))
+
             if len(key) == 1:
                 """ If just one element then have to extract that singular
                     element for the metadata call to Pandas so it doesn't
@@ -579,7 +590,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         out_sample = df_sample.apply(func, axis)
 
         empty_df = out_sample.iloc[:0]
-        empty_df.index = pd.RangeIndex(0)
 
         plan = LazyPlan(
             "LogicalProjectionPythonScalarFunc",

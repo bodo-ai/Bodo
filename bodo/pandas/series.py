@@ -217,8 +217,11 @@ class StringMethods:
         self._series = series
 
     def lower(self):
+        index = self._series.head(0).index
         new_metadata = pd.Series(
-            dtype=pd.ArrowDtype(pa.large_string()), name=self._series.name
+            dtype=pd.ArrowDtype(pa.large_string()),
+            name=self._series.name,
+            index=index,
         )
         return wrap_plan(
             new_metadata,

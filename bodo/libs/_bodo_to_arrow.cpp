@@ -7,6 +7,7 @@
 #include <arrow/builder.h>
 #include <arrow/compute/cast.h>
 #include <arrow/table.h>
+#include "arrow/util/key_value_metadata.h"
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -1496,6 +1497,9 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
     std::shared_ptr<table_info> out_table =
         std::make_shared<table_info>(out_arrs);
     out_table->column_names = table->ColumnNames();
+    out_table->metadata =
+        std::make_shared<TableMetadata>(table->schema()->metadata()->keys(),
+                                        table->schema()->metadata()->values());
     return out_table;
 }
 

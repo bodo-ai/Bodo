@@ -19,14 +19,6 @@ def from_pandas(df):
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame")
 
-    # TODO: Add support for Index
-    if (
-        not isinstance(df.index, pd.RangeIndex)
-        or df.index.start != 0
-        or df.index.step != 1
-    ):
-        raise ValueError("Only RangeIndex with start=0 and step=1 is supported")
-
     # Make sure empty_df has proper dtypes since used in the plan output schema.
     # Using sampling to avoid large memory usage.
     sample_size = 100
@@ -55,7 +47,7 @@ def read_parquet(
     filters=None,
     **kwargs,
 ):
-    from bodo.io.parquet_pio import get_pandas_metadata, get_parquet_dataset
+    from bodo.io.parquet_pio import get_parquet_dataset
 
     if storage_options is None:
         storage_options = {}
@@ -78,26 +70,6 @@ def read_parquet(
             "bd.read_parquet: Reading parquet with partition column not supported yet."
         )
 
-    index_cols, _ = get_pandas_metadata(arrow_schema)
-    is_supported_index = False
-
-    if len(index_cols) == 0:
-        is_supported_index = True
-    elif len(index_cols) == 1:
-        index_col = index_cols[0]
-        # RangeIndex case
-        if (
-            isinstance(index_col, dict)
-            and index_col["start"] == 0
-            and index_col["step"] == 1
-        ):
-            is_supported_index = True
-
-    if not is_supported_index:
-        raise NotImplementedError(
-            "bd.read_parquet: Reading parquet files with index columns is not supported yet."
-        )
-
     empty_df = arrow_to_empty_df(arrow_schema)
 
     plan = LazyPlan("LogicalGetParquetRead", path.encode(), storage_options)
@@ -112,11 +84,22 @@ def _empty_like(val):
     """Create an empty Pandas DataFrame or Series having the same schema as
     the given BodoDataFrame or BodoSeries
     """
-    if isinstance(val, BodoDataFrame):
-        return pd.DataFrame(
-            {col: pd.Series(dtype=dt) for col, dt in val.dtypes.items()}
-        )
-    elif isinstance(val, BodoSeries):
-        return pd.Series(dtype=val.dtype)
-    else:
-        assert False & f"_empty_like cannot create empty object like type {type(val)}"
+    import pyarrow as pa
+
+    if not isinstance(val, (BodoDataFrame, BodoSeries)):
+        raise TypeError(f"val must be a BodoDataFrame or BodoSeries, got {type(val)}")
+
+    is_series = isinstance(val, BodoSeries)
+    # Avoid triggering data collection
+    val = val.head(0)
+
+    if is_series:
+        val = val.to_frame()
+
+    # Reuse arrow_to_empty_df to make sure details like Index handling are correct
+    out = arrow_to_empty_df(pa.Schema.from_pandas(val))
+
+    if is_series:
+        out = out.iloc[:, 0]
+
+    return out
