@@ -172,10 +172,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(out_sample, pd.Series), (
             "BodoDataFrame.apply(), expected output to be Series."
         )
-        out_sample = out_sample.to_frame()
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample))
+        out_sample_df = out_sample.to_frame()
+        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample_df))
+
         # convert back to Series
-        empty_df = empty_df.squeeze()
+        empty_series = empty_df.squeeze()
+        empty_series.name = out_sample.name
 
         plan = LazyPlan(
             "LogicalProjectionPythonScalarFunc",
@@ -188,7 +190,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 {},  # kwargs
             ),
         )
-        return wrap_plan(empty_df, plan=plan)
+        return wrap_plan(empty_series, plan=plan)
 
 
 class StringMethods:
