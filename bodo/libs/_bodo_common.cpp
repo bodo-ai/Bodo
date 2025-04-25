@@ -682,6 +682,16 @@ std::unique_ptr<Schema> Schema::Project(
 }
 
 std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
+    if (this->column_names.size() == 0 && this->ncols() != 0) {
+        throw std::runtime_error(
+            "Schema::ToArrowSchema: column names not available");
+    }
+
+    if (!this->metadata) {
+        throw std::runtime_error(
+            "Schema::ToArrowSchema: metadata not available");
+    }
+
     std::vector<std::shared_ptr<::arrow::Field>> fields;
     fields.reserve(this->column_types.size());
 

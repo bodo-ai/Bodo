@@ -255,3 +255,43 @@ def test_str_lower(datapath, index_val):
     assert out_bodo._lazy
     assert out_bodo.plan is not None
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_str_strip(datapath, index_val):
+    """Very simple test for Series.str.strip() for sanity checking."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n"],
+            "C": pd.array([4, 5, 6], "Int64"),
+        },
+        index=index_val[:3],
+    )
+    bdf = bd.from_pandas(df)
+    out_pd = df.B.str.strip()
+    out_bodo = bdf.B.str.strip()
+    assert out_bodo._lazy
+    assert out_bodo.plan is not None
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_series_map(datapath, index_val):
+    """Very simple test for Series.map() for sanity checking."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int64"),
+            "B": ["A1", "B1 ", "C1"],
+            "C": pd.array([4, 5, 6], "Int64"),
+        },
+        index=index_val[:3],
+    )
+
+    def func(x):
+        return str(x)
+
+    bdf = bd.from_pandas(df)
+    out_pd = df.A.map(func)
+    out_bodo = bdf.A.map(func)
+    assert out_bodo._lazy
+    assert out_bodo.plan is not None
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)

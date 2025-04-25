@@ -562,6 +562,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """
         Apply a function along the axis of the dataframe.
         """
+        import pyarrow as pa
+
+        from bodo.pandas.utils import arrow_to_empty_df
+
         if axis != 1:
             raise BodoError("DataFrame.apply(): only axis=1 supported")
 
@@ -569,11 +573,22 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
         # TODO: remove when LIMIT plan is properly supported for head().
         mgr_plan = self._mgr._plan
-        df_sample = self.head()
+        df_sample = self.head(1)
         self._mgr._plan = mgr_plan
         out_sample = df_sample.apply(func, axis)
 
-        empty_df = out_sample.iloc[:0]
+        # TODO: Should we fallback to Pandas in the DataFrame case?
+        if not isinstance(out_sample, pd.Series):
+            raise BodoError(
+                f"DataFrame.apply(): expected output to be Series, got: {type(out_sample)}."
+            )
+
+        out_sample_df = out_sample.to_frame()
+        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample_df))
+
+        # convert back to Series
+        empty_series = empty_df.squeeze()
+        empty_series.name = out_sample.name
 
         plan = LazyPlan(
             "LogicalProjectionPythonScalarFunc",
@@ -586,4 +601,4 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 {"axis": 1},  # kwargs
             ),
         )
-        return wrap_plan(empty_df, plan=plan)
+        return wrap_plan(empty_series, plan=plan)
