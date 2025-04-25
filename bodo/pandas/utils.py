@@ -323,7 +323,7 @@ class LazyPlan:
         self.output_func = None  # filled in by wrap_plan
         self.out_schema = None  # filled in by wrap_plan
 
-    def generate_duckdb(self, cache=None):
+    def generate_duckdb(self, cache=None, in_filter=False):
         from bodo.ext import plan_optimizer
 
         # Sometimes the same LazyPlan object is encountered twice during the same
@@ -334,16 +334,59 @@ class LazyPlan:
         if id(self) in cache:
             return cache[id(self)]
 
-        def recursive_check(x):
+        def recursive_check(x, in_filter):
             """Recursively convert LazyPlans but return other types unmodified."""
             if isinstance(x, LazyPlan):
-                return x.generate_duckdb(cache=cache)
+                return x.generate_duckdb(cache=cache, in_filter=in_filter)
             else:
                 return x
 
-        # Convert any LazyPlan in the args or kwargs.
-        args = [recursive_check(x) for x in self.args]
-        kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
+        # Description of LogicalProjectionOrColRef node type.
+        #
+        # From a Pandas perspective, a projection outside filter or
+        # inside a filter are equivalent but this is not the case for
+        # duckdb.  If we had multiple projections inside a filter
+        # and we tried to make duckdb projection nodes out of them
+        # then the first one will steal the ownership of the projection
+        # source and then the second will fail with nullptr error
+        # because it has no access to the stolen projection source.
+        #
+        # Thus, we have to decide contextually whether what looks like
+        # a projection with the temporary node type
+        # LogicalProjectionOrColRef is really a projection or a
+        # column reference in a filter expression.  As we are processing
+        # the filter expression tree, if we see that we are processing a
+        # filter node then process the actual expression portion with
+        # the in_filter tag set.  This flag gets propagated down the tree
+        # and will end when the tree terminates, e.g. at a constant node,
+        # or when a LogicalProjectionOrColRef node is found.  In this
+        # case, we know the node is in a filter so we convert it to a
+        # column ref (which doesn't steal the source pointer).  Then,
+        # the recursive process of converting farther down the tree but
+        # with the filter tag off.  If a LogicalProjectionOrColRef node
+        # is encountered when the in_filter flag is not set then it is
+        # a regular projection node.
+        if self.plan_class == "LogicalFilter":
+            assert not in_filter
+            assert len(self.args) == 2
+            assert len(self.kwargs) == 0
+            args = [None, None]
+            args[1] = recursive_check(self.args[1], in_filter=True)
+            args[0] = recursive_check(self.args[0], in_filter=False)
+            kwargs = {}
+        else:
+            if in_filter:
+                if self.plan_class == "LogicalProjectionOrColRef":
+                    self.plan_class = "LogicalColRef"
+                    in_filter = False
+            else:
+                if self.plan_class == "LogicalProjectionOrColRef":
+                    self.plan_class = "LogicalProjection"
+
+            # Convert any LazyPlan in the args or kwargs.
+            args = [recursive_check(x, in_filter=in_filter) for x in self.args]
+            kwargs = {k: recursive_check(v, in_filter=in_filter) for k, v in self.kwargs.items()}
+
         # Create real duckdb class.
         pa_schema = pa.Schema.from_pandas(self.out_schema)
         ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)

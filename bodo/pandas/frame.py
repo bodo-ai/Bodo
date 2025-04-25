@@ -531,7 +531,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 return wrap_plan(
                     new_metadata,
                     plan=LazyPlan(
-                        "LogicalProjection",
+                        # See generate_duckdb for a description of this
+                        # special node type. 
+                        "LogicalProjectionOrColRef",
                         self._plan,
                         key_indices,
                     ),
@@ -541,7 +543,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 return wrap_plan(
                     new_metadata,
                     plan=LazyPlan(
-                        "LogicalProjection",
+                        # See generate_duckdb for a description of this
+                        # special node type. 
+                        "LogicalProjectionOrColRef",
                         self._plan,
                         key_indices,
                     ),

@@ -271,6 +271,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
     cdef unique_ptr[CLogicalProjection] make_projection_python_scalar_func(unique_ptr[CLogicalOperator] source, object out_schema, object args)
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
+    cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
     cdef unique_ptr[CExpression] make_const_int_expr(int val)
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx)
@@ -362,6 +363,18 @@ cdef class LogicalProjection(LogicalOperator):
         return f"LogicalProjection({self.select_vec}, {self.out_schema})"
 
 
+cdef class LogicalColRef(LogicalOperator):
+    cdef readonly vector[int] select_vec
+
+    def __cinit__(self, object out_schema, LogicalOperator source, select_idxs):
+        self.out_schema = out_schema
+        self.select_vec = select_idxs
+        self.sources = [source]
+
+    def __str__(self):
+        return f"LogicalColRef({self.select_vec}, {self.out_schema})"
+
+
 cpdef get_pushed_down_columns(proj):
     """Get column indices that are pushed down from projection to its source node. Used for testing.
     """
@@ -386,30 +399,40 @@ cdef class LogicalProjectionPythonScalarFunc(LogicalOperator):
 
 
 cdef unique_ptr[CExpression] make_expr(val):
+    """Convert a filter expression tree from Cython wrappers
+       to duckdb.
+    """
     cdef LogicalOperator source
 
     if isinstance(val, int):
         return make_const_int_expr(val)
-    elif isinstance(val, LogicalProjection):
+    elif isinstance(val, LogicalColRef):
         select_vec = val.select_vec
         field = val.out_schema.field(0)
         if len(select_vec) != 1:
             raise ValueError("len(select_vec) != 1")
-        source = val
-        return make_col_ref_expr(source.c_logical_operator.get().children[0], field, select_vec[0])
+        source = val.sources[0]
+        return make_col_ref_expr(source.c_logical_operator, field, select_vec[0])
     elif isinstance(val, LogicalBinaryOp):
         lhs_expr = make_expr(val.lhs)
         rhs_expr = make_expr(val.rhs)
         return make_binop_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
+    elif isinstance(val, LogicalConjunctionOp):
+        lhs_expr = make_expr(val.lhs)
+        rhs_expr = make_expr(val.rhs)
+        return make_conjunction_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
     else:
-        raise ValueError("Unknown expr type in make_expr " + type(val))
+        raise ValueError("Unknown expr type in make_expr " + str(type(val)))
 
 def get_source(val):
+    """Process a filter expression tree and find all the unique
+       columns referenced in the tree.
+    """
     if isinstance(val, int):
         return set()
-    elif isinstance(val, LogicalProjection):
+    elif isinstance(val, LogicalColRef):
         return {val}
-    elif isinstance(val, LogicalBinaryOp):
+    elif isinstance(val, (LogicalBinaryOp, LogicalConjunctionOp)):
         return get_source(val.lhs).union(get_source(val.rhs))
     else:
         raise ValueError("Unknown expr type in get_source " + type(val))
@@ -420,21 +443,16 @@ cdef class LogicalFilter(LogicalOperator):
         self.sources = [source]
 
         cdef unique_ptr[CExpression] c_filter_expr
-        cdef LogicalProjection active_source
-        if isinstance(key, LogicalBinaryOp):
-            lhs_expr = make_expr(key.lhs)
-            rhs_expr = make_expr(key.rhs)
+        if isinstance(key, (LogicalBinaryOp, LogicalConjunctionOp)):
             lhs_source = get_source(key.lhs)
             rhs_source = get_source(key.rhs)
-            c_filter_expr = make_binop_expr(lhs_expr, rhs_expr, str_to_expr_type(key.binop))
             for lsrc in lhs_source:
                 if source is not lsrc.sources[0]:
                     raise ValueError("Filtering with mask created from different source not supported.")
-                source = lhs_source
             for rsrc in rhs_source:
                 if source is not rsrc.sources[0]:
                     raise ValueError("Filtering with mask created from different source not supported.")
-                source = rhs_source
+            c_filter_expr = make_expr(key)
         else:
             raise ValueError("Non-binary op filter not yet supported.")
 
@@ -445,6 +463,18 @@ cdef class LogicalFilter(LogicalOperator):
         return f"LogicalFilter()"
 
 cdef class LogicalBinaryOp(LogicalOperator):
+    cdef public object lhs
+    cdef public object rhs
+    cdef public object binop
+
+    def __cinit__(self, out_schema, lhs, rhs, binop):
+        self.out_schema = out_schema
+        self.lhs = lhs
+        self.rhs = rhs
+        self.binop = binop
+        self.sources = [lhs, rhs]
+
+cdef class LogicalConjunctionOp(LogicalOperator):
     cdef public object lhs
     cdef public object rhs
     cdef public object binop

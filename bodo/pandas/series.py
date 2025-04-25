@@ -59,12 +59,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             plan=LazyPlan("LogicalBinaryOp", self._plan, other, op),
         )
 
-    def _boolean_binop(self, other, op):
+    def _conjunction_binop(self, other, op):
         """Called when a BodoSeries is element-wise boolean combined with a different entity (other)
         """
         from bodo.pandas.base import _empty_like
 
-        breakpoint()
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
         zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
@@ -77,20 +76,20 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(new_metadata, pd.Series)
         return wrap_plan(
             new_metadata,
-            plan=LazyPlan("LogicalBinaryOp", self._plan, other, op),
+            plan=LazyPlan("LogicalConjunctionOp", self._plan, other, op),
         )
 
     @check_args_fallback("all")
     def __and__(self, other):
         """Called when a BodoSeries is element-wise and'ed with a different entity (other)
         """
-        return self._boolean_binop(other, "__and__")
+        return self._conjunction_binop(other, "__and__")
 
     @check_args_fallback("all")
     def __or__(self, other):
         """Called when a BodoSeries is element-wise or'ed with a different entity (other)
         """
-        return self._boolean_binop(other, "__or__")
+        return self._conjunction_binop(other, "__or__")
 
     @check_args_fallback("all")
     def __xor__(self, other):
