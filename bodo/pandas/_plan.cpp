@@ -1,6 +1,5 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
-#include <arrow/type.h>
 #include <utility>
 
 #include "_executor.h"
@@ -308,6 +307,7 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
     std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
+
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
@@ -529,6 +529,14 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                 arrow_field_to_duckdb(map_type->item_field());
             duckdb_type =
                 duckdb::LogicalType::MAP(duckdb_key_type, duckdb_value_type);
+            break;
+        }
+        case arrow::Type::DICTIONARY: {
+            auto dict_type =
+                std::static_pointer_cast<arrow::DictionaryType>(arrow_type);
+            std::shared_ptr<arrow::Field> value_field =
+                arrow::field("name", dict_type->value_type());
+            auto [field_name, duckdb_type] = arrow_field_to_duckdb(value_field);
             break;
         }
         default:
