@@ -169,9 +169,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         self._mgr._plan = mgr_plan
         out_sample = series_sample.map(arg)
 
-        if isinstance(out_sample, pd.Series):
-            out_sample = out_sample.to_frame()
+        assert isinstance(out_sample, pd.Series), (
+            "BodoDataFrame.apply(), expected output to be Series."
+        )
+        out_sample = out_sample.to_frame()
         empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample))
+        # convert back to Series
+        empty_df = empty_df.squeeze()
 
         plan = LazyPlan(
             "LogicalProjectionPythonScalarFunc",
