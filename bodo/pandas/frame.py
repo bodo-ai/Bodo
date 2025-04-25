@@ -578,7 +578,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         out_sample = df_sample.apply(func, axis)
 
         assert isinstance(out_sample, pd.Series), (
-            "BodoDataFrame.apply(), expected output to be Series."
+            f"BodoDataFrame.apply(), expected output to be Series, got: {type(out_sample)}."
         )
         out_sample_df = out_sample.to_frame()
         empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample_df))
