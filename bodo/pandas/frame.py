@@ -573,7 +573,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
         # TODO: remove when LIMIT plan is properly supported for head().
         mgr_plan = self._mgr._plan
-        df_sample = self.head()
+        df_sample = self.head(1)
         self._mgr._plan = mgr_plan
         out_sample = df_sample.apply(func, axis)
 

@@ -165,7 +165,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
         # TODO: remove when LIMIT plan is properly supported for head().
         mgr_plan = self._mgr._plan
-        series_sample = self.head()
+        series_sample = self.head(1)
         self._mgr._plan = mgr_plan
         out_sample = series_sample.map(arg)
 
