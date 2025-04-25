@@ -363,12 +363,12 @@ void info_to_string_array(array_info* info, int64_t* length,
 }
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
-                         NRT_MemInfo** meminfo) {
+                         NRT_MemInfo** meminfo, bool dict_as_int) {
     // arrow_array_to_bodo() always produces a nullable array but
     // Python may expect a Numpy array
     if ((info->arr_type != bodo_array_type::NUMPY) &&
         (info->arr_type != bodo_array_type::CATEGORICAL) &&
-        (info->arr_type != bodo_array_type::DICT) &&
+        (!dict_as_int || info->arr_type != bodo_array_type::DICT) &&
         (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)) {
         // TODO: print array type in the error
         PyErr_Format(PyExc_RuntimeError,
