@@ -92,6 +92,10 @@ class PhysicalPythonScalarFunc : public PhysicalSourceSink {
             out_batch->column_names.push_back(std::string(utf8_name));
         }
 
+        // TODO: set metadata on the Python side in case the output has
+        // different Index type than input
+        out_batch->metadata = input_batch->metadata;
+
         Py_DECREF(bodo_module);
         Py_DECREF(result);
 
