@@ -378,8 +378,10 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
         return;
     }
 
-    // Treat DICT as categorical data, extract the indices
-    // TODO: convert indices when index type is != int32
+    bool delete_info = false;
+
+    // Treat DICT as categorical data and extract the indices.
+    // Parquet reader uses DICT arrays for categorical data.
     if (info->arr_type == bodo_array_type::DICT) {
         std::shared_ptr<array_info> codes_info = info->child_arrays[1];
 
@@ -393,7 +395,8 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                 codes_data[i] = -1;
             }
         }
-        info = codes_info.get();
+        info = new array_info(*codes_info);
+        delete_info = true;
     }
 
     *n_items = info->length;
@@ -401,6 +404,11 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
     NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
     incref_meminfo(data_meminfo);
     *meminfo = data_meminfo;
+
+    // Delete the dict child array that was created in the DICT case above
+    if (delete_info) {
+        delete info;
+    }
 }
 
 void info_to_null_array(array_info* info, uint64_t* n_items) {
