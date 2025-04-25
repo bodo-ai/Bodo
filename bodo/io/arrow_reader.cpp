@@ -825,8 +825,9 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
 
         std::shared_ptr<arrow::Array> concat_res;
         CHECK_ARROW_READER_AND_ASSIGN(res, "Concatenate", concat_res);
-        out_array = arrow_array_to_bodo(concat_res, pool);
         arrays.clear();  // memory of each array will be freed now
+
+        out_array = arrow_array_to_bodo(concat_res, pool);
 
         return out_array;
     }
