@@ -79,7 +79,7 @@ For example, consider a UDF that appends a variable suffix to each
 string in a Series of strings. The proper way to write this function is
 to use the `args` argument to `Series.apply()`.
 
-```py 
+```py
 import pandas as pd
 import bodo
 
@@ -191,3 +191,52 @@ If using a UDF that returns a DataFrame in Pandas through another means,
 this behavior will not match in Bodo and may result in a compilation
 error. Please convert your solution to one of the supported methods if
 possible.
+
+### Using the Engine Keyword Argument in Pandas
+
+Starting in Pandas 3.0, users will be able to pass a Bodo jit decorator as the `engine` argument to `DataFrame.apply`, which will automatically apply the decorator when applying the UDF. For example:
+
+```py
+import pandas as pd
+import bodo
+
+def update_score(S, answer, num_points):
+    if S.guess == answer:
+        return S.score + num_points
+    else:
+        return S.score
+
+df = pd.DataFrame(
+    {
+        "guess": ["A", "B", "C", "D", "A"],
+        "score": [0, 3, 4, 2, 1]
+    }
+)
+
+df["updated_score"] = df.apply(update_score, axis=1, args=("A", 3), engine=bodo.jit)
+```
+
+Note that the same restrictions related to type stability discussed in the previous sections apply here as well. The example above is equivalent to:
+``` py
+import pandas as pd
+import bodo
+
+def update_score(S, answer, num_points):
+    if S.guess == answer:
+        return S.score + num_points
+    else:
+        return S.score
+
+@bodo.jit
+def apply_update_scores(df, answer, num_points):
+    return df.apply(update_score, axis=1, args=(answer, num_points))
+
+df = pd.DataFrame(
+    {
+        "guess": ["A", "B", "C", "D", "A"],
+        "score": [0, 3, 4, 2, 1]
+    }
+)
+
+df["updated_score"] = apply_update_scores(df, "A", 3)
+```
