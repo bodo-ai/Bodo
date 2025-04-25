@@ -274,6 +274,8 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
     cdef unique_ptr[CExpression] make_const_int_expr(int val)
+    cdef unique_ptr[CExpression] make_const_float_expr(float val)
+    cdef unique_ptr[CExpression] make_const_string_expr(c_string val)
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
@@ -403,9 +405,15 @@ cdef unique_ptr[CExpression] make_expr(val):
        to duckdb.
     """
     cdef LogicalOperator source
+    cdef c_string val_cstr
 
     if isinstance(val, int):
         return make_const_int_expr(val)
+    elif isinstance(val, float):
+        return make_const_float_expr(val)
+    elif isinstance(val, str):
+        val_cstr = val.encode()
+        return make_const_string_expr(val_cstr)
     elif isinstance(val, LogicalColRef):
         select_vec = val.select_vec
         field = val.out_schema.field(0)
@@ -428,14 +436,14 @@ def get_source(val):
     """Process a filter expression tree and find all the unique
        columns referenced in the tree.
     """
-    if isinstance(val, int):
+    if isinstance(val, (int, float, str)):
         return set()
     elif isinstance(val, LogicalColRef):
         return {val}
     elif isinstance(val, (LogicalBinaryOp, LogicalConjunctionOp)):
         return get_source(val.lhs).union(get_source(val.rhs))
     else:
-        raise ValueError("Unknown expr type in get_source " + type(val))
+        raise ValueError("Unknown expr type in get_source " + str(type(val)))
 
 cdef class LogicalFilter(LogicalOperator):
     def __cinit__(self, out_schema, LogicalOperator source, key):

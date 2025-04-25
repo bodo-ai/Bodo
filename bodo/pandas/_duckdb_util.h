@@ -10,5 +10,5 @@
  * @param expr - the duckdb value to convert
  * @return the C++ variant converted value
  */
-std::variant<int8_t, int16_t, int32_t, int64_t, float, double> extractValue(
+std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t, uint64_t, bool, std::string, float, double> extractValue(
     const duckdb::Value& value);

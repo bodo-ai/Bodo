@@ -69,6 +69,16 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val) {
         duckdb::Value(val));
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val) {
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value(val));
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(std::string val) {
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value(val));
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
     int col_idx) {
