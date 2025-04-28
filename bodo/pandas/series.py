@@ -60,8 +60,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
     def _conjunction_binop(self, other, op):
-        """Called when a BodoSeries is element-wise boolean combined with a different entity (other)
-        """
+        """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
         from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.
@@ -81,28 +80,25 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback("all")
     def __and__(self, other):
-        """Called when a BodoSeries is element-wise and'ed with a different entity (other)
-        """
+        """Called when a BodoSeries is element-wise and'ed with a different entity (other)"""
         return self._conjunction_binop(other, "__and__")
 
     @check_args_fallback("all")
     def __or__(self, other):
-        """Called when a BodoSeries is element-wise or'ed with a different entity (other)
-        """
+        """Called when a BodoSeries is element-wise or'ed with a different entity (other)"""
         return self._conjunction_binop(other, "__or__")
 
     @check_args_fallback("all")
     def __xor__(self, other):
         """Called when a BodoSeries is element-wise xor'ed with a different
-           entity (other). xor is not supported in duckdb so convert to
-           (A or B) and not (A and B).
+        entity (other). xor is not supported in duckdb so convert to
+        (A or B) and not (A and B).
         """
         return self.__or__(other).__and__(self.__and__(other).__invert__())
 
     @check_args_fallback("all")
     def __invert__(self):
-        """Called when a BodoSeries is element-wise not'ed with a different entity (other)
-        """
+        """Called when a BodoSeries is element-wise not'ed with a different entity (other)"""
         from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.

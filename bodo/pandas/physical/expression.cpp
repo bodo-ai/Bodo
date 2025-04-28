@@ -21,15 +21,16 @@ duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype) {
 }
 
 template <>
-void compare_one_array<std::string>(std::shared_ptr<array_info> arr1, const std::string data2,
-                       uint8_t *output,
-                       const std::function<bool(int)> &comparator) {
+void compare_one_array<std::string>(
+    std::shared_ptr<array_info> arr1, const std::string data2, uint8_t *output,
+    const std::function<bool(int)> &comparator) {
     bool na_position = false;
 
     assert(arr1->arr_type == bodo_array_type::STRING);
     bodo::vector<std::string> svec = {data2};
     std::vector<bool> nulls = {false};
-    std::shared_ptr<array_info> arr2 = string_array_from_vector(svec, nulls, Bodo_CTypes::STRING);
+    std::shared_ptr<array_info> arr2 =
+        string_array_from_vector(svec, nulls, Bodo_CTypes::STRING);
     for (uint64_t i = 0; i < arr1->length; ++i) {
         int test = KeyComparisonAsPython_Column(na_position, arr1, i, arr2, 0);
         SetBitTo(output, i, comparator(test));
@@ -59,7 +60,8 @@ void compare_two_array(std::shared_ptr<array_info> arr1,
         }
     } else if (arr1->arr_type == bodo_array_type::STRING) {
         for (uint64_t i = 0; i < arr1->length; ++i) {
-            int test = KeyComparisonAsPython_Column(na_position, arr1, i, arr2, i);
+            int test =
+                KeyComparisonAsPython_Column(na_position, arr1, i, arr2, i);
             SetBitTo(output, i, comparator(test));
         }
     }

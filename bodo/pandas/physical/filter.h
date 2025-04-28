@@ -45,15 +45,18 @@ class PhysicalFilter : public PhysicalSourceSink {
                 "Filter expression tree did not result in a boolean array");
         }
 
-        if (!input_batch->column_names[input_batch->column_names.size() - 1].starts_with("__index_level_")) {
-            // Filter will always generate an explicit index.  If an explicit index
-            // does not already exist then create it and fill it is sequentially.
+        if (!input_batch->column_names[input_batch->column_names.size() - 1]
+                 .starts_with("__index_level_")) {
+            // Filter will always generate an explicit index.  If an explicit
+            // index does not already exist then create it and fill it is
+            // sequentially.
             uint64_t col_length = input_batch->columns[0]->length;
             std::shared_ptr<array_info> idx_arr =
                 alloc_nullable_array_no_nulls(col_length, Bodo_CTypes::INT64);
             // TODO: This has to be a bug in the streaming case.
             for (size_t i = 0; i < col_length; i++) {
-                getv<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(idx_arr, i) = i;
+                getv<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(idx_arr, i) =
+                    i;
             }
             input_batch->columns.push_back(idx_arr);
             input_batch->column_names.push_back("__index_level_0__");
