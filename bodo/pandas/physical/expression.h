@@ -101,7 +101,8 @@ extern std::function<bool(int)> less_equal_test;
 duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype);
 
 /**
- * @brief Handle numerical comparison operators working on a column and a scalar.
+ * @brief Handle numerical comparison operators working on a column and a
+ * scalar.
  *
  * @param arr1 - the column data input to compare
  * @param data2 - the scalar data to compare all the elements in arr1 against
@@ -110,10 +111,9 @@ duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype);
  *                     the boolean result for the desired operator
  */
 template <typename T>
-void compare_one_array_numeric(std::shared_ptr<array_info> arr1,
-                       const T data2,
-                       uint8_t *output,
-                       const std::function<bool(int)> &comparator) {
+void compare_one_array_numeric(std::shared_ptr<array_info> arr1, const T data2,
+                               uint8_t *output,
+                               const std::function<bool(int)> &comparator) {
     int64_t n_rows = arr1->length;
     uint64_t arr1_siztype = numpy_item_size[arr1->dtype];
     char *arr1_data1 = arr1->data1();
@@ -139,12 +139,12 @@ void compare_one_array_numeric(std::shared_ptr<array_info> arr1,
  *                     the boolean result for the desired operator
  */
 void compare_one_array_string(std::shared_ptr<array_info> arr1,
-                       const std::string data2,
-                       uint8_t *output,
-                       const std::function<bool(int)> &comparator);
+                              const std::string data2, uint8_t *output,
+                              const std::function<bool(int)> &comparator);
 
 /**
- * @brief Dispatch comparison operators working on a column and a scalar to the right comparison function for that type.
+ * @brief Dispatch comparison operators working on a column and a scalar to the
+ * right comparison function for that type.
  *
  * @param arr1 - the column data input to compare
  * @param data2 - the scalar data to compare all the elements in arr1 against
@@ -153,13 +153,12 @@ void compare_one_array_string(std::shared_ptr<array_info> arr1,
  *                     the boolean result for the desired operator
  */
 template <typename T>
-void compare_one_array_dispatch(std::shared_ptr<array_info> arr1,
-                       const T data2,
-                       uint8_t *output,
-                       const std::function<bool(int)> &comparator) {
+void compare_one_array_dispatch(std::shared_ptr<array_info> arr1, const T data2,
+                                uint8_t *output,
+                                const std::function<bool(int)> &comparator) {
     if (is_numerical(arr1->dtype)) {
         compare_one_array_numeric(arr1, data2, output, comparator);
-    } else if(arr1->arr_type == bodo_array_type::STRING) {
+    } else if (arr1->arr_type == bodo_array_type::STRING) {
         compare_one_array_string(arr1, data2, output, comparator);
     }
 }
@@ -174,8 +173,7 @@ void compare_one_array_dispatch(std::shared_ptr<array_info> arr1,
  *                     the boolean result for the desired operator
  */
 void compare_two_array(std::shared_ptr<array_info> arr1,
-                       const std::shared_ptr<array_info> arr2,
-                       uint8_t *output,
+                       const std::shared_ptr<array_info> arr2, uint8_t *output,
                        const std::function<bool(int)> &comparator);
 
 /**
@@ -284,8 +282,8 @@ class PhysicalComparisonExpression : public PhysicalExpression {
                               result_data1, comparator);
         } else {
             compare_one_array_dispatch(left_as_array->result,
-                              right_as_scalar->result->data1(), result_data1,
-                              comparator);
+                                       right_as_scalar->result->data1(),
+                                       result_data1, comparator);
         }
 
         return std::make_shared<ArrayExprResult>(result);

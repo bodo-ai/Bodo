@@ -21,15 +21,15 @@ duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype) {
 }
 
 void compare_one_array_string(std::shared_ptr<array_info> arr1,
-                       const std::string data2,
-                       uint8_t *output,
-                       const std::function<bool(int)> &comparator) {
+                              const std::string data2, uint8_t *output,
+                              const std::function<bool(int)> &comparator) {
     bool na_position = false;
 
     assert(arr1->arr_type == bodo_array_type::STRING);
     bodo::vector<std::string> svec = {data2};
     std::vector<bool> nulls = {true};
-    std::shared_ptr<array_info> arr2 = string_array_from_vector(svec, nulls, Bodo_CTypes::STRING);
+    std::shared_ptr<array_info> arr2 =
+        string_array_from_vector(svec, nulls, Bodo_CTypes::STRING);
     for (uint64_t i = 0; i < arr1->length; ++i) {
         int test = KeyComparisonAsPython_Column(na_position, arr1, i, arr2, 0);
         SetBitTo(output, i, comparator(test));
@@ -37,8 +37,7 @@ void compare_one_array_string(std::shared_ptr<array_info> arr1,
 }
 
 void compare_two_array(std::shared_ptr<array_info> arr1,
-                       const std::shared_ptr<array_info> arr2,
-                       uint8_t *output,
+                       const std::shared_ptr<array_info> arr2, uint8_t *output,
                        const std::function<bool(int)> &comparator) {
     int64_t n_rows = arr1->length;
     uint64_t arr1_siztype = numpy_item_size[arr1->dtype];
@@ -71,5 +70,7 @@ std::function<bool(int)> equal_test = [](int test) { return test == 0; };
 std::function<bool(int)> not_equal_test = [](int test) { return test != 0; };
 std::function<bool(int)> greater_test = [](int test) { return test < 0; };
 std::function<bool(int)> less_test = [](int test) { return test > 0; };
-std::function<bool(int)> greater_equal_test = [](int test) { return test <= 0; };
+std::function<bool(int)> greater_equal_test = [](int test) {
+    return test <= 0;
+};
 std::function<bool(int)> less_equal_test = [](int test) { return test >= 0; };
