@@ -81,6 +81,7 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
         pytest.param("datetime64ns_tz_1.pq", id="datetime64ns_tz"),
         pytest.param("struct_1.pq", id="struct"),
         pytest.param("map_1.pq", id="map"),
+        pytest.param("dictionary_string_1.pq", id="dictionary_string"),
     ],
 )
 def test_pq_read_types(fname, datapath, memory_leak_check):

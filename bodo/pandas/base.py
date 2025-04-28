@@ -63,12 +63,6 @@ def read_parquet(
         partitioning="hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
-    partition_names = pq_dataset.partition_names
-
-    if len(partition_names) > 0:
-        raise NotImplementedError(
-            "bd.read_parquet: Reading parquet with partition column not supported yet."
-        )
 
     empty_df = arrow_to_empty_df(arrow_schema)
 
