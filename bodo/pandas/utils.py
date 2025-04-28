@@ -383,7 +383,7 @@ class LazyPlan:
             kwargs = {k: recursive_check(v, in_filter=in_filter) for k, v in self.kwargs.items()}
 
         # Create real duckdb class.
-        pa_schema = pa.Schema.from_pandas(self.out_schema)
+        pa_schema = pa.Schema.from_pandas(self.out_schema, preserve_index=(self.plan_class == "LogicalFilter"))
         ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret

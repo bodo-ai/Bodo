@@ -3,6 +3,8 @@
 #include "../libs/_array_utils.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "operator.h"
+#include "../tests/utils.h"
+#include <iostream>
 
 /**
  * @brief Superclass for possible results returned by nodes in Bodo
@@ -117,12 +119,14 @@ void compare_one_array(std::shared_ptr<array_info> arr1, const T data2,
     char *arr1_data1_end = arr1_data1 + (n_rows * arr1_siztype);
     bool na_position = false;
 
-    std::function<int(const char *, const char *, bool const &)> ncfunc =
-        getNumericComparisonFunc(arr1->dtype);
-    for (uint64_t i = 0; arr1_data1 < arr1_data1_end;
-         arr1_data1 += arr1_siztype, ++i) {
-        int test = ncfunc(arr1_data1, data2, na_position);
-        SetBitTo(output, i, comparator(test));
+    if (is_numerical(arr1->dtype)) {
+        std::function<int(const char *, const char *, bool const &)> ncfunc =
+            getNumericComparisonFunc(arr1->dtype);
+        for (uint64_t i = 0; arr1_data1 < arr1_data1_end;
+             arr1_data1 += arr1_siztype, ++i) {
+            int test = ncfunc(arr1_data1, data2, na_position);
+            SetBitTo(output, i, comparator(test));
+        }
     }
 }
 
