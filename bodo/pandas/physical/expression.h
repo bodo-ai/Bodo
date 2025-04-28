@@ -1,10 +1,10 @@
 #pragma once
 
+#include <iostream>
 #include "../libs/_array_utils.h"
+#include "../tests/utils.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "operator.h"
-#include "../tests/utils.h"
-#include <iostream>
 
 /**
  * @brief Superclass for possible results returned by nodes in Bodo

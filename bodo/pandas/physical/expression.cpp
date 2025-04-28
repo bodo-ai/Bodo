@@ -60,7 +60,8 @@ void compare_two_array(std::shared_ptr<array_info> arr1,
         }
     } else if (arr1->arr_type == bodo_array_type::STRING) {
         for (uint64_t i = 0; i < arr1->length; ++i) {
-            int test = KeyComparisonAsPython_Column(na_position, arr1, i, arr2, i);
+            int test =
+                KeyComparisonAsPython_Column(na_position, arr1, i, arr2, i);
             SetBitTo(output, i, comparator(test));
         }
     }
