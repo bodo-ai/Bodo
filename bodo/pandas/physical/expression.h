@@ -101,7 +101,7 @@ extern std::function<bool(int)> less_equal_test;
 duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype);
 
 /**
- * @brief Handle comparison operators working on a column and a scalar.
+ * @brief Handle numerical comparison operators working on a column and a scalar.
  *
  * @param arr1 - the column data input to compare
  * @param data2 - the scalar data to compare all the elements in arr1 against
@@ -110,7 +110,8 @@ duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype);
  *                     the boolean result for the desired operator
  */
 template <typename T>
-void compare_one_array(std::shared_ptr<array_info> arr1, const T data2,
+void compare_one_array_numeric(std::shared_ptr<array_info> arr1,
+                       const T data2,
                        uint8_t *output,
                        const std::function<bool(int)> &comparator) {
     int64_t n_rows = arr1->length;
@@ -119,14 +120,47 @@ void compare_one_array(std::shared_ptr<array_info> arr1, const T data2,
     char *arr1_data1_end = arr1_data1 + (n_rows * arr1_siztype);
     bool na_position = false;
 
+    std::function<int(const char *, const char *, bool const &)> ncfunc =
+        getNumericComparisonFunc(arr1->dtype);
+    for (uint64_t i = 0; arr1_data1 < arr1_data1_end;
+         arr1_data1 += arr1_siztype, ++i) {
+        int test = ncfunc(arr1_data1, data2, na_position);
+        SetBitTo(output, i, comparator(test));
+    }
+}
+
+/**
+ * @brief Handle string comparison operators working on a column and a scalar.
+ *
+ * @param arr1 - the column data input to compare
+ * @param data2 - the scalar data to compare all the elements in arr1 against
+ * @param output - pointer to boolean output array with 1-bit data type
+ * @param comparator - function to convert comparison result to
+ *                     the boolean result for the desired operator
+ */
+void compare_one_array_string(std::shared_ptr<array_info> arr1,
+                       const std::string data2,
+                       uint8_t *output,
+                       const std::function<bool(int)> &comparator);
+
+/**
+ * @brief Dispatch comparison operators working on a column and a scalar to the right comparison function for that type.
+ *
+ * @param arr1 - the column data input to compare
+ * @param data2 - the scalar data to compare all the elements in arr1 against
+ * @param output - pointer to boolean output array with 1-bit data type
+ * @param comparator - function to convert comparison result to
+ *                     the boolean result for the desired operator
+ */
+template <typename T>
+void compare_one_array_dispatch(std::shared_ptr<array_info> arr1,
+                       const T data2,
+                       uint8_t *output,
+                       const std::function<bool(int)> &comparator) {
     if (is_numerical(arr1->dtype)) {
-        std::function<int(const char *, const char *, bool const &)> ncfunc =
-            getNumericComparisonFunc(arr1->dtype);
-        for (uint64_t i = 0; arr1_data1 < arr1_data1_end;
-             arr1_data1 += arr1_siztype, ++i) {
-            int test = ncfunc(arr1_data1, data2, na_position);
-            SetBitTo(output, i, comparator(test));
-        }
+        compare_one_array_numeric(arr1, data2, output, comparator);
+    } else if(arr1->arr_type == bodo_array_type::STRING) {
+        compare_one_array_string(arr1, data2, output, comparator);
     }
 }
 
@@ -140,7 +174,8 @@ void compare_one_array(std::shared_ptr<array_info> arr1, const T data2,
  *                     the boolean result for the desired operator
  */
 void compare_two_array(std::shared_ptr<array_info> arr1,
-                       const std::shared_ptr<array_info> arr2, uint8_t *output,
+                       const std::shared_ptr<array_info> arr2,
+                       uint8_t *output,
                        const std::function<bool(int)> &comparator);
 
 /**
@@ -248,7 +283,7 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             compare_two_array(left_as_array->result, right_as_array->result,
                               result_data1, comparator);
         } else {
-            compare_one_array(left_as_array->result,
+            compare_one_array_dispatch(left_as_array->result,
                               right_as_scalar->result->data1(), result_data1,
                               comparator);
         }
@@ -286,6 +321,26 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
    private:
     const T constant;
+};
+
+template <>
+class PhysicalConstantExpression<std::string> : public PhysicalExpression {
+   public:
+    PhysicalConstantExpression(const std::string &val) : constant(val) {}
+    virtual ~PhysicalConstantExpression() = default;
+
+    virtual std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch) {
+        // Create 1 element array with same type as constant.
+        std::unique_ptr<array_info> result =
+            alloc_nullable_array_no_nulls(1, typeToDtype(constant));
+        // Copy constant into the array.
+        std::memcpy(result->data1(), constant.c_str(), constant.size());
+        return std::make_shared<ScalarExprResult>(std::move(result));
+    }
+
+   private:
+    const std::string constant;
 };
 
 /**
