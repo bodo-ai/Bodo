@@ -295,3 +295,21 @@ def test_series_map(datapath, index_val):
     assert out_bodo._lazy
     assert out_bodo.plan is not None
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_parquet_read_partitioned(datapath):
+    """Test reading a partitioned parquet dataset."""
+    path = datapath("dataframe_library/example_partitioned.parquet")
+
+    bodo_out = bd.read_parquet(path)
+    py_out = pd.read_parquet(path)
+
+    assert bodo_out._lazy
+    assert bodo_out.plan is not None
+
+    # NOTE: Bodo dataframe library currently reads partitioned columns as
+    # dictionary-encoded strings but Pandas reads them as categorical.
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
