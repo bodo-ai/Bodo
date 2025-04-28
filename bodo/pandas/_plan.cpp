@@ -623,5 +623,33 @@ int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op) {
     return ret;
 }
 
+void set_table_meta_from_arrow(int64_t table_pointer,
+                               PyObject *pyarrow_schema) {
+    table_info *table = reinterpret_cast<table_info *>(table_pointer);
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+
+    // Set column names if not already set
+    if (table->column_names.size() == 0) {
+        for (int i = 0; i < arrow_schema->num_fields(); i++) {
+            table->column_names.emplace_back(arrow_schema->field(i)->name());
+        }
+    } else if (table->column_names.size() !=
+               static_cast<size_t>(arrow_schema->num_fields())) {
+        throw std::runtime_error(
+            "Number of columns in Arrow schema does not match table");
+    } else {
+        // Check that the column names match
+        for (int i = 0; i < arrow_schema->num_fields(); i++) {
+            if (table->column_names[i] != arrow_schema->field(i)->name()) {
+                throw std::runtime_error(
+                    "Column names in Arrow schema do not match table");
+            }
+        }
+    }
+
+    table->metadata = std::make_shared<TableMetadata>(
+        arrow_schema->metadata()->keys(), arrow_schema->metadata()->values());
+}
+
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN
