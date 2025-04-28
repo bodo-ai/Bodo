@@ -25,7 +25,7 @@ def test_from_pandas(datapath):
     # Sequential test
     with temp_config_override("dataframe_library_run_parallel", False):
         bdf = bd.from_pandas(df)
-        assert bdf._lazy
+        assert bdf.is_lazy_plan()
         assert bdf.plan is not None
         assert bdf.plan.plan_class == "LogicalGetPandasReadSeq"
         duckdb_plan = bdf.plan.generate_duckdb()
@@ -34,19 +34,19 @@ def test_from_pandas(datapath):
             bdf,
             df,
         )
-        assert not bdf._lazy
+        assert not bdf.is_lazy_plan()
         assert bdf._mgr._plan is None
 
     # Parallel test
     bdf = bd.from_pandas(df)
-    assert bdf._lazy
+    assert bdf.is_lazy_plan()
     assert bdf.plan is not None
     assert bdf.plan.plan_class == "LogicalGetPandasReadParallel"
     _test_equal(
         bdf,
         df,
     )
-    assert not bdf._lazy
+    assert not bdf.is_lazy_plan()
     assert bdf._mgr._plan is None
 
 
@@ -159,7 +159,7 @@ def test_filter_pushdown(datapath, op):
     bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
     # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2._lazy
+    assert bodo_df2.is_lazy_plan()
     assert bodo_df2.plan is not None
 
     pre, post = bd.utils.getPlanStatistics(bodo_df2.plan)
@@ -218,7 +218,7 @@ def test_filter(datapath, op):
     bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
     # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2._lazy
+    assert bodo_df2.is_lazy_plan()
     assert bodo_df2.plan is not None
 
     py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
@@ -255,6 +255,6 @@ def test_str_lower(datapath):
     bdf = bd.from_pandas(df)
     out_pd = df.B.str.lower()
     out_bodo = bdf.B.str.lower()
-    assert out_bodo._lazy
+    assert out_bodo.is_lazy_plan()
     assert out_bodo.plan is not None
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
