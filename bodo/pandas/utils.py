@@ -430,7 +430,11 @@ def _get_n_index_arrays(index):
 
 
 def df_to_cpp_table(df):
-    """Convert a pandas DataFrame to a C++ table pointer and column names."""
+    """Convert a pandas DataFrame to a C++ table pointer with column names and
+    metadata set properly.
+    """
+    from bodo.ext import plan_optimizer
+
     n_table_cols = len(df.columns)
     n_index_arrs = _get_n_index_arrays(df.index)
     n_all_cols = n_table_cols + n_index_arrs
@@ -447,7 +451,8 @@ def df_to_cpp_table(df):
         return cast_table_ptr_to_int64(cpp_table)
 
     cpp_table = impl_df_to_cpp_table(df)
-    return cpp_table, list(df.columns)
+    plan_optimizer.set_cpp_table_meta(cpp_table, pa.Schema.from_pandas(df))
+    return cpp_table
 
 
 def _get_function_from_path(path_str: str):
