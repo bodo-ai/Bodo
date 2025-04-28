@@ -116,7 +116,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return getattr(self._mgr, "_plan", None) is not None
 
     def execute_plan(self):
-        self._mgr.execute_plan()
+        return self._mgr.execute_plan()
 
     @property
     def shape(self):

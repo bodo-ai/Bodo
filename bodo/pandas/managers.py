@@ -17,6 +17,7 @@ from pandas.core.internals.managers import (
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.plan_optimizer import LogicalOperator
 from bodo.spawn.utils import debug_msg
 
@@ -160,7 +161,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         super().__init__(
             blocks,
             axes,
-            verify_integrity=verify_integrity if (result_id is None) else False,
+            verify_integrity=verify_integrity
+            if (result_id is None and plan is None)
+            else False,
         )
         if result_id is not None:
             # Set pandas internal metadata
@@ -199,13 +202,28 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         from bodo.pandas.utils import execute_plan
 
         data = execute_plan(self._plan)
-        self._plan = None
-        self._md_result_id = data._mgr._md_result_id
-        data._mgr._md_result_id = None
-        self._md_nrows = data._mgr._md_nrows
-        self._md_head = data._mgr._md_head
-        return data
-        
+        if isinstance(data, BodoLazyWrapper):
+            # We got a lazy result, we need to take ownership of the result
+            # and transfer ownership of the data to this manager
+            self._plan = None
+            self._md_result_id = data._mgr._md_result_id
+            self._md_nrows = data._mgr._md_nrows
+            self._md_head = data._mgr._md_head
+            self._collect_func = data._mgr._collect_func
+            self._del_func = data._mgr._del_func
+            self.axes = data._mgr.axes
+            # Transfer ownership to this manager
+            data._mgr._md_result_id = None
+            out = type(data).from_lazy_mgr(self, self._md_head)
+            return out
+        else:
+            # We got a normal pandas object, don't need to set any metadata
+            self._blocks = data._mgr.blocks
+            self.axes = data._mgr.axes
+            self._plan = None
+            BlockManager._rebuild_blknos_and_blklocs(self)
+            return data
+
     def _collect(self):
         """
         Collect the data onto the spawner.
@@ -217,14 +235,8 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             debug_msg(
                 self.logger, "[LazyBlockManager] Executing Plan and collecting data..."
             )
-            data = self.execute_plan()
-            self.blocks = data._mgr.blocks
-            # Update index here since the plan created a dummy index
-            self.axes = data._mgr.axes
-            self._md_result_id = None
-            self._md_nrows = None
-            self._md_head = None
-            BlockManager._rebuild_blknos_and_blklocs(self)
+            self.execute_plan()
+            # We might fallthrough here if data is distributed
 
         if self._md_result_id is not None:
             debug_msg(self.logger, "[LazyBlockManager] Collecting data from workers...")
@@ -235,6 +247,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             self._collect_func = None
 
             self.blocks = data._mgr.blocks
+            self.axes = data._mgr.axes
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
@@ -253,6 +266,8 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             "logger",
             "_collect_func",
             "_del_func",
+            "_plan",
+            "execute_plan",
         }:
             return object.__getattribute__(self, name)
         # Most of the time _rebuild_blknos_and_blklocs is called by pandas internals
@@ -268,7 +283,6 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             "__reduce__",
             "__setstate__",
             "_slice_mgr_rows",
-            "axes",
         }:
             self._collect()
         return super().__getattribute__(name)
@@ -281,15 +295,6 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
-
-    def _len(self) -> int:
-        """
-        Get length of the arrays in the manager.
-        Uses nrows if we don't have the data yet, otherwise uses the super implementation.
-        """
-        if self._md_head is not None:
-            return self._md_nrows
-        return super().__len__()
 
 
 class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockManager]):
@@ -439,12 +444,26 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         from bodo.pandas.utils import execute_plan
 
         data = execute_plan(self._plan)
-        self._plan = None
-        self._md_result_id = data._mgr._md_result_id
-        data._mgr._md_result_id = None
-        self._md_nrows = data._mgr._md_nrows
-        self._md_head = data._mgr._md_head
-        return data
+        if isinstance(data, BodoLazyWrapper):
+            # We got a lazy result, we need to take ownership of the result
+            # and transfer ownership of the data to this manager
+            self._plan = None
+            self._md_result_id = data._mgr._md_result_id
+            self._md_nrows = data._mgr._md_nrows
+            self._md_head = data._mgr._md_head
+            self._collect_func = data._mgr._collect_func
+            self._del_func = data._mgr._del_func
+            self.axes = data._mgr.axes
+            # Transfer ownership to this manager
+            data._mgr._md_result_id = None
+            return type(data).from_lazy_mgr(self, self._md_head)
+        else:
+            # We got a normal pandas object, don't need to set any metadata
+            self.blocks = data._mgr.blocks
+            self.axes = data._mgr.axes
+            self._plan = None
+            BlockManager._rebuild_blknos_and_blklocs(self)
+            return data
 
     def _collect(self):
         """
@@ -458,13 +477,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                 self.logger,
                 "[LazySingleBlockManager] Executing Plan and collecting data...",
             )
-            data = self.execute_plan()
-            self.blocks = data._mgr.blocks
-            # Update index here since the plan created a dummy index
-            self.axes = data._mgr.axes
-            self._md_result_id = None
-            self._md_nrows = None
-            self._md_head = None
+            self.execute_plan()
+            # We might fallthrough here if data is distributed
 
         if self._md_result_id is not None:
             assert self._md_nrows is not None
@@ -475,6 +489,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             )
             data = self._collect_func(self._md_result_id)
             self.blocks = data._mgr.blocks
+            self.axes = data._mgr.axes
 
             self._md_result_id = None
             self._md_nrows = None
@@ -494,7 +509,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "logger",
             "_collect_func",
             "_del_func",
-            "_len",
+            "_plan",
+            "execute_plan",
         }:
             return object.__getattribute__(self, name)
         if name == "blocks":
@@ -509,18 +525,6 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
-
-    def __len__(self) -> int:
-        return self._len()
-
-    def _len(self) -> int:
-        """
-        Get length of the arrays in the manager.
-        Uses nrows if we don't have the data yet, otherwise uses the super implementation.
-        """
-        if self._md_head is not None:
-            return self._md_nrows
-        return super().__len__()
 
     def get_slice(self, slobj: slice, axis: int = 0) -> SingleBlockManager:
         """

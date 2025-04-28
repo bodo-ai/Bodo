@@ -2,14 +2,15 @@ import operator
 import os
 import tempfile
 
-import bodo
 import numba
 import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
 import bodo.pandas as bd
-from bodo.tests.utils import _test_equal, temp_config_override, pytest_mark_spawn_mode
+from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
+
 
 def test_from_pandas(datapath):
     """Very simple test to scan a dataframe passed into from_pandas."""
@@ -187,22 +188,18 @@ def test_filter_distributed(datapath, op):
 
     # Force plan to execute but keep distributed.
     f(bodo_df1)
-
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    print("py_df1", py_df1)
 
-    _test_equal(bodo_df1, py_df1, check_pandas_types=False)
-    """
+    # _test_equal(bodo_df1, py_df1, check_pandas_types=False)
+    # breakpoint()
     bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
     # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2._lazy
-    assert bodo_df2.plan is not None
+    assert bodo_df2.is_lazy_plan()
 
     py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
-    """
 
 
 @pytest.mark.parametrize(

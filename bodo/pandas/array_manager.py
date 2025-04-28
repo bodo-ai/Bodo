@@ -8,6 +8,7 @@ import pandas as pd
 from pandas.core.arrays import ExtensionArray
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.plan_optimizer import LogicalOperator
 
 try:
@@ -236,12 +237,25 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         from bodo.pandas.utils import execute_plan
 
         data = execute_plan(self._plan)
-        self._plan = None
-        self._md_result_id = data._mgr._md_result_id
-        data._mgr._md_result_id = None
-        self._md_nrows = data._mgr._md_nrows
-        self._md_head = data._mgr._md_head
-        return data
+        if isinstance(data, BodoLazyWrapper):
+            # We got a lazy result, we need to take ownership of the result
+            # and transfer ownership of the data to this manager
+            self._plan = None
+            self._md_result_id = data._mgr._md_result_id
+            self._md_nrows = data._mgr._md_nrows
+            self._md_head = data._mgr._md_head
+            self._collect_func = data._mgr._collect_func
+            self._del_func = data._mgr._del_func
+            self.axes = data._mgr.axes
+            # Transfer ownership to this manager
+            data._mgr._md_result_id = None
+            return data
+        else:
+            # We got a normal pandas object, don't need to set any metadata
+            self.arrays = data._mgr.arrays
+            self.axes = data._mgr.axes
+            self._plan = None
+            return data
 
     def _collect(self):
         """
@@ -253,13 +267,8 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             debug_msg(
                 self.logger, "[LazyArrayManager] Executing Plan and collecting data..."
             )
-            data = self.execute_plan()
-            self.arrays = data._mgr.arrays
-            # Update index here since the plan created a dummy index
-            self._axes = data._mgr._axes
-            self._md_result_id = None
-            self._md_nrows = None
-            self._md_head = None
+            self.execute_plan()
+            # We might fallthrough here if data is distributed
 
         if self._md_result_id is not None:
             assert self._md_head is not None
@@ -268,6 +277,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             debug_msg(self.logger, "[LazyArrayManager] Collecting data...")
             data = self._collect_func(self._md_result_id)
             self.arrays = data._mgr.arrays
+            self.axes = data._mgr.axes
 
             self._md_result_id = None
             self._md_head = None
@@ -455,12 +465,25 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         from bodo.pandas.utils import execute_plan
 
         data = execute_plan(self._plan)
-        self._plan = None
-        self._md_result_id = data._mgr._md_result_id
-        data._mgr._md_result_id = None
-        self._md_nrows = data._mgr._md_nrows
-        self._md_head = data._mgr._md_head
-        return data
+        if isinstance(data, BodoLazyWrapper):
+            # We got a lazy result, we need to take ownership of the result
+            # and transfer ownership of the data to this manager
+            self._plan = None
+            self._md_result_id = data._mgr._md_result_id
+            self._md_nrows = data._mgr._md_nrows
+            self._md_head = data._mgr._md_head
+            self._collect_func = data._mgr._collect_func
+            self._del_func = data._mgr._del_func
+            self.axes = data._mgr.axes
+            # Transfer ownership to this manager
+            data._mgr._md_result_id = None
+            return type(data).from_lazy_mgr(self, self._md_head)
+        else:
+            # We got a normal pandas object, don't need to set any metadata
+            self.arrays = data._mgr.arrays
+            self.axes = data._mgr.axes
+            self._plan = None
+            return data
 
     def _collect(self):
         """
@@ -474,12 +497,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
                 "[LazySingleArrayManager] Executing Plan and collecting data...",
             )
             data = self.execute_plan()
-            self.arrays = data._mgr.arrays
-            # Update index here since the plan created a dummy index
-            self._axes = data._mgr._axes
-            self._md_result_id = None
-            self._md_nrows = None
-            self._md_head = None
+            # We might fallthrough here if data is distributed
 
         if self._md_result_id is not None:
             debug_msg(self.logger, "[LazySingleArrayManager] Collecting data...")
@@ -489,6 +507,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             data = self._collect_func(self._md_result_id)
 
             self.arrays = data._mgr.arrays
+            self.axes = data._mgr.axes
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None

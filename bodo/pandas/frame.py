@@ -122,7 +122,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return getattr(self._mgr, "_plan", None) is not None
 
     def execute_plan(self):
-        self._mgr.execute_plan()
+        return self._mgr.execute_plan()
 
     def head(self, n: int = 5):
         """
@@ -138,13 +138,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __len__(self):
         if self.is_lazy_plan():
             self._mgr._collect()
-        return self._mgr._len()
+        elif self._lazy:
+            return self._mgr._md_nrows
+        return super().__len__()
 
     @property
     def shape(self):
         if self.is_lazy_plan():
             self._mgr._collect()
-        return (self.__len__(), len(self._head_df.columns))
+        elif self._lazy:
+            return self._mgr._md_nrows, len(self._head_df.columns)
+        return super().shape
 
     def to_parquet(
         self,
