@@ -633,7 +633,8 @@ void set_table_meta_from_arrow(int64_t table_pointer,
         for (int i = 0; i < arrow_schema->num_fields(); i++) {
             table->column_names.emplace_back(arrow_schema->field(i)->name());
         }
-    } else if (table->column_names.size() != arrow_schema->num_fields()) {
+    } else if (table->column_names.size() !=
+               static_cast<size_t>(arrow_schema->num_fields())) {
         throw std::runtime_error(
             "Number of columns in Arrow schema does not match table");
     } else {
