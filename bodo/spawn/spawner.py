@@ -31,7 +31,6 @@ from bodo.pandas import (
     LazyMetadata,
 )
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
-from bodo.pandas.utils import execute_plan
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
