@@ -52,8 +52,7 @@ class PhysicalPythonScalarFunc : public PhysicalSourceSink {
             throw std::runtime_error("Error calling run_apply_udf");
         }
 
-        // Parse the result (assuming it returns a tuple with (table_info,
-        // arrow_schema))
+        // Result should be a pointer to a C++ table_info
         if (!PyLong_Check(result)) {
             Py_DECREF(result);
             Py_DECREF(bodo_module);
