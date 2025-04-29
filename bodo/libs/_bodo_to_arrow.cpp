@@ -1255,7 +1255,7 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
             alloc_string_array(Bodo_CTypes::STRING, n, total_chars,
                                array_id < 0 ? generate_array_id(n) : array_id);
         offset_t *out_offsets = (offset_t *)out_arr->buffers[1]->mutable_data();
-        for (size_t i = 0; i < n + 1; i++) {
+        for (size_t i = 0; i < static_cast<size_t>(n) + 1; i++) {
             out_offsets[i] = in_offsets[i] - first_offset;
         }
         std::memcpy(out_arr->buffers[0]->mutable_data(),
