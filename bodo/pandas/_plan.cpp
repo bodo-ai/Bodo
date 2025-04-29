@@ -20,6 +20,8 @@
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
+#include "duckdb/planner/operator/logical_limit.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
 
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
@@ -162,6 +164,18 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
 
     logical_filter->children.push_back(std::move(source_duck));
     return logical_filter;
+}
+
+duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    int n) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    auto logical_limit =
+        duckdb::make_uniq<duckdb::LogicalLimit>(duckdb::BoundLimitNode::ConstantValue(n), duckdb::BoundLimitNode::ConstantValue(0));
+
+    logical_limit->children.push_back(std::move(source_duck));
+    return logical_limit;
 }
 
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(

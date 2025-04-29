@@ -1,6 +1,7 @@
 import functools
 import importlib
 import inspect
+from enum import Enum
 
 import numba
 import pandas as pd
@@ -689,3 +690,8 @@ def arrow_to_empty_df(arrow_schema):
     type_dict = {field.name: pd.ArrowDtype(field.type) for field in arrow_schema}
     empty_df = empty_df.astype(type_dict)
     return _reconstruct_pandas_index(empty_df, arrow_schema)
+
+class ExecState(Enum):
+    PLAN = 0
+    DISTRIBUTED = 1
+    COLLECTED = 2

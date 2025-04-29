@@ -302,6 +302,17 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     std::unique_ptr<duckdb::Expression> &filter_expr);
 
 /**
+ * @brief Create a limit node.
+ *
+ * @param source - the source of the data to be filtered
+ * @param n - the number of rows to return
+ * @return duckdb::unique_ptr<duckdb::LogicalLimit> - the limit node
+ */
+duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    int n);
+
+/**
  * @brief Creates a LogicalGet node for reading a Parquet dataset in DuckDB with
  * Bodo metadata.
  *

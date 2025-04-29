@@ -257,6 +257,10 @@ cdef extern from "duckdb/planner/operator/logical_filter.hpp" namespace "duckdb"
     cdef cppclass CLogicalFilter" duckdb::LogicalFilter"(CLogicalOperator):
         pass
 
+cdef extern from "duckdb/planner/operator/logical_limit.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalLimit" duckdb::LogicalLimit"(CLogicalOperator):
+        pass
+
 cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalGet" duckdb::LogicalGet"(CLogicalOperator):
         pass
@@ -277,6 +281,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_float_expr(float val)
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val)
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx)
+    cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
@@ -501,6 +506,18 @@ cdef class LogicalUnaryOp(LogicalOperator):
         self.out_schema = out_schema
         self.op = op
         self.sources = [source]
+
+cdef class LogicalLimit(LogicalOperator):
+    def __cinit__(self, out_schema, LogicalOperator source, n):
+        self.out_schema = out_schema
+        self.sources = [source]
+        self.n = n
+
+        cdef unique_ptr[CLogicalLimit] c_logical_limit = make_limit(source.c_logical_operator, n)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_limit.release())
+
+    def __str__(self):
+        return f"LogicalLimit(n={self.n})"
 
 cdef class LogicalGetParquetRead(LogicalOperator):
     """Wrapper around DuckDB's LogicalGet for reading Parquet datasets.

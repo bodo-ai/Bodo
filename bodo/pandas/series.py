@@ -186,7 +186,19 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Otherwise we use the data fetched from the workers.
         """
         if (self._head_s is None) or (n > self._head_s.shape[0]):
-            return super().head(n)
+            if self._exec_state() == ExecState.PLAN:
+                from bodo.pandas.base import _empty_like
+
+                new_metadata = _empty_like(self)
+                planLimit = LazyPlan(
+                    "LogicalLimit",
+                    self._plan,
+                    n,
+                )
+
+                return wrap_plan(new_metadata, planLimit)
+            else:
+                return super().head(n)
         else:
             # If head_s is available and larger than n, then use it directly.
             return self._head_s.head(n)

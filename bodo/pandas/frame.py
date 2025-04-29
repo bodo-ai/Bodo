@@ -117,7 +117,19 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         Otherwise, use the default head method which will trigger a data pull.
         """
         if (self._head_df is None) or (n > self._head_df.shape[0]):
-            return super().head(n)
+            if self._exec_state() == ExecState.PLAN:
+                from bodo.pandas.base import _empty_like
+
+                new_metadata = _empty_like(self)
+                planLimit = LazyPlan(
+                    "LogicalLimit",
+                    self._plan,
+                    n,
+                )
+
+                return wrap_plan(new_metadata, planLimit)
+            else:
+                return super().head(n)
         else:
             # If head_df is available and larger than n, then use it directly.
             return self._head_df.head(n)
