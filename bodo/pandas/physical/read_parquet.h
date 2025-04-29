@@ -122,7 +122,7 @@ class PhysicalReadParquet : public PhysicalSource {
 
         internal_reader = std::make_shared<ParquetReader>(
             py_path, true, arrowFilterExpr, storage_options, pyarrow_schema, -1,
-            selected_columns, is_nullable, false, -1);
+            selected_columns, is_nullable, false, get_streaming_batch_size());
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
 
         // Extract column names from pyarrow schema using selected columns
