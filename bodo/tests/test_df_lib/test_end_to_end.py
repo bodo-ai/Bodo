@@ -40,7 +40,7 @@ def test_from_pandas(datapath, index_val, set_stream_batch_size_three):
         {
             "a": [1, 2, 3, 7] * 2,
             "b": [4, 5, 6, 8] * 2,
-            "c": ["a", "b", "c", "abc"] * 2,
+            "c": ["a", "b", None, "abc"] * 2,
         },
     )
     df.index = index_val[: len(df)]

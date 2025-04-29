@@ -1,6 +1,7 @@
 #include "_bodo_to_arrow.h"
 
 #include <cassert>
+#include <cstring>
 #include <memory>
 
 #include <arrow/array.h>
@@ -1242,6 +1243,29 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
     Bodo_CTypes::CTypeEnum typ_enum, int64_t array_id,
     bodo::IBufferPool *pool) {
     int64_t n = arrow_bin_arr->length();
+
+    // Arrow arrays that are outputs of slicing may have a non-zero first
+    // offset, which is not supported in Bodo. Copying data explicitly in this
+    // case.
+    offset_t *in_offsets = (offset_t *)arrow_bin_arr->raw_value_offsets();
+    offset_t first_offset = in_offsets[0];
+    if (first_offset != 0) {
+        int64_t total_chars = in_offsets[n] - first_offset;
+        std::shared_ptr<array_info> out_arr =
+            alloc_string_array(Bodo_CTypes::STRING, n, total_chars,
+                               array_id < 0 ? generate_array_id(n) : array_id);
+        offset_t *out_offsets = (offset_t *)out_arr->buffers[1]->mutable_data();
+        for (size_t i = 0; i < n + 1; i++) {
+            out_offsets[i] = in_offsets[i] - first_offset;
+        }
+        std::memcpy(out_arr->buffers[0]->mutable_data(),
+                    arrow_bin_arr->raw_data() + first_offset, total_chars);
+        for (size_t i = 0; i < n; i++) {
+            ::arrow::bit_util::SetBitTo((uint8_t *)out_arr->null_bitmask(), i,
+                                        !arrow_bin_arr->IsNull(i));
+        }
+        return out_arr;
+    }
 
     std::shared_ptr<BodoBuffer> char_buf_buffer = arrow_buffer_to_bodo(
         arrow_bin_arr->value_data(), (void *)arrow_bin_arr->raw_data(),
