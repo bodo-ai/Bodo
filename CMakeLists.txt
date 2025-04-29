@@ -548,6 +548,7 @@ set(sources_list
   "bodo/pandas/_physical_conv.cpp"
   "bodo/pandas/_duckdb_util.cpp"
   "bodo/pandas/physical/expression.cpp"
+  "bodo/pandas/physical/operator.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"
