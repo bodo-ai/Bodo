@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Python.h>
 #include <chrono>
 #include <optional>
 #include <string>
@@ -54,3 +55,11 @@ uint64_t get_physically_installed_memory();
     } while (0)
 
 #define ASSERT(x) ASSERT_WITH_ERR_MSG(x, "")
+
+/// @brief Class to manage PyObject pointers with automatic reference counting.
+class PyObjectPtr : public std::unique_ptr<PyObject, decltype(&Py_DECREF)> {
+   public:
+    PyObjectPtr(PyObject* obj)
+        : std::unique_ptr<PyObject, decltype(&Py_XDECREF)>(obj, Py_XDECREF) {}
+    operator PyObject*() const { return get(); }
+};
