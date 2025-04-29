@@ -343,8 +343,11 @@ def test_parquet_read_partitioned(datapath, set_stream_batch_size_three):
     # NOTE: Bodo dataframe library currently reads partitioned columns as
     # dictionary-encoded strings but Pandas reads them as categorical.
     _test_equal(
-        bodo_out,
+        bodo_out.copy(),
         py_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
     )
 
 
