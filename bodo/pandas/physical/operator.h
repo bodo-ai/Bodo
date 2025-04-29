@@ -74,7 +74,7 @@ class PhysicalSourceSink : public PhysicalOperator {
 
 /**
  * @brief Get the streaming batch size from environment variable.
- * It looked up the environment variable dynamically to enable setting it
+ * It looks up the environment variable dynamically to enable setting it
  * in tests during runtime.
  *
  * @return int batch size to be used in streaming operators
