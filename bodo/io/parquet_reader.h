@@ -157,7 +157,8 @@ class ParquetReader : public ArrowReader {
     std::vector<std::string> file_paths;
 
     PyObjectPtr path;  // path passed to pd.read_parquet() call
-    PyObjectPtr storage_options;
+    // We don't own storage options so store the raw pointer
+    PyObject* storage_options;
     bool input_file_name_col;
     bool use_hive;
 

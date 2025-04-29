@@ -127,8 +127,8 @@ PyObject* ParquetReader::get_dataset() {
     // schema, partitioning)
     PyObject* ds = PyObject_CallMethod(
         pq_mod, "get_parquet_dataset", "OOOOOLOO", this->path.get(), Py_True,
-        expr_filters.get(), this->storage_options.get(), Py_False,
-        tot_rows_to_read, this->pyarrow_schema, partitioning.get());
+        expr_filters.get(), this->storage_options, Py_False, tot_rows_to_read,
+        this->pyarrow_schema, partitioning.get());
     if (ds == nullptr && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
