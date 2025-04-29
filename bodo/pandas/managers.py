@@ -218,7 +218,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             return out
         else:
             # We got a normal pandas object, don't need to set any metadata
-            self._blocks = data._mgr.blocks
+            self.blocks = data._mgr.blocks
             self.axes = data._mgr.axes
             self._plan = None
             BlockManager._rebuild_blknos_and_blklocs(self)
