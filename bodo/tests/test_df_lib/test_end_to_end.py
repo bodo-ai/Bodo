@@ -240,8 +240,6 @@ def test_filter_distributed(datapath, op):
     f(bodo_df1)
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    # _test_equal(bodo_df1, py_df1, check_pandas_types=False)
-    # breakpoint()
     bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
     # Make sure bodo_df2 is unevaluated at this point.
