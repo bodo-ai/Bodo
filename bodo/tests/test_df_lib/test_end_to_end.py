@@ -14,6 +14,11 @@ from bodo.tests.utils import _test_equal, temp_config_override
 MAX_DATA_SIZE = 100
 
 
+@pytest.fixture
+def set_stream_batch_size_three(monkeypatch):
+    monkeypatch.setenv("BODO_STREAMING_BATCH_SIZE", "3")
+
+
 @pytest.fixture(
     params=[
         pd.RangeIndex(MAX_DATA_SIZE),
@@ -28,17 +33,17 @@ def index_val(request):
     return request.param
 
 
-def test_from_pandas(datapath, index_val):
+def test_from_pandas(datapath, index_val, set_stream_batch_size_three):
     """Very simple test to scan a dataframe passed into from_pandas."""
 
     df = pd.DataFrame(
         {
-            "a": [1, 2, 3],
-            "b": [4, 5, 6],
-            "c": ["a", "b", "c"],
+            "a": [1, 2, 3, 7] * 2,
+            "b": [4, 5, 6, 8] * 2,
+            "c": ["a", "b", "c", "abc"] * 2,
         },
-        index=index_val[:3],
     )
+    df.index = index_val[: len(df)]
     # Sequential test
     with temp_config_override("dataframe_library_run_parallel", False):
         bdf = bd.from_pandas(df)
@@ -67,7 +72,7 @@ def test_from_pandas(datapath, index_val):
     assert bdf._mgr._plan is None
 
 
-def test_read_parquet(datapath):
+def test_read_parquet(datapath, set_stream_batch_size_three):
     """Very simple test to read a parquet file for sanity checking."""
     path = datapath("example_no_index.parquet")
 
@@ -88,7 +93,9 @@ def test_read_parquet(datapath):
         "example_multi_index.parquet",
     ],
 )
-def test_read_parquet_projection_pushdown(datapath, file_path):
+def test_read_parquet_projection_pushdown(
+    datapath, file_path, set_stream_batch_size_three
+):
     """Make sure basic projection pushdown works for Parquet read end to end."""
     path = datapath(file_path)
 
@@ -120,7 +127,7 @@ def test_read_parquet_projection_pushdown(datapath, file_path):
         )
     ],
 )
-def test_read_parquet_index(df: pd.DataFrame, index_val):
+def test_read_parquet_index(df: pd.DataFrame, index_val, set_stream_batch_size_three):
     """Test reading parquet with index column works as expected."""
     df.index = index_val[: len(df)]
     with tempfile.TemporaryDirectory() as tmp:
@@ -137,7 +144,7 @@ def test_read_parquet_index(df: pd.DataFrame, index_val):
         )
 
 
-def test_read_parquet_len_shape(datapath):
+def test_read_parquet_len_shape(datapath, set_stream_batch_size_three):
     """Test length/shape after read parquet is correct"""
     path = datapath("example_no_index.parquet")
 
@@ -153,7 +160,7 @@ def test_read_parquet_len_shape(datapath):
     assert bodo_out2.shape == py_out.shape
 
 
-def test_projection(datapath):
+def test_projection(datapath, set_stream_batch_size_three):
     """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
@@ -177,7 +184,7 @@ def test_projection(datapath):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-def test_filter_pushdown(datapath, file_path, op):
+def test_filter_pushdown(datapath, file_path, op, set_stream_batch_size_three):
     """Very simple test for filter for sanity checking."""
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
@@ -202,7 +209,7 @@ def test_filter_pushdown(datapath, file_path, op):
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
 @pytest.mark.skip(reason="Using dataframe as source not yet implemented.")
-def test_filter(datapath, op):
+def test_filter(datapath, op, set_stream_batch_size_three):
     """Very simple test for filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -223,7 +230,7 @@ def test_filter(datapath, op):
     _test_equal(bodo_df2, py_df2, check_pandas_types=False)
 
 
-def test_apply(datapath, index_val):
+def test_apply(datapath, index_val, set_stream_batch_size_three):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
         {
@@ -239,16 +246,16 @@ def test_apply(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_lower(datapath, index_val):
+def test_str_lower(datapath, index_val, set_stream_batch_size_three):
     """Very simple test for Series.str.lower for sanity checking."""
     df = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3], "Int64"),
-            "B": ["A1", "B1", "C1"],
-            "C": pd.array([4, 5, 6], "Int64"),
-        },
-        index=index_val[:3],
+            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
+            "B": ["A1", "B1", "C1", "Abc"] * 2,
+            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
+        }
     )
+    df.index = index_val[: len(df)]
     bdf = bd.from_pandas(df)
     out_pd = df.B.str.lower()
     out_bodo = bdf.B.str.lower()
@@ -257,16 +264,16 @@ def test_str_lower(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_strip(datapath, index_val):
+def test_str_strip(datapath, index_val, set_stream_batch_size_three):
     """Very simple test for Series.str.strip() for sanity checking."""
     df = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3], "Int64"),
-            "B": ["A1\t", "B1 ", "C1\n"],
-            "C": pd.array([4, 5, 6], "Int64"),
-        },
-        index=index_val[:3],
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
     )
+    df.index = index_val[: len(df)]
     bdf = bd.from_pandas(df)
     out_pd = df.B.str.strip()
     out_bodo = bdf.B.str.strip()
@@ -275,16 +282,16 @@ def test_str_strip(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_series_map(datapath, index_val):
+def test_series_map(datapath, index_val, set_stream_batch_size_three):
     """Very simple test for Series.map() for sanity checking."""
     df = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3], "Int64"),
-            "B": ["A1", "B1 ", "C1"],
-            "C": pd.array([4, 5, 6], "Int64"),
-        },
-        index=index_val[:3],
+            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
+            "B": ["A1", "B1", "C1", "Abc"] * 2,
+            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
+        }
     )
+    df.index = index_val[: len(df)]
 
     def func(x):
         return str(x)
@@ -297,7 +304,7 @@ def test_series_map(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_parquet_read_partitioned(datapath):
+def test_parquet_read_partitioned(datapath, set_stream_batch_size_three):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
 
@@ -326,7 +333,7 @@ def test_parquet_read_partitioned(datapath):
 
 
 @pytest.mark.skip(reason="Parquet partition filter pushdown not yet implemented.")
-def test_parquet_read_partitioned_filter(datapath):
+def test_parquet_read_partitioned_filter(datapath, set_stream_batch_size_three):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
 
