@@ -1260,7 +1260,7 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
         }
         std::memcpy(out_arr->buffers[0]->mutable_data(),
                     arrow_bin_arr->raw_data() + first_offset, total_chars);
-        for (size_t i = 0; i < n; i++) {
+        for (int64_t i = 0; i < n; i++) {
             ::arrow::bit_util::SetBitTo((uint8_t *)out_arr->null_bitmask(), i,
                                         !arrow_bin_arr->IsNull(i));
         }
