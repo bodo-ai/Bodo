@@ -168,7 +168,16 @@ def test_projection(datapath, set_stream_batch_size_three):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1["D"]
 
-    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+    # TODO: remove copy when df.apply(axis=0) is implemented
+    # TODO: remove forcing collect when copy() bug with RangeIndex(1) is fixed
+    str(bodo_df2)
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -202,6 +211,7 @@ def test_filter_pushdown(datapath, file_path, op, set_stream_batch_size_three):
     py_df1 = pd.read_parquet(datapath(file_path))
     py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
+    # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
         bodo_df2.copy(),
         py_df2,
