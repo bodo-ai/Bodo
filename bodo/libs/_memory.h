@@ -103,7 +103,8 @@ class IBufferPool : public ::arrow::MemoryPool {
 
 /// @brief Options for the Buffer Pool implementation
 struct BufferPoolOptions {
-    /// @brief Total available memory (in MiB) for the buffer pool.
+    /// @brief Total memory available to this rank (in MiB)
+    /// for the buffer pool.
     uint64_t memory_size = 200;
 
     /// @brief Real system memory (in MiB) available to this rank.
