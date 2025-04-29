@@ -287,7 +287,7 @@ class Spawner:
         ]
         kwargs = {
             k: v.execute_plan()
-            if isinstance(v, BodoLazyWrapper) and v.is_lazy_plan() is not None
+            if isinstance(v, BodoLazyWrapper) and v.is_lazy_plan()
             else v
             for k, v in kwargs.items()
         }

@@ -112,6 +112,12 @@ class LazyArrowExtensionArray(
             self._md_head = None
             self._collect_func = None
 
+    def is_lazy_plan(self):
+        return False
+
+    def execute_plan(self):
+        raise BodoError("execute_plan not possible on ArrowExtensionArray")
+
     def __getattribute__(self, name: str) -> pt.Any:
         """
         Overridden to collect data from workers if needed before accessing any attribute.
