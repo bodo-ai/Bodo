@@ -8,6 +8,7 @@
 #include "../io/arrow_compat.h"
 #include "../io/parquet_reader.h"
 #include "_duckdb_util.h"
+#include "arrow/util/key_value_metadata.h"
 #include "operator.h"
 
 std::function<arrow::compute::Expression(arrow::compute::Expression,
@@ -102,6 +103,12 @@ class PhysicalReadParquet : public PhysicalSource {
 
         std::vector<bool> is_nullable(selected_columns.size(), true);
 
+        // Extract metadata from pyarrow schema (for Pandas Index reconstruction
+        // of dataframe later)
+        std::shared_ptr<arrow::Schema> schema = unwrap_schema(pyarrow_schema);
+        this->out_metadata = std::make_shared<TableMetadata>(
+            schema->metadata()->keys(), schema->metadata()->values());
+
         PyObject *schema_fields =
             PyObject_GetAttrString(pyarrow_schema, "names");
         if (!schema_fields || !PyList_Check(schema_fields)) {
@@ -115,7 +122,7 @@ class PhysicalReadParquet : public PhysicalSource {
 
         internal_reader = std::make_shared<ParquetReader>(
             py_path, true, arrowFilterExpr, storage_options, pyarrow_schema, -1,
-            selected_columns, is_nullable, false, -1);
+            selected_columns, is_nullable, false, get_streaming_batch_size());
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
 
         // Extract column names from pyarrow schema using selected columns
@@ -154,8 +161,12 @@ class PhysicalReadParquet : public PhysicalSource {
                               : ProducerResult::HAVE_MORE_OUTPUT;
 
         batch->column_names = out_column_names;
+        batch->metadata = out_metadata;
         return std::make_pair(std::shared_ptr<table_info>(batch), result);
     }
 
+    // Column names and metadata (Pandas Index info) used for dataframe
+    // construction
+    std::shared_ptr<TableMetadata> out_metadata;
     std::vector<std::string> out_column_names;
 };

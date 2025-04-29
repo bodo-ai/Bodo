@@ -762,13 +762,16 @@ def array_to_info_codegen(context, builder, sig, args):
     raise_bodo_error(f"array_to_info(): array type {arr_type} is not supported")
 
 
-def _lower_info_to_array_numpy(arr_type, context, builder, in_info, raise_py_err=True):
+def _lower_info_to_array_numpy(
+    arr_type, context, builder, in_info, raise_py_err=True, dict_as_int=False
+):
     assert arr_type.ndim == 1, "only 1D array supported"
     arr = context.make_array(arr_type)(context, builder)
 
     length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
     data_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
     meminfo_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+    dict_as_int_flag = context.get_constant(types.bool_, dict_as_int)
 
     fnty = lir.FunctionType(
         lir.VoidType(),
@@ -777,12 +780,13 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info, raise_py_err
             lir.IntType(64).as_pointer(),  # num_items
             lir.IntType(8).as_pointer().as_pointer(),  # data
             lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(1),  # dict_as_int_flag
         ],
     )  # meminfo
     fn_tp = cgutils.get_or_insert_function(
         builder.module, fnty, name="info_to_numpy_array"
     )
-    builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr])
+    builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr, dict_as_int_flag])
     if raise_py_err:
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
@@ -1133,8 +1137,15 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         out_arr = cgutils.create_struct_proxy(arr_type)(context, builder)
         int_dtype = get_categories_int_type(arr_type.dtype)
         int_arr_type = types.Array(int_dtype, 1, "C")
+        # dict_as_int allows conversion from DICT to int32 for categorical codes since
+        # Parquet reader reads categorical data as dictionary-encoded strings.
         out_arr.codes = _lower_info_to_array_numpy(
-            int_arr_type, context, builder, in_info, raise_py_err
+            int_arr_type,
+            context,
+            builder,
+            in_info,
+            raise_py_err,
+            dict_as_int=(int_dtype == types.int32),
         )
         # set categorical dtype of output array to be same as input array
         if isinstance(array_type, types.TypeRef):

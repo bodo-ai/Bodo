@@ -363,11 +363,12 @@ void info_to_string_array(array_info* info, int64_t* length,
 }
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
-                         NRT_MemInfo** meminfo) {
+                         NRT_MemInfo** meminfo, bool dict_as_int) {
     // arrow_array_to_bodo() always produces a nullable array but
     // Python may expect a Numpy array
     if ((info->arr_type != bodo_array_type::NUMPY) &&
         (info->arr_type != bodo_array_type::CATEGORICAL) &&
+        (!dict_as_int || info->arr_type != bodo_array_type::DICT) &&
         (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)) {
         // TODO: print array type in the error
         PyErr_Format(PyExc_RuntimeError,
@@ -377,11 +378,37 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
         return;
     }
 
+    bool delete_info = false;
+
+    // Treat DICT as categorical data and extract the indices.
+    // Parquet reader uses DICT arrays for categorical data.
+    if (info->arr_type == bodo_array_type::DICT) {
+        std::shared_ptr<array_info> codes_info = info->child_arrays[1];
+
+        // Convert data at NA positions to -1
+        uint8_t* bitmap =
+            reinterpret_cast<uint8_t*>(codes_info->null_bitmask());
+        int32_t* codes_data = reinterpret_cast<int32_t*>(
+            codes_info->data1<bodo_array_type::NULLABLE_INT_BOOL>());
+        for (uint64_t i = 0; i < codes_info->length; ++i) {
+            if (!GetBit(bitmap, i)) {
+                codes_data[i] = -1;
+            }
+        }
+        info = new array_info(*codes_info);
+        delete_info = true;
+    }
+
     *n_items = info->length;
     *data = info->data1();
     NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
     incref_meminfo(data_meminfo);
     *meminfo = data_meminfo;
+
+    // Delete the dict child array that was created in the DICT case above
+    if (delete_info) {
+        delete info;
+    }
 }
 
 void info_to_null_array(array_info* info, uint64_t* n_items) {

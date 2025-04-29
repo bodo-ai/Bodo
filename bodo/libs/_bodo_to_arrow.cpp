@@ -1,12 +1,14 @@
 #include "_bodo_to_arrow.h"
 
 #include <cassert>
+#include <cstring>
 #include <memory>
 
 #include <arrow/array.h>
 #include <arrow/builder.h>
 #include <arrow/compute/cast.h>
 #include <arrow/table.h>
+#include "arrow/util/key_value_metadata.h"
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -1242,6 +1244,29 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
     bodo::IBufferPool *pool) {
     int64_t n = arrow_bin_arr->length();
 
+    // Arrow arrays that are outputs of slicing may have a non-zero first
+    // offset, which is not supported in Bodo. Copying data explicitly in this
+    // case.
+    offset_t *in_offsets = (offset_t *)arrow_bin_arr->raw_value_offsets();
+    offset_t first_offset = in_offsets[0];
+    if (first_offset != 0) {
+        int64_t total_chars = in_offsets[n] - first_offset;
+        std::shared_ptr<array_info> out_arr =
+            alloc_string_array(Bodo_CTypes::STRING, n, total_chars,
+                               array_id < 0 ? generate_array_id(n) : array_id);
+        offset_t *out_offsets = (offset_t *)out_arr->buffers[1]->mutable_data();
+        for (size_t i = 0; i < static_cast<size_t>(n) + 1; i++) {
+            out_offsets[i] = in_offsets[i] - first_offset;
+        }
+        std::memcpy(out_arr->buffers[0]->mutable_data(),
+                    arrow_bin_arr->raw_data() + first_offset, total_chars);
+        for (int64_t i = 0; i < n; i++) {
+            ::arrow::bit_util::SetBitTo((uint8_t *)out_arr->null_bitmask(), i,
+                                        !arrow_bin_arr->IsNull(i));
+        }
+        return out_arr;
+    }
+
     std::shared_ptr<BodoBuffer> char_buf_buffer = arrow_buffer_to_bodo(
         arrow_bin_arr->value_data(), (void *)arrow_bin_arr->raw_data(),
         arrow_bin_arr->total_values_length(), Bodo_CTypes::UINT8, pool);
@@ -1290,7 +1315,13 @@ std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
         throw std::runtime_error(
             "arrow_dictionary_array_to_bodo(): Expected dict_array->dtype to "
             "be string, but found " +
-            std::to_string(dict_array->dtype));
+            GetDtype_as_string(dict_array->dtype));
+    }
+    if (idx_array->dtype != Bodo_CTypes::INT32) {
+        throw std::runtime_error(
+            "arrow_dictionary_array_to_bodo(): Expected idx_array->dtype to "
+            "be int32, but found " +
+            GetDtype_as_string(idx_array->dtype));
     }
     return create_dict_string_array(dict_array, idx_array);
 }
@@ -1496,6 +1527,9 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
     std::shared_ptr<table_info> out_table =
         std::make_shared<table_info>(out_arrs);
     out_table->column_names = table->ColumnNames();
+    out_table->metadata =
+        std::make_shared<TableMetadata>(table->schema()->metadata()->keys(),
+                                        table->schema()->metadata()->values());
     return out_table;
 }
 

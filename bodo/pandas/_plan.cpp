@@ -1,6 +1,5 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
-#include <arrow/type.h>
 #include <utility>
 
 #include "_executor.h"
@@ -308,6 +307,7 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
     std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
+
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
@@ -531,6 +531,14 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                 duckdb::LogicalType::MAP(duckdb_key_type, duckdb_value_type);
             break;
         }
+        case arrow::Type::DICTIONARY: {
+            auto dict_type =
+                std::static_pointer_cast<arrow::DictionaryType>(arrow_type);
+            std::shared_ptr<arrow::Field> value_field =
+                arrow::field("name", dict_type->value_type());
+            auto [field_name, duckdb_type] = arrow_field_to_duckdb(value_field);
+            break;
+        }
         default:
             throw std::runtime_error(
                 "Unsupported Arrow type: " + arrow_type->ToString() +
@@ -613,6 +621,34 @@ int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op) {
         ret += planCountNodes(child);
     }
     return ret;
+}
+
+void set_table_meta_from_arrow(int64_t table_pointer,
+                               PyObject *pyarrow_schema) {
+    table_info *table = reinterpret_cast<table_info *>(table_pointer);
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+
+    // Set column names if not already set
+    if (table->column_names.size() == 0) {
+        for (int i = 0; i < arrow_schema->num_fields(); i++) {
+            table->column_names.emplace_back(arrow_schema->field(i)->name());
+        }
+    } else if (table->column_names.size() !=
+               static_cast<size_t>(arrow_schema->num_fields())) {
+        throw std::runtime_error(
+            "Number of columns in Arrow schema does not match table");
+    } else {
+        // Check that the column names match
+        for (int i = 0; i < arrow_schema->num_fields(); i++) {
+            if (table->column_names[i] != arrow_schema->field(i)->name()) {
+                throw std::runtime_error(
+                    "Column names in Arrow schema do not match table");
+            }
+        }
+    }
+
+    table->metadata = std::make_shared<TableMetadata>(
+        arrow_schema->metadata()->keys(), arrow_schema->metadata()->values());
 }
 
 #undef CHECK_ARROW

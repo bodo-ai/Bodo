@@ -11,6 +11,7 @@
 #include "_bodo_to_arrow.h"
 #include "_datetime_utils.h"
 #include "_distributed.h"
+#include "arrow/util/key_value_metadata.h"
 
 // for numpy arrays, this maps dtype to sizeof(dtype)
 // Order should match Bodo_CTypes::CTypeEnum
@@ -554,10 +555,14 @@ Schema::Schema(const Schema& other) {
     for (const auto& t : other.column_types) {
         this->column_types.push_back(t->copy());
     }
+    this->column_names = other.column_names;
+    this->metadata = other.metadata;
 }
 
 Schema::Schema(Schema&& other) {
     this->column_types = std::move(other.column_types);
+    this->column_names = std::move(other.column_names);
+    this->metadata = std::move(other.metadata);
 }
 
 Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_)
@@ -566,6 +571,13 @@ Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_)
 Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
                std::vector<std::string> column_names)
     : column_types(std::move(column_types_)), column_names(column_names) {}
+
+Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_,
+               std::vector<std::string> column_names,
+               std::shared_ptr<TableMetadata> metadata)
+    : column_types(std::move(column_types_)),
+      column_names(column_names),
+      metadata(metadata) {}
 
 void Schema::insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
                            const size_t idx) {
@@ -635,25 +647,51 @@ std::string Schema::ToString() {
 
 std::unique_ptr<Schema> Schema::Project(size_t first_n) const {
     std::vector<std::unique_ptr<DataType>> dtypes;
+    std::vector<std::string> col_names;
     dtypes.reserve(first_n);
+    if (this->column_names.size() > 0) {
+        col_names.reserve(first_n);
+    }
     for (size_t i = 0; i < std::min(first_n, this->column_types.size()); i++) {
         dtypes.push_back(this->column_types[i]->copy());
+        if (this->column_names.size() > 0) {
+            col_names.push_back(this->column_names[i]);
+        }
     }
-    return std::make_unique<Schema>(std::move(dtypes));
+    return std::make_unique<Schema>(std::move(dtypes), std::move(col_names),
+                                    this->metadata);
 }
 
 std::unique_ptr<Schema> Schema::Project(
     const std::span<const int64_t> column_indices) const {
     std::vector<std::unique_ptr<DataType>> dtypes;
+    std::vector<std::string> col_names;
     dtypes.reserve(column_indices.size());
+    if (this->column_names.size() > 0) {
+        col_names.reserve(column_indices.size());
+    }
     for (int64_t col_idx : column_indices) {
         assert((size_t)col_idx < this->column_types.size());
         dtypes.push_back(this->column_types[col_idx]->copy());
+        if (this->column_names.size() > 0) {
+            col_names.push_back(this->column_names[col_idx]);
+        }
     }
-    return std::make_unique<Schema>(std::move(dtypes));
+    return std::make_unique<Schema>(std::move(dtypes), std::move(col_names),
+                                    this->metadata);
 }
 
 std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
+    if (this->column_names.size() == 0 && this->ncols() != 0) {
+        throw std::runtime_error(
+            "Schema::ToArrowSchema: column names not available");
+    }
+
+    if (!this->metadata) {
+        throw std::runtime_error(
+            "Schema::ToArrowSchema: metadata not available");
+    }
+
     std::vector<std::shared_ptr<::arrow::Field>> fields;
     fields.reserve(this->column_types.size());
 
@@ -668,7 +706,10 @@ std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
         fields.push_back(data_type->ToArrowType(name));
         idx++;
     }
-    return std::make_shared<arrow::Schema>(fields);
+    std::shared_ptr<const arrow::KeyValueMetadata> arrow_metadata =
+        std::make_shared<const arrow::KeyValueMetadata>(this->metadata->keys,
+                                                        this->metadata->values);
+    return std::make_shared<arrow::Schema>(fields, arrow_metadata);
 }
 
 std::shared_ptr<Schema> Schema::FromArrowSchema(
@@ -679,8 +720,10 @@ std::shared_ptr<Schema> Schema::FromArrowSchema(
         auto bodo_type = arrow_type_to_bodo_data_type(field->type());
         column_types.push_back(bodo_type->copy());
     }
+    std::shared_ptr<TableMetadata> metadata = std::make_shared<TableMetadata>(
+        schema->metadata()->keys(), schema->metadata()->values());
     return std::make_shared<Schema>(std::move(column_types),
-                                    schema->field_names());
+                                    schema->field_names(), metadata);
 }
 
 }  // namespace bodo
