@@ -321,7 +321,7 @@ def test_str_strip(datapath, index_val, set_stream_batch_size_three):
     bdf = bd.from_pandas(df)
     out_pd = df.B.str.strip()
     out_bodo = bdf.B.str.strip()
-    assert out_bodo._lazy
+    assert out_bodo.is_lazy_plan()
     assert out_bodo.plan is not None
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
@@ -343,7 +343,7 @@ def test_series_map(datapath, index_val, set_stream_batch_size_three):
     bdf = bd.from_pandas(df)
     out_pd = df.A.map(func)
     out_bodo = bdf.A.map(func)
-    assert out_bodo._lazy
+    assert out_bodo.is_lazy_plan()
     assert out_bodo.plan is not None
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
@@ -365,7 +365,7 @@ def test_parquet_read_partitioned(datapath, set_stream_batch_size_three):
     bodo_out = bd.read_parquet(path)
     py_out = pd.read_parquet(path)
 
-    assert bodo_out._lazy
+    assert bodo_out.is_lazy_plan()
     assert bodo_out.plan is not None
 
     # NOTE: Bodo dataframe library currently reads partitioned columns as
@@ -389,7 +389,7 @@ def test_parquet_read_partitioned_filter(datapath, set_stream_batch_size_three):
     py_out = pd.read_parquet(path)
     py_out = py_out[py_out.part == "a"]
 
-    assert bodo_out._lazy
+    assert bodo_out.is_lazy_plan()
     assert bodo_out.plan is not None
     # TODO: test logs to make sure filter pushdown happened and files skipped
 

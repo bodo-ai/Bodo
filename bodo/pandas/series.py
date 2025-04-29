@@ -138,6 +138,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Otherwise we use the data fetched from the workers.
         """
         if (self._head_s is None) or (n > self._head_s.shape[0]):
+            if self.is_lazy_plan():
+                self._mgr._collect()
             return super().head(n)
         else:
             # If head_s is available and larger than n, then use it directly.
