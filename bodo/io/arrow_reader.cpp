@@ -816,13 +816,8 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
             return out_array;
         }
 
-        // TODO make this more efficient:
-        // This copies to new buffers managed by Arrow, and then we copy
-        // again to our own buffers in
-        // info_to_array https://bodo.atlassian.net/browse/BE-1426
         arrow::Result<std::shared_ptr<arrow::Array>> res =
             arrow::Concatenate(arrays, pool);
-
         std::shared_ptr<arrow::Array> concat_res;
         CHECK_ARROW_READER_AND_ASSIGN(res, "Concatenate", concat_res);
         arrays.clear();  // memory of each array will be freed now
