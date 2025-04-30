@@ -553,7 +553,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
 
     if isinstance(schema, pd.DataFrame):
         metadata = LazyMetadata(
-            "LazyPlan_" + str(plan.plan_class) if res_id is None else res_id,
+            res_id,
             schema,
             nrows=nrows,
             index_data=index_data,
@@ -565,7 +565,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         plan.output_func = cpp_table_to_df
     elif isinstance(schema, pd.Series):
         metadata = LazyMetadata(
-            "LazyPlan_" + str(plan.plan_class) if res_id is None else res_id,
+            res_id,
             schema,
             nrows=nrows,
             index_data=index_data,

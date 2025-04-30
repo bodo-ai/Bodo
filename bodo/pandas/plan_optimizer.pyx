@@ -464,13 +464,6 @@ cdef class LogicalGetSeriesRead(LogicalOperator):
         assert False & "Not implemented yet."
 
 
-cdef class LogicalGetDataframeRead(LogicalOperator):
-    """Represents an already materialized BodoDataFrame."""
-    def __cinit__(self, out_schema, result_id):
-        self.out_schema = out_schema
-        assert False & "Not implemented yet."
-
-
 cdef class LogicalGetPandasReadSeq(LogicalOperator):
     """Represents sequential scan of a Pandas dataframe passed into from_pandas."""
     cdef readonly object df

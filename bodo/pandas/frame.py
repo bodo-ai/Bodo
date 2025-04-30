@@ -31,18 +31,40 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     # so some methods like head will still trigger data pull if we don't store head_df and
     # use it directly when available.
     _head_df: pd.DataFrame | None = None
+    _source_plan: LazyPlan | None = None
 
     @property
     def _plan(self):
-        if hasattr(self._mgr, "_plan"):
-            if self._mgr._plan is not None:
-                return self._mgr._plan
-            else:
-                return plan_optimizer.LogicalGetDataframeRead(self._mgr._md_result_id)
+        if self._mgr._plan is not None:
+            return self._mgr._plan
+        else:
+            """We can't create a new LazyPlan each time that _plan is called
+               because filtering checks that the projections that are part of
+               the filter all come from the same source and if you create a
+               new LazyPlan here each time then they will appear as different
+               sources.
+            """
+            if self._source_plan is not None:
+                return self._source_plan
 
-        raise NotImplementedError(
-            "Plan not available for this manager, recreate this dataframe with from_pandas"
-        )
+            from bodo.pandas.base import _empty_like
+
+            out_schema = _empty_like(self)
+            if bodo.dataframe_library_run_parallel:
+                if self._mgr._md_result_id is not None:
+                    # If the plan has been executed but the results are still
+                    # distributed then re-use those results as is.
+                    res_id = self._mgr._md_result_id
+                else:
+                    # The data has been collected and is no longer distributed
+                    # so we need to re-distribute the results.
+                    res_id = bodo.spawn.utils.scatter_data(self)
+                self._source_plan = LazyPlan("LogicalGetPandasReadParallel", res_id)
+            else:
+                self._source_plan = LazyPlan("LogicalGetPandasReadSeq", self)
+            self._source_plan.out_schema = out_schema
+
+            return self._source_plan
 
     @staticmethod
     def from_lazy_mgr(
@@ -99,6 +121,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """Returns whether the BodoDataFrame is represented by a plan."""
         return getattr(self._mgr, "_plan", None) is not None
 
+    def execute_plan(self):
+        return self._mgr.execute_plan()
+
     def head(self, n: int = 5):
         """
         Return the first n rows. If head_df is available and larger than n, then use it directly.
@@ -113,12 +138,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __len__(self):
         if self.is_lazy_plan():
             self._mgr._collect()
+        elif self._lazy:
+            return self._mgr._md_nrows
         return super().__len__()
 
     @property
     def shape(self):
         if self.is_lazy_plan():
             self._mgr._collect()
+        elif self._lazy:
+            return self._mgr._md_nrows, len(self._head_df.columns)
         return super().shape
 
     def to_parquet(
