@@ -106,7 +106,7 @@ void _cppToArrow_inner(std::vector<std::shared_ptr<arrow::Array>>& arrays,
  * @param fields vector of arrow Fields to append to as output
  * @param names
  * @param is_nullable
- * @param
+ * @param str_as_dict_cols
  * @param input_column
  **/
 template <typename T>
