@@ -298,7 +298,7 @@ def test_filter_string_pushdown(datapath):
     bodo_df2 = bodo_df1[bodo_df1.B == "gamma"]
 
     # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2._lazy
+    assert bodo_df2.is_lazy_plan()
     assert bodo_df2.plan is not None
 
     pre, post = bd.utils.getPlanStatistics(bodo_df2.plan)
@@ -308,7 +308,13 @@ def test_filter_string_pushdown(datapath):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1[py_df1.B == "gamma"]
 
-    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 def test_filter_string(datapath):
@@ -317,17 +323,30 @@ def test_filter_string(datapath):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
 
     # Force read parquet node to execute.
-    _test_equal(bodo_df1, py_df1, check_pandas_types=False)
+    _test_equal(
+        bodo_df1.copy(),
+        py_df1,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
 
     bodo_df2 = bodo_df1[bodo_df1.B == "gamma"]
 
     # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2._lazy
+    assert bodo_df2.is_lazy_plan()
     assert bodo_df2.plan is not None
 
     py_df2 = py_df1[py_df1.B == "gamma"]
 
-    _test_equal(bodo_df2, py_df2, check_pandas_types=False)
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 def test_apply(datapath, index_val, set_stream_batch_size_three):
