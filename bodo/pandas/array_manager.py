@@ -246,14 +246,14 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             self._md_head = data._mgr._md_head
             self._collect_func = data._mgr._collect_func
             self._del_func = data._mgr._del_func
-            self._axes = data._mgr.axes
+            self._axes = data._mgr._axes
             # Transfer ownership to this manager
             data._mgr._md_result_id = None
             return data
         else:
             # We got a normal pandas object, don't need to set any metadata
             self.arrays = data._mgr.arrays
-            self._axes = data._mgr.axes
+            self._axes = data._mgr._axes
             self._plan = None
             return data
 
@@ -277,7 +277,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             debug_msg(self.logger, "[LazyArrayManager] Collecting data...")
             data = self._collect_func(self._md_result_id)
             self.arrays = data._mgr.arrays
-            self._axes = data._mgr.axes
+            self._axes = data._mgr._axes
 
             self._md_result_id = None
             self._md_head = None
