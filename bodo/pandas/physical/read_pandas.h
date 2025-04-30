@@ -27,10 +27,14 @@ class PhysicalReadPandas : public PhysicalSource {
 
     std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
         override {
+        if (this->current_row >= this->num_rows) {
+            throw std::runtime_error(
+                "PhysicalReadPandas::ProduceBatch: No more rows to read");
+        }
+
         // Extract slice from pandas DataFrame
         // df.iloc[current_row:current_row+batch_size]
-        // TODO: convert to streaming
-        int64_t batch_size = this->num_rows;
+        int64_t batch_size = get_streaming_batch_size();
         PyObject* iloc = PyObject_GetAttrString(df, "iloc");
         PyObject* slice =
             PySlice_New(PyLong_FromLongLong(this->current_row),
@@ -61,6 +65,12 @@ class PhysicalReadPandas : public PhysicalSource {
         Py_DECREF(table_func);
         Py_DECREF(pa_table);
 
-        return {out_table, ProducerResult::FINISHED};
+        this->current_row += batch_size;
+
+        ProducerResult result = this->current_row >= this->num_rows
+                                    ? ProducerResult::FINISHED
+                                    : ProducerResult::HAVE_MORE_OUTPUT;
+
+        return {out_table, result};
     }
 };
