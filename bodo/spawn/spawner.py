@@ -31,7 +31,6 @@ from bodo.pandas import (
     LazyMetadata,
 )
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
-from bodo.pandas.utils import execute_plan
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
@@ -281,14 +280,14 @@ class Spawner:
         # so we can build the arg metadata.
         # We do this first so nothing is already running when we execute the plan.
         args = [
-            execute_plan(arg._plan)
-            if isinstance(arg, BodoLazyWrapper) and arg._mgr._plan is not None
+            arg.execute_plan()
+            if isinstance(arg, BodoLazyWrapper) and arg.is_lazy_plan()
             else arg
             for arg in args
         ]
         kwargs = {
-            k: execute_plan(v._plan)
-            if isinstance(v, BodoLazyWrapper) and v._mgr._plan is not None
+            k: v.execute_plan()
+            if isinstance(v, BodoLazyWrapper) and v.is_lazy_plan()
             else v
             for k, v in kwargs.items()
         }

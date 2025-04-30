@@ -166,6 +166,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Returns whether the BodoSeries is represented by a plan."""
         return getattr(self._mgr, "_plan", None) is not None
 
+    def execute_plan(self):
+        return self._mgr.execute_plan()
+
     @property
     def shape(self):
         """

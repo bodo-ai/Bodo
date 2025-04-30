@@ -388,8 +388,8 @@ class LazyPlan:
 
         # Create real duckdb class.
         pa_schema = pa.Schema.from_pandas(
-            self.out_schema, preserve_index=(self.plan_class == "LogicalFilter")
-        )
+            self.out_schema
+        )  # do this in filter case? preserve_index=(self.plan_class == "LogicalFilter")
         ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret
@@ -479,7 +479,11 @@ def _get_n_index_arrays(index):
 
 
 def df_to_cpp_table(df):
-    """Convert a pandas DataFrame to a C++ table pointer and column names."""
+    """Convert a pandas DataFrame to a C++ table pointer with column names and
+    metadata set properly.
+    """
+    from bodo.ext import plan_optimizer
+
     n_table_cols = len(df.columns)
     n_index_arrs = _get_n_index_arrays(df.index)
     n_all_cols = n_table_cols + n_index_arrs
@@ -496,7 +500,8 @@ def df_to_cpp_table(df):
         return cast_table_ptr_to_int64(cpp_table)
 
     cpp_table = impl_df_to_cpp_table(df)
-    return cpp_table, list(df.columns)
+    plan_optimizer.set_cpp_table_meta(cpp_table, pa.Schema.from_pandas(df))
+    return cpp_table
 
 
 def _get_function_from_path(path_str: str):
@@ -597,7 +602,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
 
     if isinstance(schema, pd.DataFrame):
         metadata = LazyMetadata(
-            "LazyPlan_" + str(plan.plan_class) if res_id is None else res_id,
+            res_id,
             schema,
             nrows=nrows,
             index_data=index_data,
@@ -609,7 +614,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         plan.output_func = cpp_table_to_df
     elif isinstance(schema, pd.Series):
         metadata = LazyMetadata(
-            "LazyPlan_" + str(plan.plan_class) if res_id is None else res_id,
+            res_id,
             schema,
             nrows=nrows,
             index_data=index_data,

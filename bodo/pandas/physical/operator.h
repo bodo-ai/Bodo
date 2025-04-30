@@ -71,3 +71,12 @@ class PhysicalSourceSink : public PhysicalOperator {
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) = 0;
 };
+
+/**
+ * @brief Get the streaming batch size from environment variable.
+ * It looks up the environment variable dynamically to enable setting it
+ * in tests during runtime.
+ *
+ * @return int batch size to be used in streaming operators
+ */
+int get_streaming_batch_size();

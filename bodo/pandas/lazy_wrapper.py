@@ -25,6 +25,14 @@ class BodoLazyWrapper(abc.ABC):
     def update_from_lazy_metadata(self, lazy_metadata: LazyMetadata):
         pass
 
+    @abc.abstractmethod
+    def is_lazy_plan(self):
+        pass
+
+    @abc.abstractmethod
+    def execute_plan(self):
+        pass
+
     @property
     def _lazy(self) -> bool:
         return self._get_result_id() is not None
