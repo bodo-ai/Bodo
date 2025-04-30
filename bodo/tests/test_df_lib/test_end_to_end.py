@@ -252,7 +252,8 @@ def test_filter_distributed(datapath, op):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True)
+        reset_index=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -269,7 +270,8 @@ def test_filter(datapath, op, set_stream_batch_size_three):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True)
+        reset_index=True,
+    )
 
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
@@ -286,7 +288,8 @@ def test_filter(datapath, op, set_stream_batch_size_three):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True)
+        reset_index=True,
+    )
 
 
 def test_apply(datapath, index_val, set_stream_batch_size_three):
