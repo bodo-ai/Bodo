@@ -66,12 +66,12 @@ import time
 
 
 def data_transform():
-    t0 = time.time()
+    t0 = time.perf_counter()
     df = pd.read_parquet("pd_example.pq")
     df["B"] = df.apply(lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1)
     df["C"] = df.A.dt.month
     df.to_parquet("pandas_output.pq")
-    print("Total time: {:.2f}".format(time.time() - t0))
+    print("Total time: {:.2f}".format(time.perf_counter() - t0))
 
 
 if __name__ == "__main__":
@@ -109,12 +109,12 @@ import bodo
 
 @bodo.jit
 def data_transform():
-    t0 = time.time()
+    t0 = time.perf_counter()
     df = pd.read_parquet("pd_example.pq")
     df["B"] = df.apply(lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1)
     df["C"] = df.A.dt.month
     df.to_parquet("bodo_output.pq")
-    print("Total time: {:.2f}".format(time.time()-t0))
+    print("Total time: {:.2f}".format(time.perf_counter()-t0))
 
 if __name__ == "__main__":
     data_transform()
@@ -170,12 +170,12 @@ def data_transform():
     df.to_parquet("bodo_output.pq")
 
 if __name__ == "__main__":
-    t0 = time.time()
+    t0 = time.perf_counter()
     data_transform()
-    print("Total time first call: {:.2f}".format(time.time()-t0))
-    t0 = time.time()
+    print("Total time first call: {:.2f}".format(time.perf_counter()-t0))
+    t0 = time.perf_counter()
     data_transform()
-    print("Total time second call: {:.2f}".format(time.time()-t0))
+    print("Total time second call: {:.2f}".format(time.perf_counter()-t0))
 ```
 
 Save this code in `data_transform2.py` and run in command line:
@@ -207,9 +207,9 @@ def data_transform():
 
 
 if __name__ == "__main__":
-    t0 = time.time()
+    t0 = time.perf_counter()
     data_transform()
-    print("Total time: {:.2f}".format(time.time() - t0))
+    print("Total time: {:.2f}".format(time.perf_counter() - t0))
 ```
 
 Save this code in `data_transform_cache.py` and run in command line

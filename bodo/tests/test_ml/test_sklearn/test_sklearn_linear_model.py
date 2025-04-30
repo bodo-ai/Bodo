@@ -36,9 +36,9 @@ def test_sgdc_svm(memory_leak_check):
             early_stopping=False,
             verbose=0,
         )
-        start_time = time.time()
+        start_time = time.perf_counter()
         clf.fit(X_train, y_train)
-        end_time = time.time()
+        end_time = time.perf_counter()
         if bodo.get_rank() == 0:
             print("\n", name, "Time: ", (end_time - start_time), "\n")
         score = clf.score(X_test, y_test)
@@ -112,9 +112,9 @@ def test_sgdc_lr(memory_leak_check):
             early_stopping=False,
             random_state=42,
         )
-        start_time = time.time()
+        start_time = time.perf_counter()
         clf.fit(X_train, y_train)
-        end_time = time.time()
+        end_time = time.perf_counter()
         # score = clf.score(X_test, y_test)
         y_pred = clf.predict(X_test)
         score = precision_score(y_test, y_pred, average="micro")
@@ -247,9 +247,9 @@ def test_sgdr(penalty, memory_leak_check):
             early_stopping=False,
             verbose=0,
         )
-        start_time = time.time()
+        start_time = time.perf_counter()
         clf.fit(X_train, y_train)
-        end_time = time.time()
+        end_time = time.perf_counter()
         if bodo.get_rank() == 0:
             print("\n", name, "Time: ", (end_time - start_time), "\n")
         score = clf.score(X_test, y_test)
@@ -601,9 +601,9 @@ def test_logistic_regression(memory_leak_check):
         # TODO (Hadia, Sahil) When n_jobs is set to 8, it's (recently been) failing on PR CI (but not Azure) for some
         # reason, so we need to investigate and fix the issue.
         clf = LogisticRegression(n_jobs=1)
-        start_time = time.time()
+        start_time = time.perf_counter()
         clf.fit(X_train, y_train)
-        end_time = time.time()
+        end_time = time.perf_counter()
         y_pred = clf.predict(X_test)
         score = precision_score(y_test, y_pred, average="weighted")
         if bodo.get_rank() == 0:
