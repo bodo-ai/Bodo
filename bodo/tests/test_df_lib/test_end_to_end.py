@@ -331,7 +331,6 @@ def test_filter_string(datapath):
         reset_index=True,
     )
 
-
     bodo_df2 = bodo_df1[bodo_df1.B == "gamma"]
 
     # Make sure bodo_df2 is unevaluated at this point.
