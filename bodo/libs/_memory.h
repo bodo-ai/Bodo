@@ -162,8 +162,8 @@ struct BufferPoolOptions {
     /// trace_level = 2: Trace time, print for all ranks
     uint8_t trace_level = 0;
 
-    /// @brief Number of bytes free-d through malloc after which
-    /// we call malloc_trim.
+    /// @brief Number of bytes free-d through malloc on this rank
+    /// after which we call malloc_trim.
     /// NOTE: This is only applicable on Linux since malloc_trim
     /// is only available on Linux.
     /// This is part of BufferOptions purely for unit-testing
