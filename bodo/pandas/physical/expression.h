@@ -1,10 +1,15 @@
 #pragma once
 
-#include <iostream>
+#include <arrow/api.h>
+#include <arrow/compute/api.h>
 #include "../libs/_array_utils.h"
+#include "../libs/_bodo_to_arrow.h"
 #include "../tests/utils.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "operator.h"
+
+std::shared_ptr<arrow::Array> prepare_arrow_compute(
+    std::shared_ptr<array_info> arr);
 
 /**
  * @brief Superclass for possible results returned by nodes in Bodo
@@ -363,4 +368,122 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
    protected:
     duckdb::idx_t table_index;
     const std::vector<int64_t> selected_columns;
+};
+
+/**
+ * @brief Physical expression tree node type for conjunctions of
+ *        boolean arrays.
+ *
+ */
+class PhysicalConjunctionExpression : public PhysicalExpression {
+   public:
+    PhysicalConjunctionExpression(std::shared_ptr<PhysicalExpression> left,
+                                  std::shared_ptr<PhysicalExpression> right,
+                                  duckdb::ExpressionType etype)
+        : expr_type(etype),
+          first_time(true),
+          switchLeftRight(false),
+          two_source(true) {
+        children.push_back(left);
+        children.push_back(right);
+    }
+
+    virtual ~PhysicalConjunctionExpression() = default;
+
+    /**
+     * @brief How to process this expression tree node.
+     *
+     */
+    virtual std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch) {
+        // We know we have two children so process them first.
+        std::shared_ptr<ExprResult> left_res =
+            children[0]->ProcessBatch(input_batch);
+        std::shared_ptr<ExprResult> right_res =
+            children[1]->ProcessBatch(input_batch);
+        // Try to convert the results of our children into array
+        // or scalar results to see which one they are.
+        std::shared_ptr<ArrayExprResult> left_as_array =
+            std::dynamic_pointer_cast<ArrayExprResult>(left_res);
+        std::shared_ptr<ScalarExprResult> left_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+        std::shared_ptr<ArrayExprResult> right_as_array =
+            std::dynamic_pointer_cast<ArrayExprResult>(right_res);
+        std::shared_ptr<ScalarExprResult> right_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(right_res);
+        // Some things we don't know at node conversion time but
+        // we do know at first execution time.  So, we try to do
+        // certain checks only once with the first_time flag.
+        if (first_time) {
+            first_time = false;
+            // If at least one output of our children is an array.
+            if (left_as_array || right_as_array) {
+                // Save if both are array output.
+                two_source = left_as_array && right_as_array;
+                // If left is a scalar then indicate we will swap
+                // this an all future left and right outputs and
+                // make appropriate change to the operator type.
+                if (left_as_scalar) {
+                    switchLeftRight = true;
+                    expr_type = exprSwitchLeftRight(expr_type);
+                }
+            } else {
+                throw std::runtime_error(
+                    "Don't handle scalar-scalar expressions yet.");
+            }
+            // Now after possible operator switching, save the
+            // comparator function we'll use for this and future
+            // batch processing.
+            switch (expr_type) {
+                case duckdb::ExpressionType::CONJUNCTION_AND:
+                    comparator = "and";
+                    break;
+                case duckdb::ExpressionType::CONJUNCTION_OR:
+                    comparator = "or";
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "Unhandled conjunction expression type.");
+            }
+        }
+        if (switchLeftRight) {
+            // Switch left and right so one fewer case to handle.
+            std::swap(left_as_array, right_as_array);
+            std::swap(left_as_scalar, right_as_scalar);
+        }
+        // Call one array or two array comparison functions based on whether
+        // we have one input array or two.
+        arrow::Datum src1 =
+            arrow::Datum(prepare_arrow_compute(left_as_array->result));
+        arrow::Datum src2;
+        if (two_source) {
+            src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
+            // compare_two_array(left_as_array->result, right_as_array->result,
+            //                   result_data1, comparator);
+        } else {
+            // compare_one_array_dispatch(left_as_array->result,
+            //                            right_as_scalar->result->data1(),
+            //                            result_data1, comparator);
+        }
+
+        arrow::Result<arrow::Datum> cmp_res =
+            arrow::compute::CallFunction(comparator, {src1, src2});
+        if (!cmp_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "arrow_compute_cmp_scalar: Error in Arrow compute: " +
+                cmp_res.status().message());
+        }
+
+        auto result = arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
+                                          bodo::BufferPool::DefaultPtr());
+
+        return std::make_shared<ArrayExprResult>(result);
+    }
+
+   protected:
+    duckdb::ExpressionType expr_type;
+    bool first_time;
+    bool switchLeftRight;
+    bool two_source;
+    std::string comparator;
 };

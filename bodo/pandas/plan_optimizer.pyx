@@ -546,7 +546,7 @@ cdef class LogicalGetSeriesRead(LogicalOperator):
     """Represents an already materialized BodoSeries."""
     def __cinit__(self, out_schema, result_id):
         self.out_schema = out_schema
-        raise ValueError("LogicalGetSeriesRead not yet implemented.")
+        raise NotImplementedError("LogicalGetSeriesRead not yet implemented.")
 
 
 cdef class LogicalGetPandasReadSeq(LogicalOperator):
