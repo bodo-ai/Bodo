@@ -252,7 +252,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val);
  * @param val - the constant string for the expression
  * @return duckdb::unique_ptr<duckdb::Expression> - the const string expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(std::string val);
+duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(const std::string &val);
 
 /**
  * @brief Create an expression that references a specified column.

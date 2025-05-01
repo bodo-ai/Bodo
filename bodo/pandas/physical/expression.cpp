@@ -74,3 +74,12 @@ std::function<bool(int)> greater_equal_test = [](int test) {
     return test <= 0;
 };
 std::function<bool(int)> less_equal_test = [](int test) { return test >= 0; };
+
+std::shared_ptr<arrow::Array> prepare_arrow_compute(std::shared_ptr<array_info> arr) {
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    return bodo_array_to_arrow(
+            bodo::BufferPool::DefaultPtr(), arr,
+            false /*convert_timedelta_to_int64*/, "", time_unit,
+            false, /*downcast_time_ns_to_us*/
+            bodo::default_buffer_memory_manager());
+}
