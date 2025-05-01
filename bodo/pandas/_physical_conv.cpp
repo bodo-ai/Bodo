@@ -153,8 +153,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
         std::shared_ptr<PhysicalExpression> subExprTree =
             buildPhysicalExprTree(op.expressions[i]);
         physExprTree = std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalConjunctionExpression>(
-                    physExprTree, subExprTree, duckdb::ExpressionType::CONJUNCTION_AND));
+            std::make_shared<PhysicalConjunctionExpression>(
+                physExprTree, subExprTree,
+                duckdb::ExpressionType::CONJUNCTION_AND));
     }
     std::shared_ptr<PhysicalFilter> physical_op =
         std::make_shared<PhysicalFilter>(physExprTree);

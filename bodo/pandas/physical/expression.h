@@ -1,14 +1,15 @@
 #pragma once
 
+#include <arrow/api.h>
+#include <arrow/compute/api.h>
 #include "../libs/_array_utils.h"
+#include "../libs/_bodo_to_arrow.h"
 #include "../tests/utils.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "operator.h"
-#include <arrow/api.h>
-#include <arrow/compute/api.h>
-#include "../libs/_bodo_to_arrow.h"
 
-std::shared_ptr<arrow::Array> prepare_arrow_compute(std::shared_ptr<array_info> arr);
+std::shared_ptr<arrow::Array> prepare_arrow_compute(
+    std::shared_ptr<array_info> arr);
 
 /**
  * @brief Superclass for possible results returned by nodes in Bodo
@@ -377,8 +378,8 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
 class PhysicalConjunctionExpression : public PhysicalExpression {
    public:
     PhysicalConjunctionExpression(std::shared_ptr<PhysicalExpression> left,
-                                 std::shared_ptr<PhysicalExpression> right,
-                                 duckdb::ExpressionType etype)
+                                  std::shared_ptr<PhysicalExpression> right,
+                                  duckdb::ExpressionType etype)
         : expr_type(etype),
           first_time(true),
           switchLeftRight(false),
@@ -452,25 +453,29 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         }
         // Call one array or two array comparison functions based on whether
         // we have one input array or two.
-        arrow::Datum src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
+        arrow::Datum src1 =
+            arrow::Datum(prepare_arrow_compute(left_as_array->result));
         arrow::Datum src2;
         if (two_source) {
             src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
-            //compare_two_array(left_as_array->result, right_as_array->result,
-            //                  result_data1, comparator);
+            // compare_two_array(left_as_array->result, right_as_array->result,
+            //                   result_data1, comparator);
         } else {
-            //compare_one_array_dispatch(left_as_array->result,
-            //                           right_as_scalar->result->data1(),
-            //                           result_data1, comparator);
+            // compare_one_array_dispatch(left_as_array->result,
+            //                            right_as_scalar->result->data1(),
+            //                            result_data1, comparator);
         }
 
-        arrow::Result<arrow::Datum> cmp_res = arrow::compute::CallFunction(
-                comparator, {src1, src2});
+        arrow::Result<arrow::Datum> cmp_res =
+            arrow::compute::CallFunction(comparator, {src1, src2});
         if (!cmp_res.ok()) [[unlikely]] {
-            throw std::runtime_error("arrow_compute_cmp_scalar: Error in Arrow compute: " + cmp_res.status().message());
+            throw std::runtime_error(
+                "arrow_compute_cmp_scalar: Error in Arrow compute: " +
+                cmp_res.status().message());
         }
 
-        auto result = arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(), bodo::BufferPool::DefaultPtr());
+        auto result = arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
+                                          bodo::BufferPool::DefaultPtr());
 
         return std::make_shared<ArrayExprResult>(result);
     }
