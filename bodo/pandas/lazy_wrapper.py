@@ -1,10 +1,14 @@
 import abc
 import typing as pt
 from collections.abc import Callable
+from enum import Enum
 
 from bodo.pandas.lazy_metadata import LazyMetadata
-from bodo.pandas.utils import ExecState
 
+class ExecState(Enum):
+    PLAN = 0
+    DISTRIBUTED = 1
+    COLLECTED = 2
 
 class BodoLazyWrapper(abc.ABC):
     @abc.abstractmethod

@@ -261,6 +261,10 @@ cdef extern from "duckdb/planner/operator/logical_limit.hpp" namespace "duckdb" 
     cdef cppclass CLogicalLimit" duckdb::LogicalLimit"(CLogicalOperator):
         pass
 
+cdef extern from "duckdb/planner/operator/logical_sample.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalSample" duckdb::LogicalSample"(CLogicalOperator):
+        pass
+
 cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalGet" duckdb::LogicalGet"(CLogicalOperator):
         pass
@@ -282,6 +286,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val)
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx)
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n)
+    cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
@@ -509,6 +514,8 @@ cdef class LogicalUnaryOp(LogicalOperator):
         self.sources = [source]
 
 cdef class LogicalLimit(LogicalOperator):
+    cdef public int n
+
     def __cinit__(self, out_schema, LogicalOperator source, n):
         self.out_schema = out_schema
         self.sources = [source]

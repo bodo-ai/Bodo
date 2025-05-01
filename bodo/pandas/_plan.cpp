@@ -21,7 +21,7 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_limit.hpp"
-#include "duckdb/planner/bound_result_modifier.hpp"
+#include "duckdb/planner/operator/logical_sample.hpp"
 
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
@@ -164,6 +164,22 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
 
     logical_filter->children.push_back(std::move(source_duck));
     return logical_filter;
+}
+
+duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    int n) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    duckdb::unique_ptr<duckdb::SampleOptions> sampleOptions = duckdb::make_uniq<duckdb::SampleOptions>();
+    sampleOptions->sample_size = duckdb::Value(n);
+    sampleOptions->is_percentage = false;
+    sampleOptions->method = duckdb::SampleMethod::SYSTEM_SAMPLE;
+    sampleOptions->repeatable = true;  // Not sure if this is correct.
+    auto logical_sample =
+        duckdb::make_uniq<duckdb::LogicalSample>(std::move(sampleOptions), std::move(source_duck));
+
+    return logical_sample;
 }
 
 duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
@@ -571,7 +587,9 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns,
+    duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     // Read the dataframe from the result registry using
     // sys.modules["__main__"].RESULT_REGISTRY since importing
     // bodo.spawn.worker creates a new module with new empty registry.
@@ -613,15 +631,19 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns,
+    duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     return std::make_shared<PhysicalReadPandas>(df);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoParquetScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns,
+    duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     return std::make_shared<PhysicalReadParquet>(
-        path, pyarrow_schema, storage_options, selected_columns, filter_exprs);
+        path, pyarrow_schema, storage_options, selected_columns, filter_exprs, limit_val);
 }
 
 duckdb::idx_t get_operator_table_index(

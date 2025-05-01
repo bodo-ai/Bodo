@@ -9,6 +9,7 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "physical/filter.h"
 #include "physical/project.h"
+#include "physical/limit.h"
 #include "physical/python_scalar_func.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
@@ -21,7 +22,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
 
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
-            selected_columns, op.table_filters);
+            selected_columns, op.table_filters, op.extra_info.limit_val);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");
@@ -147,3 +148,50 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     throw std::runtime_error(
         "Not supported on the physical side yet: LogicalComparisonJoin");
 }
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalSample& op) {
+    // Process the source of this limit.
+    this->Visit(*op.children[0]);
+
+    duckdb::unique_ptr<duckdb::SampleOptions> &sampleOptions = op.sample_options;
+
+    if (sampleOptions->is_percentage || sampleOptions->method != duckdb::SampleMethod::SYSTEM_SAMPLE) {
+        throw std::runtime_error(
+            "LogicalSample unsupported offset");
+    }
+
+    std::shared_ptr<PhysicalLimit> physical_op;
+
+    std::visit(
+        [&physical_op](const auto& value) {
+            using T = std::decay_t<decltype(value)>;
+            
+            // Allow only types that can safely convert to int
+            if constexpr (std::is_convertible_v<T, uint64_t>) {
+                physical_op = std::make_shared<PhysicalLimit>(value);
+            }
+        },
+        extractValue(sampleOptions->sample_size));
+    if (!physical_op) {
+        throw std::runtime_error("Cannot convert duckdb::Value to limit integer.");
+    }
+    this->active_pipeline->AddOperator(physical_op);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
+    // Process the source of this limit.
+    this->Visit(*op.children[0]);
+
+    if (op.offset_val.Type() != duckdb::LimitNodeType::CONSTANT_VALUE || op.offset_val.GetConstantValue() != 0) {
+        throw std::runtime_error(
+            "LogicalLimit unsupported offset");
+    }
+    if (op.limit_val.Type() != duckdb::LimitNodeType::CONSTANT_VALUE) {
+        throw std::runtime_error(
+            "LogicalLimit unsupported limit type");
+    }
+    duckdb::idx_t n = op.limit_val.GetConstantValue();
+    auto physical_op = std::make_shared<PhysicalLimit>(n);
+    this->active_pipeline->AddOperator(physical_op);
+}
+

@@ -95,9 +95,13 @@ class PhysicalReadParquet : public PhysicalSource {
     explicit PhysicalReadParquet(std::string _path, PyObject *pyarrow_schema,
                                  PyObject *storage_options,
                                  std::vector<int> &selected_columns,
-                                 duckdb::TableFilterSet &filter_exprs) {
+                                 duckdb::TableFilterSet &filter_exprs,
+                                 duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
         PyObject *py_path = PyUnicode_FromString(_path.c_str());
 
+        // ----------------------------------------------------------
+        // Handle columns.
+        // ----------------------------------------------------------
         std::vector<bool> is_nullable(selected_columns.size(), true);
 
         // Extract metadata from pyarrow schema (for Pandas Index reconstruction
@@ -114,12 +118,33 @@ class PhysicalReadParquet : public PhysicalSource {
                 "pyarrow schema");
         }
 
+        // ----------------------------------------------------------
+        // Handle filter expressions.
+        // ----------------------------------------------------------
         PyObject *arrowFilterExpr =
             tableFilterSetToArrowCompute(filter_exprs, schema_fields);
 
+        // ----------------------------------------------------------
+        // Handle limit.
+        // ----------------------------------------------------------
+        int64_t total_rows_to_read = -1; // Default to read everything.
+        if (limit_val) {
+            // If the limit option is present...
+            if (limit_val->Type() != duckdb::LimitNodeType::CONSTANT_VALUE) {
+                throw std::runtime_error(
+                    "PhysicalReadParquet unsupported limit type");
+            }
+            // Limit the rows to read to the limit value.
+            total_rows_to_read = limit_val->GetConstantValue();
+        }
+
+        // ----------------------------------------------------------
+        // Configure internal parquet reader.
+        // ----------------------------------------------------------
         internal_reader = std::make_shared<ParquetReader>(
-            py_path, true, arrowFilterExpr, storage_options, pyarrow_schema, -1,
-            selected_columns, is_nullable, false, get_streaming_batch_size());
+            py_path, true, arrowFilterExpr, storage_options, pyarrow_schema,
+            total_rows_to_read, selected_columns, is_nullable, false,
+            get_streaming_batch_size());
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
 
         // Extract column names from pyarrow schema using selected columns

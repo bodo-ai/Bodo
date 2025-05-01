@@ -7,7 +7,7 @@ import pyarrow as pa
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
-from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
     LazyPlan,
@@ -189,7 +189,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Otherwise we use the data fetched from the workers.
         """
         if (self._head_s is None) or (n > self._head_s.shape[0]):
-            if self._exec_state() == ExecState.PLAN:
+            if self._exec_state == ExecState.PLAN:
                 from bodo.pandas.base import _empty_like
 
                 new_metadata = _empty_like(self)

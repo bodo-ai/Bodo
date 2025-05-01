@@ -8,7 +8,7 @@ import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
-from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
@@ -130,19 +130,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         Otherwise, use the default head method which will trigger a data pull.
         """
         if (self._head_df is None) or (n > self._head_df.shape[0]):
-            if self._exec_state() == ExecState.PLAN:
-                from bodo.pandas.base import _empty_like
+            from bodo.pandas.base import _empty_like
 
-                new_metadata = _empty_like(self)
-                planLimit = LazyPlan(
-                    "LogicalLimit",
-                    self._plan,
-                    n,
-                )
+            new_metadata = _empty_like(self)
+            planLimit = LazyPlan(
+                "LogicalLimit",
+                self._plan,
+                n,
+            )
 
-                return wrap_plan(new_metadata, planLimit)
-            else:
-                return super().head(n)
+            return wrap_plan(new_metadata, planLimit)
         else:
             # If head_df is available and larger than n, then use it directly.
             return self._head_df.head(n)

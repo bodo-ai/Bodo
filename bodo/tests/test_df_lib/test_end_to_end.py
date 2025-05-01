@@ -348,6 +348,56 @@ def test_filter_string(datapath):
     )
 
 
+def test_head_pushdown(datapath):
+    """Test for head pushed down to read parquet."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1.head(3)
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+    assert bodo_df2.plan is not None
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1.head(3)
+
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_head(datapath):
+    """Test for head pushed down to read parquet."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+
+    _test_equal(
+        bodo_df1.copy(),
+        py_df1,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    bodo_df2 = bodo_df1.head(3)
+    py_df2 = py_df1.head(3)
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+    assert bodo_df2.plan is not None
+
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_apply(datapath, index_val, set_stream_batch_size_three):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
