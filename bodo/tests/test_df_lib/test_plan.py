@@ -33,7 +33,7 @@ def test_projection_node():
 def test_filter_node():
     """Make sure Cython wrapper around the filter node works. Just tests node creation."""
     P1 = plan_optimizer.LogicalGetParquetRead(pa.schema([]), b"example.parquet1", {})
-    A = plan_optimizer.LogicalProjection(pa.schema([("A", pa.int64())]), P1, [0])
+    A = plan_optimizer.LogicalColRef(pa.schema([("A", pa.int64())]), P1, [0])
     B = plan_optimizer.LogicalBinaryOp(
         pa.schema([("A", pa.bool_())]), A, 5, operator.gt
     )
