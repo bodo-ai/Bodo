@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iostream>
 #include "../libs/_array_utils.h"
 #include "../tests/utils.h"
 #include "duckdb/common/enums/expression_type.hpp"
