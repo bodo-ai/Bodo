@@ -239,6 +239,23 @@ make_projection_python_scalar_func(
 duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val);
 
 /**
+ * @brief Create an expression from a constant float.
+ *
+ * @param val - the constant float for the expression
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const float expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val);
+
+/**
+ * @brief Create an expression from a constant string.
+ *
+ * @param val - the constant string for the expression
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const string expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
+    const std::string &val);
+
+/**
  * @brief Create an expression that references a specified column.
  *
  * @param field_py - the data type of the specified column
@@ -259,6 +276,18 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
 duckdb::unique_ptr<duckdb::Expression> make_binop_expr(
+    std::unique_ptr<duckdb::Expression> &lhs,
+    std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
+
+/**
+ * @brief Create a conjunction (and/or) expression from two sources.
+ *
+ * @param lhs - the left-hand side of the expression
+ * @param rhs - the right-hand side of the expression
+ * @param etype - the expression type (and/or) comparing the two sources
+ * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
 

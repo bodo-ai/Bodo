@@ -161,8 +161,14 @@ def str_to_expr_type(val):
         return CExpressionType.COMPARE_GREATERTHANOREQUALTO
     elif val is operator.le:
         return CExpressionType.COMPARE_LESSTHANOREQUALTO
+    elif val == "__and__":
+        return CExpressionType.CONJUNCTION_AND
+    elif val == "__or__":
+        return CExpressionType.CONJUNCTION_OR
+    elif val == "__invert__":
+        return CExpressionType.OPERATOR_NOT
     else:
-        assert False
+        raise ValueError("Unhandled case in str_to_expr_type")
 
 cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" nogil:
     cpdef enum class CExpressionClass "duckdb::ExpressionClass":
@@ -266,8 +272,11 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
     cdef unique_ptr[CLogicalProjection] make_projection_python_scalar_func(unique_ptr[CLogicalOperator] source, object out_schema, object args)
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
+    cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
     cdef unique_ptr[CExpression] make_const_int_expr(int val)
+    cdef unique_ptr[CExpression] make_const_float_expr(float val)
+    cdef unique_ptr[CExpression] make_const_string_expr(c_string val)
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format)
@@ -361,6 +370,18 @@ cdef class LogicalProjection(LogicalOperator):
         return f"LogicalProjection({self.select_vec}, {self.out_schema})"
 
 
+cdef class LogicalColRef(LogicalOperator):
+    cdef readonly vector[int] select_vec
+
+    def __cinit__(self, object out_schema, LogicalOperator source, select_idxs):
+        self.out_schema = out_schema
+        self.select_vec = select_idxs
+        self.sources = [source]
+
+    def __str__(self):
+        return f"LogicalColRef({self.select_vec}, {self.out_schema})"
+
+
 cpdef get_pushed_down_columns(proj):
     """Get column indices that are pushed down from projection to its source node. Used for testing.
     """
@@ -385,26 +406,49 @@ cdef class LogicalProjectionPythonScalarFunc(LogicalOperator):
 
 
 cdef unique_ptr[CExpression] make_expr(val):
+    """Convert a filter expression tree from Cython wrappers
+       to duckdb.
+    """
     cdef LogicalOperator source
+    cdef c_string val_cstr
 
     if isinstance(val, int):
         return make_const_int_expr(val)
-    elif isinstance(val, LogicalProjection):
+    elif isinstance(val, float):
+        return make_const_float_expr(val)
+    elif isinstance(val, str):
+        val_cstr = val.encode()
+        return make_const_string_expr(val_cstr)
+    elif isinstance(val, LogicalColRef):
         select_vec = val.select_vec
         field = val.out_schema.field(0)
-        assert len(select_vec) == 1
-        source = val
-        return make_col_ref_expr(source.c_logical_operator.get().children[0], field, select_vec[0])
+        if len(select_vec) != 1:
+            raise ValueError("len(select_vec) != 1")
+        source = val.sources[0]
+        return make_col_ref_expr(source.c_logical_operator, field, select_vec[0])
+    elif isinstance(val, LogicalBinaryOp):
+        lhs_expr = make_expr(val.lhs)
+        rhs_expr = make_expr(val.rhs)
+        return make_binop_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
+    elif isinstance(val, LogicalConjunctionOp):
+        lhs_expr = make_expr(val.lhs)
+        rhs_expr = make_expr(val.rhs)
+        return make_conjunction_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
     else:
-        assert False
+        raise ValueError("Unknown expr type in make_expr " + str(type(val)))
 
 def get_source(val):
-    if isinstance(val, int):
-        return None
-    elif isinstance(val, LogicalProjection):
-        return val
+    """Process a filter expression tree and find all the unique
+       columns referenced in the tree.
+    """
+    if isinstance(val, (int, float, str)):
+        return set()
+    elif isinstance(val, LogicalColRef):
+        return {val}
+    elif isinstance(val, (LogicalBinaryOp, LogicalConjunctionOp)):
+        return get_source(val.lhs).union(get_source(val.rhs))
     else:
-        assert False
+        raise ValueError("Unknown expr type in get_source " + str(type(val)))
 
 cdef class LogicalFilter(LogicalOperator):
     def __cinit__(self, out_schema, LogicalOperator source, key):
@@ -412,22 +456,18 @@ cdef class LogicalFilter(LogicalOperator):
         self.sources = [source]
 
         cdef unique_ptr[CExpression] c_filter_expr
-        if isinstance(key, LogicalBinaryOp):
-            lhs_expr = make_expr(key.lhs)
-            rhs_expr = make_expr(key.rhs)
+        if isinstance(key, (LogicalBinaryOp, LogicalConjunctionOp)):
             lhs_source = get_source(key.lhs)
             rhs_source = get_source(key.rhs)
-            c_filter_expr = make_binop_expr(lhs_expr, rhs_expr, str_to_expr_type(key.binop))
-            if lhs_source is not None:
-                if source is not lhs_source.sources[0]:
-                    assert False, "Filtering with mask created from different source not supported."
-                source = lhs_source
-            elif rhs_source is not None:
-                if source is not rhs_source.sources[0]:
-                    assert False, "Filtering with mask created from different source not supported."
-                source = rhs_source
+            for lsrc in lhs_source:
+                if source is not lsrc.sources[0]:
+                    raise ValueError("Filtering with mask created from different source not supported.")
+            for rsrc in rhs_source:
+                if source is not rsrc.sources[0]:
+                    raise ValueError("Filtering with mask created from different source not supported.")
+            c_filter_expr = make_expr(key)
         else:
-            assert False & "Unimplemented"
+            raise ValueError("Non-binary op filter not yet supported.")
 
         cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, c_filter_expr)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
@@ -445,6 +485,27 @@ cdef class LogicalBinaryOp(LogicalOperator):
         self.lhs = lhs
         self.rhs = rhs
         self.binop = binop
+        self.sources = [lhs, rhs]
+
+cdef class LogicalConjunctionOp(LogicalOperator):
+    cdef public object lhs
+    cdef public object rhs
+    cdef public object binop
+
+    def __cinit__(self, out_schema, lhs, rhs, binop):
+        self.out_schema = out_schema
+        self.lhs = lhs
+        self.rhs = rhs
+        self.binop = binop
+        self.sources = [lhs, rhs]
+
+cdef class LogicalUnaryOp(LogicalOperator):
+    cdef public object op
+
+    def __cinit__(self, out_schema, source, op):
+        self.out_schema = out_schema
+        self.op = op
+        self.sources = [source]
 
 cdef class LogicalGetParquetRead(LogicalOperator):
     """Wrapper around DuckDB's LogicalGet for reading Parquet datasets.
@@ -465,7 +526,7 @@ cdef class LogicalGetSeriesRead(LogicalOperator):
     """Represents an already materialized BodoSeries."""
     def __cinit__(self, out_schema, result_id):
         self.out_schema = out_schema
-        assert False & "Not implemented yet."
+        raise NotImplementedError("LogicalGetSeriesRead not yet implemented.")
 
 
 cdef class LogicalGetPandasReadSeq(LogicalOperator):
@@ -535,5 +596,6 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
     exec_output = execute_plan(move(wrapped_operator.c_logical_operator), out_schema)
     cpp_table = exec_output.first
     arrow_schema = <object>exec_output.second
-    assert output_func is not None
+    if output_func is None:
+        raise ValueError("output_func is None.")
     return output_func(cpp_table, out_schema)

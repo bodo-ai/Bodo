@@ -5,6 +5,7 @@
 #include "_duckdb_util.h"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "physical/filter.h"
@@ -119,6 +120,21 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                 },
                 extracted_value);
         } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            duckdb::unique_ptr<duckdb::BoundConjunctionExpression> bce =
+                dynamic_cast_unique_ptr<duckdb::BoundConjunctionExpression>(
+                    std::move(expr));
+            // This node type has left and right children which are recursively
+            // processed first and then the resulting Bodo Physical expression
+            // subtrees are combined with the expression sub-type (e.g., equal,
+            // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
+            return std::static_pointer_cast<PhysicalExpression>(
+                std::make_shared<PhysicalConjunctionExpression>(
+                    buildPhysicalExprTree(bce->children[0]),
+                    buildPhysicalExprTree(bce->children[1]), expr_type));
+        } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
                 "Unsupported duckdb expression type" +
@@ -131,13 +147,16 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     // Process the source of this filter.
     this->Visit(*op.children[0]);
 
-    if (op.expressions.size() != 1) {
-        throw std::runtime_error(
-            "LogicalFilter only supports expressions of size 1");
-    }
-
     std::shared_ptr<PhysicalExpression> physExprTree =
         buildPhysicalExprTree(op.expressions[0]);
+    for (size_t i = 1; i < op.expressions.size(); ++i) {
+        std::shared_ptr<PhysicalExpression> subExprTree =
+            buildPhysicalExprTree(op.expressions[i]);
+        physExprTree = std::static_pointer_cast<PhysicalExpression>(
+            std::make_shared<PhysicalConjunctionExpression>(
+                physExprTree, subExprTree,
+                duckdb::ExpressionType::CONJUNCTION_AND));
+    }
     std::shared_ptr<PhysicalFilter> physical_op =
         std::make_shared<PhysicalFilter>(physExprTree);
     this->active_pipeline->AddOperator(physical_op);
