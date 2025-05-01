@@ -64,7 +64,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
         from bodo.pandas.base import _empty_like
 
-        if not ((isinstance(other, BodoSeries) and isinstance(other.dtype, pd.ArrowDtype) and other.dtype.type == bool) or isinstance(other, bool)):
+        if not ((isinstance(other, BodoSeries) and isinstance(other.dtype, pd.ArrowDtype) and other.dtype.type is bool) or isinstance(other, bool)):
             raise TypeError(
                 "'other' should be boolean BodoSeries or a bool. "
                 f"Got {type(other).__name__} instead."
@@ -114,7 +114,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(new_metadata, pd.Series)
         return wrap_plan(
             new_metadata,
-            plan=LazyPlan("LogicalUnaryOp", self._plan, op),
+            plan=LazyPlan("LogicalUnaryOp", self._plan, "__invert__"),
         )
 
     @staticmethod
