@@ -3,7 +3,6 @@ from collections.abc import Callable, Hashable
 
 import pandas as pd
 import pyarrow as pa
-import numpy as np
 
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
@@ -64,7 +63,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
         from bodo.pandas.base import _empty_like
 
-        if not ((isinstance(other, BodoSeries) and isinstance(other.dtype, pd.ArrowDtype) and other.dtype.type == bool) or isinstance(other, bool)):
+        if not (
+            (
+                isinstance(other, BodoSeries)
+                and isinstance(other.dtype, pd.ArrowDtype)
+                and other.dtype.type == bool
+            )
+            or isinstance(other, bool)
+        ):
             raise TypeError(
                 "'other' should be boolean BodoSeries or a bool. "
                 f"Got {type(other).__name__} instead."

@@ -336,7 +336,6 @@ def test_filter_multiple1(datapath, set_stream_batch_size_three):
     assert bodo_df2.is_lazy_plan()
     assert bodo_df2.plan is not None
 
-
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
         bodo_df2.copy(),
