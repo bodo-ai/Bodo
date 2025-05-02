@@ -64,6 +64,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         plan = LazyPlan(
             "LogicalProjection",
+            # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
         )
@@ -107,6 +108,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         plan = LazyPlan(
             "LogicalProjection",
+            # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
         )
@@ -271,6 +273,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
+            # Use the plan including the projection on the original table to access
+            # the right column (TODO: refactor to include a child ColRefExpression?).
             self._plan,
             (
                 "map",
@@ -284,6 +288,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         plan = LazyPlan(
             "LogicalProjection",
+            # Use the plan including the projection on the original table to access
+            # the right column (TODO: refactor to include a child ColRefExpression?).
             self._plan,
             (udf_arg,),
         )
@@ -305,6 +311,8 @@ class StringMethods:
         )
         expr = LazyPlan(
             "PythonScalarFuncExpression",
+            # Use the plan including the projection on the original table to access
+            # the right column (TODO: refactor to include a child ColRefExpression?).
             self._series._plan,
             (
                 "str.lower",
@@ -319,6 +327,8 @@ class StringMethods:
             new_metadata,
             plan=LazyPlan(
                 "LogicalProjection",
+                # Use the plan including the projection on the original table to access
+                # the right column (TODO: refactor to include a child ColRefExpression?).
                 self._series._plan,
                 (expr,),
             ),
@@ -334,6 +344,8 @@ class StringMethods:
         )
         expr = LazyPlan(
             "PythonScalarFuncExpression",
+            # Use the plan including the projection on the original table to access
+            # the right column (TODO: refactor to include a child ColRefExpression?).
             self._series._plan,
             (
                 "str.strip",
@@ -348,6 +360,8 @@ class StringMethods:
             new_metadata,
             plan=LazyPlan(
                 "LogicalProjection",
+                # Use the plan including the projection on the original table to access
+                # the right column (TODO: refactor to include a child ColRefExpression?).
                 self._series._plan,
                 (expr,),
             ),
