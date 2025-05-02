@@ -77,8 +77,12 @@ def test_parquet_projection_pushdown():
         b"example.parquet",
         {},
     )
+    exprs = [
+        plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), A, 0),
+        plan_optimizer.ColRefExpression(pa.schema([("C", pa.int32())]), A, 2),
+    ]
     B = plan_optimizer.LogicalProjection(
-        pa.schema([("A", pa.int64()), ("C", pa.int32())]), A, [0, 2]
+        pa.schema([("A", pa.int64()), ("C", pa.int32())]), A, exprs
     )
     C = plan_optimizer.py_optimize_plan(B)
     assert plan_optimizer.get_pushed_down_columns(C) == [0, 2], (
