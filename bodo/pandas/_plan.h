@@ -220,12 +220,12 @@ std::vector<int> get_projection_pushed_down_columns(
     std::unique_ptr<duckdb::LogicalOperator> &proj);
 
 /**
- * @brief Creates a LogicalProjection node with a UDF inside.
+ * @brief Creates an Expression node with a UDF inside.
  *
  * @param source input table plan
  * @param func UDF function to execute
  * @param out_schema_py output data type (single column for df.apply)
- * @return duckdb::unique_ptr<duckdb::LogicalProjection> Projection node for UDF
+ * @return duckdb::unique_ptr<duckdb::Expression> Expression node for UDF
  */
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
