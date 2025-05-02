@@ -269,8 +269,8 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema)
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
-    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
-    cdef unique_ptr[CLogicalProjection] make_projection_python_scalar_func(unique_ptr[CLogicalOperator] source, object out_schema, object args)
+    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema)
+    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args)
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
@@ -335,6 +335,17 @@ cdef class LogicalOperator:
     def toString(self):
         return plan_to_string(self.c_logical_operator, False).decode("utf-8")
 
+
+cdef class Expression:
+    """Wrapper around DuckDB's Expression to provide access in Python.
+    """
+    cdef readonly out_schema
+    cdef unique_ptr[CExpression] c_expression
+
+    def __str__(self):
+        return "Expression()"
+
+
 cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
     """
@@ -352,22 +363,25 @@ cdef class LogicalComparisonJoin(LogicalOperator):
         join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
         return f"LogicalComparisonJoin({join_type})"
 
+
 cdef class LogicalProjection(LogicalOperator):
     """Wrapper around DuckDB's LogicalProjection to provide access in Python.
     """
 
-    cdef readonly vector[int] select_vec
+    def __cinit__(self, object out_schema, LogicalOperator source, object exprs):
+        cdef vector[unique_ptr[CExpression]] expr_vec
 
-    def __cinit__(self, object out_schema, LogicalOperator source, select_idxs):
+        for expr in exprs:
+            expr_vec.push_back(move((<Expression>expr).c_expression))
+
         self.out_schema = out_schema
-        self.select_vec = select_idxs
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, self.select_vec, self.out_schema)
+        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, expr_vec, out_schema)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
 
     def __str__(self):
-        return f"LogicalProjection({self.select_vec}, {self.out_schema})"
+        return f"LogicalProjection({self.out_schema})"
 
 
 cdef class LogicalColRef(LogicalOperator):
@@ -390,19 +404,28 @@ cpdef get_pushed_down_columns(proj):
     return pushed_down_columns
 
 
-cdef class LogicalProjectionPythonScalarFunc(LogicalOperator):
-    """Wrapper around DuckDB's LogicalProjection with a ScalarFunc inside to provide access in Python.
+cdef class ColRefExpression(Expression):
+    """Wrapper around DuckDB's BoundColumnRefExpression to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, LogicalOperator source, int col_index):
+        self.out_schema = out_schema
+        self.c_expression = make_col_ref_expr(source.c_logical_operator, out_schema[0], col_index)
+
+    def __str__(self):
+        return f"ColRefExpression({self.out_schema})"
+
+
+cdef class PythonScalarFuncExpression(Expression):
+    """Wrapper around DuckDB's BoundFunctionExpression for running Python functions.
     """
 
     def __cinit__(self, object out_schema, LogicalOperator source, object args):
         self.out_schema = out_schema
-        self.sources = [source]
-
-        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection_python_scalar_func(source.c_logical_operator, self.out_schema, args)
-        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
+        self.c_expression = make_python_scalar_func_expr(source.c_logical_operator, out_schema, args)
 
     def __str__(self):
-        return f"LogicalProjectionPythonScalarFunc({self.out_schema})"
+        return f"PythonScalarFuncExpression({self.out_schema})"
 
 
 cdef unique_ptr[CExpression] make_expr(val):
@@ -419,85 +442,62 @@ cdef unique_ptr[CExpression] make_expr(val):
     elif isinstance(val, str):
         val_cstr = val.encode()
         return make_const_string_expr(val_cstr)
-    elif isinstance(val, LogicalColRef):
-        select_vec = val.select_vec
-        field = val.out_schema.field(0)
-        if len(select_vec) != 1:
-            raise ValueError("len(select_vec) != 1")
-        source = val.sources[0]
-        return make_col_ref_expr(source.c_logical_operator, field, select_vec[0])
-    elif isinstance(val, LogicalBinaryOp):
-        lhs_expr = make_expr(val.lhs)
-        rhs_expr = make_expr(val.rhs)
-        return make_binop_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
-    elif isinstance(val, LogicalConjunctionOp):
-        lhs_expr = make_expr(val.lhs)
-        rhs_expr = make_expr(val.rhs)
-        return make_conjunction_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
     else:
         raise ValueError("Unknown expr type in make_expr " + str(type(val)))
 
-def get_source(val):
-    """Process a filter expression tree and find all the unique
-       columns referenced in the tree.
-    """
-    if isinstance(val, (int, float, str)):
-        return set()
-    elif isinstance(val, LogicalColRef):
-        return {val}
-    elif isinstance(val, (LogicalBinaryOp, LogicalConjunctionOp)):
-        return get_source(val.lhs).union(get_source(val.rhs))
-    else:
-        raise ValueError("Unknown expr type in get_source " + str(type(val)))
 
 cdef class LogicalFilter(LogicalOperator):
-    def __cinit__(self, out_schema, LogicalOperator source, key):
+    def __cinit__(self, out_schema, LogicalOperator source, Expression key):
         self.out_schema = out_schema
         self.sources = [source]
-
-        cdef unique_ptr[CExpression] c_filter_expr
-        if isinstance(key, (LogicalBinaryOp, LogicalConjunctionOp)):
-            lhs_source = get_source(key.lhs)
-            rhs_source = get_source(key.rhs)
-            for lsrc in lhs_source:
-                if source is not lsrc.sources[0]:
-                    raise ValueError("Filtering with mask created from different source not supported.")
-            for rsrc in rhs_source:
-                if source is not rsrc.sources[0]:
-                    raise ValueError("Filtering with mask created from different source not supported.")
-            c_filter_expr = make_expr(key)
-        else:
-            raise ValueError("Non-binary op filter not yet supported.")
-
-        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, c_filter_expr)
+        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, key.c_expression)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
 
     def __str__(self):
         return f"LogicalFilter()"
 
-cdef class LogicalBinaryOp(LogicalOperator):
-    cdef public object lhs
-    cdef public object rhs
-    cdef public object binop
 
-    def __cinit__(self, out_schema, lhs, rhs, binop):
+cdef class BinaryOpExpression(Expression):
+    """Wrapper around DuckDB's BoundComparisonExpression and other binary operators to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, lhs, rhs, binop):
+        cdef unique_ptr[CExpression] lhs_expr
+        cdef unique_ptr[CExpression] rhs_expr
+
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+
         self.out_schema = out_schema
-        self.lhs = lhs
-        self.rhs = rhs
-        self.binop = binop
-        self.sources = [lhs, rhs]
+        self.c_expression = make_binop_expr(
+            lhs_expr,
+            rhs_expr,
+            str_to_expr_type(binop))
 
-cdef class LogicalConjunctionOp(LogicalOperator):
-    cdef public object lhs
-    cdef public object rhs
-    cdef public object binop
+    def __str__(self):
+        return f"BinaryOpExpression({self.out_schema})"
 
-    def __cinit__(self, out_schema, lhs, rhs, binop):
+
+cdef class ConjunctionOpExpression(Expression):
+    """Wrapper around DuckDB's BoundConjunctionExpression and other binary operators to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, lhs, rhs, binop):
+        cdef unique_ptr[CExpression] lhs_expr
+        cdef unique_ptr[CExpression] rhs_expr
+
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+
         self.out_schema = out_schema
-        self.lhs = lhs
-        self.rhs = rhs
-        self.binop = binop
-        self.sources = [lhs, rhs]
+        self.c_expression = make_conjunction_expr(
+            lhs_expr,
+            rhs_expr,
+            str_to_expr_type(binop))
+
+    def __str__(self):
+        return f"ConjunctionOpExpression({self.out_schema})"
+
 
 cdef class LogicalUnaryOp(LogicalOperator):
     cdef public object op
