@@ -112,13 +112,20 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             auto extracted_value = extractValue(bce->value);
             // Return a PhysicalConstantExpression<T> where T is the actual
             // type of the value contained within bce->value.
-            return std::visit(
+            std::visit(
+                [](const auto& value) {
+                    std::cout << "physical_conv constant " << value << std::endl;
+                },
+                extracted_value);
+            auto ret = std::visit(
                 [](const auto& value) {
                     return std::static_pointer_cast<PhysicalExpression>(
                         std::make_shared<PhysicalConstantExpression<
                             std::decay_t<decltype(value)>>>(value));
                 },
                 extracted_value);
+            std::cout << "after PCE creation " << *ret << std::endl;
+            return ret;
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
             // Convert the base duckdb::Expression node to its actual derived

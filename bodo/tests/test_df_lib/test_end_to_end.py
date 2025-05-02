@@ -314,7 +314,6 @@ def test_filter_multiple1_pushdown(datapath, set_stream_batch_size_three):
     )
 
 
-@pytest.mark.skip(reason="Needs conjunction non-pushdown working.")
 def test_filter_multiple1(datapath, set_stream_batch_size_three):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))

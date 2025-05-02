@@ -1,12 +1,17 @@
 #pragma once
 
 #include <arrow/api.h>
+#include <arrow/type_traits.h>
 #include <arrow/compute/api.h>
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../tests/utils.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "operator.h"
+#include <iostream>
+#include <type_traits>
+#include <string>
+
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
@@ -82,6 +87,9 @@ class PhysicalExpression {
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) = 0;
 
+    friend std::ostream& operator<<(std::ostream &os, const PhysicalExpression &obj) {
+        return os;
+    }
    protected:
     std::vector<std::shared_ptr<PhysicalExpression>> children;
 };
@@ -104,82 +112,6 @@ extern std::function<bool(int)> less_equal_test;
  *
  */
 duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype);
-
-/**
- * @brief Handle numerical comparison operators working on a column and a
- * scalar.
- *
- * @param arr1 - the column data input to compare
- * @param data2 - the scalar data to compare all the elements in arr1 against
- * @param output - pointer to boolean output array with 1-bit data type
- * @param comparator - function to convert NumericComparison result to
- *                     the boolean result for the desired operator
- */
-template <typename T>
-void compare_one_array_numeric(std::shared_ptr<array_info> arr1, const T data2,
-                               uint8_t *output,
-                               const std::function<bool(int)> &comparator) {
-    int64_t n_rows = arr1->length;
-    uint64_t arr1_siztype = numpy_item_size[arr1->dtype];
-    char *arr1_data1 = arr1->data1();
-    char *arr1_data1_end = arr1_data1 + (n_rows * arr1_siztype);
-    bool na_position = false;
-
-    std::function<int(const char *, const char *, bool const &)> ncfunc =
-        getNumericComparisonFunc(arr1->dtype);
-    for (uint64_t i = 0; arr1_data1 < arr1_data1_end;
-         arr1_data1 += arr1_siztype, ++i) {
-        int test = ncfunc(arr1_data1, data2, na_position);
-        SetBitTo(output, i, comparator(test));
-    }
-}
-
-/**
- * @brief Handle string comparison operators working on a column and a scalar.
- *
- * @param arr1 - the column data input to compare
- * @param data2 - the scalar data to compare all the elements in arr1 against
- * @param output - pointer to boolean output array with 1-bit data type
- * @param comparator - function to convert comparison result to
- *                     the boolean result for the desired operator
- */
-void compare_one_array_string(std::shared_ptr<array_info> arr1,
-                              const std::string data2, uint8_t *output,
-                              const std::function<bool(int)> &comparator);
-
-/**
- * @brief Dispatch comparison operators working on a column and a scalar to the
- * right comparison function for that type.
- *
- * @param arr1 - the column data input to compare
- * @param data2 - the scalar data to compare all the elements in arr1 against
- * @param output - pointer to boolean output array with 1-bit data type
- * @param comparator - function to convert comparison result to
- *                     the boolean result for the desired operator
- */
-template <typename T>
-void compare_one_array_dispatch(std::shared_ptr<array_info> arr1, const T data2,
-                                uint8_t *output,
-                                const std::function<bool(int)> &comparator) {
-    if (is_numerical(arr1->dtype)) {
-        compare_one_array_numeric(arr1, data2, output, comparator);
-    } else if (arr1->arr_type == bodo_array_type::STRING) {
-        compare_one_array_string(arr1, data2, output, comparator);
-    }
-}
-
-/**
- * @brief Handle comparison operators that compare two columns.
- *
- * @param arr1 - the first column data input to compare
- * @param arr2 - the second column data input to compare
- * @param output - pointer to boolean output array with 1-bit data type
- * @param comparator - function to convert NumericComparison result to
- *                     the boolean result for the desired operator
- */
-void compare_two_array(std::shared_ptr<array_info> arr1,
-                       const std::shared_ptr<array_info> arr2, uint8_t *output,
-                       const std::function<bool(int)> &comparator);
 
 /**
  * @brief Physical expression tree node type for comparisons resulting in
@@ -247,22 +179,22 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             // batch processing.
             switch (expr_type) {
                 case duckdb::ExpressionType::COMPARE_EQUAL:
-                    comparator = equal_test;
+                    comparator = "equal";
                     break;
                 case duckdb::ExpressionType::COMPARE_NOTEQUAL:
-                    comparator = not_equal_test;
+                    comparator = "not_equal";
                     break;
                 case duckdb::ExpressionType::COMPARE_GREATERTHAN:
-                    comparator = greater_test;
+                    comparator = "greater";
                     break;
                 case duckdb::ExpressionType::COMPARE_LESSTHAN:
-                    comparator = less_test;
+                    comparator = "less";
                     break;
                 case duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
-                    comparator = greater_equal_test;
+                    comparator = "greater_equal";
                     break;
                 case duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO:
-                    comparator = less_equal_test;
+                    comparator = "less_equal";
                     break;
                 default:
                     throw std::runtime_error(
@@ -274,22 +206,43 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             std::swap(left_as_array, right_as_array);
             std::swap(left_as_scalar, right_as_scalar);
         }
-        // Create output boolean array same size as input.
-        std::shared_ptr<array_info> result = alloc_nullable_array_no_nulls(
-            input_batch->nrows(), Bodo_CTypes::_BOOL);
-        // Get uint8_t raw data pointer for the boolean output array.
-        uint8_t *result_data1 =
-            result->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
-        // Call one array or two array comparison functions based on whether
-        // we have one input array or two.
+
+        arrow::Datum src1 =
+            arrow::Datum(prepare_arrow_compute(left_as_array->result));
+        arrow::Datum src2;
+
+    if (src1.is_array()) {
+        std::cout << "Datum contains an array of type: " << src1.type()->ToString() << std::endl;
+    } else if (src1.is_scalar()) {
+        std::cout << "Datum contains a scalar of type: " << src1.scalar()->type->ToString() << std::endl;
+    } else {
+        std::cout << "Datum contains a different type: " << src1.ToString() << std::endl;
+    }
+
         if (two_source) {
-            compare_two_array(left_as_array->result, right_as_array->result,
-                              result_data1, comparator);
+            src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
         } else {
-            compare_one_array_dispatch(left_as_array->result,
-                                       right_as_scalar->result->data1(),
-                                       result_data1, comparator);
+            src2 = arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)->GetScalar(0).ValueOrDie());
         }
+
+    if (src2.is_array()) {
+        std::cout << "Datum contains an array of type: " << src2.type()->ToString() << std::endl;
+    } else if (src2.is_scalar()) {
+        std::cout << "Datum contains a scalar of type: " << src2.scalar()->type->ToString() << std::endl;
+    } else {
+        std::cout << "Datum contains a different type: " << src2.ToString() << std::endl;
+    }
+
+        arrow::Result<arrow::Datum> cmp_res =
+            arrow::compute::CallFunction(comparator, {src1, src2});
+        if (!cmp_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "PhysicalComparisonExpression: Error in Arrow compute: " +
+                cmp_res.status().message());
+        }
+
+        auto result = arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
+                                          bodo::BufferPool::DefaultPtr());
 
         return std::make_shared<ArrayExprResult>(result);
     }
@@ -299,8 +252,35 @@ class PhysicalComparisonExpression : public PhysicalExpression {
     bool first_time;
     bool switchLeftRight;
     bool two_source;
-    std::function<bool(int)> comparator;
+    std::string comparator;
 };
+
+// Numeric type specialization
+template <typename T,
+          typename std::enable_if<std::is_arithmetic<T>::value && !std::is_same<T, bool>::value, int>::type = 0>
+std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const T& value) {
+    using ArrowType = typename arrow::CTypeTraits<T>::ArrowType;
+    using BuilderType = arrow::NumericBuilder<ArrowType>;
+
+    BuilderType builder;
+    arrow::Status status;
+    status = builder.Append(value);
+    if (!status.ok()) {
+         throw std::runtime_error("builder.Append failed.");
+    }
+    std::shared_ptr<arrow::Array> array;
+    status = builder.Finish(&array);
+    if (!status.ok()) {
+         throw std::runtime_error("builder.Finish failed.");
+    }
+    return array;
+}
+
+// String specialization
+std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const std::string& value);
+
+// bool specialization
+std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value);
 
 /**
  * @brief Physical expression tree node type for scalar constants.
@@ -314,12 +294,24 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
+        std::shared_ptr<arrow::Array> array = CreateOneElementArrowArray(constant);
+        std::cout << "PhysicalConstantExpression " << array->ToString() << std::endl;
+
+        auto result = arrow_array_to_bodo(array,
+                                          bodo::BufferPool::DefaultPtr());
+        /*
         // Create 1 element array with same type as constant.
         std::unique_ptr<array_info> result =
             alloc_nullable_array_no_nulls(1, typeToDtype(constant));
         // Copy constant into the array.
         std::memcpy(result->data1(), &constant, sizeof(T));
+        */
         return std::make_shared<ScalarExprResult>(std::move(result));
+    }
+
+    friend std::ostream& operator<<(std::ostream &os, const PhysicalConstantExpression<T> &obj) {
+        os << "PCE string operator<< " << obj.constant << std::endl;
+        return os;
     }
 
    private:
@@ -329,19 +321,32 @@ class PhysicalConstantExpression : public PhysicalExpression {
 template <>
 class PhysicalConstantExpression<std::string> : public PhysicalExpression {
    public:
-    PhysicalConstantExpression(const std::string &val) : constant(val) {}
+    PhysicalConstantExpression(const std::string &val) : constant(val) {
+       std::cout << "PCE string constructor " << val << std::endl;
+    }
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
+        std::shared_ptr<arrow::Array> array = CreateOneElementArrowArray(constant);
+        std::cout << "PhysicalConstantExpression " << array->ToString() << std::endl;
+
+        auto result = arrow_array_to_bodo(array,
+                                          bodo::BufferPool::DefaultPtr());
+        /*
         // Create 1 element array with same type as constant.
         std::unique_ptr<array_info> result =
             alloc_nullable_array_no_nulls(1, typeToDtype(constant));
         // Copy constant into the array.
         std::memcpy(result->data1(), constant.c_str(), constant.size());
+        */
         return std::make_shared<ScalarExprResult>(std::move(result));
     }
 
+    friend std::ostream& operator<<(std::ostream &os, const PhysicalConstantExpression<std::string> &obj) {
+        os << "PCE string operator<< " << obj.constant << std::endl;
+        return os;
+    }
    private:
     const std::string constant;
 };
@@ -425,7 +430,6 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
                 // make appropriate change to the operator type.
                 if (left_as_scalar) {
                     switchLeftRight = true;
-                    expr_type = exprSwitchLeftRight(expr_type);
                 }
             } else {
                 throw std::runtime_error(
@@ -451,26 +455,21 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
             std::swap(left_as_array, right_as_array);
             std::swap(left_as_scalar, right_as_scalar);
         }
-        // Call one array or two array comparison functions based on whether
-        // we have one input array or two.
+
         arrow::Datum src1 =
             arrow::Datum(prepare_arrow_compute(left_as_array->result));
         arrow::Datum src2;
         if (two_source) {
             src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
-            // compare_two_array(left_as_array->result, right_as_array->result,
-            //                   result_data1, comparator);
         } else {
-            // compare_one_array_dispatch(left_as_array->result,
-            //                            right_as_scalar->result->data1(),
-            //                            result_data1, comparator);
+            src2 = arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)->GetScalar(0).ValueOrDie());
         }
 
         arrow::Result<arrow::Datum> cmp_res =
             arrow::compute::CallFunction(comparator, {src1, src2});
         if (!cmp_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "arrow_compute_cmp_scalar: Error in Arrow compute: " +
+                "PhysicalConjunctionExpression: Error in Arrow compute: " +
                 cmp_res.status().message());
         }
 
