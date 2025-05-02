@@ -478,6 +478,27 @@ cdef class BinaryOpExpression(Expression):
         return f"BinaryOpExpression({self.out_schema})"
 
 
+cdef class ConjunctionOpExpression(Expression):
+    """Wrapper around DuckDB's BoundConjunctionExpression and other binary operators to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, lhs, rhs, binop):
+        cdef unique_ptr[CExpression] lhs_expr
+        cdef unique_ptr[CExpression] rhs_expr
+
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+
+        self.out_schema = out_schema
+        self.c_expression = make_conjunction_expr(
+            lhs_expr,
+            rhs_expr,
+            str_to_expr_type(binop))
+
+    def __str__(self):
+        return f"ConjunctionOpExpression({self.out_schema})"
+
+
 cdef class LogicalUnaryOp(LogicalOperator):
     cdef public object op
 

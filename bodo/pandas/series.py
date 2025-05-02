@@ -102,7 +102,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("BinaryOpExpression", lhs, rhs, op)
+        expr = LazyPlan("ConjunctionOpExpression", lhs, rhs, op)
         expr.out_schema = new_metadata.to_frame()
 
         plan = LazyPlan(
