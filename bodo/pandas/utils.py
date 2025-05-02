@@ -318,6 +318,19 @@ class LazyPlan:
         self.output_func = None  # filled in by wrap_plan
         self.out_schema = None  # filled in by wrap_plan
 
+    def __str__(self):
+        out = f"{self.plan_class}: \n"
+        for arg in self.args:
+            if isinstance(arg, pd.DataFrame):
+                out += f"  {arg.columns.tolist()}\n"
+                continue
+            out += f"  {arg}\n"
+        for k, v in self.kwargs.items():
+            out += f"  {k}: {v}\n"
+        return out
+
+    __repr__ = __str__
+
     def generate_duckdb(self, cache=None, in_filter=False):
         from bodo.ext import plan_optimizer
 
