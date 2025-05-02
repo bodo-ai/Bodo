@@ -333,6 +333,8 @@ class LazyPlan:
             """Recursively convert LazyPlans but return other types unmodified."""
             if isinstance(x, LazyPlan):
                 return x.generate_duckdb(cache=cache, in_filter=in_filter)
+            elif isinstance(x, (tuple, list)):
+                return type(x)(recursive_check(i, in_filter) for i in x)
             else:
                 return x
 
@@ -628,6 +630,16 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
 
     new_df.plan = plan
     return new_df
+
+
+def get_proj_expr_single(proj: LazyPlan):
+    """Get the single expression from a LogicalProjection node."""
+    assert (
+        isinstance(proj, LazyPlan)
+        and proj.plan_class == "LogicalProjection"
+        and len(proj.args[1]) == 1
+    ), "get_proj_expr_single: LogicalProjection with a single expr expected"
+    return proj.args[1][0]
 
 
 def _is_generated_index_name(name):
