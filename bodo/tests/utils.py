@@ -392,6 +392,27 @@ def check_func(
                 )
                 bodo_funcs["seq-strlit"] = bodo_func
 
+        if run_df_lib:
+            bodo_func = check_func_df_lib(
+                func,
+                args,
+                py_output,
+                copy_input,
+                sort_output,
+                check_names,
+                check_dtype,
+                reset_index,
+                convert_columns_to_pandas,
+                set_columns_name_to_none,
+                reorder_columns,
+                n_pes,
+                check_categorical,
+                atol,
+                rtol,
+                check_pandas_types,
+            )
+            bodo_funcs["df_lib"] = bodo_func
+
         # distributed test is not needed
         if not dist_test:
             return bodo_funcs
@@ -491,26 +512,6 @@ def check_func(
                 check_pandas_types,
             )
             bodo_funcs["spawn"] = bodo_func
-        if run_df_lib:
-            bodo_func = check_func_df_lib(
-                func,
-                args,
-                py_output,
-                copy_input,
-                sort_output,
-                check_names,
-                check_dtype,
-                reset_index,
-                convert_columns_to_pandas,
-                set_columns_name_to_none,
-                reorder_columns,
-                n_pes,
-                check_categorical,
-                atol,
-                rtol,
-                check_pandas_types,
-            )
-            bodo_funcs["df_lib"] = bodo_func
     finally:
         set_config(
             "bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD", saved_TABLE_FORMAT_THRESHOLD

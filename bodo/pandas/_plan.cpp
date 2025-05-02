@@ -515,6 +515,14 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::LIST(child_type);
             break;
         }
+        case arrow::Type::LARGE_LIST: {
+            auto list_type =
+                std::static_pointer_cast<arrow::LargeListType>(arrow_type);
+            auto [name, child_type] =
+                arrow_field_to_duckdb(list_type->value_field());
+            duckdb_type = duckdb::LogicalType::LIST(child_type);
+            break;
+        }
         case arrow::Type::STRUCT: {
             duckdb::child_list_t<duckdb::LogicalType> children;
             for (std::shared_ptr<arrow::Field> field : arrow_type->fields()) {

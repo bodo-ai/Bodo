@@ -344,7 +344,7 @@ idx_t GetTypeIdSize(PhysicalType type) {
 	case PhysicalType::LIST:
 		return sizeof(list_entry_t); // offset + len
 	default:
-		throw InternalException("Invalid PhysicalType for GetTypeIdSize");
+		throw InternalException("Invalid PhysicalType for GetTypeIdSiz_______" + to_string((int)type));
 	}
 }
 
