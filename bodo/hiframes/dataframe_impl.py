@@ -1231,7 +1231,7 @@ def overload_dataframe_isin(df, values):
     elif is_iterable_type(values) and not isinstance(values, SeriesType):
         # general iterable (e.g. list, set, array) case
         # TODO: handle passed in dict case (pass colname to func?)
-        other_colmap = {c: "values" for c in df.columns}
+        other_colmap = dict.fromkeys(df.columns, "values")
     else:
         raise_bodo_error(f"pd.isin(): not supported for type {values}")
 

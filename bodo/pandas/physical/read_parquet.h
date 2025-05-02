@@ -40,12 +40,7 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
     }
     arrow::py::import_pyarrow_wrappers();
     std::vector<PyObject *> to_be_freed;
-
-    if (filters.filters.size() > 1) {
-        throw std::runtime_error(
-            "tableFilterSetToPhysicalExpression currently supports only a "
-            "single filter.");
-    }
+    std::vector<arrow::compute::Expression> parts;
 
     for (auto &tf : filters.filters) {
         switch (tf.second->filter_type) {
@@ -57,7 +52,7 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
                     PyList_GetItem(schema_fields, tf.first);
                 if (!PyUnicode_Check(py_selected_field)) {
                     throw std::runtime_error(
-                        "tableFilterSetToPhysicalExpression selected field is "
+                        "tableFilterSetToArrowCompute selected field is "
                         "not unicode object.");
                 }
                 auto column_ref = arrow::compute::field_ref(
@@ -69,16 +64,18 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
                     extractValue(constantFilter->constant));
                 auto expr = expressionTypeToArrowCompute(
                     constantFilter->comparison_type)(column_ref, scalar_val);
-
-                ret = arrow::py::wrap_expression(expr);
+                parts.push_back(expr);
             } break;
             default:
                 throw std::runtime_error(
-                    "tableFilterSetToPhysicalExpression unsupported filter "
+                    "tableFilterSetToArrowCompute unsupported filter "
                     "type " +
                     std::to_string(static_cast<int>(tf.second->filter_type)));
         }
     }
+
+    arrow::compute::Expression whole = arrow::compute::and_(parts);
+    ret = arrow::py::wrap_expression(whole);
 
     // Clean up Python objects
     for (auto &pyo : to_be_freed) {
@@ -122,7 +119,7 @@ class PhysicalReadParquet : public PhysicalSource {
 
         internal_reader = std::make_shared<ParquetReader>(
             py_path, true, arrowFilterExpr, storage_options, pyarrow_schema, -1,
-            selected_columns, is_nullable, false, -1);
+            selected_columns, is_nullable, false, get_streaming_batch_size());
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
 
         // Extract column names from pyarrow schema using selected columns

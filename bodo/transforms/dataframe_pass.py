@@ -1238,12 +1238,12 @@ class DataFramePass:
         """
         clean_name = pd.core.computation.parsing.clean_column_name
         cleaned_columns = [clean_name(c) for c in df_typ.columns]
-        resolver = {c: 0 for c in cleaned_columns}
+        resolver = dict.fromkeys(cleaned_columns, 0)
         resolver["index"] = 0
         # create fake environment for Expr that just includes the symbol names to
         # enable parsing
         glbs = self.func_ir.func_id.func.__globals__
-        lcls = {a: 0 for a in self.func_ir.func_id.code.co_varnames}
+        lcls = dict.fromkeys(self.func_ir.func_id.code.co_varnames, 0)
         env = pd.core.computation.scope.ensure_scope(2, glbs, lcls, (resolver,))
         index_name = df_typ.index.name_typ
         return bodo.hiframes.dataframe_impl._parse_query_expr(
