@@ -530,6 +530,9 @@ add_custom_command(
   COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
 )
 
+#Prevent symbol collisions
+add_compile_definitions(duckdb=bododuckdb)
+
 ExternalProject_Add(
     duckdb_build
     PREFIX ${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/vendor/duckdb

@@ -151,8 +151,6 @@ def test_non_numeric_window_functions(
 ):
     """Tests min, max, count, count(*) and count_if with various combinations of
     window frames to test correctness and fusion"""
-    # Convert the spark input to tz-naive bc it can't handle timezones
-    convert_columns_tz_naive = ["TZ"]
     selects = []
     convert_columns_bytearray = []
     for i in range(len(funcs)):
@@ -175,7 +173,6 @@ def test_non_numeric_window_functions(
         check_names=False,
         return_codegen=True,
         only_jit_1DVar=True,
-        convert_columns_tz_naive=convert_columns_tz_naive,
         convert_columns_bytearray=convert_columns_bytearray,
         use_duckdb=True,
     )["pandas_code"]
