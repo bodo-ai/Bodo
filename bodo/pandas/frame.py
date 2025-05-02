@@ -550,34 +550,50 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             else:
                 key_indices.append(len(self.columns))
 
-            if len(key) == 1:
-                """ If just one element then have to extract that singular
-                    element for the metadata call to Pandas so it doesn't
-                    complain. """
-                key = key[0]
-                new_metadata = zero_size_self.__getitem__(key)
+            # Create column reference expressions for selected columns
+            exprs = []
+            for k in key_indices:
+                p = LazyPlan("ColRefExpression", self._plan, k)
+                schema = zero_size_self.iloc[:, k]
+                p.out_schema = (
+                    schema.to_frame() if isinstance(schema, pd.Series) else schema
+                )
+                exprs.append(p)
+
+            new_metadata = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
+            return wrap_plan(
+                new_metadata,
+                plan=LazyPlan(
+                    "LogicalProjection",
+                    self._plan,
+                    exprs,
+                ),
+            )
+
+    @check_args_fallback("none")
+    def __setitem__(self, key, value) -> None:
+        """Supports setting columns (df[key] = value) when value is a Series created
+        from the same dataframe.
+        This is done by creating a new plan that add the new
+        column in the existing dataframe plan using a projection.
+        """
+        from bodo.pandas.base import _empty_like
+
+        # Match cases like df["B"] = df["A"].str.lower()
+        if (
+            isinstance(key, str)
+            and isinstance(value, BodoSeries)
+            and value.is_lazy_plan()
+        ):
+            if (new_plan := _get_set_column_plan(self._plan, value._plan)) is not None:
+                new_metadata = _empty_like(self)
+                new_metadata[key] = _empty_like(value)
                 return wrap_plan(
                     new_metadata,
-                    plan=LazyPlan(
-                        # See generate_duckdb for a description of this
-                        # special node type.
-                        "LogicalProjectionOrColRef",
-                        self._plan,
-                        key_indices,
-                    ),
+                    plan=new_plan,
                 )
-            else:
-                new_metadata = zero_size_self.__getitem__(key)
-                return wrap_plan(
-                    new_metadata,
-                    plan=LazyPlan(
-                        # See generate_duckdb for a description of this
-                        # special node type.
-                        "LogicalProjectionOrColRef",
-                        self._plan,
-                        key_indices,
-                    ),
-                )
+
+        return super().__setitem__(key, value)
 
     @check_args_fallback(supported=["func", "axis"])
     def apply(
@@ -623,8 +639,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_series = empty_df.squeeze()
         empty_series.name = out_sample.name
 
-        plan = LazyPlan(
-            "LogicalProjectionPythonScalarFunc",
+        udf_arg = LazyPlan(
+            "PythonScalarFuncExpression",
             self._plan,
             (
                 "apply",
@@ -634,4 +650,38 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 {"axis": 1},  # kwargs
             ),
         )
+        udf_arg.out_schema = empty_df
+
+        plan = LazyPlan(
+            "LogicalProjection",
+            self._plan,
+            (udf_arg,),
+        )
         return wrap_plan(empty_series, plan=plan)
+
+
+def _get_set_column_plan(
+    df_plan: LazyPlan,
+    value_plan: LazyPlan,
+) -> LazyPlan | None:
+    """
+    Get the plan for setting a column in a dataframe or return None if not supported.
+    """
+
+    # TODO: add checks
+    # TODO: multi-level projection
+
+    # Create column reference expressions for each column in the dataframe.
+    colref_exprs = []
+    for k in range(len(df_plan.out_schema.columns)):
+        p = LazyPlan("ColRefExpression", df_plan, k)
+        schema = df_plan.out_schema.iloc[:, k]
+        p.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
+        colref_exprs.append(p)
+
+    new_plan = LazyPlan(
+        "LogicalProjection",
+        df_plan,
+        value_plan.args[1] + tuple(colref_exprs),
+    )
+    return new_plan
