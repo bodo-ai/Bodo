@@ -233,7 +233,7 @@ def check_func(
     # If dataframe_library_enabled then run compiler tests as df library tests
     # (replaces import pandas as pd with import bodo.pandas as pd)
     # NOTE: This variable takes precedence over other variables
-    only_df_lib = bodo.dataframe_library_enabled
+    only_df_lib = bodo.test_dataframe_library_enabled
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
@@ -3208,6 +3208,12 @@ pytest_mark_spawn_mode = compose_decos(spawn_mode_markers)
 
 # This is for using a "mark" or marking a whole file.
 pytest_spawn_mode = list(spawn_mode_markers)
+
+# Decorator for skipping individual tests within a file marked as DataFrame Library
+# tests.
+pytest_mark_not_df_lib = pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled, reason="Test requires compiler."
+)
 
 
 # Flag to ignore the mass slowing of tests unless specific files are changed

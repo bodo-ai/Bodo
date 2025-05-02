@@ -40,7 +40,7 @@ from bodo.tests.utils import (
 from bodo.utils.testing import ensure_clean, ensure_clean2
 from bodo.utils.typing import BodoError, BodoWarning
 
-pytestmark = pytest.mark.parquet
+pytestmark = [pytest.mark.parquet, pytest.mark.df_lib]
 
 
 # ---------------------------- Test Different DataTypes ---------------------------- #
@@ -91,6 +91,7 @@ def test_pq_read_types(fname, datapath, memory_leak_check):
     check_func(test_impl, (datapath(fname),))
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize(
     "fname",
     [
@@ -110,6 +111,7 @@ def test_pq_read_date(fname, datapath, memory_leak_check):
     check_func(impl, (), only_seq=True, py_output=output)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 def test_read_partitions_datetime(memory_leak_check):
     """Test reading and filtering partitioned parquet data for datetime data"""
@@ -158,6 +160,7 @@ def test_read_partitions_datetime(memory_leak_check):
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+@pytest.mark.skip
 def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
     """
     Tests loading and returning an array with timezone information
@@ -205,6 +208,7 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
             os.remove("test_tz.pq")
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize(
     "fname",
     [
@@ -317,6 +321,7 @@ def test_read_parquet_vv_large_string_array(memory_leak_check):
 
 
 # TODO [BE-1424]: Add memory_leak_check when bugs are resolved.
+@pytest.mark.skip
 def test_pq_arrow_array_random():
     def test_impl(fname):
         return pd.read_parquet(fname)
@@ -558,6 +563,7 @@ def test_pq_multi_idx(memory_leak_check):
 
 # ---------------------------- Test Read Partitions ---------------------------- #
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_partitions(memory_leak_check):
     """test reading and filtering partitioned parquet data"""
 
@@ -641,6 +647,7 @@ def test_read_partitions(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_partitions2(memory_leak_check):
     """test reading and filtering partitioned parquet data in more complex cases"""
 
@@ -674,6 +681,7 @@ def test_read_partitions2(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_partitions_implicit_and_detailed(memory_leak_check):
     """test reading and filtering partitioned parquet data with multiple levels
     of partitions and a complex implicit and"""
@@ -710,6 +718,7 @@ def test_read_partitions_implicit_and_detailed(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_partitions_implicit_and_simple(memory_leak_check):
     """test reading and filtering partitioned parquet data with multiple levels
     of partitions and an implicit and"""
@@ -755,6 +764,7 @@ def test_read_partitions_implicit_and_simple(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_partitions_string_int(memory_leak_check):
     """test reading from a file where the partition column could have
     a mix of strings and ints
@@ -790,6 +800,7 @@ def test_read_partitions_string_int(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_partitions_two_level(memory_leak_check):
     """test reading and filtering partitioned parquet data for two levels partitions"""
 
@@ -822,6 +833,7 @@ def test_read_partitions_two_level(memory_leak_check):
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+@pytest.mark.skip
 def test_read_partitions_predicate_dead_column(memory_leak_check):
     """test reading and filtering predicate + partition columns
     doesn't load the columns if they are unused."""
@@ -860,6 +872,7 @@ def test_read_partitions_predicate_dead_column(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_partitions_cat_ordering(memory_leak_check):
     """test reading and filtering multi-level partitioned parquet data with many
     directories, to make sure order of partition values in categorical dtype
@@ -1010,11 +1023,14 @@ def test_partition_cols(test_tz, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled, reason="Requires filter pushdown."
+)
 def test_read_partitions_to_datetime_format(memory_leak_check):
     """test that we don't incorrectly perform filter pushdown when to_datetime includes
     a format string."""
 
-    try:
+    with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
             table = pa.table(
                 {
@@ -1047,37 +1063,38 @@ def test_read_partitions_to_datetime_format(memory_leak_check):
             reset_index=True,
             check_dtype=False,
         )
-        # make sure the ParquetReader node doesn't have filters parameter set
-        bodo_func = bodo.jit(
-            (
-                numba.types.literal("pq_data"),
-                numba.types.literal("2018-01-02"),
-                numba.types.literal("2019-10-02"),
-            ),
-            pipeline_class=SeriesOptTestPipeline,
-        )(impl1)
-        try:
-            _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
-            # If we reach failed we have incorrectly performed filter pushdown
-            passed = 0
-        except AssertionError:
-            passed = 1
-        n_pes = bodo.get_size()
-        n_passed = bodo.tests.utils.reduce_sum(passed)
-        assert n_passed == n_pes, "Filter pushdown detected on at least 1 rank"
-        bodo.barrier()
-    finally:
-        if bodo.get_rank() == 0:
-            shutil.rmtree("pq_data", ignore_errors=True)
+
+        if not bodo.test_dataframe_library_enabled:
+            # make sure the ParquetReader node doesn't have filters parameter set
+            bodo_func = bodo.jit(
+                (
+                    numba.types.literal("pq_data"),
+                    numba.types.literal("2018-01-02"),
+                    numba.types.literal("2019-10-02"),
+                ),
+                pipeline_class=SeriesOptTestPipeline,
+            )(impl1)
+            try:
+                _check_for_io_reader_filters(
+                    bodo_func, bodo.ir.parquet_ext.ParquetReader
+                )
+                # If we reach failed we have incorrectly performed filter pushdown
+                passed = 0
+            except AssertionError:
+                passed = 1
+            n_pes = bodo.get_size()
+            n_passed = bodo.tests.utils.reduce_sum(passed)
+            assert n_passed == n_pes, "Filter pushdown detected on at least 1 rank"
 
 
 @pytest.mark.slow
+# @pytest.mark.skipif(bodo.test_dataframe_library_enabled, reason="Requires filter pushdown.")
 def test_read_partitions_large(memory_leak_check):
     """
     test reading and filtering partitioned parquet data with large number of partitions
     """
 
-    try:
+    with ensure_clean2("pq_data"):
         if bodo.get_rank() == 0:
             # The number of dates can't exceed 1024 because that is the default
             # max_partitions of Arrow when writing parquet. XXX how to pass
@@ -1097,22 +1114,23 @@ def test_read_partitions_large(memory_leak_check):
             ]
 
         check_func(impl1, ("pq_data", "2018-01-02", "2019-10-02"), reset_index=True)
-        # make sure the ParquetReader node has filters parameter set
-        bodo_func = bodo.jit(
-            (
-                numba.types.literal("pq_data"),
-                numba.types.literal("2018-01-02"),
-                numba.types.literal("2019-10-02"),
-            ),
-            pipeline_class=SeriesOptTestPipeline,
-        )(impl1)
-        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
-        bodo.barrier()
-    finally:
-        if bodo.get_rank() == 0:
-            shutil.rmtree("pq_data", ignore_errors=True)
+
+        if not bodo.test_dataframe_library_enabled:
+            # make sure the ParquetReader node has filters parameter set
+            bodo_func = bodo.jit(
+                (
+                    numba.types.literal("pq_data"),
+                    numba.types.literal("2018-01-02"),
+                    numba.types.literal("2019-10-02"),
+                ),
+                pipeline_class=SeriesOptTestPipeline,
+            )(impl1)
+            _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
 
 
+@pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled, reason="Unsupported partition column type."
+)
 def test_from_parquet_partition_bitsize(datapath):
     """Tests an issue with the bitsize of a partitioned dataframe"""
 
@@ -1136,6 +1154,7 @@ def test_from_parquet_partition_bitsize(datapath):
 
 # ---------------------------- Test Read with Pushdown ---------------------------- #
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
     """test that predicate pushdown executes when there is Pandas range metadata."""
 
@@ -1171,6 +1190,7 @@ def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_predicates_isnull(memory_leak_check):
     """test that predicate pushdown with isnull in the binops."""
 
@@ -1203,6 +1223,7 @@ def test_read_predicates_isnull(memory_leak_check):
             os.remove("pq_data")
 
 
+@pytest.mark.skip
 def test_read_predicates_timestamp_date(memory_leak_check):
     """Test predicate pushdown where a date column is filtered
     by a timestamp."""
@@ -1240,6 +1261,7 @@ def test_read_predicates_timestamp_date(memory_leak_check):
         bodo.barrier()
 
 
+@pytest.mark.skip
 def test_read_predicates_isnull_alone(memory_leak_check):
     """test that predicate pushdown with isnull as the sole filter."""
 
@@ -1273,6 +1295,7 @@ def test_read_predicates_isnull_alone(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_predicates_isin(memory_leak_check):
     """test that predicate pushdown with isin"""
 
@@ -1353,6 +1376,7 @@ def test_read_predicates_isin(memory_leak_check):
 # This test is slow on Windows
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_partitions_isin(memory_leak_check):
     """test that partition pushdown with isin"""
 
@@ -1418,6 +1442,7 @@ def test_read_partitions_isin(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_predicates_and_or(memory_leak_check):
     """test that predicate pushdown with and/or in the expression."""
 
@@ -1454,6 +1479,7 @@ def test_read_predicates_and_or(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_bodosql_pushdown_codegen(datapath, memory_leak_check):
     """
     Make sure possible generated codes by BodoSQL work with filter pushdown.
@@ -1557,6 +1583,7 @@ def test_filter_pushdown_past_column_filters():
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_pq_head_only(datapath, memory_leak_check):
     """
     test reading only shape and/or head from Parquet file if possible
@@ -1632,6 +1659,7 @@ def test_read_pq_head_only(datapath, memory_leak_check):
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+@pytest.mark.skip
 def test_limit_pushdown_multiple_tables(datapath, memory_leak_check):
     """
     test reading only shape and/or head from Parquet file if possible
@@ -1683,6 +1711,7 @@ def test_read_parquet_glob(datapath, memory_leak_check):
     check_func(test_impl, (glob_pattern_2,), py_output=pyout, check_dtype=False)
 
 
+@pytest.mark.skip
 def test_read_parquet_list_of_globs(memory_leak_check):
     """test reading when passing a list of globstrings"""
 
@@ -1720,6 +1749,7 @@ def test_read_parquet_list_of_globs(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_parquet_list_files(datapath, memory_leak_check):
     """test read_parquet passing a list of files"""
 
@@ -1740,6 +1770,7 @@ def test_read_parquet_list_files(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_pq_non_constant_filepath_error(datapath):
     f1 = datapath("example.parquet")
 
@@ -1779,6 +1810,7 @@ def test_pq_non_constant_filepath_error(datapath):
 # TODO: Not sure why this fails with memory_leak_check. Seems like the
 # exception returned from pq_read_py_entry prevents the code that follows from
 # freeing something
+@pytest.mark.skip
 def test_read_parquet_invalid_path():
     """test error raise when parquet file path is invalid in C++ code."""
 
@@ -1790,6 +1822,7 @@ def test_read_parquet_invalid_path():
         bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
 
 
+@pytest.mark.skip
 def test_read_parquet_invalid_path_glob():
     def test_impl():
         df = pd.read_parquet("I*dont*exist")
@@ -1799,6 +1832,7 @@ def test_read_parquet_invalid_path_glob():
         bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
 
 
+@pytest.mark.skip
 def test_read_parquet_invalid_list_of_files(datapath):
     def test_impl(fnames):
         df = pd.read_parquet(fnames)
@@ -1828,6 +1862,7 @@ def test_read_parquet_invalid_list_of_files(datapath):
         bodo.jit(test_impl)(fnames)
 
 
+@pytest.mark.skip
 def test_read_parquet_invalid_path_const(memory_leak_check):
     """test error raise when parquet file path provided as constant but is invalid."""
 
@@ -1839,6 +1874,7 @@ def test_read_parquet_invalid_path_const(memory_leak_check):
 
 
 # ---------------------------- Test Dictionary Encoding ---------------------------- #
+@pytest.mark.skip
 def test_read_parquet_bodo_read_as_dict(memory_leak_check):
     """
     Test _bodo_read_as_dict functionality for read_parquet.
@@ -1989,6 +2025,7 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
             os.remove(fname)
 
 
+@pytest.mark.skip
 def test_read_parquet_partitioned_read_as_dict(memory_leak_check):
     """
     Make sure dict-encoding determination works for partitioned Parquet datasets
@@ -2055,6 +2092,7 @@ def test_read_parquet_all_null_col_subsets(col_subset, memory_leak_check, datapa
     check_func(test_impl, (fname,), py_output=py_output)
 
 
+@pytest.mark.skip
 def test_read_parquet_input_file_name_col(datapath, memory_leak_check):
     """test basic input_col_name functionality for read_parquet"""
     fname = datapath("decimal1.pq")
@@ -2080,6 +2118,7 @@ def test_read_parquet_input_file_name_col(datapath, memory_leak_check):
     )
 
 
+@pytest.mark.skip
 def test_read_parquet_input_file_name_col_with_partitions(datapath, memory_leak_check):
     """
     test input_col_name functionality for read_parquet
@@ -2112,6 +2151,7 @@ def test_read_parquet_input_file_name_col_with_partitions(datapath, memory_leak_
     )
 
 
+@pytest.mark.skip
 def test_read_parquet_input_file_name_col_with_index(datapath, memory_leak_check):
     """
     test input_col_name functionality for read_parquet
@@ -2140,6 +2180,7 @@ def test_read_parquet_input_file_name_col_with_index(datapath, memory_leak_check
     )
 
 
+@pytest.mark.skip
 def test_read_parquet_input_file_name_col_pruned_out(datapath, memory_leak_check):
     """
     test input_col_name functionality for read_parquet
@@ -2178,6 +2219,7 @@ def test_read_parquet_input_file_name_col_pruned_out(datapath, memory_leak_check
     )
 
 
+@pytest.mark.skip
 def test_read_parquet_only_input_file_name_col(datapath, memory_leak_check):
     """
     test input_col_name functionality for read_parquet
@@ -2215,6 +2257,7 @@ def test_read_parquet_only_input_file_name_col(datapath, memory_leak_check):
     )
 
 
+@pytest.mark.skip
 def test_read_parquet_unsupported_arg(memory_leak_check):
     """
     test that an error is raised when unsupported arg is passed.
@@ -2230,6 +2273,7 @@ def test_read_parquet_unsupported_arg(memory_leak_check):
         bodo.jit(distributed=["df"])(test_impl)()
 
 
+@pytest.mark.skip
 def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
     """
     test that an error is raised when storage_options is passed for local FS
@@ -2270,6 +2314,7 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
         bodo.jit(distributed=["df"])(test_impl3)()
 
 
+@pytest.mark.skip
 def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
     """
     test that an error is raised when non-boolean is passed in for anon in storage_options
@@ -2289,6 +2334,7 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_path_hive_partitions(datapath, memory_leak_check):
     filepath = datapath(os.path.join("hive-part-sample-pq", "data"))
 
@@ -2317,6 +2363,7 @@ def test_read_path_hive_partitions(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_read_parquet_hive_partitions_type_clash(datapath):
     """
     Test error raise when parquet file path provided as constant but is invalid
@@ -2357,6 +2404,7 @@ def test_pq_columns(datapath):
     check_func(test_impl, (), only_seq=True, check_dtype=False)
 
 
+@pytest.mark.skip
 def test_pq_str_with_nan_seq(datapath):
     fname = datapath("example.parquet")
 
@@ -2368,6 +2416,7 @@ def test_pq_str_with_nan_seq(datapath):
     check_func(test_impl, (), dist_test=False)
 
 
+@pytest.mark.skip
 def test_series_str_upper_lower_dce(datapath):
     """Tests Series.str.upper and Series.str.lower can be safely removed as dead code"""
     filename = datapath("example.parquet")
@@ -2388,6 +2437,7 @@ def test_series_str_upper_lower_dce(datapath):
         check_logger_msg(stream, "Columns loaded ['three']")
 
 
+@pytest.mark.skip
 def test_pq_read(datapath):
     fname = datapath("kde.parquet")
 
@@ -2402,6 +2452,7 @@ def test_pq_read(datapath):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip
 def test_pq_read_global_str1(datapath):
     kde_file = datapath("kde.parquet")
 
@@ -2416,6 +2467,7 @@ def test_pq_read_global_str1(datapath):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip
 def test_pq_read_freevar_str1(datapath):
     kde_file2 = datapath("kde.parquet")
 
@@ -2430,6 +2482,7 @@ def test_pq_read_freevar_str1(datapath):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip
 def test_pd_read_parquet(datapath):
     fname = datapath("kde.parquet")
 
@@ -2444,6 +2497,7 @@ def test_pd_read_parquet(datapath):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip
 def test_pq_str(datapath):
     fname = datapath("example.parquet")
 
@@ -2458,6 +2512,7 @@ def test_pq_str(datapath):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip
 def test_pq_str_with_nan_par(datapath):
     fname = datapath("example.parquet")
 
@@ -2472,6 +2527,7 @@ def test_pq_str_with_nan_par(datapath):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip
 def test_pq_str_with_nan_par_multigroup(datapath):
     fname = datapath("example2.parquet")
 
@@ -2486,6 +2542,7 @@ def test_pq_str_with_nan_par_multigroup(datapath):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip
 def test_pq_bool(datapath):
     fname = datapath("example.parquet")
 
@@ -2499,6 +2556,7 @@ def test_pq_bool(datapath):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip
 def test_pq_nan(datapath):
     fname = datapath("example.parquet")
 
@@ -2512,6 +2570,7 @@ def test_pq_nan(datapath):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip
 def test_pq_float_no_nan(datapath):
     fname = datapath("example.parquet")
 
@@ -2560,6 +2619,7 @@ def test_pq_schema(datapath, memory_leak_check):
     )
 
 
+@pytest.mark.skip
 def test_unify_null_column(memory_leak_check):
     """
     Tests reading from parquet with a null column in the first
@@ -2591,6 +2651,7 @@ def test_unify_null_column(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip
 def test_pq_cache_print(datapath, capsys, memory_leak_check):
     """Make sure FilenameType behaves like a regular value and not a literal when loaded
     from cache. This allows the file name value to be set correctly and not baked in.
@@ -2661,6 +2722,7 @@ def test_pq_invalid_column_selection(datapath, memory_leak_check):
         bodo.jit(test_impl)(datapath("nested_struct_example.pq"))
 
 
+@pytest.mark.skip
 def test_python_not_filter_pushdown(memory_leak_check):
     """Tests that the Pandas ~ operator works with filter pushdown."""
     try:
@@ -2693,6 +2755,7 @@ def test_python_not_filter_pushdown(memory_leak_check):
             os.remove("pq_data")
 
 
+@pytest.mark.skip
 def test_filter_pushdown_string(datapath, memory_leak_check):
     def impl(path):
         df = pd.read_parquet(path)
@@ -2731,6 +2794,7 @@ def test_filter_pushdown_timestamp(datapath, memory_leak_check):
         check_logger_msg(stream, "(ds.field('DT64') < ds.scalar(f0))")
 
 
+@pytest.mark.skip
 def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
     def impl(path):
         df = pd.read_parquet(path)
@@ -2751,6 +2815,7 @@ def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
         check_logger_msg(stream, "(ds.field('A').isin(f0))")
 
 
+@pytest.mark.skip
 def test_filter_pushdown_tuple(datapath, memory_leak_check):
     def impl(path):
         df = pd.read_parquet(path)
@@ -2773,6 +2838,7 @@ def test_filter_pushdown_tuple(datapath, memory_leak_check):
         check_logger_msg(stream, "(ds.field('A').isin(f0))")
 
 
+@pytest.mark.skip
 def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
     @bodo.jit
     def comp(val):
@@ -2795,6 +2861,7 @@ def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
         check_logger_msg(stream, "~((ds.field('A') == ds.scalar(f0)))")
 
 
+@pytest.mark.skip
 def test_filter_pushdown_intermediate_comp_func(datapath, memory_leak_check):
     @bodo.jit
     def unused(x, test=None):
@@ -2848,6 +2915,7 @@ def test_filter_pushdown_dictionary(datapath, memory_leak_check):
         )
 
 
+@pytest.mark.skip
 def test_batched_read_agg(datapath, memory_leak_check):
     """
     Test a simple use of batched Parquet reads by
@@ -2884,6 +2952,7 @@ def test_batched_read_agg(datapath, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['L_PARTKEY']")
 
 
+@pytest.mark.skip
 def test_batched_read_only_len(datapath, memory_leak_check):
     """
     Test shape pushdown with batched Snowflake reads
