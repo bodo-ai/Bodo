@@ -49,8 +49,6 @@ def read_parquet(
 ):
     from bodo.io.parquet_pio import get_parquet_dataset
 
-    print("using the Bodo dataframe library...")
-
     if storage_options is None:
         storage_options = {}
 
