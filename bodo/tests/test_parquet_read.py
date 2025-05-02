@@ -35,6 +35,7 @@ from bodo.tests.utils import (
     gen_random_arrow_list_list_double,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    pytest_mark_not_df_lib,
     temp_env_override,
 )
 from bodo.utils.testing import ensure_clean, ensure_clean2
@@ -1789,9 +1790,7 @@ def test_read_parquet_list_files(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_non_constant_filepath_error(datapath):
     f1 = datapath("example.parquet")
 
@@ -1831,9 +1830,7 @@ def test_pq_non_constant_filepath_error(datapath):
 # TODO: Not sure why this fails with memory_leak_check. Seems like the
 # exception returned from pq_read_py_entry prevents the code that follows from
 # freeing something
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_invalid_path():
     """test error raise when parquet file path is invalid in C++ code."""
 
@@ -1845,9 +1842,7 @@ def test_read_parquet_invalid_path():
         bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_invalid_path_glob():
     def test_impl():
         df = pd.read_parquet("I*dont*exist")
@@ -1857,9 +1852,7 @@ def test_read_parquet_invalid_path_glob():
         bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_invalid_list_of_files(datapath):
     def test_impl(fnames):
         df = pd.read_parquet(fnames)
@@ -1889,9 +1882,7 @@ def test_read_parquet_invalid_list_of_files(datapath):
         bodo.jit(test_impl)(fnames)
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_invalid_path_const(memory_leak_check):
     """test error raise when parquet file path provided as constant but is invalid."""
 
@@ -1903,9 +1894,7 @@ def test_read_parquet_invalid_path_const(memory_leak_check):
 
 
 # ---------------------------- Test Dictionary Encoding ---------------------------- #
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_bodo_read_as_dict(memory_leak_check):
     """
     Test _bodo_read_as_dict functionality for read_parquet.
@@ -2306,9 +2295,7 @@ def test_read_parquet_only_input_file_name_col(datapath, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_unsupported_arg(memory_leak_check):
     """
     test that an error is raised when unsupported arg is passed.
@@ -2324,9 +2311,7 @@ def test_read_parquet_unsupported_arg(memory_leak_check):
         bodo.jit(distributed=["df"])(test_impl)()
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
     """
     test that an error is raised when storage_options is passed for local FS
@@ -2367,9 +2352,7 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
         bodo.jit(distributed=["df"])(test_impl3)()
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
     """
     test that an error is raised when non-boolean is passed in for anon in storage_options
@@ -2420,9 +2403,7 @@ def test_read_path_hive_partitions(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_hive_partitions_type_clash(datapath):
     """
     Test error raise when parquet file path provided as constant but is invalid
@@ -2499,9 +2480,7 @@ def test_series_str_upper_lower_dce(datapath):
             check_logger_msg(stream, "Columns loaded ['three']")
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_read(datapath):
     fname = datapath("kde.parquet")
 
@@ -2516,9 +2495,7 @@ def test_pq_read(datapath):
     assert count_parfor_REPs() == 0
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_read_global_str1(datapath):
     kde_file = datapath("kde.parquet")
 
@@ -2533,9 +2510,7 @@ def test_pq_read_global_str1(datapath):
     assert count_parfor_REPs() == 0
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_read_freevar_str1(datapath):
     kde_file2 = datapath("kde.parquet")
 
@@ -2550,9 +2525,7 @@ def test_pq_read_freevar_str1(datapath):
     assert count_parfor_REPs() == 0
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pd_read_parquet(datapath):
     fname = datapath("kde.parquet")
 
@@ -2567,9 +2540,7 @@ def test_pd_read_parquet(datapath):
     assert count_parfor_REPs() == 0
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_str(datapath):
     fname = datapath("example.parquet")
 
@@ -2584,9 +2555,7 @@ def test_pq_str(datapath):
     assert count_parfor_REPs() == 0
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_str_with_nan_par(datapath):
     fname = datapath("example.parquet")
 
@@ -2601,9 +2570,7 @@ def test_pq_str_with_nan_par(datapath):
     assert count_parfor_REPs() == 0
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_str_with_nan_par_multigroup(datapath):
     fname = datapath("example2.parquet")
 
@@ -2618,9 +2585,7 @@ def test_pq_str_with_nan_par_multigroup(datapath):
     assert count_parfor_REPs() == 0
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_bool(datapath):
     fname = datapath("example.parquet")
 
@@ -2634,9 +2599,7 @@ def test_pq_bool(datapath):
     assert count_parfor_REPs() == 0
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_nan(datapath):
     fname = datapath("example.parquet")
 
@@ -2650,9 +2613,7 @@ def test_pq_nan(datapath):
     assert count_parfor_REPs() == 0
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_float_no_nan(datapath):
     fname = datapath("example.parquet")
 
@@ -2676,9 +2637,7 @@ def test_read_dask_parquet(datapath, memory_leak_check):
     check_func(test_impl, (filename,))
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_schema(datapath, memory_leak_check):
     fname = datapath("example.parquet")
 
@@ -2738,9 +2697,7 @@ def test_unify_null_column(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_cache_print(datapath, capsys, memory_leak_check):
     """Make sure FilenameType behaves like a regular value and not a literal when loaded
     from cache. This allows the file name value to be set correctly and not baked in.
@@ -2759,9 +2716,7 @@ def test_pq_cache_print(datapath, capsys, memory_leak_check):
     assert "example2.parquet" in captured.out
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
     """test error raise when AWS credentials are incorrect for parquet
     file path passed by another bodo.jit function"""
@@ -2804,9 +2759,7 @@ def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
     numba.core.config.DEVELOPER_MODE = default_mode
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Test for compiler specific behavior."
-)
+@pytest_mark_not_df_lib
 def test_pq_invalid_column_selection(datapath, memory_leak_check):
     """test error raise when selected column is not in file schema"""
 
