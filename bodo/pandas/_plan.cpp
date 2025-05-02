@@ -9,6 +9,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/planner/binder.hpp"
+#include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
@@ -120,7 +121,7 @@ duckdb::unique_ptr<duckdb::Expression> matchType(
     return bce_constant;
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_binop_expr(
+std::unique_ptr<duckdb::Expression> make_binop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
@@ -167,25 +168,18 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
 
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::vector<int> &select_vec, PyObject *out_schema_py) {
-    duckdb::idx_t source_index = get_operator_table_index(source);
+    std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
+    PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     auto binder = get_duckdb_binder();
     auto table_idx = binder.get()->GenerateTableIndex();
 
-    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
-    // We only care about the types, not the field names
-    auto [_, type_vec] = arrow_schema_to_duckdb(out_schema);
-
-    assert(select_vec.size() == type_vec.size());
     std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
-    for (size_t i = 0; i < select_vec.size(); ++i) {
-        auto selection = select_vec[i];
-        auto stype = type_vec[i];
-        auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            stype, duckdb::ColumnBinding(source_index, selection));
-        projection_expressions.emplace_back(std::move(expr));
+    for (auto &expr : expr_vec) {
+        // Convert std::unique_ptr to duckdb::unique_ptr.
+        auto expr_duck = to_duckdb(expr);
+        projection_expressions.push_back(std::move(expr_duck));
     }
 
     // Create projection node.
@@ -226,27 +220,23 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
     throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
 }
 
-duckdb::unique_ptr<duckdb::LogicalProjection>
-make_projection_python_scalar_func(
+duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     PyObject *args) {
-    // Output table index
-    duckdb::idx_t table_idx = get_duckdb_binder()->GenerateTableIndex();
-
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
     assert(out_types.size() == 1);
     duckdb::LogicalType out_type = out_types[0];
 
+    // Necessary before accessing source->types attribute
+    source->ResolveOperatorTypes();
+
     // Create ScalarFunction for UDF
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
         "bodo_udf", source->types, out_type, RunFunction);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoPythonScalarFunctionData>(args);
-
-    // Necessary before accessing source->types attribute
-    source->ResolveOperatorTypes();
 
     // Add all input columns as UDF inputs
     std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
@@ -263,18 +253,7 @@ make_projection_python_scalar_func(
                                                    std::move(udf_in_exprs),
                                                    std::move(bind_data1));
 
-    // Create projection node
-    std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
-    projection_expressions.push_back(std::move(scalar_expr));
-    duckdb::unique_ptr<duckdb::LogicalProjection> proj =
-        duckdb::make_uniq<duckdb::LogicalProjection>(
-            table_idx, std::move(projection_expressions));
-
-    // Add the input source
-    auto source_duck = to_duckdb(source);
-    proj->children.push_back(std::move(source_duck));
-
-    return proj;
+    return scalar_expr;
 }
 
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
