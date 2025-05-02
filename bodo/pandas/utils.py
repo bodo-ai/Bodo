@@ -351,54 +351,11 @@ class LazyPlan:
             else:
                 return x
 
-        # Description of LogicalProjectionOrColRef node type.
-        #
-        # From a Pandas perspective, a projection outside filter or
-        # inside a filter are equivalent but this is not the case for
-        # duckdb.  If we had multiple projections inside a filter
-        # and we tried to make duckdb projection nodes out of them
-        # then the first one will steal the ownership of the projection
-        # source and then the second will fail with nullptr error
-        # because it has no access to the stolen projection source.
-        #
-        # Thus, we have to decide contextually whether what looks like
-        # a projection with the temporary node type
-        # LogicalProjectionOrColRef is really a projection or a
-        # column reference in a filter expression.  As we are processing
-        # the filter expression tree, if we see that we are processing a
-        # filter node then process the actual expression portion with
-        # the in_filter tag set.  This flag gets propagated down the tree
-        # and will end when the tree terminates, e.g. at a constant node,
-        # or when a LogicalProjectionOrColRef node is found.  In this
-        # case, we know the node is in a filter so we convert it to a
-        # column ref (which doesn't steal the source pointer).  Then,
-        # the recursive process of converting farther down the tree but
-        # with the filter tag off.  If a LogicalProjectionOrColRef node
-        # is encountered when the in_filter flag is not set then it is
-        # a regular projection node.
-        if self.plan_class == "LogicalFilter":
-            assert not in_filter
-            assert len(self.args) == 2
-            assert len(self.kwargs) == 0
-            args = [None, None]
-            args[1] = recursive_check(self.args[1], in_filter=True)
-            args[0] = recursive_check(self.args[0], in_filter=False)
-            kwargs = {}
-        else:
-            if in_filter:
-                if self.plan_class == "LogicalProjectionOrColRef":
-                    self.plan_class = "LogicalColRef"
-                    in_filter = False
-            else:
-                if self.plan_class == "LogicalProjectionOrColRef":
-                    self.plan_class = "LogicalProjection"
-
-            # Convert any LazyPlan in the args or kwargs.
-            args = [recursive_check(x, in_filter=in_filter) for x in self.args]
-            kwargs = {
-                k: recursive_check(v, in_filter=in_filter)
-                for k, v in self.kwargs.items()
-            }
+        # Convert any LazyPlan in the args or kwargs.
+        args = [recursive_check(x, in_filter=in_filter) for x in self.args]
+        kwargs = {
+            k: recursive_check(v, in_filter=in_filter) for k, v in self.kwargs.items()
+        }
 
         # Create real duckdb class.
         pa_schema = pa.Schema.from_pandas(
