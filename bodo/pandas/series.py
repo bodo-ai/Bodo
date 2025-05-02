@@ -95,11 +95,22 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Compute schema of new series.
         new_metadata = getattr(zero_size_self, op)(zero_size_other)
-        assert isinstance(new_metadata, pd.Series)
-        return wrap_plan(
-            new_metadata,
-            plan=LazyPlan("LogicalConjunctionOp", self._plan, other, op),
+        assert isinstance(new_metadata, pd.Series), (
+            "_conjunction_binop: new_metadata is not a Series"
         )
+
+        # Extract argument expressions
+        lhs = get_proj_expr_single(self._plan)
+        rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        expr = LazyPlan("BinaryOpExpression", lhs, rhs, op)
+        expr.out_schema = new_metadata.to_frame()
+
+        plan = LazyPlan(
+            "LogicalProjection",
+            self._plan.args[0],
+            (expr,),
+        )
+        return wrap_plan(new_metadata, plan=plan)
 
     @check_args_fallback("all")
     def __and__(self, other):
