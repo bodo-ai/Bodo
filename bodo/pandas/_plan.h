@@ -404,11 +404,14 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     const std::shared_ptr<arrow::Field> &field);
 
 /**
- * @brief Convert a plan rooted at the given logical operator into graphviz.
+ * @brief Convert a plan rooted at the given logical operator into text or
+ * graphviz.
  *
- * @param plan - the root of the plan to convert to graphviz
+ * @param plan - the root of the plan to convert to graphviz or text
+ * @param graphviz_format - use graphviz format if true, otherwise text
  */
-std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan);
+std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
+                           bool graphviz_format);
 
 /**
  * @brief Get the table index of operator assuming there is only one table

@@ -7,6 +7,7 @@ from libcpp.memory cimport unique_ptr, make_unique, dynamic_pointer_cast
 from libcpp.utility cimport move, pair
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
+from libcpp cimport bool as c_bool
 import operator
 from libc.stdint cimport int64_t
 
@@ -288,7 +289,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n)
     cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n)
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
-    cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
+    cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format)
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root)
     cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema)
@@ -339,7 +340,10 @@ cdef class LogicalOperator:
         self.c_logical_operator.get().estimated_cardinality = estimated_cardinality
 
     def toGraphviz(self):
-        return plan_to_string(self.c_logical_operator).decode("utf-8")
+        return plan_to_string(self.c_logical_operator, True).decode("utf-8")
+
+    def toString(self):
+        return plan_to_string(self.c_logical_operator, False).decode("utf-8")
 
 cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.

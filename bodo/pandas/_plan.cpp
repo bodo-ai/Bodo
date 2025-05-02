@@ -582,8 +582,10 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     return {field->name(), duckdb_type};
 }
 
-std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
-    return plan->ToString(duckdb::ExplainFormat::GRAPHVIZ);
+std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
+                           bool graphviz_format) {
+    return plan->ToString(graphviz_format ? duckdb::ExplainFormat::GRAPHVIZ
+                                          : duckdb::ExplainFormat::TEXT);
 }
 
 std::shared_ptr<PhysicalSource>
