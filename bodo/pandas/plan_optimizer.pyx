@@ -474,25 +474,10 @@ def get_source(val):
         raise ValueError("Unknown expr type in get_source " + str(type(val)))
 
 cdef class LogicalFilter(LogicalOperator):
-    def __cinit__(self, out_schema, LogicalOperator source, key):
+    def __cinit__(self, out_schema, LogicalOperator source, Expression key):
         self.out_schema = out_schema
         self.sources = [source]
-
-        cdef unique_ptr[CExpression] c_filter_expr
-        if isinstance(key, (LogicalBinaryOp, LogicalConjunctionOp)):
-            lhs_source = get_source(key.lhs)
-            rhs_source = get_source(key.rhs)
-            for lsrc in lhs_source:
-                if source is not lsrc.sources[0]:
-                    raise ValueError("Filtering with mask created from different source not supported.")
-            for rsrc in rhs_source:
-                if source is not rsrc.sources[0]:
-                    raise ValueError("Filtering with mask created from different source not supported.")
-            c_filter_expr = make_expr(key)
-        else:
-            raise ValueError("Non-binary op filter not yet supported.")
-
-        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, c_filter_expr)
+        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, key.c_expression)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
 
     def __str__(self):

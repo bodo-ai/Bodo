@@ -15,6 +15,7 @@ from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
     get_lazy_manager_class,
+    get_proj_expr_single,
     wrap_plan,
 )
 from bodo.utils.typing import (
@@ -518,7 +519,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if isinstance(key, BodoSeries):
             """ This is a masking operation. """
             key_plan = (
-                key._plan
+                # TODO: error checking for key to be a projection on the same dataframe
+                # with a binary operator
+                get_proj_expr_single(key._plan)
                 if key._plan is not None
                 else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
             )
