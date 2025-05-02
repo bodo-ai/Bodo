@@ -579,31 +579,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 ),
             )
 
-    @check_args_fallback("none")
-    def __setitem__(self, key, value) -> None:
-        """Supports setting columns (df[key] = value) when value is a Series created
-        from the same dataframe.
-        This is done by creating a new plan that add the new
-        column in the existing dataframe plan using a projection.
-        """
-        from bodo.pandas.base import _empty_like
-
-        # Match cases like df["B"] = df["A"].str.lower()
-        if (
-            isinstance(key, str)
-            and isinstance(value, BodoSeries)
-            and value.is_lazy_plan()
-        ):
-            if (new_plan := _get_set_column_plan(self._plan, value._plan)) is not None:
-                new_metadata = _empty_like(self)
-                new_metadata[key] = _empty_like(value)
-                return wrap_plan(
-                    new_metadata,
-                    plan=new_plan,
-                )
-
-        return super().__setitem__(key, value)
-
     @check_args_fallback(supported=["func", "axis"])
     def apply(
         self,
@@ -667,31 +642,3 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             (udf_arg,),
         )
         return wrap_plan(empty_series, plan=plan)
-
-
-def _get_set_column_plan(
-    df_plan: LazyPlan,
-    value_plan: LazyPlan,
-) -> LazyPlan | None:
-    """
-    Get the plan for setting a column in a dataframe or return None if not supported.
-    """
-
-    # TODO: add checks
-    # TODO: multi-level projection
-    # TODO: add Index columns to the projection
-
-    # Create column reference expressions for each column in the dataframe.
-    colref_exprs = []
-    for k in range(len(df_plan.out_schema.columns)):
-        p = LazyPlan("ColRefExpression", df_plan, k)
-        schema = df_plan.out_schema.iloc[:, k]
-        p.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
-        colref_exprs.append(p)
-
-    new_plan = LazyPlan(
-        "LogicalProjection",
-        df_plan,
-        value_plan.args[1] + tuple(colref_exprs),
-    )
-    return new_plan
