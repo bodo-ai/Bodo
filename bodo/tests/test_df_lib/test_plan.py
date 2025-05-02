@@ -22,12 +22,16 @@ def test_join_node():
 def test_projection_node():
     """Make sure Cython wrapper around the projection node works. Just tests node creation."""
     P1 = plan_optimizer.LogicalGetParquetRead(pa.schema([]), b"example.parquet1", {})
+    exprs = [
+        plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), P1, 0),
+        plan_optimizer.ColRefExpression(pa.schema([("B", pa.string())]), P1, 1),
+    ]
     A = plan_optimizer.LogicalProjection(
         pa.schema([("A", pa.int64()), ("C", pa.string())]),
         P1,
-        [1, 3],
+        exprs,
     )
-    assert str(A) == "LogicalProjection([1, 3], A: int64\nC: string)"
+    assert str(A) == "LogicalProjection(A: int64\nC: string)"
 
 
 def test_filter_node():
