@@ -442,36 +442,9 @@ cdef unique_ptr[CExpression] make_expr(val):
     elif isinstance(val, str):
         val_cstr = val.encode()
         return make_const_string_expr(val_cstr)
-    elif isinstance(val, LogicalColRef):
-        select_vec = val.select_vec
-        field = val.out_schema.field(0)
-        if len(select_vec) != 1:
-            raise ValueError("len(select_vec) != 1")
-        source = val.sources[0]
-        return make_col_ref_expr(source.c_logical_operator, field, select_vec[0])
-    elif isinstance(val, LogicalBinaryOp):
-        lhs_expr = make_expr(val.lhs)
-        rhs_expr = make_expr(val.rhs)
-        return make_binop_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
-    elif isinstance(val, LogicalConjunctionOp):
-        lhs_expr = make_expr(val.lhs)
-        rhs_expr = make_expr(val.rhs)
-        return make_conjunction_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
     else:
         raise ValueError("Unknown expr type in make_expr " + str(type(val)))
 
-def get_source(val):
-    """Process a filter expression tree and find all the unique
-       columns referenced in the tree.
-    """
-    if isinstance(val, (int, float, str)):
-        return set()
-    elif isinstance(val, LogicalColRef):
-        return {val}
-    elif isinstance(val, (LogicalBinaryOp, LogicalConjunctionOp)):
-        return get_source(val.lhs).union(get_source(val.rhs))
-    else:
-        raise ValueError("Unknown expr type in get_source " + str(type(val)))
 
 cdef class LogicalFilter(LogicalOperator):
     def __cinit__(self, out_schema, LogicalOperator source, Expression key):
@@ -482,18 +455,6 @@ cdef class LogicalFilter(LogicalOperator):
 
     def __str__(self):
         return f"LogicalFilter()"
-
-cdef class LogicalBinaryOp(LogicalOperator):
-    cdef public object lhs
-    cdef public object rhs
-    cdef public object binop
-
-    def __cinit__(self, out_schema, lhs, rhs, binop):
-        self.out_schema = out_schema
-        self.lhs = lhs
-        self.rhs = rhs
-        self.binop = binop
-        self.sources = [lhs, rhs]
 
 
 cdef class BinaryOpExpression(Expression):
@@ -516,18 +477,6 @@ cdef class BinaryOpExpression(Expression):
     def __str__(self):
         return f"BinaryOpExpression({self.out_schema})"
 
-
-cdef class LogicalConjunctionOp(LogicalOperator):
-    cdef public object lhs
-    cdef public object rhs
-    cdef public object binop
-
-    def __cinit__(self, out_schema, lhs, rhs, binop):
-        self.out_schema = out_schema
-        self.lhs = lhs
-        self.rhs = rhs
-        self.binop = binop
-        self.sources = [lhs, rhs]
 
 cdef class LogicalUnaryOp(LogicalOperator):
     cdef public object op
