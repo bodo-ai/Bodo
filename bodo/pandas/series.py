@@ -13,6 +13,7 @@ from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
     get_lazy_single_manager_class,
+    get_proj_expr_single,
     wrap_plan,
 )
 
@@ -54,10 +55,19 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Compute schema of new series.
         new_metadata = zero_size_self._cmp_method(zero_size_other, op)
         assert isinstance(new_metadata, pd.Series)
-        return wrap_plan(
-            new_metadata,
-            plan=LazyPlan("LogicalBinaryOp", self._plan, other, op),
+
+        # Extract argument expressions
+        lhs = get_proj_expr_single(self._plan)
+        rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        expr = LazyPlan("BinaryOpExpression", lhs, rhs, op)
+        expr.out_schema = new_metadata.to_frame()
+
+        plan = LazyPlan(
+            "LogicalProjection",
+            self._plan.args[0],
+            (expr,),
         )
+        return wrap_plan(new_metadata, plan=plan)
 
     def _conjunction_binop(self, other, op):
         """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
@@ -248,8 +258,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         empty_series = empty_df.squeeze()
         empty_series.name = out_sample.name
 
-        plan = LazyPlan(
-            "LogicalProjectionPythonScalarFunc",
+        udf_arg = LazyPlan(
+            "PythonScalarFuncExpression",
             self._plan,
             (
                 "map",
@@ -258,6 +268,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 (arg,),  # args
                 {},  # kwargs
             ),
+        )
+        udf_arg.out_schema = empty_df
+
+        plan = LazyPlan(
+            "LogicalProjection",
+            self._plan,
+            (udf_arg,),
         )
         return wrap_plan(empty_series, plan=plan)
 
@@ -275,18 +292,24 @@ class StringMethods:
             name=self._series.name,
             index=index,
         )
+        expr = LazyPlan(
+            "PythonScalarFuncExpression",
+            self._series._plan,
+            (
+                "str.lower",
+                True,  # is_series
+                True,  # is_method
+                (),  # args
+                {},  # kwargs
+            ),
+        )
+        expr.out_schema = new_metadata.to_frame()
         return wrap_plan(
             new_metadata,
             plan=LazyPlan(
-                "LogicalProjectionPythonScalarFunc",
+                "LogicalProjection",
                 self._series._plan,
-                (
-                    "str.lower",
-                    True,  # is_series
-                    True,  # is_method
-                    (),  # args
-                    {},  # kwargs
-                ),
+                (expr,),
             ),
         )
 
@@ -298,17 +321,23 @@ class StringMethods:
             name=self._series.name,
             index=index,
         )
+        expr = LazyPlan(
+            "PythonScalarFuncExpression",
+            self._series._plan,
+            (
+                "str.strip",
+                True,  # is_series
+                True,  # is_method
+                (),  # args
+                {},  # kwargs
+            ),
+        )
+        expr.out_schema = new_metadata.to_frame()
         return wrap_plan(
             new_metadata,
             plan=LazyPlan(
-                "LogicalProjectionPythonScalarFunc",
+                "LogicalProjection",
                 self._series._plan,
-                (
-                    "str.strip",
-                    True,  # is_series
-                    True,  # is_method
-                    (),  # args
-                    {},  # kwargs
-                ),
+                (expr,),
             ),
         )
