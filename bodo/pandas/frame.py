@@ -614,6 +614,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Get output data type by running the UDF on a sample of the data.
         df_sample = pd.DataFrame(self.head(1))
         out_sample = df_sample.apply(func, axis)
+        breakpoint()
 
         # TODO: Should we fallback to Pandas in the DataFrame case?
         if not isinstance(out_sample, pd.Series):
