@@ -266,7 +266,8 @@ make_projection_python_scalar_func(
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
-    assert(out_types.size() == 1);
+    // Maybe not be exactly 1 due to index column.
+    assert(out_types.size() > 0);
     duckdb::LogicalType out_type = out_types[0];
 
     // Create ScalarFunction for UDF

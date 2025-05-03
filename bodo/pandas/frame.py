@@ -612,11 +612,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError("DataFrame.apply(): only axis=1 supported")
 
         # Get output data type by running the UDF on a sample of the data.
-        # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
-        # TODO: remove when LIMIT plan is properly supported for head().
-        mgr_plan = self._mgr._plan
-        df_sample = self.head(1)
-        self._mgr._plan = mgr_plan
+        df_sample = pd.DataFrame(self.head(1))
         out_sample = df_sample.apply(func, axis)
 
         # TODO: Should we fallback to Pandas in the DataFrame case?
