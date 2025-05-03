@@ -2,7 +2,6 @@
 
 #include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
-#include <iostream>
 
 namespace duckdb {
 
