@@ -145,7 +145,8 @@ sccache = "*"
 # BodoSQL & Iceberg Testing
 maven = "*"
 sqlglot = "*"
-duckdb = "*"
+# Once 1.2.2 is released, we can remove this, test_non_numeric_window_functions fails on 1.2.1
+duckdb = "!=1.2.1"
 
 # Note: PySpark 3.5 is necessary for Python 3.12
 pyspark = "3.5.*"

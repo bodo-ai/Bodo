@@ -11,6 +11,7 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
+#include "duckdb/planner/expression.hpp"
 #include "physical/expression.h"
 #include "physical/operator.h"
 
@@ -211,7 +212,8 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
  */
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::vector<int> &select_vec, PyObject *out_schema_py);
+    std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
+    PyObject *out_schema_py);
 
 /**
  * @brief Get column indices that are pushed down from a projection node to its
@@ -224,15 +226,14 @@ std::vector<int> get_projection_pushed_down_columns(
     std::unique_ptr<duckdb::LogicalOperator> &proj);
 
 /**
- * @brief Creates a LogicalProjection node with a UDF inside.
+ * @brief Creates an Expression node with a UDF inside.
  *
  * @param source input table plan
  * @param func UDF function to execute
  * @param out_schema_py output data type (single column for df.apply)
- * @return duckdb::unique_ptr<duckdb::LogicalProjection> Projection node for UDF
+ * @return duckdb::unique_ptr<duckdb::Expression> Expression node for UDF
  */
-duckdb::unique_ptr<duckdb::LogicalProjection>
-make_projection_python_scalar_func(
+duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     PyObject *args);
 
@@ -281,7 +282,7 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
  * @param etype - the expression type comparing the two sources
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_binop_expr(
+std::unique_ptr<duckdb::Expression> make_binop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
 
