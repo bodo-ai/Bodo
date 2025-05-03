@@ -247,6 +247,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._mgr._collect()
         return super().__len__()
 
+    def collect(self):
+        if self.is_lazy_plan():
+            self._mgr._collect()
+        return self
+
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
             return self._mgr._md_result_id
@@ -266,10 +271,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Get output data type by running the UDF on a sample of the data.
         # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
         # TODO: remove when LIMIT plan is properly supported for head().
-        mgr_plan = self._mgr._plan
-        series_sample = self.head(1)
-        self._mgr._plan = mgr_plan
-        out_sample = series_sample.map(arg)
+        series_sample = self.head(1).collect()
+        pd_sample = pd.Series(series_sample)
+        out_sample = pd_sample.map(arg)
 
         assert isinstance(out_sample, pd.Series), (
             f"BodoSeries.map(), expected output to be Series, got: {type(out_sample)}."

@@ -152,6 +152,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             return self._mgr._md_nrows
         return super().__len__()
 
+    def collect(self):
+        if self.is_lazy_plan():
+            self._mgr._collect()
+        return self
+
     @property
     def shape(self):
         if self.is_lazy_plan():
@@ -612,9 +617,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError("DataFrame.apply(): only axis=1 supported")
 
         # Get output data type by running the UDF on a sample of the data.
-        df_sample = pd.DataFrame(self.head(1))
-        out_sample = df_sample.apply(func, axis)
-        breakpoint()
+        df_sample = self.head(1).collect()
+        pd_sample = pd.DataFrame(df_sample)
+        out_sample = pd_sample.apply(func, axis)
 
         # TODO: Should we fallback to Pandas in the DataFrame case?
         if not isinstance(out_sample, pd.Series):

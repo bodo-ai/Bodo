@@ -334,7 +334,6 @@ class LazyPlan:
     def generate_duckdb(self, cache=None):
         from bodo.ext import plan_optimizer
 
-        print("generate_duckdb", self.plan_class, self.args, self.out_schema)
         # Sometimes the same LazyPlan object is encountered twice during the same
         # query so  we use the cache dict to only convert it once.
         if cache is None:
@@ -357,13 +356,9 @@ class LazyPlan:
         kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
 
         # Create real duckdb class.
-        print("########################   before convert schema", self.plan_class, self.out_schema, type(self.out_schema))
         pa_schema = pa.Schema.from_pandas(
             self.out_schema
         )  # do this in filter case? preserve_index=(self.plan_class == "LogicalFilter")
-        print("########################   after convert schema", self.plan_class, pa_schema, type(pa_schema))
-        print("metadata[pandas]", self.plan_class, pa_schema.metadata[b"pandas"], type(pa_schema.metadata[b"pandas"])) 
-        print("types", self.plan_class, pa_schema.types)
         ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret
@@ -565,7 +560,6 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         get_lazy_single_manager_class,
     )
 
-    print("wrap_plan:", schema, plan.plan_class)
     assert isinstance(plan, LazyPlan), "wrap_plan: LazyPlan expected"
 
     if nrows is None:
