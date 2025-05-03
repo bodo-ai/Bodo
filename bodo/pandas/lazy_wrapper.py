@@ -5,10 +5,12 @@ from enum import Enum
 
 from bodo.pandas.lazy_metadata import LazyMetadata
 
+
 class ExecState(Enum):
     PLAN = 0
     DISTRIBUTED = 1
     COLLECTED = 2
+
 
 class BodoLazyWrapper(abc.ABC):
     @abc.abstractmethod

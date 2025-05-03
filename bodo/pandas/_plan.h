@@ -317,8 +317,7 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
  * @return duckdb::unique_ptr<duckdb::LogicalLimit> - the limit node
  */
 duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    int n);
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n);
 
 /**
  * @brief Create a limit node.
@@ -328,8 +327,7 @@ duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
  * @return duckdb::unique_ptr<duckdb::LogicalLimit> - the limit node
  */
 duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    int n);
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n);
 
 /**
  * @brief Creates a LogicalGet node for reading a Parquet dataset in DuckDB with

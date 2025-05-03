@@ -92,11 +92,11 @@ class PhysicalReadParquet : public PhysicalSource {
 
    public:
     // TODO: Fill in the contents with info from the logical operator
-    explicit PhysicalReadParquet(std::string _path, PyObject *pyarrow_schema,
-                                 PyObject *storage_options,
-                                 std::vector<int> &selected_columns,
-                                 duckdb::TableFilterSet &filter_exprs,
-                                 duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    explicit PhysicalReadParquet(
+        std::string _path, PyObject *pyarrow_schema, PyObject *storage_options,
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
         PyObject *py_path = PyUnicode_FromString(_path.c_str());
 
         // ----------------------------------------------------------
@@ -127,7 +127,7 @@ class PhysicalReadParquet : public PhysicalSource {
         // ----------------------------------------------------------
         // Handle limit.
         // ----------------------------------------------------------
-        int64_t total_rows_to_read = -1; // Default to read everything.
+        int64_t total_rows_to_read = -1;  // Default to read everything.
         if (limit_val) {
             // If the limit option is present...
             if (limit_val->Type() != duckdb::LimitNodeType::CONSTANT_VALUE) {
