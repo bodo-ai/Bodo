@@ -92,7 +92,7 @@ def test_pq_read_types(fname, datapath, memory_leak_check):
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="Calling DataFrame constructor using plan.",
+    reason="[BSE-4772] Creating Pandas DataFrame from BodoDataFrame columns.",
 )
 @pytest.mark.parametrize(
     "fname",
@@ -114,7 +114,9 @@ def test_pq_read_date(fname, datapath, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(bodo.test_dataframe_library_enabled, reason="TODO: fixme")
+@pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled, reason="[BSE-4768] Enable filtering tests."
+)
 def test_read_partitions_datetime(memory_leak_check):
     """Test reading and filtering partitioned parquet data for datetime data"""
 
@@ -205,7 +207,8 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="All null columns not supported yet."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4766] All null columns not supported yet.",
 )
 @pytest.mark.parametrize(
     "fname",
@@ -257,9 +260,6 @@ def test_read_parquet_large_string_array(memory_leak_check):
 
 
 @pytest.mark.weekly
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Does not use check_func."
-)
 def test_read_parquet_vv_large_string_array(memory_leak_check):
     """
     Test that when reading a parquet dataset with total string length
@@ -313,12 +313,22 @@ def test_read_parquet_vv_large_string_array(memory_leak_check):
             pq.write_table(table, os.path.join(fname, f"part{bodo.get_rank()}-{i}.pq"))
         bodo.barrier()
 
-        def impl(path):
-            df = pd.read_parquet(path)
-            return df
+        if bodo.test_dataframe_library_enabled:
+            import bodo.pandas as bd
 
-        # Verify that it runs without error
-        bodo.jit(impl)(fname)
+            def impl(path):
+                df = bd.read_parquet(path)
+                return df
+
+            impl(fname)
+        else:
+
+            def impl(path):
+                df = pd.read_parquet(path)
+                return df
+
+            # Verify that it runs without error
+            bodo.jit(impl)(fname)
 
 
 # TODO [BE-1424]: Add memory_leak_check when bugs are resolved.
@@ -565,7 +575,7 @@ def test_pq_multi_idx(memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.skipif(
     bodo.dataframe_library_enabled,
-    reason="duckdb internal error while making expression.",
+    reason="[BSE-4769] Fix duckdb internal error while creating expression.",
 )
 def test_read_partitions(memory_leak_check):
     """test reading and filtering partitioned parquet data"""
@@ -651,7 +661,8 @@ def test_read_partitions(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Fix incompatible field types."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4764] Dictionary columns with non-string value type not supported yet.",
 )
 def test_read_partitions2(memory_leak_check):
     """test reading and filtering partitioned parquet data in more complex cases"""
@@ -683,7 +694,10 @@ def test_read_partitions2(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(bodo.test_dataframe_library_enabled, reason="Fix expressions")
+@pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4764] Dictionary columns with non-string value type not supported yet.",
+)
 def test_read_partitions_implicit_and_detailed(memory_leak_check):
     """test reading and filtering partitioned parquet data with multiple levels
     of partitions and a complex implicit and"""
@@ -717,7 +731,10 @@ def test_read_partitions_implicit_and_detailed(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(reason="Fix expressions")
+@pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4764] Dictionary columns with non-string value type not supported yet.",
+)
 def test_read_partitions_implicit_and_simple(memory_leak_check):
     """test reading and filtering partitioned parquet data with multiple levels
     of partitions and an implicit and"""
@@ -762,7 +779,10 @@ def test_read_partitions_implicit_and_simple(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(bodo.test_dataframe_library_enabled, reason="Fix expressions")
+@pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4764] Dictionary columns with non-string value type not supported yet.",
+)
 def test_read_partitions_string_int(memory_leak_check):
     """test reading from a file where the partition column could have
     a mix of strings and ints
@@ -797,7 +817,7 @@ def test_read_partitions_string_int(memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="Reading partition columns that are not strings not supported yet.",
+    reason="[BSE-4764] Dictionary columns with non-string value type not supported yet.",
 )
 def test_read_partitions_two_level(memory_leak_check):
     """test reading and filtering partitioned parquet data for two levels partitions"""
@@ -829,7 +849,10 @@ def test_read_partitions_two_level(memory_leak_check):
             _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
 
 
-@pytest.mark.skipif(bodo.test_dataframe_library_enabled, reason="Fix expressions")
+@pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4764] Dictionary columns with non-string value type not supported yet.",
+)
 def test_read_partitions_predicate_dead_column(memory_leak_check):
     """test reading and filtering predicate + partition columns
     doesn't load the columns if they are unused."""
@@ -870,7 +893,7 @@ def test_read_partitions_predicate_dead_column(memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="Reading partition columns that are not strings not supported yet.",
+    reason="[BSE-4764] Dictionary columns with non-string value type not supported yet.",
 )
 def test_read_partitions_cat_ordering(memory_leak_check):
     """test reading and filtering multi-level partitioned parquet data with many
@@ -1024,7 +1047,7 @@ def test_partition_cols(test_tz: bool, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Fix fallback to Pandas"
+    bodo.test_dataframe_library_enabled, reason="[BSE-4768] Enable filtering tests."
 )
 def test_read_partitions_to_datetime_format(memory_leak_check):
     """test that we don't incorrectly perform filter pushdown when to_datetime includes
@@ -1089,7 +1112,7 @@ def test_read_partitions_to_datetime_format(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Fix fallback to Pandas"
+    bodo.test_dataframe_library_enabled, reason="[BSE-4768] Enable filtering tests."
 )
 def test_read_partitions_large(memory_leak_check):
     """
@@ -1132,7 +1155,7 @@ def test_read_partitions_large(memory_leak_check):
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="Unsupported column type dictionary<values=int32...>.",
+    reason="[BSE-4764] Unsupported column type dictionary<values=int32...>.",
 )
 def test_from_parquet_partition_bitsize(datapath):
     """Tests an issue with the bitsize of a partitioned dataframe"""
@@ -1191,7 +1214,8 @@ def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="notna expressions not supported yet."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4768] notna expressions not supported yet.",
 )
 def test_read_predicates_isnull(memory_leak_check):
     """test that predicate pushdown with isnull in the binops."""
@@ -1226,7 +1250,8 @@ def test_read_predicates_isnull(memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="datetime.date expr not supported yet."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4768] datetime.date expr not supported yet.",
 )
 def test_read_predicates_timestamp_date(memory_leak_check):
     """Test predicate pushdown where a date column is filtered
@@ -1268,7 +1293,7 @@ def test_read_predicates_timestamp_date(memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="notna not supported yet."
+    bodo.test_dataframe_library_enabled, reason="[BSE-4768] notna not supported yet."
 )
 def test_read_predicates_isnull_alone(memory_leak_check):
     """test that predicate pushdown with isnull as the sole filter."""
@@ -1302,7 +1327,7 @@ def test_read_predicates_isnull_alone(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="isin not supported yet."
+    bodo.test_dataframe_library_enabled, reason="[BSE-4768] isin not supported yet."
 )
 def test_read_predicates_isin(memory_leak_check):
     """test that predicate pushdown with isin"""
@@ -1390,7 +1415,7 @@ def test_read_predicates_isin(memory_leak_check):
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="isin not supported yet."
+    bodo.test_dataframe_library_enabled, reason="[BSE-4768] isin not supported yet."
 )
 def test_read_partitions_isin(memory_leak_check):
     """test that partition pushdown with isin"""
@@ -1459,7 +1484,7 @@ def test_read_partitions_isin(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Unsupported filter type"
+    bodo.test_dataframe_library_enabled, reason="[BSE-4768] Unsupported filter type."
 )
 def test_read_predicates_and_or(memory_leak_check):
     """test that predicate pushdown with and/or in the expression."""
@@ -1728,7 +1753,8 @@ def test_read_parquet_glob(datapath, memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="[XXX] Support reading list of files."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4767] Reading list of files not supported yet.",
 )
 def test_read_parquet_list_of_globs(memory_leak_check):
     """test reading when passing a list of globstrings"""
@@ -1768,7 +1794,8 @@ def test_read_parquet_list_of_globs(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="[XXX] Support reading list of files."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4767] Reading list of files not supported yet.",
 )
 def test_read_parquet_list_files(datapath, memory_leak_check):
     """test read_parquet passing a list of files"""
@@ -2090,7 +2117,7 @@ def test_read_parquet_partitioned_read_as_dict(memory_leak_check):
 # ---------------------------- Test Additional Args ---------------------------- #
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="[XXX] All null columns not supported yet.",
+    reason="[BSE-4766] All null columns not supported yet.",
 )
 @pytest.mark.parametrize(
     "col_subset",
@@ -2117,7 +2144,7 @@ def test_read_parquet_all_null_col_subsets(
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="_bodo_input_file_name_col not supported in DataFrame library.",
+    reason="[BSE-4770] _bodo_input_file_name_col not supported in DataFrame library.",
 )
 def test_read_parquet_input_file_name_col(datapath, memory_leak_check):
     """test basic input_col_name functionality for read_parquet"""
@@ -2146,7 +2173,7 @@ def test_read_parquet_input_file_name_col(datapath, memory_leak_check):
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="_bodo_input_file_name_col not supported in DataFrame library.",
+    reason="[BSE-4770] _bodo_input_file_name_col not supported in DataFrame library.",
 )
 def test_read_parquet_input_file_name_col_with_partitions(datapath, memory_leak_check):
     """
@@ -2182,7 +2209,7 @@ def test_read_parquet_input_file_name_col_with_partitions(datapath, memory_leak_
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="_bodo_input_file_name_col not supported in DataFrame library.",
+    reason="[BSE-4770] _bodo_input_file_name_col not supported in DataFrame library.",
 )
 def test_read_parquet_input_file_name_col_with_index(datapath, memory_leak_check):
     """
@@ -2214,7 +2241,7 @@ def test_read_parquet_input_file_name_col_with_index(datapath, memory_leak_check
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="_bodo_input_file_name_col not supported in DataFrame library.",
+    reason="[BSE-4770] _bodo_input_file_name_col not supported in DataFrame library.",
 )
 def test_read_parquet_input_file_name_col_pruned_out(datapath, memory_leak_check):
     """
@@ -2256,7 +2283,7 @@ def test_read_parquet_input_file_name_col_pruned_out(datapath, memory_leak_check
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="_bodo_input_file_name_col not supported in DataFrame library.",
+    reason="[BSE-4770] _bodo_input_file_name_col not supported in DataFrame library.",
 )
 def test_read_parquet_only_input_file_name_col(datapath, memory_leak_check):
     """
@@ -2373,7 +2400,8 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.skipif(
-    bodo.dataframe_library_enabled, reason="Error calling get_parquet_dataset."
+    bodo.dataframe_library_enabled,
+    reason="[BSE-4773] Error calling get_parquet_dataset.",
 )
 def test_read_path_hive_partitions(datapath, memory_leak_check):
     filepath = datapath(os.path.join("hive-part-sample-pq", "data"))
@@ -2444,7 +2472,10 @@ def test_pq_columns(datapath):
     check_func(test_impl, (), only_seq=True, check_dtype=False)
 
 
-@pytest.mark.skipif(bodo.dataframe_library_enabled, reason="Fix expressions error.")
+@pytest.mark.skipif(
+    bodo.dataframe_library_enabled,
+    reason="[BSE-4769] Fix duckdb internal error while creating expression.",
+)
 def test_pq_str_with_nan_seq(datapath):
     fname = datapath("example.parquet")
 
@@ -2457,7 +2488,8 @@ def test_pq_str_with_nan_seq(datapath):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Fix fallback for str methods."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4774] Fix fallback for str methods.",
 )
 def test_series_str_upper_lower_dce(datapath):
     """Tests Series.str.upper and Series.str.lower can be safely removed as dead code"""
@@ -2664,7 +2696,8 @@ def test_pq_schema(datapath, memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="requires reading Null column support"
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4766] requires Null column support.",
 )
 def test_unify_null_column(memory_leak_check):
     """
@@ -2772,7 +2805,7 @@ def test_pq_invalid_column_selection(datapath, memory_leak_check):
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="Non-binary op filter not supported yet.",
+    reason="[BSE-4768] Non-binary op filter not supported yet.",
 )
 def test_python_not_filter_pushdown(memory_leak_check):
     """Tests that the Pandas ~ operator works with filter pushdown."""
@@ -2806,7 +2839,8 @@ def test_python_not_filter_pushdown(memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Enable filter pushdown tests."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4768] Enable filter pushdown tests.",
 )
 def test_filter_pushdown_string(datapath, memory_leak_check):
     def impl(path):
@@ -2850,7 +2884,8 @@ def test_filter_pushdown_timestamp(datapath, memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Enable filter pushdown tests."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4768] Enable filter pushdown tests.",
 )
 def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
     def impl(path):
@@ -2874,7 +2909,8 @@ def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Enable filter pushdown tests."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4768] Enable filter pushdown tests.",
 )
 def test_filter_pushdown_tuple(datapath, memory_leak_check):
     def impl(path):
@@ -2900,7 +2936,8 @@ def test_filter_pushdown_tuple(datapath, memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="Enable filter pushdown tests."
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4768] Enable filter pushdown tests.",
 )
 def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
     @bodo.jit
