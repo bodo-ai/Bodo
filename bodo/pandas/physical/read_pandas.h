@@ -16,8 +16,40 @@ class PhysicalReadPandas : public PhysicalSource {
     int64_t num_rows;
 
    public:
-    explicit PhysicalReadPandas(PyObject* _df) : df(_df) {
+    explicit PhysicalReadPandas(PyObject* _df,
+                                std::vector<int>& selected_columns)
+        : df(_df) {
         Py_INCREF(df);
+
+        // Select only the specified columns if provided by the optimizer
+        if (!selected_columns.empty()) {
+            PyObject* iloc = PyObject_GetAttrString(df, "iloc");
+
+            // Create slice for all rows (equivalent to ':' in Python)
+            PyObject* row_slice = PySlice_New(nullptr, nullptr, nullptr);
+
+            // Convert the selected_columns vector to a Python list
+            PyObject* col_list = PyList_New(selected_columns.size());
+            for (size_t i = 0; i < selected_columns.size(); ++i) {
+                PyList_SET_ITEM(col_list, i,
+                                PyLong_FromLong(selected_columns[i]));
+            }
+
+            // Create a tuple with row_slice and col_list for advanced indexing
+            PyObject* idx_tuple = PyTuple_New(2);
+            PyTuple_SET_ITEM(idx_tuple, 0, row_slice);
+            PyTuple_SET_ITEM(idx_tuple, 1, col_list);
+
+            // Apply the indexing
+            PyObject* projected_df = PyObject_GetItem(iloc, idx_tuple);
+
+            // Clean up and update df
+            Py_DECREF(iloc);
+            Py_DECREF(idx_tuple);
+            Py_DECREF(df);
+            df = projected_df;
+        }
+
         num_rows = PyObject_Length(df);
     }
 
