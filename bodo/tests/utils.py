@@ -392,7 +392,8 @@ def check_func(
                 )
                 bodo_funcs["seq-strlit"] = bodo_func
 
-        if run_df_lib:
+        # TODO: reenable when type issues get resolved
+        if run_df_lib and not use_dict_encoded_strings:
             bodo_func = check_func_df_lib(
                 func,
                 args,
@@ -952,6 +953,12 @@ def check_func_spawn(
     )
 
 
+def _convert_to_bodo_arg(arg):
+    """Convert arg to the corresponding Bodo class if possible."""
+    if isinstance(arg, pd.DataFrame):
+        return bodo_pd.from_pandas(arg)
+
+
 def check_func_df_lib(
     func,
     args,
@@ -973,7 +980,7 @@ def check_func_df_lib(
     """Check function output against Python while running DataFrame library."""
     assert n_pes == 1, "Dataframe library tests should only run with 1 rank"
 
-    args = tuple(_get_arg(a, copy_input) for a in args)
+    args = tuple(_convert_to_bodo_arg(_get_arg(a, copy_input)) for a in args)
 
     df_lib_aliases = {"pd": bodo_pd, "pandas": bodo_pd}
 

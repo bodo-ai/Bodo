@@ -623,6 +623,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_series = empty_df.squeeze()
         empty_series.name = out_sample.name
 
+        print("done infering dtype...")
+
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
             self._plan,
@@ -641,4 +643,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self._plan,
             (udf_arg,),
         )
+
+        print(plan)
+
         return wrap_plan(empty_series, plan=plan)
