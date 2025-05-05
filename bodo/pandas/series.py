@@ -203,15 +203,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return getattr(self._mgr, "_plan", None) is not None
 
     def execute_plan(self):
-        return self._mgr.execute_plan()
+        if self.is_lazy_plan():
+            return self._mgr.execute_plan()
 
     @property
     def shape(self):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
-        if self.is_lazy_plan():
-            self._mgr._collect()
+        self.execute_plan()
 
         if isinstance(self._mgr, LazyMetadataMixin) and (
             self._mgr._md_nrows is not None
@@ -243,14 +243,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return self._head_s.head(n)
 
     def __len__(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
+        self.execute_plan()
+        if self._lazy:
+            return self._mgr._md_nrows
         return super().__len__()
-
-    def collect(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
-        return self
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
@@ -271,7 +267,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Get output data type by running the UDF on a sample of the data.
         # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
         # TODO: remove when LIMIT plan is properly supported for head().
-        series_sample = self.head(1).collect()
+        series_sample = self.head(1).execute_plan()
         pd_sample = pd.Series(series_sample)
         out_sample = pd_sample.map(arg)
 

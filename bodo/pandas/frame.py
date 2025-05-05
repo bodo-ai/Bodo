@@ -123,7 +123,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return getattr(self._mgr, "_plan", None) is not None
 
     def execute_plan(self):
-        return self._mgr.execute_plan()
+        if self.is_lazy_plan():
+            return self._mgr.execute_plan()
 
     def head(self, n: int = 5):
         """
@@ -146,22 +147,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             return self._head_df.head(n)
 
     def __len__(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
-        elif self._lazy:
+        self.execute_plan()
+        if self._lazy:
             return self._mgr._md_nrows
         return super().__len__()
 
-    def collect(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
-        return self
-
     @property
     def shape(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
-        elif self._lazy:
+        self.execute_plan()
+        if self._lazy:
             return self._mgr._md_nrows, len(self._head_df.columns)
         return super().shape
 
@@ -617,7 +611,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError("DataFrame.apply(): only axis=1 supported")
 
         # Get output data type by running the UDF on a sample of the data.
-        df_sample = self.head(1).collect()
+        df_sample = self.head(1).execute_plan()
         pd_sample = pd.DataFrame(df_sample)
         out_sample = pd_sample.apply(func, axis)
 
