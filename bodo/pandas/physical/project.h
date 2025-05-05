@@ -1,8 +1,10 @@
 #pragma once
 
 #include <utility>
+#include "../_plan.h"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "operator.h"
 
 /**
@@ -41,8 +43,16 @@ class PhysicalProjection : public PhysicalSourceSink {
                 } else {
                     col_names.emplace_back(colref.GetName());
                 }
+            } else if (expr->type == duckdb::ExpressionType::BOUND_FUNCTION) {
+                BodoPythonScalarFunctionData& scalar_func_data =
+                    expr->Cast<duckdb::BoundFunctionExpression>()
+                        .bind_info->Cast<BodoPythonScalarFunctionData>();
+                out_cols.emplace_back(runPythonScalarFunction(
+                    input_batch, scalar_func_data.args));
             } else {
-                // TODO: Python scalar function
+                throw std::runtime_error(
+                    "Unsupported expression type in projection " +
+                    expr->ToString());
             }
         }
 
@@ -60,5 +70,16 @@ class PhysicalProjection : public PhysicalSourceSink {
     }
 
    private:
+    /**
+     * @brief Run Python scalar function on the input batch and return the
+     * output array.
+     *
+     * @param input_batch input table batch
+     * @param args Python arguments for the function
+     * @return std::shared_ptr<array_info> output array from the Python function
+     */
+    static std::shared_ptr<array_info> runPythonScalarFunction(
+        std::shared_ptr<table_info> input_batch, PyObject* args);
+
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs;
 };
