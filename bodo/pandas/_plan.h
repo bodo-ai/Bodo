@@ -320,7 +320,7 @@ duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
     std::unique_ptr<duckdb::LogicalOperator> &source, int n);
 
 /**
- * @brief Create a limit node.
+ * @brief Create a sample node.
  *
  * @param source - the source of the data to be filtered
  * @param n - the number of rows to return
