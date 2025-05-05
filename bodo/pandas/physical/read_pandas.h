@@ -41,6 +41,11 @@ class PhysicalReadPandas : public PhysicalSource {
                 }
             }
 
+            if (selected_columns_no_indexes.empty()) {
+                throw std::runtime_error(
+                    "No valid columns selected for PhysicalReadPandas");
+            }
+
             PyObject* iloc = PyObject_GetAttrString(df, "iloc");
 
             // Create slice for all rows (equivalent to ':' in Python)
