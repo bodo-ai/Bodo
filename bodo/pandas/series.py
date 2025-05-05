@@ -271,29 +271,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         empty_series = empty_df.squeeze()
         empty_series.name = out_sample.name
 
-        udf_arg = LazyPlan(
-            "PythonScalarFuncExpression",
-            # Use the plan including the projection on the original table to access
-            # the right column (TODO: refactor to include a child ColRefExpression?).
-            self._plan,
-            (
-                "map",
-                True,  # is_series
-                True,  # is_method
-                (arg,),  # args
-                {},  # kwargs
-            ),
-        )
-        udf_arg.out_schema = empty_df
-
-        plan = LazyPlan(
-            "LogicalProjection",
-            # Use the plan including the projection on the original table to access
-            # the right column (TODO: refactor to include a child ColRefExpression?).
-            self._plan,
-            (udf_arg,),
-        )
-        return wrap_plan(empty_series, plan=plan)
+        return _get_series_python_func_plan(self._plan, empty_series, "map", (arg,), {})
 
 
 class StringMethods:
@@ -309,29 +287,8 @@ class StringMethods:
             name=self._series.name,
             index=index,
         )
-        expr = LazyPlan(
-            "PythonScalarFuncExpression",
-            # Use the plan including the projection on the original table to access
-            # the right column (TODO: refactor to include a child ColRefExpression?).
-            self._series._plan,
-            (
-                "str.lower",
-                True,  # is_series
-                True,  # is_method
-                (),  # args
-                {},  # kwargs
-            ),
-        )
-        expr.out_schema = new_metadata.to_frame()
-        return wrap_plan(
-            new_metadata,
-            plan=LazyPlan(
-                "LogicalProjection",
-                # Use the plan including the projection on the original table to access
-                # the right column (TODO: refactor to include a child ColRefExpression?).
-                self._series._plan,
-                (expr,),
-            ),
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, "str.lower", (), {}
         )
 
     @check_args_fallback(supported=[])
@@ -342,27 +299,40 @@ class StringMethods:
             name=self._series.name,
             index=index,
         )
-        expr = LazyPlan(
-            "PythonScalarFuncExpression",
-            # Use the plan including the projection on the original table to access
-            # the right column (TODO: refactor to include a child ColRefExpression?).
-            self._series._plan,
-            (
-                "str.strip",
-                True,  # is_series
-                True,  # is_method
-                (),  # args
-                {},  # kwargs
-            ),
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, "str.strip", (), {}
         )
-        expr.out_schema = new_metadata.to_frame()
-        return wrap_plan(
-            new_metadata,
-            plan=LazyPlan(
-                "LogicalProjection",
-                # Use the plan including the projection on the original table to access
-                # the right column (TODO: refactor to include a child ColRefExpression?).
-                self._series._plan,
-                (expr,),
-            ),
-        )
+
+
+def _get_series_python_func_plan(series_proj, new_metadata, func_name, args, kwargs):
+    """Create a plan for calling a Series method in Python. Creates a proper
+    PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
+    """
+    assert (
+        series_proj.plan_class == "LogicalProjection" and len(series_proj.args[1]) == 1
+    ), "Single column projection expected"
+    input_expr = series_proj.args[1][0]
+    assert input_expr.plan_class == "ColRefExpression", "Expected ColRefExpression"
+    col_index = input_expr.args[1]
+    source_data = series_proj.args[0]
+    expr = LazyPlan(
+        "PythonScalarFuncExpression",
+        source_data,
+        (
+            func_name,
+            True,  # is_series
+            True,  # is_method
+            args,  # args
+            kwargs,  # kwargs
+        ),
+        (col_index,),
+    )
+    expr.out_schema = new_metadata.to_frame()
+    return wrap_plan(
+        new_metadata,
+        plan=LazyPlan(
+            "LogicalProjection",
+            source_data,
+            (expr,),
+        ),
+    )
