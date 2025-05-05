@@ -633,6 +633,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 (func,),  # args
                 {"axis": 1},  # kwargs
             ),
+            tuple(range(len(self.columns))),
         )
         udf_arg.out_schema = empty_df
 
