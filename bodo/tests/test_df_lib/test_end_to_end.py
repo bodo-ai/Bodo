@@ -73,6 +73,7 @@ def test_from_pandas(datapath, index_val, set_stream_batch_size_three):
     assert bdf._mgr._plan is None
 
     # Make sure projection with a middle column works.
+    bdf = bd.from_pandas(df)
     bodo_df2 = bdf["b"]
     df2 = df["b"]
     assert bodo_df2.is_lazy_plan()
