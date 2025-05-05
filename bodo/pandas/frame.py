@@ -15,6 +15,7 @@ from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
     get_lazy_manager_class,
+    get_proj_expr_single,
     wrap_plan,
 )
 from bodo.utils.typing import (
@@ -510,7 +511,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
+        import pyarrow as pa
+
         from bodo.pandas.base import _empty_like
+        from bodo.pandas.utils import arrow_to_empty_df
 
         """ Create 0 length versions of the dataframe and the key and
             simulate the operation to see the resulting type. """
@@ -518,7 +522,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if isinstance(key, BodoSeries):
             """ This is a masking operation. """
             key_plan = (
-                key._plan
+                # TODO: error checking for key to be a projection on the same dataframe
+                # with a binary operator
+                get_proj_expr_single(key._plan)
                 if key._plan is not None
                 else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
             )
@@ -550,34 +556,28 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             else:
                 key_indices.append(len(self.columns))
 
-            if len(key) == 1:
-                """ If just one element then have to extract that singular
-                    element for the metadata call to Pandas so it doesn't
-                    complain. """
-                key = key[0]
-                new_metadata = zero_size_self.__getitem__(key)
-                return wrap_plan(
-                    new_metadata,
-                    plan=LazyPlan(
-                        # See generate_duckdb for a description of this
-                        # special node type.
-                        "LogicalProjectionOrColRef",
-                        self._plan,
-                        key_indices,
-                    ),
+            # Create column reference expressions for selected columns
+            pa_schema = pa.Schema.from_pandas(self._plan.out_schema)
+            exprs = []
+            for k in key_indices:
+                p = LazyPlan("ColRefExpression", self._plan, k)
+                # Using Arrow schema instead of zero_size_self.iloc to handle Index
+                # columns correctly.
+                schema = arrow_to_empty_df(pa.schema([pa_schema[k]]))
+                p.out_schema = (
+                    schema.to_frame() if isinstance(schema, pd.Series) else schema
                 )
-            else:
-                new_metadata = zero_size_self.__getitem__(key)
-                return wrap_plan(
-                    new_metadata,
-                    plan=LazyPlan(
-                        # See generate_duckdb for a description of this
-                        # special node type.
-                        "LogicalProjectionOrColRef",
-                        self._plan,
-                        key_indices,
-                    ),
-                )
+                exprs.append(p)
+
+            new_metadata = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
+            return wrap_plan(
+                new_metadata,
+                plan=LazyPlan(
+                    "LogicalProjection",
+                    self._plan,
+                    exprs,
+                ),
+            )
 
     @check_args_fallback(supported=["func", "axis"])
     def apply(
@@ -623,8 +623,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_series = empty_df.squeeze()
         empty_series.name = out_sample.name
 
-        plan = LazyPlan(
-            "LogicalProjectionPythonScalarFunc",
+        udf_arg = LazyPlan(
+            "PythonScalarFuncExpression",
             self._plan,
             (
                 "apply",
@@ -633,5 +633,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 (func,),  # args
                 {"axis": 1},  # kwargs
             ),
+        )
+        udf_arg.out_schema = empty_df
+
+        plan = LazyPlan(
+            "LogicalProjection",
+            self._plan,
+            (udf_arg,),
         )
         return wrap_plan(empty_series, plan=plan)

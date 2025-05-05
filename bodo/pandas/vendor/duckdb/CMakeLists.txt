@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.5...3.29)
 
+# Bodo Change: Prevent symbol collisions
+add_compile_definitions(duckdb=bododuckdb)
+
 if(NOT CLANG_TIDY)
   find_package(Python3)
 endif()
