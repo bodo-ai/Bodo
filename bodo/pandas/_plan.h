@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Python.h>
+#include <object.h>
 #include <pytypedefs.h>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
@@ -63,18 +64,20 @@ class BodoParquetScanFunction : public BodoScanFunction {
  */
 class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoParquetScanFunctionData(std::string path, PyObject *pyarrow_schema,
+    BodoParquetScanFunctionData(PyObject *path, PyObject *pyarrow_schema,
                                 PyObject *storage_options)
         : path(path),
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options) {
         Py_INCREF(pyarrow_schema);
         Py_INCREF(storage_options);
+        Py_INCREF(path);
     }
 
     ~BodoParquetScanFunctionData() {
         Py_DECREF(pyarrow_schema);
         Py_DECREF(storage_options);
+        Py_DECREF(path);
     }
 
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
@@ -82,7 +85,7 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         duckdb::TableFilterSet &filter_exprs) override;
 
     // Parquet dataset path
-    std::string path;
+    PyObject *path;
     PyObject *pyarrow_schema;
     PyObject *storage_options;
 };
@@ -311,7 +314,7 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path, PyObject *pyarrow_schema,
+    PyObject *parquet_path, PyObject *pyarrow_schema,
     PyObject *storage_options);
 
 /**

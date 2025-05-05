@@ -299,7 +299,7 @@ std::pair<int64_t, PyObject *> execute_plan(
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path, PyObject *pyarrow_schema,
+    PyObject *parquet_path, PyObject *pyarrow_schema,
     PyObject *storage_options) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 

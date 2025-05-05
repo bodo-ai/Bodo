@@ -1793,10 +1793,10 @@ def test_read_parquet_list_of_globs(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4767] Reading list of files not supported yet.",
-)
+# @pytest.mark.skipif(
+#     bodo.test_dataframe_library_enabled,
+#     reason="[BSE-4767] Reading list of files not supported yet.",
+# )
 def test_read_parquet_list_files(datapath, memory_leak_check):
     """test read_parquet passing a list of files"""
 

@@ -29,6 +29,7 @@ class ParquetReader : public ArrowReader {
         if (storage_options == Py_None) {
             throw std::runtime_error("ParquetReader: storage_options is None");
         }
+        Py_INCREF(this->path);
         Py_INCREF(storage_options);
     }
 
@@ -114,6 +115,7 @@ class ParquetReader : public ArrowReader {
         // Remove after reader is finished or on error
         Py_XDECREF(this->reader);
         Py_DECREF(this->storage_options);
+        Py_DECREF(this->path);
     }
 
     /// a piece is a single parquet file in the context of parquet
@@ -156,7 +158,7 @@ class ParquetReader : public ArrowReader {
     // Parquet files that this process has to read
     std::vector<std::string> file_paths;
 
-    PyObjectPtr path;  // path passed to pd.read_parquet() call
+    PyObject* path;  // path passed to pd.read_parquet() call
     // We don't own storage options so store the raw pointer
     PyObject* storage_options;
     bool input_file_name_col;

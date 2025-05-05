@@ -3,6 +3,7 @@
 #include <Python.h>
 #include <arrow/compute/api.h>
 #include <arrow/python/pyarrow.h>
+#include <pytypedefs.h>
 #include <memory>
 #include <utility>
 #include "../io/arrow_compat.h"
@@ -92,12 +93,10 @@ class PhysicalReadParquet : public PhysicalSource {
 
    public:
     // TODO: Fill in the contents with info from the logical operator
-    explicit PhysicalReadParquet(std::string _path, PyObject *pyarrow_schema,
+    explicit PhysicalReadParquet(PyObject *py_path, PyObject *pyarrow_schema,
                                  PyObject *storage_options,
                                  std::vector<int> &selected_columns,
                                  duckdb::TableFilterSet &filter_exprs) {
-        PyObject *py_path = PyUnicode_FromString(_path.c_str());
-
         std::vector<bool> is_nullable(selected_columns.size(), true);
 
         // Extract metadata from pyarrow schema (for Pandas Index reconstruction
