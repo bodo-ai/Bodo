@@ -516,7 +516,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         self.out_schema = out_schema
         cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
-        self.path = (<bytes>parquet_path).decode("utf-8")
+        self.path = parquet_path
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"

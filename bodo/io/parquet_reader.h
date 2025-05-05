@@ -29,8 +29,8 @@ class ParquetReader : public ArrowReader {
         if (storage_options == Py_None) {
             throw std::runtime_error("ParquetReader: storage_options is None");
         }
-        Py_INCREF(this->path);
         Py_INCREF(storage_options);
+        Py_INCREF(path);
     }
 
     /**
