@@ -11,8 +11,7 @@
  */
 class PhysicalLimit : public PhysicalSourceSink {
    public:
-    explicit PhysicalLimit(uint64_t nrows)
-        : n(nrows) {}
+    explicit PhysicalLimit(uint64_t nrows) : n(nrows) {}
 
     virtual ~PhysicalLimit() = default;
 
@@ -27,7 +26,7 @@ class PhysicalLimit : public PhysicalSourceSink {
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override {
-        uint64_t select_this_time = std::min(n, input_batch->nrows()); 
+        uint64_t select_this_time = std::min(n, input_batch->nrows());
         n -= select_this_time;
 
         std::vector<int64_t> rowInds(select_this_time);
