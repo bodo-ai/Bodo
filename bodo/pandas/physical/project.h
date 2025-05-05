@@ -2,6 +2,7 @@
 
 #include <utility>
 #include "../_plan.h"
+#include "../libs/_array_utils.h"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
@@ -44,11 +45,28 @@ class PhysicalProjection : public PhysicalSourceSink {
                     col_names.emplace_back(colref.GetName());
                 }
             } else if (expr->type == duckdb::ExpressionType::BOUND_FUNCTION) {
+                auto& func_expr = expr->Cast<duckdb::BoundFunctionExpression>();
                 BodoPythonScalarFunctionData& scalar_func_data =
-                    expr->Cast<duckdb::BoundFunctionExpression>()
-                        .bind_info->Cast<BodoPythonScalarFunctionData>();
-                out_cols.emplace_back(runPythonScalarFunction(
-                    input_batch, scalar_func_data.args));
+                    func_expr.bind_info->Cast<BodoPythonScalarFunctionData>();
+                std::vector<int64_t> selected_columns;
+                for (const auto& child_expr : func_expr.children) {
+                    if (child_expr->type ==
+                        duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                        auto& colref =
+                            child_expr
+                                ->Cast<duckdb::BoundColumnRefExpression>();
+                        size_t col_idx = colref.binding.column_index;
+                        selected_columns.emplace_back(col_idx);
+                    } else {
+                        throw std::runtime_error(
+                            "Unsupported expression type in function input " +
+                            child_expr->ToString());
+                    }
+                }
+                std::shared_ptr<table_info> udf_input =
+                    ProjectTable(input_batch, selected_columns);
+                out_cols.emplace_back(
+                    runPythonScalarFunction(udf_input, scalar_func_data.args));
             } else {
                 throw std::runtime_error(
                     "Unsupported expression type in projection " +
