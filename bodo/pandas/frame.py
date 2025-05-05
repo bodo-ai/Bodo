@@ -17,6 +17,7 @@ from bodo.pandas.utils import (
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
+    make_col_ref_exprs,
     wrap_plan,
 )
 from bodo.utils.typing import (
@@ -512,10 +513,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
-        import pyarrow as pa
 
         from bodo.pandas.base import _empty_like
-        from bodo.pandas.utils import arrow_to_empty_df
 
         """ Create 0 length versions of the dataframe and the key and
             simulate the operation to see the resulting type. """
@@ -555,17 +554,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ]
 
             # Create column reference expressions for selected columns
-            pa_schema = pa.Schema.from_pandas(self._plan.out_schema)
-            exprs = []
-            for k in key_indices:
-                p = LazyPlan("ColRefExpression", self._plan, k)
-                # Using Arrow schema instead of zero_size_self.iloc to handle Index
-                # columns correctly.
-                schema = arrow_to_empty_df(pa.schema([pa_schema[k]]))
-                p.out_schema = (
-                    schema.to_frame() if isinstance(schema, pd.Series) else schema
-                )
-                exprs.append(p)
+            exprs = make_col_ref_exprs(key_indices, self._plan)
 
             new_metadata = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
             return wrap_plan(
@@ -631,7 +620,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 (func,),  # args
                 {"axis": 1},  # kwargs
             ),
-            tuple(range(len(self.columns))),
+            tuple(range(len(self.columns) + get_n_index_arrays(self.index))),
         )
         udf_arg.out_schema = empty_df
 

@@ -610,6 +610,23 @@ def get_proj_expr_single(proj: LazyPlan):
     return proj.args[1][0]
 
 
+def make_col_ref_exprs(key_indices, src_plan):
+    """Create column reference expressions for the given key indices for the input
+    source plan.
+    """
+    pa_schema = pa.Schema.from_pandas(src_plan.out_schema)
+    exprs = []
+    for k in key_indices:
+        p = LazyPlan("ColRefExpression", src_plan, k)
+        # Using Arrow schema instead of zero_size_self.iloc to handle Index
+        # columns correctly.
+        schema = arrow_to_empty_df(pa.schema([pa_schema[k]]))
+        p.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
+        exprs.append(p)
+
+    return exprs
+
+
 def _is_generated_index_name(name):
     """Check if the Index name is a generated name similar to PyArrow:
     https://github.com/apache/arrow/blob/5e9fce493f21098d616f08034bc233fcc529b3ad/python/pyarrow/pandas_compat.py#L1071
