@@ -1,7 +1,7 @@
 #include "project.h"
 #include <arrow/python/pyarrow.h>
 
-std::shared_ptr<array_info> PhysicalProjection::runPythonScalarFunction(
+std::shared_ptr<table_info> PhysicalProjection::runPythonScalarFunction(
     std::shared_ptr<table_info> input_batch, PyObject* args) {
     // Call bodo.pandas.utils.run_apply_udf() to run the UDF
 
@@ -35,15 +35,11 @@ std::shared_ptr<array_info> PhysicalProjection::runPythonScalarFunction(
 
     int64_t table_info_ptr = PyLong_AsLongLong(result);
 
-    table_info* out_table = reinterpret_cast<table_info*>(table_info_ptr);
+    std::shared_ptr<table_info> out_batch(
+        reinterpret_cast<table_info*>(table_info_ptr));
 
     Py_DECREF(bodo_module);
     Py_DECREF(result);
 
-    if (!out_table || out_table->columns.size() != 1) {
-        throw std::runtime_error(
-            "Expected table with a single column from Python function");
-    }
-
-    return out_table->columns[0];
+    return out_batch;
 }

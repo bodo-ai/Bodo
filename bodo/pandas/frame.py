@@ -624,9 +624,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         udf_arg.out_schema = empty_df
 
+        # Select Index columns explicitly for output
+        n_cols = len(self.columns)
+        index_col_refs = tuple(
+            make_col_ref_exprs(
+                range(n_cols, n_cols + get_n_index_arrays(self.index)), self._plan
+            )
+        )
         plan = LazyPlan(
             "LogicalProjection",
             self._plan,
-            (udf_arg,),
+            (udf_arg,) + index_col_refs,
         )
         return wrap_plan(empty_series, plan=plan)

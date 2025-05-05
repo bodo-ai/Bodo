@@ -13,7 +13,9 @@ from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
     get_lazy_single_manager_class,
+    get_n_index_arrays,
     get_proj_expr_single,
+    make_col_ref_exprs,
     wrap_plan,
 )
 
@@ -308,13 +310,15 @@ def _get_series_python_func_plan(series_proj, new_metadata, func_name, args, kwa
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
-    assert (
-        series_proj.plan_class == "LogicalProjection" and len(series_proj.args[1]) == 1
-    ), "Single column projection expected"
+    assert series_proj.plan_class == "LogicalProjection", "projection expected"
     input_expr = series_proj.args[1][0]
     assert input_expr.plan_class == "ColRefExpression", "Expected ColRefExpression"
     col_index = input_expr.args[1]
     source_data = series_proj.args[0]
+    n_cols = len(source_data.out_schema.columns)
+    index_cols = range(
+        n_cols, n_cols + get_n_index_arrays(source_data.out_schema.index)
+    )
     expr = LazyPlan(
         "PythonScalarFuncExpression",
         source_data,
@@ -325,14 +329,16 @@ def _get_series_python_func_plan(series_proj, new_metadata, func_name, args, kwa
             args,  # args
             kwargs,  # kwargs
         ),
-        (col_index,),
+        (col_index,) + tuple(index_cols),
     )
     expr.out_schema = new_metadata.to_frame()
+    # Select Index columns explicitly for output
+    index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
     return wrap_plan(
         new_metadata,
         plan=LazyPlan(
             "LogicalProjection",
             source_data,
-            (expr,),
+            (expr,) + index_col_refs,
         ),
     )
