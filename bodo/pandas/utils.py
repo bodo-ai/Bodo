@@ -435,7 +435,7 @@ def cast_table_ptr_to_int64(typingctx, val):
     return numba.core.types.int64(table_type), codegen
 
 
-def _get_n_index_arrays(index):
+def get_n_index_arrays(index):
     """Get the number of arrays that can hold the Index data in a table."""
     if isinstance(index, pd.RangeIndex):
         return 0
@@ -454,7 +454,7 @@ def df_to_cpp_table(df):
     from bodo.ext import plan_optimizer
 
     n_table_cols = len(df.columns)
-    n_index_arrs = _get_n_index_arrays(df.index)
+    n_index_arrs = get_n_index_arrays(df.index)
     n_all_cols = n_table_cols + n_index_arrs
     in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_all_cols)))
 

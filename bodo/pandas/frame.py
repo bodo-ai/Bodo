@@ -15,6 +15,7 @@ from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
     get_lazy_manager_class,
+    get_n_index_arrays,
     get_proj_expr_single,
     wrap_plan,
 )
@@ -548,13 +549,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
             # Add Index column numbers to select as well if any,
             # assuming Index columns are always at the end of the table (same as Arrow).
-            if isinstance(zero_size_self.index, pd.RangeIndex):
-                pass
-            elif isinstance(zero_size_self.index, pd.MultiIndex):
-                nlevels = zero_size_self.index.nlevels
-                key_indices += [len(self.columns) + i for i in range(nlevels)]
-            else:
-                key_indices.append(len(self.columns))
+            key_indices += [
+                len(self.columns) + i
+                for i in range(get_n_index_arrays(zero_size_self.index))
+            ]
 
             # Create column reference expressions for selected columns
             pa_schema = pa.Schema.from_pandas(self._plan.out_schema)
