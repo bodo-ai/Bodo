@@ -359,7 +359,6 @@ class LazyPlan:
         pa_schema = pa.Schema.from_pandas(
             self.out_schema
         )  # do this in filter case? preserve_index=(self.plan_class == "LogicalFilter")
-
         ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret

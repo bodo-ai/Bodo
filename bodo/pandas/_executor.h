@@ -25,7 +25,6 @@ class Executor {
         pipelines = std::move(builder.finished_pipelines);
 
         if (builder.active_pipeline != nullptr) {
-            std::cout << "finishing the executor..." << std::endl;
             pipelines.push_back(builder.active_pipeline->BuildEnd(out_schema));
         }
     }

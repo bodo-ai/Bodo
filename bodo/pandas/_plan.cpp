@@ -288,7 +288,6 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
-    std::cout << "executing plan... " << std::endl;
     Executor executor(std::move(plan), out_schema);
     std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
 

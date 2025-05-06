@@ -1,7 +1,5 @@
 #pragma once
 
-#include <iostream>
-#include <sstream>
 #include "../libs/_table_builder.h"
 
 #include "physical/operator.h"
@@ -26,13 +24,6 @@ class PhysicalResultCollector : public PhysicalSink {
     virtual ~PhysicalResultCollector() = default;
 
     void ConsumeBatch(std::shared_ptr<table_info> input_batch) override {
-        std::stringstream ss, ss2;
-        DEBUG_PrintTable(ss, buffer->data_table);
-        std::cout << "got schema: " << ss.str() << std::endl;
-
-        DEBUG_PrintTable(ss2, input_batch);
-        std::cout << "got schema: " << ss2.str() << std::endl;
-
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
     }
 
