@@ -1204,6 +1204,7 @@ def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
         check_func(impl, ("pq_data",), reset_index=True)
         check_func(impl2, ("pq_data",), reset_index=True)
 
+        # TODO [BSE-4776]: Check filter conditions are set in DataFrame Lib.
         if not bodo.test_dataframe_library_enabled:
             # make sure the ParquetReader node has filters parameter set
             bodo_func = bodo.jit(
@@ -2827,6 +2828,7 @@ def test_python_not_filter_pushdown(memory_leak_check):
 
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
+        # TODO [BSE-4776]: Check filter pushdown happens in DataFrame Lib.
         with set_logging_stream(logger, 1):
             # TODO: Fix index
             check_func(impl, ("pq_data",), reset_index=True)
