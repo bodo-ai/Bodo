@@ -505,6 +505,50 @@ def test_series_map(datapath, index_val, set_stream_batch_size_three):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+def test_set_column(datapath, index_val, set_stream_batch_size_three):
+    """Very simple test for Series.str.strip() for sanity checking."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+
+    # Single projection, new column
+    bdf["D"] = bdf["B"].str.strip()
+    pdf = df.copy()
+    pdf["D"] = pdf["B"].str.strip()
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Single projection, existing column
+    bdf = bd.from_pandas(df)
+    bdf["B"] = bdf["B"].str.strip()
+    pdf = df.copy()
+    pdf["B"] = pdf["B"].str.strip()
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Multiple projections, new column
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["B"].str.strip().map(lambda x: x + "1")
+    pdf = df.copy()
+    pdf["D"] = pdf["B"].str.strip().map(lambda x: x + "1")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Multiple projections, existing column
+    bdf = bd.from_pandas(df)
+    bdf["B"] = bdf["B"].str.strip().map(lambda x: x + "1")
+    pdf = df.copy()
+    pdf["B"] = pdf["B"].str.strip().map(lambda x: x + "1")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+
 def test_parquet_read_partitioned(datapath, set_stream_batch_size_three):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
