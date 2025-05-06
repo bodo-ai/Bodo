@@ -767,7 +767,36 @@ def _get_set_column_plan(
 ) -> LazyPlan | None:
     """
     Get the plan for setting a column in a dataframe or return None if not supported.
-    TODO: plan example
+    Creates a projection on top of the dataframe plan that adds original data columns as
+    well as the column from the value plan to be set.
+    For example, if the df schema is (a, b, c, I) where I is the index column and the
+    code is df["D"] = df["b"].str.lower(), then the value plan is:
+    ┌───────────────────────────┐
+    │         PROJECTION        │
+    │    ────────────────────   │
+    │        Expressions:       │
+    │ "bodo_udf"(#[0.1], #[0.3])│
+    │           #[0.3]          │
+    └─────────────┬─────────────┘
+    ┌─────────────┴─────────────┐
+    │        BODO_READ_DF       │
+    │    ────────────────────   │
+    └───────────────────────────┘
+    and the new dataframe plan with new column added is:
+    ┌───────────────────────────┐
+    │         PROJECTION        │
+    │    ────────────────────   │
+    │        Expressions:       │
+    │           #[0.0]          │
+    │           #[0.1]          │
+    │           #[0.2]          │
+    │ "bodo_udf"(#[0.1], #[0.3])│
+    │           #[0.3]          │
+    └─────────────┬─────────────┘
+    ┌─────────────┴─────────────┐
+    │        BODO_READ_DF       │
+    │    ────────────────────   │
+    └───────────────────────────┘
     """
 
     # Handle stacked projections like bdf["b"] = bdf["c"].str.lower().str.strip()
