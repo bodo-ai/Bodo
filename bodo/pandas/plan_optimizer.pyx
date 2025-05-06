@@ -270,7 +270,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema)
-    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args)
+    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices)
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
@@ -420,9 +420,9 @@ cdef class PythonScalarFuncExpression(Expression):
     """Wrapper around DuckDB's BoundFunctionExpression for running Python functions.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, object args):
+    def __cinit__(self, object out_schema, LogicalOperator source, object args, vector[int] input_column_indices):
         self.out_schema = out_schema
-        self.c_expression = make_python_scalar_func_expr(source.c_logical_operator, out_schema, args)
+        self.c_expression = make_python_scalar_func_expr(source.c_logical_operator, out_schema, args, input_column_indices)
 
     def __str__(self):
         return f"PythonScalarFuncExpression({self.out_schema})"
