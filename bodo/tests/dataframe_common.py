@@ -17,6 +17,7 @@ df_value_params = [
             }
         ),
         marks=pytest.mark.slow,
+        id="numeric_df",
     ),
     # Categorical columns
     pytest.param(
@@ -40,14 +41,25 @@ df_value_params = [
                 ).astype("category"),
             }
         ),
+        marks=pytest.mark.skipif(
+            bodo.test_dataframe_library_enabled,
+            reason="Support conversion from duration[ns].",
+        ),
+        id="categorical_df",
     ),
-    pd.DataFrame(
-        {
-            "A": pd.array([1, 8, 4, 10, 3] * 2, dtype="Int32"),
-            2: [1.1, np.nan, 4.2, 3.1, -1.3] * 2,
-            "C": pd.array([True, False, False, None, True] * 2, dtype="boolean"),
-        },
-        ["A", "BA", "", "DD", "C", "e2", "#4", "32", "ec", "#43"],
+    pytest.param(
+        pd.DataFrame(
+            {
+                "A": pd.array([1, 8, 4, 10, 3] * 2, dtype="Int32"),
+                2: [1.1, np.nan, 4.2, 3.1, -1.3] * 2,
+                "C": pd.array([True, False, False, None, True] * 2, dtype="boolean"),
+            },
+            ["A", "BA", "", "DD", "C", "e2", "#4", "32", "ec", "#43"],
+        ),
+        marks=pytest.mark.skipif(
+            bodo.test_dataframe_library_enabled, reason="Fix typing issues with Index."
+        ),
+        id="string_index",
     ),
     # uint8, float32 dtypes
     pytest.param(
@@ -57,7 +69,13 @@ df_value_params = [
                 1: np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32),
             }
         ),
-        marks=pytest.mark.slow,
+        marks=[
+            pytest.mark.slow,
+            pytest.mark.skipif(
+                bodo.test_dataframe_library_enabled, reason="Fix schema issues."
+            ),
+        ],
+        id="uint8_df",
     ),
     # string and int columns, float index
     pytest.param(
@@ -70,6 +88,7 @@ df_value_params = [
             [-2.1, 0.1, 1.1, 7.1, 9.0, 7.7],
         ),
         marks=pytest.mark.slow,
+        id="float_index",
     ),
     # range index
     pytest.param(
@@ -78,20 +97,36 @@ df_value_params = [
             range(0, 5 * 3, 1),
         ),
         marks=pytest.mark.slow,
+        id="range_index",
     ),
-    # TODO: parallel range index with start != 0 and stop != 1
-    # int index
-    pd.DataFrame(
-        {"A": [1, 8, 4, 1, -3] * 2, "B": ["A", "B", "CG", "ACDE", "C"] * 2},
-        [-2, 1, 3, 5, 9, -3, -5, 0, 4, 7],
+    pytest.param(
+        # TODO: parallel range index with start != 0 and stop != 1
+        # int index
+        pd.DataFrame(
+            {"A": [1, 8, 4, 1, -3] * 2, "B": ["A", "B", "CG", "ACDE", "C"] * 2},
+            [-2, 1, 3, 5, 9, -3, -5, 0, 4, 7],
+        ),
+        id="int_index",
     ),
     # string index
     pytest.param(
         pd.DataFrame({"A": [1, 2, 3, -1, 4]}, ["A", "BA", "", "DD", "C"]),
-        marks=pytest.mark.slow,
+        marks=[
+            pytest.mark.slow,
+            pytest.mark.skipif(
+                bodo.test_dataframe_library_enabled,
+                reason="Fix index col typing issues.",
+            ),
+        ],
+        id="string_index",
     ),
     # datetime column
-    pd.DataFrame({"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}),
+    pytest.param(
+        pd.DataFrame(
+            {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
+        ),
+        id="datetime_df",
+    ),
     # datetime index
     pytest.param(
         pd.DataFrame(
@@ -99,6 +134,7 @@ df_value_params = [
             pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
         ),
         marks=pytest.mark.slow,
+        id="datetime_index",
     ),
     # Binary column
     pytest.param(
@@ -120,7 +156,13 @@ df_value_params = [
             },
         ),
         id="binary_df",
-        marks=pytest.mark.slow,
+        marks=[
+            pytest.mark.slow,
+            pytest.mark.skipif(
+                bodo.test_dataframe_library_enabled,
+                reason="Fix null in schema issue when binary column",
+            ),
+        ],
     ),
 ]
 

@@ -8,6 +8,7 @@
 #include <arrow/builder.h>
 #include <arrow/compute/cast.h>
 #include <arrow/table.h>
+#include <arrow/type_fwd.h>
 #include "arrow/util/key_value_metadata.h"
 
 #include "_array_utils.h"
@@ -1483,6 +1484,12 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 std::static_pointer_cast<arrow::Time64Array>(time_arr),
                 Bodo_CTypes::TIME, src_pool);
         }
+        case arrow::Type::DURATION: {
+            // TODO cast to ns
+            return arrow_numeric_array_to_bodo<arrow::DurationArray>(
+                std::static_pointer_cast<arrow::DurationArray>(arrow_arr),
+                Bodo_CTypes::TIMEDELTA, src_pool);
+        }
         case arrow::Type::DICTIONARY:
             return arrow_dictionary_array_to_bodo(
                 std::static_pointer_cast<arrow::DictionaryArray>(arrow_arr),
@@ -1585,6 +1592,7 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
         case arrow::Type::UINT32:
         case arrow::Type::DATE32:
         case arrow::Type::TIMESTAMP:
+        case arrow::Type::DURATION:
         case arrow::Type::INT32:
         case arrow::Type::UINT16:
         case arrow::Type::INT16:

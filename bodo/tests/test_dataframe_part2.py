@@ -1024,6 +1024,8 @@ def test_df_apply_heterogeneous_series(memory_leak_check):
 
 
 @pytest.mark.slow
+# @pytest.mark.df_lib
+# TODO DataFrame Library: DataFrame output
 def test_df_apply_df_output(memory_leak_check):
     """test DataFrame.apply() with dataframe output 1 column"""
 
@@ -1045,6 +1047,8 @@ def test_df_apply_df_output(memory_leak_check):
     check_func(impl2, (df,), check_dtype=False)
 
 
+# @pytest.mark.df_lib
+# TODO DataFrame Library: DataFrame output
 def test_df_apply_df_output_multicolumn(memory_leak_check):
     """test DataFrame.apply() with dataframe output with multiple columns"""
 
@@ -1056,6 +1060,8 @@ def test_df_apply_df_output_multicolumn(memory_leak_check):
 
 
 @pytest.mark.slow
+# @pytest.mark.df_lib
+# TODO DataFrame Library: DataFrame output
 def test_df_apply_df_output_multistring(memory_leak_check):
     def test_impl(df):
         def f(row):
@@ -1129,6 +1135,8 @@ def test_df_apply_udf_inline_objmode(memory_leak_check):
 
 
 @pytest.mark.slow
+# TODO DF lib: Enable more params
+@pytest.mark.df_lib
 def test_df_apply_supported_types(df_value, memory_leak_check):
     """Test DataFrame.apply with all Bodo supported Types"""
 
@@ -1142,10 +1150,15 @@ def test_df_apply_supported_types(df_value, memory_leak_check):
     if "A" not in df.columns:
         df.rename(columns={df.columns[0]: "A"}, inplace=True)
 
-    check_func(test_impl, (df,), check_dtype=False)
+    check_pandas_types = not bodo.test_dataframe_library_enabled
+    check_func(
+        test_impl, (df,), check_dtype=False, check_pandas_types=check_pandas_types
+    )
 
 
 @pytest.mark.slow
+# TODO DF lib: support conversion from duration[ns]
+# @pytest.mark.df_lib
 def test_df_apply_datetime(memory_leak_check):
     def test_impl(df):
         return df.apply(lambda r: r.A, axis=1)

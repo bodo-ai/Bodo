@@ -425,8 +425,32 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::VARCHAR;
             break;
         }
+        case arrow::Type::UINT8: {
+            duckdb_type = duckdb::LogicalType::UTINYINT;
+            break;
+        }
+        case arrow::Type::INT8: {
+            duckdb_type = duckdb::LogicalType::TINYINT;
+            break;
+        }
+        case arrow::Type::UINT16: {
+            duckdb_type = duckdb::LogicalType::USMALLINT;
+            break;
+        }
+        case arrow::Type::INT16: {
+            duckdb_type = duckdb::LogicalType::SMALLINT;
+            break;
+        }
+        case arrow::Type::UINT32: {
+            duckdb_type = duckdb::LogicalType::UINTEGER;
+            break;
+        }
         case arrow::Type::INT32: {
             duckdb_type = duckdb::LogicalType::INTEGER;
+            break;
+        }
+        case arrow::Type::UINT64: {
+            duckdb_type = duckdb::LogicalType::UBIGINT;
             break;
         }
         case arrow::Type::INT64: {
@@ -447,6 +471,10 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
         }
         case arrow::Type::DATE32: {
             duckdb_type = duckdb::LogicalType::DATE;
+            break;
+        }
+        case arrow::Type::DURATION: {
+            duckdb_type = duckdb::LogicalType::INTERVAL;
             break;
         }
         case arrow::Type::TIMESTAMP: {
