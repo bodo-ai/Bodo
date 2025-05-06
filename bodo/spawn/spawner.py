@@ -507,7 +507,8 @@ class Spawner:
             if len(table_metas) == 0:
                 return None
 
-            dist_flags["distributed"].add(arg_name)
+            # We can't guarantee that the tables are block distributed
+            dist_flags["distributed_block"].add(arg_name)
             return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
 
         return None
