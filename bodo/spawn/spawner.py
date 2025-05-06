@@ -452,16 +452,19 @@ class Spawner:
             arg (Any): argument value
             arg_name (str): argument name
             is_replicated (bool): true if the argument is set to be replicated by user
-            dist_flags (list[str]): list of distributed arguments to update
+            dist_flags (dict[str,list[str]]): map of distribution type to
+                list of distributed arguments to update
 
         Returns:
             ArgMetadata or None: ArgMetadata if argument is distributable, None otherwise
         """
         dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
-            dist_flags.append(arg_name)
             if arg._lazy:
+                # We can't guarantee lazy args are block distributed
+                dist_flags["distributed"].append(arg_name)
                 return ArgMetadata.LAZY
+            dist_flags["distributed_block"].append(arg_name)
             return dist_comm_meta
 
         # Handle distributed data inside tuples
@@ -483,8 +486,8 @@ class Spawner:
         if data_type is None:
             return None
 
-        if is_distributable_typ(data_type):
-            dist_flags.append(arg_name)
+        if is_distributable_typ(data_type) and not is_replicated:
+            dist_flags["distributed"].append(arg_name)
             return dist_comm_meta
 
         # Send metadata to receive tables and reconstruct BodoSQLContext on workers
@@ -504,7 +507,7 @@ class Spawner:
             if len(table_metas) == 0:
                 return None
 
-            dist_flags.append(arg_name)
+            dist_flags["distributed"].append(arg_name)
             return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
 
         return None
@@ -577,7 +580,7 @@ class Spawner:
             if is_dispatcher
             else ()
         )
-        dist_flags = []
+        dist_flags = {"distributed": [], "distributed_block": []}
         args_meta = tuple(
             self._get_arg_metadata(
                 arg, param_names[i], param_names[i] in replicated, dist_flags
@@ -615,8 +618,13 @@ class Spawner:
         pickled_args = cloudpickle.dumps((args_to_send, kwargs_to_send))
         self.worker_intercomm.bcast(pickled_args, root=self.bcast_root)
         if is_dispatcher:
+            func_to_execute.decorator_args["distributed"] = (
+                func_to_execute.decorator_args.get("distributed", [])
+                + dist_flags["distributed"]
+            )
             func_to_execute.decorator_args["distributed_block"] = (
-                func_to_execute.decorator_args.get("distributed_block", []) + dist_flags
+                func_to_execute.decorator_args.get("distributed_block", [])
+                + dist_flags["distributed_block"]
             )
         # Send DataFrame/Series/Index/array arguments (others are already sent)
         for arg, arg_meta in itertools.chain(
