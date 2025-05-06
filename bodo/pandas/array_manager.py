@@ -154,7 +154,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         super().__init__(
             _arrays,
             self._axes,
-            verify_integrity=(verify_integrity if (result_id is None and plan is None) else False),
+            verify_integrity=(
+                verify_integrity if (result_id is None and plan is None) else False
+            ),
         )
 
     @property
@@ -449,7 +451,9 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         super().__init__(
             _arrays,
             self._axes,
-            verify_integrity=(verify_integrity if (result_id is None and plan is None) else False),
+            verify_integrity=(
+                verify_integrity if (result_id is None and plan is None) else False
+            ),
         )
 
     @property

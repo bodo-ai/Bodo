@@ -397,7 +397,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         super().__init__(
             block_,
             axis_,
-            verify_integrity=verify_integrity if (result_id is None and plan is None) else False,
+            verify_integrity=verify_integrity
+            if (result_id is None and plan is None)
+            else False,
         )
 
     def get_dtypes(self) -> np.typing.NDArray[np.object_]:
