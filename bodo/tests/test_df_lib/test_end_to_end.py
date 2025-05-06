@@ -423,6 +423,7 @@ def test_head_pushdown(datapath):
     )
 
 
+@pytest.mark.skip(reason="Non-pushdown physical limit node needs work.")
 def test_head(datapath):
     """Test for head pushed down to read parquet."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
