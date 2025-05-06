@@ -34,6 +34,7 @@ unique_ptr<LogicalOperator> LimitPushdown::Optimize(unique_ptr<LogicalOperator> 
 		projection->children[0] = std::move(op);
 		swap(projection, op);
 	}
+    // Bodo Change: limit_pushdown to data source not previously supported by DuckDB
 	if (op->type == LogicalOperatorType::LOGICAL_LIMIT &&
 		op->Cast<LogicalLimit>().limit_val.Type() == LimitNodeType::CONSTANT_VALUE &&
 	    op->children[0]->type == LogicalOperatorType::LOGICAL_GET &&

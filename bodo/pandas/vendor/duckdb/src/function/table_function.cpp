@@ -24,6 +24,7 @@ TableFunction::TableFunction(string name, vector<LogicalType> arguments, table_f
       get_partition_data(nullptr), get_bind_info(nullptr), type_pushdown(nullptr), get_multi_file_reader(nullptr),
       supports_pushdown_type(nullptr), get_partition_info(nullptr), get_partition_stats(nullptr),
       get_virtual_columns(nullptr), serialize(nullptr), deserialize(nullptr), projection_pushdown(false),
+      // Bodo Change: limit_pushdown to data source not previously supported by DuckDB
       filter_pushdown(false), filter_prune(false), sampling_pushdown(false), limit_pushdown(false),
       late_materialization(false) {
 }
@@ -41,6 +42,7 @@ TableFunction::TableFunction()
       get_multi_file_reader(nullptr), supports_pushdown_type(nullptr), get_partition_info(nullptr),
       get_partition_stats(nullptr), get_virtual_columns(nullptr), serialize(nullptr), deserialize(nullptr),
       projection_pushdown(false), filter_pushdown(false), filter_prune(false), sampling_pushdown(false),
+      // Bodo Change: limit_pushdown to data source not previously supported by DuckDB
       limit_pushdown(false), late_materialization(false) {
 }
 
