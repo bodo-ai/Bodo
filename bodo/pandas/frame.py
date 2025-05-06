@@ -135,8 +135,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """
         # Prevent infinite recursion when called from _empty_like and in general
         # data is never required for head(0) so making a plan is never necessary.
-        #if n == 0 and self._head_df is not None:
-        #    return pd.DataFrame(index=self._head_df.index, columns=self._head_df.columns).astype({k:v for k,v in zip(self._head_df.columns, self._head_df.dtypes)})
+        if n == 0 and self._head_df is not None:
+            return pd.DataFrame(index=self._head_df.index, columns=self._head_df.columns).astype({k:v for k,v in zip(self._head_df.columns, self._head_df.dtypes)})
 
         if (self._head_df is None) or (n > self._head_df.shape[0]):
             from bodo.pandas.base import _empty_like
