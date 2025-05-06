@@ -10,7 +10,6 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "physical/filter.h"
 #include "physical/project.h"
-#include "physical/python_scalar_func.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -34,29 +33,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     // Process the source of this projection.
     this->Visit(*op.children[0]);
 
-    // Handle UDF execution case
-    if (op.expressions.size() == 1 &&
-        op.expressions[0]->type == duckdb::ExpressionType::BOUND_FUNCTION) {
-        BodoPythonScalarFunctionData& scalar_func_data =
-            op.expressions[0]
-                ->Cast<duckdb::BoundFunctionExpression>()
-                .bind_info->Cast<BodoPythonScalarFunctionData>();
-        this->active_pipeline->AddOperator(
-            std::make_shared<PhysicalPythonScalarFunc>(scalar_func_data.args));
-        return;
-    }
-
-    std::vector<int64_t> selected_columns;
-
-    // Convert BoundColumnRefExpressions in LogicalOperator.expresssions field
-    // to integer selected columns.
-    for (const auto& expr : op.expressions) {
-        duckdb::BoundColumnRefExpression& colref =
-            expr->Cast<duckdb::BoundColumnRefExpression>();
-        selected_columns.push_back(colref.binding.column_index);
-    }
-
-    auto physical_op = std::make_shared<PhysicalProjection>(selected_columns);
+    auto physical_op =
+        std::make_shared<PhysicalProjection>(std::move(op.expressions));
     this->active_pipeline->AddOperator(physical_op);
 }
 
