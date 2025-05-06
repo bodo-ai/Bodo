@@ -465,6 +465,24 @@ def test_str_strip(datapath, index_val, set_stream_batch_size_three):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+def test_chain_python_func(datapath, index_val, set_stream_batch_size_three):
+    """Make sure chaining multiple Series functions that run in Python works"""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+    out_pd = df.B.str.strip().str.lower()
+    out_bodo = bdf.B.str.strip().str.lower()
+    assert out_bodo.is_lazy_plan()
+    assert out_bodo.plan is not None
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
 def test_series_map(datapath, index_val, set_stream_batch_size_three):
     """Very simple test for Series.map() for sanity checking."""
     df = pd.DataFrame(
