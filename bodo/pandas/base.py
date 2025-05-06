@@ -53,7 +53,6 @@ def read_parquet(
         storage_options = {}
 
     # Read Parquet schema
-    # TODO: Make this more robust (e.g. handle Index, etc.)
     use_hive = True
     pq_dataset = get_parquet_dataset(
         path,
