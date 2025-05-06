@@ -683,7 +683,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self._mgr._disable_collect = original_flag
 
 
-def update_func_expr_source(
+def _update_func_expr_source(
     func_expr: LazyPlan, new_source_plan: LazyPlan, col_index_offset: int
 ):
     """Update source plan of PythonScalarFuncExpression and add an offset to its
@@ -729,7 +729,7 @@ def _add_proj_expr_to_plan(
     if func_expr.plan_class != "PythonScalarFuncExpression":
         return None
     func_expr = (
-        update_func_expr_source(func_expr, df_plan, ikey)
+        _update_func_expr_source(func_expr, df_plan, ikey)
         if replace_func_source
         else func_expr
     )
