@@ -487,7 +487,7 @@ class Spawner:
             return None
 
         if is_distributable_typ(data_type) and not is_replicated:
-            dist_flags["distributed"].add(arg_name)
+            dist_flags["distributed_block"].add(arg_name)
             return dist_comm_meta
 
         # Send metadata to receive tables and reconstruct BodoSQLContext on workers
