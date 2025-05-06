@@ -575,7 +575,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         This is done by creating a new plan that add the new
         column in the existing dataframe plan using a projection.
         """
-        from bodo.pandas.base import _empty_like
 
         # Match cases like df["B"] = df["A"].str.lower()
         if (
@@ -584,12 +583,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             and isinstance(value, BodoSeries)
             and value.is_lazy_plan()
         ):
-            if (new_plan := _get_set_column_plan(self._plan, value._plan)) is not None:
-                # Set plan metadata
-                new_metadata = _empty_like(self)
-                new_metadata[key] = _empty_like(value)
-                new_plan.out_schema = new_metadata
-                new_plan.output_func = cpp_table_to_df
+            if (
+                new_plan := _get_set_column_plan(self._plan, value._plan, key)
+            ) is not None:
                 # Update internal state
                 self.plan = new_plan
                 self._mgr._plan = new_plan
@@ -689,6 +685,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 def _get_set_column_plan(
     df_plan: LazyPlan,
     value_plan: LazyPlan,
+    key: str,
 ) -> LazyPlan | None:
     """
     Get the plan for setting a column in a dataframe or return None if not supported.
@@ -713,4 +710,9 @@ def _get_set_column_plan(
         df_plan,
         tuple(exprs),
     )
+    # Set plan metadata
+    new_metadata = df_plan.out_schema.copy()
+    new_metadata[key] = value_plan.out_schema.copy()
+    new_plan.out_schema = new_metadata
+    new_plan.output_func = cpp_table_to_df
     return new_plan
