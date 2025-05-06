@@ -726,7 +726,7 @@ def _add_proj_expr_to_plan(
 
     # Get the function expression from the value plan to be added
     func_expr = value_plan.args[1][0]
-    if func_expr.plan_type != "PythonScalarFuncExpression":
+    if func_expr.plan_class != "PythonScalarFuncExpression":
         return None
     func_expr = (
         update_func_expr_source(func_expr, df_plan, ikey)
