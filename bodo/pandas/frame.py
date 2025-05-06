@@ -19,6 +19,7 @@ from bodo.pandas.utils import (
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
+    is_single_projection,
     make_col_ref_exprs,
     wrap_plan,
 )
@@ -682,33 +683,74 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self._mgr._disable_collect = original_flag
 
 
-def _get_set_column_plan(
-    df_plan: LazyPlan,
-    value_plan: LazyPlan,
-    key: str,
-) -> LazyPlan | None:
+def update_func_expr_source(
+    func_expr: LazyPlan, new_source_plan: LazyPlan, col_index_offset: int
+):
+    """Update source plan of PythonScalarFuncExpression and add an offset to its
+    input data column index.
     """
-    Get the plan for setting a column in a dataframe or return None if not supported.
+    in_col_ind = func_expr.args[2][0]
+    n_source_cols = len(new_source_plan.out_schema.columns)
+    index_cols = tuple(
+        range(
+            n_source_cols,
+            n_source_cols + get_n_index_arrays(new_source_plan.out_schema.index),
+        )
+    )
+    expr = LazyPlan(
+        "PythonScalarFuncExpression",
+        new_source_plan,
+        func_expr.args[1],
+        (in_col_ind + col_index_offset,) + index_cols,
+    )
+    expr.out_schema = func_expr.out_schema
+    return expr
+
+
+def _add_proj_expr_to_plan(
+    df_plan: LazyPlan, value_plan: LazyPlan, key: str, replace_func_source=False
+):
+    """Add a projection on top of dataframe plan that adds or replaces a column
+    with output expression of value_plan (which is a single expression projection).
     """
-
-    # TODO: add checks
-    # TODO: multi-level projection
-    # TODO: update existing column
-
     # Create column reference expressions for each column in the dataframe.
     in_empty_df = df_plan.out_schema
+
+    # Check if the column already exists in the dataframe
+    if key in in_empty_df.columns:
+        ikey = in_empty_df.columns.get_loc(key)
+        is_replace = True
+    else:
+        ikey = None
+        is_replace = False
+
+    # Get the function expression from the value plan to be added
+    func_expr = value_plan.args[1][0]
+    if func_expr.plan_type != "PythonScalarFuncExpression":
+        return None
+    func_expr = (
+        update_func_expr_source(func_expr, df_plan, ikey)
+        if replace_func_source
+        else func_expr
+    )
+
+    # Get projection expressions
     n_cols = len(in_empty_df.columns)
-    data_cols = make_col_ref_exprs(range(n_cols), df_plan)
+    key_indices = [k for k in range(n_cols) if (not is_replace or k != ikey)]
+    data_cols = make_col_ref_exprs(key_indices, df_plan)
+    if is_replace:
+        data_cols.insert(ikey, func_expr)
+    else:
+        # New column should be at the end of data columns to match Pandas
+        data_cols.append(func_expr)
     index_cols = make_col_ref_exprs(
         range(n_cols, n_cols + get_n_index_arrays(in_empty_df.index)), df_plan
     )
-    # New column should be at the end of data columns to match Pandas
-    exprs = data_cols + [value_plan.args[1][0]] + index_cols
 
     new_plan = LazyPlan(
         "LogicalProjection",
         df_plan,
-        tuple(exprs),
+        tuple(data_cols + index_cols),
     )
     # Set plan metadata
     new_metadata = df_plan.out_schema.copy()
@@ -716,3 +758,29 @@ def _get_set_column_plan(
     new_plan.out_schema = new_metadata
     new_plan.output_func = cpp_table_to_df
     return new_plan
+
+
+def _get_set_column_plan(
+    df_plan: LazyPlan,
+    value_plan: LazyPlan,
+    key: str,
+) -> LazyPlan | None:
+    """
+    Get the plan for setting a column in a dataframe or return None if not supported.
+    TODO: plan example
+    """
+
+    # Handle stacked projections like bdf["b"] = bdf["c"].str.lower().str.strip()
+    if (
+        is_single_projection(value_plan)
+        and value_plan.args[0] != df_plan
+        and (inner_plan := _get_set_column_plan(df_plan, value_plan.args[0], key))
+        is not None
+    ):
+        return _add_proj_expr_to_plan(inner_plan, value_plan, key, True)
+
+    # Check for simple projections like bdf["b"] = bdf["c"].str.lower()
+    if not is_single_projection(value_plan) or value_plan.args[0] != df_plan:
+        return None
+
+    return _add_proj_expr_to_plan(df_plan, value_plan, key)
