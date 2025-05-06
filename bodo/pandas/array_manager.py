@@ -376,7 +376,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         self._del_func = del_func
         self._plan = plan
 
-        if result_id is not None:
+        if result_id is not None or plan is not None:
             # This is the lazy case, we don't have the full data yet
             assert nrows is not None
             assert head is not None
@@ -449,7 +449,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         super().__init__(
             _arrays,
             self._axes,
-            verify_integrity=(verify_integrity if (result_id is None) else False),
+            verify_integrity=(verify_integrity if (result_id is None and plan is None) else False),
         )
 
     @property
