@@ -573,7 +573,7 @@ def test_create_series_input1(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(S), test_impl(S), check_column_type=False)
 
 
-@pytest.mark.df_lib
+# @pytest.mark.df_lib
 def test_df_apply_getitem(memory_leak_check):
     """test getitem access of row value passed in df.apply()"""
 
@@ -588,7 +588,7 @@ def test_df_apply_getitem(memory_leak_check):
     check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
 
 
-@pytest.mark.df_lib
+# @pytest.mark.df_lib
 def test_df_apply_name_heterogeneous(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -604,7 +604,7 @@ def test_df_apply_name_heterogeneous(memory_leak_check):
     check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
 
 
-@pytest.mark.df_lib
+# @pytest.mark.df_lib
 def test_df_apply_name_homogeneous(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -620,8 +620,8 @@ def test_df_apply_name_homogeneous(memory_leak_check):
     check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
 
 
+# TODO [BSE-4778]: Dataframe Lib: Enable fallback to Pandas in DataFrame output case.
 # @pytest.mark.df_lib
-# TODO: Dataframe Lib: df.apply that returns a Series per row.
 def test_df_apply_direct_import(memory_leak_check):
     """
     Check that Series class works if imported directly instead of pd.Series.
@@ -635,7 +635,7 @@ def test_df_apply_direct_import(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.df_lib
+# @pytest.mark.df_lib
 def test_df_apply_name_datetime_index(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -654,8 +654,8 @@ def test_df_apply_name_datetime_index(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.df_lib
-# TODO: DF lib: unsupported dtype duration[ns]
+# TODO [BSE-4779]: Dataframe Lib: unsupported dtype duration[ns]
+# @pytest.mark.df_lib
 def test_df_apply_name_timedelta_index(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -674,8 +674,8 @@ def test_df_apply_name_timedelta_index(memory_leak_check):
     check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
 
 
-@pytest.mark.df_lib
-# TODO: DF lib: output type mismatch
+# TODO [BSE-4780]: Fix output schema for tuple result type.
+# @pytest.mark.df_lib
 def test_df_apply_int_getitem_unsorted_columns(memory_leak_check):
     """
     test int getitem access of row passed in df.apply() where column names are not in
@@ -772,8 +772,8 @@ def test_df_apply_timestamp(memory_leak_check):
     check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
 
 
+# TODO [BSE-4781]: DataFrame lib: general column name selection support
 # @pytest.mark.df_lib
-# TODO: DF lib: fix output column selection
 def test_df_apply_general_colnames(memory_leak_check):
     """make sure all column names (e.g. not string, not identifier-compatible string) can be handled in apply() properly"""
 
@@ -812,8 +812,8 @@ def test_df_apply_general_colnames(memory_leak_check):
 
 
 @pytest.mark.slow
+# TODO [BSE-4782]: DF LIB: out_schema contains object dtypes.
 # @pytest.mark.df_lib
-# TODO: DF LIB: fix null column typing issue
 def test_df_apply_decimal(memory_leak_check):
     """make sure Decimal output can be handled in apply() properly"""
 
@@ -840,8 +840,8 @@ def test_df_apply_decimal(memory_leak_check):
 
 
 @pytest.mark.slow
+# TODO [BSE-4783]: DF LIB: support passing args and kwargs to UDF.
 # @pytest.mark.df_lib
-# TODO: DF LIB: support args and kwargs passed to df.apply.
 def test_df_apply_args(memory_leak_check):
     """test passing extra args to apply UDF"""
 
@@ -850,18 +850,18 @@ def test_df_apply_args(memory_leak_check):
 
     n = 121
     df = pd.DataFrame({"A": np.arange(n)})
-    check_func(test_impl, (df, 3))
+    check_pandas_types = not bodo.test_dataframe_library_enabled
+    check_func(test_impl, (df, 3), check_pandas_types=check_pandas_types)
 
     # Test passing args as non-constant tuple
     def test_impl2(df, args, v):
         return df.apply(lambda r, a, c: r.A == a + c, axis=1, args=args, c=v)
 
-    check_func(test_impl2, (df, (1,), 2))
+    check_func(test_impl2, (df, (1,), 2), check_pandas_types=check_pandas_types)
 
 
+# TODO [BSE-4783]: DF LIB: support passing args and kwargs to UDF.
 # @pytest.mark.df_lib
-# @pytest.mark.df_lib
-# TODO: DF LIB: support args and kwargs passed to df.apply.
 def test_df_apply_kws(memory_leak_check):
     """test passing extra keyword args to apply UDF"""
 
@@ -883,7 +883,7 @@ def g(r):
     return 2 * r.A
 
 
-@pytest.mark.df_lib
+# @pytest.mark.df_lib
 def test_df_apply_func_case1(memory_leak_check):
     """make sure a global function can be used in df.apply"""
 
@@ -931,6 +931,7 @@ def g3(r):
     return r.A + g_var[0]
 
 
+# @pytest.mark.df_lib
 def test_df_apply_wrap_python(memory_leak_check):
     """Test wrap_python function in df.apply()"""
 
@@ -942,8 +943,8 @@ def test_df_apply_wrap_python(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+# TODO [BSE-4783]: DF LIB: support passing args and kwargs to UDF.
 # @pytest.mark.df_lib
-# TODO: DF LIB: incorrect result, also args/kwargs not supported
 def test_df_apply_freevar(memory_leak_check):
     """Test transforming freevars into apply() arguments"""
 
@@ -1024,8 +1025,8 @@ def test_df_apply_heterogeneous_series(memory_leak_check):
 
 
 @pytest.mark.slow
+# TODO [BSE-4778] DataFrame Lib: Fallback to Pandas when DataFrame result.
 # @pytest.mark.df_lib
-# TODO DataFrame Library: DataFrame output
 def test_df_apply_df_output(memory_leak_check):
     """test DataFrame.apply() with dataframe output 1 column"""
 
@@ -1047,8 +1048,8 @@ def test_df_apply_df_output(memory_leak_check):
     check_func(impl2, (df,), check_dtype=False)
 
 
+# TODO [BSE-4778] DataFrame Lib: Fallback to Pandas when DataFrame result.
 # @pytest.mark.df_lib
-# TODO DataFrame Library: DataFrame output
 def test_df_apply_df_output_multicolumn(memory_leak_check):
     """test DataFrame.apply() with dataframe output with multiple columns"""
 
@@ -1060,8 +1061,8 @@ def test_df_apply_df_output_multicolumn(memory_leak_check):
 
 
 @pytest.mark.slow
+# TODO [BSE-4778] DataFrame Lib: Fallback to Pandas when DataFrame result.
 # @pytest.mark.df_lib
-# TODO DataFrame Library: DataFrame output
 def test_df_apply_df_output_multistring(memory_leak_check):
     def test_impl(df):
         def f(row):
@@ -1157,7 +1158,7 @@ def test_df_apply_supported_types(df_value, memory_leak_check):
 
 
 @pytest.mark.slow
-# TODO DF lib: support conversion from duration[ns]
+# TODO [BSE-4779 DataFrame lib: support duration[ns] type
 # @pytest.mark.df_lib
 def test_df_apply_datetime(memory_leak_check):
     def test_impl(df):

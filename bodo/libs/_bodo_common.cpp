@@ -138,8 +138,7 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
             return Bodo_CTypes::TIME;
         case arrow::Type::BOOL:
             return Bodo_CTypes::_BOOL;
-        case arrow::Type::DURATION:
-            return Bodo_CTypes::TIMEDELTA;
+        // TODO Timedelta
         default: {
             // TODO: Construct the type from the id
             throw std::runtime_error("arrow_to_bodo_type");

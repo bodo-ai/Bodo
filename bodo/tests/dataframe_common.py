@@ -43,7 +43,7 @@ df_value_params = [
         ),
         marks=pytest.mark.skipif(
             bodo.test_dataframe_library_enabled,
-            reason="Support conversion from duration[ns].",
+            reason="[BSE-4779/4764] Support conversion from duration[ns], categorical dtypes.",
         ),
         id="categorical_df",
     ),
@@ -57,7 +57,8 @@ df_value_params = [
             ["A", "BA", "", "DD", "C", "e2", "#4", "32", "ec", "#43"],
         ),
         marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled, reason="Fix typing issues with Index."
+            bodo.test_dataframe_library_enabled,
+            reason="[BSE-4782] Fix null-in-schema issue.",
         ),
         id="string_index",
     ),
@@ -72,7 +73,8 @@ df_value_params = [
         marks=[
             pytest.mark.slow,
             pytest.mark.skipif(
-                bodo.test_dataframe_library_enabled, reason="Fix schema issues."
+                bodo.test_dataframe_library_enabled,
+                reason="[BSE-4781] Integer column name support.",
             ),
         ],
         id="uint8_df",
@@ -115,7 +117,7 @@ df_value_params = [
             pytest.mark.slow,
             pytest.mark.skipif(
                 bodo.test_dataframe_library_enabled,
-                reason="Fix index col typing issues.",
+                reason="[BSE-4782] Fix null-in-schema issue.",
             ),
         ],
         id="string_index",
@@ -160,7 +162,7 @@ df_value_params = [
             pytest.mark.slow,
             pytest.mark.skipif(
                 bodo.test_dataframe_library_enabled,
-                reason="Fix null in schema issue when binary column",
+                reason="[BSE-4782] Fix null-in-schema issue.",
             ),
         ],
     ),
