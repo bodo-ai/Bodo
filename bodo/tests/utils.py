@@ -233,7 +233,7 @@ def check_func(
     # If dataframe_library_enabled then run compiler tests as df library tests
     # (replaces import pandas as pd with import bodo.pandas as pd)
     # NOTE: This variable takes precedence over other variables
-    only_df_lib = bodo.dataframe_library_enabled
+    only_df_lib = bodo.test_dataframe_library_enabled
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
@@ -392,6 +392,27 @@ def check_func(
                 )
                 bodo_funcs["seq-strlit"] = bodo_func
 
+        if run_df_lib:
+            bodo_func = check_func_df_lib(
+                func,
+                args,
+                py_output,
+                copy_input,
+                sort_output,
+                check_names,
+                check_dtype,
+                reset_index,
+                convert_columns_to_pandas,
+                set_columns_name_to_none,
+                reorder_columns,
+                n_pes,
+                check_categorical,
+                atol,
+                rtol,
+                check_pandas_types,
+            )
+            bodo_funcs["df_lib"] = bodo_func
+
         # distributed test is not needed
         if not dist_test:
             return bodo_funcs
@@ -491,26 +512,6 @@ def check_func(
                 check_pandas_types,
             )
             bodo_funcs["spawn"] = bodo_func
-        if run_df_lib:
-            bodo_func = check_func_df_lib(
-                func,
-                args,
-                py_output,
-                copy_input,
-                sort_output,
-                check_names,
-                check_dtype,
-                reset_index,
-                convert_columns_to_pandas,
-                set_columns_name_to_none,
-                reorder_columns,
-                n_pes,
-                check_categorical,
-                atol,
-                rtol,
-                check_pandas_types,
-            )
-            bodo_funcs["df_lib"] = bodo_func
     finally:
         set_config(
             "bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD", saved_TABLE_FORMAT_THRESHOLD
@@ -3208,6 +3209,12 @@ pytest_mark_spawn_mode = compose_decos(spawn_mode_markers)
 
 # This is for using a "mark" or marking a whole file.
 pytest_spawn_mode = list(spawn_mode_markers)
+
+# Decorator for skipping individual tests within a file marked as DataFrame Library
+# tests.
+pytest_mark_not_df_lib = pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled, reason="Test requires compiler."
+)
 
 
 # Flag to ignore the mass slowing of tests unless specific files are changed

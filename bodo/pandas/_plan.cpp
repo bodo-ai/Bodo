@@ -252,7 +252,7 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
 
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args) {
+    PyObject *args, const std::vector<int> &selected_columns) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
@@ -269,12 +269,12 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoPythonScalarFunctionData>(args);
 
-    // Add all input columns as UDF inputs
+    // Add UDF input expressions for selected columns
     std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
-    for (size_t i = 0; i < source->types.size(); ++i) {
+    for (int col_idx : selected_columns) {
         auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            source->types[i],
-            duckdb::ColumnBinding(get_operator_table_index(source), i));
+            source->types[col_idx],
+            duckdb::ColumnBinding(get_operator_table_index(source), col_idx));
         udf_in_exprs.emplace_back(std::move(expr));
     }
 
@@ -379,9 +379,18 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
 
     duckdb::virtual_column_map_t virtual_columns;
 
-    return duckdb::make_uniq<duckdb::LogicalGet>(
+    auto out_get = duckdb::make_uniq<duckdb::LogicalGet>(
         binder->GenerateTableIndex(), table_function, std::move(bind_data1),
         return_types, return_names, virtual_columns);
+
+    // Column ids need to be added separately.
+    // DuckDB column id initialization example:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
+    for (size_t i = 0; i < return_names.size(); i++) {
+        out_get->AddColumnId(i);
+    }
+
+    return out_get;
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
@@ -396,11 +405,18 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
 
-    duckdb::virtual_column_map_t virtual_columns;
-
-    return duckdb::make_uniq<duckdb::LogicalGet>(
+    auto out_get = duckdb::make_uniq<duckdb::LogicalGet>(
         binder->GenerateTableIndex(), table_function, std::move(bind_data1),
-        return_types, return_names, virtual_columns);
+        return_types, return_names);
+
+    // Column ids need to be added separately.
+    // DuckDB column id initialization example:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
+    for (size_t i = 0; i < return_names.size(); i++) {
+        out_get->AddColumnId(i);
+    }
+
+    return out_get;
 }
 
 duckdb::ClientContext &get_duckdb_context() {
@@ -525,6 +541,14 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::LIST(child_type);
             break;
         }
+        case arrow::Type::LARGE_LIST: {
+            auto list_type =
+                std::static_pointer_cast<arrow::LargeListType>(arrow_type);
+            auto [name, child_type] =
+                arrow_field_to_duckdb(list_type->value_field());
+            duckdb_type = duckdb::LogicalType::LIST(child_type);
+            break;
+        }
         case arrow::Type::STRUCT: {
             duckdb::child_list_t<duckdb::LogicalType> children;
             for (std::shared_ptr<arrow::Field> field : arrow_type->fields()) {
@@ -608,14 +632,14 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
     Py_DECREF(modules_dict);
     Py_DECREF(sys_module);
 
-    return std::make_shared<PhysicalReadPandas>(df);
+    return std::make_shared<PhysicalReadPandas>(df, selected_columns);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
-    return std::make_shared<PhysicalReadPandas>(df);
+    return std::make_shared<PhysicalReadPandas>(df, selected_columns);
 }
 
 std::shared_ptr<PhysicalSource>
