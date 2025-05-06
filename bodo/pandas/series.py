@@ -226,6 +226,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Get the first n rows of the series. If head_s is present and n < len(head_s) we call head on head_s.
         Otherwise we use the data fetched from the workers.
         """
+        if n == 0 and self._head_s is not None:
+            return pd.Series(index=self._head_s.index, dtype=self._head_s.dtype)
+
         if (self._head_s is None) or (n > self._head_s.shape[0]):
             if self._exec_state == ExecState.PLAN:
                 from bodo.pandas.base import _empty_like
