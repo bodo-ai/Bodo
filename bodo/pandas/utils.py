@@ -435,7 +435,7 @@ def cast_table_ptr_to_int64(typingctx, val):
     return numba.core.types.int64(table_type), codegen
 
 
-def _get_n_index_arrays(index):
+def get_n_index_arrays(index):
     """Get the number of arrays that can hold the Index data in a table."""
     if isinstance(index, pd.RangeIndex):
         return 0
@@ -454,7 +454,7 @@ def df_to_cpp_table(df):
     from bodo.ext import plan_optimizer
 
     n_table_cols = len(df.columns)
-    n_index_arrs = _get_n_index_arrays(df.index)
+    n_index_arrs = get_n_index_arrays(df.index)
     n_all_cols = n_table_cols + n_index_arrs
     in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_all_cols)))
 
@@ -608,6 +608,23 @@ def get_proj_expr_single(proj: LazyPlan):
         and len(proj.args[1]) == 1
     ), "get_proj_expr_single: LogicalProjection with a single expr expected"
     return proj.args[1][0]
+
+
+def make_col_ref_exprs(key_indices, src_plan):
+    """Create column reference expressions for the given key indices for the input
+    source plan.
+    """
+    pa_schema = pa.Schema.from_pandas(src_plan.out_schema)
+    exprs = []
+    for k in key_indices:
+        p = LazyPlan("ColRefExpression", src_plan, k)
+        # Using Arrow schema instead of zero_size_self.iloc to handle Index
+        # columns correctly.
+        schema = arrow_to_empty_df(pa.schema([pa_schema[k]]))
+        p.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
+        exprs.append(p)
+
+    return exprs
 
 
 def _is_generated_index_name(name):
