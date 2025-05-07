@@ -1,5 +1,6 @@
 import typing as pt
 from collections.abc import Callable, Iterable
+from contextlib import contextmanager
 
 import pandas as pd
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
@@ -14,9 +15,11 @@ from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
+    cpp_table_to_df,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
+    is_single_projection,
     make_col_ref_exprs,
     wrap_plan,
 )
@@ -566,6 +569,38 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 ),
             )
 
+    @check_args_fallback("none")
+    def __setitem__(self, key, value) -> None:
+        """Supports setting columns (df[key] = value) when value is a Series created
+        from the same dataframe.
+        This is done by creating a new plan that add the new
+        column in the existing dataframe plan using a projection.
+        """
+
+        # Match cases like df["B"] = df["A"].str.lower()
+        if (
+            self.is_lazy_plan()
+            and isinstance(key, str)
+            and isinstance(value, BodoSeries)
+            and value.is_lazy_plan()
+        ):
+            if (
+                new_plan := _get_set_column_plan(self._plan, value._plan, key)
+            ) is not None:
+                # Update internal state
+                self.plan = new_plan
+                self._mgr._plan = new_plan
+                head_val = value._head_s
+                self._head_df[key] = head_val
+                with self.disable_collect():
+                    # Update internal data manager (e.g. insert a new block or update an
+                    # existing one). See:
+                    # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
+                    super().__setitem__(key, head_val)
+                return
+
+        return super().__setitem__(key, value)
+
     @check_args_fallback(supported=["func", "axis"])
     def apply(
         self,
@@ -637,3 +672,149 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             (udf_arg,) + index_col_refs,
         )
         return wrap_plan(empty_series, plan=plan)
+
+    @contextmanager
+    def disable_collect(self):
+        """Disable collect calls in internal manager to allow updating internal state.
+        See __setitem__.
+        """
+        original_flag = self._mgr._disable_collect
+        self._mgr._disable_collect = True
+        try:
+            yield
+        finally:
+            self._mgr._disable_collect = original_flag
+
+
+def _update_func_expr_source(
+    func_expr: LazyPlan, new_source_plan: LazyPlan, col_index_offset: int
+):
+    """Update source plan of PythonScalarFuncExpression and add an offset to its
+    input data column index.
+    """
+    # Previous input data column index
+    in_col_ind = func_expr.args[2][0]
+    n_source_cols = len(new_source_plan.out_schema.columns)
+    # Add Index columns of the new source plan as input
+    index_cols = tuple(
+        range(
+            n_source_cols,
+            n_source_cols + get_n_index_arrays(new_source_plan.out_schema.index),
+        )
+    )
+    expr = LazyPlan(
+        "PythonScalarFuncExpression",
+        new_source_plan,
+        func_expr.args[1],
+        (in_col_ind + col_index_offset,) + index_cols,
+    )
+    expr.out_schema = func_expr.out_schema
+    return expr
+
+
+def _add_proj_expr_to_plan(
+    df_plan: LazyPlan, value_plan: LazyPlan, key: str, replace_func_source=False
+):
+    """Add a projection on top of dataframe plan that adds or replaces a column
+    with output expression of value_plan (which is a single expression projection).
+    """
+    # Create column reference expressions for each column in the dataframe.
+    in_empty_df = df_plan.out_schema
+
+    # Check if the column already exists in the dataframe
+    if key in in_empty_df.columns:
+        ikey = in_empty_df.columns.get_loc(key)
+        is_replace = True
+    else:
+        ikey = None
+        is_replace = False
+
+    # Get the function expression from the value plan to be added
+    func_expr = value_plan.args[1][0]
+    if func_expr.plan_class != "PythonScalarFuncExpression":
+        return None
+    func_expr = (
+        _update_func_expr_source(func_expr, df_plan, ikey)
+        if replace_func_source
+        else func_expr
+    )
+
+    # Get projection expressions
+    n_cols = len(in_empty_df.columns)
+    key_indices = [k for k in range(n_cols) if (not is_replace or k != ikey)]
+    data_cols = make_col_ref_exprs(key_indices, df_plan)
+    if is_replace:
+        data_cols.insert(ikey, func_expr)
+    else:
+        # New column should be at the end of data columns to match Pandas
+        data_cols.append(func_expr)
+    index_cols = make_col_ref_exprs(
+        range(n_cols, n_cols + get_n_index_arrays(in_empty_df.index)), df_plan
+    )
+
+    new_plan = LazyPlan(
+        "LogicalProjection",
+        df_plan,
+        tuple(data_cols + index_cols),
+    )
+    # Set plan metadata
+    new_metadata = df_plan.out_schema.copy()
+    new_metadata[key] = value_plan.out_schema.copy()
+    new_plan.out_schema = new_metadata
+    new_plan.output_func = cpp_table_to_df
+    return new_plan
+
+
+def _get_set_column_plan(
+    df_plan: LazyPlan,
+    value_plan: LazyPlan,
+    key: str,
+) -> LazyPlan | None:
+    """
+    Get the plan for setting a column in a dataframe or return None if not supported.
+    Creates a projection on top of the dataframe plan that adds original data columns as
+    well as the column from the value plan to be set.
+    For example, if the df schema is (a, b, c, I) where I is the index column and the
+    code is df["D"] = df["b"].str.lower(), then the value plan is:
+    ┌───────────────────────────┐
+    │         PROJECTION        │
+    │    ────────────────────   │
+    │        Expressions:       │
+    │ "bodo_udf"(#[0.1], #[0.3])│
+    │           #[0.3]          │
+    └─────────────┬─────────────┘
+    ┌─────────────┴─────────────┐
+    │        BODO_READ_DF       │
+    │    ────────────────────   │
+    └───────────────────────────┘
+    and the new dataframe plan with new column added is:
+    ┌───────────────────────────┐
+    │         PROJECTION        │
+    │    ────────────────────   │
+    │        Expressions:       │
+    │           #[0.0]          │
+    │           #[0.1]          │
+    │           #[0.2]          │
+    │ "bodo_udf"(#[0.1], #[0.3])│
+    │           #[0.3]          │
+    └─────────────┬─────────────┘
+    ┌─────────────┴─────────────┐
+    │        BODO_READ_DF       │
+    │    ────────────────────   │
+    └───────────────────────────┘
+    """
+
+    # Handle stacked projections like bdf["b"] = bdf["c"].str.lower().str.strip()
+    if (
+        is_single_projection(value_plan)
+        and value_plan.args[0] != df_plan
+        and (inner_plan := _get_set_column_plan(df_plan, value_plan.args[0], key))
+        is not None
+    ):
+        return _add_proj_expr_to_plan(inner_plan, value_plan, key, True)
+
+    # Check for simple projections like bdf["b"] = bdf["c"].str.lower()
+    if not is_single_projection(value_plan) or value_plan.args[0] != df_plan:
+        return None
+
+    return _add_proj_expr_to_plan(df_plan, value_plan, key)

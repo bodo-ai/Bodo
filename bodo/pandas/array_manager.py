@@ -156,6 +156,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             self._axes,
             verify_integrity=(verify_integrity if (result_id is None) else False),
         )
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        self._disable_collect = False
 
     @property
     def is_single_block(self) -> bool:
@@ -263,6 +266,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         If we have a plan, execute it and replace the blocks with the result.
         If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
         if self._plan is not None:
             debug_msg(
                 self.logger, "[LazyArrayManager] Executing Plan and collecting data..."
@@ -298,6 +304,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             "logger",
             "_collect_func",
             "_del_func",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
         # If the attribute is 'arrays', we ensure we have the data.
@@ -451,6 +458,9 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             self._axes,
             verify_integrity=(verify_integrity if (result_id is None) else False),
         )
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        self._disable_collect = False
 
     @property
     def dtype(self):
@@ -491,6 +501,9 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         If we have a plan, execute it and replace the blocks with the result.
         If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
         if self._plan is not None:
             debug_msg(
                 self.logger,
@@ -572,6 +585,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             "logger",
             "_collect_func",
             "_del_func",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
         # If the attribute is 'arrays', we ensure we have the data.

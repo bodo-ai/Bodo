@@ -165,6 +165,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             if (result_id is None and plan is None)
             else False,
         )
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        self._disable_collect = False
         if result_id is not None:
             # Set pandas internal metadata
             self._rebuild_blknos_and_blklocs_lazy()
@@ -230,6 +233,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         If we have a plan, execute it and replace the blocks with the result.
         If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
         # Execute the plan if we have one
         if self._plan is not None:
             debug_msg(
@@ -268,6 +274,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             "_del_func",
             "_plan",
             "execute_plan",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
         # Most of the time _rebuild_blknos_and_blklocs is called by pandas internals
@@ -400,6 +407,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             axis_,
             verify_integrity=verify_integrity if (result_id is None) else False,
         )
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        self._disable_collect = False
 
     def get_dtypes(self) -> np.typing.NDArray[np.object_]:
         """
@@ -471,6 +481,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         If we have a plan, execute it and replace the blocks with the result.
         If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
         # Execute the plan if we have one
         if self._plan is not None:
             debug_msg(
@@ -511,6 +524,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "_del_func",
             "_plan",
             "execute_plan",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
         if name == "blocks":
