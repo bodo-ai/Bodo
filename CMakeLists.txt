@@ -29,11 +29,9 @@ find_program(CCACHE_EXECUTABLE "ccache")
 find_program(SCCACHE_EXECUTABLE "sccache")
 
 if ((NOT DEFINED ENV{DISABLE_CCACHE}) AND CCACHE_EXECUTABLE)
-  set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
-  set(CMAKE_C_COMPILER_LAUNCHER ccache)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 elseif ((NOT DEFINED ENV{DISABLE_SCCACHE}) AND SCCACHE_EXECUTABLE)
-  set(CMAKE_CXX_COMPILER_LAUNCHER sccache)
-  set(CMAKE_C_COMPILER_LAUNCHER sccache)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE sccache)
 endif()
 
 # ---------------------------- Enable C++ Linting ----------------------------
