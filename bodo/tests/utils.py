@@ -392,6 +392,7 @@ def check_func(
                 )
                 bodo_funcs["seq-strlit"] = bodo_func
 
+        # TODO [BSE-4787] Fix schema issues and reenable use_dict_encoded_strings case.
         if run_df_lib and not use_dict_encoded_strings:
             bodo_func = check_func_df_lib(
                 func,

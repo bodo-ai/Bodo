@@ -471,6 +471,10 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::VARCHAR;
             break;
         }
+        case arrow::Type::BINARY: {
+            duckdb_type = duckdb::LogicalType::BLOB;
+            break;
+        }
         case arrow::Type::UINT8: {
             duckdb_type = duckdb::LogicalType::UTINYINT;
             break;

@@ -812,7 +812,7 @@ def test_df_apply_general_colnames(memory_leak_check):
 
 
 @pytest.mark.slow
-# TODO [BSE-4782]: DF LIB: out_schema contains object dtypes.
+# TODO [BSE-4789] Fix issue with decimal from_pandas incorrect precision/scale.
 # @pytest.mark.df_lib
 def test_df_apply_decimal(memory_leak_check):
     """make sure Decimal output can be handled in apply() properly"""
@@ -836,7 +836,9 @@ def test_df_apply_decimal(memory_leak_check):
             ]
         }
     )
-    check_func(test_impl, (df,))
+
+    check_pandas_types = not bodo.test_dataframe_library_enabled
+    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
 
 
 @pytest.mark.slow

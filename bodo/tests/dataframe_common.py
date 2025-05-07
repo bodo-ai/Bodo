@@ -56,10 +56,10 @@ df_value_params = [
             },
             ["A", "BA", "", "DD", "C", "e2", "#4", "32", "ec", "#43"],
         ),
-        marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled,
-            reason="[BSE-4782] Fix null-in-schema issue.",
-        ),
+        # marks=pytest.mark.skipif(
+        #     bodo.test_dataframe_library_enabled,
+        #     reason="[BSE-4782] Fix null-in-schema issue.",
+        # ),
         id="string_index",
     ),
     # uint8, float32 dtypes
@@ -115,10 +115,10 @@ df_value_params = [
         pd.DataFrame({"A": [1, 2, 3, -1, 4]}, ["A", "BA", "", "DD", "C"]),
         marks=[
             pytest.mark.slow,
-            pytest.mark.skipif(
-                bodo.test_dataframe_library_enabled,
-                reason="[BSE-4782] Fix null-in-schema issue.",
-            ),
+            # pytest.mark.skipif(
+            #     bodo.test_dataframe_library_enabled,
+            #     reason="[BSE-4782] Fix null-in-schema issue.",
+            # ),
         ],
         id="string_index",
     ),
@@ -160,10 +160,10 @@ df_value_params = [
         id="binary_df",
         marks=[
             pytest.mark.slow,
-            pytest.mark.skipif(
-                bodo.test_dataframe_library_enabled,
-                reason="[BSE-4782] Fix null-in-schema issue.",
-            ),
+            # pytest.mark.skipif(
+            #     bodo.test_dataframe_library_enabled,
+            #     reason="[BSE-4782] Fix null-in-schema issue.",
+            # ),
         ],
     ),
 ]

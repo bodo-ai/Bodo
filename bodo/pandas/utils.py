@@ -528,6 +528,8 @@ def run_func_on_table(cpp_table, arrow_schema, in_args):
         out = func(input, *args, **kwargs)
 
     out_df = pd.DataFrame({"OUT": out})
+
+    # TODO [BSE-4788]: replace with convert_to_arrow_dtypes util
     out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
     return df_to_cpp_table(out_df)
 

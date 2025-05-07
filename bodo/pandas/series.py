@@ -11,6 +11,7 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
     LazyPlan,
+    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_single_manager_class,
     get_n_index_arrays,
@@ -282,11 +283,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(out_sample, pd.Series), (
             f"BodoSeries.map(), expected output to be Series, got: {type(out_sample)}."
         )
-        out_sample = out_sample.convert_dtypes(dtype_backend="pyarrow")
 
-        return _get_series_python_func_plan(
-            self._plan, out_sample.head(0), "map", (arg,), {}
-        )
+        # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
+        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample.to_frame()))
+        empty_series = empty_df.squeeze()
+        empty_series.name = out_sample.name
+
+        return _get_series_python_func_plan(self._plan, empty_series, "map", (arg,), {})
 
 
 class StringMethods:

@@ -1,4 +1,5 @@
 import pandas as pd
+import pyarrow as pa
 from pandas._libs import lib
 
 from bodo.pandas.frame import BodoDataFrame
@@ -22,7 +23,9 @@ def from_pandas(df):
     # Make sure empty_df has proper dtypes since used in the plan output schema.
     # Using sampling to avoid large memory usage.
     sample_size = 100
-    empty_df = df.iloc[:sample_size].convert_dtypes(dtype_backend="pyarrow").iloc[:0]
+
+    # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
+    empty_df = arrow_to_empty_df(pa.Schema.from_pandas(df.iloc[:sample_size]))
     n_rows = len(df)
 
     res_id = None
