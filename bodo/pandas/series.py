@@ -110,6 +110,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         plan = LazyPlan(
             "LogicalProjection",
+            empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
