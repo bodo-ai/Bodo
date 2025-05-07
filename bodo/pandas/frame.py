@@ -143,9 +143,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # data is never required for head(0) so making a plan is never necessary.
         if n == 0:
             if self._exec_state == ExecState.COLLECTED:
-                return pd.DataFrame(
-                    index=self.index, columns=self.columns
-                ).astype(dict(zip(self.columns, self.dtypes)))
+                return pd.DataFrame(index=self.index, columns=self.columns).astype(
+                    dict(zip(self.columns, self.dtypes))
+                )
             else:
                 assert self._head_df is not None
                 return pd.DataFrame(
