@@ -14,6 +14,8 @@ from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 from bodo.utils.typing import check_unsupported_args_fallback
 
+BODO_NONE_DUMMY = "_bodo_none_dummy_"
+
 
 def get_data_manager_pandas() -> str:
     """Get the value of mode.data_manager from pandas config.
@@ -316,7 +318,12 @@ class LazyPlan:
         self.args = args
         self.kwargs = kwargs
         self.is_series = isinstance(empty_data, pd.Series)
-        self.empty_data = empty_data.to_frame() if self.is_series else empty_data
+        self.empty_data = empty_data
+        if self.is_series:
+            # None name doesn't round-trip to dataframe correctly so we use a dummy name
+            # that is replaced with None in wrap_plan
+            name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
+            self.empty_data = empty_data.to_frame(name=name)
 
     def __str__(self):
         out = f"{self.plan_class}: \n"
@@ -581,9 +588,13 @@ def wrap_plan(plan, res_id=None, nrows=None):
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
     else:
+        empty_data = plan.empty_data.squeeze()
+        # Replace the dummy name with None set in LazyPlan constructor
+        if empty_data.name == BODO_NONE_DUMMY:
+            empty_data.name = None
         metadata = LazyMetadata(
             res_id,
-            plan.empty_data.iloc[:, 0],
+            empty_data,
             nrows=nrows,
             index_data=index_data,
         )
