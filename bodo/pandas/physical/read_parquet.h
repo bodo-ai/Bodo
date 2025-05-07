@@ -3,7 +3,6 @@
 #include <Python.h>
 #include <arrow/compute/api.h>
 #include <arrow/python/pyarrow.h>
-#include <pytypedefs.h>
 #include <memory>
 #include <utility>
 #include "../io/arrow_compat.h"
