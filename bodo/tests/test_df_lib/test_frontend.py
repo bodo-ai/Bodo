@@ -2,9 +2,12 @@
 Tests dataframe library frontend (no triggering of execution).
 """
 
+import pytest
+
 import bodo.pandas as pd
 
 
+@pytest.mark.skip("disabled for release until merge is implemented")
 def test_read_join_filter_proj(datapath):
     df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))

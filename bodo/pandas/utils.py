@@ -142,7 +142,12 @@ def get_overloads(cls_name):
 
 
 def check_args_fallback(
-    unsupported=None, supported=None, package_name="pandas", fn_str=None, module_name=""
+    unsupported=None,
+    supported=None,
+    package_name="pandas",
+    fn_str=None,
+    module_name="",
+    disable=False,
 ):
     """Decorator to apply to dataframe or series member functions that handles
     argument checking, falling back to JIT compilation when it might work, and
@@ -166,6 +171,8 @@ def check_args_fallback(
         package_name - see bodo.utils.typing.check_unsupported_args_fallback
         fn_str - see bodo.utils.typing.check_unsupported_args_fallback
         module_name - see bodo.utils.typing.check_unsupported_args_fallback
+        disable - if True, falls back immediately to the Pandas implementation (used
+                in frontend methods that are not fully implemented yet)
     """
     assert (unsupported is None) ^ (supported is None), (
         "Exactly one of unsupported and supported must be specified."
@@ -175,7 +182,7 @@ def check_args_fallback(
         # See if function is top-level or not by looking for a . in
         # the full name.
         toplevel = "." not in func.__qualname__
-        if not bodo.dataframe_library_enabled:
+        if not bodo.dataframe_library_enabled or disable:
             # Dataframe library not enabled so just call the Pandas super class version.
             if toplevel:
                 py_pkg = importlib.import_module(package_name)
