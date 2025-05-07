@@ -291,7 +291,6 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
     assert df.dtypes.equals(pd.Series(["Int64", "string[python]"], index=["A0", "B5"]))
 
     assert base_df.head(5).equals(df.head(5))
-    )
 
     agg_df = df.groupby("A0").size()
     assert agg_df.equals(
