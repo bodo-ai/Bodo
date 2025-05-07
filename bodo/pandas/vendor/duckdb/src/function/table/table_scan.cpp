@@ -734,6 +734,8 @@ TableFunction TableScanFunction::GetFunction() {
 	scan_function.filter_pushdown = true;
 	scan_function.filter_prune = true;
 	scan_function.sampling_pushdown = true;
+    // Bodo Change: limit_pushdown to data source not previously supported by DuckDB
+	scan_function.limit_pushdown = true;
 	scan_function.late_materialization = true;
 	scan_function.serialize = TableScanSerialize;
 	scan_function.deserialize = TableScanDeserialize;

@@ -21,6 +21,8 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalProjection& op);
     void Visit(duckdb::LogicalFilter& op);
     void Visit(duckdb::LogicalComparisonJoin& op);
+    void Visit(duckdb::LogicalLimit& op);
+    void Visit(duckdb::LogicalSample& op);
 
     void Visit(duckdb::LogicalOperator& op) {
         if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
@@ -32,8 +34,13 @@ class PhysicalPlanBuilder {
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
             Visit(op.Cast<duckdb::LogicalComparisonJoin>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_LIMIT) {
+            Visit(op.Cast<duckdb::LogicalLimit>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_SAMPLE) {
+            Visit(op.Cast<duckdb::LogicalSample>());
         } else {
-            throw std::runtime_error("Unsupported logical operator type");
+            throw std::runtime_error("Unsupported logical operator type " +
+                                     std::to_string(static_cast<int>(op.type)));
         }
     }
 };

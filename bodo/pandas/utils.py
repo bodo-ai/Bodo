@@ -610,6 +610,22 @@ def get_proj_expr_single(proj: LazyPlan):
     return proj.args[1][0]
 
 
+def is_single_projection(proj: LazyPlan):
+    """Return True if plan is a projection with a single expression"""
+    return (
+        isinstance(proj, LazyPlan)
+        and proj.plan_class == "LogicalProjection"
+        and len(proj.args[1]) == (get_n_index_arrays(proj.out_schema.index) + 1)
+    )
+
+
+def is_single_colref_projection(proj: LazyPlan):
+    """Return True if plan is a projection with a single expression that is a column reference"""
+    return (
+        is_single_projection(proj) and proj.args[1][0].plan_class == "ColRefExpression"
+    )
+
+
 def make_col_ref_exprs(key_indices, src_plan):
     """Create column reference expressions for the given key indices for the input
     source plan.
