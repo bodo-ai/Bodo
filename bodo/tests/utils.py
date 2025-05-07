@@ -958,6 +958,8 @@ def _convert_to_bodo_arg(arg):
     if isinstance(arg, pd.DataFrame):
         return bodo_pd.from_pandas(arg)
 
+    return arg
+
 
 def check_func_df_lib(
     func,
