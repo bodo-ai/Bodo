@@ -479,6 +479,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         from bodo.pandas.utils import execute_plan
 
         data = execute_plan(self._plan)
+
         if isinstance(data, BodoLazyWrapper):
             # We got a lazy result, we need to take ownership of the result
             # and transfer ownership of the data to this manager
