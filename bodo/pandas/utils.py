@@ -172,14 +172,6 @@ def check_args_fallback(
     )
 
     def decorator(func):
-        def to_bodo(val):
-            if isinstance(val, pd.DataFrame):
-                return bodo.pandas.DataFrame(val)
-            elif isinstance(val, pd.Series):
-                return bodo.pandas.Series(val)
-            else:
-                assert False, f"Unexpected val type {type(val)}"
-
         # See if function is top-level or not by looking for a . in
         # the full name.
         toplevel = "." not in func.__qualname__
@@ -191,16 +183,14 @@ def check_args_fallback(
                 @functools.wraps(func)
                 def wrapper(*args, **kwargs):
                     # Call the same method in the base class.
-                    return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
+                    return getattr(py_pkg, func.__name__)(*args, **kwargs)
             else:
 
                 @functools.wraps(func)
                 def wrapper(self, *args, **kwargs):
                     # Call the same method in the base class.
-                    return to_bodo(
-                        getattr(self.__class__.__bases__[0], func.__name__)(
-                            self, *args, **kwargs
-                        )
+                    return getattr(self.__class__.__bases__[0], func.__name__)(
+                        self, *args, **kwargs
                     )
         else:
             signature = inspect.signature(func)
@@ -259,7 +249,7 @@ def check_args_fallback(
                         # Can we do a top-level override check?
 
                         # Fallback to Python. Call the same method in the base class.
-                        return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
+                        return getattr(py_pkg, func.__name__)(*args, **kwargs)
                     else:
                         result = func(*args, **kwargs)
                     return result
@@ -292,10 +282,8 @@ def check_args_fallback(
                             pass
 
                         # Fallback to Python. Call the same method in the base class.
-                        return to_bodo(
-                            getattr(self.__class__.__bases__[0], func.__name__)(
-                                self, *args, **kwargs
-                            )
+                        return getattr(self.__class__.__bases__[0], func.__name__)(
+                            self, *args, **kwargs
                         )
                     else:
                         result = func(self, *args, **kwargs)
