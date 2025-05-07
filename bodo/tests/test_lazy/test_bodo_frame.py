@@ -11,7 +11,6 @@ from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 from bodo.tests.utils import (
     _gather_output,
-    _test_equal,
     pytest_mark_spawn_mode,
 )
 from bodo.utils.testing import ensure_clean2
