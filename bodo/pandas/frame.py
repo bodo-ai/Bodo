@@ -128,7 +128,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return getattr(self._mgr, "_plan", None) is not None
 
     def execute_plan(self):
-        if self.is_lazy_plan():
+        if self.is_lazy_plan() and not self._mgr._disable_collect:
             return self._mgr.execute_plan()
 
     def head(self, n: int = 5):
