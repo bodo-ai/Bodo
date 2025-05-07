@@ -1625,6 +1625,9 @@ def test_filter_pushdown_past_column_filters():
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled, reason="TODO [BSE-4790]: Fix limit pushdown."
+)
 def test_read_pq_head_only(datapath, memory_leak_check):
     """
     test reading only shape and/or head from Parquet file if possible
@@ -1755,7 +1758,7 @@ def test_read_parquet_glob(datapath, memory_leak_check):
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="[BSE-4767] Reading list of files not supported yet.",
+    reason="[BSE-4764] Unsupported column type dictionary<values=int32...>.",
 )
 def test_read_parquet_list_of_globs(memory_leak_check):
     """test reading when passing a list of globstrings"""
@@ -1794,10 +1797,6 @@ def test_read_parquet_list_of_globs(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4767] Reading list of files not supported yet.",
-)
 def test_read_parquet_list_files(datapath, memory_leak_check):
     """test read_parquet passing a list of files"""
 

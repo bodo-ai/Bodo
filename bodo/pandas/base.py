@@ -65,7 +65,7 @@ def read_parquet(
 
     empty_df = arrow_to_empty_df(arrow_schema)
 
-    plan = LazyPlan("LogicalGetParquetRead", empty_df, path.encode(), storage_options)
+    plan = LazyPlan("LogicalGetParquetRead", empty_df, path, storage_options)
     return wrap_plan(plan=plan)
 
 
