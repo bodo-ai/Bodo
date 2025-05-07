@@ -316,7 +316,6 @@ class LazyPlan:
         self.args = args
         self.kwargs = kwargs
         self.is_series = isinstance(empty_data, pd.Series)
-        self.output_func = cpp_table_to_series if self.is_series else cpp_table_to_df
         self.empty_data = empty_data.to_frame() if self.is_series else empty_data
 
     def __str__(self):
@@ -396,8 +395,10 @@ def execute_plan(plan: LazyPlan):
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)
+
+        output_func = cpp_table_to_series if plan.is_series else cpp_table_to_df
         return plan_optimizer.py_execute_plan(
-            optimized_plan, plan.output_func, duckdb_plan.out_schema
+            optimized_plan, output_func, duckdb_plan.out_schema
         )
 
     if bodo.dataframe_library_run_parallel:
