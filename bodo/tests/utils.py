@@ -392,7 +392,6 @@ def check_func(
                 )
                 bodo_funcs["seq-strlit"] = bodo_func
 
-        # TODO: reenable when type issues get resolved
         if run_df_lib and not use_dict_encoded_strings:
             bodo_func = check_func_df_lib(
                 func,
