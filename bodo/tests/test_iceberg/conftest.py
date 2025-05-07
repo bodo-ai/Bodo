@@ -147,7 +147,7 @@ def polaris_package():
     @run_rank0
     def ensure_polaris_client():
         try:
-            subprocess.run(["pip", "show", "polaris.management"], check=True)
+            subprocess.run(["pip", "show", "polaris"], check=True)
         except subprocess.CalledProcessError:
             raise ValueError(
                 "Polaris client is not installed. Please install it manually."
