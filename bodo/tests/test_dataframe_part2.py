@@ -573,7 +573,7 @@ def test_create_series_input1(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(S), test_impl(S), check_column_type=False)
 
 
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_getitem(memory_leak_check):
     """test getitem access of row value passed in df.apply()"""
 
@@ -588,7 +588,7 @@ def test_df_apply_getitem(memory_leak_check):
     check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
 
 
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_name_heterogeneous(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -604,7 +604,7 @@ def test_df_apply_name_heterogeneous(memory_leak_check):
     check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
 
 
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_name_homogeneous(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -635,7 +635,7 @@ def test_df_apply_direct_import(memory_leak_check):
 
 
 @pytest.mark.slow
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_name_datetime_index(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -883,7 +883,7 @@ def g(r):
     return 2 * r.A
 
 
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_func_case1(memory_leak_check):
     """make sure a global function can be used in df.apply"""
 
@@ -931,7 +931,6 @@ def g3(r):
     return r.A + g_var[0]
 
 
-# @pytest.mark.df_lib
 def test_df_apply_wrap_python(memory_leak_check):
     """Test wrap_python function in df.apply()"""
 
