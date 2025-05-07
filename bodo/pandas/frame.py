@@ -13,6 +13,7 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BodoLibNotImplementedException,
     LazyPlan,
     check_args_fallback,
     get_lazy_manager_class,
@@ -534,6 +535,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """Called when df[key] is used."""
 
         from bodo.pandas.base import _empty_like
+
+        # Only selecting single column or filtering with BodoSeries is supported
+        if not isinstance(key, (str, BodoSeries)):
+            raise BodoLibNotImplementedException(
+                "DataFrame.__getitem__: only string and BodoSeries keys are supported"
+            )
 
         """ Create 0 length versions of the dataframe and the key and
             simulate the operation to see the resulting type. """

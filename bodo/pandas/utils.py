@@ -1,6 +1,7 @@
 import functools
 import importlib
 import inspect
+import warnings
 
 import numba
 import pandas as pd
@@ -141,6 +142,18 @@ def get_overloads(cls_name):
         assert False
 
 
+class BodoLibNotImplementedException(Exception):
+    """Exception raised in the Bodo library when a functionality is not implemented yet
+    and we need to fall back to Pandas.
+    """
+
+
+class BodoLibFallbackWarning(Warning):
+    """Warning raised in the Bodo library when a functionality is not implemented yet
+    and we need to fall back to Pandas.
+    """
+
+
 def check_args_fallback(
     unsupported=None,
     supported=None,
@@ -252,14 +265,23 @@ def check_args_fallback(
                         module_name=module_name,
                         raise_on_error=(BODO_PANDAS_FALLBACK == 0),
                     )
-                    if error:
-                        # Can we do a top-level override check?
+                    if not error:
+                        try:
+                            return func(*args, **kwargs)
+                        except BodoLibNotImplementedException:
+                            # Fall back to Pandas below
+                            pass
+                    # Can we do a top-level override check?
 
-                        # Fallback to Python. Call the same method in the base class.
-                        return getattr(py_pkg, func.__name__)(*args, **kwargs)
-                    else:
-                        result = func(*args, **kwargs)
-                    return result
+                    # Fallback to Python. Call the same method in the base class.
+                    warnings.warn(
+                        BodoLibFallbackWarning(
+                            f"{func.__name__} is not "
+                            "implemented in Bodo dataframe library yet. "
+                            "Falling back to Pandas which may be slow or run out of memory."
+                        )
+                    )
+                    return getattr(py_pkg, func.__name__)(*args, **kwargs)
             else:
 
                 @functools.wraps(func)
@@ -277,24 +299,33 @@ def check_args_fallback(
                         module_name=module_name,
                         raise_on_error=(BODO_PANDAS_FALLBACK == 0),
                     )
-                    if error:
-                        # The dataframe library must not support some specified option.
-                        # Get overloaded functions for this dataframe/series in JIT mode.
-                        overloads = get_overloads(self.__class__.__name__)
-                        if func.__name__ in overloads:
-                            # TO-DO: Generate a function and bodo JIT it to do this
-                            # individual operation.  If the compile fails then fallthrough
-                            # to the pure Python code below.  If the compile works then
-                            # run the operation using the JITted function.
+                    if not error:
+                        try:
+                            return func(self, *args, **kwargs)
+                        except BodoLibNotImplementedException:
+                            # Fall back to Pandas below
                             pass
 
-                        # Fallback to Python. Call the same method in the base class.
-                        return getattr(self.__class__.__bases__[0], func.__name__)(
-                            self, *args, **kwargs
+                    # The dataframe library must not support some specified option.
+                    # Get overloaded functions for this dataframe/series in JIT mode.
+                    overloads = get_overloads(self.__class__.__name__)
+                    if func.__name__ in overloads:
+                        # TO-DO: Generate a function and bodo JIT it to do this
+                        # individual operation.  If the compile fails then fallthrough
+                        # to the pure Python code below.  If the compile works then
+                        # run the operation using the JITted function.
+                        pass
+
+                    # Fallback to Python. Call the same method in the base class.
+                    base_class = self.__class__.__bases__[0]
+                    warnings.warn(
+                        BodoLibFallbackWarning(
+                            f"{base_class.__name__}.{func.__name__} is not "
+                            "implemented in Bodo dataframe library yet. "
+                            "Falling back to Pandas which may be slow or run out of memory."
                         )
-                    else:
-                        result = func(self, *args, **kwargs)
-                    return result
+                    )
+                    return getattr(base_class, func.__name__)(self, *args, **kwargs)
 
         return wrapper
 
