@@ -310,7 +310,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         }:
             return object.__getattribute__(self, name)
         # If the attribute is 'arrays', we ensure we have the data.
-        if name == "arrays":
+        if name in {
+            "arrays",
+        }:
             self._collect()
         return ArrayManager.__getattribute__(self, name)
 
