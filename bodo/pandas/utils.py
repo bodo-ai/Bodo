@@ -603,7 +603,6 @@ def wrap_plan(plan, res_id=None, nrows=None):
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
 
-    new_df.plan = plan
     return new_df
 
 

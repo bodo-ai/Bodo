@@ -605,7 +605,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 new_plan := _get_set_column_plan(self._plan, value._plan, key)
             ) is not None:
                 # Update internal state
-                self.plan = new_plan
                 self._mgr._plan = new_plan
                 head_val = value._head_s
                 self._head_df[key] = head_val
