@@ -56,22 +56,22 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             other = other._plan
 
         # Compute schema of new series.
-        new_metadata = zero_size_self._cmp_method(zero_size_other, op)
-        assert isinstance(new_metadata, pd.Series)
+        empty_data = zero_size_self._cmp_method(zero_size_other, op)
+        assert isinstance(empty_data, pd.Series), "_cmp_method: Series expected"
 
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("BinaryOpExpression", lhs, rhs, op)
-        expr.empty_data = new_metadata.to_frame()
+        expr = LazyPlan("BinaryOpExpression", empty_data, lhs, rhs, op)
 
         plan = LazyPlan(
             "LogicalProjection",
+            empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
         )
-        return wrap_plan(new_metadata, plan=plan)
+        return wrap_plan(plan=plan)
 
     def _conjunction_binop(self, other, op):
         """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
@@ -98,16 +98,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             other = other._plan
 
         # Compute schema of new series.
-        new_metadata = getattr(zero_size_self, op)(zero_size_other)
-        assert isinstance(new_metadata, pd.Series), (
-            "_conjunction_binop: new_metadata is not a Series"
+        empty_data = getattr(zero_size_self, op)(zero_size_other)
+        assert isinstance(empty_data, pd.Series), (
+            "_conjunction_binop: empty_data is not a Series"
         )
 
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("ConjunctionOpExpression", lhs, rhs, op)
-        expr.empty_data = new_metadata.to_frame()
+        expr = LazyPlan("ConjunctionOpExpression", empty_data, lhs, rhs, op)
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -115,7 +114,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan.args[0],
             (expr,),
         )
-        return wrap_plan(new_metadata, plan=plan)
+        return wrap_plan(plan=plan)
 
     @check_args_fallback("all")
     def __and__(self, other):
@@ -141,12 +140,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.
-        new_metadata = _empty_like(self)
+        empty_data = _empty_like(self)
 
-        assert isinstance(new_metadata, pd.Series)
+        assert isinstance(empty_data, pd.Series), "Series expected"
         return wrap_plan(
-            new_metadata,
-            plan=LazyPlan("LogicalUnaryOp", self._plan, "__invert__"),
+            plan=LazyPlan("LogicalUnaryOp", empty_data, self._plan, "__invert__"),
         )
 
     @staticmethod
@@ -238,14 +236,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             if self._exec_state == ExecState.PLAN:
                 from bodo.pandas.base import _empty_like
 
-                new_metadata = _empty_like(self)
                 planLimit = LazyPlan(
                     "LogicalLimit",
+                    _empty_like(self),
                     self._plan,
                     n,
                 )
 
-                return wrap_plan(new_metadata, planLimit)
+                return wrap_plan(planLimit)
             else:
                 return super().head(n)
         else:
@@ -324,7 +322,7 @@ class StringMethods:
         )
 
 
-def _get_series_python_func_plan(series_proj, new_metadata, func_name, args, kwargs):
+def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
@@ -343,6 +341,7 @@ def _get_series_python_func_plan(series_proj, new_metadata, func_name, args, kwa
     )
     expr = LazyPlan(
         "PythonScalarFuncExpression",
+        empty_data,
         source_data,
         (
             func_name,
@@ -353,13 +352,12 @@ def _get_series_python_func_plan(series_proj, new_metadata, func_name, args, kwa
         ),
         (col_index,) + tuple(index_cols),
     )
-    expr.empty_data = new_metadata.to_frame()
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
     return wrap_plan(
-        new_metadata,
         plan=LazyPlan(
             "LogicalProjection",
+            empty_data,
             source_data,
             (expr,) + index_col_refs,
         ),

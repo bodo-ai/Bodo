@@ -311,12 +311,13 @@ class LazyPlan:
     can be used to convert to an isolated set of DuckDB objects for execution.
     """
 
-    def __init__(self, plan_class, *args, **kwargs):
+    def __init__(self, plan_class, empty_data, *args, **kwargs):
         self.plan_class = plan_class
         self.args = args
         self.kwargs = kwargs
-        self.output_func = None  # filled in by wrap_plan
-        self.empty_data = None  # filled in by wrap_plan
+        self.is_series = isinstance(empty_data, pd.Series)
+        self.output_func = cpp_table_to_series if self.is_series else cpp_table_to_df
+        self.empty_data = empty_data.to_frame() if self.is_series else empty_data
 
     def __str__(self):
         out = f"{self.plan_class}: \n"
@@ -545,11 +546,10 @@ def _get_index_data(index):
     return data
 
 
-def wrap_plan(schema, plan, res_id=None, nrows=None):
+def wrap_plan(plan, res_id=None, nrows=None):
     """Create a BodoDataFrame or BodoSeries with the given
     schema and given plan node.
     """
-    import pandas as pd
 
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.lazy_metadata import LazyMetadata
@@ -566,13 +566,12 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         # Fake non-zero rows. nrows should be overwritten upon plan execution.
         nrows = 1
 
-    plan.empty_data = schema.to_frame() if isinstance(schema, pd.Series) else schema
-    index_data = _get_index_data(schema.index)
+    index_data = _get_index_data(plan.empty_data.index)
 
-    if isinstance(schema, pd.DataFrame):
+    if not plan.is_series:
         metadata = LazyMetadata(
             res_id,
-            schema,
+            plan.empty_data,
             nrows=nrows,
             index_data=index_data,
         )
@@ -580,11 +579,10 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         new_df = BodoDataFrame.from_lazy_metadata(
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
-        plan.output_func = cpp_table_to_df
-    elif isinstance(schema, pd.Series):
+    else:
         metadata = LazyMetadata(
             res_id,
-            schema,
+            plan.empty_data.iloc[:, 0],
             nrows=nrows,
             index_data=index_data,
         )
@@ -592,9 +590,6 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         new_df = BodoSeries.from_lazy_metadata(
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
-        plan.output_func = cpp_table_to_series
-    else:
-        raise TypeError(f"Invalid schema type: {type(schema)}")
 
     new_df.plan = plan
     return new_df
@@ -633,11 +628,10 @@ def make_col_ref_exprs(key_indices, src_plan):
     pa_schema = pa.Schema.from_pandas(src_plan.empty_data)
     exprs = []
     for k in key_indices:
-        p = LazyPlan("ColRefExpression", src_plan, k)
         # Using Arrow schema instead of zero_size_self.iloc to handle Index
         # columns correctly.
-        schema = arrow_to_empty_df(pa.schema([pa_schema[k]]))
-        p.empty_data = schema.to_frame() if isinstance(schema, pd.Series) else schema
+        empty_data = arrow_to_empty_df(pa.schema([pa_schema[k]]))
+        p = LazyPlan("ColRefExpression", empty_data, src_plan, k)
         exprs.append(p)
 
     return exprs

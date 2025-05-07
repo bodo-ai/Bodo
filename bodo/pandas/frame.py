@@ -15,7 +15,6 @@ from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     LazyPlan,
     check_args_fallback,
-    cpp_table_to_df,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
@@ -65,10 +64,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     # The data has been collected and is no longer distributed
                     # so we need to re-distribute the results.
                     res_id = bodo.spawn.utils.scatter_data(self)
-                self._source_plan = LazyPlan("LogicalGetPandasReadParallel", res_id)
+                self._source_plan = LazyPlan(
+                    "LogicalGetPandasReadParallel", empty_data, res_id
+                )
             else:
-                self._source_plan = LazyPlan("LogicalGetPandasReadSeq", self)
-            self._source_plan.empty_data = empty_data
+                self._source_plan = LazyPlan(
+                    "LogicalGetPandasReadSeq", empty_data, self
+                )
 
             return self._source_plan
 
@@ -146,14 +148,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if (self._head_df is None) or (n > self._head_df.shape[0]):
             from bodo.pandas.base import _empty_like
 
-            new_metadata = _empty_like(self)
             planLimit = LazyPlan(
                 "LogicalLimit",
+                _empty_like(self),
                 self._plan,
                 n,
             )
 
-            return wrap_plan(new_metadata, planLimit)
+            return wrap_plan(planLimit)
         else:
             # If head_df is available and larger than n, then use it directly.
             return self._head_df.head(n)
@@ -491,7 +493,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
-        new_metadata = zero_size_self.merge(
+        empty_data = zero_size_self.merge(
             zero_size_right,
             how=how,
             on=on,
@@ -516,6 +518,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             right_on = []
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
+            empty_data,
             self._plan,
             right._plan,
             plan_optimizer.CJoinType.INNER,
@@ -526,7 +529,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ],
         )
 
-        return wrap_plan(new_metadata, planComparisonJoin)
+        return wrap_plan(planComparisonJoin)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
@@ -547,10 +550,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
             )
             zero_size_key = _empty_like(key)
-            new_metadata = zero_size_self.__getitem__(zero_size_key)
+            empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
-                new_metadata,
-                plan=LazyPlan("LogicalFilter", self._plan, key_plan),
+                plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
             )
         else:
             """ This is selecting one or more columns. Be a bit more
@@ -574,11 +576,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Create column reference expressions for selected columns
             exprs = make_col_ref_exprs(key_indices, self._plan)
 
-            new_metadata = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
+            empty_data = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
             return wrap_plan(
-                new_metadata,
                 plan=LazyPlan(
                     "LogicalProjection",
+                    empty_data,
                     self._plan,
                     exprs,
                 ),
@@ -659,6 +661,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
+            empty_df,
             self._plan,
             (
                 "apply",
@@ -669,7 +672,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ),
             tuple(range(len(self.columns) + get_n_index_arrays(self.index))),
         )
-        udf_arg.empty_data = empty_df
 
         # Select Index columns explicitly for output
         n_cols = len(self.columns)
@@ -680,10 +682,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         plan = LazyPlan(
             "LogicalProjection",
+            empty_series,
             self._plan,
             (udf_arg,) + index_col_refs,
         )
-        return wrap_plan(empty_series, plan=plan)
+        return wrap_plan(plan=plan)
 
     @contextmanager
     def disable_collect(self):
@@ -716,11 +719,11 @@ def _update_func_expr_source(
     )
     expr = LazyPlan(
         "PythonScalarFuncExpression",
+        func_expr.empty_data,
         new_source_plan,
         func_expr.args[1],
         (in_col_ind + col_index_offset,) + index_cols,
     )
-    expr.empty_data = func_expr.empty_data
     return expr
 
 
@@ -764,16 +767,14 @@ def _add_proj_expr_to_plan(
         range(n_cols, n_cols + get_n_index_arrays(in_empty_df.index)), df_plan
     )
 
+    empty_data = df_plan.empty_data.copy()
+    empty_data[key] = value_plan.empty_data.copy()
     new_plan = LazyPlan(
         "LogicalProjection",
+        empty_data,
         df_plan,
         tuple(data_cols + index_cols),
     )
-    # Set plan metadata
-    new_metadata = df_plan.empty_data.copy()
-    new_metadata[key] = value_plan.empty_data.copy()
-    new_plan.empty_data = new_metadata
-    new_plan.output_func = cpp_table_to_df
     return new_plan
 
 
