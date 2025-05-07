@@ -14,6 +14,8 @@ from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 from bodo.utils.typing import check_unsupported_args_fallback
 
+BODO_NONE_DUMMY = "_bodo_none_dummy_"
+
 
 def get_data_manager_pandas() -> str:
     """Get the value of mode.data_manager from pandas config.
@@ -311,12 +313,20 @@ class LazyPlan:
     can be used to convert to an isolated set of DuckDB objects for execution.
     """
 
-    def __init__(self, plan_class, *args, **kwargs):
+    def __init__(self, plan_class, empty_data, *args, **kwargs):
         self.plan_class = plan_class
         self.args = args
         self.kwargs = kwargs
-        self.output_func = None  # filled in by wrap_plan
-        self.out_schema = None  # filled in by wrap_plan
+        assert isinstance(empty_data, (pd.DataFrame, pd.Series)), (
+            "LazyPlan: empty_data must be a DataFrame or Series"
+        )
+        self.is_series = isinstance(empty_data, pd.Series)
+        self.empty_data = empty_data
+        if self.is_series:
+            # None name doesn't round-trip to dataframe correctly so we use a dummy name
+            # that is replaced with None in wrap_plan
+            name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
+            self.empty_data = empty_data.to_frame(name=name)
 
     def __str__(self):
         out = f"{self.plan_class}: \n"
@@ -357,7 +367,7 @@ class LazyPlan:
 
         # Create real duckdb class.
         pa_schema = pa.Schema.from_pandas(
-            self.out_schema
+            self.empty_data
         )  # do this in filter case? preserve_index=(self.plan_class == "LogicalFilter")
         ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
@@ -395,8 +405,10 @@ def execute_plan(plan: LazyPlan):
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)
+
+        output_func = cpp_table_to_series if plan.is_series else cpp_table_to_df
         return plan_optimizer.py_execute_plan(
-            optimized_plan, plan.output_func, duckdb_plan.out_schema
+            optimized_plan, output_func, duckdb_plan.out_schema
         )
 
     if bodo.dataframe_library_run_parallel:
@@ -545,11 +557,10 @@ def _get_index_data(index):
     return data
 
 
-def wrap_plan(schema, plan, res_id=None, nrows=None):
+def wrap_plan(plan, res_id=None, nrows=None):
     """Create a BodoDataFrame or BodoSeries with the given
     schema and given plan node.
     """
-    import pandas as pd
 
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.lazy_metadata import LazyMetadata
@@ -566,13 +577,12 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         # Fake non-zero rows. nrows should be overwritten upon plan execution.
         nrows = 1
 
-    plan.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
-    index_data = _get_index_data(schema.index)
+    index_data = _get_index_data(plan.empty_data.index)
 
-    if isinstance(schema, pd.DataFrame):
+    if not plan.is_series:
         metadata = LazyMetadata(
             res_id,
-            schema,
+            plan.empty_data,
             nrows=nrows,
             index_data=index_data,
         )
@@ -580,11 +590,14 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         new_df = BodoDataFrame.from_lazy_metadata(
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
-        plan.output_func = cpp_table_to_df
-    elif isinstance(schema, pd.Series):
+    else:
+        empty_data = plan.empty_data.squeeze()
+        # Replace the dummy name with None set in LazyPlan constructor
+        if empty_data.name == BODO_NONE_DUMMY:
+            empty_data.name = None
         metadata = LazyMetadata(
             res_id,
-            schema,
+            empty_data,
             nrows=nrows,
             index_data=index_data,
         )
@@ -592,11 +605,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         new_df = BodoSeries.from_lazy_metadata(
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
-        plan.output_func = cpp_table_to_series
-    else:
-        raise TypeError(f"Invalid schema type: {type(schema)}")
 
-    new_df.plan = plan
     return new_df
 
 
@@ -615,7 +624,7 @@ def is_single_projection(proj: LazyPlan):
     return (
         isinstance(proj, LazyPlan)
         and proj.plan_class == "LogicalProjection"
-        and len(proj.args[1]) == (get_n_index_arrays(proj.out_schema.index) + 1)
+        and len(proj.args[1]) == (get_n_index_arrays(proj.empty_data.index) + 1)
     )
 
 
@@ -630,14 +639,13 @@ def make_col_ref_exprs(key_indices, src_plan):
     """Create column reference expressions for the given key indices for the input
     source plan.
     """
-    pa_schema = pa.Schema.from_pandas(src_plan.out_schema)
+    pa_schema = pa.Schema.from_pandas(src_plan.empty_data)
     exprs = []
     for k in key_indices:
-        p = LazyPlan("ColRefExpression", src_plan, k)
         # Using Arrow schema instead of zero_size_self.iloc to handle Index
         # columns correctly.
-        schema = arrow_to_empty_df(pa.schema([pa_schema[k]]))
-        p.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
+        empty_data = arrow_to_empty_df(pa.schema([pa_schema[k]]))
+        p = LazyPlan("ColRefExpression", empty_data, src_plan, k)
         exprs.append(p)
 
     return exprs
