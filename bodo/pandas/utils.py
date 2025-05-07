@@ -316,7 +316,7 @@ class LazyPlan:
         self.args = args
         self.kwargs = kwargs
         self.output_func = None  # filled in by wrap_plan
-        self.out_schema = None  # filled in by wrap_plan
+        self.empty_data = None  # filled in by wrap_plan
 
     def __str__(self):
         out = f"{self.plan_class}: \n"
@@ -357,7 +357,7 @@ class LazyPlan:
 
         # Create real duckdb class.
         pa_schema = pa.Schema.from_pandas(
-            self.out_schema
+            self.empty_data
         )  # do this in filter case? preserve_index=(self.plan_class == "LogicalFilter")
         ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
@@ -566,7 +566,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         # Fake non-zero rows. nrows should be overwritten upon plan execution.
         nrows = 1
 
-    plan.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
+    plan.empty_data = schema.to_frame() if isinstance(schema, pd.Series) else schema
     index_data = _get_index_data(schema.index)
 
     if isinstance(schema, pd.DataFrame):
@@ -615,7 +615,7 @@ def is_single_projection(proj: LazyPlan):
     return (
         isinstance(proj, LazyPlan)
         and proj.plan_class == "LogicalProjection"
-        and len(proj.args[1]) == (get_n_index_arrays(proj.out_schema.index) + 1)
+        and len(proj.args[1]) == (get_n_index_arrays(proj.empty_data.index) + 1)
     )
 
 
@@ -630,14 +630,14 @@ def make_col_ref_exprs(key_indices, src_plan):
     """Create column reference expressions for the given key indices for the input
     source plan.
     """
-    pa_schema = pa.Schema.from_pandas(src_plan.out_schema)
+    pa_schema = pa.Schema.from_pandas(src_plan.empty_data)
     exprs = []
     for k in key_indices:
         p = LazyPlan("ColRefExpression", src_plan, k)
         # Using Arrow schema instead of zero_size_self.iloc to handle Index
         # columns correctly.
         schema = arrow_to_empty_df(pa.schema([pa_schema[k]]))
-        p.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
+        p.empty_data = schema.to_frame() if isinstance(schema, pd.Series) else schema
         exprs.append(p)
 
     return exprs

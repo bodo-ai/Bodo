@@ -55,7 +55,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
             from bodo.pandas.base import _empty_like
 
-            out_schema = _empty_like(self)
+            empty_data = _empty_like(self)
             if bodo.dataframe_library_run_parallel:
                 if self._mgr._md_result_id is not None:
                     # If the plan has been executed but the results are still
@@ -68,7 +68,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 self._source_plan = LazyPlan("LogicalGetPandasReadParallel", res_id)
             else:
                 self._source_plan = LazyPlan("LogicalGetPandasReadSeq", self)
-            self._source_plan.out_schema = out_schema
+            self._source_plan.empty_data = empty_data
 
             return self._source_plan
 
@@ -669,7 +669,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ),
             tuple(range(len(self.columns) + get_n_index_arrays(self.index))),
         )
-        udf_arg.out_schema = empty_df
+        udf_arg.empty_data = empty_df
 
         # Select Index columns explicitly for output
         n_cols = len(self.columns)
@@ -706,12 +706,12 @@ def _update_func_expr_source(
     """
     # Previous input data column index
     in_col_ind = func_expr.args[2][0]
-    n_source_cols = len(new_source_plan.out_schema.columns)
+    n_source_cols = len(new_source_plan.empty_data.columns)
     # Add Index columns of the new source plan as input
     index_cols = tuple(
         range(
             n_source_cols,
-            n_source_cols + get_n_index_arrays(new_source_plan.out_schema.index),
+            n_source_cols + get_n_index_arrays(new_source_plan.empty_data.index),
         )
     )
     expr = LazyPlan(
@@ -720,7 +720,7 @@ def _update_func_expr_source(
         func_expr.args[1],
         (in_col_ind + col_index_offset,) + index_cols,
     )
-    expr.out_schema = func_expr.out_schema
+    expr.empty_data = func_expr.empty_data
     return expr
 
 
@@ -731,7 +731,7 @@ def _add_proj_expr_to_plan(
     with output expression of value_plan (which is a single expression projection).
     """
     # Create column reference expressions for each column in the dataframe.
-    in_empty_df = df_plan.out_schema
+    in_empty_df = df_plan.empty_data
 
     # Check if the column already exists in the dataframe
     if key in in_empty_df.columns:
@@ -770,9 +770,9 @@ def _add_proj_expr_to_plan(
         tuple(data_cols + index_cols),
     )
     # Set plan metadata
-    new_metadata = df_plan.out_schema.copy()
-    new_metadata[key] = value_plan.out_schema.copy()
-    new_plan.out_schema = new_metadata
+    new_metadata = df_plan.empty_data.copy()
+    new_metadata[key] = value_plan.empty_data.copy()
+    new_plan.empty_data = new_metadata
     new_plan.output_func = cpp_table_to_df
     return new_plan
 

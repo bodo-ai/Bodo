@@ -63,7 +63,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
         expr = LazyPlan("BinaryOpExpression", lhs, rhs, op)
-        expr.out_schema = new_metadata.to_frame()
+        expr.empty_data = new_metadata.to_frame()
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -107,7 +107,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
         expr = LazyPlan("ConjunctionOpExpression", lhs, rhs, op)
-        expr.out_schema = new_metadata.to_frame()
+        expr.empty_data = new_metadata.to_frame()
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -337,9 +337,9 @@ def _get_series_python_func_plan(series_proj, new_metadata, func_name, args, kwa
         source_data = series_proj
         col_index = 0
 
-    n_cols = len(source_data.out_schema.columns)
+    n_cols = len(source_data.empty_data.columns)
     index_cols = range(
-        n_cols, n_cols + get_n_index_arrays(source_data.out_schema.index)
+        n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
     expr = LazyPlan(
         "PythonScalarFuncExpression",
@@ -353,7 +353,7 @@ def _get_series_python_func_plan(series_proj, new_metadata, func_name, args, kwa
         ),
         (col_index,) + tuple(index_cols),
     )
-    expr.out_schema = new_metadata.to_frame()
+    expr.empty_data = new_metadata.to_frame()
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
     return wrap_plan(
