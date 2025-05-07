@@ -128,31 +128,46 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return getattr(self._mgr, "_plan", None) is not None
 
     def execute_plan(self):
-        return self._mgr.execute_plan()
+        if self.is_lazy_plan():
+            return self._mgr.execute_plan()
 
     def head(self, n: int = 5):
         """
         Return the first n rows. If head_df is available and larger than n, then use it directly.
         Otherwise, use the default head method which will trigger a data pull.
         """
+        # Prevent infinite recursion when called from _empty_like and in general
+        # data is never required for head(0) so making a plan is never necessary.
+        if n == 0 and self._head_df is not None:
+            return pd.DataFrame(
+                index=self._head_df.index, columns=self._head_df.columns
+            ).astype(dict(zip(self._head_df.columns, self._head_df.dtypes)))
+
         if (self._head_df is None) or (n > self._head_df.shape[0]):
-            return super().head(n)
+            from bodo.pandas.base import _empty_like
+
+            new_metadata = _empty_like(self)
+            planLimit = LazyPlan(
+                "LogicalLimit",
+                self._plan,
+                n,
+            )
+
+            return wrap_plan(new_metadata, planLimit)
         else:
             # If head_df is available and larger than n, then use it directly.
             return self._head_df.head(n)
 
     def __len__(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
-        elif self._lazy:
+        self.execute_plan()
+        if self._lazy:
             return self._mgr._md_nrows
         return super().__len__()
 
     @property
     def shape(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
-        elif self._lazy:
+        self.execute_plan()
+        if self._lazy:
             return self._mgr._md_nrows, len(self._head_df.columns)
         return super().shape
 
@@ -625,12 +640,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError("DataFrame.apply(): only axis=1 supported")
 
         # Get output data type by running the UDF on a sample of the data.
-        # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
-        # TODO: remove when LIMIT plan is properly supported for head().
-        mgr_plan = self._mgr._plan
-        df_sample = self.head(1)
-        self._mgr._plan = mgr_plan
-        out_sample = df_sample.apply(func, axis)
+        df_sample = self.head(1).execute_plan()
+        pd_sample = pd.DataFrame(df_sample)
+        out_sample = pd_sample.apply(func, axis)
 
         # TODO: Should we fallback to Pandas in the DataFrame case?
         if not isinstance(out_sample, pd.Series):

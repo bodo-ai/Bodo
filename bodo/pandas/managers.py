@@ -337,9 +337,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         self._collect_func = collect_func
         self._del_func = del_func
         self._plan = plan
-        if result_id is not None:
+        if result_id is not None or plan is not None:
             assert nrows is not None
-            assert result_id is not None
             assert head is not None
             assert collect_func is not None
             assert del_func is not None
@@ -405,7 +404,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         super().__init__(
             block_,
             axis_,
-            verify_integrity=verify_integrity if (result_id is None) else False,
+            verify_integrity=verify_integrity
+            if (result_id is None and plan is None)
+            else False,
         )
         # Flag for disabling collect to allow updating internal pandas metadata
         # See DataFrame.__setitem__

@@ -7,7 +7,7 @@ import pyarrow as pa
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
-from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
     LazyPlan,
@@ -206,15 +206,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return getattr(self._mgr, "_plan", None) is not None
 
     def execute_plan(self):
-        return self._mgr.execute_plan()
+        if self.is_lazy_plan():
+            return self._mgr.execute_plan()
 
     @property
     def shape(self):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
-        if self.is_lazy_plan():
-            self._mgr._collect()
+        self.execute_plan()
 
         if isinstance(self._mgr, LazyMetadataMixin) and (
             self._mgr._md_nrows is not None
@@ -227,17 +227,35 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Get the first n rows of the series. If head_s is present and n < len(head_s) we call head on head_s.
         Otherwise we use the data fetched from the workers.
         """
+        if n == 0 and self._head_s is not None:
+            return pd.Series(
+                index=self._head_s.index,
+                name=self._head_s.name,
+                dtype=self._head_s.dtype,
+            )
+
         if (self._head_s is None) or (n > self._head_s.shape[0]):
-            if self.is_lazy_plan():
-                self._mgr._collect()
-            return super().head(n)
+            if self._exec_state == ExecState.PLAN:
+                from bodo.pandas.base import _empty_like
+
+                new_metadata = _empty_like(self)
+                planLimit = LazyPlan(
+                    "LogicalLimit",
+                    self._plan,
+                    n,
+                )
+
+                return wrap_plan(new_metadata, planLimit)
+            else:
+                return super().head(n)
         else:
             # If head_s is available and larger than n, then use it directly.
             return self._head_s.head(n)
 
     def __len__(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
+        self.execute_plan()
+        if self._lazy:
+            return self._mgr._md_nrows
         return super().__len__()
 
     def _get_result_id(self) -> str | None:
@@ -259,10 +277,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Get output data type by running the UDF on a sample of the data.
         # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
         # TODO: remove when LIMIT plan is properly supported for head().
-        mgr_plan = self._mgr._plan
-        series_sample = self.head(1)
-        self._mgr._plan = mgr_plan
-        out_sample = series_sample.map(arg)
+        series_sample = self.head(1).execute_plan()
+        pd_sample = pd.Series(series_sample)
+        out_sample = pd_sample.map(arg)
 
         assert isinstance(out_sample, pd.Series), (
             f"BodoSeries.map(), expected output to be Series, got: {type(out_sample)}."
