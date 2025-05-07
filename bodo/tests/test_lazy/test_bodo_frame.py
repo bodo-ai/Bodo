@@ -291,7 +291,6 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
     assert df.dtypes.equals(pd.Series(["Int64", "string[python]"], index=["A0", "B5"]))
 
     assert base_df.head(5).equals(df.head(5))
-        check_pandas_types=False,
         sort_output=True,
         reset_index=True,
     )
