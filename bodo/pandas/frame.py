@@ -593,6 +593,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 head_val = value._head_s
                 self._head_df[key] = head_val
                 with self.disable_collect():
+                    # Update internal data manager (e.g. insert a new block or update an
+                    # existing one). See:
+                    # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
                     super().__setitem__(key, head_val)
                 return
 

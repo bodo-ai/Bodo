@@ -505,8 +505,8 @@ def test_series_map(datapath, index_val, set_stream_batch_size_three):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_set_column(datapath, index_val, set_stream_batch_size_three):
-    """Very simple test for Series.str.strip() for sanity checking."""
+def test_set_df_column(datapath, index_val, set_stream_batch_size_three):
+    """Test setting a dataframe column with a Series function of the same dataframe."""
     df = pd.DataFrame(
         {
             "A": pd.array([1, 2, 3, 7], "Int64"),
