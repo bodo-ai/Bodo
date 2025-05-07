@@ -270,7 +270,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Apply function to elements in a Series
         """
-        from bodo.pandas.utils import arrow_to_empty_df
 
         # Get output data type by running the UDF on a sample of the data.
         # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
@@ -282,14 +281,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(out_sample, pd.Series), (
             f"BodoSeries.map(), expected output to be Series, got: {type(out_sample)}."
         )
-        out_sample_df = out_sample.to_frame()
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample_df))
 
-        # convert back to Series
-        empty_series = empty_df.squeeze()
-        empty_series.name = out_sample.name
-
-        return _get_series_python_func_plan(self._plan, empty_series, "map", (arg,), {})
+        return _get_series_python_func_plan(
+            self._plan, out_sample.head(0), "map", (arg,), {}
+        )
 
 
 class StringMethods:

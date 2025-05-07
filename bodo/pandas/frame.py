@@ -634,9 +634,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """
         Apply a function along the axis of the dataframe.
         """
-        import pyarrow as pa
-
-        from bodo.pandas.utils import arrow_to_empty_df
 
         if axis != 1:
             raise BodoError("DataFrame.apply(): only axis=1 supported")
@@ -652,16 +649,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 f"DataFrame.apply(): expected output to be Series, got: {type(out_sample)}."
             )
 
-        out_sample_df = out_sample.to_frame()
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample_df))
-
-        # convert back to Series
-        empty_series = empty_df.squeeze()
-        empty_series.name = out_sample.name
+        empty_series = out_sample.head(0)
 
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
-            empty_df,
+            empty_series,
             self._plan,
             (
                 "apply",
