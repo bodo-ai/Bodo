@@ -655,8 +655,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_series = empty_df.squeeze()
         empty_series.name = out_sample.name
 
-        # breakpoint()
-
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
             empty_series,
