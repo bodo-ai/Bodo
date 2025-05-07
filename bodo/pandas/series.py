@@ -282,6 +282,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(out_sample, pd.Series), (
             f"BodoSeries.map(), expected output to be Series, got: {type(out_sample)}."
         )
+        out_sample = out_sample.convert_dtypes(dtype_backend="pyarrow")
 
         return _get_series_python_func_plan(
             self._plan, out_sample.head(0), "map", (arg,), {}

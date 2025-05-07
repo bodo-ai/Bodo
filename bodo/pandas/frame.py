@@ -649,6 +649,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 f"DataFrame.apply(): expected output to be Series, got: {type(out_sample)}."
             )
 
+        out_sample = out_sample.convert_dtypes(dtype_backend="pyarrow")
         empty_series = out_sample.head(0)
 
         udf_arg = LazyPlan(
