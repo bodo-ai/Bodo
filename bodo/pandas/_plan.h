@@ -11,6 +11,7 @@
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "physical/expression.h"
 #include "physical/operator.h"
@@ -39,7 +40,8 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
      */
     virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs) = 0;
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) = 0;
 };
 
 /**
@@ -53,6 +55,7 @@ class BodoParquetScanFunction : public BodoScanFunction {
         filter_pushdown = true;
         filter_prune = true;
         projection_pushdown = true;
+        limit_pushdown = true;
         // TODO: set statistics and other optimization flags as needed
         // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/include/duckdb/function/table_function.hpp#L357
     }
@@ -82,7 +85,8 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
 
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs) override;
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
 
     // Parquet dataset path
     PyObject *path;
@@ -118,7 +122,8 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
      */
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs) override;
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
 
     PyObject *df;
 };
@@ -140,7 +145,8 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
      */
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs) override;
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
     std::string result_id;
 };
 
@@ -308,6 +314,26 @@ duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
 duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::unique_ptr<duckdb::Expression> &filter_expr);
+
+/**
+ * @brief Create a limit node.
+ *
+ * @param source - the source of the data to be filtered
+ * @param n - the number of rows to return
+ * @return duckdb::unique_ptr<duckdb::LogicalLimit> - the limit node
+ */
+duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n);
+
+/**
+ * @brief Create a sample node.
+ *
+ * @param source - the source of the data to be filtered
+ * @param n - the number of rows to return
+ * @return duckdb::unique_ptr<duckdb::LogicalLimit> - the sample node
+ */
+duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n);
 
 /**
  * @brief Creates a LogicalGet node for reading a Parquet dataset in DuckDB with

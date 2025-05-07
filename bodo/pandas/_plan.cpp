@@ -20,7 +20,9 @@
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
+#include "duckdb/planner/operator/logical_sample.hpp"
 
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
@@ -166,6 +168,34 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     return logical_filter;
 }
 
+duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    duckdb::unique_ptr<duckdb::SampleOptions> sampleOptions =
+        duckdb::make_uniq<duckdb::SampleOptions>();
+    sampleOptions->sample_size = duckdb::Value(n);
+    sampleOptions->is_percentage = false;
+    sampleOptions->method = duckdb::SampleMethod::SYSTEM_SAMPLE;
+    sampleOptions->repeatable = true;  // Not sure if this is correct.
+    auto logical_sample = duckdb::make_uniq<duckdb::LogicalSample>(
+        std::move(sampleOptions), std::move(source_duck));
+
+    return logical_sample;
+}
+
+duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    auto logical_limit = duckdb::make_uniq<duckdb::LogicalLimit>(
+        duckdb::BoundLimitNode::ConstantValue(n),
+        duckdb::BoundLimitNode::ConstantValue(0));
+
+    logical_limit->children.push_back(std::move(source_duck));
+    return logical_limit;
+}
+
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
@@ -226,7 +256,8 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
-    assert(out_types.size() == 1);
+    // Maybe not be exactly 1 due to index column.
+    assert(out_types.size() > 0);
     duckdb::LogicalType out_type = out_types[0];
 
     // Necessary before accessing source->types attribute
@@ -563,7 +594,8 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     // Read the dataframe from the result registry using
     // sys.modules["__main__"].RESULT_REGISTRY since importing
     // bodo.spawn.worker creates a new module with new empty registry.
@@ -605,15 +637,18 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     return std::make_shared<PhysicalReadPandas>(df, selected_columns);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoParquetScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     return std::make_shared<PhysicalReadParquet>(
-        path, pyarrow_schema, storage_options, selected_columns, filter_exprs);
+        path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
+        limit_val);
 }
 
 duckdb::idx_t get_operator_table_index(
