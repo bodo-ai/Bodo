@@ -317,6 +317,9 @@ class LazyPlan:
         self.plan_class = plan_class
         self.args = args
         self.kwargs = kwargs
+        assert isinstance(empty_data, (pd.DataFrame, pd.Series)), (
+            "LazyPlan: empty_data must be a DataFrame or Series"
+        )
         self.is_series = isinstance(empty_data, pd.Series)
         self.empty_data = empty_data
         if self.is_series:
