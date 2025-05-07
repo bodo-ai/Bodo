@@ -692,8 +692,10 @@ def _update_func_expr_source(
     """Update source plan of PythonScalarFuncExpression and add an offset to its
     input data column index.
     """
+    # Previous input data column index
     in_col_ind = func_expr.args[2][0]
     n_source_cols = len(new_source_plan.out_schema.columns)
+    # Add Index columns of the new source plan as input
     index_cols = tuple(
         range(
             n_source_cols,
