@@ -272,27 +272,27 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
 
 
 cdef extern from "_plan.h" nogil:
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options)
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema)
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema)
-    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
-    cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
-    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema)
-    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices)
-    cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
-    cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
-    cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
-    cdef unique_ptr[CExpression] make_const_int_expr(int val)
-    cdef unique_ptr[CExpression] make_const_float_expr(float val)
-    cdef unique_ptr[CExpression] make_const_string_expr(c_string val)
-    cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx)
-    cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n)
-    cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n)
-    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
-    cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format)
-    cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
-    cdef int planCountNodes(unique_ptr[CLogicalOperator] root)
-    cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options) except +
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema) except +
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema) except +
+    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
+    cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
+    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
+    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
+    cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
+    cdef unique_ptr[CExpression] make_const_int_expr(int val) except +
+    cdef unique_ptr[CExpression] make_const_float_expr(float val) except +
+    cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
+    cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
+    cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
+    cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
+    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
+    cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format) except +
+    cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
+    cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
+    cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -442,16 +442,15 @@ cdef unique_ptr[CExpression] make_expr(val):
     """Convert a filter expression tree from Cython wrappers
        to duckdb.
     """
-    cdef LogicalOperator source
     cdef c_string val_cstr
 
     if isinstance(val, int):
-        return make_const_int_expr(val)
+        return move(make_const_int_expr(val))
     elif isinstance(val, float):
-        return make_const_float_expr(val)
+        return move(make_const_float_expr(val))
     elif isinstance(val, str):
         val_cstr = val.encode()
-        return make_const_string_expr(val_cstr)
+        return move(make_const_string_expr(val_cstr))
     else:
         raise ValueError("Unknown expr type in make_expr " + str(type(val)))
 

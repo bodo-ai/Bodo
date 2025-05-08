@@ -151,6 +151,11 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             # This is the base ArrayManager case
             assert nrows is None
             assert head is None
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             _arrays,
             self._axes,
@@ -158,9 +163,6 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
                 verify_integrity if (result_id is None and plan is None) else False
             ),
         )
-        # Flag for disabling collect to allow updating internal pandas metadata
-        # See DataFrame.__setitem__
-        self._disable_collect = False
 
     @property
     def is_single_block(self) -> bool:
@@ -455,6 +457,11 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             assert nrows is None
             assert head is None
 
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             _arrays,
             self._axes,
@@ -462,9 +469,6 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
                 verify_integrity if (result_id is None and plan is None) else False
             ),
         )
-        # Flag for disabling collect to allow updating internal pandas metadata
-        # See DataFrame.__setitem__
-        self._disable_collect = False
 
     @property
     def dtype(self):

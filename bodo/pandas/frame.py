@@ -14,6 +14,7 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BodoLibNotImplementedException,
     LazyPlan,
     arrow_to_empty_df,
     check_args_fallback,
@@ -485,7 +486,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], self, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["on"])
+    @check_args_fallback(supported=["on"], disable=True)
     def merge(
         self,
         right: "BodoDataFrame | BodoSeries",
@@ -548,6 +549,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """Called when df[key] is used."""
 
         from bodo.pandas.base import _empty_like
+
+        # Only selecting columns or filtering with BodoSeries is supported
+        if not (
+            isinstance(key, (str, BodoSeries))
+            or (isinstance(key, list) and all(isinstance(k, str) for k in key))
+        ):
+            raise BodoLibNotImplementedException(
+                "only string and BodoSeries keys are supported"
+            )
 
         """ Create 0 length versions of the dataframe and the key and
             simulate the operation to see the resulting type. """
@@ -627,7 +637,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     super().__setitem__(key, head_val)
                 return
 
-        return super().__setitem__(key, value)
+        raise BodoLibNotImplementedException(
+            "Only setting a column with a Series created from the same dataframe is supported."
+        )
 
     @check_args_fallback(supported=["func", "axis"])
     def apply(
@@ -654,10 +666,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         pd_sample = pd.DataFrame(df_sample)
         out_sample = pd_sample.apply(func, axis)
 
-        # TODO: Should we fallback to Pandas in the DataFrame case?
         if not isinstance(out_sample, pd.Series):
-            raise BodoError(
-                f"DataFrame.apply(): expected output to be Series, got: {type(out_sample)}."
+            raise BodoLibNotImplementedException(
+                f"expected output to be Series, got: {type(out_sample)}."
             )
 
         # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
