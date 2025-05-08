@@ -417,44 +417,22 @@ def test_head_pushdown(datapath):
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1.head(3)
-
-    _test_equal(
-        bodo_df2.copy(),
-        py_df2,
-        check_pandas_types=False,
-        sort_output=True,
-        reset_index=True,
-    )
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df2) == 3
 
 
 @pytest.mark.skip(reason="Not working.")
 def test_projection_head_pushdown(datapath):
-    """Test for head pushed down to read parquet."""
+    """Test for projection and head pushed down to read parquet."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
     bodo_df3 = bodo_df2.head(3)
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df3.is_lazy_plan()
-    assert bodo_df3.plan is not None
 
-    # pre, post = bd.utils.getPlanStatistics(bodo_df3.plan)
-    # _test_equal(pre, 3)
-    # _test_equal(post, 2)
-
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1["D"]
-    py_df3 = py_df2.head(3)
-
-    _test_equal(
-        bodo_df3,
-        py_df3,
-        check_pandas_types=False,
-        sort_output=True,
-        reset_index=True,
-    )
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df3) == 3
 
 
 def test_head(datapath):
@@ -471,7 +449,6 @@ def test_head(datapath):
     )
 
     bodo_df2 = bodo_df1.head(3)
-    py_df1.head(3)
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
