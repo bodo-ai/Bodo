@@ -144,13 +144,13 @@ def get_overloads(cls_name):
 
 class BodoLibNotImplementedException(Exception):
     """Exception raised in the Bodo library when a functionality is not implemented yet
-    and we need to fall back to Pandas.
+    and we need to fall back to Pandas (captured by the fallback decorator).
     """
 
 
 class BodoLibFallbackWarning(Warning):
-    """Warning raised in the Bodo library when a functionality is not implemented yet
-    and we need to fall back to Pandas.
+    """Warning raised in the Bodo library in the fallback decorator when some
+    functionality is not implemented yet and we need to fall back to Pandas.
     """
 
 
