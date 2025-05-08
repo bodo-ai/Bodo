@@ -34,7 +34,7 @@ bool Pipeline::midPipelineExecute(unsigned idx,
             }
 
             // op_result has to be NEED_MORE_INPUT or HAVE_MORE_OUTPUT since
-            // FINSIHED is checked above.  If this operator is done this part
+            // FINISHED is checked above.  If this operator is done this part
             // of the pipeline is done and we aren't set to finish yet.
             if (op_result == OperatorResult::NEED_MORE_INPUT) {
                 return false;
