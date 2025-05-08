@@ -281,7 +281,7 @@ def check_args_fallback(
                         "Falling back to Pandas (may be slow or run out of memory."
                     )
                     if except_msg:
-                        msg += f"\n Exception: {except_msg}"
+                        msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
                     return getattr(py_pkg, func.__name__)(*args, **kwargs)
             else:
@@ -327,7 +327,7 @@ def check_args_fallback(
                         "Falling back to Pandas (may be slow or run out of memory)."
                     )
                     if except_msg:
-                        msg += f"\n Exception: {except_msg}"
+                        msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
                     return getattr(base_class, func.__name__)(self, *args, **kwargs)
 
