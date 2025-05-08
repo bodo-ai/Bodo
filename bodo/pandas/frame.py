@@ -539,7 +539,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Only selecting single column or filtering with BodoSeries is supported
         if not isinstance(key, (str, BodoSeries)):
             raise BodoLibNotImplementedException(
-                "DataFrame.__getitem__: only string and BodoSeries keys are supported"
+                "only string and BodoSeries keys are supported"
             )
 
         """ Create 0 length versions of the dataframe and the key and

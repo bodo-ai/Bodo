@@ -265,22 +265,24 @@ def check_args_fallback(
                         module_name=module_name,
                         raise_on_error=(BODO_PANDAS_FALLBACK == 0),
                     )
+                    except_msg = ""
                     if not error:
                         try:
                             return func(*args, **kwargs)
-                        except BodoLibNotImplementedException:
+                        except BodoLibNotImplementedException as e:
                             # Fall back to Pandas below
-                            pass
+                            except_msg = str(e)
                     # Can we do a top-level override check?
 
                     # Fallback to Python. Call the same method in the base class.
-                    warnings.warn(
-                        BodoLibFallbackWarning(
-                            f"{func.__name__} is not "
-                            "implemented in Bodo dataframe library yet. "
-                            "Falling back to Pandas which may be slow or run out of memory."
-                        )
+                    msg = (
+                        f"{func.__name__} is not "
+                        "implemented in Bodo dataframe library for the specified arguments yet. "
+                        "Falling back to Pandas (may be slow or run out of memory."
                     )
+                    if except_msg:
+                        msg += f"\n Exception: {except_msg}"
+                    warnings.warn(BodoLibFallbackWarning(msg))
                     return getattr(py_pkg, func.__name__)(*args, **kwargs)
             else:
 
@@ -299,12 +301,13 @@ def check_args_fallback(
                         module_name=module_name,
                         raise_on_error=(BODO_PANDAS_FALLBACK == 0),
                     )
+                    except_msg = ""
                     if not error:
                         try:
                             return func(self, *args, **kwargs)
-                        except BodoLibNotImplementedException:
+                        except BodoLibNotImplementedException as e:
                             # Fall back to Pandas below
-                            pass
+                            except_msg = str(e)
 
                     # The dataframe library must not support some specified option.
                     # Get overloaded functions for this dataframe/series in JIT mode.
@@ -318,13 +321,14 @@ def check_args_fallback(
 
                     # Fallback to Python. Call the same method in the base class.
                     base_class = self.__class__.__bases__[0]
-                    warnings.warn(
-                        BodoLibFallbackWarning(
-                            f"{base_class.__name__}.{func.__name__} is not "
-                            "implemented in Bodo dataframe library yet. "
-                            "Falling back to Pandas which may be slow or run out of memory."
-                        )
+                    msg = (
+                        f"{base_class.__name__}.{func.__name__} is not "
+                        "implemented in Bodo dataframe library for the specified arguments yet. "
+                        "Falling back to Pandas (may be slow or run out of memory)."
                     )
+                    if except_msg:
+                        msg += f"\n Exception: {except_msg}"
+                    warnings.warn(BodoLibFallbackWarning(msg))
                     return getattr(base_class, func.__name__)(self, *args, **kwargs)
 
         return wrapper
