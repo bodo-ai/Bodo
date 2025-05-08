@@ -540,8 +540,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         from bodo.pandas.base import _empty_like
 
-        # Only selecting single column or filtering with BodoSeries is supported
-        if not isinstance(key, (str, BodoSeries)):
+        # Only selecting columns or filtering with BodoSeries is supported
+        if not (
+            isinstance(key, (str, BodoSeries))
+            or (isinstance(key, list) and all(isinstance(k, str) for k in key))
+        ):
             raise BodoLibNotImplementedException(
                 "only string and BodoSeries keys are supported"
             )
