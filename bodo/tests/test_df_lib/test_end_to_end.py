@@ -440,9 +440,9 @@ def test_projection_head_pushdown(datapath):
     assert bodo_df3.is_lazy_plan()
     assert bodo_df3.plan is not None
 
-    #pre, post = bd.utils.getPlanStatistics(bodo_df3.plan)
-    #_test_equal(pre, 3)
-    #_test_equal(post, 2)
+    # pre, post = bd.utils.getPlanStatistics(bodo_df3.plan)
+    # _test_equal(pre, 3)
+    # _test_equal(post, 2)
 
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1["D"]
@@ -471,7 +471,7 @@ def test_head(datapath):
     )
 
     bodo_df2 = bodo_df1.head(3)
-    py_df2 = py_df1.head(3)
+    py_df1.head(3)
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()

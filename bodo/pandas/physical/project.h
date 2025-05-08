@@ -26,7 +26,8 @@ class PhysicalProjection : public PhysicalSourceSink {
      * @brief Do projection.
      *
      * @return std::pair<std::shared_ptr<table_info>, OperatorResult>
-     * The output table from the current operation and whether there is more output.
+     * The output table from the current operation and whether there is more
+     * output.
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override {
