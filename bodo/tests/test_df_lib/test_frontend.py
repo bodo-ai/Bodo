@@ -28,3 +28,16 @@ def test_df_getitem_fallback_warning():
     bdf = pd.from_pandas(df)
     with pytest.warns(BodoLibFallbackWarning):
         bdf[:]
+
+
+def test_df_apply_fallback_warning():
+    """Make sure DataFrame.apply() raises a warning when falling back to Pandas."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int64"),
+            "B": ["A1", "B1", "C1"],
+        },
+    )
+    bdf = pd.from_pandas(df)
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf.apply(lambda a: pd.Series([1, 2]), axis=1)
