@@ -22,7 +22,8 @@ class PhysicalLimit : public PhysicalSourceSink {
      * @brief Do limit.
      *
      * @return std::pair<std::shared_ptr<table_info>, OperatorResult>
-     * The output table from the current operation and whether there is more output.
+     * The output table from the current operation and whether there is more
+     * output.
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override {
@@ -34,8 +35,9 @@ class PhysicalLimit : public PhysicalSourceSink {
         // Gather how many rows are on each rank
         std::vector<uint64_t> row_counts(n_pes);
         uint64_t cur_rows = input_batch->nrows();
-        CHECK_MPI(MPI_Allgather(&cur_rows, 1, MPI_UNSIGNED_LONG_LONG, row_counts.data(), 1,
-                                MPI_UNSIGNED_LONG_LONG, MPI_COMM_WORLD),
+        CHECK_MPI(MPI_Allgather(&cur_rows, 1, MPI_UNSIGNED_LONG_LONG,
+                                row_counts.data(), 1, MPI_UNSIGNED_LONG_LONG,
+                                MPI_COMM_WORLD),
                   "PhysicalLimit: MPI error on MPI_Allgather:");
 
         uint64_t select_local = 0;
@@ -54,7 +56,8 @@ class PhysicalLimit : public PhysicalSourceSink {
         }
         std::shared_ptr<table_info> out_table_info =
             RetrieveTable(input_batch, rowInds);
-        return {out_table_info, n == 0 ? OperatorResult::FINISHED : OperatorResult::NEED_MORE_INPUT};
+        return {out_table_info, n == 0 ? OperatorResult::FINISHED
+                                       : OperatorResult::NEED_MORE_INPUT};
     }
 
    private:

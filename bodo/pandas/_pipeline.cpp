@@ -9,7 +9,8 @@
  * nodes in the pipeline to process the first set of output.  Each operator
  * could theoretically require multiple (different) iterations in this manner.
  */
-bool Pipeline::midPipelineExecute(unsigned idx, std::shared_ptr<table_info> batch) {
+bool Pipeline::midPipelineExecute(unsigned idx,
+                                  std::shared_ptr<table_info> batch) {
     // Terminate the recursion when we have processed all the operators
     // and only have the sink to go which cannot HAVE_MORE_OUTPUT.
     if (idx >= between_ops.size()) {
@@ -18,7 +19,7 @@ bool Pipeline::midPipelineExecute(unsigned idx, std::shared_ptr<table_info> batc
     } else {
         // Get the current operator.
         std::shared_ptr<PhysicalSourceSink>& op = between_ops[idx];
-        while(true) {
+        while (true) {
             // Process this batch with this operator.
             std::pair<std::shared_ptr<table_info>, OperatorResult> result =
                 op->ProcessBatch(batch);
@@ -27,12 +28,13 @@ bool Pipeline::midPipelineExecute(unsigned idx, std::shared_ptr<table_info> batc
             // Execute subsequent operators and If any of them said that
             // no more output is needed or the current operator knows no
             // more output is needed then return true to terminate the pipeline.
-            if (midPipelineExecute(idx + 1, result.first) || op_result == OperatorResult::FINISHED) {
+            if (midPipelineExecute(idx + 1, result.first) ||
+                op_result == OperatorResult::FINISHED) {
                 return true;
             }
 
             // op_result has to be NEED_MORE_INPUT or HAVE_MORE_OUTPUT since
-            // FINSIHED is checked above.  If this operator is done this part
+            // FINISHED is checked above.  If this operator is done this part
             // of the pipeline is done and we aren't set to finish yet.
             if (op_result == OperatorResult::NEED_MORE_INPUT) {
                 return false;
