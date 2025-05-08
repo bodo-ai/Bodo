@@ -180,6 +180,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return super().__len__()
 
     @property
+    def index(self):
+        self.execute_plan()
+        return super().index
+
+    @property
     def shape(self):
         self.execute_plan()
         if self._lazy:
