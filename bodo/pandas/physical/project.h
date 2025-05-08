@@ -88,7 +88,7 @@ class PhysicalProjection : public PhysicalSourceSink {
         std::shared_ptr<table_info> out_table_info =
             std::make_shared<table_info>(out_cols, out_size, col_names,
                                          input_batch->metadata);
-        return {out_table_info, OperatorResult::FINISHED};
+        return {out_table_info, OperatorResult::NEED_MORE_INPUT};
     }
 
    private:

@@ -49,7 +49,7 @@ class PhysicalFilter : public PhysicalSourceSink {
         std::shared_ptr<table_info> out_table =
             RetrieveTable(input_batch, bitmask);
 
-        return {out_table, OperatorResult::FINISHED};
+        return {out_table, OperatorResult::NEED_MORE_INPUT};
     }
 
    private:

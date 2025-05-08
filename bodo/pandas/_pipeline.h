@@ -12,6 +12,15 @@ class Pipeline {
     std::shared_ptr<PhysicalSource> source;
     std::vector<std::shared_ptr<PhysicalSourceSink>> between_ops;
     std::shared_ptr<PhysicalSink> sink;
+    /**
+     * @brief Execute the pipeline starting at a certain point.
+     *
+     * param idx - the operator index in between_ops to start at
+     * param batch - the output of the previous operator in the pipeline
+     * returns - bool that is True if some operator in the pipeline has
+     * indicated that no more output needs to be generated.
+     */
+    bool midPipelineExecute(unsigned idx, std::shared_ptr<table_info> batch);
 
     friend class PipelineBuilder;
 

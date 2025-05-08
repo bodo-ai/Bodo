@@ -3,6 +3,7 @@
 #include <memory>
 #include <utility>
 #include "../libs/_array_utils.h"
+#include "../libs/_distributed.h"
 #include "operator.h"
 
 /**
@@ -25,16 +26,35 @@ class PhysicalLimit : public PhysicalSourceSink {
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override {
-        uint64_t select_this_time = std::min(n, input_batch->nrows());
-        n -= select_this_time;
+        int n_pes = 0;
+        int myrank = 0;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-        std::vector<int64_t> rowInds(select_this_time);
-        for (uint64_t i = 0; i < select_this_time; ++i) {
+        // Gather how many rows are on each rank
+        std::vector<uint64_t> row_counts(n_pes);
+        uint64_t cur_rows = input_batch->nrows();
+        CHECK_MPI(MPI_Allgather(&cur_rows, 1, MPI_UNSIGNED_LONG_LONG, row_counts.data(), 1,
+                                MPI_UNSIGNED_LONG_LONG, MPI_COMM_WORLD),
+                  "PhysicalLimit: MPI error on MPI_Allgather:");
+
+        uint64_t select_local = 0;
+
+        for (int64_t i = 0; i < n_pes && n > 0; ++i) {
+            uint64_t num_from_rank = std::min(n, row_counts[i]);
+            if (i == myrank) {
+                select_local = num_from_rank;
+            }
+            n -= num_from_rank;
+        }
+
+        std::vector<int64_t> rowInds(select_local);
+        for (uint64_t i = 0; i < select_local; ++i) {
             rowInds[i] = i;
         }
         std::shared_ptr<table_info> out_table_info =
             RetrieveTable(input_batch, rowInds);
-        return {out_table_info, OperatorResult::FINISHED};
+        return {out_table_info, n == 0 ? OperatorResult::FINISHED : OperatorResult::NEED_MORE_INPUT};
     }
 
    private:

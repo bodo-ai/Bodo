@@ -413,7 +413,7 @@ def test_head_pushdown(datapath):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2.plan)
+    pre, post = bd.utils.getPlanStatistics(bodo_df2._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -457,7 +457,6 @@ def test_projection_head_pushdown(datapath):
     )
 
 
-@pytest.mark.skip(reason="Non-pushdown physical limit node needs work.")
 def test_head(datapath):
     """Test for head pushed down to read parquet."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
