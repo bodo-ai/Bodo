@@ -93,12 +93,10 @@ class PhysicalReadParquet : public PhysicalSource {
    public:
     // TODO: Fill in the contents with info from the logical operator
     explicit PhysicalReadParquet(
-        std::string _path, PyObject *pyarrow_schema, PyObject *storage_options,
+        PyObject *py_path, PyObject *pyarrow_schema, PyObject *storage_options,
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
-        PyObject *py_path = PyUnicode_FromString(_path.c_str());
-
         // ----------------------------------------------------------
         // Handle columns.
         // ----------------------------------------------------------
