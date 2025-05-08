@@ -442,7 +442,6 @@ cdef unique_ptr[CExpression] make_expr(val):
     """Convert a filter expression tree from Cython wrappers
        to duckdb.
     """
-    cdef LogicalOperator source
     cdef c_string val_cstr
 
     if isinstance(val, int):
