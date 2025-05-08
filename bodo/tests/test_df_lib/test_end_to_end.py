@@ -18,6 +18,8 @@ MAX_DATA_SIZE = 100
 @pytest.fixture
 def set_stream_batch_size_three(monkeypatch):
     monkeypatch.setenv("BODO_STREAMING_BATCH_SIZE", "3")
+    yield
+    monkeypatch.undo()
 
 
 @pytest.fixture(
