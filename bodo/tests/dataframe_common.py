@@ -150,9 +150,7 @@ df_value_params = [
             },
         ),
         id="binary_df",
-        marks=[
-            pytest.mark.slow,
-        ],
+        marks=pytest.mark.slow,
     ),
 ]
 
