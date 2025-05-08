@@ -5,6 +5,7 @@ Tests dataframe library frontend (no triggering of execution).
 import pytest
 
 import bodo.pandas as pd
+from bodo.pandas.utils import BodoLibFallbackWarning
 
 
 @pytest.mark.skip("disabled for release until merge is implemented")
@@ -14,3 +15,16 @@ def test_read_join_filter_proj(datapath):
     df3 = df1.merge(df2, on="A")
     df3 = df3[df3.A > 3]
     df3[["B", "C"]]
+
+
+def test_df_getitem_fallback_warning():
+    """Make sure DataFrame.__getitem__() raises a warning when falling back to Pandas."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], "Int64"),
+            "B": ["A1", "B1", "C1"],
+        },
+    )
+    bdf = pd.from_pandas(df)
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf[:]

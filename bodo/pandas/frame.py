@@ -647,10 +647,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         pd_sample = pd.DataFrame(df_sample)
         out_sample = pd_sample.apply(func, axis)
 
-        # TODO: Should we fallback to Pandas in the DataFrame case?
         if not isinstance(out_sample, pd.Series):
-            raise BodoError(
-                f"DataFrame.apply(): expected output to be Series, got: {type(out_sample)}."
+            raise BodoLibNotImplementedException(
+                f"expected output to be Series, got: {type(out_sample)}."
             )
 
         out_sample = out_sample.convert_dtypes(dtype_backend="pyarrow")
