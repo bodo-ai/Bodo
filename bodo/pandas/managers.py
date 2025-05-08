@@ -473,7 +473,6 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self.blocks = data._mgr.blocks
             self.axes = data._mgr.axes
             self._plan = None
-            BlockManager._rebuild_blknos_and_blklocs(self)
             return data
 
     def _collect(self):
