@@ -86,7 +86,7 @@ bodo.pandas.read_parquet(
 ) -> BodoDataFrame
 ```
 
-Reads
+Creates a lazy DataFrame object for reading from parquet file(s).
 
 #### Parameters
 : __path__ : __*str, path object or file-like object*__: Location(s) of the parquet file(s). Refer to [Pandas documentation for more details](https://pandas.pydata.org/docs/reference/api/pandas.read_parquet.html#pandas.read_parquet).
