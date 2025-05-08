@@ -10,7 +10,7 @@ import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
-from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
@@ -42,23 +42,24 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @property
     def _plan(self):
-        if self._mgr._plan is not None:
+        if self.is_lazy_plan():
             return self._mgr._plan
         else:
             """We can't create a new LazyPlan each time that _plan is called
                because filtering checks that the projections that are part of
                the filter all come from the same source and if you create a
                new LazyPlan here each time then they will appear as different
-               sources.
+               sources.  We sometimes use a pandas manager which doesn't have
+               _source_plan so we have to do getattr check.
             """
-            if self._source_plan is not None:
+            if getattr(self, "_source_plan", None) is not None:
                 return self._source_plan
 
             from bodo.pandas.base import _empty_like
 
             empty_data = _empty_like(self)
             if bodo.dataframe_library_run_parallel:
-                if self._mgr._md_result_id is not None:
+                if getattr(self._mgr, "_md_result_id", None) is not None:
                     # If the plan has been executed but the results are still
                     # distributed then re-use those results as is.
                     res_id = self._mgr._md_result_id
@@ -142,22 +143,31 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """
         # Prevent infinite recursion when called from _empty_like and in general
         # data is never required for head(0) so making a plan is never necessary.
-        if n == 0 and self._head_df is not None:
-            return pd.DataFrame(
-                index=self._head_df.index, columns=self._head_df.columns
-            ).astype(dict(zip(self._head_df.columns, self._head_df.dtypes)))
+        if n == 0:
+            if self._exec_state == ExecState.COLLECTED:
+                return pd.DataFrame(index=self.index, columns=self.columns).astype(
+                    dict(zip(self.columns, self.dtypes))
+                )
+            else:
+                assert self._head_df is not None
+                return pd.DataFrame(
+                    index=self._head_df.index, columns=self._head_df.columns
+                ).astype(dict(zip(self._head_df.columns, self._head_df.dtypes)))
 
         if (self._head_df is None) or (n > self._head_df.shape[0]):
-            from bodo.pandas.base import _empty_like
+            if bodo.dataframe_library_enabled:
+                from bodo.pandas.base import _empty_like
 
-            planLimit = LazyPlan(
-                "LogicalLimit",
-                _empty_like(self),
-                self._plan,
-                n,
-            )
+                planLimit = LazyPlan(
+                    "LogicalLimit",
+                    _empty_like(self),
+                    self._plan,
+                    n,
+                )
 
-            return wrap_plan(planLimit)
+                return wrap_plan(planLimit)
+            else:
+                return super().head(n)
         else:
             # If head_df is available and larger than n, then use it directly.
             return self._head_df.head(n)
