@@ -117,6 +117,7 @@ jobs:
       pytest-marker: "not slow and not weekly or smoke"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: NORMAL
     secrets: inherit
 
   spawn-ci:
@@ -129,6 +130,7 @@ jobs:
       pytest-marker: "spawn_mode"
       collect-coverage: false
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: SPAWN
     secrets: inherit
 
   df-lib-ci:
@@ -141,6 +143,7 @@ jobs:
       pytest-marker: "df_lib and not weekly"
       collect-coverage: false
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
+      test-type: "DF_LIB"
     secrets: inherit
 
   java-ci:
