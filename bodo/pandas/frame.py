@@ -620,7 +620,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     super().__setitem__(key, head_val)
                 return
 
-        return super().__setitem__(key, value)
+        raise BodoLibNotImplementedException(
+            "Only setting a column with a Series created from the same dataframe is supported."
+        )
 
     @check_args_fallback(supported=["func", "axis"])
     def apply(
