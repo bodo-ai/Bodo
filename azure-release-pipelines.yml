@@ -95,10 +95,10 @@ stages:
       matrix:
         TEST_1P:
           NP: 1
-          PYTEST_MARKER: "df_lib"
+          PYTEST_MARKER: "df_lib and not weekly"
         TEST_2P:
           NP: 2
-          PYTEST_MARKER: "df_lib"
+          PYTEST_MARKER: "df_lib and not weekly"
 
 
 - stage: Test_BodoSQL
