@@ -138,7 +138,7 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "df_lib"
+      pytest-marker: "df_lib and not weekly"
       collect-coverage: false
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
     secrets: inherit

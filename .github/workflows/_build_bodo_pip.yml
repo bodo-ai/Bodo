@@ -68,7 +68,7 @@ jobs:
             curl -fsSL https://pixi.sh/install.sh | bash
             source ~/.bashrc
             # Global Tools
-            pixi global install sccache
+            pixi global install sccache ninja
             # Install dependencies available on package manager
             dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
             # Install boost

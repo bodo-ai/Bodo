@@ -3,6 +3,7 @@ from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 
 import pandas as pd
+import pyarrow as pa
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
@@ -15,6 +16,7 @@ from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
+    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_manager_class,
     get_n_index_arrays,
@@ -656,8 +658,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 f"expected output to be Series, got: {type(out_sample)}."
             )
 
-        out_sample = out_sample.convert_dtypes(dtype_backend="pyarrow")
-        empty_series = out_sample.head(0)
+        # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
+        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample.to_frame()))
+        empty_series = empty_df.squeeze()
+        empty_series.name = out_sample.name
 
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
