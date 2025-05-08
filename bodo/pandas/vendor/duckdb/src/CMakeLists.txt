@@ -69,10 +69,10 @@ if(AMALGAMATION_BUILD)
   target_link_libraries(duckdb_static ${DUCKDB_SYSTEM_LIBS})
   link_threads(duckdb_static)
   link_extension_libraries(duckdb_static)
-
-  install(FILES "${PROJECT_SOURCE_DIR}/src/amalgamation/duckdb.hpp"
-                "${PROJECT_SOURCE_DIR}/src/include/duckdb.h"
-          DESTINATION "${INSTALL_INCLUDE_DIR}")
+  # Bodo change: I think we removed these
+  #install(FILES "${PROJECT_SOURCE_DIR}/src/amalgamation/duckdb.hpp"
+  #              "${PROJECT_SOURCE_DIR}/src/include/duckdb.h"
+  #        DESTINATION "${INSTALL_INCLUDE_DIR}")
   install(FILES "${PROJECT_SOURCE_DIR}/src/include/duckdb/common/winapi.hpp"
           DESTINATION "${INSTALL_INCLUDE_DIR}/duckdb/common")
 
@@ -148,9 +148,10 @@ else()
     FILES_MATCHING
     PATTERN "*.hpp"
     PATTERN "*.ipp")
-  install(FILES "${PROJECT_SOURCE_DIR}/src/include/duckdb.hpp"
-                "${PROJECT_SOURCE_DIR}/src/include/duckdb.h"
-          DESTINATION "${INSTALL_INCLUDE_DIR}")
+  # Bodo change: I think we removed these
+  #install(FILES "${PROJECT_SOURCE_DIR}/src/include/duckdb.hpp"
+  #              "${PROJECT_SOURCE_DIR}/src/include/duckdb.h"
+  #        DESTINATION "${INSTALL_INCLUDE_DIR}")
 
 endif()
 
