@@ -445,12 +445,12 @@ cdef unique_ptr[CExpression] make_expr(val):
     cdef c_string val_cstr
 
     if isinstance(val, int):
-        return make_const_int_expr(val)
+        return move(make_const_int_expr(val))
     elif isinstance(val, float):
-        return make_const_float_expr(val)
+        return move(make_const_float_expr(val))
     elif isinstance(val, str):
         val_cstr = val.encode()
-        return make_const_string_expr(val_cstr)
+        return move(make_const_string_expr(val_cstr))
     else:
         raise ValueError("Unknown expr type in make_expr " + str(type(val)))
 
