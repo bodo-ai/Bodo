@@ -263,6 +263,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         self.execute_plan()
         return super().index
 
+    @index.setter
+    def index(self, value):
+        self.execute_plan()
+        super()._set_axis(0, value)
+
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
             return self._mgr._md_result_id
