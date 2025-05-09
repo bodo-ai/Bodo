@@ -1,6 +1,7 @@
 import functools
 import importlib
 import inspect
+import warnings
 
 import numba
 import pandas as pd
@@ -141,8 +142,25 @@ def get_overloads(cls_name):
         assert False
 
 
+class BodoLibNotImplementedException(Exception):
+    """Exception raised in the Bodo library when a functionality is not implemented yet
+    and we need to fall back to Pandas (captured by the fallback decorator).
+    """
+
+
+class BodoLibFallbackWarning(Warning):
+    """Warning raised in the Bodo library in the fallback decorator when some
+    functionality is not implemented yet and we need to fall back to Pandas.
+    """
+
+
 def check_args_fallback(
-    unsupported=None, supported=None, package_name="pandas", fn_str=None, module_name=""
+    unsupported=None,
+    supported=None,
+    package_name="pandas",
+    fn_str=None,
+    module_name="",
+    disable=False,
 ):
     """Decorator to apply to dataframe or series member functions that handles
     argument checking, falling back to JIT compilation when it might work, and
@@ -166,24 +184,18 @@ def check_args_fallback(
         package_name - see bodo.utils.typing.check_unsupported_args_fallback
         fn_str - see bodo.utils.typing.check_unsupported_args_fallback
         module_name - see bodo.utils.typing.check_unsupported_args_fallback
+        disable - if True, falls back immediately to the Pandas implementation (used
+                in frontend methods that are not fully implemented yet)
     """
     assert (unsupported is None) ^ (supported is None), (
         "Exactly one of unsupported and supported must be specified."
     )
 
     def decorator(func):
-        def to_bodo(val):
-            if isinstance(val, pd.DataFrame):
-                return bodo.pandas.DataFrame(val)
-            elif isinstance(val, pd.Series):
-                return bodo.pandas.Series(val)
-            else:
-                assert False, f"Unexpected val type {type(val)}"
-
         # See if function is top-level or not by looking for a . in
         # the full name.
         toplevel = "." not in func.__qualname__
-        if not bodo.dataframe_library_enabled:
+        if not bodo.dataframe_library_enabled or disable:
             # Dataframe library not enabled so just call the Pandas super class version.
             if toplevel:
                 py_pkg = importlib.import_module(package_name)
@@ -191,16 +203,14 @@ def check_args_fallback(
                 @functools.wraps(func)
                 def wrapper(*args, **kwargs):
                     # Call the same method in the base class.
-                    return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
+                    return getattr(py_pkg, func.__name__)(*args, **kwargs)
             else:
 
                 @functools.wraps(func)
                 def wrapper(self, *args, **kwargs):
                     # Call the same method in the base class.
-                    return to_bodo(
-                        getattr(self.__class__.__bases__[0], func.__name__)(
-                            self, *args, **kwargs
-                        )
+                    return getattr(self.__class__.__bases__[0], func.__name__)(
+                        self, *args, **kwargs
                     )
         else:
             signature = inspect.signature(func)
@@ -255,14 +265,25 @@ def check_args_fallback(
                         module_name=module_name,
                         raise_on_error=(BODO_PANDAS_FALLBACK == 0),
                     )
-                    if error:
-                        # Can we do a top-level override check?
+                    except_msg = ""
+                    if not error:
+                        try:
+                            return func(*args, **kwargs)
+                        except BodoLibNotImplementedException as e:
+                            # Fall back to Pandas below
+                            except_msg = str(e)
+                    # Can we do a top-level override check?
 
-                        # Fallback to Python. Call the same method in the base class.
-                        return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
-                    else:
-                        result = func(*args, **kwargs)
-                    return result
+                    # Fallback to Python. Call the same method in the base class.
+                    msg = (
+                        f"{func.__name__} is not "
+                        "implemented in Bodo dataframe library for the specified arguments yet. "
+                        "Falling back to Pandas (may be slow or run out of memory."
+                    )
+                    if except_msg:
+                        msg += f"\nException: {except_msg}"
+                    warnings.warn(BodoLibFallbackWarning(msg))
+                    return getattr(py_pkg, func.__name__)(*args, **kwargs)
             else:
 
                 @functools.wraps(func)
@@ -280,26 +301,35 @@ def check_args_fallback(
                         module_name=module_name,
                         raise_on_error=(BODO_PANDAS_FALLBACK == 0),
                     )
-                    if error:
-                        # The dataframe library must not support some specified option.
-                        # Get overloaded functions for this dataframe/series in JIT mode.
-                        overloads = get_overloads(self.__class__.__name__)
-                        if func.__name__ in overloads:
-                            # TO-DO: Generate a function and bodo JIT it to do this
-                            # individual operation.  If the compile fails then fallthrough
-                            # to the pure Python code below.  If the compile works then
-                            # run the operation using the JITted function.
-                            pass
+                    except_msg = ""
+                    if not error:
+                        try:
+                            return func(self, *args, **kwargs)
+                        except BodoLibNotImplementedException as e:
+                            # Fall back to Pandas below
+                            except_msg = str(e)
 
-                        # Fallback to Python. Call the same method in the base class.
-                        return to_bodo(
-                            getattr(self.__class__.__bases__[0], func.__name__)(
-                                self, *args, **kwargs
-                            )
-                        )
-                    else:
-                        result = func(self, *args, **kwargs)
-                    return result
+                    # The dataframe library must not support some specified option.
+                    # Get overloaded functions for this dataframe/series in JIT mode.
+                    overloads = get_overloads(self.__class__.__name__)
+                    if func.__name__ in overloads:
+                        # TO-DO: Generate a function and bodo JIT it to do this
+                        # individual operation.  If the compile fails then fallthrough
+                        # to the pure Python code below.  If the compile works then
+                        # run the operation using the JITted function.
+                        pass
+
+                    # Fallback to Python. Call the same method in the base class.
+                    base_class = self.__class__.__bases__[0]
+                    msg = (
+                        f"{base_class.__name__}.{func.__name__} is not "
+                        "implemented in Bodo dataframe library for the specified arguments yet. "
+                        "Falling back to Pandas (may be slow or run out of memory)."
+                    )
+                    if except_msg:
+                        msg += f"\nException: {except_msg}"
+                    warnings.warn(BodoLibFallbackWarning(msg))
+                    return getattr(base_class, func.__name__)(self, *args, **kwargs)
 
         return wrapper
 
@@ -528,6 +558,8 @@ def run_func_on_table(cpp_table, arrow_schema, in_args):
         out = func(input, *args, **kwargs)
 
     out_df = pd.DataFrame({"OUT": out})
+
+    # TODO [BSE-4788]: replace with convert_to_arrow_dtypes util
     out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
     return df_to_cpp_table(out_df)
 

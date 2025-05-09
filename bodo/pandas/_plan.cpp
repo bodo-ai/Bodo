@@ -330,7 +330,7 @@ std::pair<int64_t, PyObject *> execute_plan(
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path, PyObject *pyarrow_schema,
+    PyObject *parquet_path, PyObject *pyarrow_schema,
     PyObject *storage_options) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
@@ -471,8 +471,36 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::VARCHAR;
             break;
         }
+        case arrow::Type::BINARY: {
+            duckdb_type = duckdb::LogicalType::BLOB;
+            break;
+        }
+        case arrow::Type::UINT8: {
+            duckdb_type = duckdb::LogicalType::UTINYINT;
+            break;
+        }
+        case arrow::Type::INT8: {
+            duckdb_type = duckdb::LogicalType::TINYINT;
+            break;
+        }
+        case arrow::Type::UINT16: {
+            duckdb_type = duckdb::LogicalType::USMALLINT;
+            break;
+        }
+        case arrow::Type::INT16: {
+            duckdb_type = duckdb::LogicalType::SMALLINT;
+            break;
+        }
+        case arrow::Type::UINT32: {
+            duckdb_type = duckdb::LogicalType::UINTEGER;
+            break;
+        }
         case arrow::Type::INT32: {
             duckdb_type = duckdb::LogicalType::INTEGER;
+            break;
+        }
+        case arrow::Type::UINT64: {
+            duckdb_type = duckdb::LogicalType::UBIGINT;
             break;
         }
         case arrow::Type::INT64: {
@@ -493,6 +521,10 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
         }
         case arrow::Type::DATE32: {
             duckdb_type = duckdb::LogicalType::DATE;
+            break;
+        }
+        case arrow::Type::DURATION: {
+            duckdb_type = duckdb::LogicalType::INTERVAL;
             break;
         }
         case arrow::Type::TIMESTAMP: {

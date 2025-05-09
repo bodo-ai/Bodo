@@ -126,7 +126,7 @@ PyObject* ParquetReader::get_dataset() {
     // filters, storage_options, read_categories=False, tot_rows_to_read,
     // schema, partitioning)
     PyObject* ds = PyObject_CallMethod(
-        pq_mod, "get_parquet_dataset", "OOOOOLOO", this->path.get(), Py_True,
+        pq_mod, "get_parquet_dataset", "OOOOOLOO", this->path, Py_True,
         expr_filters.get(), this->storage_options, Py_False, tot_rows_to_read,
         this->pyarrow_schema, partitioning.get());
     if (ds == nullptr && PyErr_Occurred()) {

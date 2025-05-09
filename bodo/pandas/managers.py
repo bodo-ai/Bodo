@@ -158,6 +158,11 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
         | None = None,
     ):
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             blocks,
             axes,
@@ -165,9 +170,6 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             if (result_id is None and plan is None)
             else False,
         )
-        # Flag for disabling collect to allow updating internal pandas metadata
-        # See DataFrame.__setitem__
-        self._disable_collect = False
         if result_id is not None:
             # Set pandas internal metadata
             self._rebuild_blknos_and_blklocs_lazy()
@@ -401,6 +403,11 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                         "Index type {type(head_axis)} not supported in LazySingleBlockManager"
                     )
 
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             block_,
             axis_,
@@ -408,9 +415,6 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             if (result_id is None and plan is None)
             else False,
         )
-        # Flag for disabling collect to allow updating internal pandas metadata
-        # See DataFrame.__setitem__
-        self._disable_collect = False
 
     def get_dtypes(self) -> np.typing.NDArray[np.object_]:
         """
@@ -473,7 +477,6 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self.blocks = data._mgr.blocks
             self.axes = data._mgr.axes
             self._plan = None
-            BlockManager._rebuild_blknos_and_blklocs(self)
             return data
 
     def _collect(self):

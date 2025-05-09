@@ -48,7 +48,7 @@ def test_filter_node():
 def test_parquet_node():
     """Make sure Cython wrapper around the Parquet node works. Just tests node creation."""
     A = plan_optimizer.LogicalGetParquetRead(
-        pa.schema([("A", pa.int64()), ("B", pa.string())]), b"example.parquet", {}
+        pa.schema([("A", pa.int64()), ("B", pa.string())]), "example.parquet", {}
     )
     assert str(A) == "LogicalGetParquetRead(example.parquet)"
     assert A.path == "example.parquet"
