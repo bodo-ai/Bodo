@@ -102,6 +102,8 @@ Output:
 
 ---
 
+## Input/Output
+
 ### bodo.pandas.read_parquet
 ``` py
 bodo.pandas.read_parquet(
