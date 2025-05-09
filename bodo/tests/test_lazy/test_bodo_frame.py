@@ -297,10 +297,11 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
     )
 
     agg_df = df.groupby("A0").size()
-    assert agg_df.equals(
+    _test_equal(
+        agg_df,
         pd.Series(
             [8, 8, 8, 8, 8], index=pd.Index([1, 2, 3, 4, 5], dtype="Int64", name="A0")
-        )
+        ),
     )
     assert df.describe().equals(
         pd.DataFrame(
