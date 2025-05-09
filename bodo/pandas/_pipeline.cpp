@@ -14,8 +14,7 @@ bool Pipeline::midPipelineExecute(unsigned idx,
     // Terminate the recursion when we have processed all the operators
     // and only have the sink to go which cannot HAVE_MORE_OUTPUT.
     if (idx >= between_ops.size()) {
-        sink->ConsumeBatch(batch);
-        return false;
+        return sink->ConsumeBatch(batch) == OperatorResult::FINISHED;
     } else {
         // Get the current operator.
         std::shared_ptr<PhysicalSourceSink>& op = between_ops[idx];
@@ -73,6 +72,8 @@ void Pipeline::Execute() {
         op->Finalize();
     }
     sink->Finalize();
+
+    executed = true;
 }
 
 std::shared_ptr<table_info> Pipeline::GetResult() { return sink->GetResult(); }
@@ -83,6 +84,7 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(
     pipeline->source = source;
     pipeline->between_ops = std::move(between_ops);
     pipeline->sink = sink;
+    pipeline->executed = false;
     return pipeline;
 }
 

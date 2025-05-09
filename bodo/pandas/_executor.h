@@ -23,19 +23,24 @@ class Executor {
         PhysicalPlanBuilder builder;
         builder.Visit(*plan);
         pipelines = std::move(builder.finished_pipelines);
-
-        if (builder.active_pipeline != nullptr) {
-            pipelines.push_back(builder.active_pipeline->BuildEnd(out_schema));
-        }
+        assert(builder.active_pipelines.size() == 1);
+        pipelines.push_back(builder.active_pipelines.top().first->BuildEnd(out_schema));
     }
 
     /**
-     * @brief Execute the plan and return the result (placeholder for now).
+     * @brief Execute the plan and return the result.
      */
     std::shared_ptr<table_info> ExecutePipelines() {
-        // TODO: support multiple pipelines
-        pipelines[0]->Execute();
-
-        return pipelines[0]->GetResult();
+        // We must execute all pipelines once.
+        // Though there are dependencies between them
+        // the method of construction should guarantee that
+        // earlier items in the vector are dependencies to
+        // later items so we can still process them in order.
+        for (size_t i = 0; i < pipelines.size(); ++i) {
+            assert(pipelines[i]->dependencies_finished());
+            // Run that pipeline.
+            pipelines[i]->Execute();
+        }
+        return pipelines.back()->GetResult();
     }
 };

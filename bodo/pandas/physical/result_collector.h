@@ -23,8 +23,9 @@ class PhysicalResultCollector : public PhysicalSink {
 
     virtual ~PhysicalResultCollector() = default;
 
-    void ConsumeBatch(std::shared_ptr<table_info> input_batch) override {
+    OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch) override {
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
+        return OperatorResult::NEED_MORE_INPUT;
     }
 
     void Finalize() override {}
