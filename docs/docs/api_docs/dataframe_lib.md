@@ -371,7 +371,7 @@ df = pd.DataFrame(
     )
 
 bdf = bodo_pd.from_pandas(df)
-bodo_ser_head = df.A.head(3)
+bodo_ser_head = bdf.A.head(3)
 print(type(bodo_ser_head))
 print(bodo_ser_head)
 ```
