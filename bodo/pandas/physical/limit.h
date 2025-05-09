@@ -13,8 +13,7 @@
  */
 class PhysicalLimit : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalLimit(uint64_t nrows)
-        : n(nrows), local_remaining(nrows) {}
+    explicit PhysicalLimit(uint64_t nrows) : n(nrows), local_remaining(nrows) {}
 
     virtual ~PhysicalLimit() = default;
 
@@ -55,11 +54,16 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
             n -= num_from_rank;
         }
 
-        auto reduced_collected_rows = std::make_unique<ChunkedTableBuilderState>(collected_rows->table_schema, collected_rows->builder->active_chunk_capacity);
+        auto reduced_collected_rows =
+            std::make_unique<ChunkedTableBuilderState>(
+                collected_rows->table_schema,
+                collected_rows->builder->active_chunk_capacity);
         while (!collected_rows->builder->empty()) {
             auto next_batch = collected_rows->builder->PopChunk();
-            uint64_t select_local = std::min(local_remaining, (uint64_t)std::get<1>(next_batch));
-            reduced_collected_rows->builder->AppendBatch(std::get<0>(next_batch), std::move(get_n_rows(select_local)));
+            uint64_t select_local =
+                std::min(local_remaining, (uint64_t)std::get<1>(next_batch));
+            reduced_collected_rows->builder->AppendBatch(
+                std::get<0>(next_batch), std::move(get_n_rows(select_local)));
             reduced_collected_rows->builder->FinalizeActiveChunk();
             local_remaining -= select_local;
         }
@@ -95,11 +99,13 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     OperatorResult ConsumeBatch(
         std::shared_ptr<table_info> input_batch) override {
         if (!collected_rows) {
-            collected_rows = std::make_unique<ChunkedTableBuilderState>(input_batch->schema(), input_batch->nrows());
+            collected_rows = std::make_unique<ChunkedTableBuilderState>(
+                input_batch->schema(), input_batch->nrows());
         }
         // Every rank will collect n rows.  We remove extras in Finalize.
         uint64_t select_local = std::min(local_remaining, input_batch->nrows());
-        collected_rows->builder->AppendBatch(input_batch, std::move(get_n_rows(select_local)));
+        collected_rows->builder->AppendBatch(
+            input_batch, std::move(get_n_rows(select_local)));
         collected_rows->builder->FinalizeActiveChunk();
         local_remaining -= select_local;
         return local_remaining == 0 ? OperatorResult::FINISHED
@@ -121,7 +127,8 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      *
      * returns std::pair<std::shared_ptr<table_info>, ProducerResult>
      */
-    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch() override {
+    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
+        override {
         auto next_batch = collected_rows->builder->PopChunk();
         return {std::get<0>(next_batch),
                 collected_rows->builder->empty()
