@@ -421,11 +421,25 @@ def test_head_pushdown(datapath):
     assert len(bodo_df2) == 3
 
 
-@pytest.mark.skip(reason="Not working.")
 def test_projection_head_pushdown(datapath):
     """Test for projection and head pushed down to read parquet."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
+    bodo_df3 = bodo_df2.head(3)
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df3.is_lazy_plan()
+
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df3) == 3
+
+
+def test_series_head(datapath):
+    """Test for projection and head pushed down to read parquet."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1["D"]
+    bodo_df2.execute_plan()
+    breakpoint()
     bodo_df3 = bodo_df2.head(3)
 
     # Make sure bodo_df2 is unevaluated at this point.

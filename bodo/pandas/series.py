@@ -228,14 +228,22 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Otherwise we use the data fetched from the workers.
         """
         if n == 0 and self._head_s is not None:
-            return pd.Series(
-                index=self._head_s.index,
-                name=self._head_s.name,
-                dtype=self._head_s.dtype,
-            )
+            if self._exec_state == ExecState.COLLECTED:
+                return pd.Series(
+                    index=self.index,
+                    name=self.name,
+                    dtype=self.dtype,
+                )
+            else:
+                assert self._head_s is not None
+                return pd.Series(
+                    index=self._head_s.index,
+                    name=self._head_s.name,
+                    dtype=self._head_s.dtype,
+                )
 
         if (self._head_s is None) or (n > self._head_s.shape[0]):
-            if self._exec_state == ExecState.PLAN:
+            if bodo.dataframe_library_enabled:
                 from bodo.pandas.base import _empty_like
 
                 planLimit = LazyPlan(
