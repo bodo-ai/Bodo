@@ -341,7 +341,7 @@ Name: D, dtype: string
 
 ## Series API
 
-### bodo.BodoSeries.head
+### bodo.pandas.BodoSeries.head
 ```
 BodoSeries.head(n=5) -> BodoSeries
 ```
@@ -386,7 +386,7 @@ Name: A, dtype: Int64
 
 ---
 
-### bodo.BodoSeries.map
+### bodo.pandas.BodoSeries.map
 ```
 BodoSeries.map(arg, na_action=None) -> BodoSeries
 ```
@@ -447,7 +447,7 @@ Name: A, dtype: int64[pyarrow]
 
 ---
 
-### bodo.BodoSeries.str.lower
+### bodo.pandas.BodoSeries.str.lower
 ```
 BodoSeries.str.lower() -> BodoSeries
 ```
@@ -497,7 +497,7 @@ Name: A, dtype: string
 
 ---
 
-### bodo.BodoSeries.str.strip
+### bodo.pandas.BodoSeries.str.strip
 ```
 BodoSeries.str.strip(to_strip=None) -> BodoSeries
 ```
