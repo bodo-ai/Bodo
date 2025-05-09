@@ -146,14 +146,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # data is never required for head(0) so making a plan is never necessary.
         if n == 0:
             if self._exec_state == ExecState.COLLECTED:
-                return pd.DataFrame(index=self.index, columns=self.columns).astype(
-                    dict(zip(self.columns, self.dtypes))
-                )
+                return self.iloc[:0].copy()
             else:
                 assert self._head_df is not None
-                return pd.DataFrame(
-                    index=self._head_df.index, columns=self._head_df.columns
-                ).astype(dict(zip(self._head_df.columns, self._head_df.dtypes)))
+                return self._head_df.head(0).copy()
 
         if (self._head_df is None) or (n > self._head_df.shape[0]):
             if bodo.dataframe_library_enabled:
@@ -178,6 +174,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if self._lazy:
             return self._mgr._md_nrows
         return super().__len__()
+
+    @property
+    def index(self):
+        self.execute_plan()
+        return super().index
+
+    @index.setter
+    def index(self, value):
+        self.execute_plan()
+        super()._set_axis(1, value)
 
     @property
     def shape(self):
@@ -687,14 +693,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 (func,),  # args
                 {"axis": 1},  # kwargs
             ),
-            tuple(range(len(self.columns) + get_n_index_arrays(self.index))),
+            tuple(range(len(self.columns) + get_n_index_arrays(self.head(0).index))),
         )
 
         # Select Index columns explicitly for output
         n_cols = len(self.columns)
         index_col_refs = tuple(
             make_col_ref_exprs(
-                range(n_cols, n_cols + get_n_index_arrays(self.index)), self._plan
+                range(n_cols, n_cols + get_n_index_arrays(self.head(0).index)),
+                self._plan,
             )
         )
         plan = LazyPlan(
