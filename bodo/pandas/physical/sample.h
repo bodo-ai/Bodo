@@ -7,7 +7,7 @@
 #include "operator.h"
 
 /**
- * @brief Physical node for projection.
+ * @brief Physical node for sampling.
  *
  */
 class PhysicalSample : public PhysicalSourceSink {
@@ -41,7 +41,7 @@ class PhysicalSample : public PhysicalSourceSink {
     }
 
    private:
-    float percentage;
+    const float percentage;
 
     uint64_t stochasticRound(uint64_t nrows) {
         double scaled = nrows * percentage;

@@ -4,16 +4,17 @@
 #include <utility>
 #include "../libs/_array_utils.h"
 #include "../libs/_distributed.h"
+#include "../libs/_table_builder.h"
 #include "operator.h"
 
 /**
- * @brief Physical node for projection.
+ * @brief Physical node for limit.
  *
  */
 class PhysicalLimit : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalLimit(uint64_t nrows)
-        : n(nrows), local_remaining(nrows), produced(0) {}
+        : n(nrows), local_remaining(nrows) {}
 
     virtual ~PhysicalLimit() = default;
 
@@ -35,7 +36,7 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
 
         // Sum up total rows this rank has collected.
         uint64_t cur_rows = std::accumulate(
-            collected_rows.begin(), collected_rows.end(), 0,
+            collected_rows->builder->begin(), collected_rows->builder->end(), 0,
             [](uint64_t acc, const std::shared_ptr<table_info>& item) {
                 return acc + item->nrows();
             });
@@ -44,29 +45,26 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
                                 MPI_COMM_WORLD),
                   "PhysicalLimit: MPI error on MPI_Allgather:");
 
-        uint64_t select_local = 0;
+        uint64_t local_remaining = 0;
 
-        for (int64_t i = 0; i < n_pes && n > 0; ++i) {
+        for (int32_t i = 0; i < n_pes && n > 0; ++i) {
             uint64_t num_from_rank = std::min(n, row_counts[i]);
             if (i == myrank) {
-                select_local = num_from_rank;
+                local_remaining = num_from_rank;
             }
             n -= num_from_rank;
         }
 
-        // Go back through the collected rows and remove ones we don't need.
-        for (size_t i = 0; i < collected_rows.size(); ++i) {
-            collected_rows[i] =
-                get_n_rows(collected_rows[i],
-                           std::min(select_local, collected_rows[i]->nrows()));
-            select_local -= collected_rows[i]->nrows();
-            if (select_local == 0) {
-                // Remove any subsequent sets of rows as they are unneeded.
-                collected_rows.erase(collected_rows.begin() + i + 1,
-                                     collected_rows.end());
-                break;
-            }
+        auto reduced_collected_rows = std::make_unique<ChunkedTableBuilderState>(collected_rows->table_schema, collected_rows->builder->active_chunk_capacity);
+        while (!collected_rows->builder->empty()) {
+            auto next_batch = collected_rows->builder->PopChunk();
+            uint64_t select_local = std::min(local_remaining, (uint64_t)std::get<1>(next_batch));
+            reduced_collected_rows->builder->AppendBatch(std::get<0>(next_batch), std::move(get_n_rows(select_local)));
+            reduced_collected_rows->builder->FinalizeActiveChunk();
+            local_remaining -= select_local;
         }
+
+        collected_rows = std::move(reduced_collected_rows);
     }
 
     /**
@@ -79,13 +77,12 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      * returns std::shared_ptr<table_info> - the table restriced to num_rows
      * rows.
      */
-    std::shared_ptr<table_info> get_n_rows(
-        std::shared_ptr<table_info> input_batch, uint64_t num_rows) {
+    std::vector<int64_t> get_n_rows(uint64_t num_rows) {
         std::vector<int64_t> rowInds(num_rows);
         for (uint64_t i = 0; i < num_rows; ++i) {
             rowInds[i] = i;
         }
-        return RetrieveTable(input_batch, rowInds);
+        return rowInds;
     }
 
     /**
@@ -97,9 +94,13 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(
         std::shared_ptr<table_info> input_batch) override {
+        if (!collected_rows) {
+            collected_rows = std::make_unique<ChunkedTableBuilderState>(input_batch->schema(), input_batch->nrows());
+        }
         // Every rank will collect n rows.  We remove extras in Finalize.
         uint64_t select_local = std::min(local_remaining, input_batch->nrows());
-        collected_rows.emplace_back(get_n_rows(input_batch, select_local));
+        collected_rows->builder->AppendBatch(input_batch, std::move(get_n_rows(select_local)));
+        collected_rows->builder->FinalizeActiveChunk();
         local_remaining -= select_local;
         return local_remaining == 0 ? OperatorResult::FINISHED
                                     : OperatorResult::NEED_MORE_INPUT;
@@ -108,7 +109,7 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
-    std::shared_ptr<table_info> GetResult() {
+    std::shared_ptr<table_info> GetResult() override {
         // Limit should be between pipelines and act alternatively as a sink
         // then source but there should never be the need to ask for the result
         // all in one go.
@@ -120,17 +121,15 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      *
      * returns std::pair<std::shared_ptr<table_info>, ProducerResult>
      */
-    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch() {
-        // Return the previously accumulated table_infos.  There should always
-        // be at least one.
-        produced++;
-        return {collected_rows[produced - 1],
-                produced >= collected_rows.size()
+    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch() override {
+        auto next_batch = collected_rows->builder->PopChunk();
+        return {std::get<0>(next_batch),
+                collected_rows->builder->empty()
                     ? ProducerResult::FINISHED
                     : ProducerResult::HAVE_MORE_OUTPUT};
     }
 
    private:
-    uint64_t n, local_remaining, produced;
-    std::vector<std::shared_ptr<table_info>> collected_rows;
+    uint64_t n, local_remaining;
+    std::unique_ptr<ChunkedTableBuilderState> collected_rows;
 };
