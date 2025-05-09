@@ -12,31 +12,30 @@
  */
 class PhysicalLimit : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalLimit(uint64_t nrows) : n(nrows), local_remaining(nrows), produced(0) {}
+    explicit PhysicalLimit(uint64_t nrows)
+        : n(nrows), local_remaining(nrows), produced(0) {}
 
     virtual ~PhysicalLimit() = default;
 
     /**
-     * @brief Finalize - this function is a safe place to see how many rows each rank
-     *        collected and to determine how many from each rank is needed to meet the
-     *        overall goal of "n".  The collected_rows table_infos are reduced to meet
-     *        that goal.
+     * @brief Finalize - this function is a safe place to see how many rows each
+     * rank collected and to determine how many from each rank is needed to meet
+     * the overall goal of "n".  The collected_rows table_infos are reduced to
+     * meet that goal.
      *
      */
     void Finalize() override {
         int n_pes = 0;
         int myrank = 0;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);  // total ranks
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank); // my rank
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);   // total ranks
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);  // my rank
 
         // Gather how many rows are on each rank
         std::vector<uint64_t> row_counts(n_pes);
 
         // Sum up total rows this rank has collected.
         uint64_t cur_rows = std::accumulate(
-            collected_rows.begin(),
-            collected_rows.end(),
-            0,
+            collected_rows.begin(), collected_rows.end(), 0,
             [](uint64_t acc, const std::shared_ptr<table_info>& item) {
                 return acc + item->nrows();
             });
@@ -57,25 +56,31 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
 
         // Go back through the collected rows and remove ones we don't need.
         for (size_t i = 0; i < collected_rows.size(); ++i) {
-            collected_rows[i] = get_n_rows(collected_rows[i], std::min(select_local, collected_rows[i]->nrows()));
+            collected_rows[i] =
+                get_n_rows(collected_rows[i],
+                           std::min(select_local, collected_rows[i]->nrows()));
             select_local -= collected_rows[i]->nrows();
             if (select_local == 0) {
                 // Remove any subsequent sets of rows as they are unneeded.
-                collected_rows.erase(collected_rows.begin() + i + 1, collected_rows.end());
+                collected_rows.erase(collected_rows.begin() + i + 1,
+                                     collected_rows.end());
                 break;
             }
         }
     }
 
     /**
-     * @brief get_n_rows - utility function to get a fixed number of rows from a table_info
+     * @brief get_n_rows - utility function to get a fixed number of rows from a
+     * table_info
      *
      * param input_batch - the table to return a subset of
      * param num_rows - the number of rows of the table to return
      *
-     * returns std::shared_ptr<table_info> - the table restriced to num_rows rows.
+     * returns std::shared_ptr<table_info> - the table restriced to num_rows
+     * rows.
      */
-    std::shared_ptr<table_info> get_n_rows(std::shared_ptr<table_info> input_batch, uint64_t num_rows) {
+    std::shared_ptr<table_info> get_n_rows(
+        std::shared_ptr<table_info> input_batch, uint64_t num_rows) {
         std::vector<int64_t> rowInds(num_rows);
         for (uint64_t i = 0; i < num_rows; ++i) {
             rowInds[i] = i;
@@ -96,17 +101,18 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
         uint64_t select_local = std::min(local_remaining, input_batch->nrows());
         collected_rows.emplace_back(get_n_rows(input_batch, select_local));
         local_remaining -= select_local;
-        return local_remaining == 0 ? OperatorResult::FINISHED : OperatorResult::NEED_MORE_INPUT;
+        return local_remaining == 0 ? OperatorResult::FINISHED
+                                    : OperatorResult::NEED_MORE_INPUT;
     }
 
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
     std::shared_ptr<table_info> GetResult() {
-        // Limit should be between pipelines and act alternatively as a sink then source
-        // but there should never be the need to ask for the result all in one go.
-        throw std::runtime_error(
-            "GetResult called on a limit node.");
+        // Limit should be between pipelines and act alternatively as a sink
+        // then source but there should never be the need to ask for the result
+        // all in one go.
+        throw std::runtime_error("GetResult called on a limit node.");
     }
 
     /**
@@ -115,9 +121,13 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      * returns std::pair<std::shared_ptr<table_info>, ProducerResult>
      */
     std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch() {
-        // Return the previously accumulated table_infos.  There should always be at least one.
+        // Return the previously accumulated table_infos.  There should always
+        // be at least one.
         produced++;
-        return {collected_rows[produced-1], produced >= collected_rows.size() ? ProducerResult::FINISHED : ProducerResult::HAVE_MORE_OUTPUT};
+        return {collected_rows[produced - 1],
+                produced >= collected_rows.size()
+                    ? ProducerResult::FINISHED
+                    : ProducerResult::HAVE_MORE_OUTPUT};
     }
 
    private:

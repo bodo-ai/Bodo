@@ -24,7 +24,8 @@ class Executor {
         builder.Visit(*plan);
         pipelines = std::move(builder.finished_pipelines);
         assert(builder.active_pipelines.size() == 1);
-        pipelines.push_back(builder.active_pipelines.top().first->BuildEnd(out_schema));
+        pipelines.push_back(
+            builder.active_pipelines.top().first->BuildEnd(out_schema));
     }
 
     /**

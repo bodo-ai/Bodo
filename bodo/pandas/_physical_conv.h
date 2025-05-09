@@ -19,7 +19,9 @@ class PhysicalPlanBuilder {
     // of other pipelines that we are dependent on.  Have to
     // accumulate these here so that they can be moved into
     // the pipeline object which is constructed later.
-    std::stack<std::pair<std::shared_ptr<PipelineBuilder>, std::vector<std::shared_ptr<Pipeline>>>> active_pipelines;
+    std::stack<std::pair<std::shared_ptr<PipelineBuilder>,
+                         std::vector<std::shared_ptr<Pipeline>>>>
+        active_pipelines;
 
     PhysicalPlanBuilder() {}
 

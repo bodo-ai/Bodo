@@ -10,8 +10,8 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "physical/filter.h"
 #include "physical/limit.h"
-#include "physical/sample.h"
 #include "physical/project.h"
+#include "physical/sample.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -24,7 +24,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
             selected_columns, op.table_filters, op.extra_info.limit_val);
-    this->active_pipelines.push({std::make_shared<PipelineBuilder>(physical_op), std::vector<std::shared_ptr<Pipeline>>()});
+    this->active_pipelines.push({std::make_shared<PipelineBuilder>(physical_op),
+                                 std::vector<std::shared_ptr<Pipeline>>()});
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
@@ -189,9 +190,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
     auto physical_op = std::make_shared<PhysicalLimit>(n);
     // Finish the pipeline at this point so that Finalize can run
     // to reduce the number of collected rows to the desired amount.
-    finished_pipelines.emplace_back(this->active_pipelines.top().first->Build(physical_op));
+    finished_pipelines.emplace_back(
+        this->active_pipelines.top().first->Build(physical_op));
     // The same operator will exist in both pipelines.  The sink of the
     // previous pipeline and the source of the next one.
     // We record the pipeline dependency between these two pipelines.
-    this->active_pipelines.push({std::make_shared<PipelineBuilder>(physical_op), {finished_pipelines.back()}});
+    this->active_pipelines.push({std::make_shared<PipelineBuilder>(physical_op),
+                                 {finished_pipelines.back()}});
 }

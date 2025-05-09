@@ -58,7 +58,8 @@ class PhysicalSink : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SINK; }
 
-    virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch) = 0;
+    virtual OperatorResult ConsumeBatch(
+        std::shared_ptr<table_info> input_batch) = 0;
     virtual std::shared_ptr<table_info> GetResult() = 0;
 };
 

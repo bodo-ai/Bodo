@@ -49,6 +49,7 @@ class PhysicalSample : public PhysicalSourceSink {
         double remainder = scaled - base;
 
         // Decide whether to add 1 based on remainder probability
-        return base + (static_cast<double>(rand()) / RAND_MAX < remainder ? 1 : 0);
+        return base +
+               (static_cast<double>(rand()) / RAND_MAX < remainder ? 1 : 0);
     }
 };
