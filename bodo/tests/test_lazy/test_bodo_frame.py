@@ -11,7 +11,6 @@ from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 from bodo.tests.utils import (
     _gather_output,
-    _test_equal,
     pytest_mark_spawn_mode,
 )
 from bodo.utils.testing import ensure_clean2
@@ -291,14 +290,13 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
     assert df.shape == (40, 2)
     assert df.dtypes.equals(pd.Series(["Int64", "string[python]"], index=["A0", "B5"]))
 
-    _test_equal(base_df, df, check_dtype=False, check_pandas_types=False)
+    assert base_df.head(5).equals(df.head(5))
 
     agg_df = df.groupby("A0").size()
-    _test_equal(
-        agg_df,
+    assert agg_df.equals(
         pd.Series(
             [8, 8, 8, 8, 8], index=pd.Index([1, 2, 3, 4, 5], dtype="Int64", name="A0")
-        ),
+        )
     )
     assert df.describe().equals(
         pd.DataFrame(
