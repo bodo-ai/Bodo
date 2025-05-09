@@ -258,6 +258,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return self._mgr._md_nrows
         return super().__len__()
 
+    @property
+    def index(self):
+        self.execute_plan()
+        return super().index
+
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
             return self._mgr._md_result_id
