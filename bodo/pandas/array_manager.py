@@ -394,10 +394,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             assert collect_func is not None
             assert del_func is not None
 
-            # head may use a different manager (array vs block) if the workers have a
-            # different configuration than the spawner. BlockManager doesn't have _axes.
-            # See test_bodo_data_frame_pandas_manager
-            head_axis = head._axes[0] if hasattr(head, "_axes") else head.axes[0]
+            head_axis = head._axes[0]
             new_axis = None
             # BSE-4099: Support other types of indexes
             match type(head_axis):
