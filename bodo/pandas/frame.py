@@ -146,10 +146,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # data is never required for head(0) so making a plan is never necessary.
         if n == 0:
             if self._exec_state == ExecState.COLLECTED:
-                return arrow_to_empty_df(pa.Schema.from_pandas(self))
+                return self.iloc[:0].copy()
             else:
                 assert self._head_df is not None
-                return arrow_to_empty_df(pa.Schema.from_pandas(self._head_df))
+                return self._head_df.head(0).copy()
 
         if (self._head_df is None) or (n > self._head_df.shape[0]):
             if bodo.dataframe_library_enabled:
