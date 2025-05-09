@@ -665,7 +665,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """
 
         if axis != 1:
-            raise BodoError("DataFrame.apply(): only axis=1 supported")
+            raise BodoLibNotImplementedException(
+                "DataFrame.apply(): only axis=1 supported"
+            )
 
         # Get output data type by running the UDF on a sample of the data.
         df_sample = self.head(1).execute_plan()
