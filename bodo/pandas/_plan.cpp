@@ -606,7 +606,8 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                 std::static_pointer_cast<arrow::DictionaryType>(arrow_type);
             std::shared_ptr<arrow::Field> value_field =
                 arrow::field("name", dict_type->value_type());
-            auto [field_name, duckdb_type] = arrow_field_to_duckdb(value_field);
+            auto [field_name, inner_type] = arrow_field_to_duckdb(value_field);
+            duckdb_type = inner_type;
             break;
         }
         default:
