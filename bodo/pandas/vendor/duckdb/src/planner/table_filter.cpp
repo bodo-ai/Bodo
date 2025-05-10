@@ -3,7 +3,6 @@
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
-#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 
 namespace duckdb {
 
@@ -53,27 +52,6 @@ void DynamicTableFilterSet::PushFilter(const PhysicalOperator &op, idx_t column_
 bool DynamicTableFilterSet::HasFilters() const {
 	lock_guard<mutex> l(lock);
 	return !filters.empty();
-}
-
-unique_ptr<TableFilterSet>
-DynamicTableFilterSet::GetFinalTableFilters(const PhysicalTableScan &scan,
-                                            optional_ptr<TableFilterSet> existing_filters) const {
-	D_ASSERT(HasFilters());
-	auto result = make_uniq<TableFilterSet>();
-	if (existing_filters) {
-		for (auto &entry : existing_filters->filters) {
-			result->PushFilter(ColumnIndex(entry.first), entry.second->Copy());
-		}
-	}
-	for (auto &entry : filters) {
-		for (auto &filter : entry.second->filters) {
-			result->PushFilter(ColumnIndex(filter.first), filter.second->Copy());
-		}
-	}
-	if (result->filters.empty()) {
-		return nullptr;
-	}
-	return result;
 }
 
 } // namespace duckdb

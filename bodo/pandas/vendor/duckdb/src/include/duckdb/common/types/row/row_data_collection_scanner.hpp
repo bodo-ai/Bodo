@@ -10,6 +10,7 @@
 
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/row/row_layout.hpp"
+#include "duckdb/common/types/vector.hpp"
 
 namespace duckdb {
 
