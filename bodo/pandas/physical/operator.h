@@ -17,10 +17,10 @@ enum class OperatorType : uint8_t {
 };
 
 /// Specifies the status of the physical operator in the execution:
-/// 1. NEED_MORE_INPUT means the operator needs more input to produce output
-/// 2. HAVE_MORE_OUTPUT means the operator has more output to produce in later
-/// iterations
-/// 3. FINISHED means the operator has finished processing
+/// 1. NEED_MORE_INPUT means the operator is ready for additional input
+/// 2. HAVE_MORE_OUTPUT means the operator can produce more output without
+/// additional input.
+/// 3. FINISHED means the pipeline should terminate
 enum class OperatorResult : uint8_t {
     NEED_MORE_INPUT,
     HAVE_MORE_OUTPUT,
@@ -58,7 +58,8 @@ class PhysicalSink : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SINK; }
 
-    virtual void ConsumeBatch(std::shared_ptr<table_info> input_batch) = 0;
+    virtual OperatorResult ConsumeBatch(
+        std::shared_ptr<table_info> input_batch) = 0;
     virtual std::shared_ptr<table_info> GetResult() = 0;
 };
 

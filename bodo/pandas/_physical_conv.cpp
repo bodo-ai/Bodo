@@ -11,6 +11,7 @@
 #include "physical/filter.h"
 #include "physical/limit.h"
 #include "physical/project.h"
+#include "physical/sample.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -23,11 +24,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
             selected_columns, op.table_filters, op.extra_info.limit_val);
-    if (this->active_pipeline != nullptr) {
-        throw std::runtime_error(
-            "LogicalGet operator should be the first operator in the pipeline");
-    }
-    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+    this->active_pipelines.push({std::make_shared<PipelineBuilder>(physical_op),
+                                 std::vector<std::shared_ptr<Pipeline>>()});
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
@@ -36,7 +34,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
 
     auto physical_op =
         std::make_shared<PhysicalProjection>(std::move(op.expressions));
-    this->active_pipeline->AddOperator(physical_op);
+    this->active_pipelines.top().first->AddOperator(physical_op);
 }
 
 /**
@@ -138,7 +136,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     }
     std::shared_ptr<PhysicalFilter> physical_op =
         std::make_shared<PhysicalFilter>(physExprTree);
-    this->active_pipeline->AddOperator(physical_op);
+    this->active_pipelines.top().first->AddOperator(physical_op);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
@@ -158,7 +156,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSample& op) {
         throw std::runtime_error("LogicalSample unsupported offset");
     }
 
-    std::shared_ptr<PhysicalLimit> physical_op;
+    std::shared_ptr<PhysicalSample> physical_op;
 
     std::visit(
         [&physical_op](const auto& value) {
@@ -166,7 +164,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSample& op) {
 
             // Allow only types that can safely convert to int
             if constexpr (std::is_convertible_v<T, uint64_t>) {
-                physical_op = std::make_shared<PhysicalLimit>(value);
+                physical_op = std::make_shared<PhysicalSample>(value);
             }
         },
         extractValue(sampleOptions->sample_size));
@@ -174,7 +172,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSample& op) {
         throw std::runtime_error(
             "Cannot convert duckdb::Value to limit integer.");
     }
-    this->active_pipeline->AddOperator(physical_op);
+    this->active_pipelines.top().first->AddOperator(physical_op);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
@@ -190,5 +188,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
     }
     duckdb::idx_t n = op.limit_val.GetConstantValue();
     auto physical_op = std::make_shared<PhysicalLimit>(n);
-    this->active_pipeline->AddOperator(physical_op);
+    // Finish the pipeline at this point so that Finalize can run
+    // to reduce the number of collected rows to the desired amount.
+    finished_pipelines.emplace_back(
+        this->active_pipelines.top().first->Build(physical_op));
+    // The same operator will exist in both pipelines.  The sink of the
+    // previous pipeline and the source of the next one.
+    // We record the pipeline dependency between these two pipelines.
+    this->active_pipelines.push({std::make_shared<PipelineBuilder>(physical_op),
+                                 {finished_pipelines.back()}});
 }
