@@ -573,6 +573,10 @@ def test_pq_multi_idx(memory_leak_check):
 
 # ---------------------------- Test Read Partitions ---------------------------- #
 @pytest.mark.slow
+@pytest.mark.skipif(
+    bodo.dataframe_library_enabled,
+    reason="[BSE-4795] Fix filter bug without pushdown",
+)
 def test_read_partitions(memory_leak_check):
     """test reading and filtering partitioned parquet data"""
 
