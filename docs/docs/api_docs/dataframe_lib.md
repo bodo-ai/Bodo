@@ -37,10 +37,10 @@ making it possible to process datasets larger than memory reliably.
 ## Lazy Evaluation and Fallback to Pandas
 
 Bodo DataFrame Library operates with lazy evaluation to allow query optimization, meaning operations are recorded into a query plan rather than executed immediately.
-Execution is automatically triggered only when results are actually needed, such as when displaying the first 5 rows in a DataFrame with `print(df.head(5))`.
+Execution is automatically triggered only when results are actually needed, such as when displaying a DataFrame `df` with `print(df)`.
 
 If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame library gracefully falls back to native Pandas.
-When this happens, the query plan is immediately executed, the resulting data is collected onto a single core and converted to a Pandas DataFrame, and further operations proceed using Pandas.
+When this happens, the current query plan of the DataFrame is immediately executed, the resulting data is collected onto a single core and converted to a Pandas DataFrame, and further operations proceed using Pandas.
 
 !!! warning
     Fallback to Pandas may lead to degraded performance and increase the risk of out-of-memory (OOM) errors, especially for large datasets.
@@ -56,14 +56,14 @@ bodo.pandas.from_pandas(df: pandas.DataFrame) -> BodoDataFrame
 
 Converts a Pandas DataFrame into an equivalent BodoDataFrame.
 
-<p style="font-size: 1.1em; font-weight: bold;">Parameters</p>
+<p class="api-header">Parameters</p>
 
 : __df : *pandas.DataFrame*:__ The Pandas DataFrame to use as data source.
 
-<p style="font-size: 1.1em; font-weight: bold;">Returns</p>
+<p class="api-header">Returns</p>
 : __BodoDataFrame__
 
-<p style="font-size: 1.1em; font-weight: bold;">Example</p>
+<p class="api-header">Example</p>
 
 ``` py
 import pandas as pd
@@ -129,10 +129,10 @@ The type of this argument differs from Pandas.
 
 : All other parameters will trigger a fallback to [`pandas.read_parquet`](https://pandas.pydata.org/docs/reference/api/pandas.read_parquet.html#pandas.read_parquet) if a non-default value is provided.
 
-<p style="font-size: 1.1em; font-weight: bold;">Returns</p>
+<p class="api-header">Returns</p>
 : __BodoDataFrame__
 
-<p style="font-size: 1.1em; font-weight: bold;">Example</p>
+<p class="api-header">Example</p>
 
 ``` py
 import bodo
@@ -205,10 +205,10 @@ See [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pand
 
 : All other parameters will trigger a fallback to [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.apply.html#pandas.DataFrame.apply) if a non-default value is provided.
 
-<p style="font-size: 1.1em; font-weight: bold;">Returns</p>
+<p class="api-header">Returns</p>
 : __BodoSeries:__ The result of applying *func* to each row in the BodoDataFrame.
 
-<p style="font-size: 1.1em; font-weight: bold;">Example</p>
+<p class="api-header">Example</p>
 
 ``` py
 import pandas as pd
@@ -259,11 +259,11 @@ Returns the first *n* rows of the BodoDataFrame.
 
 : __n : *int, default 5*:__ Number of rows to select.
 
-<p style="font-size: 1.1em; font-weight: bold;">Returns</p>
+<p class="api-header">Returns</p>
 
 : __BodoDataFrame__
 
-<p style="font-size: 1.1em; font-weight: bold;">Example</p>
+<p class="api-header">Example</p>
 
 ``` py
 import bodo
@@ -300,7 +300,7 @@ Output:
 BodoDataFrames support setting columns lazily when the value is a projection from the same DataFrame.
 Other cases will fallback to Pandas.
 
-<p style="font-size: 1.1em; font-weight: bold;">Example</p>
+<p class="api-header">Example</p>
 
 ``` py
 import bodo.pandas as bodo_pd
@@ -354,11 +354,11 @@ Returns the first *n* rows of the BodoSeries.
 
 : __n : *int, default 5*:__ Number of elements to select.
 
-<p style="font-size: 1.1em; font-weight: bold;">Returns</p>
+<p class="api-header">Returns</p>
 
 : __BodoSeries__
 
-<p style="font-size: 1.1em; font-weight: bold;">Example</p>
+<p class="api-header">Example</p>
 
 ``` py
 import bodo.pandas as bodo_pd
@@ -405,11 +405,11 @@ Map values of a BodoSeries according to a mapping.
 
 : __na_actions:__ will fall back to [`pandas.Series.map`](https://pandas.pydata.org/docs/reference/api/pandas.Series.map.html#pandas.Series.map) if 'ignore' is provided.
 
-<p style="font-size: 1.1em; font-weight: bold;">Returns</p>
+<p class="api-header">Returns</p>
 
 : __BodoSeries__
 
-<p style="font-size: 1.1em; font-weight: bold;">Example</p>
+<p class="api-header">Example</p>
 
 ``` py
 import bodo.pandas as bodo_pd
@@ -456,11 +456,11 @@ BodoSeries.str.lower() -> BodoSeries
 Converts strings in a BodoSeries to lowercase.
 Equivalent to [`str.lower()`](https://docs.python.org/3/library/stdtypes.html#str.lower).
 
-<p style="font-size: 1.1em; font-weight: bold;">Returns</p>
+<p class="api-header">Returns</p>
 
 : __BodoSeries__
 
-<p style="font-size: 1.1em; font-weight: bold;">Example</p>
+<p class="api-header">Example</p>
 
 ``` py
 import bodo.pandas as bodo_pd
@@ -511,11 +511,11 @@ Equivalent to [`str.strip()`](https://docs.python.org/3/library/stdtypes.html#st
 : __to_strip:__
 Will fall back to [`pandas.Series.str.strip`](https://pandas.pydata.org/docs/reference/api/pandas.Series.str.strip.html#pandas.Series.str.strip) if a value other than None is provided.
 
-<p style="font-size: 1.1em; font-weight: bold;">Returns</p>
+<p class="api-header">Returns</p>
 
 : __BodoSeries__
 
-<p style="font-size: 1.1em; font-weight: bold;">Example</p>
+<p class="api-header">Example</p>
 
 ``` py
 import bodo.pandas as bodo_pd
