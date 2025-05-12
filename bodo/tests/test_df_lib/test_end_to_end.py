@@ -421,10 +421,6 @@ def test_head_pushdown(datapath):
     assert len(bodo_df2) == 3
 
 
-<<<<<<< HEAD
-=======
-@pytest.mark.skip(reason="Not working.")
->>>>>>> main
 def test_projection_head_pushdown(datapath):
     """Test for projection and head pushed down to read parquet."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -436,7 +432,6 @@ def test_projection_head_pushdown(datapath):
 
     # Contents not guaranteed to be the same as Pandas so just check length.
     assert len(bodo_df3) == 3
-<<<<<<< HEAD
 
 
 def test_series_head(datapath):
@@ -444,7 +439,6 @@ def test_series_head(datapath):
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
     bodo_df2.execute_plan()
-    breakpoint()
     bodo_df3 = bodo_df2.head(3)
 
     # Make sure bodo_df2 is unevaluated at this point.
@@ -452,8 +446,6 @@ def test_series_head(datapath):
 
     # Contents not guaranteed to be the same as Pandas so just check length.
     assert len(bodo_df3) == 3
-=======
->>>>>>> main
 
 
 def test_head(datapath):
