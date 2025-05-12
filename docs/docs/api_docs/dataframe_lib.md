@@ -193,8 +193,8 @@ All other uses will fall back to Pandas.
 See [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.apply.html#pandas.DataFrame.apply) for more details.
 
 !!! note
-    Calling `BodoDataFrame.apply` will immediately execute a plan to generate the a small sample of the BodoDataFrame
-    and then call `pandas.DataFrame.apply` on the head to infer output types
+    Calling `BodoDataFrame.apply` will immediately execute a plan to generate a small sample of the BodoDataFrame
+    and then call `pandas.DataFrame.apply` on the sample to infer output types
     before proceeding with lazy evaluation.
 
 <p class="api-header">Parameters</p>
@@ -281,8 +281,9 @@ def write_parquet(df):
 write_parquet(original_df)
 
 restored_df = bodo_pd.read_parquet("example.pq")
-print(type(restored_df))
-print(restored_df.head(2))
+restored_df_head = restored_df.head(2)
+print(type(restored_df_head))
+print(restored_df_head)
 ```
 
 Output:
@@ -396,7 +397,7 @@ Map values of a BodoSeries according to a mapping.
 
 !!! note
     Calling `BodoSeries.map` will immediately execute a plan to generate a small sample of the BodoSeries
-    and then call `pandas.Series.map` on the head to infer output types
+    and then call `pandas.Series.map` on the sample to infer output types
     before proceeding with lazy evaluation.
 
 <p class="api-header">Parameters</p>
