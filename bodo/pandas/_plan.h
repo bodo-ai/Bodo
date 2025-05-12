@@ -167,7 +167,9 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
  */
 class BodoSeriesSeqScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoSeriesSeqScanFunctionData(PyObject *series) : series(series) { Py_INCREF(series); }
+    BodoSeriesSeqScanFunctionData(PyObject *series) : series(series) {
+        Py_INCREF(series);
+    }
     ~BodoSeriesSeqScanFunctionData() { Py_DECREF(series); }
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
