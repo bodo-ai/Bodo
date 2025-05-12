@@ -15,15 +15,13 @@ from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_ov
 MAX_DATA_SIZE = 100
 
 
-@pytest.fixture
-def set_stream_batch_size_three(monkeypatch):
-    monkeypatch.setenv("BODO_STREAMING_BATCH_SIZE", "3")
+@pytest.fixture(scope="module")
+def set_stream_batch_size_three():
+    os.environ["BODO_STREAMING_BATCH_SIZE"] = "3"
     yield
-    monkeypatch.undo()
+    del os.environ["BODO_STREAMING_BATCH_SIZE"]
     # Destroy the spawner and workers so they aren't stuck with this batch size
-    bodo.spawn.spawner.submit_func_to_workers(
-        lambda: None, ["BODO_STREAMING_BATCH_SIZE"]
-    )
+    bodo.spawn.spawner.destroy_spawner()
 
 
 @pytest.fixture(
