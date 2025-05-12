@@ -419,6 +419,65 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
     return out_get;
 }
 
+duckdb::unique_ptr<duckdb::LogicalGet> make_series_get_seq_node(
+    PyObject *series, PyObject *pyarrow_schema) {
+    // See DuckDB Pandas scan code:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_scan.hpp#L19
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_bind.hpp#L19
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/pandas/scan.cpp#L185
+
+    duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+
+    BodoSeriesScanFunction table_function = BodoSeriesScanFunction();
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
+        duckdb::make_uniq<BodoSeriesSeqScanFunctionData>(series);
+
+    // Convert Arrow schema to DuckDB
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+    auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
+
+    duckdb::virtual_column_map_t virtual_columns;
+
+    auto out_get = duckdb::make_uniq<duckdb::LogicalGet>(
+        binder->GenerateTableIndex(), table_function, std::move(bind_data1),
+        return_types, return_names, virtual_columns);
+
+    // Column ids need to be added separately.
+    // DuckDB column id initialization example:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
+    for (size_t i = 0; i < return_names.size(); i++) {
+        out_get->AddColumnId(i);
+    }
+
+    return out_get;
+}
+
+duckdb::unique_ptr<duckdb::LogicalGet> make_series_get_parallel_node(
+    std::string result_id, PyObject *pyarrow_schema) {
+    duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+
+    BodoSeriesScanFunction table_function = BodoSeriesScanFunction();
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
+        duckdb::make_uniq<BodoSeriesParallelScanFunctionData>(result_id);
+
+    // Convert Arrow schema to DuckDB
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+    auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
+
+    auto out_get = duckdb::make_uniq<duckdb::LogicalGet>(
+        binder->GenerateTableIndex(), table_function, std::move(bind_data1),
+        return_types, return_names);
+
+    // Column ids need to be added separately.
+    // DuckDB column id initialization example:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
+    for (size_t i = 0; i < return_names.size(); i++) {
+        out_get->AddColumnId(i);
+    }
+
+    return out_get;
+}
+
 duckdb::ClientContext &get_duckdb_context() {
     static duckdb::DuckDB db(nullptr);
     static duckdb::ClientContext context(db.instance);
@@ -672,6 +731,56 @@ BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     return std::make_shared<PhysicalReadPandas>(df, selected_columns);
+}
+
+std::shared_ptr<PhysicalSource>
+BodoSeriesParallelScanFunctionData::CreatePhysicalOperator(
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    // Read the series from the result registry using
+    // sys.modules["__main__"].RESULT_REGISTRY since importing
+    // bodo.spawn.worker creates a new module with new empty registry.
+
+    // Import Python sys module
+    PyObject *sys_module = PyImport_ImportModule("sys");
+    if (!sys_module) {
+        throw std::runtime_error("Failed to import sys module");
+    }
+
+    // Get sys.modules dictionary
+    PyObject *modules_dict = PyObject_GetAttrString(sys_module, "modules");
+    if (!modules_dict) {
+        Py_DECREF(sys_module);
+        throw std::runtime_error("Failed to get sys.modules");
+    }
+
+    // Get __main__ module
+    PyObject *main_module = PyDict_GetItemString(modules_dict, "__main__");
+    if (!main_module) {
+        Py_DECREF(modules_dict);
+        Py_DECREF(sys_module);
+        throw std::runtime_error("Failed to get __main__ module");
+    }
+
+    // Get RESULT_REGISTRY[result_id]
+    PyObject *result_registry =
+        PyObject_GetAttrString(main_module, "RESULT_REGISTRY");
+    PyObject *df = PyDict_GetItemString(result_registry, result_id.c_str());
+    if (!df) {
+        throw std::runtime_error("Result ID not found in result registry");
+    }
+    Py_DECREF(result_registry);
+    Py_DECREF(modules_dict);
+    Py_DECREF(sys_module);
+
+    return std::make_shared<PhysicalReadSeries>(df, selected_columns);
+}
+
+std::shared_ptr<PhysicalSource>
+BodoSeriesSeqScanFunctionData::CreatePhysicalOperator(
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    return std::make_shared<PhysicalReadSeries>(series, selected_columns);
 }
 
 std::shared_ptr<PhysicalSource>

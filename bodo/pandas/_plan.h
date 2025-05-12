@@ -105,6 +105,18 @@ class BodoDataFrameScanFunction : public BodoScanFunction {
 };
 
 /**
+ * @brief Bodo's DuckDB TableFunction for reading dataframe rows
+ * (used in LogicalGet).
+ *
+ */
+class BodoSeriesScanFunction : public BodoScanFunction {
+   public:
+    BodoSeriesScanFunction() : BodoScanFunction("bodo_read_series") {
+        projection_pushdown = false;
+    }
+};
+
+/**
  * @brief Data for Bodo's DuckDB TableFunction for reading dataframe rows on
  * spawner sequentially.
  *
@@ -138,6 +150,50 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
     ~BodoDataFrameParallelScanFunctionData() {}
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
+     *
+     * @return std::shared_ptr<PhysicalOperator> dataframe read operator
+     */
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
+    std::string result_id;
+};
+
+/**
+ * @brief Data for Bodo's DuckDB TableFunction for reading series rows on
+ * spawner sequentially.
+ *
+ */
+class BodoSeriesSeqScanFunctionData : public BodoScanFunctionData {
+   public:
+    BodoSeriesSeqScanFunctionData(PyObject *series) : series(series) { Py_INCREF(series); }
+    ~BodoSeriesSeqScanFunctionData() { Py_DECREF(series); }
+    /**
+     * @brief Create a PhysicalOperator for reading from the dataframe.
+     *
+     * @return std::shared_ptr<PhysicalOperator> dataframe read operator
+     */
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
+
+    PyObject *series;
+};
+
+/**
+ * @brief Data for Bodo's DuckDB TableFunction for reading series rows on
+ * workers in parallel.
+ *
+ */
+class BodoSeriesParallelScanFunctionData : public BodoScanFunctionData {
+   public:
+    BodoSeriesParallelScanFunctionData(std::string result_id)
+        : result_id(result_id) {}
+    ~BodoSeriesParallelScanFunctionData() {}
+    /**
+     * @brief Create a PhysicalOperator for reading from the series.
      *
      * @return std::shared_ptr<PhysicalOperator> dataframe read operator
      */
@@ -362,6 +418,26 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
+    std::string result_id, PyObject *pyarrow_schema);
+
+/**
+ * @brief Create LogicalGet node for reading a series sequentially
+ *
+ * @param series input series to read
+ * @param pyarrow_schema schema of the dataframe
+ * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
+ */
+duckdb::unique_ptr<duckdb::LogicalGet> make_series_get_seq_node(
+    PyObject *series, PyObject *pyarrow_schema);
+
+/**
+ * @brief Create LogicalGet node for reading a series in parallel
+ *
+ * @param result_id input series id on workers to read
+ * @param pyarrow_schema schema of the dataframe
+ * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
+ */
+duckdb::unique_ptr<duckdb::LogicalGet> make_series_get_parallel_node(
     std::string result_id, PyObject *pyarrow_schema);
 
 /**

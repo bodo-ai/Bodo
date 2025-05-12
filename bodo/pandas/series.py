@@ -4,6 +4,7 @@ from collections.abc import Callable, Hashable
 import pandas as pd
 import pyarrow as pa
 
+import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -33,10 +34,40 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @property
     def _plan(self):
         if hasattr(self._mgr, "_plan"):
-            if self._mgr._plan is not None:
+            if self.is_lazy_plan():
                 return self._mgr._plan
             else:
-                return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
+                """We can't create a new LazyPlan each time that _plan is called
+                   because filtering checks that the projections that are part of
+                   the filter all come from the same source and if you create a
+                   new LazyPlan here each time then they will appear as different
+                   sources.  We sometimes use a pandas manager which doesn't have
+                   _source_plan so we have to do getattr check.
+                """
+                if getattr(self, "_source_plan", None) is not None:
+                    return self._source_plan
+
+                from bodo.pandas.base import _empty_like
+
+                empty_data = _empty_like(self)
+                if bodo.dataframe_library_run_parallel:
+                    if getattr(self._mgr, "_md_result_id", None) is not None:
+                        # If the plan has been executed but the results are still
+                        # distributed then re-use those results as is.
+                        res_id = self._mgr._md_result_id
+                    else:
+                        # The data has been collected and is no longer distributed
+                        # so we need to re-distribute the results.
+                        res_id = bodo.spawn.utils.scatter_data(self)
+                    self._source_plan = LazyPlan(
+                        "LogicalGetSeriesReadParallel", empty_data, res_id
+                    )
+                else:
+                    self._source_plan = LazyPlan(
+                        "LogicalGetSeriesReadSeq", empty_data, self
+                    )
+
+                return self._source_plan
 
         raise NotImplementedError(
             "Plan not available for this manager, recreate this series with from_pandas"

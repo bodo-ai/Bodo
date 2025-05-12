@@ -8,7 +8,7 @@
 #include "../libs/_bodo_to_arrow.h"
 #include "operator.h"
 
-/// @brief Physical node for reading Parquet files in pipelines.
+/// @brief Physical node for reading Pandas dataframes in pipelines.
 class PhysicalReadPandas : public PhysicalSource {
    private:
     PyObject* df;
@@ -120,6 +120,75 @@ class PhysicalReadPandas : public PhysicalSource {
         Py_DECREF(pyarrow_module);
         Py_DECREF(table_func);
         Py_DECREF(pa_table);
+
+        this->current_row += batch_size;
+
+        ProducerResult result = this->current_row >= this->num_rows
+                                    ? ProducerResult::FINISHED
+                                    : ProducerResult::HAVE_MORE_OUTPUT;
+
+        return {out_table, result};
+    }
+};
+
+/// @brief Physical node for reading Pandas series in pipelines.
+class PhysicalReadSeries : public PhysicalSource {
+   private:
+    PyObject* series;
+    int64_t current_row = 0;
+    int64_t num_rows;
+
+   public:
+    explicit PhysicalReadSeries(PyObject* _series,
+                                std::vector<int>& selected_columns)
+        : series(_series) {
+        Py_INCREF(series);
+
+        num_rows = PyObject_Length(series);
+    }
+
+    virtual ~PhysicalReadSeries() { Py_DECREF(series); }
+
+    void Finalize() override {}
+
+    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
+        override {
+        if (this->current_row >= this->num_rows) {
+            throw std::runtime_error(
+                "PhysicalReadSeries::ProduceBatch: No more rows to read");
+        }
+
+        // Extract slice from pandas DataFrame
+        // series.iloc[current_row:current_row+batch_size]
+        int64_t batch_size = get_streaming_batch_size();
+        PyObject* iloc = PyObject_GetAttrString(series, "iloc");
+        PyObject* slice =
+            PySlice_New(PyLong_FromLongLong(this->current_row),
+                        PyLong_FromLongLong(this->current_row + batch_size),
+                        PyLong_FromLongLong(1));
+        PyObject* batch = PyObject_GetItem(iloc, slice);
+
+        // Convert pandas DataFrame to Arrow Table
+        PyObject* pyarrow_module = PyImport_ImportModule("pyarrow");
+        PyObject* pa_array =
+            PyObject_CallMethod(pyarrow_module, "array", "O", batch);
+
+        // Unwrap Arrow table from Python object
+        std::shared_ptr<arrow::Array> array =
+            arrow::py::unwrap_array(pa_array).ValueOrDie();
+
+        // Convert Arrow arrays to Bodo arrays
+        auto* bodo_pool = bodo::BufferPool::DefaultPtr();
+        std::vector<std::shared_ptr<array_info>> cvec = {arrow_array_to_bodo(array, bodo_pool)};
+        std::shared_ptr<table_info> out_table =
+            std::make_shared<table_info>(std::move(cvec));
+
+        // Clean up Python references
+        Py_DECREF(iloc);
+        Py_DECREF(slice);
+        Py_DECREF(batch);
+        Py_DECREF(pyarrow_module);
+        Py_DECREF(pa_array);
 
         this->current_row += batch_size;
 
