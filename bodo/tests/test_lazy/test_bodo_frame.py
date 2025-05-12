@@ -11,10 +11,12 @@ from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 from bodo.tests.utils import (
     _gather_output,
-    pytest_mark_spawn_mode,
+    pytest_spawn_mode,
 )
 from bodo.utils.testing import ensure_clean2
 from bodo.utils.utils import run_rank0
+
+pytestmark = pytest_spawn_mode
 
 
 @pytest.fixture
@@ -442,7 +444,6 @@ def test_slice(pandas_managers, head_df, collect_func):
     pd.testing.assert_frame_equal(lam_sliced_head_df, collect_func(0)[-3:])
 
 
-@pytest_mark_spawn_mode
 def test_parquet(collect_func):
     """Tests that to_parquet() writes the frame correctly and does not trigger data fetch"""
 
@@ -470,7 +471,6 @@ def test_parquet(collect_func):
     )
 
 
-@pytest_mark_spawn_mode
 def test_parquet_param(collect_func):
     """Tests that to_parquet() raises an error on unsupported parameters"""
 
@@ -495,7 +495,6 @@ def test_parquet_param(collect_func):
             bodo_df.to_parquet(fname, row_group_size="a")
 
 
-@pytest_mark_spawn_mode
 @pytest.mark.iceberg
 @run_rank0
 def test_sql(iceberg_database, iceberg_table_conn, collect_func):
@@ -534,7 +533,6 @@ def test_sql(iceberg_database, iceberg_table_conn, collect_func):
     )
 
 
-@pytest_mark_spawn_mode
 def test_csv(collect_func):
     """Tests that to_csv() writes the frame correctly and does not trigger data fetch"""
 
@@ -562,7 +560,6 @@ def test_csv(collect_func):
     )
 
 
-@pytest_mark_spawn_mode
 def test_csv_str(collect_func):
     """Tests that to_csv() with string output works properly (returns all string data to spawner)"""
 
@@ -576,7 +573,6 @@ def test_csv_str(collect_func):
     assert bodo_df._lazy
 
 
-@pytest_mark_spawn_mode
 def test_csv_param(collect_func):
     """Tests that to_csv() raises an error on unsupported parameters"""
 
@@ -606,7 +602,6 @@ def test_csv_param(collect_func):
             bodo_df.to_csv(fname, mode="r")
 
 
-@pytest_mark_spawn_mode
 def test_json(collect_func):
     """Tests that to_json() writes the frame correctly and does not trigger data fetch"""
 
@@ -640,7 +635,6 @@ def test_json(collect_func):
     )
 
 
-@pytest_mark_spawn_mode
 def test_json_str(collect_func):
     """Tests that to_json() with string output works properly (returns all string data to spawner)"""
 
@@ -656,7 +650,6 @@ def test_json_str(collect_func):
     assert bodo_df._lazy
 
 
-@pytest_mark_spawn_mode
 def test_map_partitions():
     """Test map_partitions on BodoDataFrame"""
 
