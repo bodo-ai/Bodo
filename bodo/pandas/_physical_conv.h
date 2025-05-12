@@ -13,9 +13,17 @@ class PhysicalPlanBuilder {
    public:
     // TODO: Make private properties later
     std::vector<std::shared_ptr<Pipeline>> finished_pipelines;
-    std::shared_ptr<PipelineBuilder> active_pipeline;
+    // Allow there to be multiple pipelines under construction.
+    // The first part is the PipelineBuilder that is used to
+    // construct the pipeline and the second part is a vector
+    // of other pipelines that we are dependent on.  Have to
+    // accumulate these here so that they can be moved into
+    // the pipeline object which is constructed later.
+    std::stack<std::pair<std::shared_ptr<PipelineBuilder>,
+                         std::vector<std::shared_ptr<Pipeline>>>>
+        active_pipelines;
 
-    PhysicalPlanBuilder() : active_pipeline(nullptr) {}
+    PhysicalPlanBuilder() {}
 
     void Visit(duckdb::LogicalGet& op);
     void Visit(duckdb::LogicalProjection& op);
