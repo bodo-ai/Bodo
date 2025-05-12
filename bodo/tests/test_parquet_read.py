@@ -1625,6 +1625,10 @@ def test_filter_pushdown_past_column_filters():
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    bodo.test_dataframe_library_enabled,
+    reason="[BSE-4764] Dictionary columns with non-string value type not supported yet.",
+)
 def test_read_pq_head_only(datapath, memory_leak_check):
     """
     test reading only shape and/or head from Parquet file if possible
