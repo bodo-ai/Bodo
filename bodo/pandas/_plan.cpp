@@ -303,9 +303,9 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
         duckdb::JoinCondition cond;
         cond.comparison = duckdb::ExpressionType::COMPARE_EQUAL;
         cond.left = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            cbtype, duckdb::ColumnBinding(0, cond_pair.first));
+            cbtype, lhs_duck->GetColumnBindings()[cond_pair.first]);
         cond.right = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            cbtype, duckdb::ColumnBinding(0, cond_pair.second));
+            cbtype, rhs_duck->GetColumnBindings()[cond_pair.second]);
         // Add the join condition to the join node.
         comp_join->conditions.push_back(std::move(cond));
     }
