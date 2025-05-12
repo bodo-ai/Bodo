@@ -1,20 +1,28 @@
 import typing as pt
 from collections.abc import Callable, Iterable
+from contextlib import contextmanager
 
 import pandas as pd
+import pyarrow as pa
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
-from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BodoLibNotImplementedException,
     LazyPlan,
+    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_manager_class,
+    get_n_index_arrays,
+    get_proj_expr_single,
+    is_single_projection,
+    make_col_ref_exprs,
     wrap_plan,
 )
 from bodo.utils.typing import (
@@ -35,23 +43,24 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @property
     def _plan(self):
-        if self._mgr._plan is not None:
+        if self.is_lazy_plan():
             return self._mgr._plan
         else:
             """We can't create a new LazyPlan each time that _plan is called
                because filtering checks that the projections that are part of
                the filter all come from the same source and if you create a
                new LazyPlan here each time then they will appear as different
-               sources.
+               sources.  We sometimes use a pandas manager which doesn't have
+               _source_plan so we have to do getattr check.
             """
-            if self._source_plan is not None:
+            if getattr(self, "_source_plan", None) is not None:
                 return self._source_plan
 
             from bodo.pandas.base import _empty_like
 
-            out_schema = _empty_like(self)
+            empty_data = _empty_like(self)
             if bodo.dataframe_library_run_parallel:
-                if self._mgr._md_result_id is not None:
+                if getattr(self._mgr, "_md_result_id", None) is not None:
                     # If the plan has been executed but the results are still
                     # distributed then re-use those results as is.
                     res_id = self._mgr._md_result_id
@@ -59,10 +68,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     # The data has been collected and is no longer distributed
                     # so we need to re-distribute the results.
                     res_id = bodo.spawn.utils.scatter_data(self)
-                self._source_plan = LazyPlan("LogicalGetPandasReadParallel", res_id)
+                self._source_plan = LazyPlan(
+                    "LogicalGetPandasReadParallel", empty_data, res_id
+                )
             else:
-                self._source_plan = LazyPlan("LogicalGetPandasReadSeq", self)
-            self._source_plan.out_schema = out_schema
+                self._source_plan = LazyPlan(
+                    "LogicalGetPandasReadSeq", empty_data, self
+                )
 
             return self._source_plan
 
@@ -122,31 +134,61 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return getattr(self._mgr, "_plan", None) is not None
 
     def execute_plan(self):
-        return self._mgr.execute_plan()
+        if self.is_lazy_plan() and not self._mgr._disable_collect:
+            return self._mgr.execute_plan()
 
     def head(self, n: int = 5):
         """
         Return the first n rows. If head_df is available and larger than n, then use it directly.
         Otherwise, use the default head method which will trigger a data pull.
         """
+        # Prevent infinite recursion when called from _empty_like and in general
+        # data is never required for head(0) so making a plan is never necessary.
+        if n == 0:
+            if self._exec_state == ExecState.COLLECTED:
+                return self.iloc[:0].copy()
+            else:
+                assert self._head_df is not None
+                return self._head_df.head(0).copy()
+
         if (self._head_df is None) or (n > self._head_df.shape[0]):
-            return super().head(n)
+            if bodo.dataframe_library_enabled:
+                from bodo.pandas.base import _empty_like
+
+                planLimit = LazyPlan(
+                    "LogicalLimit",
+                    _empty_like(self),
+                    self._plan,
+                    n,
+                )
+
+                return wrap_plan(planLimit)
+            else:
+                return super().head(n)
         else:
             # If head_df is available and larger than n, then use it directly.
             return self._head_df.head(n)
 
     def __len__(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
-        elif self._lazy:
+        self.execute_plan()
+        if self._lazy:
             return self._mgr._md_nrows
         return super().__len__()
 
     @property
+    def index(self):
+        self.execute_plan()
+        return super().index
+
+    @index.setter
+    def index(self, value):
+        self.execute_plan()
+        super()._set_axis(1, value)
+
+    @property
     def shape(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
-        elif self._lazy:
+        self.execute_plan()
+        if self._lazy:
             return self._mgr._md_nrows, len(self._head_df.columns)
         return super().shape
 
@@ -450,7 +492,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], self, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["on"])
+    @check_args_fallback(supported=["on"], disable=True)
     def merge(
         self,
         right: "BodoDataFrame | BodoSeries",
@@ -470,7 +512,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
-        new_metadata = zero_size_self.merge(
+        empty_data = zero_size_self.merge(
             zero_size_right,
             how=how,
             on=on,
@@ -495,6 +537,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             right_on = []
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
+            empty_data,
             self._plan,
             right._plan,
             plan_optimizer.CJoinType.INNER,
@@ -505,12 +548,22 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ],
         )
 
-        return wrap_plan(new_metadata, planComparisonJoin)
+        return wrap_plan(planComparisonJoin)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
+
         from bodo.pandas.base import _empty_like
+
+        # Only selecting columns or filtering with BodoSeries is supported
+        if not (
+            isinstance(key, (str, BodoSeries))
+            or (isinstance(key, list) and all(isinstance(k, str) for k in key))
+        ):
+            raise BodoLibNotImplementedException(
+                "only string and BodoSeries keys are supported"
+            )
 
         """ Create 0 length versions of the dataframe and the key and
             simulate the operation to see the resulting type. """
@@ -518,15 +571,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if isinstance(key, BodoSeries):
             """ This is a masking operation. """
             key_plan = (
-                key._plan
+                # TODO: error checking for key to be a projection on the same dataframe
+                # with a binary operator
+                get_proj_expr_single(key._plan)
                 if key._plan is not None
                 else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
             )
             zero_size_key = _empty_like(key)
-            new_metadata = zero_size_self.__getitem__(zero_size_key)
+            empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
-                new_metadata,
-                plan=LazyPlan("LogicalFilter", self._plan, key_plan),
+                plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
             )
         else:
             """ This is selecting one or more columns. Be a bit more
@@ -542,14 +596,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
             # Add Index column numbers to select as well if any,
             # assuming Index columns are always at the end of the table (same as Arrow).
-            if isinstance(zero_size_self.index, pd.RangeIndex):
-                pass
-            elif isinstance(zero_size_self.index, pd.MultiIndex):
-                nlevels = zero_size_self.index.nlevels
-                key_indices += [len(self.columns) + i for i in range(nlevels)]
-            else:
-                key_indices.append(len(self.columns))
+            key_indices += [
+                len(self.columns) + i
+                for i in range(get_n_index_arrays(zero_size_self.index))
+            ]
 
+            """
             if len(key) == 1:
                 """ If just one element then have to extract that singular
                     element for the metadata call to Pandas so it doesn't
@@ -578,6 +630,52 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         key_indices,
                     ),
                 )
+            """
+            # Create column reference expressions for selected columns
+            exprs = make_col_ref_exprs(key_indices, self._plan)
+
+            empty_data = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
+            return wrap_plan(
+                plan=LazyPlan(
+                    "LogicalProjection",
+                    empty_data,
+                    self._plan,
+                    exprs,
+                ),
+            )
+
+    @check_args_fallback("none")
+    def __setitem__(self, key, value) -> None:
+        """Supports setting columns (df[key] = value) when value is a Series created
+        from the same dataframe.
+        This is done by creating a new plan that add the new
+        column in the existing dataframe plan using a projection.
+        """
+
+        # Match cases like df["B"] = df["A"].str.lower()
+        if (
+            self.is_lazy_plan()
+            and isinstance(key, str)
+            and isinstance(value, BodoSeries)
+            and value.is_lazy_plan()
+        ):
+            if (
+                new_plan := _get_set_column_plan(self._plan, value._plan, key)
+            ) is not None:
+                # Update internal state
+                self._mgr._plan = new_plan
+                head_val = value._head_s
+                self._head_df[key] = head_val
+                with self.disable_collect():
+                    # Update internal data manager (e.g. insert a new block or update an
+                    # existing one). See:
+                    # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
+                    super().__setitem__(key, head_val)
+                return
+
+        raise BodoLibNotImplementedException(
+            "Only setting a column with a Series created from the same dataframe is supported."
+        )
 
     @check_args_fallback(supported=["func", "axis"])
     def apply(
@@ -595,36 +693,28 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """
         Apply a function along the axis of the dataframe.
         """
-        import pyarrow as pa
-
-        from bodo.pandas.utils import arrow_to_empty_df
 
         if axis != 1:
             raise BodoError("DataFrame.apply(): only axis=1 supported")
 
         # Get output data type by running the UDF on a sample of the data.
-        # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
-        # TODO: remove when LIMIT plan is properly supported for head().
-        mgr_plan = self._mgr._plan
-        df_sample = self.head(1)
-        self._mgr._plan = mgr_plan
-        out_sample = df_sample.apply(func, axis)
+        df_sample = self.head(1).execute_plan()
+        pd_sample = pd.DataFrame(df_sample)
+        out_sample = pd_sample.apply(func, axis)
 
-        # TODO: Should we fallback to Pandas in the DataFrame case?
         if not isinstance(out_sample, pd.Series):
-            raise BodoError(
-                f"DataFrame.apply(): expected output to be Series, got: {type(out_sample)}."
+            raise BodoLibNotImplementedException(
+                f"expected output to be Series, got: {type(out_sample)}."
             )
 
-        out_sample_df = out_sample.to_frame()
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample_df))
-
-        # convert back to Series
+        # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
+        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample.to_frame()))
         empty_series = empty_df.squeeze()
         empty_series.name = out_sample.name
 
-        plan = LazyPlan(
-            "LogicalProjectionPythonScalarFunc",
+        udf_arg = LazyPlan(
+            "PythonScalarFuncExpression",
+            empty_series,
             self._plan,
             (
                 "apply",
@@ -633,5 +723,165 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 (func,),  # args
                 {"axis": 1},  # kwargs
             ),
+            tuple(range(len(self.columns) + get_n_index_arrays(self.head(0).index))),
         )
-        return wrap_plan(empty_series, plan=plan)
+
+        # Select Index columns explicitly for output
+        n_cols = len(self.columns)
+        index_col_refs = tuple(
+            make_col_ref_exprs(
+                range(n_cols, n_cols + get_n_index_arrays(self.head(0).index)),
+                self._plan,
+            )
+        )
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_series,
+            self._plan,
+            (udf_arg,) + index_col_refs,
+        )
+        return wrap_plan(plan=plan)
+
+    @contextmanager
+    def disable_collect(self):
+        """Disable collect calls in internal manager to allow updating internal state.
+        See __setitem__.
+        """
+        original_flag = self._mgr._disable_collect
+        self._mgr._disable_collect = True
+        try:
+            yield
+        finally:
+            self._mgr._disable_collect = original_flag
+
+
+def _update_func_expr_source(
+    func_expr: LazyPlan, new_source_plan: LazyPlan, col_index_offset: int
+):
+    """Update source plan of PythonScalarFuncExpression and add an offset to its
+    input data column index.
+    """
+    # Previous input data column index
+    in_col_ind = func_expr.args[2][0]
+    n_source_cols = len(new_source_plan.empty_data.columns)
+    # Add Index columns of the new source plan as input
+    index_cols = tuple(
+        range(
+            n_source_cols,
+            n_source_cols + get_n_index_arrays(new_source_plan.empty_data.index),
+        )
+    )
+    expr = LazyPlan(
+        "PythonScalarFuncExpression",
+        func_expr.empty_data,
+        new_source_plan,
+        func_expr.args[1],
+        (in_col_ind + col_index_offset,) + index_cols,
+    )
+    return expr
+
+
+def _add_proj_expr_to_plan(
+    df_plan: LazyPlan, value_plan: LazyPlan, key: str, replace_func_source=False
+):
+    """Add a projection on top of dataframe plan that adds or replaces a column
+    with output expression of value_plan (which is a single expression projection).
+    """
+    # Create column reference expressions for each column in the dataframe.
+    in_empty_df = df_plan.empty_data
+
+    # Check if the column already exists in the dataframe
+    if key in in_empty_df.columns:
+        ikey = in_empty_df.columns.get_loc(key)
+        is_replace = True
+    else:
+        ikey = None
+        is_replace = False
+
+    # Get the function expression from the value plan to be added
+    func_expr = value_plan.args[1][0]
+    if func_expr.plan_class != "PythonScalarFuncExpression":
+        return None
+    func_expr = (
+        _update_func_expr_source(func_expr, df_plan, ikey)
+        if replace_func_source
+        else func_expr
+    )
+
+    # Get projection expressions
+    n_cols = len(in_empty_df.columns)
+    key_indices = [k for k in range(n_cols) if (not is_replace or k != ikey)]
+    data_cols = make_col_ref_exprs(key_indices, df_plan)
+    if is_replace:
+        data_cols.insert(ikey, func_expr)
+    else:
+        # New column should be at the end of data columns to match Pandas
+        data_cols.append(func_expr)
+    index_cols = make_col_ref_exprs(
+        range(n_cols, n_cols + get_n_index_arrays(in_empty_df.index)), df_plan
+    )
+
+    empty_data = df_plan.empty_data.copy()
+    empty_data[key] = value_plan.empty_data.copy()
+    new_plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df_plan,
+        tuple(data_cols + index_cols),
+    )
+    return new_plan
+
+
+def _get_set_column_plan(
+    df_plan: LazyPlan,
+    value_plan: LazyPlan,
+    key: str,
+) -> LazyPlan | None:
+    """
+    Get the plan for setting a column in a dataframe or return None if not supported.
+    Creates a projection on top of the dataframe plan that adds original data columns as
+    well as the column from the value plan to be set.
+    For example, if the df schema is (a, b, c, I) where I is the index column and the
+    code is df["D"] = df["b"].str.lower(), then the value plan is:
+    ┌───────────────────────────┐
+    │         PROJECTION        │
+    │    ────────────────────   │
+    │        Expressions:       │
+    │ "bodo_udf"(#[0.1], #[0.3])│
+    │           #[0.3]          │
+    └─────────────┬─────────────┘
+    ┌─────────────┴─────────────┐
+    │        BODO_READ_DF       │
+    │    ────────────────────   │
+    └───────────────────────────┘
+    and the new dataframe plan with new column added is:
+    ┌───────────────────────────┐
+    │         PROJECTION        │
+    │    ────────────────────   │
+    │        Expressions:       │
+    │           #[0.0]          │
+    │           #[0.1]          │
+    │           #[0.2]          │
+    │ "bodo_udf"(#[0.1], #[0.3])│
+    │           #[0.3]          │
+    └─────────────┬─────────────┘
+    ┌─────────────┴─────────────┐
+    │        BODO_READ_DF       │
+    │    ────────────────────   │
+    └───────────────────────────┘
+    """
+
+    # Handle stacked projections like bdf["b"] = bdf["c"].str.lower().str.strip()
+    if (
+        is_single_projection(value_plan)
+        and value_plan.args[0] != df_plan
+        and (inner_plan := _get_set_column_plan(df_plan, value_plan.args[0], key))
+        is not None
+    ):
+        return _add_proj_expr_to_plan(inner_plan, value_plan, key, True)
+
+    # Check for simple projections like bdf["b"] = bdf["c"].str.lower()
+    if not is_single_projection(value_plan) or value_plan.args[0] != df_plan:
+        return None
+
+    return _add_proj_expr_to_plan(df_plan, value_plan, key)

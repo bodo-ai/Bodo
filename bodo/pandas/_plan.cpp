@@ -9,6 +9,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/planner/binder.hpp"
+#include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
@@ -19,7 +20,9 @@
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
+#include "duckdb/planner/operator/logical_sample.hpp"
 
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
@@ -121,7 +124,7 @@ duckdb::unique_ptr<duckdb::Expression> matchType(
     return bce_constant;
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_binop_expr(
+std::unique_ptr<duckdb::Expression> make_binop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
@@ -166,27 +169,48 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     return logical_filter;
 }
 
+duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    duckdb::unique_ptr<duckdb::SampleOptions> sampleOptions =
+        duckdb::make_uniq<duckdb::SampleOptions>();
+    sampleOptions->sample_size = duckdb::Value(n);
+    sampleOptions->is_percentage = false;
+    sampleOptions->method = duckdb::SampleMethod::SYSTEM_SAMPLE;
+    sampleOptions->repeatable = true;  // Not sure if this is correct.
+    auto logical_sample = duckdb::make_uniq<duckdb::LogicalSample>(
+        std::move(sampleOptions), std::move(source_duck));
+
+    return logical_sample;
+}
+
+duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    auto logical_limit = duckdb::make_uniq<duckdb::LogicalLimit>(
+        duckdb::BoundLimitNode::ConstantValue(n),
+        duckdb::BoundLimitNode::ConstantValue(0));
+
+    logical_limit->children.push_back(std::move(source_duck));
+    return logical_limit;
+}
+
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::vector<int> &select_vec, PyObject *out_schema_py) {
-    duckdb::idx_t source_index = get_operator_table_index(source);
+    std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
+    PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     auto binder = get_duckdb_binder();
     auto table_idx = binder.get()->GenerateTableIndex();
 
-    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
-    // We only care about the types, not the field names
-    auto [_, type_vec] = arrow_schema_to_duckdb(out_schema);
-
-    assert(select_vec.size() == type_vec.size());
     std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
-    for (size_t i = 0; i < select_vec.size(); ++i) {
-        auto selection = select_vec[i];
-        auto stype = type_vec[i];
-        auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            stype, duckdb::ColumnBinding(source_index, selection));
-        projection_expressions.emplace_back(std::move(expr));
+    for (auto &expr : expr_vec) {
+        // Convert std::unique_ptr to duckdb::unique_ptr.
+        auto expr_duck = to_duckdb(expr);
+        projection_expressions.push_back(std::move(expr_duck));
     }
 
     // Create projection node.
@@ -227,18 +251,18 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
     throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
 }
 
-duckdb::unique_ptr<duckdb::LogicalProjection>
-make_projection_python_scalar_func(
+duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args) {
-    // Output table index
-    duckdb::idx_t table_idx = get_duckdb_binder()->GenerateTableIndex();
-
+    PyObject *args, const std::vector<int> &selected_columns) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
-    assert(out_types.size() == 1);
+    // Maybe not be exactly 1 due to index column.
+    assert(out_types.size() > 0);
     duckdb::LogicalType out_type = out_types[0];
+
+    // Necessary before accessing source->types attribute
+    source->ResolveOperatorTypes();
 
     // Create ScalarFunction for UDF
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
@@ -246,15 +270,12 @@ make_projection_python_scalar_func(
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoPythonScalarFunctionData>(args);
 
-    // Necessary before accessing source->types attribute
-    source->ResolveOperatorTypes();
-
-    // Add all input columns as UDF inputs
+    // Add UDF input expressions for selected columns
     std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
-    for (size_t i = 0; i < source->types.size(); ++i) {
+    for (int col_idx : selected_columns) {
         auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            source->types[i],
-            duckdb::ColumnBinding(get_operator_table_index(source), i));
+            source->types[col_idx],
+            duckdb::ColumnBinding(get_operator_table_index(source), col_idx));
         udf_in_exprs.emplace_back(std::move(expr));
     }
 
@@ -264,18 +285,7 @@ make_projection_python_scalar_func(
                                                    std::move(udf_in_exprs),
                                                    std::move(bind_data1));
 
-    // Create projection node
-    std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
-    projection_expressions.push_back(std::move(scalar_expr));
-    duckdb::unique_ptr<duckdb::LogicalProjection> proj =
-        duckdb::make_uniq<duckdb::LogicalProjection>(
-            table_idx, std::move(projection_expressions));
-
-    // Add the input source
-    auto source_duck = to_duckdb(source);
-    proj->children.push_back(std::move(source_duck));
-
-    return proj;
+    return scalar_expr;
 }
 
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
@@ -321,7 +331,7 @@ std::pair<int64_t, PyObject *> execute_plan(
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path, PyObject *pyarrow_schema,
+    PyObject *parquet_path, PyObject *pyarrow_schema,
     PyObject *storage_options) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
@@ -370,9 +380,18 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
 
     duckdb::virtual_column_map_t virtual_columns;
 
-    return duckdb::make_uniq<duckdb::LogicalGet>(
+    auto out_get = duckdb::make_uniq<duckdb::LogicalGet>(
         binder->GenerateTableIndex(), table_function, std::move(bind_data1),
         return_types, return_names, virtual_columns);
+
+    // Column ids need to be added separately.
+    // DuckDB column id initialization example:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
+    for (size_t i = 0; i < return_names.size(); i++) {
+        out_get->AddColumnId(i);
+    }
+
+    return out_get;
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
@@ -387,11 +406,18 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
 
-    duckdb::virtual_column_map_t virtual_columns;
-
-    return duckdb::make_uniq<duckdb::LogicalGet>(
+    auto out_get = duckdb::make_uniq<duckdb::LogicalGet>(
         binder->GenerateTableIndex(), table_function, std::move(bind_data1),
-        return_types, return_names, virtual_columns);
+        return_types, return_names);
+
+    // Column ids need to be added separately.
+    // DuckDB column id initialization example:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
+    for (size_t i = 0; i < return_names.size(); i++) {
+        out_get->AddColumnId(i);
+    }
+
+    return out_get;
 }
 
 duckdb::ClientContext &get_duckdb_context() {
@@ -446,8 +472,36 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::VARCHAR;
             break;
         }
+        case arrow::Type::BINARY: {
+            duckdb_type = duckdb::LogicalType::BLOB;
+            break;
+        }
+        case arrow::Type::UINT8: {
+            duckdb_type = duckdb::LogicalType::UTINYINT;
+            break;
+        }
+        case arrow::Type::INT8: {
+            duckdb_type = duckdb::LogicalType::TINYINT;
+            break;
+        }
+        case arrow::Type::UINT16: {
+            duckdb_type = duckdb::LogicalType::USMALLINT;
+            break;
+        }
+        case arrow::Type::INT16: {
+            duckdb_type = duckdb::LogicalType::SMALLINT;
+            break;
+        }
+        case arrow::Type::UINT32: {
+            duckdb_type = duckdb::LogicalType::UINTEGER;
+            break;
+        }
         case arrow::Type::INT32: {
             duckdb_type = duckdb::LogicalType::INTEGER;
+            break;
+        }
+        case arrow::Type::UINT64: {
+            duckdb_type = duckdb::LogicalType::UBIGINT;
             break;
         }
         case arrow::Type::INT64: {
@@ -468,6 +522,10 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
         }
         case arrow::Type::DATE32: {
             duckdb_type = duckdb::LogicalType::DATE;
+            break;
+        }
+        case arrow::Type::DURATION: {
+            duckdb_type = duckdb::LogicalType::INTERVAL;
             break;
         }
         case arrow::Type::TIMESTAMP: {
@@ -516,6 +574,14 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::LIST(child_type);
             break;
         }
+        case arrow::Type::LARGE_LIST: {
+            auto list_type =
+                std::static_pointer_cast<arrow::LargeListType>(arrow_type);
+            auto [name, child_type] =
+                arrow_field_to_duckdb(list_type->value_field());
+            duckdb_type = duckdb::LogicalType::LIST(child_type);
+            break;
+        }
         case arrow::Type::STRUCT: {
             duckdb::child_list_t<duckdb::LogicalType> children;
             for (std::shared_ptr<arrow::Field> field : arrow_type->fields()) {
@@ -541,7 +607,8 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                 std::static_pointer_cast<arrow::DictionaryType>(arrow_type);
             std::shared_ptr<arrow::Field> value_field =
                 arrow::field("name", dict_type->value_type());
-            auto [field_name, duckdb_type] = arrow_field_to_duckdb(value_field);
+            auto [field_name, inner_type] = arrow_field_to_duckdb(value_field);
+            duckdb_type = inner_type;
             break;
         }
         default:
@@ -553,13 +620,16 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     return {field->name(), duckdb_type};
 }
 
-std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan) {
-    return plan->ToString(duckdb::ExplainFormat::GRAPHVIZ);
+std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
+                           bool graphviz_format) {
+    return plan->ToString(graphviz_format ? duckdb::ExplainFormat::GRAPHVIZ
+                                          : duckdb::ExplainFormat::TEXT);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     // Read the dataframe from the result registry using
     // sys.modules["__main__"].RESULT_REGISTRY since importing
     // bodo.spawn.worker creates a new module with new empty registry.
@@ -596,20 +666,23 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
     Py_DECREF(modules_dict);
     Py_DECREF(sys_module);
 
-    return std::make_shared<PhysicalReadPandas>(df);
+    return std::make_shared<PhysicalReadPandas>(df, selected_columns);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
-    return std::make_shared<PhysicalReadPandas>(df);
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    return std::make_shared<PhysicalReadPandas>(df, selected_columns);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoParquetScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs) {
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     return std::make_shared<PhysicalReadParquet>(
-        path, pyarrow_schema, storage_options, selected_columns, filter_exprs);
+        path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
+        limit_val);
 }
 
 duckdb::idx_t get_operator_table_index(

@@ -9,8 +9,9 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "physical/filter.h"
+#include "physical/limit.h"
 #include "physical/project.h"
-#include "physical/python_scalar_func.h"
+#include "physical/sample.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -22,42 +23,18 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
 
     auto physical_op =
         op.bind_data->Cast<BodoScanFunctionData>().CreatePhysicalOperator(
-            selected_columns, op.table_filters);
-    if (this->active_pipeline != nullptr) {
-        throw std::runtime_error(
-            "LogicalGet operator should be the first operator in the pipeline");
-    }
-    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+            selected_columns, op.table_filters, op.extra_info.limit_val);
+    this->active_pipelines.push({std::make_shared<PipelineBuilder>(physical_op),
+                                 std::vector<std::shared_ptr<Pipeline>>()});
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     // Process the source of this projection.
     this->Visit(*op.children[0]);
 
-    // Handle UDF execution case
-    if (op.expressions.size() == 1 &&
-        op.expressions[0]->type == duckdb::ExpressionType::BOUND_FUNCTION) {
-        BodoPythonScalarFunctionData& scalar_func_data =
-            op.expressions[0]
-                ->Cast<duckdb::BoundFunctionExpression>()
-                .bind_info->Cast<BodoPythonScalarFunctionData>();
-        this->active_pipeline->AddOperator(
-            std::make_shared<PhysicalPythonScalarFunc>(scalar_func_data.args));
-        return;
-    }
-
-    std::vector<int64_t> selected_columns;
-
-    // Convert BoundColumnRefExpressions in LogicalOperator.expresssions field
-    // to integer selected columns.
-    for (const auto& expr : op.expressions) {
-        duckdb::BoundColumnRefExpression& colref =
-            expr->Cast<duckdb::BoundColumnRefExpression>();
-        selected_columns.push_back(colref.binding.column_index);
-    }
-
-    auto physical_op = std::make_shared<PhysicalProjection>(selected_columns);
-    this->active_pipeline->AddOperator(physical_op);
+    auto physical_op =
+        std::make_shared<PhysicalProjection>(std::move(op.expressions));
+    this->active_pipelines.top().first->AddOperator(physical_op);
 }
 
 /**
@@ -142,6 +119,21 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     buildPhysicalExprTree(bce->children[0]),
                     buildPhysicalExprTree(bce->children[1]), expr_type));
         } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            duckdb::unique_ptr<duckdb::BoundConjunctionExpression> bce =
+                dynamic_cast_unique_ptr<duckdb::BoundConjunctionExpression>(
+                    std::move(expr));
+            // This node type has left and right children which are recursively
+            // processed first and then the resulting Bodo Physical expression
+            // subtrees are combined with the expression sub-type (e.g., equal,
+            // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
+            return std::static_pointer_cast<PhysicalExpression>(
+                std::make_shared<PhysicalConjunctionExpression>(
+                    buildPhysicalExprTree(bce->children[0]),
+                    buildPhysicalExprTree(bce->children[1]), expr_type));
+        } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
                 "Unsupported duckdb expression type" +
@@ -166,10 +158,65 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     }
     std::shared_ptr<PhysicalFilter> physical_op =
         std::make_shared<PhysicalFilter>(physExprTree);
-    this->active_pipeline->AddOperator(physical_op);
+    this->active_pipelines.top().first->AddOperator(physical_op);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     throw std::runtime_error(
         "Not supported on the physical side yet: LogicalComparisonJoin");
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalSample& op) {
+    // Process the source of this limit.
+    this->Visit(*op.children[0]);
+
+    duckdb::unique_ptr<duckdb::SampleOptions>& sampleOptions =
+        op.sample_options;
+
+    if (sampleOptions->is_percentage ||
+        sampleOptions->method != duckdb::SampleMethod::SYSTEM_SAMPLE) {
+        throw std::runtime_error("LogicalSample unsupported offset");
+    }
+
+    std::shared_ptr<PhysicalSample> physical_op;
+
+    std::visit(
+        [&physical_op](const auto& value) {
+            using T = std::decay_t<decltype(value)>;
+
+            // Allow only types that can safely convert to int
+            if constexpr (std::is_convertible_v<T, uint64_t>) {
+                physical_op = std::make_shared<PhysicalSample>(value);
+            }
+        },
+        extractValue(sampleOptions->sample_size));
+    if (!physical_op) {
+        throw std::runtime_error(
+            "Cannot convert duckdb::Value to limit integer.");
+    }
+    this->active_pipelines.top().first->AddOperator(physical_op);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
+    // Process the source of this limit.
+    this->Visit(*op.children[0]);
+
+    if (op.offset_val.Type() != duckdb::LimitNodeType::CONSTANT_VALUE ||
+        op.offset_val.GetConstantValue() != 0) {
+        throw std::runtime_error("LogicalLimit unsupported offset");
+    }
+    if (op.limit_val.Type() != duckdb::LimitNodeType::CONSTANT_VALUE) {
+        throw std::runtime_error("LogicalLimit unsupported limit type");
+    }
+    duckdb::idx_t n = op.limit_val.GetConstantValue();
+    auto physical_op = std::make_shared<PhysicalLimit>(n);
+    // Finish the pipeline at this point so that Finalize can run
+    // to reduce the number of collected rows to the desired amount.
+    finished_pipelines.emplace_back(
+        this->active_pipelines.top().first->Build(physical_op));
+    // The same operator will exist in both pipelines.  The sink of the
+    // previous pipeline and the source of the next one.
+    // We record the pipeline dependency between these two pipelines.
+    this->active_pipelines.push({std::make_shared<PipelineBuilder>(physical_op),
+                                 {finished_pipelines.back()}});
 }

@@ -7,6 +7,7 @@ from libcpp.memory cimport unique_ptr, make_unique, dynamic_pointer_cast
 from libcpp.utility cimport move, pair
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
+from libcpp cimport bool as c_bool
 import operator
 from libc.stdint cimport int64_t
 
@@ -257,31 +258,41 @@ cdef extern from "duckdb/planner/operator/logical_filter.hpp" namespace "duckdb"
     cdef cppclass CLogicalFilter" duckdb::LogicalFilter"(CLogicalOperator):
         pass
 
+cdef extern from "duckdb/planner/operator/logical_limit.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalLimit" duckdb::LogicalLimit"(CLogicalOperator):
+        pass
+
+cdef extern from "duckdb/planner/operator/logical_sample.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalSample" duckdb::LogicalSample"(CLogicalOperator):
+        pass
+
 cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalGet" duckdb::LogicalGet"(CLogicalOperator):
         pass
 
 
 cdef extern from "_plan.h" nogil:
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema, object storage_options)
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema)
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema)
-    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
-    cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
-    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[int] select_vec, object out_schema)
-    cdef unique_ptr[CLogicalProjection] make_projection_python_scalar_func(unique_ptr[CLogicalOperator] source, object out_schema, object args)
-    cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
-    cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
-    cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
-    cdef unique_ptr[CExpression] make_const_int_expr(int val)
-    cdef unique_ptr[CExpression] make_const_float_expr(float val)
-    cdef unique_ptr[CExpression] make_const_string_expr(c_string val)
-    cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx)
-    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
-    cdef c_string plan_to_string(unique_ptr[CLogicalOperator])
-    cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
-    cdef int planCountNodes(unique_ptr[CLogicalOperator] root)
-    cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options) except +
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema) except +
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema) except +
+    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
+    cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
+    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
+    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
+    cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
+    cdef unique_ptr[CExpression] make_const_int_expr(int val) except +
+    cdef unique_ptr[CExpression] make_const_float_expr(float val) except +
+    cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
+    cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
+    cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
+    cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
+    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
+    cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format) except +
+    cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
+    cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
+    cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -329,7 +340,21 @@ cdef class LogicalOperator:
         self.c_logical_operator.get().estimated_cardinality = estimated_cardinality
 
     def toGraphviz(self):
-        return plan_to_string(self.c_logical_operator).decode("utf-8")
+        return plan_to_string(self.c_logical_operator, True).decode("utf-8")
+
+    def toString(self):
+        return plan_to_string(self.c_logical_operator, False).decode("utf-8")
+
+
+cdef class Expression:
+    """Wrapper around DuckDB's Expression to provide access in Python.
+    """
+    cdef readonly out_schema
+    cdef unique_ptr[CExpression] c_expression
+
+    def __str__(self):
+        return "Expression()"
+
 
 cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
@@ -348,10 +373,28 @@ cdef class LogicalComparisonJoin(LogicalOperator):
         join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
         return f"LogicalComparisonJoin({join_type})"
 
+
 cdef class LogicalProjection(LogicalOperator):
     """Wrapper around DuckDB's LogicalProjection to provide access in Python.
     """
 
+    def __cinit__(self, object out_schema, LogicalOperator source, object exprs):
+        cdef vector[unique_ptr[CExpression]] expr_vec
+
+        for expr in exprs:
+            expr_vec.push_back(move((<Expression>expr).c_expression))
+
+        self.out_schema = out_schema
+        self.sources = [source]
+
+        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, expr_vec, out_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
+
+    def __str__(self):
+        return f"LogicalProjection({self.out_schema})"
+
+
+cdef class LogicalColRef(LogicalOperator):
     cdef readonly vector[int] select_vec
 
     def __cinit__(self, object out_schema, LogicalOperator source, select_idxs):
@@ -359,11 +402,8 @@ cdef class LogicalProjection(LogicalOperator):
         self.select_vec = select_idxs
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, self.select_vec, self.out_schema)
-        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
-
     def __str__(self):
-        return f"LogicalProjection({self.select_vec}, {self.out_schema})"
+        return f"LogicalColRef({self.select_vec}, {self.out_schema})"
 
 
 cdef class LogicalColRef(LogicalOperator):
@@ -386,24 +426,34 @@ cpdef get_pushed_down_columns(proj):
     return pushed_down_columns
 
 
-cdef class LogicalProjectionPythonScalarFunc(LogicalOperator):
-    """Wrapper around DuckDB's LogicalProjection with a ScalarFunc inside to provide access in Python.
+cdef class ColRefExpression(Expression):
+    """Wrapper around DuckDB's BoundColumnRefExpression to provide access in Python.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, object args):
+    def __cinit__(self, object out_schema, LogicalOperator source, int col_index):
         self.out_schema = out_schema
-        self.sources = [source]
-
-        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection_python_scalar_func(source.c_logical_operator, self.out_schema, args)
-        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
+        self.c_expression = make_col_ref_expr(source.c_logical_operator, out_schema[0], col_index)
 
     def __str__(self):
-        return f"LogicalProjectionPythonScalarFunc({self.out_schema})"
+        return f"ColRefExpression({self.out_schema})"
+
+
+cdef class PythonScalarFuncExpression(Expression):
+    """Wrapper around DuckDB's BoundFunctionExpression for running Python functions.
+    """
+
+    def __cinit__(self, object out_schema, LogicalOperator source, object args, vector[int] input_column_indices):
+        self.out_schema = out_schema
+        self.c_expression = make_python_scalar_func_expr(source.c_logical_operator, out_schema, args, input_column_indices)
+
+    def __str__(self):
+        return f"PythonScalarFuncExpression({self.out_schema})"
 
 
 cdef unique_ptr[CExpression] make_expr(val):
     """Convert a filter expression tree from Cython wrappers
        to duckdb.
+    """
     """
     cdef LogicalOperator source
     cdef c_string val_cstr
@@ -433,69 +483,74 @@ cdef unique_ptr[CExpression] make_expr(val):
     else:
         raise ValueError("Unknown expr type in make_expr " + str(type(val)))
 
-def get_source(val):
-    """Process a filter expression tree and find all the unique
-       columns referenced in the tree.
     """
-    if isinstance(val, (int, float, str)):
-        return set()
-    elif isinstance(val, LogicalColRef):
-        return {val}
-    elif isinstance(val, (LogicalBinaryOp, LogicalConjunctionOp)):
-        return get_source(val.lhs).union(get_source(val.rhs))
+    cdef c_string val_cstr
+
+    if isinstance(val, int):
+        return move(make_const_int_expr(val))
+    elif isinstance(val, float):
+        return move(make_const_float_expr(val))
+    elif isinstance(val, str):
+        val_cstr = val.encode()
+        return move(make_const_string_expr(val_cstr))
     else:
-        raise ValueError("Unknown expr type in get_source " + str(type(val)))
+        raise ValueError("Unknown expr type in make_expr " + str(type(val)))
+
 
 cdef class LogicalFilter(LogicalOperator):
-    def __cinit__(self, out_schema, LogicalOperator source, key):
+    def __cinit__(self, out_schema, LogicalOperator source, Expression key):
         self.out_schema = out_schema
         self.sources = [source]
-
-        cdef unique_ptr[CExpression] c_filter_expr
-        if isinstance(key, (LogicalBinaryOp, LogicalConjunctionOp)):
-            lhs_source = get_source(key.lhs)
-            rhs_source = get_source(key.rhs)
-            for lsrc in lhs_source:
-                if source is not lsrc.sources[0]:
-                    raise ValueError("Filtering with mask created from different source not supported.")
-            for rsrc in rhs_source:
-                if source is not rsrc.sources[0]:
-                    raise ValueError("Filtering with mask created from different source not supported.")
-            c_filter_expr = make_expr(key)
-        else:
-            raise ValueError("Non-binary op filter not yet supported.")
-
-        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, c_filter_expr)
+        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, key.c_expression)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
 
     def __str__(self):
         return f"LogicalFilter()"
 
-cdef class LogicalBinaryOp(LogicalOperator):
-    cdef public object lhs
-    cdef public object rhs
-    cdef public object binop
 
-    def __cinit__(self, out_schema, lhs, rhs, binop):
+cdef class BinaryOpExpression(Expression):
+    """Wrapper around DuckDB's BoundComparisonExpression and other binary operators to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, lhs, rhs, binop):
+        cdef unique_ptr[CExpression] lhs_expr
+        cdef unique_ptr[CExpression] rhs_expr
+
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+
         self.out_schema = out_schema
-        self.lhs = lhs
-        self.rhs = rhs
-        self.binop = binop
-        self.sources = [lhs, rhs]
+        self.c_expression = make_binop_expr(
+            lhs_expr,
+            rhs_expr,
+            str_to_expr_type(binop))
 
-cdef class LogicalConjunctionOp(LogicalOperator):
-    cdef public object lhs
-    cdef public object rhs
-    cdef public object binop
+    def __str__(self):
+        return f"BinaryOpExpression({self.out_schema})"
 
-    def __cinit__(self, out_schema, lhs, rhs, binop):
+
+cdef class ConjunctionOpExpression(Expression):
+    """Wrapper around DuckDB's BoundConjunctionExpression and other binary operators to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, lhs, rhs, binop):
+        cdef unique_ptr[CExpression] lhs_expr
+        cdef unique_ptr[CExpression] rhs_expr
+
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+
         self.out_schema = out_schema
-        self.lhs = lhs
-        self.rhs = rhs
-        self.binop = binop
-        self.sources = [lhs, rhs]
+        self.c_expression = make_conjunction_expr(
+            lhs_expr,
+            rhs_expr,
+            str_to_expr_type(binop))
 
-cdef class LogicalUnaryOp(LogicalOperator):
+    def __str__(self):
+        return f"ConjunctionOpExpression({self.out_schema})"
+
+
+cdef class UnaryOpExpression(Expression):
     cdef public object op
 
     def __cinit__(self, out_schema, source, op):
@@ -503,16 +558,45 @@ cdef class LogicalUnaryOp(LogicalOperator):
         self.op = op
         self.sources = [source]
 
+    def __cinit__(self, object out_schema, lhs, op):
+        cdef unique_ptr[CExpression] lhs_expr
+
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
+
+        self.out_schema = out_schema
+        self.c_expression = make_unary_expr(
+            lhs_expr,
+            str_to_expr_type(op))
+
+    def __str__(self):
+        return f"UnaryOpExpression({self.out_schema})"
+
+
+cdef class LogicalLimit(LogicalOperator):
+    cdef public int n
+
+    def __cinit__(self, out_schema, LogicalOperator source, n):
+        self.out_schema = out_schema
+        self.sources = [source]
+        self.n = n
+
+        cdef unique_ptr[CLogicalLimit] c_logical_limit = make_limit(source.c_logical_operator, n)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_limit.release())
+
+    def __str__(self):
+        return f"LogicalLimit(n={self.n})"
+
+
 cdef class LogicalGetParquetRead(LogicalOperator):
     """Wrapper around DuckDB's LogicalGet for reading Parquet datasets.
     """
-    cdef readonly str path
+    cdef readonly object path
 
-    def __cinit__(self, object out_schema, c_string parquet_path, object storage_options):
+    def __cinit__(self, object out_schema, object parquet_path, object storage_options):
         self.out_schema = out_schema
         cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
-        self.path = (<bytes>parquet_path).decode("utf-8")
+        self.path = parquet_path
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"

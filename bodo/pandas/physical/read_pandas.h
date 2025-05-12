@@ -16,8 +16,64 @@ class PhysicalReadPandas : public PhysicalSource {
     int64_t num_rows;
 
    public:
-    explicit PhysicalReadPandas(PyObject* _df) : df(_df) {
+    explicit PhysicalReadPandas(PyObject* _df,
+                                std::vector<int>& selected_columns)
+        : df(_df) {
         Py_INCREF(df);
+
+        // Select only the specified columns if provided by the optimizer
+        if (!selected_columns.empty()) {
+            // Avoid Index columns since not supported in df.iloc
+            PyObject* shape_attr = PyObject_GetAttrString(df, "shape");
+            if (!shape_attr) {
+                throw std::runtime_error(
+                    "Failed to get DataFrame shape attribute");
+            }
+            // shape is a tuple (n_rows, n_cols)
+            PyObject* n_cols_obj =
+                PyTuple_GetItem(shape_attr, 1);  // Not a new reference
+            int64_t n_cols = PyLong_AsLongLong(n_cols_obj);
+            Py_DECREF(shape_attr);
+            std::vector<int> selected_columns_no_indexes;
+            for (size_t i = 0; i < selected_columns.size(); ++i) {
+                if (selected_columns[i] < n_cols) {
+                    selected_columns_no_indexes.push_back(selected_columns[i]);
+                }
+            }
+
+            if (selected_columns_no_indexes.empty()) {
+                throw std::runtime_error(
+                    "No valid columns selected for PhysicalReadPandas");
+            }
+
+            PyObject* iloc = PyObject_GetAttrString(df, "iloc");
+
+            // Create slice for all rows (equivalent to ':' in Python)
+            PyObject* row_slice = PySlice_New(nullptr, nullptr, nullptr);
+
+            // Convert the selected_columns_no_indexes vector to a Python list
+            PyObject* col_list = PyList_New(selected_columns_no_indexes.size());
+            for (size_t i = 0; i < selected_columns_no_indexes.size(); ++i) {
+                PyList_SET_ITEM(
+                    col_list, i,
+                    PyLong_FromLong(selected_columns_no_indexes[i]));
+            }
+
+            // Create a tuple with row_slice and col_list for advanced indexing
+            PyObject* idx_tuple = PyTuple_New(2);
+            PyTuple_SET_ITEM(idx_tuple, 0, row_slice);
+            PyTuple_SET_ITEM(idx_tuple, 1, col_list);
+
+            // Apply the indexing
+            PyObject* projected_df = PyObject_GetItem(iloc, idx_tuple);
+
+            // Clean up and update df
+            Py_DECREF(iloc);
+            Py_DECREF(idx_tuple);
+            Py_DECREF(df);
+            df = projected_df;
+        }
+
         num_rows = PyObject_Length(df);
     }
 

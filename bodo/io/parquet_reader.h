@@ -4,6 +4,7 @@
 
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_distributed.h"
+#include "../libs/_utils.h"
 #include "arrow_reader.h"
 
 class ParquetReader : public ArrowReader {
@@ -29,6 +30,7 @@ class ParquetReader : public ArrowReader {
             throw std::runtime_error("ParquetReader: storage_options is None");
         }
         Py_INCREF(storage_options);
+        Py_INCREF(path);
     }
 
     /**
@@ -113,6 +115,7 @@ class ParquetReader : public ArrowReader {
         // Remove after reader is finished or on error
         Py_XDECREF(this->reader);
         Py_DECREF(this->storage_options);
+        Py_DECREF(this->path);
     }
 
     /// a piece is a single parquet file in the context of parquet
@@ -146,16 +149,17 @@ class ParquetReader : public ArrowReader {
     // Prefix to add to each of the file paths (only used for input_file_name)
     std::string prefix;
 
-    PyObject* expr_filters = nullptr;
-    PyObject* filesystem = nullptr;
+    PyObjectPtr expr_filters = nullptr;
+    PyObjectPtr filesystem = nullptr;
     // dataset partitioning info (regardless of whether we select partition
     // columns or not)
-    PyObject* ds_partitioning = nullptr;
+    PyObjectPtr ds_partitioning = nullptr;
 
     // Parquet files that this process has to read
     std::vector<std::string> file_paths;
 
     PyObject* path;  // path passed to pd.read_parquet() call
+    // We don't own storage options so store the raw pointer
     PyObject* storage_options;
     bool input_file_name_col;
     bool use_hive;

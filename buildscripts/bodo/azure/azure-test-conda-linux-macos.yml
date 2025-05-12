@@ -8,7 +8,7 @@ parameters:
 - name: test_type
   type: string
   default: NORMAL
-  values: 
+  values:
     - NORMAL
     - SPAWN
     - CACHE
@@ -136,11 +136,14 @@ jobs:
       if [[ "${{ parameters.test_type }}" == "CACHE" ]]; then
         pixi run -e azure python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
       elif [[ "${{ parameters.test_type }}" == "SPAWN" ]]; then
+        # Disabling the DataFrame library for spawn tests since some of the tests
+        # create Pandas manager states for testing that are not fully functional.
+        export BODO_ENABLE_DATAFRAME_LIBRARY=0
         export BODO_TEST_SPAWN_MODE=1
         export BODO_NUM_WORKERS="$NP"
         pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       elif [[ "${{ parameters.test_type }}" == "DF_LIB" ]]; then
-        export BODO_ENABLE_DATAFRAME_LIBRARY=1
+        export BODO_ENABLE_TEST_DATAFRAME_LIBRARY=1
         export BODO_NUM_WORKERS="$NP"
         pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-df-library.xml --test-run-title="${{ parameters.name }}"
       else

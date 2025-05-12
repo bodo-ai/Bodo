@@ -180,9 +180,13 @@ sql_plan_cache_loc = os.environ.get("BODO_SQL_PLAN_CACHE_DIR")
 
 # ---------------------------- DataFrame Library Config ----------------------------
 
-# Directory where sql plans generated during compilation should be stored.
-# This is expected to be a distributed filesystem which all nodes have access to.
-dataframe_library_enabled = os.environ.get("BODO_ENABLE_DATAFRAME_LIBRARY", "0") != "0"
+# Flag to enable bodo dataframe library (bodo.pandas). When disabled, these classes
+# will fallback to Pandas.
+dataframe_library_enabled = os.environ.get("BODO_ENABLE_DATAFRAME_LIBRARY", "1") != "0"
+
+# Run tests utilizing check_func in dataframe library mode (replaces)
+# 'import pandas as pd' with 'import bodo.pandas as pd' when running the func.
+test_dataframe_library_enabled = os.environ.get("BODO_ENABLE_TEST_DATAFRAME_LIBRARY", "0") != "0"
 
 # Runs the DataFrame library in parallel mode if enabled (disable for debugging on a
 # single core).

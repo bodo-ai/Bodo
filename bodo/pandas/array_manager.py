@@ -75,7 +75,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         self._del_func = del_func
         self._plan = plan
 
-        if result_id is not None:
+        if result_id is not None or plan is not None:
             # This is the lazy case, we don't have the full data yet
             assert nrows is not None
             assert head is not None
@@ -151,10 +151,17 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             # This is the base ArrayManager case
             assert nrows is None
             assert head is None
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             _arrays,
             self._axes,
-            verify_integrity=(verify_integrity if (result_id is None) else False),
+            verify_integrity=(
+                verify_integrity if (result_id is None and plan is None) else False
+            ),
         )
 
     @property
@@ -263,6 +270,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         If we have a plan, execute it and replace the blocks with the result.
         If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
         if self._plan is not None:
             debug_msg(
                 self.logger, "[LazyArrayManager] Executing Plan and collecting data..."
@@ -298,6 +308,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             "logger",
             "_collect_func",
             "_del_func",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
         # If the attribute is 'arrays', we ensure we have the data.
@@ -376,7 +387,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         self._del_func = del_func
         self._plan = plan
 
-        if result_id is not None:
+        if result_id is not None or plan is not None:
             # This is the lazy case, we don't have the full data yet
             assert nrows is not None
             assert head is not None
@@ -446,10 +457,17 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             assert nrows is None
             assert head is None
 
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             _arrays,
             self._axes,
-            verify_integrity=(verify_integrity if (result_id is None) else False),
+            verify_integrity=(
+                verify_integrity if (result_id is None and plan is None) else False
+            ),
         )
 
     @property
@@ -491,6 +509,9 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         If we have a plan, execute it and replace the blocks with the result.
         If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
         if self._plan is not None:
             debug_msg(
                 self.logger,
@@ -572,6 +593,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             "logger",
             "_collect_func",
             "_del_func",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
         # If the attribute is 'arrays', we ensure we have the data.

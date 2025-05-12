@@ -16,6 +16,9 @@
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
 
+std::shared_ptr<arrow::Array> prepare_arrow_compute(
+    std::shared_ptr<array_info> arr);
+
 /**
  * @brief Superclass for possible results returned by nodes in Bodo
  *        Physical expression tree.

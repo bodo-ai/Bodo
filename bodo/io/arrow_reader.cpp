@@ -817,15 +817,14 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
             return out_array;
         }
 
-        std::shared_ptr<::arrow::Array> out_arrow_array;
-        // TODO make this more efficient:
-        // This copies to new buffers managed by Arrow, and then we copy
-        // again to our own buffers in
-        // info_to_array https://bodo.atlassian.net/browse/BE-1426
-        out_arrow_array = arrow::Concatenate(arrays, pool).ValueOrDie();
+        arrow::Result<std::shared_ptr<arrow::Array>> res =
+            arrow::Concatenate(arrays, pool);
+        std::shared_ptr<arrow::Array> concat_res;
+        CHECK_ARROW_READER_AND_ASSIGN(res, "Concatenate", concat_res);
         arrays.clear();  // memory of each array will be freed now
 
-        out_array = arrow_array_to_bodo(out_arrow_array, pool);
+        out_array = arrow_array_to_bodo(concat_res, pool);
+
         return out_array;
     }
 

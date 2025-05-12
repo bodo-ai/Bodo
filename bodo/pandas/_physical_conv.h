@@ -13,14 +13,24 @@ class PhysicalPlanBuilder {
    public:
     // TODO: Make private properties later
     std::vector<std::shared_ptr<Pipeline>> finished_pipelines;
-    std::shared_ptr<PipelineBuilder> active_pipeline;
+    // Allow there to be multiple pipelines under construction.
+    // The first part is the PipelineBuilder that is used to
+    // construct the pipeline and the second part is a vector
+    // of other pipelines that we are dependent on.  Have to
+    // accumulate these here so that they can be moved into
+    // the pipeline object which is constructed later.
+    std::stack<std::pair<std::shared_ptr<PipelineBuilder>,
+                         std::vector<std::shared_ptr<Pipeline>>>>
+        active_pipelines;
 
-    PhysicalPlanBuilder() : active_pipeline(nullptr) {}
+    PhysicalPlanBuilder() {}
 
     void Visit(duckdb::LogicalGet& op);
     void Visit(duckdb::LogicalProjection& op);
     void Visit(duckdb::LogicalFilter& op);
     void Visit(duckdb::LogicalComparisonJoin& op);
+    void Visit(duckdb::LogicalLimit& op);
+    void Visit(duckdb::LogicalSample& op);
 
     void Visit(duckdb::LogicalOperator& op) {
         if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
@@ -32,8 +42,13 @@ class PhysicalPlanBuilder {
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
             Visit(op.Cast<duckdb::LogicalComparisonJoin>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_LIMIT) {
+            Visit(op.Cast<duckdb::LogicalLimit>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_SAMPLE) {
+            Visit(op.Cast<duckdb::LogicalSample>());
         } else {
-            throw std::runtime_error("Unsupported logical operator type");
+            throw std::runtime_error("Unsupported logical operator type " +
+                                     std::to_string(static_cast<int>(op.type)));
         }
     }
 };

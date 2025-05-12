@@ -403,6 +403,9 @@ public:
 	//! Whether or not the table function supports sampling pushdown. If not supported a sample will be taken after the
 	//! table function.
 	bool sampling_pushdown;
+    // Bodo Change: limit_pushdown to data source not previously supported by DuckDB
+	//! Whether or not the table function supports limit pushdown.
+	bool limit_pushdown;
 	//! Whether or not the table function supports late materialization
 	bool late_materialization;
 	//! Additional function info, passed to the bind

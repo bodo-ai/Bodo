@@ -22,19 +22,23 @@ def test_join_node():
 def test_projection_node():
     """Make sure Cython wrapper around the projection node works. Just tests node creation."""
     P1 = plan_optimizer.LogicalGetParquetRead(pa.schema([]), b"example.parquet1", {})
+    exprs = [
+        plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), P1, 0),
+        plan_optimizer.ColRefExpression(pa.schema([("B", pa.string())]), P1, 1),
+    ]
     A = plan_optimizer.LogicalProjection(
         pa.schema([("A", pa.int64()), ("C", pa.string())]),
         P1,
-        [1, 3],
+        exprs,
     )
-    assert str(A) == "LogicalProjection([1, 3], A: int64\nC: string)"
+    assert str(A) == "LogicalProjection(A: int64\nC: string)"
 
 
 def test_filter_node():
     """Make sure Cython wrapper around the filter node works. Just tests node creation."""
     P1 = plan_optimizer.LogicalGetParquetRead(pa.schema([]), b"example.parquet1", {})
-    A = plan_optimizer.LogicalColRef(pa.schema([("A", pa.int64())]), P1, [0])
-    B = plan_optimizer.LogicalBinaryOp(
+    A = plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), P1, 0)
+    B = plan_optimizer.BinaryOpExpression(
         pa.schema([("A", pa.bool_())]), A, 5, operator.gt
     )
     C = plan_optimizer.LogicalFilter(pa.schema([("A", pa.int64())]), P1, B)
@@ -44,7 +48,7 @@ def test_filter_node():
 def test_parquet_node():
     """Make sure Cython wrapper around the Parquet node works. Just tests node creation."""
     A = plan_optimizer.LogicalGetParquetRead(
-        pa.schema([("A", pa.int64()), ("B", pa.string())]), b"example.parquet", {}
+        pa.schema([("A", pa.int64()), ("B", pa.string())]), "example.parquet", {}
     )
     assert str(A) == "LogicalGetParquetRead(example.parquet)"
     assert A.path == "example.parquet"
@@ -73,8 +77,12 @@ def test_parquet_projection_pushdown():
         b"example.parquet",
         {},
     )
+    exprs = [
+        plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), A, 0),
+        plan_optimizer.ColRefExpression(pa.schema([("C", pa.int32())]), A, 2),
+    ]
     B = plan_optimizer.LogicalProjection(
-        pa.schema([("A", pa.int64()), ("C", pa.int32())]), A, [0, 2]
+        pa.schema([("A", pa.int64()), ("C", pa.int32())]), A, exprs
     )
     C = plan_optimizer.py_optimize_plan(B)
     assert plan_optimizer.get_pushed_down_columns(C) == [0, 2], (

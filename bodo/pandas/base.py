@@ -1,4 +1,5 @@
 import pandas as pd
+import pyarrow as pa
 from pandas._libs import lib
 
 from bodo.pandas.frame import BodoDataFrame
@@ -22,17 +23,19 @@ def from_pandas(df):
     # Make sure empty_df has proper dtypes since used in the plan output schema.
     # Using sampling to avoid large memory usage.
     sample_size = 100
-    empty_df = df.iloc[:sample_size].convert_dtypes(dtype_backend="pyarrow").iloc[:0]
+
+    # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
+    empty_df = arrow_to_empty_df(pa.Schema.from_pandas(df.iloc[:sample_size]))
     n_rows = len(df)
 
     res_id = None
     if bodo.dataframe_library_run_parallel:
         res_id = bodo.spawn.utils.scatter_data(df)
-        plan = LazyPlan("LogicalGetPandasReadParallel", res_id)
+        plan = LazyPlan("LogicalGetPandasReadParallel", empty_df, res_id)
     else:
-        plan = LazyPlan("LogicalGetPandasReadSeq", df)
+        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
 
-    return wrap_plan(empty_df, plan=plan, nrows=n_rows, res_id=res_id)
+    return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
 
 @check_args_fallback("all")
@@ -53,7 +56,6 @@ def read_parquet(
         storage_options = {}
 
     # Read Parquet schema
-    # TODO: Make this more robust (e.g. handle Index, etc.)
     use_hive = True
     pq_dataset = get_parquet_dataset(
         path,
@@ -66,8 +68,8 @@ def read_parquet(
 
     empty_df = arrow_to_empty_df(arrow_schema)
 
-    plan = LazyPlan("LogicalGetParquetRead", path.encode(), storage_options)
-    return wrap_plan(empty_df, plan=plan)
+    plan = LazyPlan("LogicalGetParquetRead", empty_df, path, storage_options)
+    return wrap_plan(plan=plan)
 
 
 def merge(lhs, rhs, *args, **kwargs):
