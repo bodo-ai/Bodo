@@ -179,7 +179,8 @@ class PhysicalReadSeries : public PhysicalSource {
 
         // Convert Arrow arrays to Bodo arrays
         auto* bodo_pool = bodo::BufferPool::DefaultPtr();
-        std::vector<std::shared_ptr<array_info>> cvec = {arrow_array_to_bodo(array, bodo_pool)};
+        std::vector<std::shared_ptr<array_info>> cvec = {
+            arrow_array_to_bodo(array, bodo_pool)};
         std::shared_ptr<table_info> out_table =
             std::make_shared<table_info>(std::move(cvec));
 
