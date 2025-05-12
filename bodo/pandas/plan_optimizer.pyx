@@ -281,6 +281,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
     cdef unique_ptr[CExpression] make_const_int_expr(int val) except +
     cdef unique_ptr[CExpression] make_const_float_expr(float val) except +
@@ -392,18 +393,6 @@ cdef class LogicalProjection(LogicalOperator):
 
     def __str__(self):
         return f"LogicalProjection({self.out_schema})"
-
-
-cdef class LogicalColRef(LogicalOperator):
-    cdef readonly vector[int] select_vec
-
-    def __cinit__(self, object out_schema, LogicalOperator source, select_idxs):
-        self.out_schema = out_schema
-        self.select_vec = select_idxs
-        self.sources = [source]
-
-    def __str__(self):
-        return f"LogicalColRef({self.select_vec}, {self.out_schema})"
 
 
 cdef class LogicalColRef(LogicalOperator):
@@ -551,21 +540,14 @@ cdef class ConjunctionOpExpression(Expression):
 
 
 cdef class UnaryOpExpression(Expression):
-    cdef public object op
+    def __cinit__(self, object out_schema, source, op):
+        cdef unique_ptr[CExpression] source_expr
 
-    def __cinit__(self, out_schema, source, op):
-        self.out_schema = out_schema
-        self.op = op
-        self.sources = [source]
-
-    def __cinit__(self, object out_schema, lhs, op):
-        cdef unique_ptr[CExpression] lhs_expr
-
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
+        source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_expr(source))
 
         self.out_schema = out_schema
         self.c_expression = make_unary_expr(
-            lhs_expr,
+            source_expr,
             str_to_expr_type(op))
 
     def __str__(self):

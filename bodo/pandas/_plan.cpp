@@ -16,6 +16,7 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
@@ -154,6 +155,25 @@ duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
 
     return duckdb::make_uniq<duckdb::BoundConjunctionExpression>(
         etype, std::move(lhs_duck), std::move(rhs_duck));
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
+    std::unique_ptr<duckdb::Expression> &lhs,
+    duckdb::ExpressionType etype) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto lhs_duck = to_duckdb(lhs);
+
+    switch(etype) {
+        case duckdb::ExpressionType::OPERATOR_NOT: {
+            auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
+                etype, duckdb::LogicalType::BOOLEAN);
+            ret->children.push_back(std::move(lhs_duck));
+            return ret;
+        } break;
+        default:
+            throw std::runtime_error(
+                "make_unary_expr unsupported etype " + std::to_string(static_cast<int>(etype)));
+    }
 }
 
 duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(

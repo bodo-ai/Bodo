@@ -8,6 +8,7 @@
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "physical/filter.h"
 #include "physical/limit.h"
 #include "physical/project.h"
@@ -119,20 +120,29 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     buildPhysicalExprTree(bce->children[0]),
                     buildPhysicalExprTree(bce->children[1]), expr_type));
         } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
+        case duckdb::ExpressionClass::BOUND_OPERATOR: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            duckdb::unique_ptr<duckdb::BoundConjunctionExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundConjunctionExpression>(
+            duckdb::unique_ptr<duckdb::BoundOperatorExpression> bce =
+                dynamic_cast_unique_ptr<duckdb::BoundOperatorExpression>(
                     std::move(expr));
-            // This node type has left and right children which are recursively
-            // processed first and then the resulting Bodo Physical expression
-            // subtrees are combined with the expression sub-type (e.g., equal,
-            // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
-            return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalConjunctionExpression>(
-                    buildPhysicalExprTree(bce->children[0]),
-                    buildPhysicalExprTree(bce->children[1]), expr_type));
+            switch(bce->children.size()) {
+                case 1: {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalUnaryExpression>(
+                            buildPhysicalExprTree(bce->children[0]),
+                            expr_type));
+                } break;
+                case 2: {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalBinaryExpression>(
+                            buildPhysicalExprTree(bce->children[0]),
+                            buildPhysicalExprTree(bce->children[1]), expr_type));
+                } break;
+                default:
+                    throw std::runtime_error(
+                        "Unsupported number of children for bound operator");
+            }
         } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(

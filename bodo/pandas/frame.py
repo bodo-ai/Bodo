@@ -601,36 +601,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 for i in range(get_n_index_arrays(zero_size_self.index))
             ]
 
-            """
-            if len(key) == 1:
-                """ If just one element then have to extract that singular
-                    element for the metadata call to Pandas so it doesn't
-                    complain. """
-                key = key[0]
-                new_metadata = zero_size_self.__getitem__(key)
-                return wrap_plan(
-                    new_metadata,
-                    plan=LazyPlan(
-                        # See generate_duckdb for a description of this
-                        # special node type.
-                        "LogicalProjectionOrColRef",
-                        self._plan,
-                        key_indices,
-                    ),
-                )
-            else:
-                new_metadata = zero_size_self.__getitem__(key)
-                return wrap_plan(
-                    new_metadata,
-                    plan=LazyPlan(
-                        # See generate_duckdb for a description of this
-                        # special node type.
-                        "LogicalProjectionOrColRef",
-                        self._plan,
-                        key_indices,
-                    ),
-                )
-            """
             # Create column reference expressions for selected columns
             exprs = make_col_ref_exprs(key_indices, self._plan)
 

@@ -371,7 +371,7 @@ class LazyPlan:
 
     __repr__ = __str__
 
-    def generate_duckdb(self, cache=None, in_filter=False):
+    def generate_duckdb(self, cache=None):
         from bodo.ext import plan_optimizer
 
         # Sometimes the same LazyPlan object is encountered twice during the same
@@ -382,7 +382,7 @@ class LazyPlan:
         if id(self) in cache:
             return cache[id(self)]
 
-        def recursive_check(x, in_filter):
+        def recursive_check(x):
             """Recursively convert LazyPlans but return other types unmodified."""
             if isinstance(x, LazyPlan):
                 return x.generate_duckdb(cache=cache)
