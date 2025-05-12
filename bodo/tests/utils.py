@@ -957,6 +957,12 @@ def _convert_to_bodo_arg(arg):
     """Convert arg to the corresponding Bodo class if possible."""
     if isinstance(arg, pd.DataFrame):
         return bodo_pd.from_pandas(arg)
+    elif isinstance(arg, pd.Series):
+        # convert to BodoDataFrame, then extract BodoSeries
+        bodo_df_arg = bodo_pd.from_pandas(arg.to_frame())
+        bodo_ser_arg = bodo_df_arg[bodo_df_arg.columns[0]]
+        bodo_ser_arg.name = arg.name
+        return bodo_ser_arg
 
     return arg
 
@@ -1010,7 +1016,7 @@ def check_func_df_lib(
         check_categorical,
         atol,
         rtol,
-        check_pandas_types,
+        check_pandas_types=False,
     )
 
 

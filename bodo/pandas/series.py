@@ -282,7 +282,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Apply function to elements in a Series
         """
-
         # Get output data type by running the UDF on a sample of the data.
         # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
         # TODO: remove when LIMIT plan is properly supported for head().
