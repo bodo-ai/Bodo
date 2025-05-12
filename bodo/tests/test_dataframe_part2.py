@@ -584,8 +584,7 @@ def test_df_apply_getitem(memory_leak_check):
         {"A": ["AA", "B", "CC", "C", "AA"], "B": [3, 1, 2, 5, 9]}, index=[3, 1, 4, 6, 0]
     )
 
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+    check_func(test_impl, (df,))
 
 
 @pytest.mark.df_lib
@@ -600,8 +599,7 @@ def test_df_apply_name_heterogeneous(memory_leak_check):
 
     df = pd.DataFrame({"C": ["go", "to", "bed", "a", "b"], "A": [1, 2, 3, 4, 1]})
 
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+    check_func(test_impl, (df,))
 
 
 @pytest.mark.df_lib
@@ -616,8 +614,7 @@ def test_df_apply_name_homogeneous(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, 3, 4, 1]})
 
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+    check_func(test_impl, (df,))
 
 
 # TODO [BSE-4778]: Dataframe Lib: Enable fallback to Pandas in DataFrame output case.
@@ -649,8 +646,8 @@ def test_df_apply_name_datetime_index(memory_leak_check):
     df = pd.DataFrame(
         {"A": [1, 2, 3, 4, 1]}, index=pd.date_range("2018-01-01", periods=5, freq="H")
     )
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+
+    check_func(test_impl, (df,))
 
 
 @pytest.mark.slow
@@ -670,8 +667,7 @@ def test_df_apply_name_timedelta_index(memory_leak_check):
         {"A": [1, 2, 3, 4, 1]}, index=pd.timedelta_range(start="1 day", periods=5)
     )
 
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+    check_func(test_impl, (df,))
 
 
 # TODO [BSE-4780]: Fix output schema for tuple result type.
@@ -701,8 +697,7 @@ def test_df_apply_bool(memory_leak_check):
     n = 121
     df = pd.DataFrame({"A": np.arange(n)})
 
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+    check_func(test_impl, (df,))
 
 
 @pytest.mark.df_lib
@@ -714,8 +709,7 @@ def test_df_apply_str(memory_leak_check):
 
     df = pd.DataFrame({"A": ["AA", "B", "CC", "C", "AA"]}, index=[3, 1, 4, 6, 0])
 
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+    check_func(test_impl, (df,))
 
 
 @pytest.mark.df_lib
@@ -726,8 +720,8 @@ def test_df_apply_list_str(memory_leak_check):
         return df.apply(lambda r: [r.A] if r.A == "AA" else ["BB", r.A], axis=1)
 
     df = pd.DataFrame({"A": ["AA", "B", "CC", "C", "AA"]}, index=[3, 1, 4, 6, 0])
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+
+    check_func(test_impl, (df,))
 
 
 @pytest.mark.df_lib
@@ -738,8 +732,8 @@ def test_df_apply_array_item(memory_leak_check):
         return df.apply(lambda r: [len(r.A)] if r.A == "AA" else [3, len(r.A)], axis=1)
 
     df = pd.DataFrame({"A": ["AA", "B", "CC", "C", "AA"]}, index=[3, 1, 4, 6, 0])
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+
+    check_func(test_impl, (df,))
 
 
 @pytest.mark.df_lib
@@ -752,8 +746,8 @@ def test_df_apply_date(memory_leak_check):
     df = pd.DataFrame(
         {"A": pd.date_range(start="2018-04-24", end="2019-04-29", periods=5)}
     )
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+
+    check_func(test_impl, (df,))
 
 
 @pytest.mark.df_lib
@@ -768,8 +762,8 @@ def test_df_apply_timestamp(memory_leak_check):
     df = pd.DataFrame(
         {"A": pd.date_range(start="2018-04-24", end="2019-04-29", periods=5)}
     )
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+
+    check_func(test_impl, (df,))
 
 
 # TODO [BSE-4781]: DataFrame lib: general column name selection support
@@ -795,20 +789,17 @@ def test_df_apply_general_colnames(memory_leak_check):
         index=[3, 1, 4, 6, 0],
     )
 
-    check_pandas_types = not bodo.test_dataframe_library_enabled
     check_func(
         impl1,
         (df,),
         convert_to_nullable_float=False,
-        check_pandas_types=check_pandas_types,
     )
     check_func(
         impl2,
         (df,),
         convert_to_nullable_float=False,
-        check_pandas_types=check_pandas_types,
     )
-    check_func(impl3, (df,), check_pandas_types=check_pandas_types)
+    check_func(impl3, (df,))
 
 
 @pytest.mark.slow
@@ -837,8 +828,7 @@ def test_df_apply_decimal(memory_leak_check):
         }
     )
 
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+    check_func(test_impl, (df,))
 
 
 @pytest.mark.slow
@@ -852,14 +842,14 @@ def test_df_apply_args(memory_leak_check):
 
     n = 121
     df = pd.DataFrame({"A": np.arange(n)})
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df, 3), check_pandas_types=check_pandas_types)
+
+    check_func(test_impl, (df, 3))
 
     # Test passing args as non-constant tuple
     def test_impl2(df, args, v):
         return df.apply(lambda r, a, c: r.A == a + c, axis=1, args=args, c=v)
 
-    check_func(test_impl2, (df, (1,), 2), check_pandas_types=check_pandas_types)
+    check_func(test_impl2, (df, (1,), 2))
 
 
 # TODO [BSE-4783]: DF LIB: support passing args and kwargs to UDF.
@@ -894,8 +884,8 @@ def test_df_apply_func_case1(memory_leak_check):
 
     n = 121
     df = pd.DataFrame({"A": np.arange(n)})
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(test_impl, (df,), check_pandas_types=check_pandas_types)
+
+    check_func(test_impl, (df,))
 
 
 @bodo.jit
@@ -982,9 +972,9 @@ def test_df_apply_freevar(memory_leak_check):
 
     n = 4
     df = pd.DataFrame({"A": np.arange(n)})
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(impl1, (df, 3), check_pandas_types=check_pandas_types)
-    check_func(impl2, (df, 7), check_pandas_types=check_pandas_types)
+
+    check_func(impl1, (df, 3))
+    check_func(impl2, (df, 7))
     if not bodo.test_dataframe_library_enabled:
         with pytest.raises(
             BodoError, match="Inner function is using non-constant variable"
@@ -1152,10 +1142,7 @@ def test_df_apply_supported_types(df_value, memory_leak_check):
     if "A" not in df.columns:
         df.rename(columns={df.columns[0]: "A"}, inplace=True)
 
-    check_pandas_types = not bodo.test_dataframe_library_enabled
-    check_func(
-        test_impl, (df,), check_dtype=False, check_pandas_types=check_pandas_types
-    )
+    check_func(test_impl, (df,), check_dtype=False)
 
 
 @pytest.mark.slow
