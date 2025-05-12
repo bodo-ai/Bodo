@@ -418,7 +418,7 @@ class LazyPlan:
 
         def recursive_check(x):
             if isinstance(x, LazyPlan):
-                popped_source_data.extend(x.pop_source_data())
+                popped_source_data.extend(x._pop_source_data())
             elif isinstance(x, (tuple, list)):
                 type(x)(recursive_check(i) for i in x)
 
