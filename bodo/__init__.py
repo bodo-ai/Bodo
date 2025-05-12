@@ -182,7 +182,7 @@ sql_plan_cache_loc = os.environ.get("BODO_SQL_PLAN_CACHE_DIR")
 
 # Flag to enable bodo dataframe library (bodo.pandas). When disabled, these classes
 # will fallback to Pandas.
-dataframe_library_enabled = os.environ.get("BODO_ENABLE_DATAFRAME_LIBRARY", "0") != "0"
+dataframe_library_enabled = os.environ.get("BODO_ENABLE_DATAFRAME_LIBRARY", "1") != "0"
 
 # Run tests utilizing check_func in dataframe library mode (replaces)
 # 'import pandas as pd' with 'import bodo.pandas as pd' when running the func.

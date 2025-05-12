@@ -119,7 +119,9 @@ jobs:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
             PYTEST_MARKER: ${{ inputs.pytest-marker }}
             BODO_TEST_SPAWN_MODE: ${{ inputs.test-type == 'SPAWN' && '1' || '0' }}
-            BODO_ENABLE_DATAFRAME_LIBRARY: ${{ inputs.test-type == 'DF_LIB' && '1' || '0' }}
+            # Disabling the DataFrame library for spawn tests since some of the tests
+            # create Pandas manager states for testing that are not fully functional.
+            BODO_ENABLE_DATAFRAME_LIBRARY: ${{ inputs.test-type != 'SPAWN' && '1' || '0' }}
             BODO_ENABLE_TEST_DATAFRAME_LIBRARY: ${{ inputs.test-type == 'DF_LIB' && '1' || '0' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"
             BODO_SPAWN_MODE: "0"

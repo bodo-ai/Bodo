@@ -741,9 +741,25 @@ def _reconstruct_pandas_index(df, arrow_schema):
     return df
 
 
+def _empty_pd_array(pa_type):
+    """Create an empty pandas array with the given Arrow type."""
+
+    # Workaround Arrows conversion gaps for dictionary types
+    if isinstance(pa_type, pa.DictionaryType):
+        assert pa_type.index_type == pa.int32() and (
+            pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
+        ), "Invalid dictionary type"
+        return pd.array(
+            ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
+        )[:0]
+
+    pa_arr = pa.array([], type=pa_type, from_pandas=True)
+    return pd.array(pa_arr, dtype=pd.ArrowDtype(pa_type))
+
+
 def arrow_to_empty_df(arrow_schema):
     """Create an empty dataframe with the same schema as the Arrow schema"""
-    empty_df = pd.DataFrame(columns=[field.name for field in arrow_schema])
-    type_dict = {field.name: pd.ArrowDtype(field.type) for field in arrow_schema}
-    empty_df = empty_df.astype(type_dict)
+    empty_df = pd.DataFrame(
+        {field.name: _empty_pd_array(field.type) for field in arrow_schema}
+    )
     return _reconstruct_pandas_index(empty_df, arrow_schema)
