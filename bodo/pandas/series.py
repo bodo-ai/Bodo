@@ -1,4 +1,5 @@
 import typing as pt
+import warnings
 from collections.abc import Callable, Hashable
 
 import pandas as pd
@@ -10,6 +11,7 @@ from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
+    BodoLibFallbackWarning,
     LazyPlan,
     arrow_to_empty_df,
     check_args_fallback,
@@ -275,7 +277,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @property
     def str(self):
-        return StringMethods(self)
+        return BodoStringMethods(self)
 
     @check_args_fallback(supported=["arg"])
     def map(self, arg, na_action=None):
@@ -302,7 +304,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return _get_series_python_func_plan(self._plan, empty_series, "map", (arg,), {})
 
 
-class StringMethods:
+class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
     def __init__(self, series):
@@ -330,6 +332,19 @@ class StringMethods:
         return _get_series_python_func_plan(
             self._series._plan, new_metadata, "str.strip", (), {}
         )
+
+    @check_args_fallback(unsupported="none")
+    def __getattribute__(self, name: str, /) -> pt.Any:
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            msg = (
+                f"StringMethods.{name} is not "
+                "implemented in Bodo dataframe library for the specified arguments yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            warnings.warn(BodoLibFallbackWarning(msg))
+            return object.__getattribute__(pd.Series(self._series).str, name)
 
 
 def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
