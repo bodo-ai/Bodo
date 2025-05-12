@@ -20,7 +20,9 @@ enum class OperatorType : uint8_t {
 /// 1. NEED_MORE_INPUT means the operator is ready for additional input
 /// 2. HAVE_MORE_OUTPUT means the operator can produce more output without
 /// additional input.
-/// 3. FINISHED means the pipeline should terminate
+/// 3. FINISHED means the pipeline should terminate (used only for LIMIT)
+// DuckDB's description:
+// https://youtu.be/MA0OsvYFGrc?t=1205
 enum class OperatorResult : uint8_t {
     NEED_MORE_INPUT,
     HAVE_MORE_OUTPUT,
