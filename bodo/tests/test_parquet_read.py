@@ -1625,9 +1625,6 @@ def test_filter_pushdown_past_column_filters():
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled, reason="TODO [BSE-4790]: Fix limit pushdown."
-)
 def test_read_pq_head_only(datapath, memory_leak_check):
     """
     test reading only shape and/or head from Parquet file if possible
