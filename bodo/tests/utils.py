@@ -1016,6 +1016,7 @@ def check_func_df_lib(
         check_categorical,
         atol,
         rtol,
+        # We'll get a different type from the Bodo DataFrame library
         check_pandas_types=False,
     )
 

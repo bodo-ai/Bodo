@@ -2823,6 +2823,7 @@ def test_series_apply_args(memory_leak_check):
 
 # TODO: Add memory leak check once constant lowering memory leak is fixed
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_series_map_supported_types(series_val):
     """Test Series.map with all Bodo supported Types"""
 
@@ -2931,11 +2932,17 @@ def test_series_groupby_by_arg_supported_types(series_val, memory_leak_check):
     # check_func(test_impl_by_types, (S, ))
 
 
+# E               RuntimeError: Array dtypes don't match in ReserveArray, buffer is FLOAT64, but input is INT64
+# Seg fault
+# @pytest.mark.df_lib
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([1.0, 2.0, 3.0, 4.0, 5.0]),
-        pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], [3, 1, 0, 2, 4], name="ABC"),
+        pytest.param(pd.Series([1.0, 2.0, 3.0, 4.0, 5.0]), id="series_no_index"),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], [3, 1, 0, 2, 4], name="ABC"),
+            id="series_index",
+        ),
     ],
 )
 def test_series_map(S, memory_leak_check):
