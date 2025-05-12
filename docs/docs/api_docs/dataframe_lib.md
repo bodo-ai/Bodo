@@ -121,7 +121,7 @@ bodo.pandas.read_parquet(
 
 Creates a BodoDataFrame object for reading from parquet file(s) lazily.
 
-<p style="font-size: 1.1em; font-weight: bold;">Parameters</p>
+<p class="api-header">Parameters</p>
 
 : __path : *str, list[str]*:__ Location of the parquet file(s) to read.
 Refer to [`pandas.read_parquet`](https://pandas.pydata.org/docs/reference/api/pandas.read_parquet.html#pandas.read_parquet) for more details.
@@ -197,7 +197,7 @@ See [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pand
     and then call `pandas.DataFrame.apply` on the head to infer output types
     before proceeding with lazy evaluation.
 
-<p style="font-size: 1.1em; font-weight: bold;">Parameters</p>
+<p class="api-header">Parameters</p>
 
 : __func : *function*:__ Function to apply to each row.
 
@@ -255,7 +255,7 @@ BodoDataFrame.head(n=5) -> BodoDataFrame
 
 Returns the first *n* rows of the BodoDataFrame.
 
-<p style="font-size: 1.1em; font-weight: bold;">Parameters</p>
+<p class="api-header">Parameters</p>
 
 : __n : *int, default 5*:__ Number of rows to select.
 
@@ -350,7 +350,7 @@ BodoSeries.head(n=5) -> BodoSeries
 
 Returns the first *n* rows of the BodoSeries.
 
-<p style="font-size: 1.1em; font-weight: bold;">Parameters</p>
+<p class="api-header">Parameters</p>
 
 : __n : *int, default 5*:__ Number of elements to select.
 
@@ -399,7 +399,7 @@ Map values of a BodoSeries according to a mapping.
     and then call `pandas.Series.map` on the head to infer output types
     before proceeding with lazy evaluation.
 
-<p style="font-size: 1.1em; font-weight: bold;">Parameters</p>
+<p class="api-header">Parameters</p>
 
 : __arg : *function, collections.abc.Mapping subclass or Series*:__ Mapping correspondence.
 
@@ -506,7 +506,7 @@ BodoSeries.str.strip(to_strip=None) -> BodoSeries
 Remove leading and trailing characters.
 Equivalent to [`str.strip()`](https://docs.python.org/3/library/stdtypes.html#str.strip).
 
-<p style="font-size: 1.1em; font-weight: bold;">Parameters</p>
+<p class="api-header">Parameters</p>
 
 : __to_strip:__
 Will fall back to [`pandas.Series.str.strip`](https://pandas.pydata.org/docs/reference/api/pandas.Series.str.strip.html#pandas.Series.str.strip) if a value other than None is provided.
