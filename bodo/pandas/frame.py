@@ -492,7 +492,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], self, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["on"], disable=True)
+    @check_args_fallback(supported=["on"])
     def merge(
         self,
         right: "BodoDataFrame | BodoSeries",
