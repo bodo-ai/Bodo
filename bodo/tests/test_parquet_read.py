@@ -575,7 +575,7 @@ def test_pq_multi_idx(memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.skipif(
     bodo.dataframe_library_enabled,
-    reason="[BSE-4769] Fix duckdb internal error while creating expression.",
+    reason="[BSE-4795] Fix filter bug without pushdown",
 )
 def test_read_partitions(memory_leak_check):
     """test reading and filtering partitioned parquet data"""
@@ -2487,10 +2487,6 @@ def test_pq_str_with_nan_seq(datapath):
     check_func(test_impl, (), dist_test=False)
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4774] Fix fallback for str methods.",
-)
 def test_series_str_upper_lower_dce(datapath):
     """Tests Series.str.upper and Series.str.lower can be safely removed as dead code"""
     filename = datapath("example.parquet")
