@@ -262,18 +262,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         if n == 0 and self._head_s is not None:
             if self._exec_state == ExecState.COLLECTED:
-                return pd.Series(
-                    index=self.index,
-                    name=self.name,
-                    dtype=self.dtype,
-                )
+                return self.iloc[:0].copy()
             else:
                 assert self._head_s is not None
-                return pd.Series(
-                    index=self._head_s.index,
-                    name=self._head_s.name,
-                    dtype=self._head_s.dtype,
-                )
+                return self._head_s.head(0).copy()
 
         if (self._head_s is None) or (n > self._head_s.shape[0]):
             if bodo.dataframe_library_enabled:
