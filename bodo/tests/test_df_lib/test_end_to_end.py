@@ -21,7 +21,9 @@ def set_stream_batch_size_three(monkeypatch):
     yield
     monkeypatch.undo()
     # Destroy the spawner and workers so they aren't stuck with this batch size
-    bodo.spawn.spawner.destroy_spawner()
+    bodo.spawn.spawner.submit_func_to_workers(
+        lambda: None, ["BODO_STREAMING_BATCH_SIZE"]
+    )
 
 
 @pytest.fixture(
