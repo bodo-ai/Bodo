@@ -473,7 +473,7 @@ def execute_plan(plan: LazyPlan):
         # to the workers can create issues. We still need to keep a reference
         # until the plan has executed. This was tried with LazyPlan.__reduce__ first but
         # that also created issues
-        plan._pop_source_data()
+        source_data = plan._pop_source_data()  # noqa
 
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
