@@ -39,7 +39,19 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(
         std::shared_ptr<table_info> input_batch) override {
-        return OperatorResult::NEED_MORE_INPUT;
+        bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
+        // TODO: handle output
+        bool is_last = join_build_consume_batch(this->join_state.get(),
+                                                input_batch, has_bloom_filter,
+                                                // TODO: set is_last properly
+                                                true);
+
+        if (is_last) {
+            return OperatorResult::FINISHED;
+        }
+        return !join_state->build_shuffle_state.BuffersFull()
+                   ? OperatorResult::HAVE_MORE_OUTPUT
+                   : OperatorResult::NEED_MORE_INPUT;
     }
 
     /**

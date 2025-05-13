@@ -1439,3 +1439,16 @@ bool nested_loop_join_probe_consume_batch(
     const std::vector<uint64_t> probe_kept_cols, bool is_last);
 
 bool stream_join_sync_is_last(bool local_is_last, JoinState* join_state);
+
+/**
+ * @brief consume build table batch in streaming join (insert into hash
+ * table)
+ *
+ * @param join_state join state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch
+ * @return updated is_last
+ */
+bool join_build_consume_batch(HashJoinState* join_state,
+                              std::shared_ptr<table_info> in_table,
+                              bool use_bloom_filter, bool local_is_last);
