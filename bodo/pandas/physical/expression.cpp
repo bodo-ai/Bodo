@@ -30,17 +30,18 @@ std::shared_ptr<arrow::Array> prepare_arrow_compute(
 }
 
 // String specialization
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const std::string& value) {
+std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
+    const std::string& value) {
     arrow::StringBuilder builder;
     arrow::Status status;
     status = builder.Append(value);
     if (!status.ok()) {
-         throw std::runtime_error("builder.Append failed.");
+        throw std::runtime_error("builder.Append failed.");
     }
     std::shared_ptr<arrow::Array> array;
     status = builder.Finish(&array);
     if (!status.ok()) {
-         throw std::runtime_error("builder.Finish failed.");
+        throw std::runtime_error("builder.Finish failed.");
     }
     return array;
 }

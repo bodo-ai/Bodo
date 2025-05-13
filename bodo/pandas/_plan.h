@@ -310,8 +310,7 @@ duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
 duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
-    std::unique_ptr<duckdb::Expression> &lhs,
-    duckdb::ExpressionType etype);
+    std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype);
 
 /**
  * @brief Create a conjunction (and/or) expression from two sources.

@@ -1,16 +1,15 @@
 #pragma once
 
 #include <arrow/api.h>
-#include <arrow/type_traits.h>
 #include <arrow/compute/api.h>
+#include <arrow/type_traits.h>
+#include <string>
+#include <type_traits>
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../tests/utils.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "operator.h"
-#include <type_traits>
-#include <string>
-
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
@@ -89,9 +88,11 @@ class PhysicalExpression {
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) = 0;
 
-    friend std::ostream& operator<<(std::ostream &os, const PhysicalExpression &obj) {
+    friend std::ostream &operator<<(std::ostream &os,
+                                    const PhysicalExpression &obj) {
         return os;
     }
+
    protected:
     std::vector<std::shared_ptr<PhysicalExpression>> children;
 };
@@ -216,7 +217,10 @@ class PhysicalComparisonExpression : public PhysicalExpression {
         if (two_source) {
             src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
         } else {
-            src2 = arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)->GetScalar(0).ValueOrDie());
+            src2 =
+                arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)
+                                      ->GetScalar(0)
+                                      .ValueOrDie());
         }
 
         arrow::Result<arrow::Datum> cmp_res =
@@ -242,9 +246,10 @@ class PhysicalComparisonExpression : public PhysicalExpression {
 };
 
 // Numeric type specialization
-template <typename T,
-          typename std::enable_if<std::is_arithmetic<T>::value && !std::is_same<T, bool>::value, int>::type = 0>
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const T& value) {
+template <typename T, typename std::enable_if<std::is_arithmetic<T>::value &&
+                                                  !std::is_same<T, bool>::value,
+                                              int>::type = 0>
+std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const T &value) {
     using ArrowType = typename arrow::CTypeTraits<T>::ArrowType;
     using BuilderType = arrow::NumericBuilder<ArrowType>;
 
@@ -252,18 +257,19 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const T& value) {
     arrow::Status status;
     status = builder.Append(value);
     if (!status.ok()) {
-         throw std::runtime_error("builder.Append failed.");
+        throw std::runtime_error("builder.Append failed.");
     }
     std::shared_ptr<arrow::Array> array;
     status = builder.Finish(&array);
     if (!status.ok()) {
-         throw std::runtime_error("builder.Finish failed.");
+        throw std::runtime_error("builder.Finish failed.");
     }
     return array;
 }
 
 // String specialization
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const std::string& value);
+std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
+    const std::string &value);
 
 // bool specialization
 std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value);
@@ -280,14 +286,16 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::shared_ptr<arrow::Array> array = CreateOneElementArrowArray(constant);
+        std::shared_ptr<arrow::Array> array =
+            CreateOneElementArrowArray(constant);
 
-        auto result = arrow_array_to_bodo(array,
-                                          bodo::BufferPool::DefaultPtr());
+        auto result =
+            arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
         return std::make_shared<ScalarExprResult>(std::move(result));
     }
 
-    friend std::ostream& operator<<(std::ostream &os, const PhysicalConstantExpression<T> &obj) {
+    friend std::ostream &operator<<(std::ostream &os,
+                                    const PhysicalConstantExpression<T> &obj) {
         os << "PCE string operator<< " << obj.constant << std::endl;
         return os;
     }
@@ -304,17 +312,20 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::shared_ptr<arrow::Array> array = CreateOneElementArrowArray(constant);
+        std::shared_ptr<arrow::Array> array =
+            CreateOneElementArrowArray(constant);
 
-        auto result = arrow_array_to_bodo(array,
-                                          bodo::BufferPool::DefaultPtr());
+        auto result =
+            arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
         return std::make_shared<ScalarExprResult>(std::move(result));
     }
 
-    friend std::ostream& operator<<(std::ostream &os, const PhysicalConstantExpression<std::string> &obj) {
+    friend std::ostream &operator<<(
+        std::ostream &os, const PhysicalConstantExpression<std::string> &obj) {
         os << "PCE string operator<< " << obj.constant << std::endl;
         return os;
     }
+
    private:
     const std::string constant;
 };
@@ -430,7 +441,10 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         if (two_source) {
             src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
         } else {
-            src2 = arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)->GetScalar(0).ValueOrDie());
+            src2 =
+                arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)
+                                      ->GetScalar(0)
+                                      .ValueOrDie());
         }
 
         arrow::Result<arrow::Datum> cmp_res =
@@ -455,7 +469,6 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
     std::string comparator;
 };
 
-
 /**
  * @brief Physical expression tree node type for unary of array.
  *
@@ -463,9 +476,8 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
 class PhysicalUnaryExpression : public PhysicalExpression {
    public:
     PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
-                                  duckdb::ExpressionType etype)
-        : expr_type(etype),
-          first_time(true) {
+                            duckdb::ExpressionType etype)
+        : expr_type(etype), first_time(true) {
         children.push_back(left);
     }
 
@@ -502,7 +514,10 @@ class PhysicalUnaryExpression : public PhysicalExpression {
         if (left_as_array) {
             src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
         } else {
-            src1 = arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)->GetScalar(0).ValueOrDie());
+            src1 =
+                arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
+                                      ->GetScalar(0)
+                                      .ValueOrDie());
         }
 
         arrow::Result<arrow::Datum> cmp_res =
@@ -525,7 +540,6 @@ class PhysicalUnaryExpression : public PhysicalExpression {
     std::string comparator;
 };
 
-
 /**
  * @brief Physical expression tree node type for binary op non-boolean arrays.
  *
@@ -533,10 +547,9 @@ class PhysicalUnaryExpression : public PhysicalExpression {
 class PhysicalBinaryExpression : public PhysicalExpression {
    public:
     PhysicalBinaryExpression(std::shared_ptr<PhysicalExpression> left,
-                                  std::shared_ptr<PhysicalExpression> right,
-                                  duckdb::ExpressionType etype)
-        : expr_type(etype),
-          first_time(true) {
+                             std::shared_ptr<PhysicalExpression> right,
+                             duckdb::ExpressionType etype)
+        : expr_type(etype), first_time(true) {
         children.push_back(left);
         children.push_back(right);
     }
@@ -583,14 +596,20 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         if (left_as_array) {
             src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
         } else {
-            src1 = arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)->GetScalar(0).ValueOrDie());
+            src1 =
+                arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
+                                      ->GetScalar(0)
+                                      .ValueOrDie());
         }
 
         arrow::Datum src2;
         if (right_as_array) {
             src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
         } else {
-            src2 = arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)->GetScalar(0).ValueOrDie());
+            src2 =
+                arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)
+                                      ->GetScalar(0)
+                                      .ValueOrDie());
         }
 
         arrow::Result<arrow::Datum> cmp_res =

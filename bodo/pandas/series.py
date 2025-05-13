@@ -147,7 +147,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         empty_data = _empty_like(self)
 
         assert isinstance(empty_data, pd.Series), "Series expected"
-        expr = plan=LazyPlan("UnaryOpExpression", empty_data, self._plan, "__invert__")
+        expr = plan = LazyPlan(
+            "UnaryOpExpression", empty_data, self._plan, "__invert__"
+        )
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
@@ -184,7 +186,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Compute schema of new series.
         new_metadata = getattr(zero_size_self, op)(zero_size_other)
         assert isinstance(new_metadata, pd.Series)
-        expr = plan=LazyPlan("ConjunctionOpExpression", new_metadata, self._plan, other, op)
+        expr = plan = LazyPlan(
+            "ConjunctionOpExpression", new_metadata, self._plan, other, op
+        )
         plan = LazyPlan(
             "LogicalProjection",
             new_metadata,
