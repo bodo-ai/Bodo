@@ -160,6 +160,8 @@ def get_spark(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         )
+        builder.master("local[*]")
+        builder.config("spark.driver.bindAddress", "127.0.0.1")
 
         for catalog in spark_catalogs:
             add_catalog(builder, catalog)
