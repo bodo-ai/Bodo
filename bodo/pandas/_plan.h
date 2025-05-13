@@ -111,7 +111,11 @@ class BodoDataFrameScanFunction : public BodoScanFunction {
  */
 class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoDataFrameSeqScanFunctionData(PyObject *df) : df(df) { Py_INCREF(df); }
+    BodoDataFrameSeqScanFunctionData(
+        PyObject *df, std::shared_ptr<arrow::Schema> arrow_schema)
+        : df(df), arrow_schema(arrow_schema) {
+        Py_INCREF(df);
+    }
     ~BodoDataFrameSeqScanFunctionData() { Py_DECREF(df); }
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
@@ -124,6 +128,7 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
 
     PyObject *df;
+    std::shared_ptr<arrow::Schema> arrow_schema;
 };
 
 /**
@@ -133,8 +138,9 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
  */
 class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoDataFrameParallelScanFunctionData(std::string result_id)
-        : result_id(result_id) {}
+    BodoDataFrameParallelScanFunctionData(
+        std::string result_id, std::shared_ptr<arrow::Schema> arrow_schema)
+        : result_id(result_id), arrow_schema(arrow_schema) {}
     ~BodoDataFrameParallelScanFunctionData() {}
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
@@ -146,6 +152,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
     std::string result_id;
+    std::shared_ptr<arrow::Schema> arrow_schema;
 };
 
 /**

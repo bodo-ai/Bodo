@@ -14,11 +14,13 @@ class PhysicalReadPandas : public PhysicalSource {
     PyObject* df;
     int64_t current_row = 0;
     int64_t num_rows;
+    std::shared_ptr<arrow::Schema> arrow_schema;
 
    public:
     explicit PhysicalReadPandas(PyObject* _df,
-                                std::vector<int>& selected_columns)
-        : df(_df) {
+                                std::vector<int>& selected_columns,
+                                std::shared_ptr<arrow::Schema> arrow_schema)
+        : df(_df), arrow_schema(arrow_schema) {
         Py_INCREF(df);
 
         // Select only the specified columns if provided by the optimizer
@@ -128,5 +130,9 @@ class PhysicalReadPandas : public PhysicalSource {
                                     : ProducerResult::HAVE_MORE_OUTPUT;
 
         return {out_table, result};
+    }
+
+    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        return bodo::Schema::FromArrowSchema(this->arrow_schema);
     }
 };

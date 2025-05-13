@@ -59,4 +59,11 @@ class PipelineBuilder {
     /// the sink.
     std::shared_ptr<Pipeline> BuildEnd(
         std::shared_ptr<arrow::Schema> out_schema);
+
+    std::shared_ptr<bodo::Schema> getPrevOpOutputSchema() {
+        if (this->between_ops.empty()) {
+            return this->source->getOutputSchema();
+        }
+        return this->between_ops.back()->getOutputSchema();
+    }
 };

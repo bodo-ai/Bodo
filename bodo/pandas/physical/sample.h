@@ -40,6 +40,11 @@ class PhysicalSample : public PhysicalSourceSink {
         return {out_table_info, OperatorResult::NEED_MORE_INPUT};
     }
 
+    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        // TODO
+        return nullptr;
+    }
+
    private:
     const float percentage;
 

@@ -54,6 +54,8 @@ class PhysicalSource : public PhysicalOperator {
 
     virtual std::pair<std::shared_ptr<table_info>, ProducerResult>
     ProduceBatch() = 0;
+
+    virtual std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
 class PhysicalSink : public PhysicalOperator {
@@ -73,6 +75,8 @@ class PhysicalSourceSink : public PhysicalOperator {
 
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) = 0;
+
+    virtual std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
 /**

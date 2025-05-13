@@ -136,6 +136,11 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
                     : ProducerResult::HAVE_MORE_OUTPUT};
     }
 
+    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        // TODO
+        return nullptr;
+    }
+
    private:
     uint64_t n, local_remaining;
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;

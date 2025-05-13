@@ -35,6 +35,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override {
+        std::shared_ptr<table_info> out_table;
         return {out_table, OperatorResult::NEED_MORE_INPUT};
     }
 
@@ -44,6 +45,11 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     std::shared_ptr<table_info> GetResult() override {
         // Join build doesn't return output results
         throw std::runtime_error("GetResult called on a join node.");
+    }
+
+    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        // TODO
+        return nullptr;
     }
 
    private:

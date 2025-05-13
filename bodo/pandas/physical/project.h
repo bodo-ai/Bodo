@@ -92,6 +92,11 @@ class PhysicalProjection : public PhysicalSourceSink {
         return {out_table_info, OperatorResult::NEED_MORE_INPUT};
     }
 
+    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        // TODO
+        return nullptr;
+    }
+
    private:
     /**
      * @brief Run Python scalar function on the input batch and return the
