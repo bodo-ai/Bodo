@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "../../libs/streaming/_join.h"
 #include "operator.h"
 
 /**
@@ -36,4 +37,15 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         std::shared_ptr<table_info> input_batch) override {
         return {out_table, OperatorResult::NEED_MORE_INPUT};
     }
+
+    /**
+     * @brief GetResult - just for API compatability but should never be called
+     */
+    std::shared_ptr<table_info> GetResult() override {
+        // Join build doesn't return output results
+        throw std::runtime_error("GetResult called on a join node.");
+    }
+
+   private:
+    std::shared_ptr<HashJoinState> join_state;
 };
