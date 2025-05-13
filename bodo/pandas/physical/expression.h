@@ -214,27 +214,11 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             arrow::Datum(prepare_arrow_compute(left_as_array->result));
         arrow::Datum src2;
 
-    if (src1.is_array()) {
-        std::cout << "Datum contains an array of type: " << src1.type()->ToString() << std::endl;
-    } else if (src1.is_scalar()) {
-        std::cout << "Datum contains a scalar of type: " << src1.scalar()->type->ToString() << std::endl;
-    } else {
-        std::cout << "Datum contains a different type: " << src1.ToString() << std::endl;
-    }
-
         if (two_source) {
             src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
         } else {
             src2 = arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)->GetScalar(0).ValueOrDie());
         }
-
-    if (src2.is_array()) {
-        std::cout << "Datum contains an array of type: " << src2.type()->ToString() << std::endl;
-    } else if (src2.is_scalar()) {
-        std::cout << "Datum contains a scalar of type: " << src2.scalar()->type->ToString() << std::endl;
-    } else {
-        std::cout << "Datum contains a different type: " << src2.ToString() << std::endl;
-    }
 
         arrow::Result<arrow::Datum> cmp_res =
             arrow::compute::CallFunction(comparator, {src1, src2});
@@ -298,7 +282,6 @@ class PhysicalConstantExpression : public PhysicalExpression {
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
         std::shared_ptr<arrow::Array> array = CreateOneElementArrowArray(constant);
-        std::cout << "PhysicalConstantExpression " << array->ToString() << std::endl;
 
         auto result = arrow_array_to_bodo(array,
                                           bodo::BufferPool::DefaultPtr());
@@ -317,15 +300,12 @@ class PhysicalConstantExpression : public PhysicalExpression {
 template <>
 class PhysicalConstantExpression<std::string> : public PhysicalExpression {
    public:
-    PhysicalConstantExpression(const std::string &val) : constant(val) {
-       std::cout << "PCE string constructor " << val << std::endl;
-    }
+    PhysicalConstantExpression(const std::string &val) : constant(val) {}
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
         std::shared_ptr<arrow::Array> array = CreateOneElementArrowArray(constant);
-        std::cout << "PhysicalConstantExpression " << array->ToString() << std::endl;
 
         auto result = arrow_array_to_bodo(array,
                                           bodo::BufferPool::DefaultPtr());
