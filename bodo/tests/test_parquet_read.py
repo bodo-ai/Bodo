@@ -2487,10 +2487,6 @@ def test_pq_str_with_nan_seq(datapath):
     check_func(test_impl, (), dist_test=False)
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4774] Fix fallback for str methods.",
-)
 def test_series_str_upper_lower_dce(datapath):
     """Tests Series.str.upper and Series.str.lower can be safely removed as dead code"""
     filename = datapath("example.parquet")
