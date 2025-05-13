@@ -42,7 +42,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
                 empty_data = _empty_like(self)
 
-                return LazyPlan("LogicalGetSeriesRead", empty_data, self._mgr)
+                return LazyPlan(
+                    "LogicalGetSeriesRead",
+                    empty_data,
+                    # Mark our manager as a dependency so the results won't be deleted from the workers
+                    # if this object goes out of scope.
+                    [self._mgr],
+                    self._mgr._md_result_id,
+                )
 
         raise NotImplementedError(
             "Plan not available for this manager, recreate this series with from_pandas"
@@ -69,11 +76,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("BinaryOpExpression", empty_data, lhs, rhs, op)
+        expr = LazyPlan("BinaryOpExpression", empty_data, [], lhs, rhs, op)
 
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
+            [],
             # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
@@ -113,11 +121,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("ConjunctionOpExpression", empty_data, lhs, rhs, op)
+        expr = LazyPlan("ConjunctionOpExpression", empty_data, [], lhs, rhs, op)
 
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
+            [],
             # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
@@ -152,7 +161,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         assert isinstance(empty_data, pd.Series), "Series expected"
         return wrap_plan(
-            plan=LazyPlan("LogicalUnaryOp", empty_data, self._plan, "__invert__"),
+            plan=LazyPlan("LogicalUnaryOp", empty_data, [], self._plan, "__invert__"),
         )
 
     @staticmethod
@@ -247,6 +256,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 planLimit = LazyPlan(
                     "LogicalLimit",
                     _empty_like(self),
+                    [],
                     self._plan,
                     n,
                 )
@@ -371,6 +381,7 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
     expr = LazyPlan(
         "PythonScalarFuncExpression",
         empty_data,
+        [],
         source_data,
         (
             func_name,
@@ -387,6 +398,7 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
         plan=LazyPlan(
             "LogicalProjection",
             empty_data,
+            [],
             source_data,
             (expr,) + index_col_refs,
         ),
