@@ -565,7 +565,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "only string and BodoSeries keys are supported"
             )
 
-        def collapse_key_exprs(key_plan, plan_source = None):
+        def collapse_key_exprs(key_plan, plan_source=None):
             assert isinstance(key_plan, LazyPlan)
             if key_plan.plan_class == "LogicalProjection":
                 if plan_source is None:
@@ -575,12 +575,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                         return None
 
                 if is_single_projection(key_plan):
-                    if not isinstance(key_plan.args[1], tuple) or len(key_plan.args[1]) != 1:
+                    if (
+                        not isinstance(key_plan.args[1], tuple)
+                        or len(key_plan.args[1]) != 1
+                    ):
                         return None
                     assert len(key_plan.args) == 2
 
                     arg0 = collapse_key_exprs(key_plan.args[0], plan_source=plan_source)
-                    arg1tup0 = collapse_key_exprs(key_plan.args[1][0], plan_source=plan_source)
+                    arg1tup0 = collapse_key_exprs(
+                        key_plan.args[1][0], plan_source=plan_source
+                    )
                     if arg0 is None or arg1tup0 is None:
                         return None
                     key_plan.args = (arg0, (arg1tup0,))
@@ -591,7 +596,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 assert len(key_plan.args) == 3
                 lhs = collapse_key_exprs(key_plan.args[0], plan_source=plan_source)
                 rhs = collapse_key_exprs(key_plan.args[1], plan_source=plan_source)
-                if lhs is None or rhs is None or lhs.plan_class != "LogicalProjection" or rhs.plan_class != "LogicalProjection":
+                if (
+                    lhs is None
+                    or rhs is None
+                    or lhs.plan_class != "LogicalProjection"
+                    or rhs.plan_class != "LogicalProjection"
+                ):
                     return None
                 key_plan.args = (lhs.args[1][0], rhs.args[1][0], key_plan.args[2])
                 assert isinstance(key_plan.args[0], LazyPlan)
@@ -600,13 +610,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             else:
                 return key_plan
 
-        if (
-            isinstance(key, BodoSeries)
-            and key.is_lazy_plan()
-        ):
-            if (
-                new_plan := collapse_key_exprs(key._plan)
-            ) is not None:
+        if isinstance(key, BodoSeries) and key.is_lazy_plan():
+            if (new_plan := collapse_key_exprs(key._plan)) is not None:
                 # Update internal state
                 key._mgr._plan = new_plan
             else:

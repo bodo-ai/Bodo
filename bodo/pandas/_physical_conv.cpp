@@ -120,7 +120,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             duckdb::unique_ptr<duckdb::BoundOperatorExpression> bce =
                 dynamic_cast_unique_ptr<duckdb::BoundOperatorExpression>(
                     std::move(expr));
-            switch(bce->children.size()) {
+            switch (bce->children.size()) {
                 case 1: {
                     return std::static_pointer_cast<PhysicalExpression>(
                         std::make_shared<PhysicalUnaryExpression>(
@@ -131,7 +131,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     return std::static_pointer_cast<PhysicalExpression>(
                         std::make_shared<PhysicalBinaryExpression>(
                             buildPhysicalExprTree(bce->children[0]),
-                            buildPhysicalExprTree(bce->children[1]), expr_type));
+                            buildPhysicalExprTree(bce->children[1]),
+                            expr_type));
                 } break;
                 default:
                     throw std::runtime_error(
