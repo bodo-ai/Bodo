@@ -560,12 +560,7 @@ def run_func_on_table(cpp_table, arrow_schema, in_args):
     out_df = pd.DataFrame({"OUT": out})
 
     # TODO [BSE-4788]: replace with convert_to_arrow_dtypes util
-    # First covert floats to doubles, then do the integer check
-    # Since convert dtypes converts to integers first if possible
-    print(f"df before conversion: {out_df}")
-    # out_df = out_df.convert_dtypes(dtype_backend="pyarrow", convert_integer=False)
     out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
-    print(f"df after conversion: {out_df.dtypes}")
     return df_to_cpp_table(out_df)
 
 

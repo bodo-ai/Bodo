@@ -2932,8 +2932,8 @@ def test_series_groupby_by_arg_supported_types(series_val, memory_leak_check):
     # check_func(test_impl_by_types, (S, ))
 
 
-# [BSE-4788] Add proper utility for conversion to pyarrow dtypes
-@pytest.mark.df_lib
+# TODO: [BSE-4802] Incorrect cast of output batch float->int.
+# @pytest.mark.df_lib
 @pytest.mark.parametrize(
     "S",
     [

@@ -53,7 +53,7 @@ series_val_params = [
         ),
         id="decimal",
         marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled, reason="BSE XXX Decimal"
+            bodo.test_dataframe_library_enabled, reason="[BSE 4789] Decimal support."
         ),
     ),
     pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow, id="integer"),
@@ -120,7 +120,8 @@ series_val_params = [
         ),
         id="timedelta",
         marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled, reason="BSE XXX Category"
+            bodo.test_dataframe_library_enabled,
+            reason="[BSE-4779] Duration[ns] support.",
         ),
     ),
     pytest.param(
@@ -151,14 +152,16 @@ series_val_params = [
         pd.Series(["AA", "BB", "", "AA", None, "AA"] * 2, dtype="category"),
         id="categorical_string",
         marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled, reason="BSE XXX Category"
+            bodo.test_dataframe_library_enabled,
+            reason="[BSE-4804] Categorical dtypes support.",
         ),
     ),
     pytest.param(
         pd.Series(pd.Categorical([1, 2, 5, None, 2] * 2, ordered=True)),
         id="categorical_integer_ordered",
         marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled, reason="BSE XXX Category"
+            bodo.test_dataframe_library_enabled,
+            reason="[BSE-4804] Categorical dtypes support.",
         ),
     ),
     pytest.param(
@@ -170,7 +173,8 @@ series_val_params = [
         ).astype("category"),
         id="categorical_timestamp",
         marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled, reason="BSE XXX Category"
+            bodo.test_dataframe_library_enabled,
+            reason="[BSE-4804] Categorical dtypes support.",
         ),
     ),
     pytest.param(
@@ -182,7 +186,8 @@ series_val_params = [
         ).astype(pd.CategoricalDtype(ordered=True)),
         id="categorical_timestamp_ordered",
         marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled, reason="BSE XXX Category"
+            bodo.test_dataframe_library_enabled,
+            reason="[BSE-4804] Categorical dtypes support.",
         ),
     ),
     pytest.param(
