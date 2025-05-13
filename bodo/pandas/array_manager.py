@@ -495,7 +495,9 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             self._axes = data._mgr.axes
             # Transfer ownership to this manager
             data._mgr._md_result_id = None
-            return type(data).from_lazy_mgr(self, data.head())
+            head_s = pd.Series._from_mgr(self._md_head, [])
+            head_s._name = data._name
+            return type(data).from_lazy_mgr(self, head_s)
         else:
             # We got a normal pandas object, don't need to set any metadata
             self.arrays = data._mgr.arrays

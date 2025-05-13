@@ -644,7 +644,7 @@ def test_parquet_read_partitioned_filter(datapath):
     )
 
 
-def test_project_after_filter(datapath, set_stream_batch_size_three):
+def test_project_after_filter(datapath):
     """Test creating a plan with a Projection on top of a filter works"""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1[bodo_df1.D > 80][["B", "A"]]
