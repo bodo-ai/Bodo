@@ -5,6 +5,7 @@ from pandas._libs import lib
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BODO_NONE_DUMMY,
     LazyPlan,
     arrow_to_empty_df,
     check_args_fallback,
@@ -90,7 +91,7 @@ def _empty_like(val):
     val = val.head(0)
 
     if is_series:
-        val = val.to_frame()
+        val = val.to_frame(name=BODO_NONE_DUMMY if val.name is None else val.name)
 
     # Reuse arrow_to_empty_df to make sure details like Index handling are correct
     out = arrow_to_empty_df(pa.Schema.from_pandas(val))
