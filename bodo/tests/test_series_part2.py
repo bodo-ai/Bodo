@@ -69,7 +69,7 @@ def test_series_map_dict_arg(S, d, memory_leak_check):
         pd.Series([-1, 11, 2, 3, 5]),
     ],
 )
-# TODO: null columns
+# TODO XXX: Initial sample is None
 # @pytest.mark.df_lib
 def test_series_map_none(S, memory_leak_check):
     """Test returning None from UDF"""
@@ -91,8 +91,8 @@ def test_series_map_none_str(memory_leak_check):
     check_func(test_impl, (S,), check_dtype=False, only_1DVar=True)
 
 
+# TODO: Fails in two rank case (worker 2 has an all None output batch)
 # @pytest.mark.df_lib
-# [None, RuntimeError("Array dtypes don't match in ReserveArray, buffer is DATETIME, but input is _BOOL")]
 def test_series_map_none_timestamp(memory_leak_check):
     """Test returning Optional(timestamp) from UDF"""
 
@@ -130,7 +130,7 @@ def test_series_map_isna_check(memory_leak_check):
     check_func(impl2, (S,))
 
 
-# RuntimeError: Array dtypes don't match in ReserveArray, buffer is FLOAT64, but input is INT64
+# TODO: [BSE-4788] Wrong conversion float->int. Add proper conversion to pyarrow types utility.
 # @pytest.mark.df_lib
 def test_series_map_global1(memory_leak_check):
     def test_impl(S):
@@ -162,7 +162,7 @@ def g4(a):
     return [a, 2 * a]
 
 
-# RuntimeError: Array dtypes don't match in ReserveArray, buffer is FLOAT64, but input is INT64
+# TODO: [BSE-4788] Wrong conversion float->int. Add proper conversion to pyarrow types utility.
 # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_func_cases1(memory_leak_check):
@@ -209,7 +209,7 @@ def test_series_map_func_cases1(memory_leak_check):
     check_func(test_impl5, (S,))
 
 
-# RuntimeError: Array dtypes don't match in ReserveArray, buffer is FLOAT64, but input is INT64
+# TODO: [BSE-4788] Wrong conversion float->int. Add proper conversion to pyarrow types utility.
 # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_global_jit(memory_leak_check):
@@ -233,8 +233,6 @@ def test_series_map_wrap_python(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# RuntimeError: Array types don't match in ReserveArray, buffer is ARRAY_ITEM, but input is STRUCT
-# @pytest.mark.df_lib
 # TODO: add memory_leak_check
 # @pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
 @pytest.mark.slow

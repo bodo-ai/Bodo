@@ -2932,9 +2932,8 @@ def test_series_groupby_by_arg_supported_types(series_val, memory_leak_check):
     # check_func(test_impl_by_types, (S, ))
 
 
-# E               RuntimeError: Array dtypes don't match in ReserveArray, buffer is FLOAT64, but input is INT64
-# Seg fault
-# @pytest.mark.df_lib
+# [BSE-4788] Add proper utility for conversion to pyarrow dtypes
+@pytest.mark.df_lib
 @pytest.mark.parametrize(
     "S",
     [
