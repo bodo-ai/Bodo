@@ -69,7 +69,7 @@ def test_series_map_dict_arg(S, d, memory_leak_check):
         pd.Series([-1, 11, 2, 3, 5]),
     ],
 )
-# TODO XXX: Initial sample is None
+# TODO [BSE-4801]: DataFrame Lib: Initial sample is None
 # @pytest.mark.df_lib
 def test_series_map_none(S, memory_leak_check):
     """Test returning None from UDF"""
@@ -91,7 +91,7 @@ def test_series_map_none_str(memory_leak_check):
     check_func(test_impl, (S,), check_dtype=False, only_1DVar=True)
 
 
-# TODO: Fails in two rank case (worker 2 has an all None output batch)
+# TODO [BSE-4802]: DataFrame Lib: Fails in two rank case (worker 2 has an all None output batch)
 # @pytest.mark.df_lib
 def test_series_map_none_timestamp(memory_leak_check):
     """Test returning Optional(timestamp) from UDF"""
@@ -105,7 +105,7 @@ def test_series_map_none_timestamp(memory_leak_check):
     check_func(impl, (S,))
 
 
-# TODO: Support duration[ns] type
+# TODO [BSE-4779]: DataFrame Lib: Support for duration[ns] type.
 # @pytest.mark.df_lib
 def test_series_map_isna_check(memory_leak_check):
     """Test checking for NA input values in UDF"""
@@ -130,7 +130,7 @@ def test_series_map_isna_check(memory_leak_check):
     check_func(impl2, (S,))
 
 
-# TODO: [BSE-4788] Wrong conversion float->int. Add proper conversion to pyarrow types utility.
+# TODO: [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch float->int.
 # @pytest.mark.df_lib
 def test_series_map_global1(memory_leak_check):
     def test_impl(S):
@@ -162,7 +162,7 @@ def g4(a):
     return [a, 2 * a]
 
 
-# TODO: [BSE-4788] Wrong conversion float->int. Add proper conversion to pyarrow types utility.
+# TODO: [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch float->int.
 # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_func_cases1(memory_leak_check):
@@ -209,7 +209,7 @@ def test_series_map_func_cases1(memory_leak_check):
     check_func(test_impl5, (S,))
 
 
-# TODO: [BSE-4788] Wrong conversion float->int. Add proper conversion to pyarrow types utility.
+# TODO: [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch float->int.
 # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_global_jit(memory_leak_check):
@@ -247,7 +247,7 @@ def test_series_map_tup1():
     # check_func(test_impl, (S,))
 
 
-# Seg fault
+# TODO: [BSE-4802]: Incorrect conversion of output batch tuple->struct.
 # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_map1(memory_leak_check):
@@ -287,8 +287,8 @@ def test_series_map_tup_list2(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# E   pyarrow.lib.ArrowInvalid: Could not convert 'A' with type str: tried to convert to int64
-# @pytest.mark.df_lib
+# TODO [BSE-4801]: DataFrame Lib: Make type inference more robust.
+# # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_list3(memory_leak_check):
     """test returning a list of tuples with variable size data from UDF"""
@@ -374,7 +374,7 @@ def test_series_map_dict(memory_leak_check):
 
 
 @pytest.mark.slow
-# E   pyarrow.lib.ArrowTypeError: Expected dict key of type str or bytes, got 'int'
+# TODO [BSE-4788]: DataFrame Lib: Add proper utility for converting to pyarrow dtypes
 # @pytest.mark.df_lib
 def test_series_map_dict_input(memory_leak_check):
     """test dict input in map"""
@@ -424,7 +424,7 @@ def test_series_map_timestamp(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO: Decimal
+# TODO [BSE-4789]: DataFrame Lib: Proper support for Decimal types.
 # @pytest.mark.df_lib
 def test_series_map_decimal(memory_leak_check):
     """make sure Decimal output can be handled in map() properly"""
