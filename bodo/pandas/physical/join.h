@@ -17,7 +17,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     void InitializeJoinState(
         const std::shared_ptr<bodo::Schema> build_table_schema,
         const std::shared_ptr<bodo::Schema> probe_table_schema) {
-        this->join_state = new HashJoinState(
+        this->join_state = std::make_shared<HashJoinState>(
             build_table_schema, probe_table_schema,
             // TODO: handle keys properly
             1,
