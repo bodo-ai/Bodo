@@ -15,11 +15,6 @@ from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_ov
 MAX_DATA_SIZE = 100
 
 
-@pytest.fixture
-def set_stream_batch_size_three(monkeypatch):
-    monkeypatch.setenv("BODO_STREAMING_BATCH_SIZE", "3")
-
-
 @pytest.fixture(
     params=[
         pd.RangeIndex(MAX_DATA_SIZE),
@@ -34,7 +29,7 @@ def index_val(request):
     return request.param
 
 
-def test_from_pandas(datapath, index_val, set_stream_batch_size_three):
+def test_from_pandas(datapath, index_val):
     """Very simple test to scan a dataframe passed into from_pandas."""
 
     df = pd.DataFrame(
@@ -82,7 +77,7 @@ def test_from_pandas(datapath, index_val, set_stream_batch_size_three):
     )
 
 
-def test_read_parquet(datapath, set_stream_batch_size_three):
+def test_read_parquet(datapath):
     """Very simple test to read a parquet file for sanity checking."""
     path = datapath("example_no_index.parquet")
 
@@ -103,9 +98,7 @@ def test_read_parquet(datapath, set_stream_batch_size_three):
         "example_multi_index.parquet",
     ],
 )
-def test_read_parquet_projection_pushdown(
-    datapath, file_path, set_stream_batch_size_three
-):
+def test_read_parquet_projection_pushdown(datapath, file_path):
     """Make sure basic projection pushdown works for Parquet read end to end."""
     path = datapath(file_path)
 
@@ -137,7 +130,7 @@ def test_read_parquet_projection_pushdown(
         )
     ],
 )
-def test_read_parquet_index(df: pd.DataFrame, index_val, set_stream_batch_size_three):
+def test_read_parquet_index(df: pd.DataFrame, index_val):
     """Test reading parquet with index column works as expected."""
     df.index = index_val[: len(df)]
     with tempfile.TemporaryDirectory() as tmp:
@@ -154,7 +147,7 @@ def test_read_parquet_index(df: pd.DataFrame, index_val, set_stream_batch_size_t
         )
 
 
-def test_read_parquet_len_shape(datapath, set_stream_batch_size_three):
+def test_read_parquet_len_shape(datapath):
     """Test length/shape after read parquet is correct"""
     path = datapath("example_no_index.parquet")
 
@@ -170,7 +163,7 @@ def test_read_parquet_len_shape(datapath, set_stream_batch_size_three):
     assert bodo_out2.shape == py_out.shape
 
 
-def test_projection(datapath, set_stream_batch_size_three):
+def test_projection(datapath):
     """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
@@ -203,7 +196,7 @@ def test_projection(datapath, set_stream_batch_size_three):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-def test_filter_pushdown(datapath, file_path, op, set_stream_batch_size_three):
+def test_filter_pushdown(datapath, file_path, op):
     """Test for filter with filter pushdown into read parquet."""
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
@@ -267,7 +260,7 @@ def test_filter_distributed(datapath, op):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-def test_filter(datapath, op, set_stream_batch_size_three):
+def test_filter(datapath, op):
     """Test for standalone filter."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -299,7 +292,7 @@ def test_filter(datapath, op, set_stream_batch_size_three):
     )
 
 
-def test_filter_multiple1_pushdown(datapath, set_stream_batch_size_three):
+def test_filter_multiple1_pushdown(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1[((bodo_df1.A < 20) & (bodo_df1.D > 80))]
@@ -320,7 +313,7 @@ def test_filter_multiple1_pushdown(datapath, set_stream_batch_size_three):
     )
 
 
-def test_filter_multiple1(datapath, set_stream_batch_size_three):
+def test_filter_multiple1(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -456,7 +449,7 @@ def test_head(datapath):
     assert len(bodo_df2) == 3
 
 
-def test_apply(datapath, index_val, set_stream_batch_size_three):
+def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
         {
@@ -472,7 +465,7 @@ def test_apply(datapath, index_val, set_stream_batch_size_three):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_lower(datapath, index_val, set_stream_batch_size_three):
+def test_str_lower(datapath, index_val):
     """Very simple test for Series.str.lower for sanity checking."""
     df = pd.DataFrame(
         {
@@ -489,7 +482,7 @@ def test_str_lower(datapath, index_val, set_stream_batch_size_three):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_strip(datapath, index_val, set_stream_batch_size_three):
+def test_str_strip(datapath, index_val):
     """Very simple test for Series.str.strip() for sanity checking."""
     df = pd.DataFrame(
         {
@@ -506,7 +499,7 @@ def test_str_strip(datapath, index_val, set_stream_batch_size_three):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_chain_python_func(datapath, index_val, set_stream_batch_size_three):
+def test_chain_python_func(datapath, index_val):
     """Make sure chaining multiple Series functions that run in Python works"""
     df = pd.DataFrame(
         {
@@ -523,7 +516,7 @@ def test_chain_python_func(datapath, index_val, set_stream_batch_size_three):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_series_map(datapath, index_val, set_stream_batch_size_three):
+def test_series_map(datapath, index_val):
     """Very simple test for Series.map() for sanity checking."""
     df = pd.DataFrame(
         {
@@ -544,7 +537,7 @@ def test_series_map(datapath, index_val, set_stream_batch_size_three):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_set_df_column(datapath, index_val, set_stream_batch_size_three):
+def test_set_df_column(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe."""
     df = pd.DataFrame(
         {
@@ -588,7 +581,7 @@ def test_set_df_column(datapath, index_val, set_stream_batch_size_three):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
-def test_parquet_read_partitioned(datapath, set_stream_batch_size_three):
+def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
 
@@ -619,7 +612,7 @@ def test_parquet_read_partitioned(datapath, set_stream_batch_size_three):
 
 
 @pytest.mark.skip(reason="Parquet partition filter pushdown not yet implemented.")
-def test_parquet_read_partitioned_filter(datapath, set_stream_batch_size_three):
+def test_parquet_read_partitioned_filter(datapath):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
 
@@ -637,7 +630,7 @@ def test_parquet_read_partitioned_filter(datapath, set_stream_batch_size_three):
     )
 
 
-def test_project_after_filter(datapath, set_stream_batch_size_three):
+def test_project_after_filter(datapath):
     """Test creating a plan with a Projection on top of a filter works"""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1[bodo_df1.D > 80][["B", "A"]]
