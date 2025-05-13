@@ -91,7 +91,8 @@ def test_series_map_none_str(memory_leak_check):
     check_func(test_impl, (S,), check_dtype=False, only_1DVar=True)
 
 
-# TODO [BSE-4802]: DataFrame Lib: Fails in two rank case (worker 2 has an all None output batch)
+# TODO [BSE-4802]: DataFrame Lib: Fails in two rank case
+# (worker has an all-None output data)
 # @pytest.mark.df_lib
 def test_series_map_none_timestamp(memory_leak_check):
     """Test returning Optional(timestamp) from UDF"""
@@ -233,18 +234,15 @@ def test_series_map_wrap_python(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO: add memory_leak_check
-# @pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
+# TODO [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch tuple->struct.
+# @pytest.mark.df_lib
 @pytest.mark.slow
-def test_series_map_tup1():
+def test_series_map_tup1(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: (a, 2 * a))
 
     S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
-    # TODO: support unbox for column of tuples
-    # check_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
 # TODO: [BSE-4802]: Incorrect conversion of output batch tuple->struct.
@@ -288,7 +286,7 @@ def test_series_map_tup_list2(memory_leak_check):
 
 
 # TODO [BSE-4801]: DataFrame Lib: Make type inference more robust.
-# # @pytest.mark.df_lib
+# @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_list3(memory_leak_check):
     """test returning a list of tuples with variable size data from UDF"""

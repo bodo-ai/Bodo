@@ -87,7 +87,7 @@ def _empty_like(val):
         raise TypeError(f"val must be a BodoDataFrame or BodoSeries, got {type(val)}")
 
     is_series = isinstance(val, BodoSeries)
-
+    # Avoid triggering data collection
     val = val.head(0)
 
     if is_series:
