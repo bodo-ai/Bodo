@@ -9,6 +9,7 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "physical/filter.h"
+#include "physical/join.h"
 #include "physical/limit.h"
 #include "physical/project.h"
 #include "physical/sample.h"
@@ -143,8 +144,27 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
-    throw std::runtime_error(
-        "Not supported on the physical side yet: LogicalComparisonJoin");
+    // See DuckDB code for background:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_plan/plan_comparison_join.cpp#L65
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
+
+    auto physical_join = std::make_shared<PhysicalJoin>();
+
+    // Create pipelines for the build side of the join (right child)
+    PhysicalPlanBuilder rhs_builder;
+    rhs_builder.Visit(*op.children[1]);
+    std::vector<std::shared_ptr<Pipeline>> build_pipelines =
+        std::move(rhs_builder.finished_pipelines);
+    build_pipelines.push_back(
+        rhs_builder.active_pipeline->Build(physical_join));
+    this->finished_pipelines.insert(this->finished_pipelines.begin(),
+                                    build_pipelines.begin(),
+                                    build_pipelines.end());
+
+    // Create pipelines for the probe side of the join (left child)
+    this->Visit(*op.children[0]);
+    this->active_pipeline->AddOperator(physical_join);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalSample& op) {
