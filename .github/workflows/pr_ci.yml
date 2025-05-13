@@ -83,11 +83,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - name: Build from Source
-        uses: ./.github/actions/build-source
-        with:
-          build-all: false
+      # - uses: actions/checkout@v4
+      # - name: Build from Source
+      #   uses: ./.github/actions/build-source
+      #   with:
+      #     build-all: false
       - name: Load and Save Hadoop to Cache
         id: hadoop-cache
         if: ${{ runner.os != 'Windows' }}

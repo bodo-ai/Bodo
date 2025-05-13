@@ -69,6 +69,9 @@ jobs:
         # Run Tests
         - name: Run Tests
           run: |
+            export SPARK_LOCAL_IP=127.0.0.1
+            export PYSPARK_SUBMIT_ARGS="--conf spark.driver.bindAddress=127.0.0.1 --conf spark.driver.host=127.0.0.1 pyspark-shell"
+
             if [[ "$RUNNER_OS" == "Windows" ]]; then
               # On Windows we set HADOOP_HOME to a dummy directory.
               # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
