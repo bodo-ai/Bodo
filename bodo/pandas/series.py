@@ -145,9 +145,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         empty_data = _empty_like(self)
 
         assert isinstance(empty_data, pd.Series), "Series expected"
-        return wrap_plan(
-            plan=LazyPlan("LogicalUnaryOp", empty_data, self._plan, "__invert__"),
+        expr = plan=LazyPlan("UnaryOpExpression", empty_data, self._plan, "__invert__")
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            # Use the original table without the Series projection node.
+            self._plan.args[0],
+            (expr,),
         )
+        return wrap_plan(plan=plan)
 
     def _conjunction_binop(self, other, op):
         """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
@@ -176,10 +182,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Compute schema of new series.
         new_metadata = getattr(zero_size_self, op)(zero_size_other)
         assert isinstance(new_metadata, pd.Series)
-        return wrap_plan(
+        expr = plan=LazyPlan("ConjunctionOpExpression", new_metadata, self._plan, other, op)
+        plan = LazyPlan(
+            "LogicalProjection",
             new_metadata,
-            plan=LazyPlan("LogicalConjunctionOp", self._plan, other, op),
+            # Use the original table without the Series projection node.
+            self._plan.args[0],
+            (expr,),
         )
+        return wrap_plan(plan=plan)
 
     @check_args_fallback("all")
     def __and__(self, other):
@@ -209,8 +220,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         assert isinstance(new_metadata, pd.Series)
         return wrap_plan(
-            new_metadata,
-            plan=LazyPlan("LogicalUnaryOp", self._plan, "__invert__"),
+            plan=LazyPlan("LogicalUnaryOp", new_metadata, self._plan, "__invert__"),
         )
 
     @staticmethod
