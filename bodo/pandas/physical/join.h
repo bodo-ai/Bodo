@@ -48,6 +48,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     OperatorResult ConsumeBatch(
         std::shared_ptr<table_info> input_batch) override {
         bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
+        // TODO: fix is_last
+        this->join_state->global_is_last = true;
         // TODO: handle output
         bool is_last = join_build_consume_batch(this->join_state.get(),
                                                 input_batch, has_bloom_filter,
