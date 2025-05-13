@@ -302,13 +302,6 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
         auto result = arrow_array_to_bodo(array,
                                           bodo::BufferPool::DefaultPtr());
-        /*
-        // Create 1 element array with same type as constant.
-        std::unique_ptr<array_info> result =
-            alloc_nullable_array_no_nulls(1, typeToDtype(constant));
-        // Copy constant into the array.
-        std::memcpy(result->data1(), &constant, sizeof(T));
-        */
         return std::make_shared<ScalarExprResult>(std::move(result));
     }
 
@@ -336,13 +329,6 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
 
         auto result = arrow_array_to_bodo(array,
                                           bodo::BufferPool::DefaultPtr());
-        /*
-        // Create 1 element array with same type as constant.
-        std::unique_ptr<array_info> result =
-            alloc_nullable_array_no_nulls(1, typeToDtype(constant));
-        // Copy constant into the array.
-        std::memcpy(result->data1(), constant.c_str(), constant.size());
-        */
         return std::make_shared<ScalarExprResult>(std::move(result));
     }
 
