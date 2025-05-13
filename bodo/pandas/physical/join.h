@@ -26,7 +26,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             // TODO: handle broadcast join properly
             false, nullptr, true, true, get_streaming_batch_size(), -1,
             // TODO: add op_id
-            0);
+            -1);
     }
 
     void Finalize() override {}
