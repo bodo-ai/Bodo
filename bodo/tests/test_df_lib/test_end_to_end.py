@@ -636,3 +636,24 @@ def test_parquet_read_partitioned_filter(datapath, set_stream_batch_size_three):
         bodo_out,
         py_out,
     )
+
+
+def test_parquet_read_shape_head(datapath):
+    """
+    Test to catch a case where the original manager goes out of scope
+    causing the parallel get to become invalid.
+    """
+    path = datapath("dataframe_library/df1.parquet")
+
+    def bodo_impl():
+        df = bd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    def pd_impl():
+        df = pd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    bdf_shape, bdf_head = bodo_impl()
+    pdf_shape, pdf_head = pd_impl()
+    assert bdf_shape == pdf_shape
+    _test_equal(bdf_head, pdf_head)
