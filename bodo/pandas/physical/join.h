@@ -14,6 +14,21 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
     virtual ~PhysicalJoin() = default;
 
+    void InitializeJoinState(
+        const std::shared_ptr<bodo::Schema> build_table_schema,
+        const std::shared_ptr<bodo::Schema> probe_table_schema) {
+        this->join_state = new HashJoinState(
+            build_table_schema, probe_table_schema,
+            // TODO: handle keys properly
+            1,
+            // TODO: handle outer joins properly
+            false, false,
+            // TODO: handle broadcast join properly
+            false, nullptr, true, true, get_streaming_batch_size(), -1,
+            // TODO: add op_id
+            0);
+    }
+
     void Finalize() override {}
 
     /**

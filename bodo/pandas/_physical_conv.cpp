@@ -154,6 +154,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // Create pipelines for the build side of the join (right child)
     PhysicalPlanBuilder rhs_builder;
     rhs_builder.Visit(*op.children[1]);
+    std::shared_ptr<bodo::Schema> build_table_schema =
+        rhs_builder.active_pipeline->getPrevOpOutputSchema();
     std::vector<std::shared_ptr<Pipeline>> build_pipelines =
         std::move(rhs_builder.finished_pipelines);
     build_pipelines.push_back(
@@ -164,6 +166,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
 
     // Create pipelines for the probe side of the join (left child)
     this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> probe_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    physical_join->InitializeJoinState(build_table_schema, probe_table_schema);
+
     this->active_pipeline->AddOperator(physical_join);
 }
 
