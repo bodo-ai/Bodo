@@ -957,6 +957,13 @@ def _convert_to_bodo_arg(arg):
     """Convert arg to the corresponding Bodo class if possible."""
     if isinstance(arg, pd.DataFrame):
         return bodo_pd.from_pandas(arg)
+    elif isinstance(arg, pd.Series):
+        # convert to BodoDataFrame, then extract BodoSeries
+        ser_name = bodo_pd.utils.BODO_NONE_DUMMY if arg.name is None else arg.name
+        bodo_df_arg = bodo_pd.from_pandas(arg.to_frame(name=ser_name))
+        bodo_ser_arg = bodo_df_arg[bodo_df_arg.columns[0]]
+        bodo_ser_arg.name = arg.name
+        return bodo_ser_arg
 
     return arg
 

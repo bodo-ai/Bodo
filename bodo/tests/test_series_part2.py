@@ -29,6 +29,7 @@ from bodo.utils.typing import BodoError
 pytestmark = pytest_pandas
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize(
     "S,d",
     [
@@ -68,6 +69,8 @@ def test_series_map_dict_arg(S, d, memory_leak_check):
         pd.Series([-1, 11, 2, 3, 5]),
     ],
 )
+# TODO [BSE-4801]: DataFrame Lib: Initial sample is None
+# @pytest.mark.df_lib
 def test_series_map_none(S, memory_leak_check):
     """Test returning None from UDF"""
 
@@ -77,6 +80,7 @@ def test_series_map_none(S, memory_leak_check):
     check_func(test_impl, (S,), check_dtype=False)
 
 
+@pytest.mark.df_lib
 def test_series_map_none_str(memory_leak_check):
     """Test returning None from UDF with string output"""
 
@@ -87,6 +91,9 @@ def test_series_map_none_str(memory_leak_check):
     check_func(test_impl, (S,), check_dtype=False, only_1DVar=True)
 
 
+# TODO [BSE-4802]: DataFrame Lib: Fails in two rank case
+# (worker has an all-None output data)
+# @pytest.mark.df_lib
 def test_series_map_none_timestamp(memory_leak_check):
     """Test returning Optional(timestamp) from UDF"""
 
@@ -99,6 +106,8 @@ def test_series_map_none_timestamp(memory_leak_check):
     check_func(impl, (S,))
 
 
+# TODO [BSE-4779]: DataFrame Lib: Support for duration[ns] type.
+# @pytest.mark.df_lib
 def test_series_map_isna_check(memory_leak_check):
     """Test checking for NA input values in UDF"""
 
@@ -122,6 +131,8 @@ def test_series_map_isna_check(memory_leak_check):
     check_func(impl2, (S,))
 
 
+# TODO: [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch float->int.
+# @pytest.mark.df_lib
 def test_series_map_global1(memory_leak_check):
     def test_impl(S):
         return S.map(arg=lambda a: a + GLOBAL_VAL)
@@ -152,6 +163,8 @@ def g4(a):
     return [a, 2 * a]
 
 
+# TODO: [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch float->int.
+# @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_func_cases1(memory_leak_check):
     """test map() called with a function defined as global/freevar outside or passed as
@@ -197,6 +210,8 @@ def test_series_map_func_cases1(memory_leak_check):
     check_func(test_impl5, (S,))
 
 
+# TODO: [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch float->int.
+# @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_global_jit(memory_leak_check):
     """Test UDF defined as a global jit function"""
@@ -208,6 +223,7 @@ def test_series_map_global_jit(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.df_lib
 def test_series_map_wrap_python(memory_leak_check):
     """Test UDF defined as a wrap_python function"""
 
@@ -218,20 +234,19 @@ def test_series_map_wrap_python(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO: add memory_leak_check
-@pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
+# TODO [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch tuple->struct.
+# @pytest.mark.df_lib
 @pytest.mark.slow
-def test_series_map_tup1():
+def test_series_map_tup1(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: (a, 2 * a))
 
     S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
-    # TODO: support unbox for column of tuples
-    # check_func(test_impl, (S,))
+    check_func(test_impl, (S,))
 
 
+# TODO: [BSE-4802]: Incorrect conversion of output batch tuple->struct.
+# @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_map1(memory_leak_check):
     def test_impl(S):
@@ -242,6 +257,7 @@ def test_series_map_tup_map1(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_list1(memory_leak_check):
     """test returning a list of tuples from UDF"""
@@ -254,6 +270,7 @@ def test_series_map_tup_list1(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_list2(memory_leak_check):
     """test returning a list of list of tuples from UDF"""
@@ -268,6 +285,8 @@ def test_series_map_tup_list2(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+# TODO [BSE-4801]: DataFrame Lib: Make type inference more robust.
+# @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_list3(memory_leak_check):
     """test returning a list of tuples with variable size data from UDF"""
@@ -281,6 +300,7 @@ def test_series_map_tup_list3(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_series_map_str(memory_leak_check):
     """test string output in map"""
 
@@ -292,6 +312,7 @@ def test_series_map_str(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_series_map_list_str(memory_leak_check):
     """test list(str) output in map"""
 
@@ -303,6 +324,7 @@ def test_series_map_list_str(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_series_map_array_item(memory_leak_check):
     """test array(item) output in map"""
 
@@ -314,6 +336,7 @@ def test_series_map_array_item(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_series_map_array_item_input(memory_leak_check):
     """test array(item) input and output in map"""
 
@@ -331,6 +354,7 @@ def test_series_map_array_item_input(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_series_map_dict(memory_leak_check):
     """test dict output in map"""
 
@@ -348,6 +372,8 @@ def test_series_map_dict(memory_leak_check):
 
 
 @pytest.mark.slow
+# TODO [BSE-4788]: DataFrame Lib: Add proper utility for converting to pyarrow dtypes
+# @pytest.mark.df_lib
 def test_series_map_dict_input(memory_leak_check):
     """test dict input in map"""
 
@@ -359,6 +385,7 @@ def test_series_map_dict_input(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_series_map_date(memory_leak_check):
     """make sure datetime.date output can be handled in map() properly"""
 
@@ -370,6 +397,7 @@ def test_series_map_date(memory_leak_check):
 
 
 @pytest.mark.smoke
+@pytest.mark.df_lib
 def test_series_map_full_pipeline(memory_leak_check):
     """make sure full Bodo pipeline is run on UDFs, including untyped pass."""
 
@@ -381,6 +409,7 @@ def test_series_map_full_pipeline(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.df_lib
 def test_series_map_timestamp(memory_leak_check):
     """make sure Timestamp (converted to datetime64) output can be handled in map()
     properly
@@ -393,6 +422,8 @@ def test_series_map_timestamp(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+# TODO [BSE-4789]: DataFrame Lib: Proper support for Decimal types.
+# @pytest.mark.df_lib
 def test_series_map_decimal(memory_leak_check):
     """make sure Decimal output can be handled in map() properly"""
 
@@ -416,6 +447,7 @@ def test_series_map_decimal(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.df_lib
 def test_series_map_dt_str(memory_leak_check):
     """test string output in map with dt64/Timestamp input"""
 
@@ -445,6 +477,7 @@ def test_series_map_nested_func(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_series_map_arg_fold(memory_leak_check):
     """test handling UDF default value (argument folding)"""
 

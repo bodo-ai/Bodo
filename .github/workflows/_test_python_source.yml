@@ -127,6 +127,12 @@ jobs:
             BODO_SPAWN_MODE: "0"
             BODO_BUFFER_POOL_REMOTE_MODE: "1"
             BODO_BUFFER_POOL_DEBUG_MODE: "1"
+            # Pyspark Config
+            SPARK_LOCAL_IP: 127.0.0.1
+            PYSPARK_SUBMIT_ARGS: >
+              --conf spark.driver.bindAddress=127.0.0.1 
+              --conf spark.driver.host=127.0.0.1 
+              pyspark-shell
             # Testing Credentials
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
