@@ -9,6 +9,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/planner/binder.hpp"
+#include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
@@ -91,9 +92,12 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
                            "make_col_ref_expr: unable to unwrap field", field);
     auto [_, ctype] = arrow_field_to_duckdb(field);
 
+    std::vector<duckdb::ColumnBinding> source_cols =
+        source->GetColumnBindings();
+    assert(col_idx < source_cols.size());
+
     return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-        ctype,
-        duckdb::ColumnBinding(get_operator_table_index(source), col_idx));
+        ctype, source_cols[col_idx]);
 }
 
 /**
@@ -269,12 +273,14 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoPythonScalarFunctionData>(args);
 
+    std::vector<duckdb::ColumnBinding> source_cols =
+        source->GetColumnBindings();
+
     // Add UDF input expressions for selected columns
     std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
     for (int col_idx : selected_columns) {
         auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            source->types[col_idx],
-            duckdb::ColumnBinding(get_operator_table_index(source), col_idx));
+            source->types[col_idx], source_cols[col_idx]);
         udf_in_exprs.emplace_back(std::move(expr));
     }
 
@@ -682,14 +688,6 @@ BodoParquetScanFunctionData::CreatePhysicalOperator(
     return std::make_shared<PhysicalReadParquet>(
         path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
         limit_val);
-}
-
-duckdb::idx_t get_operator_table_index(
-    std::unique_ptr<duckdb::LogicalOperator> &op) {
-    if (op->GetTableIndex().size() != 1) {
-        throw std::runtime_error("Only one table index expected in operator");
-    }
-    return op->GetTableIndex()[0];
 }
 
 int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op) {

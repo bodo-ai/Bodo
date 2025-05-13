@@ -636,3 +636,24 @@ def test_parquet_read_partitioned_filter(datapath, set_stream_batch_size_three):
         bodo_out,
         py_out,
     )
+
+
+def test_project_after_filter(datapath, set_stream_batch_size_three):
+    """Test creating a plan with a Projection on top of a filter works"""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[bodo_df1.D > 80][["B", "A"]]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[py_df1.D > 80][["B", "A"]]
+
+    # TODO: remove copy when df.apply(axis=0) is implemented
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
