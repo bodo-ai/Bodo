@@ -443,36 +443,6 @@ cdef unique_ptr[CExpression] make_expr(val):
     """Convert a filter expression tree from Cython wrappers
        to duckdb.
     """
-    """
-    cdef LogicalOperator source
-    cdef c_string val_cstr
-
-    if isinstance(val, int):
-        return make_const_int_expr(val)
-    elif isinstance(val, float):
-        return make_const_float_expr(val)
-    elif isinstance(val, str):
-        val_cstr = val.encode()
-        return make_const_string_expr(val_cstr)
-    elif isinstance(val, LogicalColRef):
-        select_vec = val.select_vec
-        field = val.out_schema.field(0)
-        if len(select_vec) != 1:
-            raise ValueError("len(select_vec) != 1")
-        source = val.sources[0]
-        return make_col_ref_expr(source.c_logical_operator, field, select_vec[0])
-    elif isinstance(val, LogicalBinaryOp):
-        lhs_expr = make_expr(val.lhs)
-        rhs_expr = make_expr(val.rhs)
-        return make_binop_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
-    elif isinstance(val, LogicalConjunctionOp):
-        lhs_expr = make_expr(val.lhs)
-        rhs_expr = make_expr(val.rhs)
-        return make_conjunction_expr(lhs_expr, rhs_expr, str_to_expr_type(val.binop))
-    else:
-        raise ValueError("Unknown expr type in make_expr " + str(type(val)))
-
-    """
     cdef c_string val_cstr
 
     if isinstance(val, int):

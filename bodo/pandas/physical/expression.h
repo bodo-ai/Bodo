@@ -8,7 +8,6 @@
 #include "../tests/utils.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "operator.h"
-#include <iostream>
 #include <type_traits>
 #include <string>
 
