@@ -763,3 +763,21 @@ def arrow_to_empty_df(arrow_schema):
         {field.name: _empty_pd_array(field.type) for field in arrow_schema}
     )
     return _reconstruct_pandas_index(empty_df, arrow_schema)
+
+
+class LazyPlanDistributedArg:
+    """
+    Class to hold the arguments for a LazyPlan that are distributed on the workers.
+    """
+
+    def __init__(self, mgr, res_id: str):
+        self.mgr = mgr
+        self.res_id = res_id
+
+    def __reduce__(self):
+        """
+        This method is used to serialize the object for distribution.
+        We can't send the manager to the workers without triggering collection
+        so we just send the result ID instead.
+        """
+        return (str, (self.res_id,))
