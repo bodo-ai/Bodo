@@ -152,7 +152,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 return self._head_df.head(0).copy()
 
         if (self._head_df is None) or (n > self._head_df.shape[0]):
-            if bodo.dataframe_library_enabled:
+            if bodo.dataframe_library_enabled and isinstance(
+                self._mgr, (LazyMetadataMixin)
+            ):
                 from bodo.pandas.base import _empty_like
 
                 planLimit = LazyPlan(
