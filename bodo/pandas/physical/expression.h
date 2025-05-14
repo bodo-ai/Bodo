@@ -314,7 +314,8 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
 
     friend std::ostream &operator<<(
         std::ostream &os, const PhysicalConstantExpression<std::string> &obj) {
-        os << "PhysicalConstantExpression<string> " << obj.constant << std::endl;
+        os << "PhysicalConstantExpression<string> " << obj.constant
+           << std::endl;
         return os;
     }
 
@@ -475,8 +476,7 @@ class PhysicalUnaryExpression : public PhysicalExpression {
                 comparator = "invert";
                 break;
             default:
-                throw std::runtime_error(
-                    "Unhandled unary op expression type.");
+                throw std::runtime_error("Unhandled unary op expression type.");
         }
     }
 
@@ -542,8 +542,7 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         children.push_back(right);
         switch (etype) {
             default:
-                throw std::runtime_error(
-                    "Unhandled binary expression type.");
+                throw std::runtime_error("Unhandled binary expression type.");
         }
     }
 
@@ -574,7 +573,7 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         arrow::Datum src1;
         if (left_as_array) {
             src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
-        } else if(left_as_scalar) {
+        } else if (left_as_scalar) {
             src1 =
                 arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
                                       ->GetScalar(0)
