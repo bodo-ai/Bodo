@@ -6,13 +6,9 @@ import logging
 import typing as pt
 from enum import Enum
 from time import sleep
-from typing import TYPE_CHECKING
 
 import bodo.user_logging
 from bodo.mpi4py import MPI
-
-if TYPE_CHECKING:
-    pass
 
 
 class CommandType(str, Enum):
