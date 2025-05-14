@@ -12,6 +12,7 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
+    BodoLibNotImplementedException,
     LazyPlan,
     arrow_to_empty_df,
     check_args_fallback,
