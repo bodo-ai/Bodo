@@ -14,8 +14,8 @@ from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     LazyPlan,
-    arrow_to_empty_df,
     check_args_fallback,
+    get_empty_series_arrow,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
@@ -323,14 +323,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         pd_sample = pd.Series(series_sample)
         out_sample = pd_sample.map(arg)
 
-        assert isinstance(out_sample, pd.Series), (
-            f"BodoSeries.map(), expected output to be Series, got: {type(out_sample)}."
-        )
-
-        # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample.to_frame()))
-        empty_series = empty_df.squeeze()
-        empty_series.name = out_sample.name
+        empty_series = get_empty_series_arrow(out_sample)
 
         return _get_series_python_func_plan(self._plan, empty_series, "map", (arg,), {})
 

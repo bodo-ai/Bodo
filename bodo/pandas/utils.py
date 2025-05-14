@@ -763,3 +763,12 @@ def arrow_to_empty_df(arrow_schema):
         {field.name: _empty_pd_array(field.type) for field in arrow_schema}
     )
     return _reconstruct_pandas_index(empty_df, arrow_schema)
+
+
+def get_empty_series_arrow(ser: pd.Series) -> pd.Series:
+    """Create an empty Series like ser possibly converting some dtype to use
+    pyarrow"""
+    empty_df = arrow_to_empty_df(pa.Schema.from_pandas(ser.to_frame()))
+    empty_series = empty_df.squeeze()
+    empty_series.name = ser.name
+    return empty_series
