@@ -269,7 +269,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         if (self._head_s is None) or (n > self._head_s.shape[0]):
             if bodo.dataframe_library_enabled and isinstance(
-                self._mgr, (LazyMetadataMixin)
+                self._mgr, LazyMetadataMixin
             ):
                 from bodo.pandas.base import _empty_like
 
