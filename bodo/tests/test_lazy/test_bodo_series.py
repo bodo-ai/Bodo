@@ -4,7 +4,7 @@ from pandas.core.internals import SingleBlockManager
 from pandas.core.internals.array_manager import SingleArrayManager
 
 from bodo.pandas.series import BodoSeries
-from bodo.tests.utils import temp_config_override  # noqa
+from bodo.tests.test_lazy.utils import single_pandas_managers  # noqa
 
 
 @pytest.fixture
@@ -179,7 +179,6 @@ def test_bodo_series_pandas_manager(single_pandas_managers):
     """
     Test basic operations on a bodo series using a pandas manager.
     """
-    # with temp_config_override("dataframe_library_enabled", False):
     _, pandas_manager = single_pandas_managers
     base_s = pd.Series(pd.array(["a", "bc", "def", "ghij", "klmno"] * 8))
 
