@@ -62,8 +62,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     else:
                         # The data has been collected and is no longer distributed
                         # so we need to re-distribute the results.
-                        res_id = bodo.spawn.utils.scatter_data(self)
-                        mgr = None
+                        mgr = bodo.spawn.spawner.get_spawner().scatter_data(self)
+                        res_id = self._mgr._md_result_id
                     self._source_plan = LazyPlan(
                         "LogicalGetPandasReadParallel",
                         empty_data,

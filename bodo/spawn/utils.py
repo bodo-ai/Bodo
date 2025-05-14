@@ -12,7 +12,7 @@ import bodo.user_logging
 from bodo.mpi4py import MPI
 
 if TYPE_CHECKING:
-    import pandas as pd
+    pass
 
 
 class CommandType(str, Enum):
@@ -81,18 +81,3 @@ def set_global_config(config_name: str, config_value: pt.Any):
     exec(f"import {mod_name}; mod = {mod_name}", globals(), locs)
     mod = locs["mod"]
     setattr(mod, attr, config_value)
-
-
-def scatter_data(data: pd.DataFrame | pd.Series | pd.Index | pd.array) -> str:
-    """Scatter data to all workers and return the result ID"""
-    import bodo.spawn.spawner
-    from bodo.mpi4py import MPI
-    from bodo.spawn.spawner import CommandType
-
-    spawner = bodo.spawn.spawner.get_spawner()
-    bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-    spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
-    bodo.libs.distributed_api.scatterv(
-        data, root=bcast_root, comm=spawner.worker_intercomm
-    )
-    return spawner.worker_intercomm.recv(None, source=0)
