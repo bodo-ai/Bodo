@@ -1,5 +1,6 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
+#include <fmt/format.h>
 #include <utility>
 
 #include "_executor.h"
@@ -640,13 +641,13 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
     // bodo.spawn.worker creates a new module with new empty registry.
 
     // Import Python sys module
-    PyObject *sys_module = PyImport_ImportModule("sys");
+    PyObjectPtr sys_module = PyImport_ImportModule("sys");
     if (!sys_module) {
         throw std::runtime_error("Failed to import sys module");
     }
 
     // Get sys.modules dictionary
-    PyObject *modules_dict = PyObject_GetAttrString(sys_module, "modules");
+    PyObjectPtr modules_dict = PyObject_GetAttrString(sys_module, "modules");
     if (!modules_dict) {
         Py_DECREF(sys_module);
         throw std::runtime_error("Failed to get sys.modules");
@@ -655,21 +656,17 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
     // Get __main__ module
     PyObject *main_module = PyDict_GetItemString(modules_dict, "__main__");
     if (!main_module) {
-        Py_DECREF(modules_dict);
-        Py_DECREF(sys_module);
         throw std::runtime_error("Failed to get __main__ module");
     }
 
     // Get RESULT_REGISTRY[result_id]
-    PyObject *result_registry =
+    PyObjectPtr result_registry =
         PyObject_GetAttrString(main_module, "RESULT_REGISTRY");
     PyObject *df = PyDict_GetItemString(result_registry, result_id.c_str());
     if (!df) {
-        throw std::runtime_error("Result ID not found in result registry");
+        throw std::runtime_error(fmt::format(
+            "Result ID {} not found in result registry", result_id.c_str()));
     }
-    Py_DECREF(result_registry);
-    Py_DECREF(modules_dict);
-    Py_DECREF(sys_module);
 
     return std::make_shared<PhysicalReadPandas>(df, selected_columns);
 }

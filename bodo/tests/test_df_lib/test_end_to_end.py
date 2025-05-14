@@ -644,6 +644,27 @@ def test_parquet_read_partitioned_filter(datapath):
     )
 
 
+def test_parquet_read_shape_head(datapath):
+    """
+    Test to catch a case where the original manager goes out of scope
+    causing the parallel get to become invalid.
+    """
+    path = datapath("dataframe_library/df1.parquet")
+
+    def bodo_impl():
+        df = bd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    def pd_impl():
+        df = pd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    bdf_shape, bdf_head = bodo_impl()
+    pdf_shape, pdf_head = pd_impl()
+    assert bdf_shape == pdf_shape
+    _test_equal(bdf_head, pdf_head)
+
+
 def test_project_after_filter(datapath):
     """Test creating a plan with a Projection on top of a filter works"""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
