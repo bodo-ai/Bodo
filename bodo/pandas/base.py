@@ -31,9 +31,9 @@ def from_pandas(df):
     res_id = None
     if bodo.dataframe_library_run_parallel:
         res_id = bodo.spawn.utils.scatter_data(df)
-        plan = LazyPlan("LogicalGetPandasReadParallel", empty_df, [], res_id)
+        plan = LazyPlan("LogicalGetPandasReadParallel", empty_df, res_id)
     else:
-        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, [], df)
+        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
 
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
@@ -68,7 +68,7 @@ def read_parquet(
 
     empty_df = arrow_to_empty_df(arrow_schema)
 
-    plan = LazyPlan("LogicalGetParquetRead", empty_df, [], path, storage_options)
+    plan = LazyPlan("LogicalGetParquetRead", empty_df, path, storage_options)
     return wrap_plan(plan=plan)
 
 

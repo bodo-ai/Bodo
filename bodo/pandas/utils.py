@@ -343,12 +343,7 @@ class LazyPlan:
     can be used to convert to an isolated set of DuckDB objects for execution.
     """
 
-    def __init__(self, plan_class, empty_data, source_data, *args, **kwargs):
-        """
-        args:
-            source_data: list, any objects that this plan is dependent on and need to be
-                kept alive
-        """
+    def __init__(self, plan_class, empty_data, *args, **kwargs):
         self.plan_class = plan_class
         self.args = args
         self.kwargs = kwargs
@@ -362,7 +357,6 @@ class LazyPlan:
             # that is replaced with None in wrap_plan
             name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
             self.empty_data = empty_data.to_frame(name=name)
-        self.source_data = source_data
 
     def __str__(self):
         out = f"{self.plan_class}: \n"
@@ -410,25 +404,6 @@ class LazyPlan:
         cache[id(self)] = ret
         return ret
 
-    def _pop_source_data(self):
-        """Recursively remove source data from plans and return it"""
-        popped_source_data = []
-        popped_source_data.extend(self.source_data)
-        self.source_data = []
-
-        def recursive_check(x):
-            if isinstance(x, LazyPlan):
-                popped_source_data.extend(x._pop_source_data())
-            elif isinstance(x, (tuple, list)):
-                type(x)(recursive_check(i) for i in x)
-
-        for arg in self.args:
-            recursive_check(arg)
-        for kwarg in self.kwargs.values():
-            recursive_check(kwarg)
-
-        return popped_source_data
-
 
 def execute_plan(plan: LazyPlan):
     """Execute a dataframe plan using Bodo's execution engine.
@@ -468,12 +443,6 @@ def execute_plan(plan: LazyPlan):
 
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner
-
-        # We only need to keep source_data alive on the spawner, sending them
-        # to the workers can create issues. We still need to keep a reference
-        # until the plan has executed. This was tried with LazyPlan.__reduce__ first but
-        # that also created issues
-        source_data = plan._pop_source_data()  # noqa
 
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
@@ -708,7 +677,7 @@ def make_col_ref_exprs(key_indices, src_plan):
         # Using Arrow schema instead of zero_size_self.iloc to handle Index
         # columns correctly.
         empty_data = arrow_to_empty_df(pa.schema([pa_schema[k]]))
-        p = LazyPlan("ColRefExpression", empty_data, [], src_plan, k)
+        p = LazyPlan("ColRefExpression", empty_data, src_plan, k)
         exprs.append(p)
 
     return exprs
