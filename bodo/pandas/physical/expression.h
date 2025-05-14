@@ -14,9 +14,6 @@
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
 
-std::shared_ptr<arrow::Array> prepare_arrow_compute(
-    std::shared_ptr<array_info> arr);
-
 /**
  * @brief Superclass for possible results returned by nodes in Bodo
  *        Physical expression tree.
@@ -87,11 +84,6 @@ class PhysicalExpression {
      */
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) = 0;
-
-    friend std::ostream &operator<<(std::ostream &os,
-                                    const PhysicalExpression &obj) {
-        return os;
-    }
 
    protected:
     std::vector<std::shared_ptr<PhysicalExpression>> children;
@@ -296,7 +288,7 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
     friend std::ostream &operator<<(std::ostream &os,
                                     const PhysicalConstantExpression<T> &obj) {
-        os << "PCE string operator<< " << obj.constant << std::endl;
+        os << "PhysicalConstantExpression " << obj.constant << std::endl;
         return os;
     }
 
@@ -322,7 +314,7 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
 
     friend std::ostream &operator<<(
         std::ostream &os, const PhysicalConstantExpression<std::string> &obj) {
-        os << "PCE string operator<< " << obj.constant << std::endl;
+        os << "PhysicalConstantExpression<string> " << obj.constant << std::endl;
         return os;
     }
 
@@ -476,9 +468,16 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
 class PhysicalUnaryExpression : public PhysicalExpression {
    public:
     PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
-                            duckdb::ExpressionType etype)
-        : expr_type(etype), first_time(true) {
+                            duckdb::ExpressionType etype) {
         children.push_back(left);
+        switch (etype) {
+            case duckdb::ExpressionType::OPERATOR_NOT:
+                comparator = "invert";
+                break;
+            default:
+                throw std::runtime_error(
+                    "Unhandled unary op expression type.");
+        }
     }
 
     virtual ~PhysicalUnaryExpression() = default;
@@ -498,26 +497,18 @@ class PhysicalUnaryExpression : public PhysicalExpression {
             std::dynamic_pointer_cast<ArrayExprResult>(left_res);
         std::shared_ptr<ScalarExprResult> left_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(left_res);
-        if (first_time) {
-            first_time = false;
-            switch (expr_type) {
-                case duckdb::ExpressionType::OPERATOR_NOT:
-                    comparator = "invert";
-                    break;
-                default:
-                    throw std::runtime_error(
-                        "Unhandled unary op expression type.");
-            }
-        }
 
         arrow::Datum src1;
         if (left_as_array) {
             src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
-        } else {
+        } else if (left_as_scalar) {
             src1 =
                 arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
                                       ->GetScalar(0)
                                       .ValueOrDie());
+        } else {
+            throw std::runtime_error(
+                "PhysicalUnaryExpression left is neither array nor scalar.");
         }
 
         arrow::Result<arrow::Datum> cmp_res =
@@ -535,8 +526,6 @@ class PhysicalUnaryExpression : public PhysicalExpression {
     }
 
    protected:
-    duckdb::ExpressionType expr_type;
-    bool first_time;
     std::string comparator;
 };
 
@@ -548,10 +537,14 @@ class PhysicalBinaryExpression : public PhysicalExpression {
    public:
     PhysicalBinaryExpression(std::shared_ptr<PhysicalExpression> left,
                              std::shared_ptr<PhysicalExpression> right,
-                             duckdb::ExpressionType etype)
-        : expr_type(etype), first_time(true) {
+                             duckdb::ExpressionType etype) {
         children.push_back(left);
         children.push_back(right);
+        switch (etype) {
+            default:
+                throw std::runtime_error(
+                    "Unhandled binary expression type.");
+        }
     }
 
     virtual ~PhysicalBinaryExpression() = default;
@@ -577,39 +570,31 @@ class PhysicalBinaryExpression : public PhysicalExpression {
             std::dynamic_pointer_cast<ArrayExprResult>(right_res);
         std::shared_ptr<ScalarExprResult> right_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(right_res);
-        // Some things we don't know at node conversion time but
-        // we do know at first execution time.  So, we try to do
-        // certain checks only once with the first_time flag.
-        if (first_time) {
-            first_time = false;
-            // Now after possible operator switching, save the
-            // comparator function we'll use for this and future
-            // batch processing.
-            switch (expr_type) {
-                default:
-                    throw std::runtime_error(
-                        "Unhandled binary expression type.");
-            }
-        }
 
         arrow::Datum src1;
         if (left_as_array) {
             src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
-        } else {
+        } else if(left_as_scalar) {
             src1 =
                 arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
                                       ->GetScalar(0)
                                       .ValueOrDie());
+        } else {
+            throw std::runtime_error(
+                "PhysicalBinaryExpression left is neither array nor scalar.");
         }
 
         arrow::Datum src2;
         if (right_as_array) {
             src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
-        } else {
+        } else if (right_as_scalar) {
             src2 =
                 arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)
                                       ->GetScalar(0)
                                       .ValueOrDie());
+        } else {
+            throw std::runtime_error(
+                "PhysicalBinaryExpression right is neither array nor scalar.");
         }
 
         arrow::Result<arrow::Datum> cmp_res =
@@ -627,7 +612,5 @@ class PhysicalBinaryExpression : public PhysicalExpression {
     }
 
    protected:
-    duckdb::ExpressionType expr_type;
-    bool first_time;
     std::string comparator;
 };
