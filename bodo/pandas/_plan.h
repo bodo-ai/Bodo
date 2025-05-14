@@ -424,15 +424,6 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
                            bool graphviz_format);
 
 /**
- * @brief Get the table index of operator assuming there is only one table
- *
- * @param op input operator
- * @return duckdb::idx_t table index of operator
- */
-duckdb::idx_t get_operator_table_index(
-    std::unique_ptr<duckdb::LogicalOperator> &op);
-
-/**
  * @brief Dynamic cast of base pointer to derived pointer.
  *
  * @param base_ptr - the base pointer to cast from

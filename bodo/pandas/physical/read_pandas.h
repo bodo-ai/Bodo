@@ -17,11 +17,11 @@ class PhysicalReadPandas : public PhysicalSource {
     std::shared_ptr<arrow::Schema> arrow_schema;
 
    public:
-    explicit PhysicalReadPandas(PyObject* _df,
+    explicit PhysicalReadPandas(PyObject* _df_or_series,
                                 std::vector<int>& selected_columns,
                                 std::shared_ptr<arrow::Schema> arrow_schema)
-        : df(_df), arrow_schema(arrow_schema) {
-        Py_INCREF(df);
+        : arrow_schema(arrow_schema) {
+        this->setInputDF(_df_or_series);
 
         // Select only the specified columns if provided by the optimizer
         if (!selected_columns.empty()) {
@@ -134,5 +134,43 @@ class PhysicalReadPandas : public PhysicalSource {
 
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return bodo::Schema::FromArrowSchema(this->arrow_schema);
+    }
+
+   private:
+    /**
+     * @brief Convert to a DataFrame if the input is a Series.
+     *
+     * @param _df_or_series input DataFrame or Series
+     */
+    void setInputDF(PyObject* _df_or_series) {
+        // Check if _df_or_series is a Series
+        PyObject* pandas_module = PyImport_ImportModule("pandas");
+        if (!pandas_module) {
+            throw std::runtime_error("Failed to import pandas module");
+        }
+        PyObject* series_class =
+            PyObject_GetAttrString(pandas_module, "Series");
+        if (!series_class) {
+            Py_XDECREF(pandas_module);
+            Py_XDECREF(series_class);
+            throw std::runtime_error("Failed to get Series classes");
+        }
+
+        if (PyObject_IsInstance(_df_or_series, series_class) == 1) {
+            PyObject* df_from_series =
+                PyObject_CallMethod(_df_or_series, "to_frame", nullptr);
+            if (!df_from_series) {
+                Py_XDECREF(pandas_module);
+                Py_XDECREF(series_class);
+                throw std::runtime_error(
+                    "Failed to convert Series to DataFrame");
+            }
+            Py_XDECREF(pandas_module);
+            Py_XDECREF(series_class);
+            this->df = df_from_series;
+        } else {
+            this->df = _df_or_series;
+            Py_INCREF(df);
+        }
     }
 };
