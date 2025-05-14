@@ -106,16 +106,14 @@ extern std::function<bool(int)> less_equal_test;
  *
  */
 std::shared_ptr<array_info> do_arrow_compute_unary(
-    std::shared_ptr<ExprResult> left_res,
-    const std::string &comparator);
+    std::shared_ptr<ExprResult> left_res, const std::string &comparator);
 
 /**
  * @brief Convert two ExprResults to arrow and run compute operation on them.
  *
  */
 std::shared_ptr<array_info> do_arrow_compute_binary(
-    std::shared_ptr<ExprResult> left_res,
-    std::shared_ptr<ExprResult> right_res,
+    std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator);
 
 /**
@@ -310,7 +308,7 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
                 throw std::runtime_error(
                     "Unhandled conjunction expression type.");
         }
-}
+    }
 
     virtual ~PhysicalConjunctionExpression() = default;
 

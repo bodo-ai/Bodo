@@ -11,7 +11,7 @@ std::shared_ptr<arrow::Array> prepare_arrow_compute(
 
 // String specialization
 std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
-    const std::string& value) {
+    const std::string &value) {
     arrow::StringBuilder builder;
     arrow::Status status;
     status = builder.Append(value);
@@ -46,10 +46,8 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value) {
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
-    std::shared_ptr<ExprResult> left_res,
-    std::shared_ptr<ExprResult> right_res,
+    std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator) {
-
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprResult> left_as_array =
@@ -65,10 +63,9 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     if (left_as_array) {
         src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
     } else if (left_as_scalar) {
-        src1 =
-            arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
-                                  ->GetScalar(0)
-                                  .ValueOrDie());
+        src1 = arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
     } else {
         throw std::runtime_error(
             "do_arrow_compute left is neither array nor scalar.");
@@ -78,10 +75,9 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     if (right_as_array) {
         src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
     } else if (right_as_scalar) {
-        src2 =
-            arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)
-                                  ->GetScalar(0)
-                                  .ValueOrDie());
+        src2 = arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
     } else {
         throw std::runtime_error(
             "do_arrow_compute right is neither array nor scalar.");
@@ -90,9 +86,8 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1, src2});
     if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute: Error in Arrow compute: " +
-            cmp_res.status().message());
+        throw std::runtime_error("do_array_compute: Error in Arrow compute: " +
+                                 cmp_res.status().message());
     }
 
     return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
@@ -100,9 +95,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 }
 
 std::shared_ptr<array_info> do_arrow_compute_unary(
-    std::shared_ptr<ExprResult> left_res,
-    const std::string &comparator) {
-
+    std::shared_ptr<ExprResult> left_res, const std::string &comparator) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprResult> left_as_array =
@@ -114,10 +107,9 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
     if (left_as_array) {
         src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
     } else if (left_as_scalar) {
-        src1 =
-            arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
-                                  ->GetScalar(0)
-                                  .ValueOrDie());
+        src1 = arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
     } else {
         throw std::runtime_error(
             "do_arrow_compute left is neither array nor scalar.");
@@ -126,9 +118,8 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1});
     if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute: Error in Arrow compute: " +
-            cmp_res.status().message());
+        throw std::runtime_error("do_array_compute: Error in Arrow compute: " +
+                                 cmp_res.status().message());
     }
 
     return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),

@@ -148,9 +148,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         assert isinstance(empty_data, pd.Series), "Series expected"
         source_expr = get_proj_expr_single(self._plan)
-        expr = LazyPlan(
-            "UnaryOpExpression", empty_data, source_expr, "__invert__"
-        )
+        expr = LazyPlan("UnaryOpExpression", empty_data, source_expr, "__invert__")
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
