@@ -313,18 +313,6 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype);
 
 /**
- * @brief Create a conjunction (and/or) expression from two sources.
- *
- * @param lhs - the left-hand side of the expression
- * @param rhs - the right-hand side of the expression
- * @param etype - the expression type (and/or) comparing the two sources
- * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
- */
-duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
-    std::unique_ptr<duckdb::Expression> &lhs,
-    std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
-
-/**
  * @brief Create a filter node.
  *
  * @param source - the source of the data to be filtered
