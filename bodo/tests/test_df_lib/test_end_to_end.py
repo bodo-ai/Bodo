@@ -414,7 +414,6 @@ def test_head_pushdown(datapath):
     assert len(bodo_df2) == 3
 
 
-@pytest.mark.skip(reason="Not working.")
 def test_projection_head_pushdown(datapath):
     """Test for projection and head pushed down to read parquet."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -422,6 +421,20 @@ def test_projection_head_pushdown(datapath):
     bodo_df3 = bodo_df2.head(3)
 
     # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df3.is_lazy_plan()
+
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df3) == 3
+
+
+def test_series_head(datapath):
+    """Test for Series.head() reading from Pandas."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1["D"]
+    bodo_df2.execute_plan()
+    bodo_df3 = bodo_df2.head(3)
+
+    # Make sure bodo_df3 is unevaluated at this point.
     assert bodo_df3.is_lazy_plan()
 
     # Contents not guaranteed to be the same as Pandas so just check length.
@@ -652,7 +665,7 @@ def test_parquet_read_shape_head(datapath):
     _test_equal(bdf_head, pdf_head)
 
 
-def test_project_after_filter(datapath, set_stream_batch_size_three):
+def test_project_after_filter(datapath):
     """Test creating a plan with a Projection on top of a filter works"""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1[bodo_df1.D > 80][["B", "A"]]
