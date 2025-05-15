@@ -187,6 +187,11 @@ class PhysicalReadParquet : public PhysicalSource {
         return std::make_pair(std::shared_ptr<table_info>(batch), result);
     }
 
+    /**
+     * @brief Get the physical schema of the Parquet data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return bodo::Schema::FromArrowSchema(this->arrow_schema);
     }

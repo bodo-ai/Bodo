@@ -57,6 +57,11 @@ class PhysicalFilter : public PhysicalSourceSink {
                                : OperatorResult::NEED_MORE_INPUT};
     }
 
+    /**
+     * @brief Get the physical schema of the output data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
         // TODO
         return nullptr;

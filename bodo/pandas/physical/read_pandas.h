@@ -131,6 +131,11 @@ class PhysicalReadPandas : public PhysicalSource {
         return {out_table, result};
     }
 
+    /**
+     * @brief Get the physical schema of the dataframe/series data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return bodo::Schema::FromArrowSchema(this->arrow_schema);
     }
