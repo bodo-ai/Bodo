@@ -18,12 +18,14 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     void InitializeJoinState(
         const std::shared_ptr<bodo::Schema> build_table_schema,
         const std::shared_ptr<bodo::Schema> probe_table_schema) {
+        // TODO: handle outer joins properly
+        bool build_table_outer = false;
+        bool probe_table_outer = false;
+
         this->join_state = std::make_shared<HashJoinState>(
             build_table_schema, probe_table_schema,
             // TODO: handle keys properly
-            1,
-            // TODO: handle outer joins properly
-            false, false,
+            1, build_table_outer, probe_table_outer,
             // TODO: handle broadcast join properly
             false, nullptr, true, true, get_streaming_batch_size(), -1,
             // TODO: add op_id
@@ -35,6 +37,34 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         this->probe_kept_cols.resize(probe_table_schema->ncols());
         std::iota(this->probe_kept_cols.begin(), this->probe_kept_cols.end(),
                   0);
+
+        // Create the probe output schema, same as here for consistency:
+        // https://github.com/bodo-ai/Bodo/blob/a2e8bb7ba455dcba7372e6e92bd8488ed2b2d5cc/bodo/libs/streaming/_join.cpp#L1138
+        this->output_schema = std::make_shared<bodo::Schema>();
+
+        for (uint64_t i_col : probe_kept_cols) {
+            std::unique_ptr<bodo::DataType> col_type =
+                probe_table_schema->column_types[i_col]->copy();
+            // In the build outer case, we need to make NUMPY arrays
+            // into NULLABLE arrays. Matches the `use_nullable_arrs`
+            // behavior of RetrieveTable.
+            if (build_table_outer) {
+                col_type = col_type->to_nullable_type();
+            }
+            output_schema->append_column(std::move(col_type));
+        }
+
+        for (uint64_t i_col : build_kept_cols) {
+            std::unique_ptr<bodo::DataType> col_type =
+                build_table_schema->column_types[i_col]->copy();
+            // In the probe outer case, we need to make NUMPY arrays
+            // into NULLABLE arrays. Matches the `use_nullable_arrs`
+            // behavior of RetrieveTable.
+            if (probe_table_outer) {
+                col_type = col_type->to_nullable_type();
+            }
+            output_schema->append_column(std::move(col_type));
+        }
     }
 
     void Finalize() override {}
@@ -127,12 +157,12 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     }
 
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
-        // TODO
-        return nullptr;
+        return output_schema;
     }
 
    private:
     std::shared_ptr<HashJoinState> join_state;
     std::vector<uint64_t> build_kept_cols;
     std::vector<uint64_t> probe_kept_cols;
+    std::shared_ptr<bodo::Schema> output_schema;
 };
