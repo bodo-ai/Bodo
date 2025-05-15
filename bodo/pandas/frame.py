@@ -499,7 +499,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], self, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["on", "left_on", "right_on"])
+    @check_args_fallback(supported=["left_on", "right_on"])
     def merge(
         self,
         right: "BodoDataFrame | BodoSeries",
@@ -516,6 +516,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         validate: MergeValidate | None = None,
     ):  # -> BodoDataFrame:
         from bodo.pandas.base import _empty_like
+
+        # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
+        # key columns with the same names from output
+
+        # TODO[BSE-4811]: add proper argument validation
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
