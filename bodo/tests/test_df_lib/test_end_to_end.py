@@ -497,7 +497,7 @@ def test_str_lower(datapath, index_val):
 
 
 @pytest.mark.parametrize(
-    "to_strip", [pytest.param(None, id="default"), pytest.param("AB", id="strip-AB")]
+    "to_strip", [pytest.param(None, id="default"), pytest.param("A B", id="strip-AB")]
 )
 def test_str_strip(datapath, index_val, to_strip):
     """Very simple test for Series.str.strip() for sanity checking."""
