@@ -295,13 +295,13 @@ def test_filter(datapath, op):
 def test_filter_multiple1_pushdown(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & (bodo_df1.D > 80))]
+    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1[((py_df1.A < 20) & (py_df1.D > 80))]
+    py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
@@ -313,7 +313,6 @@ def test_filter_multiple1_pushdown(datapath):
     )
 
 
-@pytest.mark.skip(reason="Needs conjunction non-pushdown working.")
 def test_filter_multiple1(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -328,8 +327,8 @@ def test_filter_multiple1(datapath):
         reset_index=True,
     )
 
-    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & (bodo_df1.D > 80))]
-    py_df2 = py_df1[((py_df1.A < 20) & (py_df1.D > 80))]
+    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
+    py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
