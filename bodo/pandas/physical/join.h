@@ -44,7 +44,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     void InitializeJoinState(
         const std::shared_ptr<bodo::Schema> build_table_schema,
         const std::shared_ptr<bodo::Schema> probe_table_schema) {
-        // TODO: handle outer joins properly
+        // TODO[BSE-4813]: handle outer joins properly
         bool build_table_outer = false;
         bool probe_table_outer = false;
 
@@ -53,9 +53,9 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             // TODO[BSE-4812]: support keys that are not in the beginning of the
             // input tables
             this->left_keys.size(), build_table_outer, probe_table_outer,
-            // TODO: handle broadcast join properly
+            // TODO: support forcing broadcast by the planner
             false, nullptr, true, true, get_streaming_batch_size(), -1,
-            // TODO: add op_id
+            // TODO: support query profiling
             -1);
 
         this->build_kept_cols.resize(build_table_schema->ncols());
