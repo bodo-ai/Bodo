@@ -2,6 +2,7 @@ import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
 
+import bodo.spawn.spawner  # noqa: F401
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
