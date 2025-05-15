@@ -173,7 +173,8 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
         return (other.args == this->args);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args);
+        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args,
+                                                               out_schema);
     }
 
     PyObject *args;
