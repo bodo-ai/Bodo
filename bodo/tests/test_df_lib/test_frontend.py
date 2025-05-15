@@ -19,6 +19,9 @@ def test_read_join_filter_proj(datapath):
 
 def test_df_getitem_fallback_warning():
     """Make sure DataFrame.__getitem__() raises a warning when falling back to Pandas."""
+    import bodo
+
+    bodo.set_verbose_level(2)
     df = pd.DataFrame(
         {
             "A": pd.array([1, 2, 3], "Int64"),
