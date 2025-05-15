@@ -217,7 +217,7 @@ if (WIN32)
     "/guard:cf" # Enable control flow guard (security feature)
     "/EHsc"
   )
-  add_definitions(-DMS_WINDOWS) # Globally define MS_WINDOWS
+  add_definitions(-DMS_WINDOWS)  # Globally define MS_WINDOWS
 else()
   add_compile_options(
     "-Wno-c99-designator"         # Check if still necessary?
