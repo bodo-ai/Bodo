@@ -54,16 +54,16 @@ void Pipeline::Execute() {
         std::shared_ptr<table_info> batch;
 
         // Execute the source to get the base batch
-        std::pair<std::shared_ptr<table_info>, ProducerResult> result =
+        std::pair<std::shared_ptr<table_info>, OperatorResult> result =
             source->ProduceBatch();
         batch = result.first;
-        ProducerResult produce_result = result.second;
+        OperatorResult produce_result = result.second;
         // Run the between_ops and sink of the pipeline allowing repetition
         // in the HAVE_MORE_OUTPUT case.
         finished = midPipelineExecute(0, batch);
         // The whole pipeline is over when the producer has no more output
         // or some operator has set the finished flag.
-        finished = finished || (produce_result == ProducerResult::FINISHED);
+        finished = finished || (produce_result == OperatorResult::FINISHED);
     }
 
     // Finalize

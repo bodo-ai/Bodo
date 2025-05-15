@@ -172,15 +172,15 @@ class PhysicalReadParquet : public PhysicalSource {
 
     void Finalize() override {}
 
-    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
+    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         uint64_t total_rows;
         bool is_last;
 
         table_info *batch =
             internal_reader->read_batch(is_last, total_rows, true);
-        auto result = is_last ? ProducerResult::FINISHED
-                              : ProducerResult::HAVE_MORE_OUTPUT;
+        auto result = is_last ? OperatorResult::FINISHED
+                              : OperatorResult::HAVE_MORE_OUTPUT;
 
         batch->column_names = out_column_names;
         batch->metadata = out_metadata;

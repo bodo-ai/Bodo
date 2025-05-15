@@ -125,15 +125,15 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     /**
      * @brief ProduceBatch - act as a data source
      *
-     * returns std::pair<std::shared_ptr<table_info>, ProducerResult>
+     * returns std::pair<std::shared_ptr<table_info>, OperatorResult>
      */
-    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
+    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         auto next_batch = collected_rows->builder->PopChunk();
         return {std::get<0>(next_batch),
                 collected_rows->builder->empty()
-                    ? ProducerResult::FINISHED
-                    : ProducerResult::HAVE_MORE_OUTPUT};
+                    ? OperatorResult::FINISHED
+                    : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
     std::shared_ptr<bodo::Schema> getOutputSchema() override {

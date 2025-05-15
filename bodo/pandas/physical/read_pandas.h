@@ -83,7 +83,7 @@ class PhysicalReadPandas : public PhysicalSource {
 
     void Finalize() override {}
 
-    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
+    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         if (this->current_row >= this->num_rows) {
             throw std::runtime_error(
@@ -125,9 +125,9 @@ class PhysicalReadPandas : public PhysicalSource {
 
         this->current_row += batch_size;
 
-        ProducerResult result = this->current_row >= this->num_rows
-                                    ? ProducerResult::FINISHED
-                                    : ProducerResult::HAVE_MORE_OUTPUT;
+        OperatorResult result = this->current_row >= this->num_rows
+                                    ? OperatorResult::FINISHED
+                                    : OperatorResult::HAVE_MORE_OUTPUT;
 
         return {out_table, result};
     }

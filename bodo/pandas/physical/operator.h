@@ -29,8 +29,6 @@ enum class OperatorResult : uint8_t {
     FINISHED,
 };
 
-enum class ProducerResult : bool { HAVE_MORE_OUTPUT, FINISHED };
-
 /**
  * @brief Physical operators to be used in the execution pipelines (NOTE: they
  * are Bodo classes and not using DuckDB).
@@ -52,7 +50,7 @@ class PhysicalSource : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SOURCE; }
 
-    virtual std::pair<std::shared_ptr<table_info>, ProducerResult>
+    virtual std::pair<std::shared_ptr<table_info>, OperatorResult>
     ProduceBatch() = 0;
 
     virtual std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
