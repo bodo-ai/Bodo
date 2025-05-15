@@ -1,25 +1,5 @@
 #include "expression.h"
 
-duckdb::ExpressionType exprSwitchLeftRight(duckdb::ExpressionType etype) {
-    switch (etype) {
-        case duckdb::ExpressionType::COMPARE_EQUAL:
-        case duckdb::ExpressionType::COMPARE_NOTEQUAL:
-            return etype;
-        case duckdb::ExpressionType::COMPARE_LESSTHAN:
-            return duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO;
-        case duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
-            return duckdb::ExpressionType::COMPARE_LESSTHAN;
-        case duckdb::ExpressionType::COMPARE_GREATERTHAN:
-            return duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO;
-        case duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO:
-            return duckdb::ExpressionType::COMPARE_GREATERTHAN;
-        default:
-            throw std::runtime_error(
-                "switchLeftRight doesn't handle expression type " +
-                std::to_string(static_cast<int>(etype)));
-    }
-}
-
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr) {
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
@@ -31,7 +11,7 @@ std::shared_ptr<arrow::Array> prepare_arrow_compute(
 
 // String specialization
 std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
-    const std::string& value) {
+    const std::string &value) {
     arrow::StringBuilder builder;
     arrow::Status status;
     status = builder.Append(value);
@@ -63,4 +43,85 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value) {
     }
 
     return array;
+}
+
+std::shared_ptr<array_info> do_arrow_compute_binary(
+    std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
+    const std::string &comparator) {
+    // Try to convert the results of our children into array
+    // or scalar results to see which one they are.
+    std::shared_ptr<ArrayExprResult> left_as_array =
+        std::dynamic_pointer_cast<ArrayExprResult>(left_res);
+    std::shared_ptr<ScalarExprResult> left_as_scalar =
+        std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+    std::shared_ptr<ArrayExprResult> right_as_array =
+        std::dynamic_pointer_cast<ArrayExprResult>(right_res);
+    std::shared_ptr<ScalarExprResult> right_as_scalar =
+        std::dynamic_pointer_cast<ScalarExprResult>(right_res);
+
+    arrow::Datum src1;
+    if (left_as_array) {
+        src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
+    } else if (left_as_scalar) {
+        src1 = arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
+    } else {
+        throw std::runtime_error(
+            "do_arrow_compute left is neither array nor scalar.");
+    }
+
+    arrow::Datum src2;
+    if (right_as_array) {
+        src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
+    } else if (right_as_scalar) {
+        src2 = arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
+    } else {
+        throw std::runtime_error(
+            "do_arrow_compute right is neither array nor scalar.");
+    }
+
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::CallFunction(comparator, {src1, src2});
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error("do_array_compute: Error in Arrow compute: " +
+                                 cmp_res.status().message());
+    }
+
+    return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
+                               bodo::BufferPool::DefaultPtr());
+}
+
+std::shared_ptr<array_info> do_arrow_compute_unary(
+    std::shared_ptr<ExprResult> left_res, const std::string &comparator) {
+    // Try to convert the results of our children into array
+    // or scalar results to see which one they are.
+    std::shared_ptr<ArrayExprResult> left_as_array =
+        std::dynamic_pointer_cast<ArrayExprResult>(left_res);
+    std::shared_ptr<ScalarExprResult> left_as_scalar =
+        std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+
+    arrow::Datum src1;
+    if (left_as_array) {
+        src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
+    } else if (left_as_scalar) {
+        src1 = arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
+    } else {
+        throw std::runtime_error(
+            "do_arrow_compute left is neither array nor scalar.");
+    }
+
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::CallFunction(comparator, {src1});
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error("do_array_compute: Error in Arrow compute: " +
+                                 cmp_res.status().message());
+    }
+
+    return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
+                               bodo::BufferPool::DefaultPtr());
 }

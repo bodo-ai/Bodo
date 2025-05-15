@@ -12,6 +12,7 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
+    BodoLibNotImplementedException,
     LazyPlan,
     arrow_to_empty_df,
     check_args_fallback,
@@ -88,7 +89,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
             or isinstance(other, bool)
         ):
-            raise TypeError(
+            raise BodoLibNotImplementedException(
                 "'other' should be boolean BodoSeries or a bool. "
                 f"Got {type(other).__name__} instead."
             )
@@ -147,9 +148,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         empty_data = _empty_like(self)
 
         assert isinstance(empty_data, pd.Series), "Series expected"
-        expr = plan = LazyPlan(
-            "UnaryOpExpression", empty_data, self._plan, "__invert__"
-        )
+        source_expr = get_proj_expr_single(self._plan)
+        expr = LazyPlan("UnaryOpExpression", empty_data, source_expr, "__invert__")
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
@@ -158,76 +158,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             (expr,),
         )
         return wrap_plan(plan=plan)
-
-    def _conjunction_binop(self, other, op):
-        """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
-        from bodo.pandas.base import _empty_like
-
-        if not (
-            (
-                isinstance(other, BodoSeries)
-                and isinstance(other.dtype, pd.ArrowDtype)
-                and other.dtype.type is bool
-            )
-            or isinstance(other, bool)
-        ):
-            raise TypeError(
-                "'other' should be boolean BodoSeries or a bool. "
-                f"Got {type(other).__name__} instead."
-            )
-
-        # Get empty Pandas objects for self and other with same schema.
-        zero_size_self = _empty_like(self)
-        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
-        # This is effectively a check for a dataframe or series.
-        if hasattr(other, "_plan"):
-            other = other._plan
-
-        # Compute schema of new series.
-        new_metadata = getattr(zero_size_self, op)(zero_size_other)
-        assert isinstance(new_metadata, pd.Series)
-        expr = plan = LazyPlan(
-            "ConjunctionOpExpression", new_metadata, self._plan, other, op
-        )
-        plan = LazyPlan(
-            "LogicalProjection",
-            new_metadata,
-            # Use the original table without the Series projection node.
-            self._plan.args[0],
-            (expr,),
-        )
-        return wrap_plan(plan=plan)
-
-    @check_args_fallback("all")
-    def __and__(self, other):
-        """Called when a BodoSeries is element-wise and'ed with a different entity (other)"""
-        return self._conjunction_binop(other, "__and__")
-
-    @check_args_fallback("all")
-    def __or__(self, other):
-        """Called when a BodoSeries is element-wise or'ed with a different entity (other)"""
-        return self._conjunction_binop(other, "__or__")
-
-    @check_args_fallback("all")
-    def __xor__(self, other):
-        """Called when a BodoSeries is element-wise xor'ed with a different
-        entity (other). xor is not supported in duckdb so convert to
-        (A or B) and not (A and B).
-        """
-        return self.__or__(other).__and__(self.__and__(other).__invert__())
-
-    @check_args_fallback("all")
-    def __invert__(self):
-        """Called when a BodoSeries is element-wise not'ed with a different entity (other)"""
-        from bodo.pandas.base import _empty_like
-
-        # Get empty Pandas objects for self and other with same schema.
-        new_metadata = _empty_like(self)
-
-        assert isinstance(new_metadata, pd.Series)
-        return wrap_plan(
-            plan=LazyPlan("LogicalUnaryOp", new_metadata, self._plan, "__invert__"),
-        )
 
     @staticmethod
     def from_lazy_mgr(
