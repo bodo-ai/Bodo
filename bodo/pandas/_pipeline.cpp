@@ -40,8 +40,13 @@ bool Pipeline::midPipelineExecute(unsigned idx,
                 return false;
             }
 
-            // Must be the HAVE_MORE_OUTPUT case so iterator the while loop
+            // Must be the HAVE_MORE_OUTPUT case so iterato the while loop
             // to give this operator a chance to produce more output.
+            // Currently, streaming operators assume input to be empty in this
+            // case to match BodoSQL.
+            if (batch->nrows() != 0) {
+                batch = RetrieveTable(batch, std::vector<int64_t>());
+            }
         }
     }
 }
