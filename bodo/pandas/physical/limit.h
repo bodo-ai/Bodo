@@ -132,9 +132,10 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         auto next_batch = collected_rows->builder->PopChunk();
-        return {std::get<0>(next_batch), collected_rows->builder->empty()
-                                             ? OperatorResult::FINISHED
-                                             : OperatorResult::NEED_MORE_INPUT};
+        return {std::get<0>(next_batch),
+                collected_rows->builder->empty()
+                    ? OperatorResult::FINISHED
+                    : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
     std::shared_ptr<bodo::Schema> getOutputSchema() override {

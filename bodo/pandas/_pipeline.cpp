@@ -58,7 +58,13 @@ void Pipeline::Execute() {
         std::pair<std::shared_ptr<table_info>, OperatorResult> result =
             source->ProduceBatch();
         batch = result.first;
-        OperatorResult produce_result = result.second;
+        // Use NEED_MORE_INPUT for sources
+        // just for compatibility with other operators' input expectations and
+        // simplifying the pipeline code.
+        OperatorResult produce_result =
+            result.second == OperatorResult::FINISHED
+                ? OperatorResult::FINISHED
+                : OperatorResult::NEED_MORE_INPUT;
         // Run the between_ops and sink of the pipeline allowing repetition
         // in the HAVE_MORE_OUTPUT case.
         finished = midPipelineExecute(0, batch, produce_result);

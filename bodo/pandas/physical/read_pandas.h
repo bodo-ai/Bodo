@@ -126,7 +126,7 @@ class PhysicalReadPandas : public PhysicalSource {
 
         OperatorResult result = this->current_row >= this->num_rows
                                     ? OperatorResult::FINISHED
-                                    : OperatorResult::NEED_MORE_INPUT;
+                                    : OperatorResult::HAVE_MORE_OUTPUT;
 
         return {out_table, result};
     }
