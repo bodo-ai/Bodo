@@ -450,7 +450,6 @@ def test_head_pushdown(datapath):
     assert len(bodo_df2) == 3
 
 
-@pytest.mark.skip(reason="Not working.")
 def test_projection_head_pushdown(datapath):
     """Test for projection and head pushed down to read parquet."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -458,6 +457,20 @@ def test_projection_head_pushdown(datapath):
     bodo_df3 = bodo_df2.head(3)
 
     # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df3.is_lazy_plan()
+
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df3) == 3
+
+
+def test_series_head(datapath):
+    """Test for Series.head() reading from Pandas."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1["D"]
+    bodo_df2.execute_plan()
+    bodo_df3 = bodo_df2.head(3)
+
+    # Make sure bodo_df3 is unevaluated at this point.
     assert bodo_df3.is_lazy_plan()
 
     # Contents not guaranteed to be the same as Pandas so just check length.
@@ -665,6 +678,27 @@ def test_parquet_read_partitioned_filter(datapath):
         bodo_out,
         py_out,
     )
+
+
+def test_parquet_read_shape_head(datapath):
+    """
+    Test to catch a case where the original manager goes out of scope
+    causing the parallel get to become invalid.
+    """
+    path = datapath("dataframe_library/df1.parquet")
+
+    def bodo_impl():
+        df = bd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    def pd_impl():
+        df = pd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    bdf_shape, bdf_head = bodo_impl()
+    pdf_shape, pdf_head = pd_impl()
+    assert bdf_shape == pdf_shape
+    _test_equal(bdf_head, pdf_head)
 
 
 def test_project_after_filter(datapath):
