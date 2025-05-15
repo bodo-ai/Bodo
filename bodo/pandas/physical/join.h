@@ -15,6 +15,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
    public:
     explicit PhysicalJoin(
         const duckdb::vector<duckdb::JoinCondition>& conditions) {
+        // Check conditions and add key columns
         for (const duckdb::JoinCondition& cond : conditions) {
             if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
                 throw std::runtime_error(
@@ -41,6 +42,13 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
     virtual ~PhysicalJoin() = default;
 
+    /**
+     * @brief Initialize the join state using build and probe schemas (called
+     * when available).
+     *
+     * @param build_table_schema schema of the build table
+     * @param probe_table_schema schema of the probe table
+     */
     void InitializeJoinState(
         const std::shared_ptr<bodo::Schema> build_table_schema,
         const std::shared_ptr<bodo::Schema> probe_table_schema) {
@@ -106,6 +114,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
+        // See
+        // https://github.com/bodo-ai/Bodo/blob/967b62f1c943a3e8f8e00d5f9cdcb2865fb55cb0/bodo/libs/streaming/_join.cpp#L4018
         bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
 
         bool global_is_last =
@@ -169,6 +179,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         auto [out_table, chunk_size] = join_state->output_buffer->PopChunk(
             /*force_return*/ is_last);
 
+        is_last = is_last && join_state->output_buffer->total_remaining == 0;
+
         return {out_table,
                 is_last ? OperatorResult::FINISHED
                         : (request_input ? OperatorResult::NEED_MORE_INPUT
@@ -183,6 +195,11 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         throw std::runtime_error("GetResult called on a join node.");
     }
 
+    /**
+     * @brief Get the output schema of join probe
+     *
+     * @return std::shared_ptr<bodo::Schema>
+     */
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
