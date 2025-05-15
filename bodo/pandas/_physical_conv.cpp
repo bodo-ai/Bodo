@@ -160,6 +160,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         std::move(rhs_builder.finished_pipelines);
     build_pipelines.push_back(
         rhs_builder.active_pipeline->Build(physical_join));
+    // Build pipelines need to execute before probe pipeline (recursively
+    // handles multiple joins)
     this->finished_pipelines.insert(this->finished_pipelines.begin(),
                                     build_pipelines.begin(),
                                     build_pipelines.end());
