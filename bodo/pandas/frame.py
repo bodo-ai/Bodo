@@ -15,6 +15,7 @@ from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
+    LazyPlanDistributedArg,
     check_args_fallback,
     get_lazy_manager_class,
     get_n_index_arrays,
@@ -63,12 +64,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     # If the plan has been executed but the results are still
                     # distributed then re-use those results as is.
                     res_id = self._mgr._md_result_id
+                    mgr = self._mgr
                 else:
                     # The data has been collected and is no longer distributed
                     # so we need to re-distribute the results.
                     res_id = bodo.spawn.utils.scatter_data(self)
+                    mgr = None
                 self._source_plan = LazyPlan(
-                    "LogicalGetPandasReadParallel", empty_data, res_id
+                    "LogicalGetPandasReadParallel",
+                    empty_data,
+                    LazyPlanDistributedArg(mgr, res_id),
                 )
             else:
                 self._source_plan = LazyPlan(
@@ -151,7 +156,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 return self._head_df.head(0).copy()
 
         if (self._head_df is None) or (n > self._head_df.shape[0]):
-            if bodo.dataframe_library_enabled:
+            if bodo.dataframe_library_enabled and isinstance(
+                self._mgr, LazyMetadataMixin
+            ):
                 from bodo.pandas.base import _empty_like
 
                 planLimit = LazyPlan(

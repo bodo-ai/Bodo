@@ -7,6 +7,7 @@ from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
     LazyPlan,
+    LazyPlanDistributedArg,
     arrow_to_empty_df,
     check_args_fallback,
     wrap_plan,
@@ -32,7 +33,11 @@ def from_pandas(df):
     res_id = None
     if bodo.dataframe_library_run_parallel:
         res_id = bodo.spawn.utils.scatter_data(df)
-        plan = LazyPlan("LogicalGetPandasReadParallel", empty_df, res_id)
+        plan = LazyPlan(
+            "LogicalGetPandasReadParallel",
+            empty_df,
+            LazyPlanDistributedArg(None, res_id),
+        )
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
 

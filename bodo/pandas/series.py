@@ -13,7 +13,9 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
+    BodoLibNotImplementedException,
     LazyPlan,
+    LazyPlanDistributedArg,
     check_args_fallback,
     get_lazy_single_manager_class,
     get_n_index_arrays,
@@ -57,12 +59,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                         # If the plan has been executed but the results are still
                         # distributed then re-use those results as is.
                         res_id = self._mgr._md_result_id
+                        mgr = self._mgr
                     else:
                         # The data has been collected and is no longer distributed
                         # so we need to re-distribute the results.
                         res_id = bodo.spawn.utils.scatter_data(self)
+                        mgr = None
                     self._source_plan = LazyPlan(
-                        "LogicalGetPandasReadParallel", empty_data, res_id
+                        "LogicalGetPandasReadParallel",
+                        empty_data,
+                        LazyPlanDistributedArg(mgr, res_id),
                     )
                 else:
                     self._source_plan = LazyPlan(
@@ -119,7 +125,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
             or isinstance(other, bool)
         ):
-            raise TypeError(
+            raise BodoLibNotImplementedException(
                 "'other' should be boolean BodoSeries or a bool. "
                 f"Got {type(other).__name__} instead."
             )
@@ -178,9 +184,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         empty_data = _empty_like(self)
 
         assert isinstance(empty_data, pd.Series), "Series expected"
-        return wrap_plan(
-            plan=LazyPlan("LogicalUnaryOp", empty_data, self._plan, "__invert__"),
+        source_expr = get_proj_expr_single(self._plan)
+        expr = LazyPlan("UnaryOpExpression", empty_data, source_expr, "__invert__")
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            # Use the original table without the Series projection node.
+            self._plan.args[0],
+            (expr,),
         )
+        return wrap_plan(plan=plan)
 
     @staticmethod
     def from_lazy_mgr(
@@ -268,7 +281,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 return self._head_s.head(0).copy()
 
         if (self._head_s is None) or (n > self._head_s.shape[0]):
-            if bodo.dataframe_library_enabled:
+            if bodo.dataframe_library_enabled and isinstance(
+                self._mgr, LazyMetadataMixin
+            ):
                 from bodo.pandas.base import _empty_like
 
                 planLimit = LazyPlan(
