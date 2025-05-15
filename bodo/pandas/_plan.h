@@ -161,7 +161,9 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
  *
  */
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
-    BodoPythonScalarFunctionData(PyObject *args) : args(args) {
+    BodoPythonScalarFunctionData(PyObject *args,
+                                 std::shared_ptr<arrow::Schema> out_schema)
+        : args(args), out_schema(out_schema) {
         Py_INCREF(args);
     }
     ~BodoPythonScalarFunctionData() override { Py_DECREF(args); }
@@ -175,6 +177,7 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     }
 
     PyObject *args;
+    std::shared_ptr<arrow::Schema> out_schema;
 };
 
 /**

@@ -15,8 +15,35 @@
 class PhysicalProjection : public PhysicalSourceSink {
    public:
     explicit PhysicalProjection(
-        duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs)
-        : exprs(std::move(exprs)) {}
+        duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs,
+        std::shared_ptr<bodo::Schema> input_schema)
+        : exprs(std::move(exprs)) {
+        // Create the output schema from expressions
+        this->output_schema = std::make_shared<bodo::Schema>();
+        for (const auto& expr : this->exprs) {
+            if (expr->type == duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
+                std::unique_ptr<bodo::DataType> col_type =
+                    input_schema->column_types[colref.binding.column_index]
+                        ->copy();
+                this->output_schema->append_column(std::move(col_type));
+            } else if (expr->type == duckdb::ExpressionType::BOUND_FUNCTION) {
+                auto& func_expr = expr->Cast<duckdb::BoundFunctionExpression>();
+                BodoPythonScalarFunctionData& scalar_func_data =
+                    func_expr.bind_info->Cast<BodoPythonScalarFunctionData>();
+
+                std::unique_ptr<bodo::DataType> col_type =
+                    bodo::Schema::FromArrowSchema(scalar_func_data.out_schema)
+                        ->column_types[0]
+                        ->copy();
+                this->output_schema->append_column(std::move(col_type));
+            } else {
+                throw std::runtime_error(
+                    "Unsupported expression type in projection " +
+                    expr->ToString());
+            }
+        }
+    }
 
     virtual ~PhysicalProjection() = default;
 
@@ -99,8 +126,7 @@ class PhysicalProjection : public PhysicalSourceSink {
     }
 
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
-        // TODO
-        return nullptr;
+        return output_schema;
     }
 
    private:
@@ -116,4 +142,5 @@ class PhysicalProjection : public PhysicalSourceSink {
         std::shared_ptr<table_info> input_batch, PyObject* args);
 
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs;
+    std::shared_ptr<bodo::Schema> output_schema;
 };

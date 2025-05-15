@@ -14,8 +14,8 @@
 class PhysicalFilter : public PhysicalSourceSink {
    public:
     explicit PhysicalFilter(std::shared_ptr<PhysicalExpression> expr,
-                            std::shared_ptr<bodo::Schema> output_schema)
-        : expression(expr), output_schema(output_schema) {}
+                            std::shared_ptr<bodo::Schema> input_schema)
+        : expression(expr), output_schema(input_schema) {}
 
     virtual ~PhysicalFilter() = default;
 
