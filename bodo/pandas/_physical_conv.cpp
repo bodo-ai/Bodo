@@ -127,6 +127,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
 void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     // Process the source of this filter.
     this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
 
     std::shared_ptr<PhysicalExpression> physExprTree =
         buildPhysicalExprTree(op.expressions[0]);
@@ -139,7 +141,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
                 duckdb::ExpressionType::CONJUNCTION_AND));
     }
     std::shared_ptr<PhysicalFilter> physical_op =
-        std::make_shared<PhysicalFilter>(physExprTree);
+        std::make_shared<PhysicalFilter>(physExprTree, in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
 }
 
