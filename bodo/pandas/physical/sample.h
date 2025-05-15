@@ -12,7 +12,9 @@
  */
 class PhysicalSample : public PhysicalSourceSink {
    public:
-    explicit PhysicalSample(float percent) : percentage(percent) {}
+    explicit PhysicalSample(float percent,
+                            std::shared_ptr<bodo::Schema> input_schema)
+        : percentage(percent), output_schema(input_schema) {}
 
     virtual ~PhysicalSample() = default;
 
@@ -42,12 +44,12 @@ class PhysicalSample : public PhysicalSourceSink {
     }
 
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
-        // TODO
-        return nullptr;
+        return output_schema;
     }
 
    private:
     const float percentage;
+    std::shared_ptr<bodo::Schema> output_schema;
 
     uint64_t stochasticRound(uint64_t nrows) {
         double scaled = nrows * percentage;
