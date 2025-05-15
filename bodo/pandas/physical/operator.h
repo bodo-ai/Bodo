@@ -18,11 +18,15 @@ enum class OperatorType : uint8_t {
 
 /// Specifies the status of the physical operator in the execution:
 /// 1. NEED_MORE_INPUT means the operator is ready for additional input
+// (also used for source operators when they are not done producing output,
+// just for compatibility with other operators' input expectations and
+// simplifying the pipeline code).
 /// 2. HAVE_MORE_OUTPUT means the operator can produce more output without
 /// additional input.
-/// 3. FINISHED means the pipeline should terminate (used only for LIMIT)
-// DuckDB's description:
-// https://youtu.be/MA0OsvYFGrc?t=1205
+/// 3. FINISHED means the operator is done executing.
+// This is passed across operators and the pipeline terminates when the sink
+// operator returns this status. DuckDB's description for background (Bodo's
+// semantics is different per above): https://youtu.be/MA0OsvYFGrc?t=1205
 enum class OperatorResult : uint8_t {
     NEED_MORE_INPUT,
     HAVE_MORE_OUTPUT,
