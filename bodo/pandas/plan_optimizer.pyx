@@ -11,6 +11,7 @@ from libcpp cimport bool as c_bool
 import operator
 from libc.stdint cimport int64_t
 import pandas as pd
+from utils import BodoLibNotImplementedException
 
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
@@ -169,7 +170,7 @@ def str_to_expr_type(val):
     elif val == "__invert__":
         return CExpressionType.OPERATOR_NOT
     else:
-        raise ValueError("Unhandled case in str_to_expr_type")
+        raise BodoLibNotImplementedException("Unhandled case in str_to_expr_type")
 
 cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" nogil:
     cpdef enum class CExpressionClass "duckdb::ExpressionClass":
@@ -325,7 +326,7 @@ def join_type_to_string(CJoinType join_type):
     elif join_type == CJoinType.RIGHT_ANTI:
         return "RIGHT_ANTI"
     else:
-        raise ValueError("Unknown Join Type")
+        raise BodoLibNotImplementedException("Unknown Join Type")
 
 
 cdef class LogicalOperator:
@@ -458,9 +459,9 @@ cdef unique_ptr[CExpression] make_expr(val):
         if val.resolution.nanoseconds == 1:
             return move(make_const_timestamp_ns_expr(val.value))
         else:
-            raise ValueError("Only support ns timestamp resolution currently, not " + str(val.resolution))
+            raise BodoLibNotImplementedException("Only support ns timestamp resolution currently, not " + str(val.resolution))
     else:
-        raise ValueError("Unknown expr type in make_expr " + str(type(val)))
+        raise BodoLibNotImplementedException("Unknown expr type in make_expr " + str(type(val)))
 
 
 cdef class LogicalFilter(LogicalOperator):
@@ -565,7 +566,7 @@ cdef class LogicalGetSeriesRead(LogicalOperator):
     """Represents an already materialized BodoSeries."""
     def __cinit__(self, out_schema, result_id):
         self.out_schema = out_schema
-        raise NotImplementedError("LogicalGetSeriesRead not yet implemented.")
+        raise BodoLibNotImplementedException("LogicalGetSeriesRead not yet implemented.")
 
 
 cdef class LogicalGetPandasReadSeq(LogicalOperator):
