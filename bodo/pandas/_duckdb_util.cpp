@@ -32,7 +32,8 @@ extractValue(const duckdb::Value& value) {
         case duckdb::LogicalTypeId::TIMESTAMP_NS: {
             // Define a timestamp type with nanosecond precision
             auto timestamp_type = arrow::timestamp(arrow::TimeUnit::NANO);
-            duckdb::timestamp_ns_t extracted = value.GetValue<duckdb::timestamp_ns_t>();
+            duckdb::timestamp_ns_t extracted =
+                value.GetValue<duckdb::timestamp_ns_t>();
             // Create a TimestampScalar with nanosecond value
             return arrow::TimestampScalar(extracted.value, timestamp_type);
         } break;

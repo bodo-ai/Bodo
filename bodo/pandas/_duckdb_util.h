@@ -1,9 +1,9 @@
 #pragma once
 
+#include <arrow/api.h>
 #include <cstdint>
 #include <variant>
 #include "duckdb/common/types/value.hpp"
-#include <arrow/api.h>
 
 /**
  * @brief Convert duckdb value to C++ variant.

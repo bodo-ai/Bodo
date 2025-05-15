@@ -272,7 +272,8 @@ duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
  * @param val - the constant timestamp for the expression in ns since epoch
  * @return duckdb::unique_ptr<duckdb::Expression> - the const timestamp expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(int64_t val);
+duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
+    int64_t val);
 
 /**
  * @brief Create an expression that references a specified column.

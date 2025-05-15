@@ -416,7 +416,9 @@ def test_filter_datetime(datapath, op):
 
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    bodo_df2 = bodo_df1[eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
+    bodo_df2 = bodo_df1[
+        eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")
+    ]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()

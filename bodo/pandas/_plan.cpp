@@ -79,7 +79,8 @@ duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val) {
         duckdb::Value(val));
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(int64_t val) {
+duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
+    int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::TIMESTAMPNS(duckdb::timestamp_ns_t(val)));
 }

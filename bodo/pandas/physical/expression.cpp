@@ -26,8 +26,10 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
     return array;
 }
 
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const arrow::TimestampScalar &value) {
-    arrow::TimestampBuilder builder(arrow::timestamp(arrow::TimeUnit::NANO), arrow::default_memory_pool());
+std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
+    const arrow::TimestampScalar &value) {
+    arrow::TimestampBuilder builder(arrow::timestamp(arrow::TimeUnit::NANO),
+                                    arrow::default_memory_pool());
     arrow::Status status;
     status = builder.Append(value.value);
     if (!status.ok()) {
