@@ -50,8 +50,9 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
         this->join_state = std::make_shared<HashJoinState>(
             build_table_schema, probe_table_schema,
-            // TODO: handle keys properly
-            1, build_table_outer, probe_table_outer,
+            // TODO[BSE-4812]: support keys that are not in the beginning of the
+            // input tables
+            this->left_keys.size(), build_table_outer, probe_table_outer,
             // TODO: handle broadcast join properly
             false, nullptr, true, true, get_streaming_batch_size(), -1,
             // TODO: add op_id
