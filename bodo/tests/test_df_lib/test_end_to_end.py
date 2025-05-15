@@ -496,7 +496,10 @@ def test_str_lower(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_strip(datapath, index_val):
+@pytest.mark.parametrize(
+    "to_strip", [pytest.param(None, id="default"), pytest.param("AB", id="strip-AB")]
+)
+def test_str_strip(datapath, index_val, to_strip):
     """Very simple test for Series.str.strip() for sanity checking."""
     df = pd.DataFrame(
         {
@@ -507,8 +510,8 @@ def test_str_strip(datapath, index_val):
     )
     df.index = index_val[: len(df)]
     bdf = bd.from_pandas(df)
-    out_pd = df.B.str.strip()
-    out_bodo = bdf.B.str.strip()
+    out_pd = df.B.str.strip(to_strip=to_strip)
+    out_bodo = bdf.B.str.strip(to_strip=to_strip)
     assert out_bodo.is_lazy_plan()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
