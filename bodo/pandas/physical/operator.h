@@ -25,7 +25,8 @@ enum class OperatorType : uint8_t {
 /// additional input.
 /// 3. FINISHED means the operator is done executing.
 // This is passed across operators and the pipeline terminates when the sink
-// operator returns this status. DuckDB's description for background (Bodo's
+// operator returns this status.
+// DuckDB's description for background (Bodo's
 // semantics is different per above): https://youtu.be/MA0OsvYFGrc?t=1205
 enum class OperatorResult : uint8_t {
     NEED_MORE_INPUT,
