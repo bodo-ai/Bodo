@@ -180,7 +180,7 @@ class PhysicalReadParquet : public PhysicalSource {
         table_info *batch =
             internal_reader->read_batch(is_last, total_rows, true);
         auto result = is_last ? OperatorResult::FINISHED
-                              : OperatorResult::HAVE_MORE_OUTPUT;
+                              : OperatorResult::NEED_MORE_INPUT;
 
         batch->column_names = out_column_names;
         batch->metadata = out_metadata;

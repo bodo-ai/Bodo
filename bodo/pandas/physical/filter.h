@@ -50,7 +50,11 @@ class PhysicalFilter : public PhysicalSourceSink {
         std::shared_ptr<table_info> out_table =
             RetrieveTable(input_batch, bitmask);
 
-        return {out_table, OperatorResult::NEED_MORE_INPUT};
+        // Just propagate the FINISHED flag to other operators (like join) or
+        // accept more input
+        return {out_table, prev_op_result == OperatorResult::FINISHED
+                               ? OperatorResult::FINISHED
+                               : OperatorResult::NEED_MORE_INPUT};
     }
 
     std::shared_ptr<bodo::Schema> getOutputSchema() override {

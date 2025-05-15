@@ -90,7 +90,12 @@ class PhysicalProjection : public PhysicalSourceSink {
         std::shared_ptr<table_info> out_table_info =
             std::make_shared<table_info>(out_cols, out_size, col_names,
                                          input_batch->metadata);
-        return {out_table_info, OperatorResult::NEED_MORE_INPUT};
+
+        // Just propagate the FINISHED flag to other operators (like join) or
+        // accept more input
+        return {out_table_info, prev_op_result == OperatorResult::FINISHED
+                                    ? OperatorResult::FINISHED
+                                    : OperatorResult::NEED_MORE_INPUT};
     }
 
     std::shared_ptr<bodo::Schema> getOutputSchema() override {

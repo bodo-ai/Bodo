@@ -29,8 +29,7 @@ bool Pipeline::midPipelineExecute(unsigned idx,
             // Execute subsequent operators and If any of them said that
             // no more output is needed or the current operator knows no
             // more output is needed then return true to terminate the pipeline.
-            if (midPipelineExecute(idx + 1, result.first, prev_op_result) ||
-                prev_op_result == OperatorResult::FINISHED) {
+            if (midPipelineExecute(idx + 1, result.first, prev_op_result)) {
                 return true;
             }
 
@@ -63,9 +62,6 @@ void Pipeline::Execute() {
         // Run the between_ops and sink of the pipeline allowing repetition
         // in the HAVE_MORE_OUTPUT case.
         finished = midPipelineExecute(0, batch, produce_result);
-        // The whole pipeline is over when the producer has no more output
-        // or some operator has set the finished flag.
-        finished = finished || (produce_result == OperatorResult::FINISHED);
     }
 
     // Finalize

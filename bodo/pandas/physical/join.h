@@ -47,16 +47,15 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
-        bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
-        // TODO: fix is_last
-        this->join_state->global_is_last = true;
-        // TODO: handle output
-        bool is_last = join_build_consume_batch(this->join_state.get(),
-                                                input_batch, has_bloom_filter,
-                                                // TODO: set is_last properly
-                                                true);
+        bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
-        if (is_last) {
+        bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
+
+        bool global_is_last =
+            join_build_consume_batch(this->join_state.get(), input_batch,
+                                     has_bloom_filter, local_is_last);
+
+        if (global_is_last) {
             return OperatorResult::FINISHED;
         }
         return !join_state->build_shuffle_state.BuffersFull()
@@ -85,8 +84,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         }
         bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
 
-        // TODO
-        bool is_last = true;
+        bool is_last = prev_op_result == OperatorResult::FINISHED;
 
         if (has_bloom_filter) {
             is_last = join_probe_consume_batch<false, false, false, true>(
@@ -114,8 +112,10 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         auto [out_table, chunk_size] = join_state->output_buffer->PopChunk(
             /*force_return*/ is_last);
 
-        return {out_table, request_input ? OperatorResult::NEED_MORE_INPUT
-                                         : OperatorResult::HAVE_MORE_OUTPUT};
+        return {out_table,
+                is_last ? OperatorResult::FINISHED
+                        : (request_input ? OperatorResult::NEED_MORE_INPUT
+                                         : OperatorResult::HAVE_MORE_OUTPUT)};
     }
 
     /**
