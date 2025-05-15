@@ -60,8 +60,8 @@ class PhysicalSink : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SINK; }
 
-    virtual OperatorResult ConsumeBatch(
-        std::shared_ptr<table_info> input_batch) = 0;
+    virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                        OperatorResult prev_op_result) = 0;
     virtual std::shared_ptr<table_info> GetResult() = 0;
 };
 
@@ -72,7 +72,8 @@ class PhysicalSourceSink : public PhysicalOperator {
     }
 
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) = 0;
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) = 0;
 
     virtual std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };

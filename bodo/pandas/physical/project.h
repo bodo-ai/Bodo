@@ -30,7 +30,8 @@ class PhysicalProjection : public PhysicalSourceSink {
      * output.
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) override {
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) override {
         std::vector<std::shared_ptr<array_info>> out_cols;
         std::vector<std::string> col_names;
 

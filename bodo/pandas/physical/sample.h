@@ -26,7 +26,8 @@ class PhysicalSample : public PhysicalSourceSink {
      * batch
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) override {
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) override {
         uint64_t select_this_time = stochasticRound(input_batch->nrows());
 
         // Perhaps we should randomly select rather than just

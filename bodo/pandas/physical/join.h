@@ -45,8 +45,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      *
      * @return OperatorResult
      */
-    OperatorResult ConsumeBatch(
-        std::shared_ptr<table_info> input_batch) override {
+    OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                OperatorResult prev_op_result) override {
         bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
         // TODO: fix is_last
         this->join_state->global_is_last = true;
@@ -71,7 +71,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      * @return output batch of probe and return flag
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) override {
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) override {
         // See
         // https://github.com/bodo-ai/Bodo/blob/546cb5a45f5bc8e3922f5060e7f778cc744a0930/bodo/libs/streaming/_join.cpp#L4062
         this->join_state->InitOutputBuffer(this->build_kept_cols,

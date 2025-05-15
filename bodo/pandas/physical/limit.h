@@ -96,8 +96,8 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      * The output table from the current operation and whether there is more
      * output.
      */
-    OperatorResult ConsumeBatch(
-        std::shared_ptr<table_info> input_batch) override {
+    OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                OperatorResult prev_op_result) override {
         if (!collected_rows) {
             collected_rows = std::make_unique<ChunkedTableBuilderState>(
                 input_batch->schema(), input_batch->nrows());

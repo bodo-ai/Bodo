@@ -23,7 +23,8 @@ class Pipeline {
      * returns - bool that is True if some operator in the pipeline has
      * indicated that no more output needs to be generated.
      */
-    bool midPipelineExecute(unsigned idx, std::shared_ptr<table_info> batch);
+    bool midPipelineExecute(unsigned idx, std::shared_ptr<table_info> batch,
+                            OperatorResult prev_op_result);
 
     friend class PipelineBuilder;
 

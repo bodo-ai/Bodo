@@ -27,7 +27,8 @@ class PhysicalFilter : public PhysicalSourceSink {
      * @return the filtered batch from applying the expression to the input.
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) override {
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) override {
         // Evaluate the Physical expression tree with the given input batch.
         std::shared_ptr<ExprResult> expr_output =
             expression->ProcessBatch(input_batch);

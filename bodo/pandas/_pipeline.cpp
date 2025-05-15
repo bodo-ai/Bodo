@@ -10,32 +10,34 @@
  * could theoretically require multiple (different) iterations in this manner.
  */
 bool Pipeline::midPipelineExecute(unsigned idx,
-                                  std::shared_ptr<table_info> batch) {
+                                  std::shared_ptr<table_info> batch,
+                                  OperatorResult prev_op_result) {
     // Terminate the recursion when we have processed all the operators
     // and only have the sink to go which cannot HAVE_MORE_OUTPUT.
     if (idx >= between_ops.size()) {
-        return sink->ConsumeBatch(batch) == OperatorResult::FINISHED;
+        return sink->ConsumeBatch(batch, prev_op_result) ==
+               OperatorResult::FINISHED;
     } else {
         // Get the current operator.
         std::shared_ptr<PhysicalSourceSink>& op = between_ops[idx];
         while (true) {
             // Process this batch with this operator.
             std::pair<std::shared_ptr<table_info>, OperatorResult> result =
-                op->ProcessBatch(batch);
-            OperatorResult op_result = result.second;
+                op->ProcessBatch(batch, prev_op_result);
+            prev_op_result = result.second;
 
             // Execute subsequent operators and If any of them said that
             // no more output is needed or the current operator knows no
             // more output is needed then return true to terminate the pipeline.
-            if (midPipelineExecute(idx + 1, result.first) ||
-                op_result == OperatorResult::FINISHED) {
+            if (midPipelineExecute(idx + 1, result.first, prev_op_result) ||
+                prev_op_result == OperatorResult::FINISHED) {
                 return true;
             }
 
             // op_result has to be NEED_MORE_INPUT or HAVE_MORE_OUTPUT since
             // FINISHED is checked above.  If this operator is done this part
             // of the pipeline is done and we aren't set to finish yet.
-            if (op_result == OperatorResult::NEED_MORE_INPUT) {
+            if (prev_op_result == OperatorResult::NEED_MORE_INPUT) {
                 return false;
             }
 
@@ -60,7 +62,7 @@ void Pipeline::Execute() {
         OperatorResult produce_result = result.second;
         // Run the between_ops and sink of the pipeline allowing repetition
         // in the HAVE_MORE_OUTPUT case.
-        finished = midPipelineExecute(0, batch);
+        finished = midPipelineExecute(0, batch, produce_result);
         // The whole pipeline is over when the producer has no more output
         // or some operator has set the finished flag.
         finished = finished || (produce_result == OperatorResult::FINISHED);
