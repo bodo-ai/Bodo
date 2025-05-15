@@ -8,6 +8,7 @@
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "physical/filter.h"
 #include "physical/limit.h"
 #include "physical/project.h"
@@ -89,13 +90,14 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             auto extracted_value = extractValue(bce->value);
             // Return a PhysicalConstantExpression<T> where T is the actual
             // type of the value contained within bce->value.
-            return std::visit(
+            auto ret = std::visit(
                 [](const auto& value) {
                     return std::static_pointer_cast<PhysicalExpression>(
                         std::make_shared<PhysicalConstantExpression<
                             std::decay_t<decltype(value)>>>(value));
                 },
                 extracted_value);
+            return ret;
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
             // Convert the base duckdb::Expression node to its actual derived
@@ -111,6 +113,31 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                 std::make_shared<PhysicalConjunctionExpression>(
                     buildPhysicalExprTree(bce->children[0]),
                     buildPhysicalExprTree(bce->children[1]), expr_type));
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_OPERATOR: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            duckdb::unique_ptr<duckdb::BoundOperatorExpression> bce =
+                dynamic_cast_unique_ptr<duckdb::BoundOperatorExpression>(
+                    std::move(expr));
+            switch (bce->children.size()) {
+                case 1: {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalUnaryExpression>(
+                            buildPhysicalExprTree(bce->children[0]),
+                            expr_type));
+                } break;
+                case 2: {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalBinaryExpression>(
+                            buildPhysicalExprTree(bce->children[0]),
+                            buildPhysicalExprTree(bce->children[1]),
+                            expr_type));
+                } break;
+                default:
+                    throw std::runtime_error(
+                        "Unsupported number of children for bound operator");
+            }
         } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
