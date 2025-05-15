@@ -3,6 +3,8 @@
 
 #include <cstdint>
 #include "../../libs/streaming/_join.h"
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "operator.h"
 
 /**
@@ -11,7 +13,31 @@
  */
 class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
    public:
-    explicit PhysicalJoin() {}
+    explicit PhysicalJoin(
+        const duckdb::vector<duckdb::JoinCondition>& conditions) {
+        for (const duckdb::JoinCondition& cond : conditions) {
+            if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
+                throw std::runtime_error(
+                    "Non-equi join condition not supported yet.");
+            }
+            if (cond.left->GetExpressionClass() !=
+                duckdb::ExpressionClass::BOUND_COLUMN_REF) {
+                throw std::runtime_error(
+                    "Join condition left side is not a column reference.");
+            }
+            if (cond.right->GetExpressionClass() !=
+                duckdb::ExpressionClass::BOUND_COLUMN_REF) {
+                throw std::runtime_error(
+                    "Join condition right side is not a column reference.");
+            }
+            this->left_keys.push_back(
+                cond.left->Cast<duckdb::BoundColumnRefExpression>()
+                    .binding.column_index);
+            this->right_keys.push_back(
+                cond.right->Cast<duckdb::BoundColumnRefExpression>()
+                    .binding.column_index);
+        }
+    }
 
     virtual ~PhysicalJoin() = default;
 
@@ -164,5 +190,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     std::shared_ptr<HashJoinState> join_state;
     std::vector<uint64_t> build_kept_cols;
     std::vector<uint64_t> probe_kept_cols;
+    std::vector<uint64_t> left_keys;
+    std::vector<uint64_t> right_keys;
     std::shared_ptr<bodo::Schema> output_schema;
 };
