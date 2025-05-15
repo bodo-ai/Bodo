@@ -13,7 +13,9 @@
  */
 class PhysicalLimit : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalLimit(uint64_t nrows) : n(nrows), local_remaining(nrows) {}
+    explicit PhysicalLimit(uint64_t nrows,
+                           std::shared_ptr<bodo::Schema> input_schema)
+        : n(nrows), local_remaining(nrows), output_schema(input_schema) {}
 
     virtual ~PhysicalLimit() = default;
 
@@ -138,12 +140,17 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
                     : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
+    /**
+     * @brief Get the physical schema of the output data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
-        // TODO
-        return nullptr;
+        return output_schema;
     }
 
    private:
     uint64_t n, local_remaining;
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
+    std::shared_ptr<bodo::Schema> output_schema;
 };
