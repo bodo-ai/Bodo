@@ -108,8 +108,10 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
                                              get_n_rows(select_local));
         collected_rows->builder->FinalizeActiveChunk();
         local_remaining -= select_local;
-        return local_remaining == 0 ? OperatorResult::FINISHED
-                                    : OperatorResult::NEED_MORE_INPUT;
+        return (local_remaining == 0 ||
+                prev_op_result == OperatorResult::FINISHED)
+                   ? OperatorResult::FINISHED
+                   : OperatorResult::NEED_MORE_INPUT;
     }
 
     /**
@@ -130,10 +132,9 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         auto next_batch = collected_rows->builder->PopChunk();
-        return {std::get<0>(next_batch),
-                collected_rows->builder->empty()
-                    ? OperatorResult::FINISHED
-                    : OperatorResult::HAVE_MORE_OUTPUT};
+        return {std::get<0>(next_batch), collected_rows->builder->empty()
+                                             ? OperatorResult::FINISHED
+                                             : OperatorResult::NEED_MORE_INPUT};
     }
 
     std::shared_ptr<bodo::Schema> getOutputSchema() override {
