@@ -348,6 +348,7 @@ class BodoStringMethods:
     def __init__(self, series):
         self._series = series
 
+    @check_args_fallback(unsupported="none")
     def lower(self):
         index = self._series.head(0).index
         new_metadata = pd.Series(
@@ -359,6 +360,7 @@ class BodoStringMethods:
             self._series._plan, new_metadata, "str.lower", (), {}
         )
 
+    @check_args_fallback(unsupported="none")
     def strip(self, to_strip=None):
         index = self._series.head(0).index
         new_metadata = pd.Series(
