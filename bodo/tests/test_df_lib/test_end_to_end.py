@@ -295,13 +295,13 @@ def test_filter(datapath, op):
 def test_filter_multiple1_pushdown(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & (bodo_df1.D > 80))]
+    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1[((py_df1.A < 20) & (py_df1.D > 80))]
+    py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
@@ -313,7 +313,6 @@ def test_filter_multiple1_pushdown(datapath):
     )
 
 
-@pytest.mark.skip(reason="Needs conjunction non-pushdown working.")
 def test_filter_multiple1(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -328,8 +327,8 @@ def test_filter_multiple1(datapath):
         reset_index=True,
     )
 
-    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & (bodo_df1.D > 80))]
-    py_df2 = py_df1[((py_df1.A < 20) & (py_df1.D > 80))]
+    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
+    py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
@@ -388,6 +387,73 @@ def test_filter_string(datapath):
     assert bodo_df2.is_lazy_plan()
 
     py_df2 = py_df1[py_df1.B == "gamma"]
+
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_filter_datetime_pushdown(datapath, op):
+    """Test for standalone filter."""
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[
+        eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")
+    ]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    _test_equal(pre, 2)
+    _test_equal(post, 1)
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[eval(f"py_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
+
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_filter_datetime(datapath, op):
+    """Test for standalone filter."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+
+    # Force read parquet node to execute so the filter doesn't get pushed into the read.
+    _test_equal(
+        bodo_df1.copy(),
+        py_df1,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    bodo_df2 = bodo_df1[
+        eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")
+    ]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    py_df2 = py_df1[eval(f"py_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
 
     _test_equal(
         bodo_df2.copy(),

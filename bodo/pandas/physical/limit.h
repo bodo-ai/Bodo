@@ -36,11 +36,11 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
         std::vector<uint64_t> row_counts(n_pes);
 
         // Sum up total rows this rank has collected.
-        uint64_t cur_rows = std::accumulate(
-            collected_rows->builder->begin(), collected_rows->builder->end(), 0,
-            [](uint64_t acc, const std::shared_ptr<table_info>& item) {
-                return acc + item->nrows();
-            });
+        uint64_t cur_rows = 0;
+        for (auto it = collected_rows->builder->begin();
+             it != collected_rows->builder->end(); ++it) {
+            cur_rows += (*it)->nrows();
+        }
         CHECK_MPI(MPI_Allgather(&cur_rows, 1, MPI_UNSIGNED_LONG_LONG,
                                 row_counts.data(), 1, MPI_UNSIGNED_LONG_LONG,
                                 MPI_COMM_WORLD),

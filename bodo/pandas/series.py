@@ -13,6 +13,7 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
+    BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
     arrow_to_empty_df,
@@ -124,7 +125,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
             or isinstance(other, bool)
         ):
-            raise TypeError(
+            raise BodoLibNotImplementedException(
                 "'other' should be boolean BodoSeries or a bool. "
                 f"Got {type(other).__name__} instead."
             )
@@ -183,9 +184,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         empty_data = _empty_like(self)
 
         assert isinstance(empty_data, pd.Series), "Series expected"
-        return wrap_plan(
-            plan=LazyPlan("LogicalUnaryOp", empty_data, self._plan, "__invert__"),
+        source_expr = get_proj_expr_single(self._plan)
+        expr = LazyPlan("UnaryOpExpression", empty_data, source_expr, "__invert__")
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            # Use the original table without the Series projection node.
+            self._plan.args[0],
+            (expr,),
         )
+        return wrap_plan(plan=plan)
 
     @staticmethod
     def from_lazy_mgr(
