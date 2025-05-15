@@ -201,6 +201,10 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const T &value) {
 std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
     const std::string &value);
 
+// arrow::TimestampSclar specialization
+std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
+    const arrow::TimestampScalar &value);
+
 // bool specialization
 std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value);
 

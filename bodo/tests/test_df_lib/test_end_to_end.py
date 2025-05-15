@@ -400,41 +400,6 @@ def test_filter_string(datapath):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-def test_filter_date(datapath, op):
-    """Test for standalone filter."""
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-
-    # Force read parquet node to execute.
-    _test_equal(
-        bodo_df1.copy(),
-        py_df1,
-        check_pandas_types=False,
-        sort_output=True,
-        reset_index=True,
-    )
-
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-
-    bodo_df2 = bodo_df1[eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-06').date()")]
-
-    # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2.is_lazy_plan()
-
-    py_df2 = py_df1[eval(f"py_df1.G {op_str} pd.to_datetime('2025-07-06').date()")]
-
-    _test_equal(
-        bodo_df2.copy(),
-        py_df2,
-        check_pandas_types=False,
-        sort_output=True,
-        reset_index=True,
-    )
-
-
-@pytest.mark.parametrize(
-    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
-)
 def test_filter_datetime(datapath, op):
     """Test for standalone filter."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -451,12 +416,12 @@ def test_filter_datetime(datapath, op):
 
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    bodo_df2 = bodo_df1[eval(f"bodo_df1.G {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
+    bodo_df2 = bodo_df1[eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    py_df2 = py_df1[eval(f"py_df1.G {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
+    py_df2 = py_df1[eval(f"py_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
 
     _test_equal(
         bodo_df2.copy(),

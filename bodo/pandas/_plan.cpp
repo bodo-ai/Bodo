@@ -4,6 +4,7 @@
 
 #include "_executor.h"
 #include "duckdb/common/types.hpp"
+#include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -76,6 +77,11 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val) {
 duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(val));
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(int64_t val) {
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value::TIMESTAMPNS(duckdb::timestamp_ns_t(val)));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(

@@ -10,6 +10,7 @@ from libcpp.vector cimport vector
 from libcpp cimport bool as c_bool
 import operator
 from libc.stdint cimport int64_t
+import pandas as pd
 
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
@@ -285,6 +286,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
     cdef unique_ptr[CExpression] make_const_int_expr(int val) except +
     cdef unique_ptr[CExpression] make_const_float_expr(float val) except +
+    cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
@@ -452,6 +454,11 @@ cdef unique_ptr[CExpression] make_expr(val):
     elif isinstance(val, str):
         val_cstr = val.encode()
         return move(make_const_string_expr(val_cstr))
+    elif isinstance(val, pd.Timestamp):
+        if val.resolution.nanoseconds == 1:
+            return move(make_const_timestamp_ns_expr(val.value))
+        else:
+            raise ValueError("Only support ns timestamp resolution currently, not " + str(val.resolution))
     else:
         raise ValueError("Unknown expr type in make_expr " + str(type(val)))
 
