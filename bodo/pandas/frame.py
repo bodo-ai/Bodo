@@ -3,7 +3,6 @@ from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 
 import pandas as pd
-import pyarrow as pa
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
@@ -17,10 +16,10 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     check_args_fallback,
-    get_empty_series_arrow,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
+    get_scalar_udf_result_type,
     is_single_projection,
     make_col_ref_exprs,
     wrap_plan,
@@ -647,62 +646,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             "Only setting a column with a Series created from the same dataframe is supported."
         )
 
-    def _infer_udf_dtype(self, func, axis, args, **kwargs) -> pd.Series:
-        """Infer the output type from applying a UDF.
-
-        Args:
-            func: The UDF to test.
-            axis: The axis to apply the function over.
-            args: Positional args to be passed to the UDF.
-
-        Raises:
-            BodoLibNotImplementedException: If the dtype cannot be infered.
-
-        Returns:
-            Empty Series with the dtype matching the output of the UDF
-            (or equivalent pyarrow dtype)
-        """
-        # TODO: Tune sample sizes, return
-        sample_sizes = (1, 4, 9, 25, 100)
-
-        except_msg = ""
-        for sample_size in sample_sizes:
-            df_sample = self.head(sample_size).execute_plan()
-            pd_sample = pd.DataFrame(df_sample)
-            out_sample = pd_sample.apply(func, axis=axis, args=args, **kwargs)
-
-            if not isinstance(out_sample, pd.Series):
-                raise BodoLibNotImplementedException(
-                    f"expected output to be Series, got: {type(out_sample)}."
-                )
-
-            try:
-                empty_series = get_empty_series_arrow(out_sample)
-            except pa.lib.ArrowTypeError as e:
-                # Could not get a pyarrow type for the series, Fallback to pandas.
-                except_msg = f", got: {str(e)}. Make sure your UDF returns the same type for each row."
-                break
-
-            # validate that the dtype was inferred correctly
-            # if the output of the UDF is all None and "object" type,
-            # we cannot infer the dtype properly.
-            if isinstance(
-                dtype := empty_series.dtype, pd.ArrowDtype
-            ) and not pa.types.is_null(dtype.pyarrow_dtype):
-                return empty_series
-
-            except_msg = f", result of applying udf on a sample of {sample_size} row(s) was all null"
-
-            # all the data was collected and couldn't infer types,
-            # fall back to pandas.
-            if len(out_sample) < sample_size:
-                break
-
-        raise BodoLibNotImplementedException(
-            f"could not infer the output type of user defined function{except_msg}."
-        )
-
-    @check_args_fallback(supported=["func", "axis"])
+    @check_args_fallback(supported=["func", "axis", "args"])
     def apply(
         self,
         func,
@@ -724,7 +668,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.apply(): only axis=1 supported"
             )
 
-        empty_series = self._infer_udf_dtype(func, axis, args, **kwargs)
+        empty_series = get_scalar_udf_result_type(self, "apply", func, axis=axis)
 
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
@@ -735,7 +679,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 False,  # is_series
                 True,  # is_method
                 (func,),  # args
-                {"axis": 1},  # kwargs
+                {"axis": 1, "args": args} | kwargs,  # kwargs
             ),
             tuple(range(len(self.columns) + get_n_index_arrays(self.head(0).index))),
         )

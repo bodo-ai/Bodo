@@ -15,10 +15,10 @@ from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     LazyPlan,
     check_args_fallback,
-    get_empty_series_arrow,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
+    get_scalar_udf_result_type,
     is_single_colref_projection,
     make_col_ref_exprs,
     wrap_plan,
@@ -310,22 +310,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def str(self):
         return BodoStringMethods(self)
 
-    @check_args_fallback(supported=["arg"])
+    @check_args_fallback(unsupported="none")
     def map(self, arg, na_action=None):
         """
         Apply function to elements in a Series
         """
 
         # Get output data type by running the UDF on a sample of the data.
-        # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
-        # TODO: remove when LIMIT plan is properly supported for head().
-        series_sample = self.head(1).execute_plan()
-        pd_sample = pd.Series(series_sample)
-        out_sample = pd_sample.map(arg)
+        empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
 
-        empty_series = get_empty_series_arrow(out_sample)
-
-        return _get_series_python_func_plan(self._plan, empty_series, "map", (arg,), {})
+        return _get_series_python_func_plan(
+            self._plan, empty_series, "map", (arg, na_action), {}
+        )
 
 
 class BodoStringMethods:
