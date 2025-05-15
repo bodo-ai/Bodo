@@ -85,10 +85,9 @@ class PhysicalReadPandas : public PhysicalSource {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
-        if (this->current_row >= this->num_rows) {
-            throw std::runtime_error(
-                "PhysicalReadPandas::ProduceBatch: No more rows to read");
-        }
+        // NOTE: current_row may be greater than num_rows since sources need to
+        // be able to produce empty batches. df.iloc will return an empty
+        // DataFrame if the slice is out of bounds.
 
         // Extract slice from pandas DataFrame
         // df.iloc[current_row:current_row+batch_size]
