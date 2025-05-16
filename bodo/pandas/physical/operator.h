@@ -20,14 +20,16 @@ enum class OperatorType : uint8_t {
 /// 1. NEED_MORE_INPUT means the operator is ready for additional input
 /// 2. HAVE_MORE_OUTPUT means the operator can produce more output without
 /// additional input.
-/// 3. FINISHED means the pipeline should terminate
+/// 3. FINISHED means the operator is done executing.
+// This is passed across operators and the pipeline terminates when the sink
+// operator returns this status.
+// DuckDB's description for background (Bodo's
+// semantics is different per above): https://youtu.be/MA0OsvYFGrc?t=1205
 enum class OperatorResult : uint8_t {
     NEED_MORE_INPUT,
     HAVE_MORE_OUTPUT,
     FINISHED,
 };
-
-enum class ProducerResult : bool { HAVE_MORE_OUTPUT, FINISHED };
 
 /**
  * @brief Physical operators to be used in the execution pipelines (NOTE: they
@@ -50,16 +52,23 @@ class PhysicalSource : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SOURCE; }
 
-    virtual std::pair<std::shared_ptr<table_info>, ProducerResult>
+    virtual std::pair<std::shared_ptr<table_info>, OperatorResult>
     ProduceBatch() = 0;
+
+    /**
+     * @brief Get the physical schema of the source data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
 class PhysicalSink : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SINK; }
 
-    virtual OperatorResult ConsumeBatch(
-        std::shared_ptr<table_info> input_batch) = 0;
+    virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                        OperatorResult prev_op_result) = 0;
     virtual std::shared_ptr<table_info> GetResult() = 0;
 };
 
@@ -70,7 +79,15 @@ class PhysicalSourceSink : public PhysicalOperator {
     }
 
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) = 0;
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) = 0;
+
+    /**
+     * @brief Get the physical schema of the output data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
 /**

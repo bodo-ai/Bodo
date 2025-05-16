@@ -499,7 +499,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], self, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["on"], disable=True)
+    @check_args_fallback(supported=["left_on", "right_on"])
     def merge(
         self,
         right: "BodoDataFrame | BodoSeries",
@@ -516,6 +516,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         validate: MergeValidate | None = None,
     ):  # -> BodoDataFrame:
         from bodo.pandas.base import _empty_like
+
+        # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
+        # key columns with the same names from output
+
+        # TODO[BSE-4811]: add proper argument validation
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
@@ -542,17 +547,28 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             left_on = []
         if right_on is None:
             right_on = []
+
+        key_indices = [
+            (self.columns.get_loc(c), right.columns.get_loc(c)) for c in on
+        ] + [
+            (self.columns.get_loc(a), right.columns.get_loc(b))
+            for a, b in zip(left_on, right_on)
+        ]
+
+        # TODO[BSE-4812]: support keys that are not in the beginning of the input tables
+        for i in range(len(key_indices)):
+            if key_indices[i] != (i, i):
+                raise BodoLibNotImplementedException(
+                    "Keys must be in the beginning of the input tables"
+                )
+
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
             empty_data,
             self._plan,
             right._plan,
             plan_optimizer.CJoinType.INNER,
-            [(self.columns.get_loc(c), right.columns.get_loc(c)) for c in on]
-            + [
-                (self.columns.get_loc(a), right.columns.get_loc(b))
-                for a, b in zip(left_on, right_on)
-            ],
+            key_indices,
         )
 
         return wrap_plan(planComparisonJoin)
