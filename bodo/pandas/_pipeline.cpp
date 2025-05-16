@@ -40,7 +40,7 @@ bool Pipeline::midPipelineExecute(unsigned idx,
                 return false;
             }
 
-            // Must be the HAVE_MORE_OUTPUT case so iterato the while loop
+            // Must be the HAVE_MORE_OUTPUT case so iterate the while loop
             // to give this operator a chance to produce more output.
             // Currently, streaming operators assume input to be empty in this
             // case to match BodoSQL.
