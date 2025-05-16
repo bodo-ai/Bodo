@@ -66,7 +66,9 @@ class PhysicalProjection : public PhysicalSourceSink {
                 std::shared_ptr<table_info> udf_input =
                     ProjectTable(input_batch, selected_columns);
                 std::shared_ptr<table_info> udf_output =
-                    runPythonScalarFunction(udf_input, scalar_func_data.args);
+                    runPythonScalarFunction(udf_input,
+                                            scalar_func_data.result_type,
+                                            scalar_func_data.args);
                 // Extracting the data column only assuming Index columns are
                 // the same as input and already included as column refs in
                 // exprs.
@@ -98,11 +100,13 @@ class PhysicalProjection : public PhysicalSourceSink {
      * output table (single data column plus Index columns).
      *
      * @param input_batch input table batch
+     * @param result_type The expected result type of the function
      * @param args Python arguments for the function
      * @return std::shared_ptr<table_info> output table from the Python function
      */
     static std::shared_ptr<table_info> runPythonScalarFunction(
-        std::shared_ptr<table_info> input_batch, PyObject* args);
+        std::shared_ptr<table_info> input_batch,
+        std::shared_ptr<arrow::Schema> result_type, PyObject* args);
 
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs;
 };

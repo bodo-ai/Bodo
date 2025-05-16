@@ -154,19 +154,24 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
  *
  */
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
-    BodoPythonScalarFunctionData(PyObject *args) : args(args) {
+    BodoPythonScalarFunctionData(std::shared_ptr<arrow::Schema> result_type,
+                                 PyObject *args)
+        : result_type(result_type), args(args) {
         Py_INCREF(args);
     }
     ~BodoPythonScalarFunctionData() override { Py_DECREF(args); }
     bool Equals(const FunctionData &other_p) const override {
         const BodoPythonScalarFunctionData &other =
             other_p.Cast<BodoPythonScalarFunctionData>();
-        return (other.args == this->args);
+        return (other.args == this->args) &&
+               (other.result_type == this->result_type);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args);
+        return duckdb::make_uniq<BodoPythonScalarFunctionData>(
+            this->result_type, this->args);
     }
 
+    std::shared_ptr<arrow::Schema> result_type;
     PyObject *args;
 };
 

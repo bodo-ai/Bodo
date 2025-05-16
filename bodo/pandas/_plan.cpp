@@ -291,7 +291,7 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
         "bodo_udf", source->types, out_type, RunFunction);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoPythonScalarFunctionData>(args);
+        duckdb::make_uniq<BodoPythonScalarFunctionData>(out_schema, args);
 
     std::vector<duckdb::ColumnBinding> source_cols =
         source->GetColumnBindings();

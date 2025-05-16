@@ -536,10 +536,11 @@ def _get_function_from_path(path_str: str):
     return getattr(module, func_name)
 
 
-def run_func_on_table(cpp_table, arrow_schema, in_args):
+def run_func_on_table(cpp_table, arrow_schema, out_schema, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
+    result_type = out_schema.types[0]
     input = cpp_table_to_df(cpp_table, arrow_schema)
     func_path_str, is_series, is_method, args, kwargs = in_args
 
@@ -555,12 +556,10 @@ def run_func_on_table(cpp_table, arrow_schema, in_args):
     else:
         # TODO: test this path
         func = _get_function_from_path(func_path_str)
-        out = func(input, *args, **kwargs)
+        out: pd.Series = func(input, *args, **kwargs)
 
-    out_df = pd.DataFrame({"OUT": out})
+    out_df = pd.DataFrame({"OUT": out.astype(pd.ArrowDtype(result_type))})
 
-    # TODO [BSE-4788]: replace with convert_to_arrow_dtypes util
-    out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
     return df_to_cpp_table(out_df)
 
 
