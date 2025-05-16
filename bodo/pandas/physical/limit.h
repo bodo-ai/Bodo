@@ -145,12 +145,12 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
 
    private:
     uint64_t n, local_remaining;
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
-    std::shared_ptr<bodo::Schema> output_schema;
+    const std::shared_ptr<bodo::Schema> output_schema;
 };

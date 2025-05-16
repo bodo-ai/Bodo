@@ -125,7 +125,7 @@ class PhysicalProjection : public PhysicalSourceSink {
                                     : OperatorResult::NEED_MORE_INPUT};
     }
 
-    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
 

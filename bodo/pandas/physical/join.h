@@ -200,7 +200,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      *
      * @return std::shared_ptr<bodo::Schema>
      */
-    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
 

@@ -136,7 +136,7 @@ class PhysicalReadPandas : public PhysicalSource {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return bodo::Schema::FromArrowSchema(this->arrow_schema);
     }
 

@@ -60,7 +60,7 @@ class PhysicalSource : public PhysicalOperator {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    virtual std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
 class PhysicalSink : public PhysicalOperator {
@@ -87,7 +87,7 @@ class PhysicalSourceSink : public PhysicalOperator {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    virtual std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
 /**

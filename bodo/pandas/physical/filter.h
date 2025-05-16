@@ -63,12 +63,12 @@ class PhysicalFilter : public PhysicalSourceSink {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         // Filter's output schema is the same as the input schema
         return output_schema;
     }
 
    private:
     std::shared_ptr<PhysicalExpression> expression;
-    std::shared_ptr<bodo::Schema> output_schema;
+    const std::shared_ptr<bodo::Schema> output_schema;
 };
