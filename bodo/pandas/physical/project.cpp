@@ -1,13 +1,13 @@
 #include "project.h"
 #include <arrow/python/pyarrow.h>
+#include <arrow/type.h>
 #include <object.h>
 #include <iostream>
 
 std::shared_ptr<table_info> PhysicalProjection::runPythonScalarFunction(
     std::shared_ptr<table_info> input_batch,
-    std::shared_ptr<arrow::Schema> result_type, PyObject* args) {
+    std::shared_ptr<arrow::DataType> result_type, PyObject* args) {
     // Call bodo.pandas.utils.run_apply_udf() to run the UDF
-    PyObject* result_type_py(arrow::py::wrap_schema(result_type));
 
     // Import the bodo.pandas.utils module
     PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.utils");
@@ -20,6 +20,7 @@ std::shared_ptr<table_info> PhysicalProjection::runPythonScalarFunction(
     // and UDF function
     PyObject* pyarrow_schema =
         arrow::py::wrap_schema(input_batch->schema()->ToArrowSchema());
+    PyObject* result_type_py(arrow::py::wrap_data_type(result_type));
     PyObject* result = PyObject_CallMethod(
         bodo_module, "run_func_on_table", "LOOO",
         reinterpret_cast<int64_t>(new table_info(*input_batch)), pyarrow_schema,

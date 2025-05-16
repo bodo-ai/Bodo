@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arrow/type.h>
 #include <utility>
 #include "../_plan.h"
 #include "../libs/_array_utils.h"
@@ -106,7 +107,7 @@ class PhysicalProjection : public PhysicalSourceSink {
      */
     static std::shared_ptr<table_info> runPythonScalarFunction(
         std::shared_ptr<table_info> input_batch,
-        std::shared_ptr<arrow::Schema> result_type, PyObject* args);
+        std::shared_ptr<arrow::DataType> result_type, PyObject* args);
 
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs;
 };

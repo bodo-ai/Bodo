@@ -1,6 +1,8 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
+#include <arrow/type_fwd.h>
 #include <fmt/format.h>
+#include <memory>
 #include <utility>
 
 #include "_executor.h"
@@ -282,16 +284,18 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
     // Maybe not be exactly 1 due to index column.
     assert(out_types.size() > 0);
-    duckdb::LogicalType out_type = out_types[0];
+    duckdb::LogicalType out_type_duck = out_types[0];
+    std::shared_ptr<arrow::DataType> out_type_arrow =
+        out_schema->field(0)->type();
 
     // Necessary before accessing source->types attribute
     source->ResolveOperatorTypes();
 
     // Create ScalarFunction for UDF
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
-        "bodo_udf", source->types, out_type, RunFunction);
+        "bodo_udf", source->types, out_type_duck, RunFunction);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoPythonScalarFunctionData>(out_schema, args);
+        duckdb::make_uniq<BodoPythonScalarFunctionData>(out_type_arrow, args);
 
     std::vector<duckdb::ColumnBinding> source_cols =
         source->GetColumnBindings();
@@ -306,9 +310,9 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
 
     // Create UDF expression
     duckdb::unique_ptr<duckdb::BoundFunctionExpression> scalar_expr =
-        make_uniq<duckdb::BoundFunctionExpression>(out_type, scalar_function,
-                                                   std::move(udf_in_exprs),
-                                                   std::move(bind_data1));
+        make_uniq<duckdb::BoundFunctionExpression>(
+            out_type_duck, scalar_function, std::move(udf_in_exprs),
+            std::move(bind_data1));
 
     return scalar_expr;
 }

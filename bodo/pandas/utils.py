@@ -536,11 +536,10 @@ def _get_function_from_path(path_str: str):
     return getattr(module, func_name)
 
 
-def run_func_on_table(cpp_table, arrow_schema, out_schema, in_args):
+def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
-    result_type = out_schema.types[0]
     input = cpp_table_to_df(cpp_table, arrow_schema)
     func_path_str, is_series, is_method, args, kwargs = in_args
 
@@ -556,7 +555,7 @@ def run_func_on_table(cpp_table, arrow_schema, out_schema, in_args):
     else:
         # TODO: test this path
         func = _get_function_from_path(func_path_str)
-        out: pd.Series = func(input, *args, **kwargs)
+        out = func(input, *args, **kwargs)
 
     out_df = pd.DataFrame({"OUT": out.astype(pd.ArrowDtype(result_type))})
 
@@ -812,7 +811,7 @@ def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
 
         try:
             empty_series = get_empty_series_arrow(out_sample)
-        except pa.lib.ArrowTypeError as e:
+        except (pa.lib.ArrowTypeError, pa.lib.ArrowInvalid) as e:
             # Could not get a pyarrow type for the series, Fallback to pandas.
             except_msg = f", got: {str(e)}."
             break

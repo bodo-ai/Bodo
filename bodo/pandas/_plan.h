@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Python.h>
+#include <arrow/type.h>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
@@ -154,7 +155,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
  *
  */
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
-    BodoPythonScalarFunctionData(std::shared_ptr<arrow::Schema> result_type,
+    BodoPythonScalarFunctionData(std::shared_ptr<arrow::DataType> result_type,
                                  PyObject *args)
         : result_type(result_type), args(args) {
         Py_INCREF(args);
@@ -171,7 +172,7 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
             this->result_type, this->args);
     }
 
-    std::shared_ptr<arrow::Schema> result_type;
+    std::shared_ptr<arrow::DataType> result_type;
     PyObject *args;
 };
 
