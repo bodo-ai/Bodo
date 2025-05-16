@@ -1,7 +1,7 @@
 #include "_duckdb_util.h"
 
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
-             uint64_t, bool, std::string, float, double>
+             uint64_t, bool, std::string, float, double, arrow::TimestampScalar>
 extractValue(const duckdb::Value& value) {
     duckdb::LogicalTypeId type = value.type().id();
     switch (type) {
@@ -29,6 +29,14 @@ extractValue(const duckdb::Value& value) {
             return value.GetValue<bool>();
         case duckdb::LogicalTypeId::VARCHAR:
             return value.GetValue<std::string>();
+        case duckdb::LogicalTypeId::TIMESTAMP_NS: {
+            // Define a timestamp type with nanosecond precision
+            auto timestamp_type = arrow::timestamp(arrow::TimeUnit::NANO);
+            duckdb::timestamp_ns_t extracted =
+                value.GetValue<duckdb::timestamp_ns_t>();
+            // Create a TimestampScalar with nanosecond value
+            return arrow::TimestampScalar(extracted.value, timestamp_type);
+        } break;
         default:
             throw std::runtime_error("extractValue unhandled type." +
                                      std::to_string(static_cast<int>(type)));
