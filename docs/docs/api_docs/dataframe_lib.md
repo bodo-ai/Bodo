@@ -1,4 +1,4 @@
-# Bodo Pandas API (Bodo DataFrame Library)
+# Bodo Pandas API (Bodo DataFrame Library) {#dataframe-lib}
 
 The Bodo DataFrame Library is designed to accelerate and scale Pandas workflows with just a one-line change — simply replace:
 
