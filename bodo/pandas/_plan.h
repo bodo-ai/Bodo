@@ -128,7 +128,7 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
 
     PyObject *df;
-    std::shared_ptr<arrow::Schema> arrow_schema;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
 };
 
 /**
@@ -152,7 +152,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
     std::string result_id;
-    std::shared_ptr<arrow::Schema> arrow_schema;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
 };
 
 /**

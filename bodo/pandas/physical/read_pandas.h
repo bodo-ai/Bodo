@@ -14,7 +14,7 @@ class PhysicalReadPandas : public PhysicalSource {
     PyObject* df;
     int64_t current_row = 0;
     int64_t num_rows;
-    std::shared_ptr<arrow::Schema> arrow_schema;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
 
    public:
     explicit PhysicalReadPandas(PyObject* _df_or_series,
