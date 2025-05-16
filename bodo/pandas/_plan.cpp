@@ -298,7 +298,7 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
         "bodo_udf", source->types, out_type, RunFunction);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoPythonScalarFunctionData>(args);
+        duckdb::make_uniq<BodoPythonScalarFunctionData>(args, out_schema);
 
     std::vector<duckdb::ColumnBinding> source_cols =
         source->GetColumnBindings();
@@ -336,9 +336,9 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
         duckdb::JoinCondition cond;
         cond.comparison = duckdb::ExpressionType::COMPARE_EQUAL;
         cond.left = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            cbtype, duckdb::ColumnBinding(0, cond_pair.first));
+            cbtype, lhs_duck->GetColumnBindings()[cond_pair.first]);
         cond.right = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            cbtype, duckdb::ColumnBinding(0, cond_pair.second));
+            cbtype, rhs_duck->GetColumnBindings()[cond_pair.second]);
         // Add the join condition to the join node.
         comp_join->conditions.push_back(std::move(cond));
     }
@@ -400,14 +400,15 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_bind.hpp#L19
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/pandas/scan.cpp#L185
 
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     BodoDataFrameScanFunction table_function = BodoDataFrameScanFunction();
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoDataFrameSeqScanFunctionData>(df);
+        duckdb::make_uniq<BodoDataFrameSeqScanFunctionData>(df, arrow_schema);
 
     // Convert Arrow schema to DuckDB
-    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
 
     duckdb::virtual_column_map_t virtual_columns;
@@ -429,13 +430,14 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
     std::string result_id, PyObject *pyarrow_schema) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
     BodoDataFrameScanFunction table_function = BodoDataFrameScanFunction();
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoDataFrameParallelScanFunctionData>(result_id);
+        duckdb::make_uniq<BodoDataFrameParallelScanFunctionData>(result_id,
+                                                                 arrow_schema);
 
     // Convert Arrow schema to DuckDB
-    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
 
     auto out_get = duckdb::make_uniq<duckdb::LogicalGet>(
@@ -694,14 +696,16 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
             "Result ID {} not found in result registry", result_id.c_str()));
     }
 
-    return std::make_shared<PhysicalReadPandas>(df, selected_columns);
+    return std::make_shared<PhysicalReadPandas>(df, selected_columns,
+                                                this->arrow_schema);
 }
 
 std::shared_ptr<PhysicalSource>
 BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
-    return std::make_shared<PhysicalReadPandas>(df, selected_columns);
+    return std::make_shared<PhysicalReadPandas>(df, selected_columns,
+                                                this->arrow_schema);
 }
 
 std::shared_ptr<PhysicalSource>

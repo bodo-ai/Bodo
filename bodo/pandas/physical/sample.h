@@ -12,7 +12,9 @@
  */
 class PhysicalSample : public PhysicalSourceSink {
    public:
-    explicit PhysicalSample(float percent) : percentage(percent) {}
+    explicit PhysicalSample(float percent,
+                            std::shared_ptr<bodo::Schema> input_schema)
+        : percentage(percent), output_schema(input_schema) {}
 
     virtual ~PhysicalSample() = default;
 
@@ -26,7 +28,8 @@ class PhysicalSample : public PhysicalSourceSink {
      * batch
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) override {
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) override {
         uint64_t select_this_time = stochasticRound(input_batch->nrows());
 
         // Perhaps we should randomly select rather than just
@@ -40,8 +43,13 @@ class PhysicalSample : public PhysicalSourceSink {
         return {out_table_info, OperatorResult::NEED_MORE_INPUT};
     }
 
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        return output_schema;
+    }
+
    private:
     const float percentage;
+    const std::shared_ptr<bodo::Schema> output_schema;
 
     uint64_t stochasticRound(uint64_t nrows) {
         double scaled = nrows * percentage;

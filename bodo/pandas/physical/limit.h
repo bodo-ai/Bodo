@@ -13,7 +13,9 @@
  */
 class PhysicalLimit : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalLimit(uint64_t nrows) : n(nrows), local_remaining(nrows) {}
+    explicit PhysicalLimit(uint64_t nrows,
+                           std::shared_ptr<bodo::Schema> input_schema)
+        : n(nrows), local_remaining(nrows), output_schema(input_schema) {}
 
     virtual ~PhysicalLimit() = default;
 
@@ -96,8 +98,8 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      * The output table from the current operation and whether there is more
      * output.
      */
-    OperatorResult ConsumeBatch(
-        std::shared_ptr<table_info> input_batch) override {
+    OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                OperatorResult prev_op_result) override {
         if (!collected_rows) {
             collected_rows = std::make_unique<ChunkedTableBuilderState>(
                 input_batch->schema(), input_batch->nrows());
@@ -108,8 +110,10 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
                                              get_n_rows(select_local));
         collected_rows->builder->FinalizeActiveChunk();
         local_remaining -= select_local;
-        return local_remaining == 0 ? OperatorResult::FINISHED
-                                    : OperatorResult::NEED_MORE_INPUT;
+        return (local_remaining == 0 ||
+                prev_op_result == OperatorResult::FINISHED)
+                   ? OperatorResult::FINISHED
+                   : OperatorResult::NEED_MORE_INPUT;
     }
 
     /**
@@ -125,18 +129,28 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     /**
      * @brief ProduceBatch - act as a data source
      *
-     * returns std::pair<std::shared_ptr<table_info>, ProducerResult>
+     * returns std::pair<std::shared_ptr<table_info>, OperatorResult>
      */
-    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
+    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         auto next_batch = collected_rows->builder->PopChunk();
         return {std::get<0>(next_batch),
                 collected_rows->builder->empty()
-                    ? ProducerResult::FINISHED
-                    : ProducerResult::HAVE_MORE_OUTPUT};
+                    ? OperatorResult::FINISHED
+                    : OperatorResult::HAVE_MORE_OUTPUT};
+    }
+
+    /**
+     * @brief Get the physical schema of the output data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        return output_schema;
     }
 
    private:
     uint64_t n, local_remaining;
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
+    const std::shared_ptr<bodo::Schema> output_schema;
 };
