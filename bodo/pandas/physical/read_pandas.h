@@ -110,9 +110,11 @@ class PhysicalReadPandas : public PhysicalSource {
             arrow::py::unwrap_table(pa_table).ValueOrDie();
 
         // Convert Arrow arrays to Bodo arrays
-        auto* bodo_pool = bodo::BufferPool::DefaultPtr();
+        // (passing nullptr for pool since not allocated through Bodo so can't
+        // support spilling etc,
+        // TODO: pass bodo's buffer pool to Arrow)
         std::shared_ptr<table_info> out_table =
-            arrow_table_to_bodo(table, bodo_pool);
+            arrow_table_to_bodo(table, nullptr);
 
         // Clean up Python references
         Py_DECREF(iloc);
