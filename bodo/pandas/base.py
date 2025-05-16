@@ -1,3 +1,5 @@
+import typing as pt
+
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
@@ -105,3 +107,18 @@ def _empty_like(val):
         out = out.iloc[:, 0]
 
     return out
+
+
+@check_args_fallback(supported="all")
+def read_iceberg(
+    table_identifier: str,
+    catalog_name: str | None = None,
+    catalog_properties: dict[str, pt.Any] | None = None,
+    row_filter: str | None = None,
+    selected_fields: tuple[str] | None = None,
+    case_sensitive: bool = True,
+    snapshot_id: int | None = None,
+    limit: int | None = None,
+    scan_properties: dict[str, pt.Any] | None = None,
+) -> BodoDataFrame:
+    return BodoDataFrame()
