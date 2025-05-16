@@ -8,7 +8,6 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pytest
 
 import bodo
@@ -146,10 +145,7 @@ series_val_params = [
         id="string_non_unicode",
     ),
     pytest.param(
-        pd.Series(
-            [[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]],
-            dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
-        ),
+        pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
         id="integer_array",
     ),
     pytest.param(
