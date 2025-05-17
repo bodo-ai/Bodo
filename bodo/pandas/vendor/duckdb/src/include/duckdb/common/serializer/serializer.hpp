@@ -20,7 +20,6 @@
 #include "duckdb/common/optional_idx.hpp"
 #include "duckdb/common/optionally_owned_ptr.hpp"
 #include "duckdb/common/value_operations/value_operations.hpp"
-#include "duckdb/execution/operator/csv_scanner/csv_option.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/common/insertion_order_preserving_map.hpp"
 
@@ -114,21 +113,6 @@ public:
 		}
 		OnOptionalPropertyBegin(field_id, tag, true);
 		WriteValue(value);
-		OnOptionalPropertyEnd(true);
-	}
-
-	// Specialization for Value (default Value comparison throws when comparing nulls)
-	template <class T>
-	void WritePropertyWithDefault(const field_id_t field_id, const char *tag, const CSVOption<T> &value,
-	                              const T &default_value) {
-		// If current value is default, don't write it
-		if (!options.serialize_default_values && (value == default_value)) {
-			OnOptionalPropertyBegin(field_id, tag, false);
-			OnOptionalPropertyEnd(false);
-			return;
-		}
-		OnOptionalPropertyBegin(field_id, tag, true);
-		WriteValue(value.GetValue());
 		OnOptionalPropertyEnd(true);
 	}
 

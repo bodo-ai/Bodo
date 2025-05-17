@@ -52,9 +52,6 @@ public:
 		return std::move(art);
 	}
 
-	//! Plan index construction.
-	static PhysicalOperator &CreatePlan(PlanIndexInput &input);
-
 	//! Root of the tree.
 	Node tree = Node();
 	//! Fixed-size allocators holding the ART nodes.
