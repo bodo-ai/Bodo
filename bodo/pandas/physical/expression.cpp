@@ -26,6 +26,23 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
     return array;
 }
 
+std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
+    const arrow::TimestampScalar &value) {
+    arrow::TimestampBuilder builder(arrow::timestamp(arrow::TimeUnit::NANO),
+                                    arrow::default_memory_pool());
+    arrow::Status status;
+    status = builder.Append(value.value);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.Append failed.");
+    }
+    std::shared_ptr<arrow::Array> array;
+    status = builder.Finish(&array);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.Finish failed.");
+    }
+    return array;
+}
+
 std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value) {
     arrow::BooleanBuilder builder;
 

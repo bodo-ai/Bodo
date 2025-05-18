@@ -89,6 +89,7 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
 class PhysicalReadParquet : public PhysicalSource {
    private:
     std::shared_ptr<ParquetReader> internal_reader;
+    std::shared_ptr<arrow::Schema> arrow_schema;
 
    public:
     // TODO: Fill in the contents with info from the logical operator
@@ -104,9 +105,10 @@ class PhysicalReadParquet : public PhysicalSource {
 
         // Extract metadata from pyarrow schema (for Pandas Index reconstruction
         // of dataframe later)
-        std::shared_ptr<arrow::Schema> schema = unwrap_schema(pyarrow_schema);
+        this->arrow_schema = unwrap_schema(pyarrow_schema);
         this->out_metadata = std::make_shared<TableMetadata>(
-            schema->metadata()->keys(), schema->metadata()->values());
+            this->arrow_schema->metadata()->keys(),
+            this->arrow_schema->metadata()->values());
 
         PyObject *schema_fields =
             PyObject_GetAttrString(pyarrow_schema, "names");
@@ -170,19 +172,28 @@ class PhysicalReadParquet : public PhysicalSource {
 
     void Finalize() override {}
 
-    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
+    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         uint64_t total_rows;
         bool is_last;
 
         table_info *batch =
             internal_reader->read_batch(is_last, total_rows, true);
-        auto result = is_last ? ProducerResult::FINISHED
-                              : ProducerResult::HAVE_MORE_OUTPUT;
+        auto result = is_last ? OperatorResult::FINISHED
+                              : OperatorResult::HAVE_MORE_OUTPUT;
 
         batch->column_names = out_column_names;
         batch->metadata = out_metadata;
         return std::make_pair(std::shared_ptr<table_info>(batch), result);
+    }
+
+    /**
+     * @brief Get the physical schema of the Parquet data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        return bodo::Schema::FromArrowSchema(this->arrow_schema);
     }
 
     // Column names and metadata (Pandas Index info) used for dataframe

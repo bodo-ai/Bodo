@@ -832,8 +832,7 @@ def test_df_apply_decimal(memory_leak_check):
 
 
 @pytest.mark.slow
-# TODO [BSE-4783]: DF LIB: support passing args and kwargs to UDF.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_args(memory_leak_check):
     """test passing extra args to apply UDF"""
 
@@ -852,8 +851,7 @@ def test_df_apply_args(memory_leak_check):
     check_func(test_impl2, (df, (1,), 2))
 
 
-# TODO [BSE-4783]: DF LIB: support passing args and kwargs to UDF.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_kws(memory_leak_check):
     """test passing extra keyword args to apply UDF"""
 
@@ -934,8 +932,7 @@ def test_df_apply_wrap_python(memory_leak_check):
     check_func(test_impl, (df,))
 
 
-# TODO [BSE-4783]: DF LIB: support passing args and kwargs to UDF.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_freevar(memory_leak_check):
     """Test transforming freevars into apply() arguments"""
 
