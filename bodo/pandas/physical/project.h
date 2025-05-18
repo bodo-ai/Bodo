@@ -1,7 +1,5 @@
 #pragma once
 
-#include <arrow/type.h>
-#include <memory>
 #include <utility>
 #include "../_plan.h"
 #include "../libs/_array_utils.h"

@@ -4,7 +4,6 @@
 #pragma once
 
 #include <Python.h>
-#include <arrow/type.h>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"

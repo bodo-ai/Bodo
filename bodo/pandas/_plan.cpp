@@ -1,8 +1,6 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
-#include <arrow/type_fwd.h>
 #include <fmt/format.h>
-#include <memory>
 #include <utility>
 
 #include "_executor.h"
