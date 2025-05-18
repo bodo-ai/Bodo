@@ -40,9 +40,9 @@ set(CMAKE_VERBOSE_MAKEFILE OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_MACOSX_RPATH 1)
 
+# Bodo Change: Remove, setting ccache/sccache done in top level CMakeLists.txt
 # find_program(CCACHE_PROGRAM ccache)
-# Bodo change: use env var to control ccache
-# if((NOT DEFINED ENV{DISABLE_CCACHE}) AND CCACHE_PROGRAM)
+# if(CCACHE_PROGRAM)
 #   message(WARNING "USING CCACHE")
 #   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 # else()
