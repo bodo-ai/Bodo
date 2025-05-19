@@ -2,6 +2,7 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <utility>
+#include "arrow/util/key_value_metadata.h"
 
 #include "../io/arrow_compat.h"
 #include "_bodo_scan_function.h"
@@ -456,14 +457,13 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyiceberg_catalog) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
-    BodoIcebergScanFunction table_function = BodoIcebergScanFunction();
-    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoIcebergScanFunctionData>(
-            pyarrow_schema, table_name, pyiceberg_catalog);
-
     // Convert Arrow schema to DuckDB
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
+
+    BodoIcebergScanFunction table_function = BodoIcebergScanFunction();
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
+        duckdb::make_uniq<BodoIcebergScanFunctionData>(arrow_schema);
 
     duckdb::virtual_column_map_t virtual_columns;
 

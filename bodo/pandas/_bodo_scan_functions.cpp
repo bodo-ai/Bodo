@@ -1,6 +1,7 @@
 #include "_bodo_scan_function.h"
 
 #include "../libs/_utils.h"
+#include "physical/read_iceberg.h"
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
 
@@ -61,4 +62,12 @@ BodoParquetScanFunctionData::CreatePhysicalOperator(
     return std::make_shared<PhysicalReadParquet>(
         path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
         limit_val);
+}
+
+std::shared_ptr<PhysicalSource>
+BodoIcebergScanFunctionData::CreatePhysicalOperator(
+    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+    return std::make_shared<PhysicalReadIceberg>(selected_columns, filter_exprs,
+                                                 limit_val);
 }

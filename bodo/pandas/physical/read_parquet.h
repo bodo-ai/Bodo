@@ -8,7 +8,9 @@
 #include "../io/arrow_compat.h"
 #include "../io/parquet_reader.h"
 #include "_duckdb_util.h"
-#include "arrow/util/key_value_metadata.h"
+#include "_plan.h"
+#include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
 
 std::function<arrow::compute::Expression(arrow::compute::Expression,

@@ -198,7 +198,8 @@ class BodoIcebergScanFunction : public BodoScanFunction {
  */
 class BodoIcebergScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoIcebergScanFunctionData() {};
+    BodoIcebergScanFunctionData(std::shared_ptr<arrow::Schema> arrow_schema)
+        : arrow_schema(std::move(arrow_schema)) {};
 
     ~BodoIcebergScanFunctionData() override {}
 
@@ -206,4 +207,5 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
 };
