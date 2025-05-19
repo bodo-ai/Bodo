@@ -2,6 +2,8 @@ import typing as pt
 
 import pandas as pd
 import pyarrow as pa
+import pyiceberg.catalog
+import pyiceberg.expressions
 from pandas._libs import lib
 
 from bodo.pandas.frame import BodoDataFrame
@@ -109,7 +111,7 @@ def _empty_like(val):
     return out
 
 
-@check_args_fallback(supported="all")
+@check_args_fallback(supported=["catalog_name", "catalog_properties"])
 def read_iceberg(
     table_identifier: str,
     catalog_name: str | None = None,
@@ -121,4 +123,15 @@ def read_iceberg(
     limit: int | None = None,
     scan_properties: dict[str, pt.Any] | None = None,
 ) -> BodoDataFrame:
-    return BodoDataFrame()
+    if catalog_properties is None:
+        catalog_properties = {}
+    catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
+
+    # Get the output schema
+    table = catalog.load_table(table_identifier)
+    pyiceberg_schema = table.schema()
+    arrow_schema = pyiceberg_schema.as_arrow()
+    empty_df = arrow_to_empty_df(arrow_schema)
+
+    plan = LazyPlan("LogicalGetIcebergRead", empty_df, table_identifier, catalog)
+    return wrap_plan(plan=plan)
