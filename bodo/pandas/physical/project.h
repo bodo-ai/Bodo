@@ -43,7 +43,8 @@ class PhysicalProjection : public PhysicalSourceSink {
                         ->column_types[0]
                         ->copy();
                 this->output_schema->append_column(std::move(col_type));
-                col_names.emplace_back(func_expr.GetName());
+                col_names.emplace_back(
+                    scalar_func_data.out_schema->field(0)->name());
             } else {
                 throw std::runtime_error(
                     "Unsupported expression type in projection " +
