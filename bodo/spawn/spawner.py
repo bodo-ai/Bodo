@@ -788,13 +788,12 @@ class Spawner:
         from bodo.mpi4py import MPI
         from bodo.spawn.spawner import CommandType
 
-        spawner = bodo.spawn.spawner.get_spawner()
         bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-        spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
+        self.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
         bodo.libs.distributed_api.scatterv(
-            data, root=bcast_root, comm=spawner.worker_intercomm
+            data, root=bcast_root, comm=self.worker_intercomm
         )
-        res_id = spawner.worker_intercomm.recv(None, source=0)
+        res_id = self.worker_intercomm.recv(None, source=0)
         if isinstance(data, pd.DataFrame):
             return get_lazy_manager_class()(
                 None,
