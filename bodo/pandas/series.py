@@ -5,6 +5,7 @@ from collections.abc import Callable, Hashable
 import pandas as pd
 import pyarrow as pa
 
+import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -12,7 +13,9 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
+    BodoLibNotImplementedException,
     LazyPlan,
+    LazyPlanDistributedArg,
     arrow_to_empty_df,
     check_args_fallback,
     get_lazy_single_manager_class,
@@ -35,10 +38,44 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @property
     def _plan(self):
         if hasattr(self._mgr, "_plan"):
-            if self._mgr._plan is not None:
+            if self.is_lazy_plan():
                 return self._mgr._plan
             else:
-                return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
+                """We can't create a new LazyPlan each time that _plan is called
+                   because filtering checks that the projections that are part of
+                   the filter all come from the same source and if you create a
+                   new LazyPlan here each time then they will appear as different
+                   sources.  We sometimes use a pandas manager which doesn't have
+                   _source_plan so we have to do getattr check.
+                """
+                if getattr(self, "_source_plan", None) is not None:
+                    return self._source_plan
+
+                from bodo.pandas.base import _empty_like
+
+                empty_data = _empty_like(self)
+                if bodo.dataframe_library_run_parallel:
+                    if getattr(self._mgr, "_md_result_id", None) is not None:
+                        # If the plan has been executed but the results are still
+                        # distributed then re-use those results as is.
+                        res_id = self._mgr._md_result_id
+                        mgr = self._mgr
+                    else:
+                        # The data has been collected and is no longer distributed
+                        # so we need to re-distribute the results.
+                        res_id = bodo.spawn.utils.scatter_data(self)
+                        mgr = None
+                    self._source_plan = LazyPlan(
+                        "LogicalGetPandasReadParallel",
+                        empty_data,
+                        LazyPlanDistributedArg(mgr, res_id),
+                    )
+                else:
+                    self._source_plan = LazyPlan(
+                        "LogicalGetPandasReadSeq", empty_data, self
+                    )
+
+                return self._source_plan
 
         raise NotImplementedError(
             "Plan not available for this manager, recreate this series with from_pandas"
@@ -88,7 +125,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
             or isinstance(other, bool)
         ):
-            raise TypeError(
+            raise BodoLibNotImplementedException(
                 "'other' should be boolean BodoSeries or a bool. "
                 f"Got {type(other).__name__} instead."
             )
@@ -147,9 +184,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         empty_data = _empty_like(self)
 
         assert isinstance(empty_data, pd.Series), "Series expected"
-        return wrap_plan(
-            plan=LazyPlan("LogicalUnaryOp", empty_data, self._plan, "__invert__"),
+        source_expr = get_proj_expr_single(self._plan)
+        expr = LazyPlan("UnaryOpExpression", empty_data, source_expr, "__invert__")
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            # Use the original table without the Series projection node.
+            self._plan.args[0],
+            (expr,),
         )
+        return wrap_plan(plan=plan)
 
     @staticmethod
     def from_lazy_mgr(
@@ -230,14 +274,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Otherwise we use the data fetched from the workers.
         """
         if n == 0 and self._head_s is not None:
-            return pd.Series(
-                index=self._head_s.index,
-                name=self._head_s.name,
-                dtype=self._head_s.dtype,
-            )
+            if self._exec_state == ExecState.COLLECTED:
+                return self.iloc[:0].copy()
+            else:
+                assert self._head_s is not None
+                return self._head_s.head(0).copy()
 
         if (self._head_s is None) or (n > self._head_s.shape[0]):
-            if self._exec_state == ExecState.PLAN:
+            if bodo.dataframe_library_enabled and isinstance(
+                self._mgr, LazyMetadataMixin
+            ):
                 from bodo.pandas.base import _empty_like
 
                 planLimit = LazyPlan(
@@ -310,6 +356,7 @@ class BodoStringMethods:
     def __init__(self, series):
         self._series = series
 
+    @check_args_fallback(unsupported="none")
     def lower(self):
         index = self._series.head(0).index
         new_metadata = pd.Series(
@@ -321,7 +368,7 @@ class BodoStringMethods:
             self._series._plan, new_metadata, "str.lower", (), {}
         )
 
-    @check_args_fallback(supported=[])
+    @check_args_fallback(unsupported="none")
     def strip(self, to_strip=None):
         index = self._series.head(0).index
         new_metadata = pd.Series(
@@ -330,7 +377,7 @@ class BodoStringMethods:
             index=index,
         )
         return _get_series_python_func_plan(
-            self._series._plan, new_metadata, "str.strip", (), {}
+            self._series._plan, new_metadata, "str.strip", (to_strip,), {}
         )
 
     @check_args_fallback(unsupported="none")

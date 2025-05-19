@@ -295,13 +295,13 @@ def test_filter(datapath, op):
 def test_filter_multiple1_pushdown(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & (bodo_df1.D > 80))]
+    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1[((py_df1.A < 20) & (py_df1.D > 80))]
+    py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
@@ -313,7 +313,6 @@ def test_filter_multiple1_pushdown(datapath):
     )
 
 
-@pytest.mark.skip(reason="Needs conjunction non-pushdown working.")
 def test_filter_multiple1(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -328,8 +327,8 @@ def test_filter_multiple1(datapath):
         reset_index=True,
     )
 
-    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & (bodo_df1.D > 80))]
-    py_df2 = py_df1[((py_df1.A < 20) & (py_df1.D > 80))]
+    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
+    py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
@@ -398,6 +397,73 @@ def test_filter_string(datapath):
     )
 
 
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_filter_datetime_pushdown(datapath, op):
+    """Test for standalone filter."""
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[
+        eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")
+    ]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    _test_equal(pre, 2)
+    _test_equal(post, 1)
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[eval(f"py_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
+
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_filter_datetime(datapath, op):
+    """Test for standalone filter."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+
+    # Force read parquet node to execute so the filter doesn't get pushed into the read.
+    _test_equal(
+        bodo_df1.copy(),
+        py_df1,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    bodo_df2 = bodo_df1[
+        eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")
+    ]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    py_df2 = py_df1[eval(f"py_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
+
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_head_pushdown(datapath):
     """Test for head pushed down to read parquet."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -414,7 +480,6 @@ def test_head_pushdown(datapath):
     assert len(bodo_df2) == 3
 
 
-@pytest.mark.skip(reason="Not working.")
 def test_projection_head_pushdown(datapath):
     """Test for projection and head pushed down to read parquet."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -422,6 +487,20 @@ def test_projection_head_pushdown(datapath):
     bodo_df3 = bodo_df2.head(3)
 
     # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df3.is_lazy_plan()
+
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df3) == 3
+
+
+def test_series_head(datapath):
+    """Test for Series.head() reading from Pandas."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1["D"]
+    bodo_df2.execute_plan()
+    bodo_df3 = bodo_df2.head(3)
+
+    # Make sure bodo_df3 is unevaluated at this point.
     assert bodo_df3.is_lazy_plan()
 
     # Contents not guaranteed to be the same as Pandas so just check length.
@@ -483,7 +562,10 @@ def test_str_lower(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_strip(datapath, index_val):
+@pytest.mark.parametrize(
+    "to_strip", [pytest.param(None, id="default"), pytest.param("A B", id="strip-AB")]
+)
+def test_str_strip(datapath, index_val, to_strip):
     """Very simple test for Series.str.strip() for sanity checking."""
     df = pd.DataFrame(
         {
@@ -494,8 +576,8 @@ def test_str_strip(datapath, index_val):
     )
     df.index = index_val[: len(df)]
     bdf = bd.from_pandas(df)
-    out_pd = df.B.str.strip()
-    out_bodo = bdf.B.str.strip()
+    out_pd = df.B.str.strip(to_strip=to_strip)
+    out_bodo = bdf.B.str.strip(to_strip=to_strip)
     assert out_bodo.is_lazy_plan()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
@@ -631,6 +713,27 @@ def test_parquet_read_partitioned_filter(datapath):
     )
 
 
+def test_parquet_read_shape_head(datapath):
+    """
+    Test to catch a case where the original manager goes out of scope
+    causing the parallel get to become invalid.
+    """
+    path = datapath("dataframe_library/df1.parquet")
+
+    def bodo_impl():
+        df = bd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    def pd_impl():
+        df = pd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    bdf_shape, bdf_head = bodo_impl()
+    pdf_shape, pdf_head = pd_impl()
+    assert bdf_shape == pdf_shape
+    _test_equal(bdf_head, pdf_head)
+
+
 def test_project_after_filter(datapath):
     """Test creating a plan with a Projection on top of a filter works"""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -646,6 +749,39 @@ def test_project_after_filter(datapath):
     _test_equal(
         bodo_df2.copy(),
         py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_merge():
+    """Simple test for DataFrame merge."""
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([2, 2, 3], "Int64"),
+            "B": ["a1", "b11", "c111"],
+            "E": [1.1, 2.2, 3.3],
+        },
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([2, 3, 8], "Int64"),
+            "D": ["a1", "b222", "c33"],
+        },
+    )
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["C"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["C"])
+    # Make sure bdf3 is unevaluated at this point.
+    assert bdf3.is_lazy_plan()
+
+    _test_equal(
+        bdf3.copy(),
+        df3,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
