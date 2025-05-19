@@ -89,7 +89,7 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
 class PhysicalReadParquet : public PhysicalSource {
    private:
     std::shared_ptr<ParquetReader> internal_reader;
-    std::shared_ptr<arrow::Schema> arrow_schema;
+    std::shared_ptr<bodo::Schema> output_schema;
 
    public:
     // TODO: Fill in the contents with info from the logical operator
@@ -105,10 +105,13 @@ class PhysicalReadParquet : public PhysicalSource {
 
         // Extract metadata from pyarrow schema (for Pandas Index reconstruction
         // of dataframe later)
-        this->arrow_schema = unwrap_schema(pyarrow_schema);
-        this->out_metadata = std::make_shared<TableMetadata>(
-            this->arrow_schema->metadata()->keys(),
-            this->arrow_schema->metadata()->values());
+        std::shared_ptr<arrow::Schema> arrow_schema =
+            unwrap_schema(pyarrow_schema);
+        this->out_metadata =
+            std::make_shared<TableMetadata>(arrow_schema->metadata()->keys(),
+                                            arrow_schema->metadata()->values());
+        this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
+                                  ->Project(selected_columns);
 
         PyObject *schema_fields =
             PyObject_GetAttrString(pyarrow_schema, "names");
@@ -193,7 +196,7 @@ class PhysicalReadParquet : public PhysicalSource {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
-        return bodo::Schema::FromArrowSchema(this->arrow_schema);
+        return output_schema;
     }
 
     // Column names and metadata (Pandas Index info) used for dataframe
