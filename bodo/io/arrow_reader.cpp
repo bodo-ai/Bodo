@@ -1635,21 +1635,6 @@ table_info* ArrowReader::unify_table_with_dictionary_builders(
     return new table_info(out_arrs, table->nrows());
 }
 
-std::shared_ptr<arrow::Schema> unwrap_schema(PyObject* pyarrow_schema) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        throw std::runtime_error(msg); \
-    }
-
-    CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
-    std::shared_ptr<arrow::Schema> schema;
-    CHECK_ARROW_READER_AND_ASSIGN(
-        arrow::py::unwrap_schema(pyarrow_schema),
-        "Unwrapping Arrow Schema from Python Object Failed", schema);
-    return schema;
-#undef CHECK
-}
-
 /**
  * @brief Py Entry Function to Call read_batch(...) on ArrowReaders
  *
