@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
@@ -66,7 +68,7 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         Py_INCREF(path);
     }
 
-    ~BodoParquetScanFunctionData() {
+    ~BodoParquetScanFunctionData() override {
         Py_DECREF(pyarrow_schema);
         Py_DECREF(storage_options);
         Py_DECREF(path);
@@ -104,10 +106,10 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
    public:
     BodoDataFrameSeqScanFunctionData(
         PyObject *df, std::shared_ptr<arrow::Schema> arrow_schema)
-        : df(df), arrow_schema(arrow_schema) {
+        : df(df), arrow_schema(std::move(arrow_schema)) {
         Py_INCREF(df);
     }
-    ~BodoDataFrameSeqScanFunctionData() { Py_DECREF(df); }
+    ~BodoDataFrameSeqScanFunctionData() override { Py_DECREF(df); }
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
      *
@@ -131,8 +133,9 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
    public:
     BodoDataFrameParallelScanFunctionData(
         std::string result_id, std::shared_ptr<arrow::Schema> arrow_schema)
-        : result_id(result_id), arrow_schema(arrow_schema) {}
-    ~BodoDataFrameParallelScanFunctionData() {}
+        : result_id(std::move(result_id)),
+          arrow_schema(std::move(arrow_schema)) {}
+    ~BodoDataFrameParallelScanFunctionData() override = default;
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
      *
@@ -154,7 +157,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     BodoPythonScalarFunctionData(PyObject *args,
                                  std::shared_ptr<arrow::Schema> out_schema)
-        : args(args), out_schema(out_schema) {
+        : args(args), out_schema(std::move(out_schema)) {
         Py_INCREF(args);
     }
     ~BodoPythonScalarFunctionData() override { Py_DECREF(args); }
@@ -170,4 +173,37 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
 
     PyObject *args;
     std::shared_ptr<arrow::Schema> out_schema;
+};
+
+/**
+ * @brief Bodo's DuckDB TableFunction for reading Iceberg datasets with Bodo
+ * metadata (used in LogicalGet).
+ *
+ */
+class BodoIcebergScanFunction : public BodoScanFunction {
+   public:
+    BodoIcebergScanFunction() : BodoScanFunction("bodo_read_iceberg") {
+        // filter_pushdown = true;
+        // filter_prune = true;
+        // projection_pushdown = true;
+        // limit_pushdown = true;
+        // TODO: set statistics and other optimization flags as needed
+        // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/include/duckdb/function/table_function.hpp#L357
+    }
+};
+
+/**
+ * @brief Data for Bodo's DuckDB TableFunction for reading Iceberg datasets.
+ *
+ */
+class BodoIcebergScanFunctionData : public BodoScanFunctionData {
+   public:
+    BodoIcebergScanFunctionData() {};
+
+    ~BodoIcebergScanFunctionData() override {}
+
+    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
 };

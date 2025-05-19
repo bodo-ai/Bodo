@@ -457,36 +457,33 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_name,
     PyObject *pyiceberg_catalog) {
-    // duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+    duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
-    // BodoParquetScanFunction table_function = BodoParquetScanFunction();
-    // duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-    //     duckdb::make_uniq<BodoParquetScanFunctionData>(
-    //         parquet_path, pyarrow_schema, storage_options);
+    BodoIcebergScanFunction table_function = BodoIcebergScanFunction();
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
+        duckdb::make_uniq<BodoIcebergScanFunctionData>(
+            pyarrow_schema, table_name, pyiceberg_catalog);
 
-    //// Convert Arrow schema to DuckDB
-    // std::shared_ptr<arrow::Schema> arrow_schema =
-    // unwrap_schema(pyarrow_schema); auto [return_names, return_types] =
-    // arrow_schema_to_duckdb(arrow_schema);
+    // Convert Arrow schema to DuckDB
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+    auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
 
-    // duckdb::virtual_column_map_t virtual_columns;
+    duckdb::virtual_column_map_t virtual_columns;
 
-    // duckdb::unique_ptr<duckdb::LogicalGet> out_get =
-    //     duckdb::make_uniq<duckdb::LogicalGet>(
-    //         binder->GenerateTableIndex(), table_function,
-    //         std::move(bind_data1), return_types, return_names,
-    //         virtual_columns);
+    duckdb::unique_ptr<duckdb::LogicalGet> out_get =
+        duckdb::make_uniq<duckdb::LogicalGet>(
+            binder->GenerateTableIndex(), table_function, std::move(bind_data1),
+            return_types, return_names, virtual_columns);
 
-    //// Column ids need to be added separately.
-    //// DuckDB column id initialization example:
-    ////
-    /// https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
-    // for (size_t i = 0; i < return_names.size(); i++) {
-    //     out_get->AddColumnId(i);
-    // }
+    // Column ids need to be added separately.
+    // DuckDB column id initialization example:
+    //
+https:  // github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
+    for (size_t i = 0; i < return_names.size(); i++) {
+        out_get->AddColumnId(i);
+    }
 
-    // return out_get;
-    return nullptr;
+    return out_get;
 }
 
 duckdb::ClientContext &get_duckdb_context() {
