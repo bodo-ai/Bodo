@@ -369,6 +369,18 @@ class BodoStringMethods:
         )
 
     @check_args_fallback(unsupported="none")
+    def upper(self):
+        index = self._series.head(0).index
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.large_string()),
+            name=self._series.name,
+            index=index,
+        )
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, "str.upper", (), {}
+        )
+
+    @check_args_fallback(unsupported="none")
     def strip(self, to_strip=None):
         index = self._series.head(0).index
         new_metadata = pd.Series(
