@@ -63,7 +63,7 @@ jobs:
       needs.validate.outputs.run_bodosql_customer_tests == 'true'
 
     steps:
-      - uses: convictional/trigger-workflow-and-wait@v1.6.1
+      - uses: convictional/trigger-workflow-and-wait@v1.6.5
         with:
           owner: bodo-ai
           repo: customer-sample-code
@@ -83,12 +83,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      # TODO: Reenable and fix Sccache
-      # - uses: actions/checkout@v4
-      # - name: Build from Source
-      #   uses: ./.github/actions/build-source
-      #   with:
-      #     build-all: false
+      - uses: actions/checkout@v4
+      - name: Build from Source
+        uses: ./.github/actions/build-source
+        with:
+          build-all: false
       - name: Load and Save Hadoop to Cache
         id: hadoop-cache
         if: ${{ runner.os != 'Windows' }}

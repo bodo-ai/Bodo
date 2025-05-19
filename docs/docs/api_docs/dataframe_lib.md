@@ -1,4 +1,4 @@
-# Bodo Pandas API (Bodo DataFrame Library)
+# Bodo Pandas API (Bodo DataFrame Library) {#dataframe-lib}
 
 The Bodo DataFrame Library is designed to accelerate and scale Pandas workflows with just a one-line change — simply replace:
 
@@ -509,9 +509,7 @@ Equivalent to [`str.strip()`](https://docs.python.org/3/library/stdtypes.html#st
 
 <p class="api-header">Parameters</p>
 
-: __to_strip:__
-Will fall back to [`pandas.Series.str.strip`](https://pandas.pydata.org/docs/reference/api/pandas.Series.str.strip.html#pandas.Series.str.strip) if a value other than None is provided.
-
+: __to_strip: *str or None, default None*__ Specifying the set of characters to be removed. All combinations of this set of characters will be stripped. If None then whitespaces are removed.
 <p class="api-header">Returns</p>
 
 : __BodoSeries__

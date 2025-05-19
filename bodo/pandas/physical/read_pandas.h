@@ -14,10 +14,13 @@ class PhysicalReadPandas : public PhysicalSource {
     PyObject* df;
     int64_t current_row = 0;
     int64_t num_rows;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
 
    public:
     explicit PhysicalReadPandas(PyObject* _df_or_series,
-                                std::vector<int>& selected_columns) {
+                                std::vector<int>& selected_columns,
+                                std::shared_ptr<arrow::Schema> arrow_schema)
+        : arrow_schema(arrow_schema) {
         this->setInputDF(_df_or_series);
 
         // Select only the specified columns if provided by the optimizer
@@ -80,12 +83,11 @@ class PhysicalReadPandas : public PhysicalSource {
 
     void Finalize() override {}
 
-    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
+    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
-        if (this->current_row >= this->num_rows) {
-            throw std::runtime_error(
-                "PhysicalReadPandas::ProduceBatch: No more rows to read");
-        }
+        // NOTE: current_row may be greater than num_rows since sources need to
+        // be able to produce empty batches. df.iloc will return an empty
+        // DataFrame if the slice is out of bounds.
 
         // Extract slice from pandas DataFrame
         // df.iloc[current_row:current_row+batch_size]
@@ -108,9 +110,11 @@ class PhysicalReadPandas : public PhysicalSource {
             arrow::py::unwrap_table(pa_table).ValueOrDie();
 
         // Convert Arrow arrays to Bodo arrays
-        auto* bodo_pool = bodo::BufferPool::DefaultPtr();
+        // (passing nullptr for pool since not allocated through Bodo so can't
+        // support spilling etc,
+        // TODO: pass bodo's buffer pool to Arrow)
         std::shared_ptr<table_info> out_table =
-            arrow_table_to_bodo(table, bodo_pool);
+            arrow_table_to_bodo(table, nullptr);
 
         // Clean up Python references
         Py_DECREF(iloc);
@@ -122,11 +126,20 @@ class PhysicalReadPandas : public PhysicalSource {
 
         this->current_row += batch_size;
 
-        ProducerResult result = this->current_row >= this->num_rows
-                                    ? ProducerResult::FINISHED
-                                    : ProducerResult::HAVE_MORE_OUTPUT;
+        OperatorResult result = this->current_row >= this->num_rows
+                                    ? OperatorResult::FINISHED
+                                    : OperatorResult::HAVE_MORE_OUTPUT;
 
         return {out_table, result};
+    }
+
+    /**
+     * @brief Get the physical schema of the dataframe/series data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        return bodo::Schema::FromArrowSchema(this->arrow_schema);
     }
 
    private:

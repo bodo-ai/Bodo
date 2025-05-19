@@ -111,7 +111,11 @@ class BodoDataFrameScanFunction : public BodoScanFunction {
  */
 class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoDataFrameSeqScanFunctionData(PyObject *df) : df(df) { Py_INCREF(df); }
+    BodoDataFrameSeqScanFunctionData(
+        PyObject *df, std::shared_ptr<arrow::Schema> arrow_schema)
+        : df(df), arrow_schema(arrow_schema) {
+        Py_INCREF(df);
+    }
     ~BodoDataFrameSeqScanFunctionData() { Py_DECREF(df); }
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
@@ -124,6 +128,7 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
 
     PyObject *df;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
 };
 
 /**
@@ -133,8 +138,9 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
  */
 class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoDataFrameParallelScanFunctionData(std::string result_id)
-        : result_id(result_id) {}
+    BodoDataFrameParallelScanFunctionData(
+        std::string result_id, std::shared_ptr<arrow::Schema> arrow_schema)
+        : result_id(result_id), arrow_schema(arrow_schema) {}
     ~BodoDataFrameParallelScanFunctionData() {}
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
@@ -146,6 +152,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
     std::string result_id;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
 };
 
 /**
@@ -154,7 +161,9 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
  *
  */
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
-    BodoPythonScalarFunctionData(PyObject *args) : args(args) {
+    BodoPythonScalarFunctionData(PyObject *args,
+                                 std::shared_ptr<arrow::Schema> out_schema)
+        : args(args), out_schema(out_schema) {
         Py_INCREF(args);
     }
     ~BodoPythonScalarFunctionData() override { Py_DECREF(args); }
@@ -164,10 +173,12 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
         return (other.args == this->args);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args);
+        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args,
+                                                               out_schema);
     }
 
     PyObject *args;
+    std::shared_ptr<arrow::Schema> out_schema;
 };
 
 /**
@@ -267,6 +278,15 @@ duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
     const std::string &val);
 
 /**
+ * @brief Create an expression from a constant timestamp with ns resolution.
+ *
+ * @param val - the constant timestamp for the expression in ns since epoch
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const timestamp expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
+    int64_t val);
+
+/**
  * @brief Create an expression that references a specified column.
  *
  * @param field_py - the data type of the specified column
@@ -301,6 +321,16 @@ std::unique_ptr<duckdb::Expression> make_binop_expr(
 duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
+
+/**
+ * @brief Create a unary op (e.g., not) expression from a source.
+ *
+ * @param lhs - the left-hand side of the expression
+ * @param etype - the expression type (e.g., not) to apply to the source
+ * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
+    std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype);
 
 /**
  * @brief Create a filter node.
