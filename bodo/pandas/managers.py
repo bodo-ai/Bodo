@@ -289,6 +289,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         if name in {
             "blocks",
             "get_slice",
+            "copy",
             "_rebuild_blknos_and_blklocs",
             "__reduce__",
             "__setstate__",
@@ -305,10 +306,6 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
-
-    def copy(self, deep=True):
-        self._collect()
-        return super().copy(deep)
 
 
 class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockManager]):
@@ -538,7 +535,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "_disable_collect",
         }:
             return object.__getattribute__(self, name)
-        if name == "blocks":
+        if name in {"blocks", "copy"}:
             self._collect()
         return super().__getattribute__(name)
 
@@ -583,7 +580,3 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         block = type(blk)(array, placement=bp, ndim=1, refs=blk.refs)
         new_index = self.index._getitem_slice(slobj)
         return type(self)(block, new_index)
-
-    def copy(self, deep=True):
-        self._collect()
-        return super().copy(deep)
