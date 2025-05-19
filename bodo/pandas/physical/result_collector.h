@@ -60,8 +60,9 @@ class PhysicalResultCollector : public PhysicalSink {
         std::vector<std::shared_ptr<array_info>> out_columns;
         for (std::string& col_name : out_schema->column_names) {
             if (col_name_to_idx.find(col_name) == col_name_to_idx.end()) {
-                throw std::runtime_error("Column " + col_name +
-                                         " not found in input schema");
+                throw std::runtime_error(
+                    "PhysicalResultCollector::GetResult(): Column " + col_name +
+                    " not found in input schema");
             }
             auto out_col = in_table->columns[col_name_to_idx[col_name]];
             out_columns.push_back(out_col);
