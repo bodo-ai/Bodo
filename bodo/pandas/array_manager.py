@@ -338,6 +338,10 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         self._verify_integrity()
         return self.shape_proper[0]
 
+    def copy(self, deep=True):
+        self._collect()
+        return super().copy(deep)
+
 
 class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayManager]):
     """
@@ -621,3 +625,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         if self._md_head is not None:
             return self._md_nrows
         return super().__len__()
+
+    def copy(self, deep=True):
+        self._collect()
+        return super().copy(deep)

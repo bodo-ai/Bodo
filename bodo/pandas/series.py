@@ -349,10 +349,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         return _get_series_python_func_plan(self._plan, empty_series, "map", (arg,), {})
 
-    def copy(self, deep=True):
-        self.execute_plan()
-        return super().copy(deep)
-
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""

@@ -273,7 +273,6 @@ def check_args_fallback(
                             # Fall back to Pandas below
                             except_msg = str(e)
                     # Can we do a top-level override check?
-
                     # Fallback to Python. Call the same method in the base class.
                     msg = (
                         f"{func.__name__} is not "

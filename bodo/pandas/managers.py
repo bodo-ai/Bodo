@@ -306,6 +306,10 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             self._del_func(r_id)
             self._del_func = None
 
+    def copy(self, deep=True):
+        self._collect()
+        return super().copy(deep)
+
 
 class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockManager]):
     """
@@ -579,3 +583,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         block = type(blk)(array, placement=bp, ndim=1, refs=blk.refs)
         new_index = self.index._getitem_slice(slobj)
         return type(self)(block, new_index)
+
+    def copy(self, deep=True):
+        self._collect()
+        return super().copy(deep)
