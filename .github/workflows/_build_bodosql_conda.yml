@@ -48,7 +48,7 @@ jobs:
       - name: 'Build Conda Package'
         run: |
           set -exo pipefail
-          source $HOME/micromamba/etc/profile.d/micromamba.sh
+          eval "$(micromamba shell hook -s posix)"
           micromamba activate bodosql_build
 
           # Determine Output Version
