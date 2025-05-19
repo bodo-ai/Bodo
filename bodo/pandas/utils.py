@@ -515,6 +515,22 @@ def df_to_cpp_table(df):
     return cpp_table
 
 
+def _empty_pd_array(pa_type):
+    """Create an empty pandas array with the given Arrow type."""
+
+    # Workaround Arrows conversion gaps for dictionary types
+    if isinstance(pa_type, pa.DictionaryType):
+        assert pa_type.index_type == pa.int32() and (
+            pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
+        ), "Invalid dictionary type"
+        return pd.array(
+            ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
+        )[:0]
+
+    pa_arr = pa.array([], type=pa_type, from_pandas=True)
+    return pd.array(pa_arr, dtype=pd.ArrowDtype(pa_type))
+
+
 def _get_function_from_path(path_str: str):
     """Get a function object from its fully qualified path string.
 
@@ -557,7 +573,12 @@ def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
         func = _get_function_from_path(func_path_str)
         out = func(input, *args, **kwargs)
 
-    out_df = pd.DataFrame({"OUT": out.astype(pd.ArrowDtype(result_type))})
+    # astype can fail in some cases when input is empty
+    if len(out):
+        # TODO: verify this is correct for all possible result_type's
+        out_df = pd.DataFrame({"OUT": out.astype(pd.ArrowDtype(result_type))})
+    else:
+        out_df = pd.DataFrame({"OUT": _empty_pd_array(result_type)})
 
     return df_to_cpp_table(out_df)
 
@@ -739,22 +760,6 @@ def _reconstruct_pandas_index(df, arrow_schema):
     return df
 
 
-def _empty_pd_array(pa_type):
-    """Create an empty pandas array with the given Arrow type."""
-
-    # Workaround Arrows conversion gaps for dictionary types
-    if isinstance(pa_type, pa.DictionaryType):
-        assert pa_type.index_type == pa.int32() and (
-            pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
-        ), "Invalid dictionary type"
-        return pd.array(
-            ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
-        )[:0]
-
-    pa_arr = pa.array([], type=pa_type, from_pandas=True)
-    return pd.array(pa_arr, dtype=pd.ArrowDtype(pa_type))
-
-
 def arrow_to_empty_df(arrow_schema):
     """Create an empty dataframe with the same schema as the Arrow schema"""
     empty_df = pd.DataFrame(
@@ -763,7 +768,7 @@ def arrow_to_empty_df(arrow_schema):
     return _reconstruct_pandas_index(empty_df, arrow_schema)
 
 
-def get_empty_series_arrow(ser: pd.Series) -> pd.Series:
+def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
     """Create an empty Series like ser possibly converting some dtype to use
     pyarrow"""
     empty_df = arrow_to_empty_df(pa.Schema.from_pandas(ser.to_frame()))
@@ -810,7 +815,7 @@ def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
             )
 
         try:
-            empty_series = get_empty_series_arrow(out_sample)
+            empty_series = _get_empty_series_arrow(out_sample)
         except (pa.lib.ArrowTypeError, pa.lib.ArrowInvalid) as e:
             # Could not get a pyarrow type for the series, Fallback to pandas.
             except_msg = f", got: {str(e)}."
