@@ -13,6 +13,12 @@ class PhysicalResultCollector : public PhysicalSink {
     explicit PhysicalResultCollector(std::shared_ptr<bodo::Schema> in_schema,
                                      std::shared_ptr<bodo::Schema> out_schema)
         : in_schema(in_schema), out_schema(out_schema) {
+        if (in_schema->column_names.empty() ||
+            out_schema->column_names.empty()) {
+            throw std::runtime_error(
+                "PhysicalResultCollector::GetResult: Input/output schema must "
+                "have column names.");
+        }
         if (in_schema->ncols() != out_schema->ncols()) {
             throw std::runtime_error(
                 "Input and output schemas must have the same number of "
