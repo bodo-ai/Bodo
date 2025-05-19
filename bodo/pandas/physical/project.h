@@ -1,7 +1,7 @@
 #pragma once
 
 #include <utility>
-#include "../_plan.h"
+#include "../_bodo_scan_function.h"
 #include "../libs/_array_utils.h"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"

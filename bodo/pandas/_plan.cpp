@@ -3,6 +3,9 @@
 #include <fmt/format.h>
 #include <utility>
 
+#include "../io/arrow_compat.h"
+#include "../libs/_utils.h"
+#include "_bodo_scan_function.h"
 #include "_executor.h"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
@@ -11,7 +14,6 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/planner/binder.hpp"
-#include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
@@ -19,7 +21,6 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
-#include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
@@ -27,7 +28,6 @@
 #include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
-
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
 
