@@ -1,6 +1,7 @@
 import functools
 import importlib
 import inspect
+import warnings
 
 import numba
 import pandas as pd
@@ -13,6 +14,8 @@ from bodo.libs.array import cpp_table_to_py_table, delete_table, table_type
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 from bodo.utils.typing import check_unsupported_args_fallback
+
+BODO_NONE_DUMMY = "_bodo_none_dummy_"
 
 
 def get_data_manager_pandas() -> str:
@@ -139,8 +142,25 @@ def get_overloads(cls_name):
         assert False
 
 
+class BodoLibNotImplementedException(Exception):
+    """Exception raised in the Bodo library when a functionality is not implemented yet
+    and we need to fall back to Pandas (captured by the fallback decorator).
+    """
+
+
+class BodoLibFallbackWarning(Warning):
+    """Warning raised in the Bodo library in the fallback decorator when some
+    functionality is not implemented yet and we need to fall back to Pandas.
+    """
+
+
 def check_args_fallback(
-    unsupported=None, supported=None, package_name="pandas", fn_str=None, module_name=""
+    unsupported=None,
+    supported=None,
+    package_name="pandas",
+    fn_str=None,
+    module_name="",
+    disable=False,
 ):
     """Decorator to apply to dataframe or series member functions that handles
     argument checking, falling back to JIT compilation when it might work, and
@@ -164,24 +184,18 @@ def check_args_fallback(
         package_name - see bodo.utils.typing.check_unsupported_args_fallback
         fn_str - see bodo.utils.typing.check_unsupported_args_fallback
         module_name - see bodo.utils.typing.check_unsupported_args_fallback
+        disable - if True, falls back immediately to the Pandas implementation (used
+                in frontend methods that are not fully implemented yet)
     """
     assert (unsupported is None) ^ (supported is None), (
         "Exactly one of unsupported and supported must be specified."
     )
 
     def decorator(func):
-        def to_bodo(val):
-            if isinstance(val, pd.DataFrame):
-                return bodo.pandas.DataFrame(val)
-            elif isinstance(val, pd.Series):
-                return bodo.pandas.Series(val)
-            else:
-                assert False, f"Unexpected val type {type(val)}"
-
         # See if function is top-level or not by looking for a . in
         # the full name.
         toplevel = "." not in func.__qualname__
-        if not bodo.dataframe_library_enabled:
+        if not bodo.dataframe_library_enabled or disable:
             # Dataframe library not enabled so just call the Pandas super class version.
             if toplevel:
                 py_pkg = importlib.import_module(package_name)
@@ -189,16 +203,14 @@ def check_args_fallback(
                 @functools.wraps(func)
                 def wrapper(*args, **kwargs):
                     # Call the same method in the base class.
-                    return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
+                    return getattr(py_pkg, func.__name__)(*args, **kwargs)
             else:
 
                 @functools.wraps(func)
                 def wrapper(self, *args, **kwargs):
                     # Call the same method in the base class.
-                    return to_bodo(
-                        getattr(self.__class__.__bases__[0], func.__name__)(
-                            self, *args, **kwargs
-                        )
+                    return getattr(self.__class__.__bases__[0], func.__name__)(
+                        self, *args, **kwargs
                     )
         else:
             signature = inspect.signature(func)
@@ -253,14 +265,25 @@ def check_args_fallback(
                         module_name=module_name,
                         raise_on_error=(BODO_PANDAS_FALLBACK == 0),
                     )
-                    if error:
-                        # Can we do a top-level override check?
+                    except_msg = ""
+                    if not error:
+                        try:
+                            return func(*args, **kwargs)
+                        except BodoLibNotImplementedException as e:
+                            # Fall back to Pandas below
+                            except_msg = str(e)
+                    # Can we do a top-level override check?
 
-                        # Fallback to Python. Call the same method in the base class.
-                        return to_bodo(getattr(py_pkg, func.__name__)(*args, **kwargs))
-                    else:
-                        result = func(*args, **kwargs)
-                    return result
+                    # Fallback to Python. Call the same method in the base class.
+                    msg = (
+                        f"{func.__name__} is not "
+                        "implemented in Bodo dataframe library for the specified arguments yet. "
+                        "Falling back to Pandas (may be slow or run out of memory."
+                    )
+                    if except_msg:
+                        msg += f"\nException: {except_msg}"
+                    warnings.warn(BodoLibFallbackWarning(msg))
+                    return getattr(py_pkg, func.__name__)(*args, **kwargs)
             else:
 
                 @functools.wraps(func)
@@ -278,26 +301,35 @@ def check_args_fallback(
                         module_name=module_name,
                         raise_on_error=(BODO_PANDAS_FALLBACK == 0),
                     )
-                    if error:
-                        # The dataframe library must not support some specified option.
-                        # Get overloaded functions for this dataframe/series in JIT mode.
-                        overloads = get_overloads(self.__class__.__name__)
-                        if func.__name__ in overloads:
-                            # TO-DO: Generate a function and bodo JIT it to do this
-                            # individual operation.  If the compile fails then fallthrough
-                            # to the pure Python code below.  If the compile works then
-                            # run the operation using the JITted function.
-                            pass
+                    except_msg = ""
+                    if not error:
+                        try:
+                            return func(self, *args, **kwargs)
+                        except BodoLibNotImplementedException as e:
+                            # Fall back to Pandas below
+                            except_msg = str(e)
 
-                        # Fallback to Python. Call the same method in the base class.
-                        return to_bodo(
-                            getattr(self.__class__.__bases__[0], func.__name__)(
-                                self, *args, **kwargs
-                            )
-                        )
-                    else:
-                        result = func(self, *args, **kwargs)
-                    return result
+                    # The dataframe library must not support some specified option.
+                    # Get overloaded functions for this dataframe/series in JIT mode.
+                    overloads = get_overloads(self.__class__.__name__)
+                    if func.__name__ in overloads:
+                        # TO-DO: Generate a function and bodo JIT it to do this
+                        # individual operation.  If the compile fails then fallthrough
+                        # to the pure Python code below.  If the compile works then
+                        # run the operation using the JITted function.
+                        pass
+
+                    # Fallback to Python. Call the same method in the base class.
+                    base_class = self.__class__.__bases__[0]
+                    msg = (
+                        f"{base_class.__name__}.{func.__name__} is not "
+                        "implemented in Bodo dataframe library for the specified arguments yet. "
+                        "Falling back to Pandas (may be slow or run out of memory)."
+                    )
+                    if except_msg:
+                        msg += f"\nException: {except_msg}"
+                    warnings.warn(BodoLibFallbackWarning(msg))
+                    return getattr(base_class, func.__name__)(self, *args, **kwargs)
 
         return wrapper
 
@@ -311,12 +343,20 @@ class LazyPlan:
     can be used to convert to an isolated set of DuckDB objects for execution.
     """
 
-    def __init__(self, plan_class, *args, **kwargs):
+    def __init__(self, plan_class, empty_data, *args, **kwargs):
         self.plan_class = plan_class
         self.args = args
         self.kwargs = kwargs
-        self.output_func = None  # filled in by wrap_plan
-        self.out_schema = None  # filled in by wrap_plan
+        assert isinstance(empty_data, (pd.DataFrame, pd.Series)), (
+            "LazyPlan: empty_data must be a DataFrame or Series"
+        )
+        self.is_series = isinstance(empty_data, pd.Series)
+        self.empty_data = empty_data
+        if self.is_series:
+            # None name doesn't round-trip to dataframe correctly so we use a dummy name
+            # that is replaced with None in wrap_plan
+            name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
+            self.empty_data = empty_data.to_frame(name=name)
 
     def __str__(self):
         out = f"{self.plan_class}: \n"
@@ -357,7 +397,7 @@ class LazyPlan:
 
         # Create real duckdb class.
         pa_schema = pa.Schema.from_pandas(
-            self.out_schema
+            self.empty_data
         )  # do this in filter case? preserve_index=(self.plan_class == "LogicalFilter")
         ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
@@ -395,8 +435,10 @@ def execute_plan(plan: LazyPlan):
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)
+
+        output_func = cpp_table_to_series if plan.is_series else cpp_table_to_df
         return plan_optimizer.py_execute_plan(
-            optimized_plan, plan.output_func, duckdb_plan.out_schema
+            optimized_plan, output_func, duckdb_plan.out_schema
         )
 
     if bodo.dataframe_library_run_parallel:
@@ -435,7 +477,7 @@ def cast_table_ptr_to_int64(typingctx, val):
     return numba.core.types.int64(table_type), codegen
 
 
-def _get_n_index_arrays(index):
+def get_n_index_arrays(index):
     """Get the number of arrays that can hold the Index data in a table."""
     if isinstance(index, pd.RangeIndex):
         return 0
@@ -454,7 +496,7 @@ def df_to_cpp_table(df):
     from bodo.ext import plan_optimizer
 
     n_table_cols = len(df.columns)
-    n_index_arrs = _get_n_index_arrays(df.index)
+    n_index_arrs = get_n_index_arrays(df.index)
     n_all_cols = n_table_cols + n_index_arrs
     in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_all_cols)))
 
@@ -516,6 +558,8 @@ def run_func_on_table(cpp_table, arrow_schema, in_args):
         out = func(input, *args, **kwargs)
 
     out_df = pd.DataFrame({"OUT": out})
+
+    # TODO [BSE-4788]: replace with convert_to_arrow_dtypes util
     out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
     return df_to_cpp_table(out_df)
 
@@ -545,11 +589,10 @@ def _get_index_data(index):
     return data
 
 
-def wrap_plan(schema, plan, res_id=None, nrows=None):
+def wrap_plan(plan, res_id=None, nrows=None):
     """Create a BodoDataFrame or BodoSeries with the given
     schema and given plan node.
     """
-    import pandas as pd
 
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.lazy_metadata import LazyMetadata
@@ -566,13 +609,12 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         # Fake non-zero rows. nrows should be overwritten upon plan execution.
         nrows = 1
 
-    plan.out_schema = schema.to_frame() if isinstance(schema, pd.Series) else schema
-    index_data = _get_index_data(schema.index)
+    index_data = _get_index_data(plan.empty_data.index)
 
-    if isinstance(schema, pd.DataFrame):
+    if not plan.is_series:
         metadata = LazyMetadata(
             res_id,
-            schema,
+            plan.empty_data,
             nrows=nrows,
             index_data=index_data,
         )
@@ -580,11 +622,14 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         new_df = BodoDataFrame.from_lazy_metadata(
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
-        plan.output_func = cpp_table_to_df
-    elif isinstance(schema, pd.Series):
+    else:
+        empty_data = plan.empty_data.squeeze()
+        # Replace the dummy name with None set in LazyPlan constructor
+        if empty_data.name == BODO_NONE_DUMMY:
+            empty_data.name = None
         metadata = LazyMetadata(
             res_id,
-            schema,
+            empty_data,
             nrows=nrows,
             index_data=index_data,
         )
@@ -592,11 +637,7 @@ def wrap_plan(schema, plan, res_id=None, nrows=None):
         new_df = BodoSeries.from_lazy_metadata(
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
-        plan.output_func = cpp_table_to_series
-    else:
-        raise TypeError(f"Invalid schema type: {type(schema)}")
 
-    new_df.plan = plan
     return new_df
 
 
@@ -608,6 +649,38 @@ def get_proj_expr_single(proj: LazyPlan):
         and len(proj.args[1]) == 1
     ), "get_proj_expr_single: LogicalProjection with a single expr expected"
     return proj.args[1][0]
+
+
+def is_single_projection(proj: LazyPlan):
+    """Return True if plan is a projection with a single expression"""
+    return (
+        isinstance(proj, LazyPlan)
+        and proj.plan_class == "LogicalProjection"
+        and len(proj.args[1]) == (get_n_index_arrays(proj.empty_data.index) + 1)
+    )
+
+
+def is_single_colref_projection(proj: LazyPlan):
+    """Return True if plan is a projection with a single expression that is a column reference"""
+    return (
+        is_single_projection(proj) and proj.args[1][0].plan_class == "ColRefExpression"
+    )
+
+
+def make_col_ref_exprs(key_indices, src_plan):
+    """Create column reference expressions for the given key indices for the input
+    source plan.
+    """
+    pa_schema = pa.Schema.from_pandas(src_plan.empty_data)
+    exprs = []
+    for k in key_indices:
+        # Using Arrow schema instead of zero_size_self.iloc to handle Index
+        # columns correctly.
+        empty_data = arrow_to_empty_df(pa.schema([pa_schema[k]]))
+        p = LazyPlan("ColRefExpression", empty_data, src_plan, k)
+        exprs.append(p)
+
+    return exprs
 
 
 def _is_generated_index_name(name):
@@ -668,9 +741,43 @@ def _reconstruct_pandas_index(df, arrow_schema):
     return df
 
 
+def _empty_pd_array(pa_type):
+    """Create an empty pandas array with the given Arrow type."""
+
+    # Workaround Arrows conversion gaps for dictionary types
+    if isinstance(pa_type, pa.DictionaryType):
+        assert pa_type.index_type == pa.int32() and (
+            pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
+        ), "Invalid dictionary type"
+        return pd.array(
+            ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
+        )[:0]
+
+    pa_arr = pa.array([], type=pa_type, from_pandas=True)
+    return pd.array(pa_arr, dtype=pd.ArrowDtype(pa_type))
+
+
 def arrow_to_empty_df(arrow_schema):
     """Create an empty dataframe with the same schema as the Arrow schema"""
-    empty_df = pd.DataFrame(columns=[field.name for field in arrow_schema])
-    type_dict = {field.name: pd.ArrowDtype(field.type) for field in arrow_schema}
-    empty_df = empty_df.astype(type_dict)
+    empty_df = pd.DataFrame(
+        {field.name: _empty_pd_array(field.type) for field in arrow_schema}
+    )
     return _reconstruct_pandas_index(empty_df, arrow_schema)
+
+
+class LazyPlanDistributedArg:
+    """
+    Class to hold the arguments for a LazyPlan that are distributed on the workers.
+    """
+
+    def __init__(self, mgr, res_id: str):
+        self.mgr = mgr
+        self.res_id = res_id
+
+    def __reduce__(self):
+        """
+        This method is used to serialize the object for distribution.
+        We can't send the manager to the workers without triggering collection
+        so we just send the result ID instead.
+        """
+        return (str, (self.res_id,))

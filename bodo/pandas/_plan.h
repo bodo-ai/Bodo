@@ -4,12 +4,12 @@
 #pragma once
 
 #include <Python.h>
-#include <pytypedefs.h>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "physical/expression.h"
 #include "physical/operator.h"
@@ -38,7 +38,8 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
      */
     virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs) = 0;
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) = 0;
 };
 
 /**
@@ -52,6 +53,7 @@ class BodoParquetScanFunction : public BodoScanFunction {
         filter_pushdown = true;
         filter_prune = true;
         projection_pushdown = true;
+        limit_pushdown = true;
         // TODO: set statistics and other optimization flags as needed
         // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/include/duckdb/function/table_function.hpp#L357
     }
@@ -63,26 +65,29 @@ class BodoParquetScanFunction : public BodoScanFunction {
  */
 class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoParquetScanFunctionData(std::string path, PyObject *pyarrow_schema,
+    BodoParquetScanFunctionData(PyObject *path, PyObject *pyarrow_schema,
                                 PyObject *storage_options)
         : path(path),
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options) {
         Py_INCREF(pyarrow_schema);
         Py_INCREF(storage_options);
+        Py_INCREF(path);
     }
 
     ~BodoParquetScanFunctionData() {
         Py_DECREF(pyarrow_schema);
         Py_DECREF(storage_options);
+        Py_DECREF(path);
     }
 
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs) override;
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
 
     // Parquet dataset path
-    std::string path;
+    PyObject *path;
     PyObject *pyarrow_schema;
     PyObject *storage_options;
 };
@@ -106,7 +111,11 @@ class BodoDataFrameScanFunction : public BodoScanFunction {
  */
 class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoDataFrameSeqScanFunctionData(PyObject *df) : df(df) { Py_INCREF(df); }
+    BodoDataFrameSeqScanFunctionData(
+        PyObject *df, std::shared_ptr<arrow::Schema> arrow_schema)
+        : df(df), arrow_schema(arrow_schema) {
+        Py_INCREF(df);
+    }
     ~BodoDataFrameSeqScanFunctionData() { Py_DECREF(df); }
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
@@ -115,9 +124,11 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
      */
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs) override;
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
 
     PyObject *df;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
 };
 
 /**
@@ -127,8 +138,9 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
  */
 class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoDataFrameParallelScanFunctionData(std::string result_id)
-        : result_id(result_id) {}
+    BodoDataFrameParallelScanFunctionData(
+        std::string result_id, std::shared_ptr<arrow::Schema> arrow_schema)
+        : result_id(result_id), arrow_schema(arrow_schema) {}
     ~BodoDataFrameParallelScanFunctionData() {}
     /**
      * @brief Create a PhysicalOperator for reading from the dataframe.
@@ -137,8 +149,10 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
      */
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs) override;
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
     std::string result_id;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
 };
 
 /**
@@ -147,7 +161,9 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
  *
  */
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
-    BodoPythonScalarFunctionData(PyObject *args) : args(args) {
+    BodoPythonScalarFunctionData(PyObject *args,
+                                 std::shared_ptr<arrow::Schema> out_schema)
+        : args(args), out_schema(out_schema) {
         Py_INCREF(args);
     }
     ~BodoPythonScalarFunctionData() override { Py_DECREF(args); }
@@ -157,10 +173,12 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
         return (other.args == this->args);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args);
+        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args,
+                                                               out_schema);
     }
 
     PyObject *args;
+    std::shared_ptr<arrow::Schema> out_schema;
 };
 
 /**
@@ -225,11 +243,14 @@ std::vector<int> get_projection_pushed_down_columns(
  * @param source input table plan
  * @param func UDF function to execute
  * @param out_schema_py output data type (single column for df.apply)
+ * @param args arguments to the UDF
+ * @param selected_columns column indices for input table columns to pass to the
+ * UDF
  * @return duckdb::unique_ptr<duckdb::Expression> Expression node for UDF
  */
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args);
+    PyObject *args, const std::vector<int> &selected_columns);
 
 /**
  * @brief Create an expression from a constant integer.
@@ -255,6 +276,15 @@ duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val);
  */
 duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
     const std::string &val);
+
+/**
+ * @brief Create an expression from a constant timestamp with ns resolution.
+ *
+ * @param val - the constant timestamp for the expression in ns since epoch
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const timestamp expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
+    int64_t val);
 
 /**
  * @brief Create an expression that references a specified column.
@@ -293,6 +323,16 @@ duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
 
 /**
+ * @brief Create a unary op (e.g., not) expression from a source.
+ *
+ * @param lhs - the left-hand side of the expression
+ * @param etype - the expression type (e.g., not) to apply to the source
+ * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
+    std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype);
+
+/**
  * @brief Create a filter node.
  *
  * @param source - the source of the data to be filtered
@@ -304,6 +344,26 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     std::unique_ptr<duckdb::Expression> &filter_expr);
 
 /**
+ * @brief Create a limit node.
+ *
+ * @param source - the source of the data to be filtered
+ * @param n - the number of rows to return
+ * @return duckdb::unique_ptr<duckdb::LogicalLimit> - the limit node
+ */
+duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n);
+
+/**
+ * @brief Create a sample node.
+ *
+ * @param source - the source of the data to be filtered
+ * @param n - the number of rows to return
+ * @return duckdb::unique_ptr<duckdb::LogicalLimit> - the sample node
+ */
+duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n);
+
+/**
  * @brief Creates a LogicalGet node for reading a Parquet dataset in DuckDB with
  * Bodo metadata.
  *
@@ -311,7 +371,7 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    std::string parquet_path, PyObject *pyarrow_schema,
+    PyObject *parquet_path, PyObject *pyarrow_schema,
     PyObject *storage_options);
 
 /**
@@ -385,15 +445,6 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
  */
 std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
                            bool graphviz_format);
-
-/**
- * @brief Get the table index of operator assuming there is only one table
- *
- * @param op input operator
- * @return duckdb::idx_t table index of operator
- */
-duckdb::idx_t get_operator_table_index(
-    std::unique_ptr<duckdb::LogicalOperator> &op);
 
 /**
  * @brief Dynamic cast of base pointer to derived pointer.

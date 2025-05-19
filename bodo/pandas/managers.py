@@ -158,6 +158,11 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         | tuple[ArrowExtensionArray, ArrowExtensionArray]
         | None = None,
     ):
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             blocks,
             axes,
@@ -214,7 +219,8 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             self.axes = data._mgr.axes
             # Transfer ownership to this manager
             data._mgr._md_result_id = None
-            out = type(data).from_lazy_mgr(self, self._md_head)
+            head_df = pd.DataFrame._from_mgr(self._md_head, [])
+            out = type(data).from_lazy_mgr(self, head_df)
             return out
         else:
             # We got a normal pandas object, don't need to set any metadata
@@ -230,6 +236,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         If we have a plan, execute it and replace the blocks with the result.
         If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
         # Execute the plan if we have one
         if self._plan is not None:
             debug_msg(
@@ -268,6 +277,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             "_del_func",
             "_plan",
             "execute_plan",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
         # Most of the time _rebuild_blknos_and_blklocs is called by pandas internals
@@ -330,9 +340,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         self._collect_func = collect_func
         self._del_func = del_func
         self._plan = plan
-        if result_id is not None:
+        if result_id is not None or plan is not None:
             assert nrows is not None
-            assert result_id is not None
             assert head is not None
             assert collect_func is not None
             assert del_func is not None
@@ -395,10 +404,17 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                         "Index type {type(head_axis)} not supported in LazySingleBlockManager"
                     )
 
+        # Flag for disabling collect to allow updating internal pandas metadata
+        # See DataFrame.__setitem__
+        # Has to be set before calling super().__init__ since super may trigger collect
+        # depending on arguments.
+        self._disable_collect = False
         super().__init__(
             block_,
             axis_,
-            verify_integrity=verify_integrity if (result_id is None) else False,
+            verify_integrity=verify_integrity
+            if (result_id is None and plan is None)
+            else False,
         )
 
     def get_dtypes(self) -> np.typing.NDArray[np.object_]:
@@ -456,13 +472,14 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self.axes = data._mgr.axes
             # Transfer ownership to this manager
             data._mgr._md_result_id = None
-            return type(data).from_lazy_mgr(self, data.head())
+            head_s = pd.Series._from_mgr(self._md_head, [])
+            head_s._name = data._name
+            return type(data).from_lazy_mgr(self, head_s)
         else:
             # We got a normal pandas object, don't need to set any metadata
             self.blocks = data._mgr.blocks
             self.axes = data._mgr.axes
             self._plan = None
-            BlockManager._rebuild_blknos_and_blklocs(self)
             return data
 
     def _collect(self):
@@ -471,6 +488,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         If we have a plan, execute it and replace the blocks with the result.
         If the data is on the workers, collect it.
         """
+        if self._disable_collect:
+            return
+
         # Execute the plan if we have one
         if self._plan is not None:
             debug_msg(
@@ -511,6 +531,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "_del_func",
             "_plan",
             "execute_plan",
+            "_disable_collect",
         }:
             return object.__getattribute__(self, name)
         if name == "blocks":

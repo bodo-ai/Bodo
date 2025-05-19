@@ -10,11 +10,10 @@ from libcpp.vector cimport vector
 from libcpp cimport bool as c_bool
 import operator
 from libc.stdint cimport int64_t
+import pandas as pd
 
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
-
-
 ctypedef unsigned long long idx_t
 ctypedef pair[int, int] int_pair
 
@@ -168,7 +167,7 @@ def str_to_expr_type(val):
     elif val == "__invert__":
         return CExpressionType.OPERATOR_NOT
     else:
-        raise ValueError("Unhandled case in str_to_expr_type")
+        raise NotImplementedError("Unhandled case in str_to_expr_type")
 
 cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" nogil:
     cpdef enum class CExpressionClass "duckdb::ExpressionClass":
@@ -258,31 +257,43 @@ cdef extern from "duckdb/planner/operator/logical_filter.hpp" namespace "duckdb"
     cdef cppclass CLogicalFilter" duckdb::LogicalFilter"(CLogicalOperator):
         pass
 
+cdef extern from "duckdb/planner/operator/logical_limit.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalLimit" duckdb::LogicalLimit"(CLogicalOperator):
+        pass
+
+cdef extern from "duckdb/planner/operator/logical_sample.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalSample" duckdb::LogicalSample"(CLogicalOperator):
+        pass
+
 cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalGet" duckdb::LogicalGet"(CLogicalOperator):
         pass
 
 
 cdef extern from "_plan.h" nogil:
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(c_string parquet_path, object arrow_schema, object storage_options)
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema)
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema)
-    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec)
-    cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator])
-    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema)
-    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args)
-    cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
-    cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype)
-    cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr)
-    cdef unique_ptr[CExpression] make_const_int_expr(int val)
-    cdef unique_ptr[CExpression] make_const_float_expr(float val)
-    cdef unique_ptr[CExpression] make_const_string_expr(c_string val)
-    cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx)
-    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema)
-    cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format)
-    cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj)
-    cdef int planCountNodes(unique_ptr[CLogicalOperator] root)
-    cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema)
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options) except +
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema) except +
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema) except +
+    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
+    cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
+    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
+    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
+    cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
+    cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
+    cdef unique_ptr[CExpression] make_const_int_expr(int val) except +
+    cdef unique_ptr[CExpression] make_const_float_expr(float val) except +
+    cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
+    cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
+    cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
+    cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
+    cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
+    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
+    cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format) except +
+    cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
+    cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
+    cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -312,7 +323,7 @@ def join_type_to_string(CJoinType join_type):
     elif join_type == CJoinType.RIGHT_ANTI:
         return "RIGHT_ANTI"
     else:
-        raise ValueError("Unknown Join Type")
+        raise NotImplementedError("Unknown Join Type")
 
 
 cdef class LogicalOperator:
@@ -420,9 +431,9 @@ cdef class PythonScalarFuncExpression(Expression):
     """Wrapper around DuckDB's BoundFunctionExpression for running Python functions.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, object args):
+    def __cinit__(self, object out_schema, LogicalOperator source, object args, vector[int] input_column_indices):
         self.out_schema = out_schema
-        self.c_expression = make_python_scalar_func_expr(source.c_logical_operator, out_schema, args)
+        self.c_expression = make_python_scalar_func_expr(source.c_logical_operator, out_schema, args, input_column_indices)
 
     def __str__(self):
         return f"PythonScalarFuncExpression({self.out_schema})"
@@ -432,18 +443,22 @@ cdef unique_ptr[CExpression] make_expr(val):
     """Convert a filter expression tree from Cython wrappers
        to duckdb.
     """
-    cdef LogicalOperator source
     cdef c_string val_cstr
 
     if isinstance(val, int):
-        return make_const_int_expr(val)
+        return move(make_const_int_expr(val))
     elif isinstance(val, float):
-        return make_const_float_expr(val)
+        return move(make_const_float_expr(val))
     elif isinstance(val, str):
         val_cstr = val.encode()
-        return make_const_string_expr(val_cstr)
+        return move(make_const_string_expr(val_cstr))
+    elif isinstance(val, pd.Timestamp):
+        if val.resolution.nanoseconds == 1:
+            return move(make_const_timestamp_ns_expr(val.value))
+        else:
+            raise NotImplementedError("Only support ns timestamp resolution currently, not " + str(val.resolution))
     else:
-        raise ValueError("Unknown expr type in make_expr " + str(type(val)))
+        raise NotImplementedError("Unknown expr type in make_expr " + str(type(val)))
 
 
 cdef class LogicalFilter(LogicalOperator):
@@ -499,24 +514,46 @@ cdef class ConjunctionOpExpression(Expression):
         return f"ConjunctionOpExpression({self.out_schema})"
 
 
-cdef class LogicalUnaryOp(LogicalOperator):
-    cdef public object op
+cdef class UnaryOpExpression(Expression):
+    def __cinit__(self, object out_schema, source, op):
+        cdef unique_ptr[CExpression] source_expr
 
-    def __cinit__(self, out_schema, source, op):
+        source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_expr(source))
+
         self.out_schema = out_schema
-        self.op = op
+        self.c_expression = make_unary_expr(
+            source_expr,
+            str_to_expr_type(op))
+
+    def __str__(self):
+        return f"UnaryOpExpression({self.out_schema})"
+
+
+cdef class LogicalLimit(LogicalOperator):
+    cdef public int n
+
+    def __cinit__(self, out_schema, LogicalOperator source, n):
+        self.out_schema = out_schema
         self.sources = [source]
+        self.n = n
+
+        cdef unique_ptr[CLogicalLimit] c_logical_limit = make_limit(source.c_logical_operator, n)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_limit.release())
+
+    def __str__(self):
+        return f"LogicalLimit(n={self.n})"
+
 
 cdef class LogicalGetParquetRead(LogicalOperator):
     """Wrapper around DuckDB's LogicalGet for reading Parquet datasets.
     """
-    cdef readonly str path
+    cdef readonly object path
 
-    def __cinit__(self, object out_schema, c_string parquet_path, object storage_options):
+    def __cinit__(self, object out_schema, object parquet_path, object storage_options):
         self.out_schema = out_schema
         cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
-        self.path = (<bytes>parquet_path).decode("utf-8")
+        self.path = parquet_path
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"

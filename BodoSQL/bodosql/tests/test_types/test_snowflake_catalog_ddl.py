@@ -1789,7 +1789,7 @@ def _show_views_snowflake_sample_data_output(terse=True):
     if terse:
         return pd.DataFrame(
             {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 47,
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 48,
                 "NAME": [
                     "APPLICABLE_ROLES",
                     "CLASSES",
@@ -1814,6 +1814,7 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "INFORMATION_SCHEMA_CATALOG_NAME",
                     "LOAD_HISTORY",
                     "MODEL_VERSIONS",
+                    "NOTEBOOKS",
                     "OBJECT_PRIVILEGES",
                     "PACKAGES",
                     "PIPES",
@@ -1839,14 +1840,14 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "USAGE_PRIVILEGES",
                     "VIEWS",
                 ],
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 47,
-                "KIND": ["VIEW"] * 47,
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 48,
+                "KIND": ["VIEW"] * 48,
             }
         )
     else:
         return pd.DataFrame(
             {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 47,
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 48,
                 "NAME": [
                     "APPLICABLE_ROLES",
                     "CLASSES",
@@ -1871,6 +1872,7 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "INFORMATION_SCHEMA_CATALOG_NAME",
                     "LOAD_HISTORY",
                     "MODEL_VERSIONS",
+                    "NOTEBOOKS",
                     "OBJECT_PRIVILEGES",
                     "PACKAGES",
                     "PIPES",
@@ -1896,8 +1898,8 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "USAGE_PRIVILEGES",
                     "VIEWS",
                 ],
-                "RESERVED": [""] * 47,
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 47,
+                "RESERVED": [""] * 48,
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 48,
                 "COMMENT": [
                     "The roles that can be applied to the current user.",
                     "The BUNDLE CLASS that the current user has privileges to view.",
@@ -1922,6 +1924,7 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "Identifies the database (or catalog, in SQL terminology) that contains the information_schema",
                     "The loading information of the copy command",
                     "The MODEL VERSIONS that the current user has privileges to view ",
+                    "Notebooks in this database that are accessible by the current user's role",
                     "The privileges on all objects defined in this database that are accessible to the current user's role.",
                     "Available packages in current account",
                     "The pipes defined in this database that are accessible to the current user's role.",
@@ -1947,12 +1950,12 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "The usage privileges on sequences defined in this database that are accessible to the current user's role.",
                     "The views defined in this database that are accessible to the current user's role.",
                 ],
-                "OWNER": [""] * 47,
-                "TEXT": [""] * 47,
-                "IS_SECURE": ["false"] * 47,
-                "IS_MATERIALIZED": ["false"] * 47,
-                "OWNER_ROLE_TYPE": [""] * 47,
-                "CHANGE_TRACKING": ["OFF"] * 47,
+                "OWNER": [""] * 48,
+                "TEXT": [""] * 48,
+                "IS_SECURE": ["false"] * 48,
+                "IS_MATERIALIZED": ["false"] * 48,
+                "OWNER_ROLE_TYPE": [""] * 48,
+                "CHANGE_TRACKING": ["OFF"] * 48,
             }
         )
 

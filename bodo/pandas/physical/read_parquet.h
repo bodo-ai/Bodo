@@ -89,22 +89,26 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
 class PhysicalReadParquet : public PhysicalSource {
    private:
     std::shared_ptr<ParquetReader> internal_reader;
+    std::shared_ptr<arrow::Schema> arrow_schema;
 
    public:
     // TODO: Fill in the contents with info from the logical operator
-    explicit PhysicalReadParquet(std::string _path, PyObject *pyarrow_schema,
-                                 PyObject *storage_options,
-                                 std::vector<int> &selected_columns,
-                                 duckdb::TableFilterSet &filter_exprs) {
-        PyObject *py_path = PyUnicode_FromString(_path.c_str());
-
+    explicit PhysicalReadParquet(
+        PyObject *py_path, PyObject *pyarrow_schema, PyObject *storage_options,
+        std::vector<int> &selected_columns,
+        duckdb::TableFilterSet &filter_exprs,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+        // ----------------------------------------------------------
+        // Handle columns.
+        // ----------------------------------------------------------
         std::vector<bool> is_nullable(selected_columns.size(), true);
 
         // Extract metadata from pyarrow schema (for Pandas Index reconstruction
         // of dataframe later)
-        std::shared_ptr<arrow::Schema> schema = unwrap_schema(pyarrow_schema);
+        this->arrow_schema = unwrap_schema(pyarrow_schema);
         this->out_metadata = std::make_shared<TableMetadata>(
-            schema->metadata()->keys(), schema->metadata()->values());
+            this->arrow_schema->metadata()->keys(),
+            this->arrow_schema->metadata()->values());
 
         PyObject *schema_fields =
             PyObject_GetAttrString(pyarrow_schema, "names");
@@ -114,12 +118,33 @@ class PhysicalReadParquet : public PhysicalSource {
                 "pyarrow schema");
         }
 
+        // ----------------------------------------------------------
+        // Handle filter expressions.
+        // ----------------------------------------------------------
         PyObject *arrowFilterExpr =
             tableFilterSetToArrowCompute(filter_exprs, schema_fields);
 
+        // ----------------------------------------------------------
+        // Handle limit.
+        // ----------------------------------------------------------
+        int64_t total_rows_to_read = -1;  // Default to read everything.
+        if (limit_val) {
+            // If the limit option is present...
+            if (limit_val->Type() != duckdb::LimitNodeType::CONSTANT_VALUE) {
+                throw std::runtime_error(
+                    "PhysicalReadParquet unsupported limit type");
+            }
+            // Limit the rows to read to the limit value.
+            total_rows_to_read = limit_val->GetConstantValue();
+        }
+
+        // ----------------------------------------------------------
+        // Configure internal parquet reader.
+        // ----------------------------------------------------------
         internal_reader = std::make_shared<ParquetReader>(
-            py_path, true, arrowFilterExpr, storage_options, pyarrow_schema, -1,
-            selected_columns, is_nullable, false, get_streaming_batch_size());
+            py_path, true, arrowFilterExpr, storage_options, pyarrow_schema,
+            total_rows_to_read, selected_columns, is_nullable, false,
+            get_streaming_batch_size());
         internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
 
         // Extract column names from pyarrow schema using selected columns
@@ -147,19 +172,28 @@ class PhysicalReadParquet : public PhysicalSource {
 
     void Finalize() override {}
 
-    std::pair<std::shared_ptr<table_info>, ProducerResult> ProduceBatch()
+    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         uint64_t total_rows;
         bool is_last;
 
         table_info *batch =
             internal_reader->read_batch(is_last, total_rows, true);
-        auto result = is_last ? ProducerResult::FINISHED
-                              : ProducerResult::HAVE_MORE_OUTPUT;
+        auto result = is_last ? OperatorResult::FINISHED
+                              : OperatorResult::HAVE_MORE_OUTPUT;
 
         batch->column_names = out_column_names;
         batch->metadata = out_metadata;
         return std::make_pair(std::shared_ptr<table_info>(batch), result);
+    }
+
+    /**
+     * @brief Get the physical schema of the Parquet data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        return bodo::Schema::FromArrowSchema(this->arrow_schema);
     }
 
     // Column names and metadata (Pandas Index info) used for dataframe

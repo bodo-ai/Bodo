@@ -12,6 +12,21 @@ class Pipeline {
     std::shared_ptr<PhysicalSource> source;
     std::vector<std::shared_ptr<PhysicalSourceSink>> between_ops;
     std::shared_ptr<PhysicalSink> sink;
+    bool executed;
+    std::vector<std::shared_ptr<Pipeline>> dependencies;
+
+    /**
+     * @brief Execute the pipeline starting at a certain point.
+     *
+     * @param idx - the operator index in between_ops to start at
+     * @param batch - the output of the previous operator in the pipeline
+     * @param prev_op_result - the result flag of the previous operator in the
+     * pipeline
+     * @return - bool that is True if some operator in the pipeline has
+     * indicated that no more output needs to be generated.
+     */
+    bool midPipelineExecute(unsigned idx, std::shared_ptr<table_info> batch,
+                            OperatorResult prev_op_result);
 
     friend class PipelineBuilder;
 
@@ -47,4 +62,18 @@ class PipelineBuilder {
     /// the sink.
     std::shared_ptr<Pipeline> BuildEnd(
         std::shared_ptr<arrow::Schema> out_schema);
+
+    /**
+     * @brief Get the physical schema of the output of the last operator in the
+     pipeline (same logical schema may have different physical schema such as
+     regular string arrays and dictionary-encoded ones).
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    std::shared_ptr<bodo::Schema> getPrevOpOutputSchema() {
+        if (this->between_ops.empty()) {
+            return this->source->getOutputSchema();
+        }
+        return this->between_ops.back()->getOutputSchema();
+    }
 };

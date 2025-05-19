@@ -13,8 +13,9 @@
  */
 class PhysicalFilter : public PhysicalSourceSink {
    public:
-    explicit PhysicalFilter(std::shared_ptr<PhysicalExpression> expr)
-        : expression(expr) {}
+    explicit PhysicalFilter(std::shared_ptr<PhysicalExpression> expr,
+                            std::shared_ptr<bodo::Schema> input_schema)
+        : expression(expr), output_schema(input_schema) {}
 
     virtual ~PhysicalFilter() = default;
 
@@ -27,7 +28,8 @@ class PhysicalFilter : public PhysicalSourceSink {
      * @return the filtered batch from applying the expression to the input.
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) override {
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) override {
         // Evaluate the Physical expression tree with the given input batch.
         std::shared_ptr<ExprResult> expr_output =
             expression->ProcessBatch(input_batch);
@@ -49,9 +51,24 @@ class PhysicalFilter : public PhysicalSourceSink {
         std::shared_ptr<table_info> out_table =
             RetrieveTable(input_batch, bitmask);
 
-        return {out_table, OperatorResult::FINISHED};
+        // Just propagate the FINISHED flag to other operators (like join) or
+        // accept more input
+        return {out_table, prev_op_result == OperatorResult::FINISHED
+                               ? OperatorResult::FINISHED
+                               : OperatorResult::NEED_MORE_INPUT};
+    }
+
+    /**
+     * @brief Get the physical schema of the output data
+     *
+     * @return std::shared_ptr<bodo::Schema> physical schema
+     */
+    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+        // Filter's output schema is the same as the input schema
+        return output_schema;
     }
 
    private:
     std::shared_ptr<PhysicalExpression> expression;
+    const std::shared_ptr<bodo::Schema> output_schema;
 };

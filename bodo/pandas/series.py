@@ -1,19 +1,28 @@
 import typing as pt
+import warnings
 from collections.abc import Callable, Hashable
 
 import pandas as pd
 import pyarrow as pa
 
+import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
-from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.utils import (
+    BodoLibFallbackWarning,
+    BodoLibNotImplementedException,
     LazyPlan,
+    LazyPlanDistributedArg,
+    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_single_manager_class,
+    get_n_index_arrays,
     get_proj_expr_single,
+    is_single_colref_projection,
+    make_col_ref_exprs,
     wrap_plan,
 )
 
@@ -29,10 +38,44 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @property
     def _plan(self):
         if hasattr(self._mgr, "_plan"):
-            if self._mgr._plan is not None:
+            if self.is_lazy_plan():
                 return self._mgr._plan
             else:
-                return plan_optimizer.LogicalGetSeriesRead(self._mgr._md_result_id)
+                """We can't create a new LazyPlan each time that _plan is called
+                   because filtering checks that the projections that are part of
+                   the filter all come from the same source and if you create a
+                   new LazyPlan here each time then they will appear as different
+                   sources.  We sometimes use a pandas manager which doesn't have
+                   _source_plan so we have to do getattr check.
+                """
+                if getattr(self, "_source_plan", None) is not None:
+                    return self._source_plan
+
+                from bodo.pandas.base import _empty_like
+
+                empty_data = _empty_like(self)
+                if bodo.dataframe_library_run_parallel:
+                    if getattr(self._mgr, "_md_result_id", None) is not None:
+                        # If the plan has been executed but the results are still
+                        # distributed then re-use those results as is.
+                        res_id = self._mgr._md_result_id
+                        mgr = self._mgr
+                    else:
+                        # The data has been collected and is no longer distributed
+                        # so we need to re-distribute the results.
+                        res_id = bodo.spawn.utils.scatter_data(self)
+                        mgr = None
+                    self._source_plan = LazyPlan(
+                        "LogicalGetPandasReadParallel",
+                        empty_data,
+                        LazyPlanDistributedArg(mgr, res_id),
+                    )
+                else:
+                    self._source_plan = LazyPlan(
+                        "LogicalGetPandasReadSeq", empty_data, self
+                    )
+
+                return self._source_plan
 
         raise NotImplementedError(
             "Plan not available for this manager, recreate this series with from_pandas"
@@ -53,22 +96,22 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             other = other._plan
 
         # Compute schema of new series.
-        new_metadata = zero_size_self._cmp_method(zero_size_other, op)
-        assert isinstance(new_metadata, pd.Series)
+        empty_data = zero_size_self._cmp_method(zero_size_other, op)
+        assert isinstance(empty_data, pd.Series), "_cmp_method: Series expected"
 
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("BinaryOpExpression", lhs, rhs, op)
-        expr.out_schema = new_metadata.to_frame()
+        expr = LazyPlan("BinaryOpExpression", empty_data, lhs, rhs, op)
 
         plan = LazyPlan(
             "LogicalProjection",
+            empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
         )
-        return wrap_plan(new_metadata, plan=plan)
+        return wrap_plan(plan=plan)
 
     def _conjunction_binop(self, other, op):
         """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
@@ -82,7 +125,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
             or isinstance(other, bool)
         ):
-            raise TypeError(
+            raise BodoLibNotImplementedException(
                 "'other' should be boolean BodoSeries or a bool. "
                 f"Got {type(other).__name__} instead."
             )
@@ -95,24 +138,24 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             other = other._plan
 
         # Compute schema of new series.
-        new_metadata = getattr(zero_size_self, op)(zero_size_other)
-        assert isinstance(new_metadata, pd.Series), (
-            "_conjunction_binop: new_metadata is not a Series"
+        empty_data = getattr(zero_size_self, op)(zero_size_other)
+        assert isinstance(empty_data, pd.Series), (
+            "_conjunction_binop: empty_data is not a Series"
         )
 
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("ConjunctionOpExpression", lhs, rhs, op)
-        expr.out_schema = new_metadata.to_frame()
+        expr = LazyPlan("ConjunctionOpExpression", empty_data, lhs, rhs, op)
 
         plan = LazyPlan(
             "LogicalProjection",
+            empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
         )
-        return wrap_plan(new_metadata, plan=plan)
+        return wrap_plan(plan=plan)
 
     @check_args_fallback("all")
     def __and__(self, other):
@@ -138,13 +181,19 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.
-        new_metadata = _empty_like(self)
+        empty_data = _empty_like(self)
 
-        assert isinstance(new_metadata, pd.Series)
-        return wrap_plan(
-            new_metadata,
-            plan=LazyPlan("LogicalUnaryOp", self._plan, "__invert__"),
+        assert isinstance(empty_data, pd.Series), "Series expected"
+        source_expr = get_proj_expr_single(self._plan)
+        expr = LazyPlan("UnaryOpExpression", empty_data, source_expr, "__invert__")
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            # Use the original table without the Series projection node.
+            self._plan.args[0],
+            (expr,),
         )
+        return wrap_plan(plan=plan)
 
     @staticmethod
     def from_lazy_mgr(
@@ -203,15 +252,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return getattr(self._mgr, "_plan", None) is not None
 
     def execute_plan(self):
-        return self._mgr.execute_plan()
+        if self.is_lazy_plan():
+            return self._mgr.execute_plan()
 
     @property
     def shape(self):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
-        if self.is_lazy_plan():
-            self._mgr._collect()
+        self.execute_plan()
 
         if isinstance(self._mgr, LazyMetadataMixin) and (
             self._mgr._md_nrows is not None
@@ -224,18 +273,48 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Get the first n rows of the series. If head_s is present and n < len(head_s) we call head on head_s.
         Otherwise we use the data fetched from the workers.
         """
+        if n == 0 and self._head_s is not None:
+            if self._exec_state == ExecState.COLLECTED:
+                return self.iloc[:0].copy()
+            else:
+                assert self._head_s is not None
+                return self._head_s.head(0).copy()
+
         if (self._head_s is None) or (n > self._head_s.shape[0]):
-            if self.is_lazy_plan():
-                self._mgr._collect()
-            return super().head(n)
+            if bodo.dataframe_library_enabled and isinstance(
+                self._mgr, LazyMetadataMixin
+            ):
+                from bodo.pandas.base import _empty_like
+
+                planLimit = LazyPlan(
+                    "LogicalLimit",
+                    _empty_like(self),
+                    self._plan,
+                    n,
+                )
+
+                return wrap_plan(planLimit)
+            else:
+                return super().head(n)
         else:
             # If head_s is available and larger than n, then use it directly.
             return self._head_s.head(n)
 
     def __len__(self):
-        if self.is_lazy_plan():
-            self._mgr._collect()
+        self.execute_plan()
+        if self._lazy:
+            return self._mgr._md_nrows
         return super().__len__()
+
+    @property
+    def index(self):
+        self.execute_plan()
+        return super().index
+
+    @index.setter
+    def index(self, value):
+        self.execute_plan()
+        super()._set_axis(0, value)
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
@@ -244,64 +323,40 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @property
     def str(self):
-        return StringMethods(self)
+        return BodoStringMethods(self)
 
     @check_args_fallback(supported=["arg"])
     def map(self, arg, na_action=None):
         """
         Apply function to elements in a Series
         """
-        from bodo.pandas.utils import arrow_to_empty_df
 
         # Get output data type by running the UDF on a sample of the data.
         # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
         # TODO: remove when LIMIT plan is properly supported for head().
-        mgr_plan = self._mgr._plan
-        series_sample = self.head(1)
-        self._mgr._plan = mgr_plan
-        out_sample = series_sample.map(arg)
+        series_sample = self.head(1).execute_plan()
+        pd_sample = pd.Series(series_sample)
+        out_sample = pd_sample.map(arg)
 
         assert isinstance(out_sample, pd.Series), (
             f"BodoSeries.map(), expected output to be Series, got: {type(out_sample)}."
         )
-        out_sample_df = out_sample.to_frame()
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample_df))
 
-        # convert back to Series
+        # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
+        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample.to_frame()))
         empty_series = empty_df.squeeze()
         empty_series.name = out_sample.name
 
-        udf_arg = LazyPlan(
-            "PythonScalarFuncExpression",
-            # Use the plan including the projection on the original table to access
-            # the right column (TODO: refactor to include a child ColRefExpression?).
-            self._plan,
-            (
-                "map",
-                True,  # is_series
-                True,  # is_method
-                (arg,),  # args
-                {},  # kwargs
-            ),
-        )
-        udf_arg.out_schema = empty_df
-
-        plan = LazyPlan(
-            "LogicalProjection",
-            # Use the plan including the projection on the original table to access
-            # the right column (TODO: refactor to include a child ColRefExpression?).
-            self._plan,
-            (udf_arg,),
-        )
-        return wrap_plan(empty_series, plan=plan)
+        return _get_series_python_func_plan(self._plan, empty_series, "map", (arg,), {})
 
 
-class StringMethods:
+class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
     def __init__(self, series):
         self._series = series
 
+    @check_args_fallback(unsupported="none")
     def lower(self):
         index = self._series.head(0).index
         new_metadata = pd.Series(
@@ -309,32 +364,11 @@ class StringMethods:
             name=self._series.name,
             index=index,
         )
-        expr = LazyPlan(
-            "PythonScalarFuncExpression",
-            # Use the plan including the projection on the original table to access
-            # the right column (TODO: refactor to include a child ColRefExpression?).
-            self._series._plan,
-            (
-                "str.lower",
-                True,  # is_series
-                True,  # is_method
-                (),  # args
-                {},  # kwargs
-            ),
-        )
-        expr.out_schema = new_metadata.to_frame()
-        return wrap_plan(
-            new_metadata,
-            plan=LazyPlan(
-                "LogicalProjection",
-                # Use the plan including the projection on the original table to access
-                # the right column (TODO: refactor to include a child ColRefExpression?).
-                self._series._plan,
-                (expr,),
-            ),
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, "str.lower", (), {}
         )
 
-    @check_args_fallback(supported=[])
+    @check_args_fallback(unsupported="none")
     def strip(self, to_strip=None):
         index = self._series.head(0).index
         new_metadata = pd.Series(
@@ -342,27 +376,61 @@ class StringMethods:
             name=self._series.name,
             index=index,
         )
-        expr = LazyPlan(
-            "PythonScalarFuncExpression",
-            # Use the plan including the projection on the original table to access
-            # the right column (TODO: refactor to include a child ColRefExpression?).
-            self._series._plan,
-            (
-                "str.strip",
-                True,  # is_series
-                True,  # is_method
-                (),  # args
-                {},  # kwargs
-            ),
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, "str.strip", (to_strip,), {}
         )
-        expr.out_schema = new_metadata.to_frame()
-        return wrap_plan(
-            new_metadata,
-            plan=LazyPlan(
-                "LogicalProjection",
-                # Use the plan including the projection on the original table to access
-                # the right column (TODO: refactor to include a child ColRefExpression?).
-                self._series._plan,
-                (expr,),
-            ),
-        )
+
+    @check_args_fallback(unsupported="none")
+    def __getattribute__(self, name: str, /) -> pt.Any:
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            msg = (
+                f"StringMethods.{name} is not "
+                "implemented in Bodo dataframe library for the specified arguments yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            warnings.warn(BodoLibFallbackWarning(msg))
+            return object.__getattribute__(pd.Series(self._series).str, name)
+
+
+def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
+    """Create a plan for calling a Series method in Python. Creates a proper
+    PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
+    """
+    # Optimize out trivial df["col"] projections to simplify plans
+    if is_single_colref_projection(series_proj):
+        source_data = series_proj.args[0]
+        input_expr = series_proj.args[1][0]
+        col_index = input_expr.args[1]
+    else:
+        source_data = series_proj
+        col_index = 0
+
+    n_cols = len(source_data.empty_data.columns)
+    index_cols = range(
+        n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
+    )
+    expr = LazyPlan(
+        "PythonScalarFuncExpression",
+        empty_data,
+        source_data,
+        (
+            func_name,
+            True,  # is_series
+            True,  # is_method
+            args,  # args
+            kwargs,  # kwargs
+        ),
+        (col_index,) + tuple(index_cols),
+    )
+    # Select Index columns explicitly for output
+    index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
+    return wrap_plan(
+        plan=LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            source_data,
+            (expr,) + index_col_refs,
+        ),
+    )

@@ -15,11 +15,6 @@ from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_ov
 MAX_DATA_SIZE = 100
 
 
-@pytest.fixture
-def set_stream_batch_size_three(monkeypatch):
-    monkeypatch.setenv("BODO_STREAMING_BATCH_SIZE", "3")
-
-
 @pytest.fixture(
     params=[
         pd.RangeIndex(MAX_DATA_SIZE),
@@ -34,7 +29,7 @@ def index_val(request):
     return request.param
 
 
-def test_from_pandas(datapath, index_val, set_stream_batch_size_three):
+def test_from_pandas(datapath, index_val):
     """Very simple test to scan a dataframe passed into from_pandas."""
 
     df = pd.DataFrame(
@@ -49,9 +44,8 @@ def test_from_pandas(datapath, index_val, set_stream_batch_size_three):
     with temp_config_override("dataframe_library_run_parallel", False):
         bdf = bd.from_pandas(df)
         assert bdf.is_lazy_plan()
-        assert bdf.plan is not None
-        assert bdf.plan.plan_class == "LogicalGetPandasReadSeq"
-        duckdb_plan = bdf.plan.generate_duckdb()
+        assert bdf._mgr._plan.plan_class == "LogicalGetPandasReadSeq"
+        duckdb_plan = bdf._mgr._plan.generate_duckdb()
         _test_equal(duckdb_plan.df, df)
         _test_equal(
             bdf,
@@ -63,8 +57,7 @@ def test_from_pandas(datapath, index_val, set_stream_batch_size_three):
     # Parallel test
     bdf = bd.from_pandas(df)
     assert bdf.is_lazy_plan()
-    assert bdf.plan is not None
-    assert bdf.plan.plan_class == "LogicalGetPandasReadParallel"
+    assert bdf._mgr._plan.plan_class == "LogicalGetPandasReadParallel"
     _test_equal(
         bdf,
         df,
@@ -72,8 +65,19 @@ def test_from_pandas(datapath, index_val, set_stream_batch_size_three):
     assert not bdf.is_lazy_plan()
     assert bdf._mgr._plan is None
 
+    # Make sure projection with a middle column works.
+    bdf = bd.from_pandas(df)
+    bodo_df2 = bdf["b"]
+    df2 = df["b"]
+    assert bodo_df2.is_lazy_plan()
+    _test_equal(
+        bodo_df2,
+        df2,
+        check_pandas_types=False,
+    )
 
-def test_read_parquet(datapath, set_stream_batch_size_three):
+
+def test_read_parquet(datapath):
     """Very simple test to read a parquet file for sanity checking."""
     path = datapath("example_no_index.parquet")
 
@@ -94,16 +98,14 @@ def test_read_parquet(datapath, set_stream_batch_size_three):
         "example_multi_index.parquet",
     ],
 )
-def test_read_parquet_projection_pushdown(
-    datapath, file_path, set_stream_batch_size_three
-):
+def test_read_parquet_projection_pushdown(datapath, file_path):
     """Make sure basic projection pushdown works for Parquet read end to end."""
     path = datapath(file_path)
 
     bodo_out = bd.read_parquet(path)[["three", "four"]]
     py_out = pd.read_parquet(path)[["three", "four"]]
 
-    assert bodo_out.plan is not None
+    assert bodo_out.is_lazy_plan()
 
     _test_equal(
         bodo_out,
@@ -128,7 +130,7 @@ def test_read_parquet_projection_pushdown(
         )
     ],
 )
-def test_read_parquet_index(df: pd.DataFrame, index_val, set_stream_batch_size_three):
+def test_read_parquet_index(df: pd.DataFrame, index_val):
     """Test reading parquet with index column works as expected."""
     df.index = index_val[: len(df)]
     with tempfile.TemporaryDirectory() as tmp:
@@ -145,7 +147,7 @@ def test_read_parquet_index(df: pd.DataFrame, index_val, set_stream_batch_size_t
         )
 
 
-def test_read_parquet_len_shape(datapath, set_stream_batch_size_three):
+def test_read_parquet_len_shape(datapath):
     """Test length/shape after read parquet is correct"""
     path = datapath("example_no_index.parquet")
 
@@ -161,7 +163,7 @@ def test_read_parquet_len_shape(datapath, set_stream_batch_size_three):
     assert bodo_out2.shape == py_out.shape
 
 
-def test_projection(datapath, set_stream_batch_size_three):
+def test_projection(datapath):
     """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
@@ -194,7 +196,7 @@ def test_projection(datapath, set_stream_batch_size_three):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-def test_filter_pushdown(datapath, file_path, op, set_stream_batch_size_three):
+def test_filter_pushdown(datapath, file_path, op):
     """Test for filter with filter pushdown into read parquet."""
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
@@ -203,9 +205,8 @@ def test_filter_pushdown(datapath, file_path, op, set_stream_batch_size_three):
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
-    assert bodo_df2.plan is not None
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2.plan)
+    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -259,7 +260,7 @@ def test_filter_distributed(datapath, op):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-def test_filter(datapath, op, set_stream_batch_size_three):
+def test_filter(datapath, op):
     """Test for standalone filter."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -279,7 +280,6 @@ def test_filter(datapath, op, set_stream_batch_size_three):
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
-    assert bodo_df2.plan is not None
 
     py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
@@ -292,17 +292,16 @@ def test_filter(datapath, op, set_stream_batch_size_three):
     )
 
 
-def test_filter_multiple1_pushdown(datapath, set_stream_batch_size_three):
+def test_filter_multiple1_pushdown(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & (bodo_df1.D > 80))]
+    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
-    assert bodo_df2.plan is not None
 
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1[((py_df1.A < 20) & (py_df1.D > 80))]
+    py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
@@ -314,8 +313,7 @@ def test_filter_multiple1_pushdown(datapath, set_stream_batch_size_three):
     )
 
 
-@pytest.mark.skip(reason="Needs conjunction non-pushdown working.")
-def test_filter_multiple1(datapath, set_stream_batch_size_three):
+def test_filter_multiple1(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -329,12 +327,11 @@ def test_filter_multiple1(datapath, set_stream_batch_size_three):
         reset_index=True,
     )
 
-    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & (bodo_df1.D > 80))]
-    py_df2 = py_df1[((py_df1.A < 20) & (py_df1.D > 80))]
+    bodo_df2 = bodo_df1[((bodo_df1.A < 20) & ~(bodo_df1.D > 80))]
+    py_df2 = py_df1[((py_df1.A < 20) & ~(py_df1.D > 80))]
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
-    assert bodo_df2.plan is not None
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
@@ -353,9 +350,8 @@ def test_filter_string_pushdown(datapath):
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
-    assert bodo_df2.plan is not None
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2.plan)
+    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -389,7 +385,6 @@ def test_filter_string(datapath):
 
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
-    assert bodo_df2.plan is not None
 
     py_df2 = py_df1[py_df1.B == "gamma"]
 
@@ -402,7 +397,139 @@ def test_filter_string(datapath):
     )
 
 
-def test_apply(datapath, index_val, set_stream_batch_size_three):
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_filter_datetime_pushdown(datapath, op):
+    """Test for standalone filter."""
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[
+        eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")
+    ]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    _test_equal(pre, 2)
+    _test_equal(post, 1)
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[eval(f"py_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
+
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_filter_datetime(datapath, op):
+    """Test for standalone filter."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+
+    # Force read parquet node to execute so the filter doesn't get pushed into the read.
+    _test_equal(
+        bodo_df1.copy(),
+        py_df1,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    bodo_df2 = bodo_df1[
+        eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")
+    ]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    py_df2 = py_df1[eval(f"py_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")]
+
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_head_pushdown(datapath):
+    """Test for head pushed down to read parquet."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1.head(3)
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    pre, post = bd.utils.getPlanStatistics(bodo_df2._plan)
+    _test_equal(pre, 2)
+    _test_equal(post, 1)
+
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df2) == 3
+
+
+def test_projection_head_pushdown(datapath):
+    """Test for projection and head pushed down to read parquet."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1["D"]
+    bodo_df3 = bodo_df2.head(3)
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df3.is_lazy_plan()
+
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df3) == 3
+
+
+def test_series_head(datapath):
+    """Test for Series.head() reading from Pandas."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1["D"]
+    bodo_df2.execute_plan()
+    bodo_df3 = bodo_df2.head(3)
+
+    # Make sure bodo_df3 is unevaluated at this point.
+    assert bodo_df3.is_lazy_plan()
+
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df3) == 3
+
+
+def test_head(datapath):
+    """Test for head pushed down to read parquet."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+
+    _test_equal(
+        bodo_df1.copy(),
+        py_df1,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    bodo_df2 = bodo_df1.head(3)
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    # Contents not guaranteed to be the same as Pandas so just check length.
+    assert len(bodo_df2) == 3
+
+
+def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
         {
@@ -418,7 +545,7 @@ def test_apply(datapath, index_val, set_stream_batch_size_three):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_lower(datapath, index_val, set_stream_batch_size_three):
+def test_str_lower(datapath, index_val):
     """Very simple test for Series.str.lower for sanity checking."""
     df = pd.DataFrame(
         {
@@ -432,11 +559,13 @@ def test_str_lower(datapath, index_val, set_stream_batch_size_three):
     out_pd = df.B.str.lower()
     out_bodo = bdf.B.str.lower()
     assert out_bodo.is_lazy_plan()
-    assert out_bodo.plan is not None
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_strip(datapath, index_val, set_stream_batch_size_three):
+@pytest.mark.parametrize(
+    "to_strip", [pytest.param(None, id="default"), pytest.param("A B", id="strip-AB")]
+)
+def test_str_strip(datapath, index_val, to_strip):
     """Very simple test for Series.str.strip() for sanity checking."""
     df = pd.DataFrame(
         {
@@ -447,14 +576,30 @@ def test_str_strip(datapath, index_val, set_stream_batch_size_three):
     )
     df.index = index_val[: len(df)]
     bdf = bd.from_pandas(df)
-    out_pd = df.B.str.strip()
-    out_bodo = bdf.B.str.strip()
+    out_pd = df.B.str.strip(to_strip=to_strip)
+    out_bodo = bdf.B.str.strip(to_strip=to_strip)
     assert out_bodo.is_lazy_plan()
-    assert out_bodo.plan is not None
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_series_map(datapath, index_val, set_stream_batch_size_three):
+def test_chain_python_func(datapath, index_val):
+    """Make sure chaining multiple Series functions that run in Python works"""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+    out_pd = df.B.str.strip().str.lower()
+    out_bodo = bdf.B.str.strip().str.lower()
+    assert out_bodo.is_lazy_plan()
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_series_map(datapath, index_val):
     """Very simple test for Series.map() for sanity checking."""
     df = pd.DataFrame(
         {
@@ -472,11 +617,54 @@ def test_series_map(datapath, index_val, set_stream_batch_size_three):
     out_pd = df.A.map(func)
     out_bodo = bdf.A.map(func)
     assert out_bodo.is_lazy_plan()
-    assert out_bodo.plan is not None
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_parquet_read_partitioned(datapath, set_stream_batch_size_three):
+def test_set_df_column(datapath, index_val):
+    """Test setting a dataframe column with a Series function of the same dataframe."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+
+    # Single projection, new column
+    bdf["D"] = bdf["B"].str.strip()
+    pdf = df.copy()
+    pdf["D"] = pdf["B"].str.strip()
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Single projection, existing column
+    bdf = bd.from_pandas(df)
+    bdf["B"] = bdf["B"].str.strip()
+    pdf = df.copy()
+    pdf["B"] = pdf["B"].str.strip()
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Multiple projections, new column
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["B"].str.strip().map(lambda x: x + "1")
+    pdf = df.copy()
+    pdf["D"] = pdf["B"].str.strip().map(lambda x: x + "1")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Multiple projections, existing column
+    bdf = bd.from_pandas(df)
+    bdf["B"] = bdf["B"].str.strip().map(lambda x: x + "1")
+    pdf = df.copy()
+    pdf["B"] = pdf["B"].str.strip().map(lambda x: x + "1")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+
+def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
 
@@ -494,7 +682,6 @@ def test_parquet_read_partitioned(datapath, set_stream_batch_size_three):
     py_out = pd.read_parquet(path)
 
     assert bodo_out.is_lazy_plan()
-    assert bodo_out.plan is not None
 
     # NOTE: Bodo dataframe library currently reads partitioned columns as
     # dictionary-encoded strings but Pandas reads them as categorical.
@@ -508,7 +695,7 @@ def test_parquet_read_partitioned(datapath, set_stream_batch_size_three):
 
 
 @pytest.mark.skip(reason="Parquet partition filter pushdown not yet implemented.")
-def test_parquet_read_partitioned_filter(datapath, set_stream_batch_size_three):
+def test_parquet_read_partitioned_filter(datapath):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
 
@@ -518,10 +705,84 @@ def test_parquet_read_partitioned_filter(datapath, set_stream_batch_size_three):
     py_out = py_out[py_out.part == "a"]
 
     assert bodo_out.is_lazy_plan()
-    assert bodo_out.plan is not None
     # TODO: test logs to make sure filter pushdown happened and files skipped
 
     _test_equal(
         bodo_out,
         py_out,
+    )
+
+
+def test_parquet_read_shape_head(datapath):
+    """
+    Test to catch a case where the original manager goes out of scope
+    causing the parallel get to become invalid.
+    """
+    path = datapath("dataframe_library/df1.parquet")
+
+    def bodo_impl():
+        df = bd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    def pd_impl():
+        df = pd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    bdf_shape, bdf_head = bodo_impl()
+    pdf_shape, pdf_head = pd_impl()
+    assert bdf_shape == pdf_shape
+    _test_equal(bdf_head, pdf_head)
+
+
+def test_project_after_filter(datapath):
+    """Test creating a plan with a Projection on top of a filter works"""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[bodo_df1.D > 80][["B", "A"]]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[py_df1.D > 80][["B", "A"]]
+
+    # TODO: remove copy when df.apply(axis=0) is implemented
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_merge():
+    """Simple test for DataFrame merge."""
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([2, 2, 3], "Int64"),
+            "B": ["a1", "b11", "c111"],
+            "E": [1.1, 2.2, 3.3],
+        },
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([2, 3, 8], "Int64"),
+            "D": ["a1", "b222", "c33"],
+        },
+    )
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["C"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["C"])
+    # Make sure bdf3 is unevaluated at this point.
+    assert bdf3.is_lazy_plan()
+
+    _test_equal(
+        bdf3.copy(),
+        df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
     )
