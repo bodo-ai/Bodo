@@ -658,7 +658,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 # Update internal state
                 self._mgr._plan = new_plan
                 head_val = value._head_s
-                self._head_df[key] = head_val
+                # Copy and update head in case reused
+                new_df_head = self._head_df.copy()
+                new_df_head[key] = head_val
+                self._head_df = new_df_head
+                self._mgr._md_head = new_df_head._mgr
                 with self.disable_collect():
                     # Update internal data manager (e.g. insert a new block or update an
                     # existing one). See:
@@ -800,8 +804,16 @@ def _add_proj_expr_to_plan(
     func_expr = (
         _update_func_expr_source(func_expr, df_plan, ikey)
         if replace_func_source
-        else func_expr
+        # Copy the function expression to avoid modifying the original one below
+        else LazyPlan(
+            "PythonScalarFuncExpression",
+            func_expr.empty_data,
+            *func_expr.args,
+            **func_expr.kwargs,
+        )
     )
+    # Update output column name
+    func_expr.empty_data = func_expr.empty_data.set_axis([key], axis=1)
 
     # Get projection expressions
     n_cols = len(in_empty_df.columns)
