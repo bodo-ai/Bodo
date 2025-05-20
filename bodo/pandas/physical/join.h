@@ -60,14 +60,18 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols);
         initOutputColumnMapping(probe_kept_cols, left_keys, n_probe_cols);
 
+        std::shared_ptr<bodo::Schema> build_table_schema_reordered =
+            build_table_schema->Project(build_col_inds);
+        std::shared_ptr<bodo::Schema> probe_table_schema_reordered =
+            probe_table_schema->Project(probe_col_inds);
+
         // TODO[BSE-4813]: handle outer joins properly
         bool build_table_outer = false;
         bool probe_table_outer = false;
 
         this->join_state = std::make_shared<HashJoinState>(
-            build_table_schema->Project(build_col_inds),
-            probe_table_schema->Project(probe_col_inds), this->left_keys.size(),
-            build_table_outer, probe_table_outer,
+            build_table_schema_reordered, probe_table_schema_reordered,
+            this->left_keys.size(), build_table_outer, probe_table_outer,
             // TODO: support forcing broadcast by the planner
             false, nullptr, true, true, get_streaming_batch_size(), -1,
             // TODO: support query profiling
@@ -77,15 +81,15 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         // https://github.com/bodo-ai/Bodo/blob/a2e8bb7ba455dcba7372e6e92bd8488ed2b2d5cc/bodo/libs/streaming/_join.cpp#L1138
         this->output_schema = std::make_shared<bodo::Schema>();
         std::vector<std::string> col_names;
-        if (probe_table_schema->column_names.empty() ||
-            build_table_schema->column_names.empty()) {
+        if (probe_table_schema_reordered->column_names.empty() ||
+            build_table_schema_reordered->column_names.empty()) {
             throw std::runtime_error(
                 "Join input tables must have column names.");
         }
 
         for (uint64_t i_col : probe_kept_cols) {
             std::unique_ptr<bodo::DataType> col_type =
-                probe_table_schema->column_types[i_col]->copy();
+                probe_table_schema_reordered->column_types[i_col]->copy();
             // In the build outer case, we need to make NUMPY arrays
             // into NULLABLE arrays. Matches the `use_nullable_arrs`
             // behavior of RetrieveTable.
@@ -93,12 +97,13 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                 col_type = col_type->to_nullable_type();
             }
             output_schema->append_column(std::move(col_type));
-            col_names.push_back(probe_table_schema->column_names[i_col]);
+            col_names.push_back(
+                probe_table_schema_reordered->column_names[i_col]);
         }
 
         for (uint64_t i_col : build_kept_cols) {
             std::unique_ptr<bodo::DataType> col_type =
-                build_table_schema->column_types[i_col]->copy();
+                build_table_schema_reordered->column_types[i_col]->copy();
             // In the probe outer case, we need to make NUMPY arrays
             // into NULLABLE arrays. Matches the `use_nullable_arrs`
             // behavior of RetrieveTable.
@@ -106,7 +111,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                 col_type = col_type->to_nullable_type();
             }
             output_schema->append_column(std::move(col_type));
-            col_names.push_back(build_table_schema->column_names[i_col]);
+            col_names.push_back(
+                build_table_schema_reordered->column_names[i_col]);
         }
         this->output_schema->column_names = col_names;
         // Indexes are ignored in the Pandas merge if not joining on Indexes.
