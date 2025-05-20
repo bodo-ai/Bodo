@@ -5,6 +5,7 @@
 #include <arrow/python/pyarrow.h>
 #include <memory>
 #include <utility>
+#include "../../io/iceberg_parquet_reader.h"
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
@@ -13,7 +14,11 @@
 class PhysicalReadIceberg : public PhysicalSource {
    private:
     const std::shared_ptr<arrow::Schema> arrow_schema;
-    // const std::shared_ptr<IcebergParquetReader> internal_reader;
+    const std::unique_ptr<IcebergParquetReader> internal_reader;
+    static std::vector<std::string> _create_out_column_names(
+        const std::vector<int> &selected_columns,
+        const std::shared_ptr<arrow::Schema> schema);
+    static std::unique_ptr<IcebergParquetReader> _create_internal_reader();
 
    public:
     explicit PhysicalReadIceberg(
@@ -23,7 +28,7 @@ class PhysicalReadIceberg : public PhysicalSource {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val);
     virtual ~PhysicalReadIceberg() = default;
 
-    void Finalize() override {}
+    void Finalize() override;
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override;
@@ -37,6 +42,6 @@ class PhysicalReadIceberg : public PhysicalSource {
 
     // Column names and metadata (Pandas Index info) used for dataframe
     // construction
-    const std::shared_ptr<TableMetadata> out_metadata;
+    const std::unique_ptr<TableMetadata> out_metadata;
     const std::vector<std::string> out_column_names;
 };
