@@ -9,6 +9,7 @@
 #include "../io/parquet_reader.h"
 #include "_duckdb_util.h"
 #include "_plan.h"
+#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
@@ -162,7 +163,7 @@ class PhysicalReadParquet : public PhysicalSource {
             }
             PyObject *name = PyList_GetItem(schema_fields, col_idx);
             if (name && PyUnicode_Check(name)) {
-                out_column_names.push_back(PyUnicode_AsUTF8(name));
+                out_column_names.emplace_back(PyUnicode_AsUTF8(name));
             } else {
                 out_column_names.push_back("column_" + std::to_string(col_idx));
             }
