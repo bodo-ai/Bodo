@@ -819,3 +819,23 @@ def test_merge_swith_side():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_dataframe_copy(index_val):
+    """
+    Test that creating a Pandas DataFrame from a Bodo DataFrame has the correct index.
+    """
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([2, 2, 3], "Int64"),
+            "B": ["a1", "b11", "c111"],
+            "E": [1.1, 2.2, 3.3],
+        },
+    )
+    df1.index = index_val[: len(df1)]
+
+    bdf = bd.from_pandas(df1)
+
+    pdf_from_bodo = pd.DataFrame(bdf)
+
+    _test_equal(df1, pdf_from_bodo, sort_output=True)
