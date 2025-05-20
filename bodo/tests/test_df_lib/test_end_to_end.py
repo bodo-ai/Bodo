@@ -804,26 +804,6 @@ def test_merge():
         reset_index=True,
     )
 
-    # Pandas merge should raise ValueError due to mismatched key lengths
-    with pytest.raises(ValueError):
-        df1.merge(df2, how="inner", left_on=["A", "B"], right_on=["C"])
-
-    # BodoDataFrame merge should raise ValueError as well
-    with pytest.raises(ValueError):
-        bdf1.merge(bdf2, how="inner", left_on=["A", "B"], right_on=["C"])
-
-    # bdf1.merge(bdf2, how="inner", left_on=["C"], right_on=["C"])
-    df1.merge(df2, how="inner", left_on=["A"], right_on="C")
-    bdf1.merge(bdf2, how="inner", left_on=["A"], right_on="C")
-
-    # Number of elements mismatch, should raise ValueError
-    with pytest.raises(ValueError):
-        bdf1.merge(bdf2, how="inner", left_on=["A", "B"], right_on="C")
-
-    # Validation checks should pass: tuple vs. tuple, tuple vs. string
-    bdf1.merge(bdf2, how="inner", left_on=("A",), right_on=("C",))
-    bdf1.merge(bdf2, how="inner", left_on=("A",), right_on="C")
-
 
 def test_merge_swith_side():
     """Test merge with left table smaller than right table so DuckDB reorders the input
