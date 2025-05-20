@@ -177,7 +177,6 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
                                                                out_schema);
     }
 
-    std::shared_ptr<arrow::DataType> result_type;
     PyObject *args;
     std::shared_ptr<arrow::Schema> out_schema;
 };
