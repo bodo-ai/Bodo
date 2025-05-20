@@ -21,6 +21,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
+from pyiceberg.catalog import Catalog as pyiceberg_catalog
 
 import bodo
 from bodo.hiframes.datetime_date_ext import (
@@ -116,6 +117,39 @@ def pa_schema_unify_reduction(schema_a_and_row_count, schema_b_and_row_count, un
 
 
 pa_schema_unify_mpi_op = MPI.Op.Create(pa_schema_unify_reduction, commute=True)
+
+
+class PyIcebergCatalogType(types.Opaque):
+    """Type for pyiceberg catalog object passed to C++. It is just a Python object passed
+    as a pointer to C++ (this is of type pyiceberg.catalog.Catalog)
+    """
+
+    def __init__(self):
+        super().__init__(name="PyIcebergCatalogType")
+
+
+pyiceberg_catalog_type = PyIcebergCatalogType()
+types.pyiceberg_catalog_type = pyarrow_schema_type  # type: ignore
+register_model(PyIcebergCatalogType)(models.OpaqueModel)
+
+
+@unbox(PyIcebergCatalogType)
+def unbox_pyiceberg_catalog_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(PyIcebergCatalogType)
+def box_pyiceberg_catalog_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
+
+
+@typeof_impl.register(pyiceberg_catalog)
+def typeof_pyiceberg_catalog(val, c):
+    return pyiceberg_catalog_type
 
 
 # Read Arrow Int/Float columns as nullable array (IntegerArrayType/FloatingArrayType)

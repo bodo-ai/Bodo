@@ -52,6 +52,7 @@ from .read_parquet import (
 from .sf_prefetch import prefetch_sf_tables_njit
 
 if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.catalog import Catalog
     from pyiceberg.expressions import BooleanExpression
 
 
@@ -63,7 +64,7 @@ except ImportError:
 
 
 def get_iceberg_pq_dataset(
-    conn: str,
+    catalog: Catalog,
     table_id: str,
     typing_pa_table_schema: pa.Schema,
     str_as_dict_cols: list[str],
@@ -126,7 +127,7 @@ def get_iceberg_pq_dataset(
         io,
         get_file_to_schema_us,
     ) = get_iceberg_file_list_parallel(
-        conn,
+        catalog,
         table_id,
         iceberg_filter,
         snapshot_id,
