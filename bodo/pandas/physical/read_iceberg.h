@@ -28,7 +28,7 @@ class PhysicalReadIceberg : public PhysicalSource {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val);
     virtual ~PhysicalReadIceberg() = default;
 
-    void Finalize() override;
+    void Finalize() override {};
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override;

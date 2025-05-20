@@ -19,7 +19,6 @@ std::pair<std::shared_ptr<table_info>, OperatorResult>
 PhysicalReadIceberg::ProduceBatch() {
     return std::make_pair(nullptr, OperatorResult::FINISHED);
 }
-void Finalize() {}
 
 const std::shared_ptr<bodo::Schema> PhysicalReadIceberg::getOutputSchema() {
     return bodo::Schema::FromArrowSchema(this->arrow_schema);
@@ -41,6 +40,7 @@ std::vector<std::string> PhysicalReadIceberg::_create_out_column_names(
     return out_column_names;
 }
 
-std::unique_ptr<IcebergParquetReader> _create_internal_reader() {
+std::unique_ptr<IcebergParquetReader>
+PhysicalReadIceberg::_create_internal_reader() {
     return nullptr;
 }
