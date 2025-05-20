@@ -910,7 +910,7 @@ def validate_on(val):
 # Validates left_on and right_on
 def validate_merge_spec(left_on, right_on):
     """Check left_on and right_on values for type correctness
-    (currenly only str, str list, str tuple, or None are supported)
+    (currently only str, str list, str tuple, or None are supported)
     and matching number of elements. If failed to validate, raise error.
     """
     validate_on(left_on)
