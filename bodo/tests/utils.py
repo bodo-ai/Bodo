@@ -1237,7 +1237,6 @@ def _test_equal(
     check_dtype=False,
     reset_index=False,
     check_categorical=False,
-    check_exact=True,
     atol: float = 1e-08,
     rtol: float = 1e-05,
     check_pandas_types=True,
