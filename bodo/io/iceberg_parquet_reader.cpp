@@ -21,7 +21,6 @@
 
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_distributed.h"
-#include "../libs/_io_cpu_thread_pool.h"
 #include "arrow_compat.h"
 #include "arrow_reader.h"
 #include "iceberg_helpers.h"

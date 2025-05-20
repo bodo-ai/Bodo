@@ -1,8 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <stdexcept>
-#include <utility>
 
 #include <arrow/compute/expression.h>
 #include <arrow/compute/type_fwd.h>
@@ -15,8 +13,6 @@
 #include <fmt/format.h>
 #include <object.h>
 
-#include "../libs/_bodo_to_arrow.h"
-#include "../libs/_distributed.h"
 #include "../libs/_io_cpu_thread_pool.h"
 #include "arrow_reader.h"
 
