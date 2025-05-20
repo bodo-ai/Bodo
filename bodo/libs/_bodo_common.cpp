@@ -663,7 +663,7 @@ std::unique_ptr<Schema> Schema::Project(size_t first_n) const {
 }
 
 std::unique_ptr<Schema> Schema::Project(
-    const std::span<const int64_t> column_indices) const {
+    const std::vector<int>& column_indices) const {
     std::vector<std::unique_ptr<DataType>> dtypes;
     std::vector<std::string> col_names;
     dtypes.reserve(column_indices.size());

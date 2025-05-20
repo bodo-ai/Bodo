@@ -58,10 +58,20 @@ class PipelineBuilder {
     /// @brief Build the pipeline and return it
     std::shared_ptr<Pipeline> Build(std::shared_ptr<PhysicalSink> sink);
 
-    /// @brief Build the last pipeline for a plan, using a result collector as
-    /// the sink.
+    /**
+     * @brief Build the last pipeline for a plan, using a result collector as
+     * the sink.
+     *
+     * @param in_schema Schema of input data to the sink from the previous
+     * operator.
+     * @param out_schema Schema of output data from the sink expected by Python.
+     * Only column orders may be different from the input schema due to DuckDB
+     * optimizers changes (e.g. reorder build/probe sides in join).
+     * @return std::shared_ptr<Pipeline> finalized pipeline
+     */
     std::shared_ptr<Pipeline> BuildEnd(
-        std::shared_ptr<arrow::Schema> out_schema);
+        std::shared_ptr<bodo::Schema> in_schema,
+        std::shared_ptr<bodo::Schema> out_schema);
 
     /**
      * @brief Get the physical schema of the output of the last operator in the
