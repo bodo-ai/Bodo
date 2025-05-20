@@ -74,6 +74,6 @@ class PhysicalResultCollector : public PhysicalSink {
     }
 
    private:
-    std::shared_ptr<bodo::Schema> in_schema;
-    std::shared_ptr<bodo::Schema> out_schema;
+    const std::shared_ptr<bodo::Schema> in_schema;
+    const std::shared_ptr<bodo::Schema> out_schema;
 };
