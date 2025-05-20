@@ -778,13 +778,14 @@ def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
 
 
 def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
-    """Infer the output type from applying a scalar UDF by running on a
+    """Infer the output type of a scalar UDF by running it on a
     sample of the data.
 
     Args:
         obj (BodoDataFrame | BodoSeries): The object the UDF is being applied over.
         method_name ("apply" | "map"): The name of the method applying the UDF.
         func (Any): The UDF argument to pass to apply/map.
+        kwargs (dict): Optional keyword arguments to pass to apply/map.
 
     Raises:
         BodoLibNotImplementedException: If the dtype cannot be infered.

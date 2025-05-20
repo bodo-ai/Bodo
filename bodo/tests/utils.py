@@ -37,6 +37,7 @@ from numba.core.untyped_passes import PreserveIR
 import bodo
 import bodo.pandas as bodo_pd
 from bodo.mpi4py import MPI
+from bodo.spawn.spawner import SpawnDispatcher
 from bodo.utils.typing import BodoWarning, dtype_to_array_type, is_bodosql_context_type
 from bodo.utils.utils import (
     is_assign,
@@ -1650,7 +1651,7 @@ def _typeof(val):
             index=numba.typeof(val.index),
             name_typ=numba.typeof(val.name),
         )
-    elif isinstance(val, pytypes.FunctionType):
+    elif isinstance(val, (pytypes.FunctionType, SpawnDispatcher)):
         # function type isn't accurate, but good enough for the purposes of _typeof
         return types.FunctionType(types.none())
     return bodo.typeof(val)

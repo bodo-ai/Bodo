@@ -1,8 +1,5 @@
 #include "project.h"
 #include <arrow/python/pyarrow.h>
-#include <arrow/type.h>
-#include <object.h>
-#include <iostream>
 
 std::shared_ptr<table_info> PhysicalProjection::runPythonScalarFunction(
     std::shared_ptr<table_info> input_batch,

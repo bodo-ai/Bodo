@@ -159,8 +159,7 @@ def g4(a):
     return [a, 2 * a]
 
 
-# TODO: Fixme
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_func_cases1(memory_leak_check):
     """test map() called with a function defined as global/freevar outside or passed as
@@ -278,7 +277,7 @@ def test_series_map_tup_list2(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO: DataFrame Lib: Can't convert types to Arrow, falls back to pandas.
+# TODO [BSE-4824]: DataFrame Lib: Can't convert types to Arrow, falls back to pandas.
 # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_list3(memory_leak_check):
