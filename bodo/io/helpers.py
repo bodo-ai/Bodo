@@ -152,6 +152,12 @@ def typeof_pyiceberg_catalog(val, c):
     return pyiceberg_catalog_type
 
 
+@lower_constant(PyIcebergCatalogType)
+def lower_pyiceberg_catalog_type(context, builder, ty, pyval):
+    pyapi = context.get_python_api(builder)
+    return pyapi.unserialize(pyapi.serialize_object(pyval))
+
+
 # Read Arrow Int/Float columns as nullable array (IntegerArrayType/FloatingArrayType)
 use_nullable_pd_arr = True
 
