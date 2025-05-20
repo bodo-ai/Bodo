@@ -711,7 +711,6 @@ def test_parquet_read_partitioned(datapath):
     )
 
 
-@pytest.mark.skip(reason="Parquet partition filter pushdown not yet implemented.")
 def test_parquet_read_partitioned_filter(datapath):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
