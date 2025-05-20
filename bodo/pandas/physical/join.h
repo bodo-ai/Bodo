@@ -235,9 +235,10 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      * @param keys key column indices
      * @param ncols number of columns in the table
      */
-    void initInputColumnMapping(std::vector<int64_t>& col_inds,
-                                std::vector<uint64_t>& keys, uint64_t ncols) {
-        for (uint64_t i : right_keys) {
+    static void initInputColumnMapping(std::vector<int64_t>& col_inds,
+                                       std::vector<uint64_t>& keys,
+                                       uint64_t ncols) {
+        for (uint64_t i : keys) {
             col_inds.push_back(i);
         }
         for (uint64_t i = 0; i < ncols; i++) {
@@ -257,8 +258,9 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      * @param keys key column indices
      * @param ncols number of columns in the table
      */
-    void initOutputColumnMapping(std::vector<uint64_t>& col_inds,
-                                 std::vector<uint64_t>& keys, uint64_t ncols) {
+    static void initOutputColumnMapping(std::vector<uint64_t>& col_inds,
+                                        std::vector<uint64_t>& keys,
+                                        uint64_t ncols) {
         // Map key column index to its position in keys vector
         std::unordered_map<uint64_t, size_t> key_positions;
         for (size_t i = 0; i < keys.size(); ++i) {
