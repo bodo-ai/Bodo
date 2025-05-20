@@ -42,3 +42,15 @@ extractValue(const duckdb::Value& value) {
                                      std::to_string(static_cast<int>(type)));
     }
 }
+
+std::string schemaColumnNamesToString(
+    const std::shared_ptr<arrow::Schema> arrow_schema) {
+    std::string ret = "";
+    for (int i = 0; i < arrow_schema->num_fields(); i++) {
+        ret += arrow_schema->field(i)->name();
+        if (i != arrow_schema->num_fields() - 1) {
+            ret += ", ";
+        }
+    }
+    return ret;
+}

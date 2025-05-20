@@ -6,6 +6,7 @@
 #include <Python.h>
 #include <fmt/format.h>
 #include <utility>
+#include "_duckdb_util.h"
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
@@ -14,16 +15,6 @@
 #include "duckdb/planner/expression.hpp"
 #include "physical/expression.h"
 #include "physical/operator.h"
-
-/**
- * @brief Return a string representation of the column names in the Arrow schema
- * for printing purposes (e.g. plan prints).
- *
- * @param arrow_schema input Arrow schema
- * @return std::string string representation of the column names
- */
-std::string schemaColumnNamesToString(
-    const std::shared_ptr<arrow::Schema> arrow_schema);
 
 /**
  * @brief Superclass for Bodo's DuckDB TableFunction classes.
