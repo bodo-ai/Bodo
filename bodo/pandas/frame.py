@@ -521,6 +521,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # key columns with the same names from output
 
         # TODO[BSE-4811]: add proper argument validation
+        validate_merge_spec(left_on, right_on)
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
@@ -880,3 +881,27 @@ def _get_set_column_plan(
         return None
 
     return _add_proj_expr_to_plan(df_plan, value_plan, key)
+
+
+# Validates single on-value
+def validate_on(val):
+    if val is not None:
+        if not (
+            isinstance(val, str)
+            or (isinstance(val, (list, tuple)) and all(isinstance(k, str) for k in val))
+        ):
+            raise ValueError(
+                "only str, str list, str tuple, or None are supported for left_on and right_on values"
+            )
+
+
+# Validates left_on and right_on
+def validate_merge_spec(left_on, right_on):
+    """Check left_on and right_on values for type correctness
+    (currenly only str, str list, str tuple, or None are supported)
+    and matching number of elements. If failed to validate, raise error.
+    """
+    validate_on(left_on)
+    validate_on(right_on)
+    if len(left_on) != len(right_on):
+        raise ValueError("len(right_on) must equal len(left_on)")
