@@ -159,11 +159,15 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
 
 @overload(conn_str_to_catalog)
 def conn_str_to_catalog_overload(
-    conn_str: str,
-) -> pyiceberg_catalog_type:
+    conn_str,
+):
     """
     Overload for conn_str_to_catalog
     """
-    with no_warning_objmode(catalog=pyiceberg_catalog_type):
-        catalog = conn_str_to_catalog(conn_str)
-    return catalog
+
+    def impl(conn_str):
+        with no_warning_objmode(catalog=pyiceberg_catalog_type):
+            catalog = conn_str_to_catalog(conn_str)
+        return catalog
+
+    return impl
