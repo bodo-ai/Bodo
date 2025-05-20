@@ -1,6 +1,8 @@
 #pragma once
 
 #include <utility>
+#include "_util.h"
+#include "fmt/format.h"
 
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
@@ -42,7 +44,11 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
  */
 class BodoParquetScanFunction : public BodoScanFunction {
    public:
-    BodoParquetScanFunction() : BodoScanFunction("bodo_read_parquet") {
+    BodoParquetScanFunction(const std::shared_ptr<arrow::Schema> arrow_schema)
+
+        : BodoScanFunction(
+              fmt::format("bodo_read_parquet({})",
+                          schemaColumnNamesToString(arrow_schema))) {
         filter_pushdown = true;
         filter_prune = true;
         projection_pushdown = true;
@@ -90,9 +96,13 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
  * (used in LogicalGet).
  *
  */
+
 class BodoDataFrameScanFunction : public BodoScanFunction {
    public:
-    BodoDataFrameScanFunction() : BodoScanFunction("bodo_read_df") {
+    BodoDataFrameScanFunction(const std::shared_ptr<arrow::Schema> arrow_schema)
+        : BodoScanFunction(fmt::format(
+
+              "bodo_read_df({})", schemaColumnNamesToString(arrow_schema))) {
         projection_pushdown = true;
     }
 };
@@ -182,7 +192,10 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
  */
 class BodoIcebergScanFunction : public BodoScanFunction {
    public:
-    BodoIcebergScanFunction() : BodoScanFunction("bodo_read_iceberg") {
+    BodoIcebergScanFunction(const std::shared_ptr<arrow::Schema> arrow_schema)
+        : BodoScanFunction(
+              fmt::format("bodo_read_iceberg({})",
+                          schemaColumnNamesToString(arrow_schema))) {
         // filter_pushdown = true;
         // filter_prune = true;
         // projection_pushdown = true;
@@ -201,7 +214,7 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
     BodoIcebergScanFunctionData(std::shared_ptr<arrow::Schema> arrow_schema)
         : arrow_schema(std::move(arrow_schema)) {};
 
-    ~BodoIcebergScanFunctionData() override {}
+    ~BodoIcebergScanFunctionData() override = default;
 
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,

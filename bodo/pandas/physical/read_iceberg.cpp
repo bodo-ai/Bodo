@@ -42,5 +42,5 @@ std::vector<std::string> PhysicalReadIceberg::_create_out_column_names(
 }
 
 std::unique_ptr<IcebergParquetReader> _create_internal_reader() {
-    return IcebergParquetReader();
+    return nullptr;
 }

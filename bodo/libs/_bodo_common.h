@@ -823,7 +823,7 @@ struct Schema {
      * @return std::unique_ptr<Schema> New schema.
      */
     std::unique_ptr<Schema> Project(
-        const std::span<const int64_t> column_indices) const;
+        const std::vector<int>& column_indices) const;
 
     /// @brief Convert to an Arrow schema
     std::shared_ptr<::arrow::Schema> ToArrowSchema() const;

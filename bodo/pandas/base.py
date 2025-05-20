@@ -10,6 +10,7 @@ from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
+    BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
     arrow_to_empty_df,
@@ -123,6 +124,8 @@ def read_iceberg(
     limit: int | None = None,
     scan_properties: dict[str, pt.Any] | None = None,
 ) -> BodoDataFrame:
+    raise BodoLibNotImplementedException()
+
     if catalog_properties is None:
         catalog_properties = {}
     catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)

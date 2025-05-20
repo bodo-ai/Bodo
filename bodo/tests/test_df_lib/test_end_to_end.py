@@ -562,6 +562,23 @@ def test_str_lower(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+def test_str_upper(datapath, index_val):
+    """Very simple test for Series.str.upper for sanity checking."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
+            "B": ["a1", "b1", "c1", "Abc"] * 2,
+            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+    out_pd = df.B.str.upper()
+    out_bodo = bdf.B.str.upper()
+    assert out_bodo.is_lazy_plan()
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
 @pytest.mark.parametrize(
     "to_strip", [pytest.param(None, id="default"), pytest.param("A B", id="strip-AB")]
 )
@@ -786,3 +803,56 @@ def test_merge():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_merge_swith_side():
+    """Test merge with left table smaller than right table so DuckDB reorders the input
+    tables to use the smaller table as build.
+    """
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([2, 2, 3], "Int64"),
+            "B": ["a1", "b11", "c111"],
+        },
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([2, 3, 8], "Int64"),
+            "D": ["a1", "b222", "c33"],
+            "E": [1.1, 2.2, 3.3],
+        },
+    )
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["C"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["C"])
+    # Make sure bdf3 is unevaluated at this point.
+    assert bdf3.is_lazy_plan()
+
+    _test_equal(
+        bdf3.copy(),
+        df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_dataframe_copy(index_val):
+    """
+    Test that creating a Pandas DataFrame from a Bodo DataFrame has the correct index.
+    """
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([2, 2, 3], "Int64"),
+            "B": ["a1", "b11", "c111"],
+            "E": [1.1, 2.2, 3.3],
+        },
+    )
+    df1.index = index_val[: len(df1)]
+
+    bdf = bd.from_pandas(df1)
+
+    pdf_from_bodo = pd.DataFrame(bdf)
+
+    _test_equal(df1, pdf_from_bodo, sort_output=True)

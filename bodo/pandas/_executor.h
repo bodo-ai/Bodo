@@ -24,7 +24,10 @@ class Executor {
         builder.Visit(*plan);
         pipelines = std::move(builder.finished_pipelines);
         assert(builder.active_pipeline != nullptr);
-        pipelines.push_back(builder.active_pipeline->BuildEnd(out_schema));
+        std::shared_ptr<bodo::Schema> in_schema =
+            builder.active_pipeline->getPrevOpOutputSchema();
+        pipelines.push_back(builder.active_pipeline->BuildEnd(
+            in_schema, bodo::Schema::FromArrowSchema(out_schema)));
     }
 
     /**

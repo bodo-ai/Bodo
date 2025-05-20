@@ -2,7 +2,6 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <utility>
-#include "arrow/util/key_value_metadata.h"
 
 #include "../io/arrow_compat.h"
 #include "_bodo_scan_function.h"
@@ -364,14 +363,15 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema,
     PyObject *storage_options) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
-    BodoParquetScanFunction table_function = BodoParquetScanFunction();
+    BodoParquetScanFunction table_function =
+        BodoParquetScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoParquetScanFunctionData>(
             parquet_path, pyarrow_schema, storage_options);
 
     // Convert Arrow schema to DuckDB
-    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
 
     duckdb::virtual_column_map_t virtual_columns;
@@ -402,7 +402,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
 
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
-    BodoDataFrameScanFunction table_function = BodoDataFrameScanFunction();
+    BodoDataFrameScanFunction table_function =
+        BodoDataFrameScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoDataFrameSeqScanFunctionData>(df, arrow_schema);
 
@@ -430,7 +431,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
-    BodoDataFrameScanFunction table_function = BodoDataFrameScanFunction();
+    BodoDataFrameScanFunction table_function =
+        BodoDataFrameScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoDataFrameParallelScanFunctionData>(result_id,
                                                                  arrow_schema);
@@ -461,7 +463,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
 
-    BodoIcebergScanFunction table_function = BodoIcebergScanFunction();
+    BodoIcebergScanFunction table_function =
+        BodoIcebergScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoIcebergScanFunctionData>(arrow_schema);
 
