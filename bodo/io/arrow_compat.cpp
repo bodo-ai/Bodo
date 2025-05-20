@@ -25,7 +25,7 @@ DEFINE_WRAP_FUNCTIONS(filesystem, std::shared_ptr<arrow::fs::FileSystem>, out);
 }  // namespace arrow::py
 
 std::shared_ptr<arrow::Schema> unwrap_schema(PyObject* pyarrow_schema) {
-    if (!arrow::py::import_pyarrow()) {
+    if (arrow::py::import_pyarrow() != 0) {
         throw std::runtime_error("importing pyarrow failed");
     }
 
