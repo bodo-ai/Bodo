@@ -14,12 +14,13 @@ class PhysicalReadPandas : public PhysicalSource {
     PyObject* df;
     int64_t current_row = 0;
     int64_t num_rows;
-    std::shared_ptr<bodo::Schema> output_schema;
+    const std::shared_ptr<bodo::Schema> output_schema;
 
    public:
     explicit PhysicalReadPandas(PyObject* _df_or_series,
                                 std::vector<int>& selected_columns,
-                                std::shared_ptr<arrow::Schema> arrow_schema) {
+                                std::shared_ptr<arrow::Schema> arrow_schema)
+        : output_schema(initOutputSchema(selected_columns, arrow_schema)) {
         this->setInputDF(_df_or_series);
 
         // Select only the specified columns if provided by the optimizer
@@ -76,12 +77,25 @@ class PhysicalReadPandas : public PhysicalSource {
         }
 
         num_rows = PyObject_Length(df);
+    }
 
-        this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema);
+    /**
+     * @brief Initialize the output schema based on the selected columns and
+     * Arrow schema.
+     *
+     * @param selected_columns The selected columns to project.
+     * @param arrow_schema The Arrow schema of the DataFrame.
+     * @return std::shared_ptr<bodo::Schema> The initialized output schema.
+     */
+    static std::shared_ptr<bodo::Schema> initOutputSchema(
+        std::vector<int>& selected_columns,
+        std::shared_ptr<arrow::Schema> arrow_schema) {
+        std::shared_ptr<bodo::Schema> output_schema =
+            bodo::Schema::FromArrowSchema(arrow_schema);
         if (!selected_columns.empty()) {
-            this->output_schema =
-                this->output_schema->Project(selected_columns);
+            output_schema = output_schema->Project(selected_columns);
         }
+        return output_schema;
     }
 
     virtual ~PhysicalReadPandas() { Py_DECREF(df); }
