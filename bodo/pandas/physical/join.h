@@ -52,10 +52,13 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     void InitializeJoinState(
         const std::shared_ptr<bodo::Schema> build_table_schema,
         const std::shared_ptr<bodo::Schema> probe_table_schema) {
-        initInputColumnMapping(build_col_inds, right_keys,
-                               build_table_schema->ncols());
-        initInputColumnMapping(probe_col_inds, left_keys,
-                               probe_table_schema->ncols());
+        size_t n_build_cols = build_table_schema->ncols();
+        size_t n_probe_cols = probe_table_schema->ncols();
+
+        initInputColumnMapping(build_col_inds, right_keys, n_build_cols);
+        initInputColumnMapping(probe_col_inds, left_keys, n_probe_cols);
+        initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols);
+        initOutputColumnMapping(probe_kept_cols, left_keys, n_probe_cols);
 
         // TODO[BSE-4813]: handle outer joins properly
         bool build_table_outer = false;
@@ -69,11 +72,6 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             false, nullptr, true, true, get_streaming_batch_size(), -1,
             // TODO: support query profiling
             -1);
-
-        initOutputColumnMapping(build_kept_cols, right_keys,
-                                build_table_schema->ncols());
-        initOutputColumnMapping(probe_kept_cols, left_keys,
-                                probe_table_schema->ncols());
 
         // Create the probe output schema, same as here for consistency:
         // https://github.com/bodo-ai/Bodo/blob/a2e8bb7ba455dcba7372e6e92bd8488ed2b2d5cc/bodo/libs/streaming/_join.cpp#L1138
