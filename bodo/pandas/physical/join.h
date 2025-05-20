@@ -62,7 +62,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         bool probe_table_outer = false;
 
         this->join_state = std::make_shared<HashJoinState>(
-            build_table_schema, probe_table_schema, this->left_keys.size(),
+            build_table_schema->Project(build_col_inds),
+            probe_table_schema->Project(probe_col_inds), this->left_keys.size(),
             build_table_outer, probe_table_outer,
             // TODO: support forcing broadcast by the planner
             false, nullptr, true, true, get_streaming_batch_size(), -1,
