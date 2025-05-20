@@ -311,7 +311,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             "_disable_collect",
         }:
             return object.__getattribute__(self, name)
-        # If the attribute is 'arrays', we ensure we have the data.
+        # If the attribute is 'arrays' or 'copy', we ensure we have the data.
         if name in {"arrays", "copy"}:
             self._collect()
         return ArrayManager.__getattribute__(self, name)
@@ -598,7 +598,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             "_disable_collect",
         }:
             return object.__getattribute__(self, name)
-        # If the attribute is 'arrays', we ensure we have the data.
+        # If the attribute is 'arrays' or 'copy', we ensure we have the data.
         if name in {"arrays", "copy"}:
             self._collect()
         return SingleArrayManager.__getattribute__(self, name)
