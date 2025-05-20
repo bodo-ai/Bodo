@@ -787,8 +787,11 @@ def test_merge():
         reset_index=True,
     )
 
-    # Test with left table smaller than right table so DuckDB reorders the input tables
-    # to use the smaller table as build.
+
+def test_merge_swith_side():
+    """Test merge with left table smaller than right table so DuckDB reorders the input
+    tables to use the smaller table as build.
+    """
     df1 = pd.DataFrame(
         {
             "A": pd.array([2, 2, 3], "Int64"),
