@@ -76,6 +76,12 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         // Create the probe output schema, same as here for consistency:
         // https://github.com/bodo-ai/Bodo/blob/a2e8bb7ba455dcba7372e6e92bd8488ed2b2d5cc/bodo/libs/streaming/_join.cpp#L1138
         this->output_schema = std::make_shared<bodo::Schema>();
+        std::vector<std::string> col_names;
+        if (probe_table_schema->column_names.empty() ||
+            build_table_schema->column_names.empty()) {
+            throw std::runtime_error(
+                "Join input tables must have column names.");
+        }
 
         for (uint64_t i_col : probe_kept_cols) {
             std::unique_ptr<bodo::DataType> col_type =
@@ -87,6 +93,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                 col_type = col_type->to_nullable_type();
             }
             output_schema->append_column(std::move(col_type));
+            col_names.push_back(probe_table_schema->column_names[i_col]);
         }
 
         for (uint64_t i_col : build_kept_cols) {
@@ -99,7 +106,15 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                 col_type = col_type->to_nullable_type();
             }
             output_schema->append_column(std::move(col_type));
+            col_names.push_back(build_table_schema->column_names[i_col]);
         }
+        this->output_schema->column_names = col_names;
+        // Indexes are ignored in the Pandas merge if not joining on Indexes.
+        // We designate empty metadata to indicate generating a trivial
+        // RangeIndex.
+        // TODO[BSE-4820]: support joining on Indexes
+        this->output_schema->metadata = std::make_shared<TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
     }
 
     void Finalize() override {}

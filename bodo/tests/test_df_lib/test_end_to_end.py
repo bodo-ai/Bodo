@@ -788,6 +788,39 @@ def test_merge():
     )
 
 
+def test_merge_swith_side():
+    """Test merge with left table smaller than right table so DuckDB reorders the input
+    tables to use the smaller table as build.
+    """
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([2, 2, 3], "Int64"),
+            "B": ["a1", "b11", "c111"],
+        },
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([2, 3, 8], "Int64"),
+            "D": ["a1", "b222", "c33"],
+            "E": [1.1, 2.2, 3.3],
+        },
+    )
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["C"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["C"])
+    # Make sure bdf3 is unevaluated at this point.
+    assert bdf3.is_lazy_plan()
+
+    _test_equal(
+        bdf3.copy(),
+        df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_dataframe_copy(index_val):
     """
     Test that creating a Pandas DataFrame from a Bodo DataFrame has the correct index.
