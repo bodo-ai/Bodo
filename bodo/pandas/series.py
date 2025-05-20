@@ -58,16 +58,19 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     if getattr(self._mgr, "_md_result_id", None) is not None:
                         # If the plan has been executed but the results are still
                         # distributed then re-use those results as is.
+                        nrows = self._mgr._md_nrows
                         res_id = self._mgr._md_result_id
                         mgr = self._mgr
                     else:
                         # The data has been collected and is no longer distributed
                         # so we need to re-distribute the results.
+                        nrows = len(self)
                         res_id = bodo.spawn.utils.scatter_data(self)
                         mgr = None
                     self._source_plan = LazyPlan(
                         "LogicalGetPandasReadParallel",
                         empty_data,
+                        nrows,
                         LazyPlanDistributedArg(mgr, res_id),
                     )
                 else:
@@ -260,13 +263,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
-        self.execute_plan()
-
-        if isinstance(self._mgr, LazyMetadataMixin) and (
-            self._mgr._md_nrows is not None
-        ):
-            return (self._mgr._md_nrows,)
-        return super().shape
+        match self._exec_state:
+            case ExecState.PLAN:
+                return (self._count_plan(),)
+            case ExecState.DISTRIBUTED:
+                return (self._mgr._md_nrows,)
+            case ExecState.COLLECTED:
+                return super().shape
 
     def head(self, n: int = 5):
         """
@@ -300,11 +303,43 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             # If head_s is available and larger than n, then use it directly.
             return self._head_s.head(n)
 
+    def _count_plan(self):
+        from bodo.pandas.utils import execute_plan, plan_cardinality
+
+        # See if we can get the cardinality statically.
+        static_cardinality = plan_cardinality(self._plan)
+        if static_cardinality is not None:
+            return static_cardinality
+
+        # Can't be known statically so create count plan on top of
+        # existing plan.
+        count_star_schema = pd.Series(dtype="uint64", name="count_star")
+        aggregate_plan = LazyPlan(
+            "LogicalAggregate",
+            count_star_schema, 
+            self._plan,
+            0,
+            0,
+            [LazyPlan("FunctionExpression", count_star_schema, "count_star")]
+        )  
+        projection_plan = LazyPlan(
+            "LogicalProjection",
+            count_star_schema, 
+            aggregate_plan,
+            make_col_ref_exprs([0], aggregate_plan)
+        )  
+
+        data = execute_plan(projection_plan)
+        return data[0]
+
     def __len__(self):
-        self.execute_plan()
-        if self._lazy:
-            return self._mgr._md_nrows
-        return super().__len__()
+        match self._exec_state:
+            case ExecState.PLAN:
+                return self._count_plan()
+            case ExecState.DISTRIBUTED:
+                return self._mgr._md_nrows
+            case ExecState.COLLECTED:
+                return super().__len__()
 
     @property
     def index(self):

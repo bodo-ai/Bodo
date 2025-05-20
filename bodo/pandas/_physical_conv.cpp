@@ -9,6 +9,7 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
+#include "physical/aggregate.h"
 #include "physical/filter.h"
 #include "physical/join.h"
 #include "physical/limit.h"
@@ -147,7 +148,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
-                "Unsupported duckdb expression type" +
+                "Unsupported duckdb expression type " +
                 std::to_string(static_cast<int>(expr_class)));
     }
     throw std::logic_error("Control should never reach here");
@@ -172,6 +173,37 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     std::shared_ptr<PhysicalFilter> physical_op =
         std::make_shared<PhysicalFilter>(physExprTree, in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
+    // Process the source of this filter.
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    if (op.expressions.size() != 1) {
+        throw std::runtime_error(
+            "LogicalAggregate does not yet support other than one expression.");
+    }
+
+    const std::string & alias = op.expressions[0]->GetAlias();
+
+    if (alias.empty()) {
+        throw std::runtime_error("PhysicalPlanBuilder::Visit(LogicalAggregate) expr alias cannot be empty");
+    } else {
+        if (alias == "count_star()") {
+            auto physical_op = std::make_shared<PhysicalCountStar>();
+            // Finish the pipeline at this point so that Finalize can run
+            // to reduce the number of collected rows to the desired amount.
+            finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
+            // The same operator will exist in both pipelines.  The sink of the
+            // previous pipeline and the source of the next one.
+            // We record the pipeline dependency between these two pipelines.
+            this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+        } else {
+            throw std::runtime_error("PhysicalPlanBuilder::Visit(LogicalAggregate) unsupported aggregate " + alias);
+        }
+    }
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {

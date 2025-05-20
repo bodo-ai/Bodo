@@ -422,6 +422,9 @@ def execute_plan(plan: LazyPlan):
 
         duckdb_plan = plan.generate_duckdb()
 
+        if bodo.dataframe_library_dump_plans:
+            print(duckdb_plan.toString())
+
         # Print the plan before optimization
         if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
             pre_optimize_graphviz = duckdb_plan.toGraphviz()
@@ -429,6 +432,9 @@ def execute_plan(plan: LazyPlan):
                 print(pre_optimize_graphviz, file=f)
 
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
+
+        if bodo.dataframe_library_dump_plans:
+            print(optimized_plan.toString())
 
         # Print the plan after optimization
         if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
@@ -447,6 +453,23 @@ def execute_plan(plan: LazyPlan):
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
+
+
+def plan_cardinality(plan: LazyPlan):
+    """See if we can statically know the cardinality of the result of the plan.
+
+    Args:
+        plan (LazyPlan): query plan to get cardinality of.
+
+    Returns:
+        int (if cardinality is known) or None (if not known)
+    """
+
+    import bodo
+    from bodo.ext import plan_optimizer
+
+    duckdb_plan = plan.generate_duckdb()
+    return duckdb_plan.getCardinality()
 
 
 def getPlanStatistics(plan: LazyPlan):
