@@ -545,7 +545,7 @@ set(sources_list
   "bodo/pandas/_plan.cpp"
   "bodo/pandas/_pipeline.cpp"
   "bodo/pandas/_physical_conv.cpp"
-  "bodo/pandas/_duckdb_util.cpp"
+  "bodo/pandas/_util.cpp"
   "bodo/pandas/physical/expression.cpp"
   "bodo/pandas/physical/operator.cpp"
   "bodo/pandas/physical/project.cpp"
