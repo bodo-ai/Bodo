@@ -1,4 +1,4 @@
-# Bodo Pandas API (Bodo DataFrame Library)
+# Bodo Pandas API (Bodo DataFrame Library) {#dataframe-lib}
 
 The Bodo DataFrame Library is designed to accelerate and scale Pandas workflows with just a one-line change — simply replace:
 
@@ -495,6 +495,56 @@ Output:
 9      b1
 10     c1
 11    abc
+Name: A, dtype: string
+```
+
+---
+
+### bodo.pandas.BodoSeries.str.upper
+```
+BodoSeries.str.upper() -> BodoSeries
+```
+Converts strings in a BodoSeries to uppercase.
+Equivalent to [`str.upper()`](https://docs.python.org/3/library/stdtypes.html#str.upper).
+
+<p class="api-header">Returns</p>
+
+: __BodoSeries__
+
+<p class="api-header">Example</p>
+
+``` py
+import bodo.pandas as bodo_pd
+import pandas as pd
+
+df = pd.DataFrame(
+        {
+            "A": ["a1", "b1", "c1", "Abc"] * 3,
+        }
+    )
+
+bdf = bodo_pd.from_pandas(df)
+bodo_ser = bdf.A.str.upper()
+print(type(bodo_ser))
+print(bodo_ser)
+```
+
+Output:
+
+```
+<class 'bodo.pandas.series.BodoSeries'>
+0      A1
+1      B1
+2      C1
+3     ABC
+4      A1
+5      B1
+6      C1
+7     ABC
+8      A1
+9      B1
+10     C1
+11    ABC
 Name: A, dtype: string
 ```
 

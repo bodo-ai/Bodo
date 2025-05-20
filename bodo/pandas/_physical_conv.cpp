@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include "_plan.h"
 
-#include "_duckdb_util.h"
+#include "_util.h"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"

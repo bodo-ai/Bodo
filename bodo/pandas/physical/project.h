@@ -20,13 +20,19 @@ class PhysicalProjection : public PhysicalSourceSink {
         : exprs(std::move(exprs)) {
         // Create the output schema from expressions
         this->output_schema = std::make_shared<bodo::Schema>();
+        std::vector<std::string> col_names;
         for (const auto& expr : this->exprs) {
             if (expr->type == duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
+                size_t col_idx = colref.binding.column_index;
                 std::unique_ptr<bodo::DataType> col_type =
-                    input_schema->column_types[colref.binding.column_index]
-                        ->copy();
+                    input_schema->column_types[col_idx]->copy();
                 this->output_schema->append_column(std::move(col_type));
+                if (input_schema->column_names.size() > 0) {
+                    col_names.emplace_back(input_schema->column_names[col_idx]);
+                } else {
+                    col_names.emplace_back(colref.GetName());
+                }
             } else if (expr->type == duckdb::ExpressionType::BOUND_FUNCTION) {
                 auto& func_expr = expr->Cast<duckdb::BoundFunctionExpression>();
                 BodoPythonScalarFunctionData& scalar_func_data =
@@ -37,12 +43,16 @@ class PhysicalProjection : public PhysicalSourceSink {
                         ->column_types[0]
                         ->copy();
                 this->output_schema->append_column(std::move(col_type));
+                col_names.emplace_back(
+                    scalar_func_data.out_schema->field(0)->name());
             } else {
                 throw std::runtime_error(
                     "Unsupported expression type in projection " +
                     expr->ToString());
             }
         }
+        this->output_schema->column_names = col_names;
+        this->output_schema->metadata = input_schema->metadata;
     }
 
     virtual ~PhysicalProjection() = default;

@@ -1,4 +1,4 @@
-#include "_duckdb_util.h"
+#include "_util.h"
 
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double, arrow::TimestampScalar>
@@ -41,4 +41,16 @@ extractValue(const duckdb::Value& value) {
             throw std::runtime_error("extractValue unhandled type." +
                                      std::to_string(static_cast<int>(type)));
     }
+}
+
+std::string schemaColumnNamesToString(
+    const std::shared_ptr<arrow::Schema> arrow_schema) {
+    std::string ret = "";
+    for (int i = 0; i < arrow_schema->num_fields(); i++) {
+        ret += arrow_schema->field(i)->name();
+        if (i != arrow_schema->num_fields() - 1) {
+            ret += ", ";
+        }
+    }
+    return ret;
 }

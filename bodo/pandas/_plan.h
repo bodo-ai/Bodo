@@ -4,7 +4,9 @@
 #pragma once
 
 #include <Python.h>
+#include <fmt/format.h>
 #include <utility>
+#include "_util.h"
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
@@ -49,7 +51,10 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
  */
 class BodoParquetScanFunction : public BodoScanFunction {
    public:
-    BodoParquetScanFunction() : BodoScanFunction("bodo_read_parquet") {
+    BodoParquetScanFunction(const std::shared_ptr<arrow::Schema> arrow_schema)
+        : BodoScanFunction(
+              fmt::format("bodo_read_parquet({})",
+                          schemaColumnNamesToString(arrow_schema))) {
         filter_pushdown = true;
         filter_prune = true;
         projection_pushdown = true;
@@ -99,7 +104,9 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
  */
 class BodoDataFrameScanFunction : public BodoScanFunction {
    public:
-    BodoDataFrameScanFunction() : BodoScanFunction("bodo_read_df") {
+    BodoDataFrameScanFunction(const std::shared_ptr<arrow::Schema> arrow_schema)
+        : BodoScanFunction(fmt::format(
+              "bodo_read_df({})", schemaColumnNamesToString(arrow_schema))) {
         projection_pushdown = true;
     }
 };
