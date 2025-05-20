@@ -6,7 +6,7 @@
 #include <Python.h>
 #include <fmt/format.h>
 #include <utility>
-#include "_duckdb_util.h"
+#include "_util.h"
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"

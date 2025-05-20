@@ -7,7 +7,7 @@
 #include <utility>
 #include "../io/arrow_compat.h"
 #include "../io/parquet_reader.h"
-#include "_duckdb_util.h"
+#include "_util.h"
 #include "arrow/util/key_value_metadata.h"
 #include "operator.h"
 
