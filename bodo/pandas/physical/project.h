@@ -1,5 +1,7 @@
 #pragma once
 
+#include <arrow/type.h>
+#include <memory>
 #include <utility>
 #include "../_plan.h"
 #include "../libs/_array_utils.h"
@@ -91,7 +93,7 @@ class PhysicalProjection : public PhysicalSourceSink {
                             child_expr->ToString());
                     }
                 }
-                std::shared_ptr<arrow::DataType> result_type =
+                const std::shared_ptr<arrow::DataType>& result_type =
                     scalar_func_data.out_schema->field(0)->type();
                 std::shared_ptr<table_info> udf_input =
                     ProjectTable(input_batch, selected_columns);
@@ -144,7 +146,7 @@ class PhysicalProjection : public PhysicalSourceSink {
      */
     static std::shared_ptr<table_info> runPythonScalarFunction(
         std::shared_ptr<table_info> input_batch,
-        std::shared_ptr<arrow::DataType> result_type, PyObject* args);
+        const std::shared_ptr<arrow::DataType>& result_type, PyObject* args);
 
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs;
     std::shared_ptr<bodo::Schema> output_schema;

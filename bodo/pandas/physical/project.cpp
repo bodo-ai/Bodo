@@ -3,7 +3,7 @@
 
 std::shared_ptr<table_info> PhysicalProjection::runPythonScalarFunction(
     std::shared_ptr<table_info> input_batch,
-    std::shared_ptr<arrow::DataType> result_type, PyObject* args) {
+    const std::shared_ptr<arrow::DataType>& result_type, PyObject* args) {
     // Call bodo.pandas.utils.run_apply_udf() to run the UDF
 
     // Import the bodo.pandas.utils module
