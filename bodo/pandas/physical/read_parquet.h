@@ -42,7 +42,6 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
         return ret;
     }
     arrow::py::import_pyarrow_wrappers();
-    std::vector<PyObject *> to_be_freed;
     std::vector<arrow::compute::Expression> parts;
 
     for (auto &tf : filters.filters) {
@@ -79,11 +78,6 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
 
     arrow::compute::Expression whole = arrow::compute::and_(parts);
     ret = arrow::py::wrap_expression(whole);
-
-    // Clean up Python objects
-    for (auto &pyo : to_be_freed) {
-        Py_DECREF(pyo);
-    }
 
     return ret;
 }
