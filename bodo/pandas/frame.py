@@ -907,6 +907,13 @@ def validate_on(val):
             )
 
 
+# If string input, turn into singleton list
+def maybe_make_list(obj):
+    if obj is not None and not isinstance(obj, (tuple, list)):
+        return [obj]
+    return obj
+
+
 # Validates left_on and right_on
 def validate_merge_spec(left_on, right_on):
     """Check left_on and right_on values for type correctness
@@ -915,5 +922,6 @@ def validate_merge_spec(left_on, right_on):
     """
     validate_on(left_on)
     validate_on(right_on)
+    left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
     if len(left_on) != len(right_on):
         raise ValueError("len(right_on) must equal len(left_on)")
