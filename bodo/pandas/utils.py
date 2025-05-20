@@ -465,9 +465,6 @@ def plan_cardinality(plan: LazyPlan):
         int (if cardinality is known) or None (if not known)
     """
 
-    import bodo
-    from bodo.ext import plan_optimizer
-
     duckdb_plan = plan.generate_duckdb()
     return duckdb_plan.getCardinality()
 

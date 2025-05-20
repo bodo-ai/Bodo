@@ -236,12 +236,10 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
  * @return duckdb::unique_ptr<duckdb::LogicalAggregate> output node
  */
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    duckdb::idx_t group_index,
+    std::unique_ptr<duckdb::LogicalOperator> &source, duckdb::idx_t group_index,
     duckdb::idx_t aggregate_index,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
     PyObject *out_schema_py);
-
 
 /**
  * @brief Get column indices that are pushed down from a projection node to its

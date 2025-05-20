@@ -211,18 +211,18 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         count_star_schema = pd.Series(dtype="uint64", name="count_star")
         aggregate_plan = LazyPlan(
             "LogicalAggregate",
-            count_star_schema, 
+            count_star_schema,
             self._plan,
             0,
             0,
-            [LazyPlan("FunctionExpression", count_star_schema, "count_star")]
-        )  
+            [LazyPlan("FunctionExpression", count_star_schema, "count_star")],
+        )
         projection_plan = LazyPlan(
             "LogicalProjection",
-            count_star_schema, 
+            count_star_schema,
             aggregate_plan,
-            make_col_ref_exprs([0], aggregate_plan)
-        )  
+            make_col_ref_exprs([0], aggregate_plan),
+        )
 
         data = execute_plan(projection_plan)
         return data[0]

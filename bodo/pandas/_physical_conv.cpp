@@ -186,22 +186,29 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             "LogicalAggregate does not yet support other than one expression.");
     }
 
-    const std::string & alias = op.expressions[0]->GetAlias();
+    const std::string& alias = op.expressions[0]->GetAlias();
 
     if (alias.empty()) {
-        throw std::runtime_error("PhysicalPlanBuilder::Visit(LogicalAggregate) expr alias cannot be empty");
+        throw std::runtime_error(
+            "PhysicalPlanBuilder::Visit(LogicalAggregate) expr alias cannot be "
+            "empty");
     } else {
         if (alias == "count_star()") {
             auto physical_op = std::make_shared<PhysicalCountStar>();
             // Finish the pipeline at this point so that Finalize can run
             // to reduce the number of collected rows to the desired amount.
-            finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
+            finished_pipelines.emplace_back(
+                this->active_pipeline->Build(physical_op));
             // The same operator will exist in both pipelines.  The sink of the
             // previous pipeline and the source of the next one.
             // We record the pipeline dependency between these two pipelines.
-            this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+            this->active_pipeline =
+                std::make_shared<PipelineBuilder>(physical_op);
         } else {
-            throw std::runtime_error("PhysicalPlanBuilder::Visit(LogicalAggregate) unsupported aggregate " + alias);
+            throw std::runtime_error(
+                "PhysicalPlanBuilder::Visit(LogicalAggregate) unsupported "
+                "aggregate " +
+                alias);
         }
     }
 }

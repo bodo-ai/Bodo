@@ -111,7 +111,9 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
 
 duckdb::unique_ptr<duckdb::Expression> make_function_expr(
     std::string function_name) {
-    return duckdb::make_uniq<duckdb::BoundColumnRefExpression>("count_star()", duckdb::LogicalType::BIGINT, duckdb::ColumnBinding(-1, 0), 0);
+    return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+        "count_star()", duckdb::LogicalType::BIGINT,
+        duckdb::ColumnBinding(-1, 0), 0);
 }
 
 /**
@@ -260,8 +262,7 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
 }
 
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    duckdb::idx_t group_index,
+    std::unique_ptr<duckdb::LogicalOperator> &source, duckdb::idx_t group_index,
     duckdb::idx_t aggregate_index,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
     PyObject *out_schema_py) {
@@ -278,8 +279,8 @@ duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
 
         switch (expr_class) {
             case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
-                // Convert the base duckdb::Expression node to its actual derived
-                // type.
+                // Convert the base duckdb::Expression node to its actual
+                // derived type.
                 duckdb::unique_ptr<duckdb::BoundColumnRefExpression> bce =
                     dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(
                         std::move(expr_duck));
