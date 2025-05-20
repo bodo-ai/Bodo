@@ -555,13 +555,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             for a, b in zip(left_on, right_on)
         ]
 
-        # TODO[BSE-4812]: support keys that are not in the beginning of the input tables
-        for i in range(len(key_indices)):
-            if key_indices[i] != (i, i):
-                raise BodoLibNotImplementedException(
-                    "Keys must be in the beginning of the input tables"
-                )
-
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
             empty_data,
