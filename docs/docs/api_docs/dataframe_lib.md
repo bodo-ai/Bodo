@@ -409,7 +409,7 @@ Map values of a BodoSeries according to a mapping.
 
 : __arg : *function, collections.abc.Mapping subclass or Series*:__ Mapping correspondence.
 
-: __na_actions : *{None, ‘ignore’}, default None*:__ If 'ignore' then NaN values will be propogated without passing them to the mapping correspondence.
+: __na_actions : *{None, ‘ignore’}, default None*:__ If 'ignore' then NaN values will be propagated without passing them to the mapping correspondence.
 
 <p class="api-header">Returns</p>
 

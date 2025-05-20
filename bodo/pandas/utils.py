@@ -815,19 +815,17 @@ def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
                 f"expected output to be Series, got: {type(out_sample)}."
             )
 
-        try:
-            empty_series = _get_empty_series_arrow(out_sample)
-        except (pa.lib.ArrowTypeError, pa.lib.ArrowInvalid) as e:
-            # Could not get a pyarrow type for the series, Fallback to pandas.
-            except_msg = f", got: {str(e)}."
-            break
+        # For Series.map with na_action='ignore' and NA values in the first rows,
+        # the type infered will be the type of the NA, not necessarily the actual
+        # return type.
+        if not pd.isna(out_sample).all():
+            try:
+                empty_series = _get_empty_series_arrow(out_sample)
+            except (pa.lib.ArrowTypeError, pa.lib.ArrowInvalid) as e:
+                # Could not get a pyarrow type for the series, Fallback to pandas.
+                except_msg = f", got: {str(e)}."
+                break
 
-        # validate that the dtype was inferred correctly
-        # if the output of the UDF is all None and "object" type,
-        # we cannot infer the dtype properly.
-        if isinstance(
-            dtype := empty_series.dtype, pd.ArrowDtype
-        ) and not pa.types.is_null(dtype.pyarrow_dtype):
             return empty_series
 
         # all the data was collected and couldn't infer types,

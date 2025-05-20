@@ -610,7 +610,7 @@ def test_series_map(datapath, index_val, na_action):
     """Very simple test for Series.map() for sanity checking."""
     df = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 7, 2] * 2, "Int64"),
+            "A": pd.array([None, None, 3, 7, 2] * 2, "Int64"),
             "B": [None, None, "B1", "C1", "Abc"] * 2,
             "C": pd.array([4, 5, 6, -1, 1] * 2, "Int64"),
         }
