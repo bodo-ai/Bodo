@@ -5,7 +5,6 @@
 #include <arrow/python/pyarrow.h>
 #include <memory>
 #include <utility>
-#include "../../io/arrow_reader.h"
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
@@ -14,7 +13,7 @@
 class PhysicalReadIceberg : public PhysicalSource {
    private:
     const std::shared_ptr<arrow::Schema> arrow_schema;
-    std::shared_ptr<IcebergParquetReader> internal_reader;
+    // const std::shared_ptr<IcebergParquetReader> internal_reader;
 
    public:
     explicit PhysicalReadIceberg(
