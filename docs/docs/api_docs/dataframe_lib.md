@@ -203,6 +203,11 @@ See [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pand
 
 : __axis : *{0 or 1}, default 0*:__ The axis to apply the function over. `axis=0` will fall back to [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.apply.html#pandas.DataFrame.apply).
 
+: __args : *tuple*:__ Additional positional arguments to pass to *func*.
+
+: __\*\*kwargs:__ Additional keyword arguments to pass as keyword arguments to *func*.
+
+
 : All other parameters will trigger a fallback to [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.apply.html#pandas.DataFrame.apply) if a non-default value is provided.
 
 <p class="api-header">Returns</p>
@@ -404,7 +409,7 @@ Map values of a BodoSeries according to a mapping.
 
 : __arg : *function, collections.abc.Mapping subclass or Series*:__ Mapping correspondence.
 
-: __na_actions:__ will fall back to [`pandas.Series.map`](https://pandas.pydata.org/docs/reference/api/pandas.Series.map.html#pandas.Series.map) if 'ignore' is provided.
+: __na_actions : *{None, ‘ignore’}, default None*:__ If 'ignore' then NaN values will be propogated without passing them to the mapping correspondence.
 
 <p class="api-header">Returns</p>
 
