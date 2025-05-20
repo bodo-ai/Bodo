@@ -17,26 +17,33 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
     virtual ~PhysicalCountStar() = default;
 
     void Finalize() override {
-        int result = MPI_Allreduce(&local_count, &global_count, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+        int result =
+            MPI_Allreduce(&local_count, &global_count, 1,
+                          MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
         if (result != MPI_SUCCESS) {
-            throw std::runtime_error("PhysicalCountStar::Finalize MPI_Allreduce failed.");
+            throw std::runtime_error(
+                "PhysicalCountStar::Finalize MPI_Allreduce failed.");
         }
     }
 
-    OperatorResult ConsumeBatch(
-        std::shared_ptr<table_info> input_batch,
-        OperatorResult prev_op_result) override {
+    OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                OperatorResult prev_op_result) override {
         local_count += input_batch->nrows();
-        return prev_op_result == OperatorResult::FINISHED ? OperatorResult::FINISHED : OperatorResult::NEED_MORE_INPUT;
+        return prev_op_result == OperatorResult::FINISHED
+                   ? OperatorResult::FINISHED
+                   : OperatorResult::NEED_MORE_INPUT;
     }
 
     std::shared_ptr<table_info> GetResult() override {
-        throw std::runtime_error("GetResult called on a PhysicalCountStar node.");
+        throw std::runtime_error(
+            "GetResult called on a PhysicalCountStar node.");
     }
 
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         std::vector<std::unique_ptr<bodo::DataType>> types;
-        types.emplace_back(std::make_unique<bodo::DataType>(bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL, Bodo_CTypes::CTypeEnum::UINT64));
+        types.emplace_back(std::make_unique<bodo::DataType>(
+            bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL,
+            Bodo_CTypes::CTypeEnum::UINT64));
         std::vector<std::string> names = {std::string("count_star()")};
         return std::make_shared<bodo::Schema>(std::move(types), names);
     }
@@ -49,7 +56,8 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
         std::shared_ptr<array_info> result =
             arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
         std::vector<std::shared_ptr<array_info>> cvec = {result};
-        std::shared_ptr<table_info> next_batch = std::make_shared<table_info>(cvec);
+        std::shared_ptr<table_info> next_batch =
+            std::make_shared<table_info>(cvec);
         return {next_batch, OperatorResult::FINISHED};
     }
 
