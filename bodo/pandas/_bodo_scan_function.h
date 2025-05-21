@@ -2,11 +2,11 @@
 
 #include <utility>
 #include "_util.h"
-#include "fmt/format.h"
 
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
+#include "fmt/format.h"
 #include "physical/operator.h"
 
 /**
@@ -172,8 +172,8 @@ class BodoIcebergScanFunction : public BodoScanFunction {
                           schemaColumnNamesToString(arrow_schema))) {
         // filter_pushdown = true;
         // filter_prune = true;
-        // projection_pushdown = true;
-        // limit_pushdown = true;
+        projection_pushdown = true;
+        limit_pushdown = true;
         // TODO: set statistics and other optimization flags as needed
         // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/include/duckdb/function/table_function.hpp#L357
     }
@@ -185,8 +185,13 @@ class BodoIcebergScanFunction : public BodoScanFunction {
  */
 class BodoIcebergScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoIcebergScanFunctionData(std::shared_ptr<arrow::Schema> arrow_schema)
-        : arrow_schema(std::move(arrow_schema)) {};
+    BodoIcebergScanFunctionData(std::shared_ptr<arrow::Schema> _arrow_schema,
+                                PyObject *_catalog, const char *_table_id,
+                                PyObject *_iceberg_filter)
+        : arrow_schema(std::move(_arrow_schema)),
+          catalog(_catalog),
+          iceberg_filter(_iceberg_filter),
+          table_id(_table_id) {};
 
     ~BodoIcebergScanFunctionData() override = default;
 
@@ -195,4 +200,7 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
     const std::shared_ptr<arrow::Schema> arrow_schema;
+    PyObject *catalog;
+    PyObject *iceberg_filter;
+    const char *table_id;
 };
