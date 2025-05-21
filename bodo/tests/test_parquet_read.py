@@ -206,10 +206,10 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
         check_func(test_impl2, (), only_seq=True)
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4766] All null columns not supported yet.",
-)
+# @pytest.mark.skipif(
+#     bodo.test_dataframe_library_enabled,
+#     reason="[BSE-4766] All null columns not supported yet.",
+# )
 @pytest.mark.parametrize(
     "fname",
     [

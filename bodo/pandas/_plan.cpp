@@ -504,6 +504,10 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
     duckdb::LogicalType duckdb_type;
     const std::shared_ptr<arrow::DataType> &arrow_type = field->type();
     switch (arrow_type->id()) {
+        case arrow::Type::NA: {
+            duckdb_type = duckdb::LogicalType::SQLNULL;
+            break;
+        }
         case arrow::Type::STRING:
         case arrow::Type::LARGE_STRING: {
             duckdb_type = duckdb::LogicalType::VARCHAR;
