@@ -435,3 +435,34 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
             (expr,) + index_col_refs,
         ),
     )
+
+
+def gen_str_scalar_func(name):
+    """Creates corresponding str function and adds to BodoStringMethods class."""
+
+    def scalar_func(self):
+        index = self._series.head(0).index
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.large_string()),
+            name=self._series.name,
+            index=index,
+        )
+        func_name = f"str.{name}"
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, func_name, (), {}
+        )
+
+    return scalar_func
+
+
+series_noarg_functions = [
+    "upper",
+    "lower",
+    "title",
+    "swapcase",
+    "capitalize",
+]
+
+for func_name in series_noarg_functions:
+    func = gen_str_scalar_func(func_name)
+    setattr(BodoStringMethods, func_name, func)

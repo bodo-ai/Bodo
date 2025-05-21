@@ -579,6 +579,23 @@ def test_str_upper(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+def test_str_swapcase(datapath, index_val):
+    """Very simple test for Series.str.swapcase for sanity checking."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
+            "B": ["AbA", "CasEEEE", "HoHohO", "Abc"] * 2,
+            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+    out_pd = df.B.str.swapcase()
+    out_bodo = bdf.B.str.swapcase()
+    assert out_bodo.is_lazy_plan()
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
 @pytest.mark.parametrize(
     "to_strip", [pytest.param(None, id="default"), pytest.param("A B", id="strip-AB")]
 )
@@ -862,3 +879,38 @@ def test_dataframe_copy(index_val):
     pdf_from_bodo = pd.DataFrame(bdf)
 
     _test_equal(df1, pdf_from_bodo, sort_output=True)
+
+
+def gen_str_scalar_test(name):
+    """Creates test case for corresponding str function and adds to global."""
+
+    def test_func(datapath, index_val):
+        """Very simple test for Series.str.[name] for sanity checking."""
+        df = pd.DataFrame(
+            {
+                "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
+                "B": ["a1", "b1", "c1", "Abc"] * 2,
+                "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
+            }
+        )
+        df.index = index_val[: len(df)]
+        bdf = bd.from_pandas(df)
+        out_pd = df.B.str.__getattribute__(name)()
+        out_bodo = bdf.B.str.__getattribute__(name)()
+        assert out_bodo.is_lazy_plan()
+        _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+    return test_func
+
+
+series_noarg_functions = [
+    "upper",
+    "lower",
+    "title",
+    "swapcase",
+    "capitalize",
+]
+
+for func_name in series_noarg_functions:
+    func = gen_str_scalar_test(func_name)
+    globals()[f"test_auto_{func_name}"] = func
