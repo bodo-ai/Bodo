@@ -789,16 +789,16 @@ def test_merge():
     )
     df2 = pd.DataFrame(
         {
-            "D": ["a1", "b222", "c33"],
-            "C": pd.array([2, 3, 8], "Int64"),
+            "Cat": pd.array([2, 3, 8], "Int64"),
+            "Dog": ["a1", "b222", "c33"],
         },
     )
 
     bdf1 = bd.from_pandas(df1)
     bdf2 = bd.from_pandas(df2)
 
-    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["C"])
-    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["C"])
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
     # Make sure bdf3 is unevaluated at this point.
     assert bdf3.is_lazy_plan()
 
