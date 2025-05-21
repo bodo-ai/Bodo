@@ -885,8 +885,8 @@ def _get_set_column_plan(
     return _add_proj_expr_to_plan(df_plan, value_plan, key)
 
 
-# Validates single on-value
 def validate_on(val):
+    """Validates single on-value"""
     if val is not None:
         if not (
             isinstance(val, str)
@@ -897,8 +897,8 @@ def validate_on(val):
             )
 
 
-# Utilizes set difference to check key membership in df
 def validate_keys(keys, df):
+    """Utilizes set difference to check key membership in DataFrame df"""
     key_diff = set(keys).difference(set(df.columns))
     if len(key_diff) > 0:
         raise KeyError(
@@ -907,8 +907,8 @@ def validate_keys(keys, df):
         )
 
 
-# If string input, turn into singleton list
 def maybe_make_list(obj):
+    """If string input, turn into singleton list"""
     if obj is None:
         return []
     elif not isinstance(obj, (tuple, list)):
@@ -916,7 +916,6 @@ def maybe_make_list(obj):
     return obj
 
 
-# Validates on, left_on and right_on
 def validate_merge_spec(left, right, on, left_on, right_on):
     """Check on, left_on and right_on values for type correctness
     (currently only str, str list, str tuple, or None are supported)
