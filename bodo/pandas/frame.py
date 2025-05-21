@@ -880,8 +880,8 @@ def _get_set_column_plan(
     return _add_proj_expr_to_plan(df_plan, value_plan, key)
 
 
-# If string input, turn into singleton list
 def maybe_make_list(obj):
+    """If string input, turn into singleton list"""
     if obj is None:
         return []
     elif not isinstance(obj, (tuple, list)):

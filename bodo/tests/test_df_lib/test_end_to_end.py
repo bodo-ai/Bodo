@@ -790,45 +790,22 @@ def test_merge():
     )
     df2 = pd.DataFrame(
         {
-            "C": pd.array([2, 3, 8], "Int64"),
-            "D": ["a1", "b222", "c33"],
+            "Cat": pd.array([2, 3, 8], "Int64"),
+            "Dog": ["a1", "b222", "c33"],
         },
     )
 
     bdf1 = bd.from_pandas(df1)
     bdf2 = bd.from_pandas(df2)
 
-    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["C"])
-    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["C"])
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
     # Make sure bdf3 is unevaluated at this point.
     assert bdf3.is_lazy_plan()
 
     _test_equal(
         bdf3.copy(),
         df3,
-        check_pandas_types=False,
-        sort_output=True,
-        reset_index=True,
-    )
-
-    # Checks DataFrames with multi-character string keys
-    df4 = pd.DataFrame(
-        {
-            "cat": pd.array([2, 3, 8], "Int64"),
-            "dog": ["a1", "b222", "c33"],
-        },
-    )
-
-    bdf4 = bd.from_pandas(df4)
-
-    df5 = df1.merge(df4, how="inner", left_on=["A"], right_on=["cat"])
-    bdf5 = bdf1.merge(bdf4, how="inner", left_on=["A"], right_on=["cat"])
-    # Make sure bdf5 is unevaluated at this point.
-    assert bdf5.is_lazy_plan()
-
-    _test_equal(
-        bdf5.copy(),
-        df5,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
