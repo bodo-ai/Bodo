@@ -542,10 +542,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 on = []
         elif not isinstance(on, list):
             on = (on,)
-        if left_on is None:
-            left_on = []
-        if right_on is None:
-            right_on = []
+
+        left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
 
         key_indices = [
             (self.columns.get_loc(c), right.columns.get_loc(c)) for c in on
@@ -553,13 +551,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             (self.columns.get_loc(a), right.columns.get_loc(b))
             for a, b in zip(left_on, right_on)
         ]
-
-        # TODO[BSE-4812]: support keys that are not in the beginning of the input tables
-        for i in range(len(key_indices)):
-            if key_indices[i] != (i, i):
-                raise BodoLibNotImplementedException(
-                    "Keys must be in the beginning of the input tables"
-                )
 
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
@@ -880,3 +871,12 @@ def _get_set_column_plan(
         return None
 
     return _add_proj_expr_to_plan(df_plan, value_plan, key)
+
+
+def maybe_make_list(obj):
+    """If string input, turn into singleton list"""
+    if obj is None:
+        return []
+    elif not isinstance(obj, (tuple, list)):
+        return [obj]
+    return obj
