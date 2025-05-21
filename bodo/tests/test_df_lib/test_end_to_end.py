@@ -718,7 +718,6 @@ def test_parquet_read_partitioned(datapath):
     )
 
 
-@pytest.mark.skip(reason="Parquet partition filter pushdown not yet implemented.")
 def test_parquet_read_partitioned_filter(datapath):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
@@ -783,9 +782,9 @@ def test_merge():
     """Simple test for DataFrame merge."""
     df1 = pd.DataFrame(
         {
-            "A": pd.array([2, 2, 3], "Int64"),
             "B": ["a1", "b11", "c111"],
             "E": [1.1, 2.2, 3.3],
+            "A": pd.array([2, 2, 3], "Int64"),
         },
     )
     df2 = pd.DataFrame(
