@@ -819,11 +819,13 @@ struct Schema {
      * @brief Same as the previous, except it provides the column indices to
      * keep.
      *
+     * @tparam T Integer type for indices
      * @param column_indices Column indices to keep in the new schema.
      * @return std::unique_ptr<Schema> New schema.
      */
-    std::unique_ptr<Schema> Project(
-        const std::vector<int>& column_indices) const;
+    template <typename T>
+        requires(std::integral<T> && !std::same_as<T, bool>)
+    std::unique_ptr<Schema> Project(const std::vector<T>& column_indices) const;
 
     /// @brief Convert to an Arrow schema
     std::shared_ptr<::arrow::Schema> ToArrowSchema() const;
