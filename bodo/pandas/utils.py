@@ -535,6 +535,22 @@ def df_to_cpp_table(df):
     return cpp_table
 
 
+def _empty_pd_array(pa_type):
+    """Create an empty pandas array with the given Arrow type."""
+
+    # Workaround Arrows conversion gaps for dictionary types
+    if isinstance(pa_type, pa.DictionaryType):
+        assert pa_type.index_type == pa.int32() and (
+            pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
+        ), "Invalid dictionary type"
+        return pd.array(
+            ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
+        )[:0]
+
+    pa_arr = pa.array([], type=pa_type, from_pandas=True)
+    return pd.array(pa_arr, dtype=pd.ArrowDtype(pa_type))
+
+
 def _get_function_from_path(path_str: str):
     """Get a function object from its fully qualified path string.
 
@@ -556,7 +572,7 @@ def _get_function_from_path(path_str: str):
     return getattr(module, func_name)
 
 
-def run_func_on_table(cpp_table, arrow_schema, in_args):
+def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
@@ -577,10 +593,13 @@ def run_func_on_table(cpp_table, arrow_schema, in_args):
         func = _get_function_from_path(func_path_str)
         out = func(input, *args, **kwargs)
 
-    out_df = pd.DataFrame({"OUT": out})
+    # astype can fail in some cases when input is empty
+    if len(out):
+        # TODO: verify this is correct for all possible result_type's
+        out_df = pd.DataFrame({"OUT": out.astype(pd.ArrowDtype(result_type))})
+    else:
+        out_df = pd.DataFrame({"OUT": _empty_pd_array(result_type)})
 
-    # TODO [BSE-4788]: replace with convert_to_arrow_dtypes util
-    out_df = out_df.convert_dtypes(dtype_backend="pyarrow")
     return df_to_cpp_table(out_df)
 
 
@@ -761,28 +780,84 @@ def _reconstruct_pandas_index(df, arrow_schema):
     return df
 
 
-def _empty_pd_array(pa_type):
-    """Create an empty pandas array with the given Arrow type."""
-
-    # Workaround Arrows conversion gaps for dictionary types
-    if isinstance(pa_type, pa.DictionaryType):
-        assert pa_type.index_type == pa.int32() and (
-            pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
-        ), "Invalid dictionary type"
-        return pd.array(
-            ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
-        )[:0]
-
-    pa_arr = pa.array([], type=pa_type, from_pandas=True)
-    return pd.array(pa_arr, dtype=pd.ArrowDtype(pa_type))
-
-
 def arrow_to_empty_df(arrow_schema):
     """Create an empty dataframe with the same schema as the Arrow schema"""
     empty_df = pd.DataFrame(
         {field.name: _empty_pd_array(field.type) for field in arrow_schema}
     )
     return _reconstruct_pandas_index(empty_df, arrow_schema)
+
+
+def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
+    """Create an empty Series like ser possibly converting some dtype to use
+    pyarrow"""
+    empty_df = arrow_to_empty_df(pa.Schema.from_pandas(ser.to_frame()))
+    empty_series = empty_df.squeeze()
+    empty_series.name = ser.name
+    return empty_series
+
+
+def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
+    """Infer the output type of a scalar UDF by running it on a
+    sample of the data.
+
+    Args:
+        obj (BodoDataFrame | BodoSeries): The object the UDF is being applied over.
+        method_name ("apply" | "map"): The name of the method applying the UDF.
+        func (Any): The UDF argument to pass to apply/map.
+        kwargs (dict): Optional keyword arguments to pass to apply/map.
+
+    Raises:
+        BodoLibNotImplementedException: If the dtype cannot be infered.
+
+    Returns:
+        Empty Series with the dtype matching the output of the UDF
+        (or equivalent pyarrow dtype)
+    """
+    assert method_name == "apply" or method_name == "map", (
+        "expected method to be one of {'apply', 'map'}"
+    )
+
+    base_class = obj.__class__.__bases__[0]
+    apply_method = getattr(base_class, method_name)
+
+    # TODO: Tune sample sizes
+    sample_sizes = (1, 4, 9, 25, 100)
+
+    except_msg = ""
+    for sample_size in sample_sizes:
+        df_sample = obj.head(sample_size).execute_plan()
+        pd_sample = type(obj)(df_sample)
+        out_sample = apply_method(pd_sample, func, **kwargs)
+
+        if not isinstance(out_sample, pd.Series):
+            raise BodoLibNotImplementedException(
+                f"expected output to be Series, got: {type(out_sample)}."
+            )
+
+        # For Series.map with na_action='ignore' and NA values in the first rows,
+        # the type infered will be the type of the NA, not necessarily the actual
+        # return type.
+        if not pd.isna(out_sample).all():
+            try:
+                empty_series = _get_empty_series_arrow(out_sample)
+            except (pa.lib.ArrowTypeError, pa.lib.ArrowInvalid) as e:
+                # Could not get a pyarrow type for the series, Fallback to pandas.
+                except_msg = f", got: {str(e)}."
+                break
+
+            return empty_series
+
+        # all the data was collected and couldn't infer types,
+        # fall back to pandas.
+        if len(out_sample) < sample_size:
+            break
+
+        # TODO: Warning that repeated sampling may hurt performance.
+
+    raise BodoLibNotImplementedException(
+        f"could not infer the output type of user defined function{except_msg}."
+    )
 
 
 class LazyPlanDistributedArg:

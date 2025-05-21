@@ -16,11 +16,11 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
-    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
+    get_scalar_udf_result_type,
     is_single_colref_projection,
     make_col_ref_exprs,
     wrap_plan,
@@ -360,29 +360,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def str(self):
         return BodoStringMethods(self)
 
-    @check_args_fallback(supported=["arg"])
+    @check_args_fallback(unsupported="none")
     def map(self, arg, na_action=None):
         """
         Apply function to elements in a Series
         """
 
         # Get output data type by running the UDF on a sample of the data.
-        # Saving the plan to avoid hitting LogicalGetDataframeRead gaps with head().
-        # TODO: remove when LIMIT plan is properly supported for head().
-        series_sample = self.head(1).execute_plan()
-        pd_sample = pd.Series(series_sample)
-        out_sample = pd_sample.map(arg)
+        empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
 
-        assert isinstance(out_sample, pd.Series), (
-            f"BodoSeries.map(), expected output to be Series, got: {type(out_sample)}."
+        return _get_series_python_func_plan(
+            self._plan, empty_series, "map", (arg, na_action), {}
         )
-
-        # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample.to_frame()))
-        empty_series = empty_df.squeeze()
-        empty_series.name = out_sample.name
-
-        return _get_series_python_func_plan(self._plan, empty_series, "map", (arg,), {})
 
 
 class BodoStringMethods:
