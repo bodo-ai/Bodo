@@ -105,5 +105,26 @@ def test_merge_validation_checks():
 
     bdf3 = pd.from_pandas(df3)
 
+    # Pandas passes checks when column names are multi-character strings
     df1.merge(df3, how="inner", left_on=("A",), right_on="cat")
+
+    # Bodo should pass checks when column names are multi-character strings
     bdf1.merge(bdf3, how="inner", left_on=("A",), right_on="cat")
+    bdf1.merge(bdf3, how="inner", left_on=("A",), right_on=["cat"])
+
+    # Check should fail if only one of left_on and right_on is provided
+    with pytest.raises(ValueError):
+        bdf1.merge(bdf2, how="inner", left_on=["A", "B"], right_on=None)
+
+    # Check should fail if invalid key contained in on
+    with pytest.raises(KeyError):
+        bdf1.merge(bdf2, how="inner", left_on=["A", "C"], right_on=["C", "D"])
+
+    # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
+    # key columns with the same names from output
+    # With "on" argument support, below test cases should work
+
+    # bdf1.merge(bdf3, how="inner")
+    # with pytest.raises(ValueError):
+    #     bdf1.merge(bdf2, how="inner", on=["A", "C"])
+    # bdf1.merge(bdf1, how="inner", on=["A", "B", "E"])
