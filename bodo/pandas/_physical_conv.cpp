@@ -183,7 +183,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
     if (op.expressions.size() != 1) {
         throw std::runtime_error(
-            "LogicalAggregate does not yet support other than one expression.");
+            "LogicalAggregate does not yet support more than one expression.");
     }
 
     const std::string& alias = op.expressions[0]->GetAlias();
