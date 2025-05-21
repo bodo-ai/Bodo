@@ -3,12 +3,15 @@
 #include <Python.h>
 #include <arrow/compute/api.h>
 #include <arrow/python/pyarrow.h>
+#include <arrow/util/key_value_metadata.h>
 #include <memory>
 #include <utility>
+#include "../_util.h"
 #include "../io/arrow_compat.h"
 #include "../io/parquet_reader.h"
-#include "_util.h"
-#include "arrow/util/key_value_metadata.h"
+#include "duckdb/planner/bound_result_modifier.hpp"
+#include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
 
 std::function<arrow::compute::Expression(arrow::compute::Expression,
@@ -39,7 +42,6 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
         return ret;
     }
     arrow::py::import_pyarrow_wrappers();
-    std::vector<PyObject *> to_be_freed;
     std::vector<arrow::compute::Expression> parts;
 
     for (auto &tf : filters.filters) {
@@ -76,11 +78,6 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
 
     arrow::compute::Expression whole = arrow::compute::and_(parts);
     ret = arrow::py::wrap_expression(whole);
-
-    // Clean up Python objects
-    for (auto &pyo : to_be_freed) {
-        Py_DECREF(pyo);
-    }
 
     return ret;
 }
@@ -163,7 +160,7 @@ class PhysicalReadParquet : public PhysicalSource {
             }
             PyObject *name = PyList_GetItem(schema_fields, col_idx);
             if (name && PyUnicode_Check(name)) {
-                out_column_names.push_back(PyUnicode_AsUTF8(name));
+                out_column_names.emplace_back(PyUnicode_AsUTF8(name));
             } else {
                 out_column_names.push_back("column_" + std::to_string(col_idx));
             }

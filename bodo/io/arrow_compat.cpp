@@ -23,3 +23,18 @@ DEFINE_WRAP_FUNCTIONS(expression, arrow::compute::Expression, out.is_valid());
 DEFINE_WRAP_FUNCTIONS(filesystem, std::shared_ptr<arrow::fs::FileSystem>, out);
 
 }  // namespace arrow::py
+
+std::shared_ptr<arrow::Schema> unwrap_schema(PyObject* pyarrow_schema) {
+    if (arrow::py::import_pyarrow() != 0) {
+        throw std::runtime_error("importing pyarrow failed");
+    }
+
+    auto res = arrow::py::unwrap_schema(pyarrow_schema);
+    if (!(res.ok())) {
+        std::string err_msg =
+            "Unwrapping Arrow Schema from Python Object Failed: " +
+            res.status().ToString();
+        throw std::runtime_error(err_msg);
+    }
+    return res.ValueOrDie();
+}
