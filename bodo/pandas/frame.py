@@ -3,7 +3,6 @@ from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 
 import pandas as pd
-import pyarrow as pa
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
@@ -17,11 +16,11 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
-    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
+    get_scalar_udf_result_type,
     is_single_projection,
     make_col_ref_exprs,
     wrap_plan,
@@ -537,8 +536,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             suffixes=suffixes,
         )
 
-        # Might want to consider moving this logic into validation check,
-        # setback is might make validation fn too heavy
         if on is None:
             if left_on is None:
                 on = tuple(set(self.columns).intersection(set(right.columns)))
@@ -547,8 +544,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         elif not isinstance(on, list):
             on = (on,)
 
-        # Might want to move validation here and make it return left_on and right_on
-        # Also might consider using left_on = right_on = on logic like Pandas and jit do
         left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
 
         key_indices = [
@@ -557,13 +552,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             (self.columns.get_loc(a), right.columns.get_loc(b))
             for a, b in zip(left_on, right_on)
         ]
-
-        # TODO[BSE-4812]: support keys that are not in the beginning of the input tables
-        for i in range(len(key_indices)):
-            if key_indices[i] != (i, i):
-                raise BodoLibNotImplementedException(
-                    "Keys must be in the beginning of the input tables"
-                )
 
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
@@ -661,7 +649,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 # Update internal state
                 self._mgr._plan = new_plan
                 head_val = value._head_s
-                self._head_df[key] = head_val
+                # Copy and update head in case reused
+                new_df_head = self._head_df.copy()
+                new_df_head[key] = head_val
+                self._head_df = new_df_head
+                self._mgr._md_head = new_df_head._mgr
                 with self.disable_collect():
                     # Update internal data manager (e.g. insert a new block or update an
                     # existing one). See:
@@ -673,7 +665,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             "Only setting a column with a Series created from the same dataframe is supported."
         )
 
-    @check_args_fallback(supported=["func", "axis"])
+    @check_args_fallback(supported=["func", "axis", "args"])
     def apply(
         self,
         func,
@@ -695,20 +687,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.apply(): only axis=1 supported"
             )
 
-        # Get output data type by running the UDF on a sample of the data.
-        df_sample = self.head(1).execute_plan()
-        pd_sample = pd.DataFrame(df_sample)
-        out_sample = pd_sample.apply(func, axis)
-
-        if not isinstance(out_sample, pd.Series):
-            raise BodoLibNotImplementedException(
-                f"expected output to be Series, got: {type(out_sample)}."
-            )
-
-        # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample.to_frame()))
-        empty_series = empty_df.squeeze()
-        empty_series.name = out_sample.name
+        empty_series = get_scalar_udf_result_type(
+            self, "apply", func, axis=axis, args=args, **kwargs
+        )
 
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
@@ -719,7 +700,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 False,  # is_series
                 True,  # is_method
                 (func,),  # args
-                {"axis": 1},  # kwargs
+                {"axis": 1, "args": args} | kwargs,  # kwargs
             ),
             tuple(range(len(self.columns) + get_n_index_arrays(self.head(0).index))),
         )
@@ -803,8 +784,16 @@ def _add_proj_expr_to_plan(
     func_expr = (
         _update_func_expr_source(func_expr, df_plan, ikey)
         if replace_func_source
-        else func_expr
+        # Copy the function expression to avoid modifying the original one below
+        else LazyPlan(
+            "PythonScalarFuncExpression",
+            func_expr.empty_data,
+            *func_expr.args,
+            **func_expr.kwargs,
+        )
     )
+    # Update output column name
+    func_expr.empty_data = func_expr.empty_data.set_axis([key], axis=1)
 
     # Get projection expressions
     n_cols = len(in_empty_df.columns)
