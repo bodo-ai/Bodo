@@ -759,15 +759,15 @@ def test_merge():
     """Simple test for DataFrame merge."""
     df1 = pd.DataFrame(
         {
-            "A": pd.array([2, 2, 3], "Int64"),
             "B": ["a1", "b11", "c111"],
             "E": [1.1, 2.2, 3.3],
+            "A": pd.array([2, 2, 3], "Int64"),
         },
     )
     df2 = pd.DataFrame(
         {
-            "C": pd.array([2, 3, 8], "Int64"),
             "D": ["a1", "b222", "c33"],
+            "C": pd.array([2, 3, 8], "Int64"),
         },
     )
 
