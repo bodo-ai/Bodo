@@ -616,13 +616,20 @@ def test_chain_python_func(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_series_map(datapath, index_val):
+@pytest.mark.parametrize(
+    "na_action",
+    [
+        pytest.param(None, id="na_action_none"),
+        pytest.param("ignore", id="na_action_ignore"),
+    ],
+)
+def test_series_map(datapath, index_val, na_action):
     """Very simple test for Series.map() for sanity checking."""
     df = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
-            "B": ["A1", "B1", "C1", "Abc"] * 2,
-            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
+            "A": pd.array([None, None, 3, 7, 2] * 2, "Int64"),
+            "B": [None, None, "B1", "C1", "Abc"] * 2,
+            "C": pd.array([4, 5, 6, -1, 1] * 2, "Int64"),
         }
     )
     df.index = index_val[: len(df)]
@@ -631,8 +638,8 @@ def test_series_map(datapath, index_val):
         return str(x)
 
     bdf = bd.from_pandas(df)
-    out_pd = df.A.map(func)
-    out_bodo = bdf.A.map(func)
+    out_pd = df.A.map(func, na_action=na_action)
+    out_bodo = bdf.A.map(func, na_action=na_action)
     assert out_bodo.is_lazy_plan()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
