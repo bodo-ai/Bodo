@@ -903,14 +903,6 @@ def gen_str_scalar_test(name):
     return test_func
 
 
-series_noarg_functions = [
-    "upper",
-    "lower",
-    "title",
-    "swapcase",
-    "capitalize",
-]
-
-for func_name in series_noarg_functions:
+for func_name in bd.series.series_noarg_functions_map:
     func = gen_str_scalar_test(func_name)
     globals()[f"test_auto_{func_name}"] = func

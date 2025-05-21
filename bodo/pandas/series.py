@@ -370,6 +370,18 @@ class BodoStringMethods:
         )
 
     @check_args_fallback(unsupported="none")
+    def isalpha(self):
+        index = self._series.head(0).index
+        new_metadata = pd.Series(
+            dtype=bool,
+            name=self._series.name,
+            index=index,
+        )
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, "str.isalpha", (), {}
+        )
+
+    @check_args_fallback(unsupported="none")
     def strip(self, to_strip=None):
         index = self._series.head(0).index
         new_metadata = pd.Series(
@@ -437,13 +449,13 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
     )
 
 
-def gen_str_scalar_func(name):
+def gen_str_scalar_func(name, rettype):
     """Creates corresponding str function and adds to BodoStringMethods class."""
 
     def scalar_func(self):
         index = self._series.head(0).index
         new_metadata = pd.Series(
-            dtype=pd.ArrowDtype(pa.large_string()),
+            dtype=rettype,
             name=self._series.name,
             index=index,
         )
@@ -455,14 +467,29 @@ def gen_str_scalar_func(name):
     return scalar_func
 
 
-series_noarg_functions = [
-    "upper",
-    "lower",
-    "title",
-    "swapcase",
-    "capitalize",
-]
+series_noarg_functions_map = {
+    # No arguments, return type Series(str)
+    "upper": 0,
+    "lower": 0,
+    "title": 0,
+    "swapcase": 0,
+    "capitalize": 0,
+    "casefold": 0,
+    # No arguments, return type Series(bool)
+    "isalpha": 1,
+    "isnumeric": 1,
+    "isalnum": 1,
+    "isdigit": 1,
+    "isdecimal": 1,
+    "isspace": 1,
+    "islower": 1,
+    "isupper": 1,
+    "istitle": 1,
+}
 
-for func_name in series_noarg_functions:
-    func = gen_str_scalar_func(func_name)
+rettypes = [pd.ArrowDtype(pa.large_string()), bool]
+
+for func_name in series_noarg_functions_map:
+    idx = series_noarg_functions_map[func_name]
+    func = gen_str_scalar_func(func_name, rettypes[idx])
     setattr(BodoStringMethods, func_name, func)
