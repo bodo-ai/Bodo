@@ -1,12 +1,37 @@
 #pragma once
 
 #include <utility>
-#include "../_plan.h"
 #include "../libs/_array_utils.h"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "operator.h"
+
+/**
+ * @brief UDF plan node data to pass around in DuckDB plans in
+ * BoundFunctionExpression.
+ *
+ */
+struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
+    BodoPythonScalarFunctionData(PyObject* args,
+                                 std::shared_ptr<arrow::Schema> out_schema)
+        : args(args), out_schema(std::move(out_schema)) {
+        Py_INCREF(args);
+    }
+    ~BodoPythonScalarFunctionData() override { Py_DECREF(args); }
+    bool Equals(const FunctionData& other_p) const override {
+        const BodoPythonScalarFunctionData& other =
+            other_p.Cast<BodoPythonScalarFunctionData>();
+        return (other.args == this->args);
+    }
+    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
+        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args,
+                                                               out_schema);
+    }
+
+    PyObject* args;
+    std::shared_ptr<arrow::Schema> out_schema;
+};
 
 /**
  * @brief Physical node for projection.

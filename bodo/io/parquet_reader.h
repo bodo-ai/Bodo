@@ -1,4 +1,4 @@
-
+#pragma once
 // Implementation of ParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading parquet datasets
 

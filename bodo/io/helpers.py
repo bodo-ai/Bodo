@@ -3,6 +3,7 @@ File that contains some IO related helpers.
 """
 
 import os
+import sys
 import threading
 import uuid
 from typing import TYPE_CHECKING
@@ -46,6 +47,7 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.mpi4py import MPI
+from bodo.utils.py_objs import install_opaque_class
 from bodo.utils.typing import (
     BodoError,
     is_nullable_ignore_sentinels,
@@ -116,6 +118,14 @@ def pa_schema_unify_reduction(schema_a_and_row_count, schema_b_and_row_count, un
 
 
 pa_schema_unify_mpi_op = MPI.Op.Create(pa_schema_unify_reduction, commute=True)
+
+
+this_module = sys.modules[__name__]
+_, pyiceberg_catalog_type = install_opaque_class(
+    types_name="pyiceberg_catalogType",
+    module=this_module,
+    class_name="PyIcebergCatalogType",
+)
 
 
 # Read Arrow Int/Float columns as nullable array (IntegerArrayType/FloatingArrayType)

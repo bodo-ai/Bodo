@@ -3,6 +3,8 @@
 #include <fmt/format.h>
 #include <utility>
 
+#include "../io/arrow_compat.h"
+#include "_bodo_scan_function.h"
 #include "_executor.h"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
@@ -11,7 +13,6 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/planner/binder.hpp"
-#include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
@@ -19,7 +20,6 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
-#include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
@@ -27,9 +27,7 @@
 #include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
-
-#include "physical/read_pandas.h"
-#include "physical/read_parquet.h"
+#include "physical/project.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
@@ -457,6 +455,38 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
     return out_get;
 }
 
+duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
+    PyObject *pyarrow_schema, std::string table_name,
+    PyObject *pyiceberg_catalog) {
+    duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+
+    // Convert Arrow schema to DuckDB
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+    auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
+
+    BodoIcebergScanFunction table_function =
+        BodoIcebergScanFunction(arrow_schema);
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
+        duckdb::make_uniq<BodoIcebergScanFunctionData>(arrow_schema);
+
+    duckdb::virtual_column_map_t virtual_columns;
+
+    duckdb::unique_ptr<duckdb::LogicalGet> out_get =
+        duckdb::make_uniq<duckdb::LogicalGet>(
+            binder->GenerateTableIndex(), table_function, std::move(bind_data1),
+            return_types, return_names, virtual_columns);
+
+    // Column ids need to be added separately.
+    // DuckDB column id initialization example:
+    // https:  //
+    // github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/catalog/catalog_entry/table_catalog_entry.cpp#L252
+    for (size_t i = 0; i < return_names.size(); i++) {
+        out_get->AddColumnId(i);
+    }
+
+    return out_get;
+}
+
 duckdb::ClientContext &get_duckdb_context() {
     static duckdb::DuckDB db(nullptr);
     static duckdb::ClientContext context(db.instance);
@@ -665,63 +695,6 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
                            bool graphviz_format) {
     return plan->ToString(graphviz_format ? duckdb::ExplainFormat::GRAPHVIZ
                                           : duckdb::ExplainFormat::TEXT);
-}
-
-std::shared_ptr<PhysicalSource>
-BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
-    // Read the dataframe from the result registry using
-    // sys.modules["__main__"].RESULT_REGISTRY since importing
-    // bodo.spawn.worker creates a new module with new empty registry.
-
-    // Import Python sys module
-    PyObjectPtr sys_module = PyImport_ImportModule("sys");
-    if (!sys_module) {
-        throw std::runtime_error("Failed to import sys module");
-    }
-
-    // Get sys.modules dictionary
-    PyObjectPtr modules_dict = PyObject_GetAttrString(sys_module, "modules");
-    if (!modules_dict) {
-        Py_DECREF(sys_module);
-        throw std::runtime_error("Failed to get sys.modules");
-    }
-
-    // Get __main__ module
-    PyObject *main_module = PyDict_GetItemString(modules_dict, "__main__");
-    if (!main_module) {
-        throw std::runtime_error("Failed to get __main__ module");
-    }
-
-    // Get RESULT_REGISTRY[result_id]
-    PyObjectPtr result_registry =
-        PyObject_GetAttrString(main_module, "RESULT_REGISTRY");
-    PyObject *df = PyDict_GetItemString(result_registry, result_id.c_str());
-    if (!df) {
-        throw std::runtime_error(fmt::format(
-            "Result ID {} not found in result registry", result_id.c_str()));
-    }
-
-    return std::make_shared<PhysicalReadPandas>(df, selected_columns,
-                                                this->arrow_schema);
-}
-
-std::shared_ptr<PhysicalSource>
-BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
-    return std::make_shared<PhysicalReadPandas>(df, selected_columns,
-                                                this->arrow_schema);
-}
-
-std::shared_ptr<PhysicalSource>
-BodoParquetScanFunctionData::CreatePhysicalOperator(
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
-    duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
-    return std::make_shared<PhysicalReadParquet>(
-        path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
-        limit_val);
 }
 
 int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op) {
