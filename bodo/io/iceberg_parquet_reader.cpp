@@ -673,9 +673,11 @@ PyObject* IcebergParquetReader::get_dataset() {
         throw std::runtime_error("python");
     }
 
+    // The iceberg reader owns these references and doesn't need them after this
     Py_DECREF(this->catalog);
     Py_XDECREF(this->iceberg_filter);
     Py_XDECREF(this->filter_scalars);
+
     Py_DECREF(str_as_dict_cols_py);
     Py_DECREF(iceberg_mod);
 
