@@ -542,6 +542,7 @@ add_custom_command(
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
+  "bodo/pandas/_bodo_scan_functions.cpp"
   "bodo/pandas/_plan.cpp"
   "bodo/pandas/_pipeline.cpp"
   "bodo/pandas/_physical_conv.cpp"
@@ -549,6 +550,7 @@ set(sources_list
   "bodo/pandas/physical/expression.cpp"
   "bodo/pandas/physical/operator.cpp"
   "bodo/pandas/physical/project.cpp"
+  "bodo/pandas/physical/read_iceberg.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Python.h>
+#include <arrow/type.h>
 #include <fmt/format.h>
 #include <utility>
 #include "_util.h"
@@ -11,182 +12,7 @@
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
-#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/expression.hpp"
-#include "physical/expression.h"
-#include "physical/operator.h"
-
-/**
- * @brief Superclass for Bodo's DuckDB TableFunction classes.
- *
- */
-class BodoScanFunction : public duckdb::TableFunction {
-   public:
-    BodoScanFunction(std::string name)
-        : TableFunction(name, {}, nullptr, nullptr, nullptr, nullptr) {}
-};
-
-/**
- * @brief Superclass for Bodo's DuckDB TableFunctionData classes.
- *
- */
-class BodoScanFunctionData : public duckdb::TableFunctionData {
-   public:
-    BodoScanFunctionData() = default;
-    /**
-     * @brief Create a PhysicalOperator for reading data from this source.
-     *
-     * @return std::shared_ptr<PhysicalSource> read operator
-     */
-    virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) = 0;
-};
-
-/**
- * @brief Bodo's DuckDB TableFunction for reading Parquet datasets with Bodo
- * metadata (used in LogicalGet).
- *
- */
-class BodoParquetScanFunction : public BodoScanFunction {
-   public:
-    BodoParquetScanFunction(const std::shared_ptr<arrow::Schema> arrow_schema)
-        : BodoScanFunction(
-              fmt::format("bodo_read_parquet({})",
-                          schemaColumnNamesToString(arrow_schema))) {
-        filter_pushdown = true;
-        filter_prune = true;
-        projection_pushdown = true;
-        limit_pushdown = true;
-        // TODO: set statistics and other optimization flags as needed
-        // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/include/duckdb/function/table_function.hpp#L357
-    }
-};
-
-/**
- * @brief Data for Bodo's DuckDB TableFunction for reading Parquet datasets.
- *
- */
-class BodoParquetScanFunctionData : public BodoScanFunctionData {
-   public:
-    BodoParquetScanFunctionData(PyObject *path, PyObject *pyarrow_schema,
-                                PyObject *storage_options)
-        : path(path),
-          pyarrow_schema(pyarrow_schema),
-          storage_options(storage_options) {
-        Py_INCREF(pyarrow_schema);
-        Py_INCREF(storage_options);
-        Py_INCREF(path);
-    }
-
-    ~BodoParquetScanFunctionData() {
-        Py_DECREF(pyarrow_schema);
-        Py_DECREF(storage_options);
-        Py_DECREF(path);
-    }
-
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
-
-    // Parquet dataset path
-    PyObject *path;
-    PyObject *pyarrow_schema;
-    PyObject *storage_options;
-};
-
-/**
- * @brief Bodo's DuckDB TableFunction for reading dataframe rows
- * (used in LogicalGet).
- *
- */
-class BodoDataFrameScanFunction : public BodoScanFunction {
-   public:
-    BodoDataFrameScanFunction(const std::shared_ptr<arrow::Schema> arrow_schema)
-        : BodoScanFunction(fmt::format(
-              "bodo_read_df({})", schemaColumnNamesToString(arrow_schema))) {
-        projection_pushdown = true;
-    }
-};
-
-/**
- * @brief Data for Bodo's DuckDB TableFunction for reading dataframe rows on
- * spawner sequentially.
- *
- */
-class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
-   public:
-    BodoDataFrameSeqScanFunctionData(
-        PyObject *df, std::shared_ptr<arrow::Schema> arrow_schema)
-        : df(df), arrow_schema(arrow_schema) {
-        Py_INCREF(df);
-    }
-    ~BodoDataFrameSeqScanFunctionData() { Py_DECREF(df); }
-    /**
-     * @brief Create a PhysicalOperator for reading from the dataframe.
-     *
-     * @return std::shared_ptr<PhysicalOperator> dataframe read operator
-     */
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
-
-    PyObject *df;
-    const std::shared_ptr<arrow::Schema> arrow_schema;
-};
-
-/**
- * @brief Data for Bodo's DuckDB TableFunction for reading dataframe rows on
- * workers in parallel.
- *
- */
-class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
-   public:
-    BodoDataFrameParallelScanFunctionData(
-        std::string result_id, std::shared_ptr<arrow::Schema> arrow_schema)
-        : result_id(result_id), arrow_schema(arrow_schema) {}
-    ~BodoDataFrameParallelScanFunctionData() {}
-    /**
-     * @brief Create a PhysicalOperator for reading from the dataframe.
-     *
-     * @return std::shared_ptr<PhysicalOperator> dataframe read operator
-     */
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
-    std::string result_id;
-    const std::shared_ptr<arrow::Schema> arrow_schema;
-};
-
-/**
- * @brief UDF plan node data to pass around in DuckDB plans in
- * BoundFunctionExpression.
- *
- */
-struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
-    BodoPythonScalarFunctionData(PyObject *args,
-                                 std::shared_ptr<arrow::Schema> out_schema)
-        : args(args), out_schema(out_schema) {
-        Py_INCREF(args);
-    }
-    ~BodoPythonScalarFunctionData() override { Py_DECREF(args); }
-    bool Equals(const FunctionData &other_p) const override {
-        const BodoPythonScalarFunctionData &other =
-            other_p.Cast<BodoPythonScalarFunctionData>();
-        return (other.args == this->args);
-    }
-    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args,
-                                                               out_schema);
-    }
-
-    PyObject *args;
-    std::shared_ptr<arrow::Schema> out_schema;
-};
 
 /**
  * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
@@ -402,6 +228,19 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
     std::string result_id, PyObject *pyarrow_schema);
 
 /**
+ * @brief Creates a LogicalGet node for reading an Iceberg dataset in DuckDB
+ * with Bodo metadata.
+ *
+ * @param pyarrow_schema schema of the Iceberg dataset
+ * @param table_name Identifier for the Iceberg table, includes schema and table
+ * @param pyiceberg_catalog Iceberg catalog object
+ * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
+    PyObject *pyarrow_schema, std::string table_identifier,
+    PyObject *pyiceberg_catalog);
+
+/**
  * @brief Returns a statically created DuckDB client context.
  *
  * @return duckdb::ClientContext& static context object
@@ -452,27 +291,6 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
  */
 std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
                            bool graphviz_format);
-
-/**
- * @brief Dynamic cast of base pointer to derived pointer.
- *
- * @param base_ptr - the base pointer to cast from
- * @return a non-NULL pointer of the derived type if the cast is possible else
- *         NULL
- */
-template <typename Derived, typename Base>
-duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
-    duckdb::unique_ptr<Base> &&base_ptr) noexcept {
-    // Perform dynamic_cast on the raw pointer
-    if (Derived *derived_raw = dynamic_cast<Derived *>(base_ptr.get())) {
-        // Release ownership from the base_ptr and transfer it to a new
-        // unique_ptr
-        base_ptr.release();  // Release the ownership of the raw pointer
-        return duckdb::unique_ptr<Derived>(derived_raw);
-    }
-    // If the cast fails, return a nullptr unique_ptr
-    return nullptr;
-}
 
 /**
  * @brief Count the number of nodes in the expression tree.

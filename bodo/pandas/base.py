@@ -1,11 +1,16 @@
+import typing as pt
+
 import pandas as pd
 import pyarrow as pa
+import pyiceberg.catalog
+import pyiceberg.expressions
 from pandas._libs import lib
 
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
+    BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
     arrow_to_empty_df,
@@ -105,3 +110,31 @@ def _empty_like(val):
         out = out.iloc[:, 0]
 
     return out
+
+
+@check_args_fallback(supported=["catalog_name", "catalog_properties"])
+def read_iceberg(
+    table_identifier: str,
+    catalog_name: str | None = None,
+    catalog_properties: dict[str, pt.Any] | None = None,
+    row_filter: str | None = None,
+    selected_fields: tuple[str] | None = None,
+    case_sensitive: bool = True,
+    snapshot_id: int | None = None,
+    limit: int | None = None,
+    scan_properties: dict[str, pt.Any] | None = None,
+) -> BodoDataFrame:
+    raise BodoLibNotImplementedException()
+
+    if catalog_properties is None:
+        catalog_properties = {}
+    catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
+
+    # Get the output schema
+    table = catalog.load_table(table_identifier)
+    pyiceberg_schema = table.schema()
+    arrow_schema = pyiceberg_schema.as_arrow()
+    empty_df = arrow_to_empty_df(arrow_schema)
+
+    plan = LazyPlan("LogicalGetIcebergRead", empty_df, table_identifier, catalog)
+    return wrap_plan(plan=plan)
