@@ -811,6 +811,29 @@ def test_merge():
         reset_index=True,
     )
 
+    # Checks DataFrames with multi-character string keys
+    df4 = pd.DataFrame(
+        {
+            "cat": pd.array([2, 3, 8], "Int64"),
+            "dog": ["a1", "b222", "c33"],
+        },
+    )
+
+    bdf4 = bd.from_pandas(df4)
+
+    df5 = df1.merge(df4, how="inner", left_on=["A"], right_on=["cat"])
+    bdf5 = bdf1.merge(bdf4, how="inner", left_on=["A"], right_on=["cat"])
+    # Make sure bdf5 is unevaluated at this point.
+    assert bdf5.is_lazy_plan()
+
+    _test_equal(
+        bdf5.copy(),
+        df5,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
 
 def test_merge_swith_side():
     """Test merge with left table smaller than right table so DuckDB reorders the input

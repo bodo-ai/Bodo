@@ -542,10 +542,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 on = []
         elif not isinstance(on, list):
             on = (on,)
-        if left_on is None:
-            left_on = []
-        if right_on is None:
-            right_on = []
+
+        left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
 
         key_indices = [
             (self.columns.get_loc(c), right.columns.get_loc(c)) for c in on
@@ -880,3 +878,12 @@ def _get_set_column_plan(
         return None
 
     return _add_proj_expr_to_plan(df_plan, value_plan, key)
+
+
+# If string input, turn into singleton list
+def maybe_make_list(obj):
+    if obj is None:
+        return []
+    elif not isinstance(obj, (tuple, list)):
+        return [obj]
+    return obj
