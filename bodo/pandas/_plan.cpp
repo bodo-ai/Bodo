@@ -27,6 +27,7 @@
 #include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
+#include "physical/project.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it

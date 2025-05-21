@@ -1355,17 +1355,6 @@ IcebergParquetReader::get_next_batch() {
  * NOTE: selected_fields must be sorted
  * @param num_selected_fields : length of selected_fields array
  * @param _is_nullable : array of booleans that indicates which of the
-        // When an unsupported schema evolution is detected in
-        // `bodo.io.iceberg.get_iceberg_pq_dataset`, a Python exception
-        // is thrown. That exception is detected and converted to a C++
-        // exception in `IcebergParquetReader::get_dataset`. That exception
-        // will be caught in `get_iceberg_pq_dataset` so this class to be
-        // destructed, calling this function aka the destructor.
-
-        // Py_XDECREF checks if the input is null,
-        // while Py_DECREF doesn't and would just segfault
-        Py_XDECREF(this->file_list);
-    }
  * selected fields is nullable. Same length and order as selected_fields.
  * @param pyarrow_schema : PyArrow schema (instance of pyarrow.lib.Schema)
  * determined at compile time. Used for schema evolution detection, and for

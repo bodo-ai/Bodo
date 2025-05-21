@@ -1,13 +1,12 @@
 #include "_physical_conv.h"
 #include <stdexcept>
-#include "_plan.h"
+#include "_bodo_scan_function.h"
 
 #include "_util.h"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
-#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "physical/filter.h"
 #include "physical/join.h"

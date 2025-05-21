@@ -15,10 +15,10 @@ class PhysicalReadIceberg : public PhysicalSource {
    private:
     const std::shared_ptr<arrow::Schema> arrow_schema;
     const std::unique_ptr<IcebergParquetReader> internal_reader;
-    static std::vector<std::string> _create_out_column_names(
+    static std::vector<std::string> create_out_column_names(
         const std::vector<int> &selected_columns,
         const std::shared_ptr<arrow::Schema> schema);
-    static std::unique_ptr<IcebergParquetReader> _create_internal_reader();
+    static std::unique_ptr<IcebergParquetReader> create_internal_reader();
 
    public:
     explicit PhysicalReadIceberg(

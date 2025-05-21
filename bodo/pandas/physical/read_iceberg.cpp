@@ -6,12 +6,12 @@ PhysicalReadIceberg::PhysicalReadIceberg(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val)
     : arrow_schema(std::move(arrow_schema)),
-      internal_reader(this->_create_internal_reader()),
+      internal_reader(this->create_internal_reader()),
       out_metadata(std::make_unique<TableMetadata>(
           this->arrow_schema->metadata()->keys(),
           this->arrow_schema->metadata()->values())),
-      out_column_names(this->_create_out_column_names(selected_columns,
-                                                      this->arrow_schema)) {
+      out_column_names(
+          this->create_out_column_names(selected_columns, this->arrow_schema)) {
     // TODO: Handle filter expressions and limit value
 }
 
@@ -24,7 +24,7 @@ const std::shared_ptr<bodo::Schema> PhysicalReadIceberg::getOutputSchema() {
     return bodo::Schema::FromArrowSchema(this->arrow_schema);
 }
 
-std::vector<std::string> PhysicalReadIceberg::_create_out_column_names(
+std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
     const std::vector<int> &selected_columns,
     const std::shared_ptr<arrow::Schema> schema) {
     std::vector<std::string> out_column_names;
@@ -41,6 +41,6 @@ std::vector<std::string> PhysicalReadIceberg::_create_out_column_names(
 }
 
 std::unique_ptr<IcebergParquetReader>
-PhysicalReadIceberg::_create_internal_reader() {
+PhysicalReadIceberg::create_internal_reader() {
     return nullptr;
 }
