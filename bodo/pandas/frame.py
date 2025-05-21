@@ -180,6 +180,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     def __len__(self):
         from bodo.pandas.utils import count_plan
+
         match self._exec_state:
             case ExecState.PLAN:
                 return count_plan(self)
@@ -201,6 +202,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     @property
     def shape(self):
         from bodo.pandas.utils import count_plan
+
         match self._exec_state:
             case ExecState.PLAN:
                 return (count_plan(self), len(self._head_df.columns))

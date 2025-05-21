@@ -2,11 +2,11 @@
 
 #include <memory>
 #include <utility>
+#include "../io/arrow_reader.h"
 #include "../libs/_array_utils.h"
 #include "../libs/_utils.h"
 #include "expression.h"
 #include "operator.h"
-#include "../io/arrow_reader.h"
 
 /**
  * @brief Physical node for count_star().
@@ -14,8 +14,7 @@
  */
 class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalCountStar() : local_count(0), global_count(0)
-{
+    explicit PhysicalCountStar() : local_count(0), global_count(0) {
         std::vector<std::unique_ptr<bodo::DataType>> types;
         types.emplace_back(std::make_unique<bodo::DataType>(
             bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL,
@@ -30,7 +29,8 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
         // Create an empty DataFrame with a uint64 column
         PyObject *dict = PyDict_New();
         PyObject *series_class = PyObject_GetAttrString(pandas, "Series");
-        PyObject *empty_series = PyObject_CallFunction(series_class, "(O)", PyUnicode_FromString("uint64"));
+        PyObject *empty_series = PyObject_CallFunction(
+            series_class, "(O)", PyUnicode_FromString("uint64"));
         PyDict_SetItemString(dict, "count_star()", empty_series);
 
         PyObject *df_class = PyObject_GetAttrString(pandas, "DataFrame");
@@ -38,7 +38,8 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
 
         // Convert to PyArrow Table
         PyObject *table_class = PyObject_GetAttrString(pyarrow, "Table");
-        PyObject *from_pandas = PyObject_GetAttrString(table_class, "from_pandas");
+        PyObject *from_pandas =
+            PyObject_GetAttrString(table_class, "from_pandas");
         PyObject *table = PyObject_CallFunctionObjArgs(from_pandas, df, NULL);
 
         PyObject *pyarrow_schema = PyObject_GetAttrString(table, "schema");

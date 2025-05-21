@@ -877,6 +877,7 @@ class LazyPlanDistributedArg:
         """
         return (str, (self.res_id,))
 
+
 def count_plan(self):
     from bodo.pandas.utils import execute_plan, get_plan_cardinality
 

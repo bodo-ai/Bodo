@@ -264,6 +264,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
         from bodo.pandas.utils import count_plan
+
         match self._exec_state:
             case ExecState.PLAN:
                 return (count_plan(self),)
@@ -306,6 +307,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     def __len__(self):
         from bodo.pandas.utils import count_plan
+
         match self._exec_state:
             case ExecState.PLAN:
                 return count_plan(self)
