@@ -11,7 +11,7 @@ PhysicalReadIceberg::PhysicalReadIceberg(
       internal_reader(this->create_internal_reader(
           catalog, table_id, iceberg_filter, this->arrow_schema,
           selected_columns, limit_val)),
-      out_metadata(std::make_unique<TableMetadata>(
+      out_metadata(std::make_shared<TableMetadata>(
           this->arrow_schema->metadata()->keys(),
           this->arrow_schema->metadata()->values())),
       out_column_names(
@@ -21,7 +21,16 @@ PhysicalReadIceberg::PhysicalReadIceberg(
 
 std::pair<std::shared_ptr<table_info>, OperatorResult>
 PhysicalReadIceberg::ProduceBatch() {
-    return std::make_pair(nullptr, OperatorResult::FINISHED);
+    uint64_t total_rows;
+    bool is_last;
+
+    table_info *batch = internal_reader->read_batch(is_last, total_rows, true);
+    auto result =
+        is_last ? OperatorResult::FINISHED : OperatorResult::HAVE_MORE_OUTPUT;
+
+    batch->column_names = out_column_names;
+    batch->metadata = out_metadata;
+    return std::make_pair(std::shared_ptr<table_info>(batch), result);
 }
 
 const std::shared_ptr<bodo::Schema> PhysicalReadIceberg::getOutputSchema() {
