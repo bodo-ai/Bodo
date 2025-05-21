@@ -238,6 +238,8 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
  * @brief Creates a LogicalAggregate node.
  *
  * @param source - the data source to aggregate
+ * @param group_index - the group index for the aggregate
+ * @param aggregate_index - the aggregate index for the aggregate
  * @param exprs - vector of aggregate exprs
  * @param out_schema_py - the schema of data coming out of the aggregate
  * @return duckdb::unique_ptr<duckdb::LogicalAggregate> output node
