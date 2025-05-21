@@ -903,6 +903,7 @@ def gen_str_scalar_test(name):
     return test_func
 
 
-for func_name in bd.series.series_noarg_functions_map:
-    func = gen_str_scalar_test(func_name)
-    globals()[f"test_auto_{func_name}"] = func
+for func_list in bd.series.series_noarg_functions:
+    for func_name in func_list:
+        func = gen_str_scalar_test(func_name)
+        globals()[f"test_auto_{func_name}"] = func

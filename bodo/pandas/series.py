@@ -1,3 +1,4 @@
+import inspect
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
@@ -453,6 +454,7 @@ def gen_str_scalar_func(name, rettype):
     """Creates corresponding str function and adds to BodoStringMethods class."""
 
     def scalar_func(self):
+        """Generalized function template for no arg str methods"""
         index = self._series.head(0).index
         new_metadata = pd.Series(
             dtype=rettype,
@@ -464,32 +466,39 @@ def gen_str_scalar_func(name, rettype):
             self._series._plan, new_metadata, func_name, (), {}
         )
 
+    scalar_func.__doc__ = f"Equivalent of Series.str.{name}()"
+
+    sig = inspect.Signature(
+        parameters=[inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
+    )
+    scalar_func.__signature__ = sig
+
     return scalar_func
 
 
-series_noarg_functions_map = {
-    # No arguments, return type Series(str)
-    "upper": 0,
-    "lower": 0,
-    "title": 0,
-    "swapcase": 0,
-    "capitalize": 0,
-    "casefold": 0,
-    # No arguments, return type Series(bool)
-    "isalpha": 1,
-    "isnumeric": 1,
-    "isalnum": 1,
-    "isdigit": 1,
-    "isdecimal": 1,
-    "isspace": 1,
-    "islower": 1,
-    "isupper": 1,
-    "istitle": 1,
-}
+series_noarg_functions = [
+    # idx = 0: No arguments, return type Series(str)
+    ["upper", "lower", "title", "swapcase", "capitalize", "casefold"],
+    # idx = 1: No arguments, return type Series(bool)
+    [
+        "isalpha",
+        "isnumeric",
+        "isalnum",
+        "isdigit",
+        "isdecimal",
+        "isspace",
+        "islower",
+        "isupper",
+        "istitle",
+    ],
+]
 
-rettypes = [pd.ArrowDtype(pa.large_string()), bool]
+rettypes = [
+    pd.ArrowDtype(pa.large_string()),  # idx = 0
+    bool,  # idx = 1
+]
 
-for func_name in series_noarg_functions_map:
-    idx = series_noarg_functions_map[func_name]
-    func = gen_str_scalar_func(func_name, rettypes[idx])
-    setattr(BodoStringMethods, func_name, func)
+for idx in range(len(series_noarg_functions)):
+    for func_name in series_noarg_functions[idx]:
+        func = gen_str_scalar_func(func_name, rettypes[idx])
+        setattr(BodoStringMethods, func_name, func)
