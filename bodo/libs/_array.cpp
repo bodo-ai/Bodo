@@ -414,13 +414,6 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
 void info_to_null_array(array_info* info, uint64_t* n_items) {
     // TODO[BSE-433]: Replace with proper null array requirements once
     // they are integrated into C++.
-    std::cout << "got: " << GetArrType_as_string(info->arr_type) << std::endl;
-    // if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
-    //     PyErr_SetString(PyExc_RuntimeError,
-    //                     "_array.cpp:: info_to_null_array: "
-    //                     "info_to_null_array requires nullable input");
-    //     return;
-    // }
     *n_items = info->length;
 }
 

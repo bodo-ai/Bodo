@@ -206,10 +206,6 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
         check_func(test_impl2, (), only_seq=True)
 
 
-# @pytest.mark.skipif(
-#     bodo.test_dataframe_library_enabled,
-#     reason="[BSE-4766] All null columns not supported yet.",
-# )
 @pytest.mark.parametrize(
     "fname",
     [
@@ -2118,7 +2114,7 @@ def test_read_parquet_partitioned_read_as_dict(memory_leak_check):
 # ---------------------------- Test Additional Args ---------------------------- #
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="[BSE-4766] All null columns not supported yet.",
+    reason="[BSE-4770] Support the columns argument for read_parquet.",
 )
 @pytest.mark.parametrize(
     "col_subset",
@@ -2694,7 +2690,7 @@ def test_pq_schema(datapath, memory_leak_check):
 
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="[BSE-4766] requires Null column support.",
+    reason="[BSE-4831] Unify null columns in schema.",
 )
 def test_unify_null_column(memory_leak_check):
     """
