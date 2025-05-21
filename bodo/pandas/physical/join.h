@@ -234,7 +234,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
    private:
     /**
      * @brief Initialize mapping of input column orders so that keys are in the
-     * beggining of build/probe tables to match streaming join APIs. See
+     * beginning of build/probe tables to match streaming join APIs. See
      * https://github.com/bodo-ai/Bodo/blob/905664de2c37741d804615cdbb3fb437621ff0bd/bodo/libs/streaming/join.py#L189
      * @param col_inds input mapping to fill
      * @param keys key column indices
