@@ -17,7 +17,6 @@ import pyarrow as pa
 
 import bodo
 import bodo.utils.tracing as tracing
-from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import (
     FieldIDs,
     FieldNames,
@@ -33,6 +32,7 @@ from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.utils.utils import BodoError, run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.catalog import Catalog
     from pyiceberg.expressions import BooleanExpression
     from pyiceberg.io import FileIO
     from pyiceberg.table import FileScanTask, Table
@@ -128,7 +128,7 @@ def _get_total_num_pq_files_in_table(table: Table) -> int:
 
 @run_rank0
 def get_iceberg_file_list_parallel(
-    conn_str: str,
+    catalog: Catalog,
     table_id: str,
     filters: BooleanExpression,
     snapshot_id: int = -1,
@@ -159,7 +159,6 @@ def get_iceberg_file_list_parallel(
     if tracing.is_tracing():  # pragma: no cover
         ev_iceberg_fl.add_attribute("g_filters", filters)
     try:
-        catalog = conn_str_to_catalog(conn_str)
         table = catalog.load_table(table_id)
 
         pq_infos, get_file_to_schema_us = _construct_parquet_infos(
