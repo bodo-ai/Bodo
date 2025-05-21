@@ -82,7 +82,7 @@ def get_iceberg_pq_dataset(
     all processing is parallelized for best performance.
 
     Args:
-        catalog (str): PyIceberg catalog to read table metadata.
+        catalog (Catalog): PyIceberg catalog to read table metadata.
         table_id (str): Table Identifier of the table to use.
         typing_pa_table_schema (pa.Schema): Final/Target PyArrow schema
             for the Iceberg table generated at compile time. This must
