@@ -3,7 +3,6 @@ from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 
 import pandas as pd
-import pyarrow as pa
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
@@ -17,11 +16,11 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
-    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
+    get_scalar_udf_result_type,
     is_single_projection,
     make_col_ref_exprs,
     wrap_plan,
@@ -677,7 +676,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             "Only setting a column with a Series created from the same dataframe is supported."
         )
 
-    @check_args_fallback(supported=["func", "axis"])
+    @check_args_fallback(supported=["func", "axis", "args"])
     def apply(
         self,
         func,
@@ -699,20 +698,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.apply(): only axis=1 supported"
             )
 
-        # Get output data type by running the UDF on a sample of the data.
-        df_sample = self.head(1).execute_plan()
-        pd_sample = pd.DataFrame(df_sample)
-        out_sample = pd_sample.apply(func, axis)
-
-        if not isinstance(out_sample, pd.Series):
-            raise BodoLibNotImplementedException(
-                f"expected output to be Series, got: {type(out_sample)}."
-            )
-
-        # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
-        empty_df = arrow_to_empty_df(pa.Schema.from_pandas(out_sample.to_frame()))
-        empty_series = empty_df.squeeze()
-        empty_series.name = out_sample.name
+        empty_series = get_scalar_udf_result_type(
+            self, "apply", func, axis=axis, args=args, **kwargs
+        )
 
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
@@ -723,7 +711,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 False,  # is_series
                 True,  # is_method
                 (func,),  # args
-                {"axis": 1},  # kwargs
+                {"axis": 1, "args": args} | kwargs,  # kwargs
             ),
             tuple(range(len(self.columns) + get_n_index_arrays(self.head(0).index))),
         )
