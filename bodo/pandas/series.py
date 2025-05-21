@@ -263,9 +263,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
+        from bodo.pandas.utils import count_plan
         match self._exec_state:
             case ExecState.PLAN:
-                return (self._count_plan(),)
+                return (count_plan(self),)
             case ExecState.DISTRIBUTED:
                 return (self._mgr._md_nrows,)
             case ExecState.COLLECTED:
@@ -303,39 +304,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             # If head_s is available and larger than n, then use it directly.
             return self._head_s.head(n)
 
-    def _count_plan(self):
-        from bodo.pandas.utils import execute_plan, plan_cardinality
-
-        # See if we can get the cardinality statically.
-        static_cardinality = plan_cardinality(self._plan)
-        if static_cardinality is not None:
-            return static_cardinality
-
-        # Can't be known statically so create count plan on top of
-        # existing plan.
-        count_star_schema = pd.Series(dtype="uint64", name="count_star()")
-        aggregate_plan = LazyPlan(
-            "LogicalAggregate",
-            count_star_schema,
-            self._plan,
-            0,
-            0,
-            [LazyPlan("FunctionExpression", count_star_schema, "count_star()")],
-        )
-        projection_plan = LazyPlan(
-            "LogicalProjection",
-            count_star_schema,
-            aggregate_plan,
-            make_col_ref_exprs([0], aggregate_plan),
-        )
-
-        data = execute_plan(projection_plan)
-        return data[0]
-
     def __len__(self):
+        from bodo.pandas.utils import count_plan
         match self._exec_state:
             case ExecState.PLAN:
-                return self._count_plan()
+                return count_plan(self)
             case ExecState.DISTRIBUTED:
                 return self._mgr._md_nrows
             case ExecState.COLLECTED:

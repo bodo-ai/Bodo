@@ -455,7 +455,7 @@ def execute_plan(plan: LazyPlan):
     return _exec_plan(plan)
 
 
-def plan_cardinality(plan: LazyPlan):
+def get_plan_cardinality(plan: LazyPlan):
     """See if we can statically know the cardinality of the result of the plan.
 
     Args:
@@ -876,3 +876,32 @@ class LazyPlanDistributedArg:
         so we just send the result ID instead.
         """
         return (str, (self.res_id,))
+
+def count_plan(self):
+    from bodo.pandas.utils import execute_plan, get_plan_cardinality
+
+    # See if we can get the cardinality statically.
+    static_cardinality = get_plan_cardinality(self._plan)
+    if static_cardinality is not None:
+        return static_cardinality
+
+    # Can't be known statically so create count plan on top of
+    # existing plan.
+    count_star_schema = pd.Series(dtype="uint64", name="count_star()")
+    aggregate_plan = LazyPlan(
+        "LogicalAggregate",
+        count_star_schema,
+        self._plan,
+        0,
+        0,
+        [LazyPlan("FunctionExpression", count_star_schema, "count_star()")],
+    )
+    projection_plan = LazyPlan(
+        "LogicalProjection",
+        count_star_schema,
+        aggregate_plan,
+        make_col_ref_exprs([0], aggregate_plan),
+    )
+
+    data = execute_plan(projection_plan)
+    return data[0]

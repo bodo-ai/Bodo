@@ -111,9 +111,14 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
 
 duckdb::unique_ptr<duckdb::Expression> make_function_expr(
     std::string function_name) {
-    return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-        "count_star()", duckdb::LogicalType::BIGINT,
-        duckdb::ColumnBinding(-1, 0), 0);
+    if (function_name == "count_star()") {
+        return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+            "count_star()", duckdb::LogicalType::BIGINT,
+            duckdb::ColumnBinding(-1, 0), 0);
+    } else {
+        throw std::runtime_error("make_function_expr unsupported function " +
+                                 function_name);
+    }
 }
 
 /**
@@ -285,6 +290,17 @@ duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
                     dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(
                         std::move(expr_duck));
                 duckdb::ColumnBinding binding = bce->binding;
+                // In duckdb, the expr (e.g., FunctionExpression) in the
+                // aggregate is created first in an unbound state and in the
+                // binding process it goes from the aggregate node first into
+                // the exprs and converts them to bound versions.  In our
+                // integration with duckdb, we don't have a binding phase so
+                // we create a BoundColumnRefExpression which requires a
+                // ColumnBinding but we can't set that correctly because we
+                // don't have the aggregate node yet.  In this function where
+                // we create the aggregate node, we go into the exprs and
+                // update these placeholders ColumnBindings to a correct
+                // version.
                 bce->binding = source_cols[binding.column_index];
                 expr_duck = std::move(bce);
             } break;  // suppress wrong fallthrough error

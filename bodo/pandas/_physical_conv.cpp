@@ -176,7 +176,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
-    // Process the source of this filter.
+    // Process the source of this aggregate.
     this->Visit(*op.children[0]);
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
