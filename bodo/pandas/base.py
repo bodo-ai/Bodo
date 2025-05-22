@@ -42,12 +42,11 @@ def from_pandas(df):
         plan = LazyPlan(
             "LogicalGetPandasReadParallel",
             empty_df,
-            pa_schema,
             nrows,
             LazyPlanDistributedArg(None, res_id),
         )
     else:
-        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, pa_schema, df)
+        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
 
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
@@ -83,7 +82,11 @@ def read_parquet(
     empty_df = arrow_to_empty_df(arrow_schema)
 
     plan = LazyPlan(
-        "LogicalGetParquetRead", empty_df, arrow_schema, path, storage_options
+        "LogicalGetParquetRead",
+        empty_df,
+        path,
+        storage_options,
+        __pa_schame=arrow_schema,
     )
     return wrap_plan(plan=plan)
 
@@ -142,9 +145,9 @@ def read_iceberg(
     plan = LazyPlan(
         "LogicalGetIcebergRead",
         empty_df,
-        arrow_schema,
         table_identifier,
         catalog,
         pyiceberg.expressions.AlwaysTrue(),
+        __pa_schema=arrow_schema,
     )
     return wrap_plan(plan=plan)

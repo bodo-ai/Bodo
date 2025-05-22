@@ -70,7 +70,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     self._source_plan = LazyPlan(
                         "LogicalGetPandasReadParallel",
                         empty_data,
-                        pa.Schema.from_pandas(empty_data),
                         nrows,
                         LazyPlanDistributedArg(mgr, res_id),
                     )
@@ -78,7 +77,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     self._source_plan = LazyPlan(
                         "LogicalGetPandasReadSeq",
                         empty_data,
-                        pa.Schema.from_pandas(empty_data),
                         self,
                     )
 
@@ -112,7 +110,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         expr = LazyPlan(
             "BinaryOpExpression",
             empty_data,
-            pa.Schema.from_pandas(empty_data),
             lhs,
             rhs,
             op,
@@ -121,7 +118,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
-            pa.Schema.from_pandas(empty_data),
             # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
@@ -164,7 +160,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         expr = LazyPlan(
             "ConjunctionOpExpression",
             empty_data,
-            pa.Schema.from_pandas(empty_data),
             lhs,
             rhs,
             op,
@@ -173,7 +168,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
-            pa.Schema.from_pandas(empty_data),
             # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
@@ -211,14 +205,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         expr = LazyPlan(
             "UnaryOpExpression",
             empty_data,
-            pa.Schema.from_pandas(empty_data),
             source_expr,
             "__invert__",
         )
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
-            pa.Schema.from_pandas(empty_data),
             # Use the original table without the Series projection node.
             self._plan.args[0],
             (expr,),
@@ -322,7 +314,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 planLimit = LazyPlan(
                     "LogicalLimit",
                     empty_data,
-                    pa.Schema.from_pandas(empty_data),
                     self._plan,
                     n,
                 )
@@ -454,7 +445,6 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
     expr = LazyPlan(
         "PythonScalarFuncExpression",
         empty_data,
-        pa.Schema.from_pandas(empty_data),
         source_data,
         (
             func_name,
@@ -471,7 +461,6 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
         plan=LazyPlan(
             "LogicalProjection",
             empty_data,
-            pa.Schema.from_pandas(empty_data),
             source_data,
             (expr,) + index_col_refs,
         ),

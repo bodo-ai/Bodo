@@ -3,7 +3,6 @@ from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 
 import pandas as pd
-import pyarrow as pa
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
 
 import bodo
@@ -76,7 +75,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 self._source_plan = LazyPlan(
                     "LogicalGetPandasReadParallel",
                     empty_data,
-                    pa.Schema.from_pandas(self.empty_data),
                     nrows,
                     LazyPlanDistributedArg(mgr, res_id),
                 )
@@ -84,7 +82,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 self._source_plan = LazyPlan(
                     "LogicalGetPandasReadSeq",
                     empty_data,
-                    pa.Schema.from_pandas(self.empty_data),
                     self,
                 )
 
@@ -173,7 +170,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 planLimit = LazyPlan(
                     "LogicalLimit",
                     empty_df,
-                    pa.Schema.from_pandas(empty_df),
                     self._plan,
                     n,
                 )
@@ -575,7 +571,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
             empty_data,
-            pa.Schema.from_pandas(empty_data),
             self._plan,
             right._plan,
             plan_optimizer.CJoinType.INNER,
@@ -617,7 +612,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 plan=LazyPlan(
                     "LogicalFilter",
                     empty_data,
-                    pa.Schema.from_pandas(empty_data),
                     self._plan,
                     key_plan,
                 ),
@@ -649,7 +643,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 plan=LazyPlan(
                     "LogicalProjection",
                     empty_data,
-                    pa.Schema.from_pandas(empty_data),
                     self._plan,
                     exprs,
                 ),
@@ -721,7 +714,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         udf_arg = LazyPlan(
             "PythonScalarFuncExpression",
             empty_series,
-            pa.Schema.from_pandas(empty_series),
             self._plan,
             (
                 "apply",
@@ -744,7 +736,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         plan = LazyPlan(
             "LogicalProjection",
             empty_series,
-            pa.Schema.from_pandas(empty_series),
             self._plan,
             (udf_arg,) + index_col_refs,
         )
@@ -782,7 +773,6 @@ def _update_func_expr_source(
     expr = LazyPlan(
         "PythonScalarFuncExpression",
         func_expr.empty_data,
-        pa.Schema.from_pandas(func_expr.empty_data),
         new_source_plan,
         func_expr.args[1],
         (in_col_ind + col_index_offset,) + index_cols,
@@ -818,7 +808,6 @@ def _add_proj_expr_to_plan(
         else LazyPlan(
             "PythonScalarFuncExpression",
             func_expr.empty_data,
-            pa.Schema.from_pandas(func_expr.empty_data),
             *func_expr.args,
             **func_expr.kwargs,
         )
@@ -844,7 +833,6 @@ def _add_proj_expr_to_plan(
     new_plan = LazyPlan(
         "LogicalProjection",
         empty_data,
-        pa.Schema.from_pandas(empty_data),
         df_plan,
         tuple(data_cols + index_cols),
     )

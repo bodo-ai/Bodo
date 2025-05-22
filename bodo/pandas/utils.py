@@ -343,11 +343,10 @@ class LazyPlan:
     can be used to convert to an isolated set of DuckDB objects for execution.
     """
 
-    def __init__(self, plan_class, empty_data, pa_schema, *args, **kwargs):
+    def __init__(self, plan_class, empty_data, *args, __pa_schema=None, **kwargs):
         self.plan_class = plan_class
         self.args = args
         self.kwargs = kwargs
-        self.pa_schema = pa_schema
         assert isinstance(empty_data, (pd.DataFrame, pd.Series)), (
             "LazyPlan: empty_data must be a DataFrame or Series"
         )
@@ -358,6 +357,12 @@ class LazyPlan:
             # that is replaced with None in wrap_plan
             name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
             self.empty_data = empty_data.to_frame(name=name)
+
+        if __pa_schema is None:
+            # Use the schema of the empty data to create the schema for the plan
+            # Passing in a separate schema is useful for some operators that need
+            # schema metadat like iceberg.
+            self.pa_schema = pa.Schema.from_pandas(self.empty_data)
 
     def __str__(self):
         out = f"{self.plan_class}: \n"
