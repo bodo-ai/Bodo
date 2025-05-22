@@ -564,9 +564,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             for a, b in zip(left_on, right_on)
         ]
 
+        # Dummy output with all probe/build columns with unique names to enable
+        # make_col_ref_exprs() below
+        empty_join_out = pd.concat([_empty_like(self), _empty_like(right)], axis=1)
+        empty_join_out.columns = [
+            c + str(i) for i, c in enumerate(empty_join_out.columns)
+        ]
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
-            empty_data,
+            empty_join_out,
             self._plan,
             right._plan,
             plan_optimizer.CJoinType.INNER,
