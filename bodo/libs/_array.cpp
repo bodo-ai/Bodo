@@ -414,6 +414,7 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
 void info_to_null_array(array_info* info, uint64_t* n_items) {
     // TODO[BSE-433]: Replace with proper null array requirements once
     // they are integrated into C++.
+    // Arrow NA type is converted to arr_type STRING.
     if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL &&
         info->arr_type != bodo_array_type::STRING) {
         PyErr_SetString(PyExc_RuntimeError,
