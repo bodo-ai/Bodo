@@ -511,7 +511,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], self, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["left_on", "right_on"])
+    @check_args_fallback(supported=["on", "left_on", "right_on"])
     def merge(
         self,
         right: "BodoDataFrame | BodoSeries",
@@ -548,19 +548,18 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             suffixes=suffixes,
         )
 
-        if on is None:
-            if left_on is None:
-                on = tuple(set(self.columns).intersection(set(right.columns)))
-            else:
-                on = []
-        elif not isinstance(on, list):
-            on = (on,)
+        # Join on common keys if keys not specified
+        if on is None and left_on is None and right_on is None:
+            on = tuple(set(self.columns).intersection(set(right.columns)))
+
+        on = maybe_make_list(on)
+        if left_on is None and right_on is None:
+            left_on = on
+            right_on = on
 
         left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
 
         key_indices = [
-            (self.columns.get_loc(c), right.columns.get_loc(c)) for c in on
-        ] + [
             (self.columns.get_loc(a), right.columns.get_loc(b))
             for a, b in zip(left_on, right_on)
         ]
@@ -575,7 +574,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
 
         # Column indices in output that need to be selected
-        col_indices = list(range(len(self.columns) + len(right.columns)))
+        col_indices = list(range(len(self.columns)))
+        common_keys = set(left_on).intersection(set(right_on))
+        for i, col in enumerate(right.columns):
+            # Ignore common keys that are in the right side to match Pandas
+            if col not in common_keys:
+                col_indices.append(len(self.columns) + i)
 
         # Create column reference expressions for selected columns
         exprs = make_col_ref_exprs(col_indices, planComparisonJoin)
