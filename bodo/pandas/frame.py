@@ -574,7 +574,19 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             key_indices,
         )
 
-        return wrap_plan(planComparisonJoin)
+        # Column indices in output that need to be selected
+        col_indices = list(range(len(self.columns) + len(right.columns)))
+
+        # Create column reference expressions for selected columns
+        exprs = make_col_ref_exprs(col_indices, planComparisonJoin)
+        proj_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            planComparisonJoin,
+            exprs,
+        )
+
+        return wrap_plan(proj_plan)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
