@@ -40,7 +40,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
         this->active_pipeline->getPrevOpOutputSchema();
 
     auto physical_op = std::make_shared<PhysicalProjection>(
-        std::move(op.expressions), in_table_schema);
+        op.children[0], std::move(op.expressions), in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
 }
 
@@ -218,7 +218,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
-    auto physical_join = std::make_shared<PhysicalJoin>(op.conditions);
+    auto physical_join = std::make_shared<PhysicalJoin>(op, op.conditions);
 
     // Create pipelines for the build side of the join (right child)
     PhysicalPlanBuilder rhs_builder;
