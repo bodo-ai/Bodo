@@ -17,7 +17,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         duckdb::LogicalComparisonJoin& logical_join,
         const duckdb::vector<duckdb::JoinCondition>& conditions) {
         // Initialize column indices in join build/probe that need to be
-        // produced accoding to join output bindings
+        // produced according to join output bindings
         duckdb::idx_t left_table_index = -1;
         duckdb::idx_t right_table_index = -1;
         std::vector<duckdb::ColumnBinding> left_findings =
