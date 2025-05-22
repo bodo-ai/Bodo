@@ -60,6 +60,22 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     PyObject *out_schema_py);
 
 /**
+ * @brief Creates a LogicalAggregate node.
+ *
+ * @param source - the data source to aggregate
+ * @param group_index - the group index for the aggregate
+ * @param aggregate_index - the aggregate index for the aggregate
+ * @param exprs - vector of aggregate exprs
+ * @param out_schema_py - the schema of data coming out of the aggregate
+ * @return duckdb::unique_ptr<duckdb::LogicalAggregate> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
+    std::unique_ptr<duckdb::LogicalOperator> &source, duckdb::idx_t group_index,
+    duckdb::idx_t aggregate_index,
+    std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
+    PyObject *out_schema_py);
+
+/**
  * @brief Get column indices that are pushed down from a projection node to its
  * source. Used for testing.
  *
@@ -129,6 +145,15 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
 duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
     int col_idx);
+
+/**
+ * @brief Create an expression for a given function name.
+ *
+ * @param function_name - the function name to create expression for
+ * @return duckdb::unique_ptr<duckdb::Expression> - the function expression
+ */
+duckdb::unique_ptr<duckdb::Expression> make_function_expr(
+    std::string function_name);
 
 /**
  * @brief Create an expression from two sources and an operator.
