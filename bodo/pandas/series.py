@@ -347,54 +347,6 @@ class BodoStringMethods:
         self._series = series
 
     @check_args_fallback(unsupported="none")
-    def lower(self):
-        index = self._series.head(0).index
-        new_metadata = pd.Series(
-            dtype=pd.ArrowDtype(pa.large_string()),
-            name=self._series.name,
-            index=index,
-        )
-        return _get_series_python_func_plan(
-            self._series._plan, new_metadata, "str.lower", (), {}
-        )
-
-    @check_args_fallback(unsupported="none")
-    def upper(self):
-        index = self._series.head(0).index
-        new_metadata = pd.Series(
-            dtype=pd.ArrowDtype(pa.large_string()),
-            name=self._series.name,
-            index=index,
-        )
-        return _get_series_python_func_plan(
-            self._series._plan, new_metadata, "str.upper", (), {}
-        )
-
-    @check_args_fallback(unsupported="none")
-    def isalpha(self):
-        index = self._series.head(0).index
-        new_metadata = pd.Series(
-            dtype=bool,
-            name=self._series.name,
-            index=index,
-        )
-        return _get_series_python_func_plan(
-            self._series._plan, new_metadata, "str.isalpha", (), {}
-        )
-
-    @check_args_fallback(unsupported="none")
-    def strip(self, to_strip=None):
-        index = self._series.head(0).index
-        new_metadata = pd.Series(
-            dtype=pd.ArrowDtype(pa.large_string()),
-            name=self._series.name,
-            index=index,
-        )
-        return _get_series_python_func_plan(
-            self._series._plan, new_metadata, "str.strip", (to_strip,), {}
-        )
-
-    @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
         try:
             return object.__getattribute__(self, name)
@@ -450,11 +402,22 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
     )
 
 
-def gen_str_scalar_func(name, rettype):
-    """Creates corresponding str function and adds to BodoStringMethods class."""
+def gen_str_method_func_inspect(name, rettype):
+    """Generalized generator for Series.str methods with optional/positional args."""
+    sample_series = pd.Series(["a"])
+    str_accessor = sample_series.str
+    func = getattr(str_accessor, name)
+    signature = inspect.signature(func)
 
-    def scalar_func(self):
-        """Generalized function template for no arg str methods"""
+    def str_method(self, *args, **kwargs):
+        key_args = tuple(
+            kwargs[param_name] if param_name in kwargs else param.default
+            for param_name, param in signature.parameters.items()
+            if param_name not in kwargs
+            and param.default is not inspect._empty
+            or param_name in kwargs
+        )
+        params = args + key_args
         index = self._series.head(0).index
         new_metadata = pd.Series(
             dtype=rettype,
@@ -463,24 +426,60 @@ def gen_str_scalar_func(name, rettype):
         )
         func_name = f"str.{name}"
         return _get_series_python_func_plan(
-            self._series._plan, new_metadata, func_name, (), {}
+            self._series._plan, new_metadata, func_name, params, {}
         )
 
-    scalar_func.__doc__ = f"Equivalent of Series.str.{name}()"
-
-    sig = inspect.Signature(
-        parameters=[inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
-    )
-    scalar_func.__signature__ = sig
-
-    return scalar_func
+    return str_method
 
 
-series_noarg_functions = [
-    # idx = 0: No arguments, return type Series(str)
-    ["upper", "lower", "title", "swapcase", "capitalize", "casefold"],
-    # idx = 1: No arguments, return type Series(bool)
+# List of unsupported methods for now
+series_str_methods_unsupported = [
+    "cat",
+    "decode",
+    "encode",
+    "extract",
+    "extractall",
+    "join",
+    "normalize",
+    "partition",
+    "rpartition",
+    "split",
+    "rsplit",
+    "get_dummies",
+]
+
+series_str_methods = [
+    # idx = 0: Series(String)
     [
+        # no args
+        "upper",
+        "lower",
+        "title",
+        "swapcase",
+        "capitalize",
+        "casefold",
+        # args
+        "strip",
+        "lstrip",
+        "rstrip",
+        "center",
+        "get",
+        "removeprefix",
+        "removesuffix",
+        "pad",
+        "rjust",
+        "ljust",
+        "repeat",
+        "slice",
+        "slice_replace",
+        "translate",
+        "zfill",
+        "replace",
+        "wrap",
+    ],
+    # idx = 1: Series(Bool)
+    [
+        # no args
         "isalpha",
         "isnumeric",
         "isalnum",
@@ -490,15 +489,43 @@ series_noarg_functions = [
         "islower",
         "isupper",
         "istitle",
+        # args
+        "startswith",
+        "endswith",
+        "contains",
+        "match",
+        "fullmatch",
+    ],
+    # idx = 2: Series(Float)
+    [
+        "len",
+    ],
+    # idx = 3: Series(Int)
+    [
+        "find",
+        "index",
+        "rindex",
+        "count",
+        "rfind",
+    ],
+    # idx = 4: Series(List(String))
+    [
+        "findall",
+        "join",
     ],
 ]
 
+# Maps series_str_methods-rettypes via indices
 rettypes = [
-    pd.ArrowDtype(pa.large_string()),  # idx = 0
-    bool,  # idx = 1
+    pd.ArrowDtype(pa.large_string()),  # idx = 0: Series(String)
+    pd.ArrowDtype(pa.bool_()),  # idx = 1: Series(Bool)
+    pd.ArrowDtype(pa.float64()),  # idx = 2: Series(Float)
+    pd.ArrowDtype(pa.int64()),  # idx = 3: Series(Int)
+    pd.ArrowDtype(pa.large_list(pa.large_string())),  # idx = 4: Series(List(String))
 ]
 
-for idx in range(len(series_noarg_functions)):
-    for func_name in series_noarg_functions[idx]:
-        func = gen_str_scalar_func(func_name, rettypes[idx])
+# Generates Series.str methods
+for idx in range(len(series_str_methods)):
+    for func_name in series_str_methods[idx]:
+        func = gen_str_method_func_inspect(func_name, rettypes[idx])
         setattr(BodoStringMethods, func_name, func)

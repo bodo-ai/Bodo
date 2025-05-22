@@ -1,5 +1,6 @@
 import operator
 import os
+import re
 import tempfile
 
 import numba
@@ -545,77 +546,6 @@ def test_apply(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_lower(datapath, index_val):
-    """Very simple test for Series.str.lower for sanity checking."""
-    df = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
-            "B": ["A1", "B1", "C1", "Abc"] * 2,
-            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
-        }
-    )
-    df.index = index_val[: len(df)]
-    bdf = bd.from_pandas(df)
-    out_pd = df.B.str.lower()
-    out_bodo = bdf.B.str.lower()
-    assert out_bodo.is_lazy_plan()
-    _test_equal(out_bodo, out_pd, check_pandas_types=False)
-
-
-def test_str_upper(datapath, index_val):
-    """Very simple test for Series.str.upper for sanity checking."""
-    df = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
-            "B": ["a1", "b1", "c1", "Abc"] * 2,
-            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
-        }
-    )
-    df.index = index_val[: len(df)]
-    bdf = bd.from_pandas(df)
-    out_pd = df.B.str.upper()
-    out_bodo = bdf.B.str.upper()
-    assert out_bodo.is_lazy_plan()
-    _test_equal(out_bodo, out_pd, check_pandas_types=False)
-
-
-def test_str_swapcase(datapath, index_val):
-    """Very simple test for Series.str.swapcase for sanity checking."""
-    df = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
-            "B": ["AbA", "CasEEEE", "HoHohO", "Abc"] * 2,
-            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
-        }
-    )
-    df.index = index_val[: len(df)]
-    bdf = bd.from_pandas(df)
-    out_pd = df.B.str.swapcase()
-    out_bodo = bdf.B.str.swapcase()
-    assert out_bodo.is_lazy_plan()
-    _test_equal(out_bodo, out_pd, check_pandas_types=False)
-
-
-@pytest.mark.parametrize(
-    "to_strip", [pytest.param(None, id="default"), pytest.param("A B", id="strip-AB")]
-)
-def test_str_strip(datapath, index_val, to_strip):
-    """Very simple test for Series.str.strip() for sanity checking."""
-    df = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, 3, 7], "Int64"),
-            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
-            "C": pd.array([4, 5, 6, -1], "Int64"),
-        }
-    )
-    df.index = index_val[: len(df)]
-    bdf = bd.from_pandas(df)
-    out_pd = df.B.str.strip(to_strip=to_strip)
-    out_bodo = bdf.B.str.strip(to_strip=to_strip)
-    assert out_bodo.is_lazy_plan()
-    _test_equal(out_bodo, out_pd, check_pandas_types=False)
-
-
 def test_chain_python_func(datapath, index_val):
     """Make sure chaining multiple Series functions that run in Python works"""
     df = pd.DataFrame(
@@ -881,29 +811,227 @@ def test_dataframe_copy(index_val):
     _test_equal(df1, pdf_from_bodo, sort_output=True)
 
 
-def gen_str_scalar_test(name):
-    """Creates test case for corresponding str function and adds to global."""
+def gen_str_param_test(name, arg_sets):
+    """
+    Generates a parameterized test case for Series.str.<name> method.
+    """
 
-    def test_func(datapath, index_val):
-        """Very simple test for Series.str.[name] for sanity checking."""
+    @pytest.mark.parametrize(
+        "args, kwargs",
+        arg_sets,
+        ids=[
+            f"{name}-args{args}-kwargs{sorted(kwargs.items())}"
+            for args, kwargs in arg_sets
+        ],
+    )
+    def test_func(datapath, index_val, args, kwargs):
         df = pd.DataFrame(
             {
-                "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
-                "B": ["a1", "b1", "c1", "Abc"] * 2,
-                "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
+                "A": pd.array([1, 2, 3, 7], dtype="Int64"),
+                "B": ["Apple", "Banana", "Excited", "Dog"],
+                "C": pd.array([4, 5, 6, -1], dtype="Int64"),
             }
         )
-        df.index = index_val[: len(df)]
+        df.index = pd.RangeIndex(len(df))
         bdf = bd.from_pandas(df)
-        out_pd = df.B.str.__getattribute__(name)()
-        out_bodo = bdf.B.str.__getattribute__(name)()
-        assert out_bodo.is_lazy_plan()
+
+        pd_func = getattr(df.B.str, name)
+        bodo_func = getattr(bdf.B.str, name)
+        pd_error, bodo_error = (False, None), (False, None)
+
+        # Pandas and Bodo methods should have identical behavior
+        try:
+            out_pd = pd_func(*args, **kwargs)
+        except Exception as e:
+            pd_error = (True, e)
+        try:
+            out_bodo = bodo_func(*args, **kwargs)
+            assert out_bodo.is_lazy_plan()
+            out_bodo.execute_plan()
+        except Exception as e:
+            bodo_error = (True, e)
+
+        # Precise types of Exceptions might differ
+        assert pd_error[0] == bodo_error[0]
+        if pd_error[0]:
+            return
+
         _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
     return test_func
 
 
-for func_list in bd.series.series_noarg_functions:
-    for func_name in func_list:
-        func = gen_str_scalar_test(func_name)
-        globals()[f"test_auto_{func_name}"] = func
+# Maps method name to test case for pytest param
+# More rigorous testing NEEDED
+test_map_arg = {
+    "contains": [
+        (("A",), {}),
+        (("A",), {"na": False}),
+        (("A",), {"na": True}),
+        (("a",), {"case": False}),
+        (("a",), {"case": False, "na": False}),
+        (("A",), {"regex": False}),
+    ],
+    "startswith": [
+        (("A",), {}),
+        (("A",), {"na": False}),
+        (("A",), {"na": None}),
+        ((("A", "B"),), {}),
+    ],
+    "endswith": [
+        (("e",), {}),
+        (("e",), {"na": False}),
+        (("e",), {"na": None}),
+        ((("e", "d"),), {}),
+    ],
+    "find": [
+        (("a",), {}),
+        (("b",), {"start": 1}),
+        (("D",), {"end": 3}),
+    ],
+    "rfind": [
+        (("a",), {}),
+        (("b",), {"start": 1}),
+        (("D",), {"end": 3}),
+    ],
+    "index": [
+        (("e",), {}),
+        (("an",), {"start": 0}),
+        (("l",), {"end": 3}),
+        (("",), {"end": 3}),
+    ],
+    "rindex": [
+        (("e",), {}),
+        (("an",), {"start": 0}),
+        (("l",), {"end": 3}),
+        (("",), {"end": 3}),
+    ],
+    "replace": [
+        (("a", "b"), {}),
+        (("a", "b"), {"regex": False}),
+        (("a", "b"), {"regex": True}),
+    ],
+    "match": [
+        (("A",), {}),
+        (("A",), {"na": False}),
+        (("A",), {"na": None}),
+    ],
+    "fullmatch": [
+        (("Apple",), {}),
+        (("Apple",), {"na": False}),
+    ],
+    "extract": [
+        ((r"([A-Za-z]+)",), {}),
+    ],
+    "extractall": [
+        ((r"([A-Za-z]+)",), {}),
+    ],
+    "get": [((0,), {}), ((-1,), {}), ((2,), {}), ((5,), {})],
+    "slice": [
+        ((), {"start": 1}),
+        ((), {"start": 1, "stop": 3}),
+        ((), {"step": 2}),
+        ((), {"start": -1}),
+    ],
+    "slice_replace": [
+        ((), {"start": 1}),
+        ((), {"start": 1, "stop": 3, "repl": "oi"}),
+        ((), {"stop": 4, "repl": "XXX"}),
+        ((), {"start": -1}),
+    ],
+    "repeat": [
+        ((2,), {}),
+        ((5,), {}),
+        ((0,), {}),
+    ],
+    "pad": [
+        ((10,), {}),
+        ((10,), {"side": "left"}),
+        ((10,), {"side": "right", "fillchar": "-"}),
+    ],
+    "center": [
+        ((10,), {}),
+        ((10,), {"fillchar": "*"}),
+        ((8,), {"fillchar": "."}),
+    ],
+    "ljust": [
+        ((10,), {}),
+        ((10,), {"fillchar": "*"}),
+    ],
+    "rjust": [
+        ((10,), {}),
+        ((10,), {"fillchar": "*"}),
+    ],
+    "zfill": [
+        ((10,), {}),
+    ],
+    "wrap": [
+        ((4,), {}),
+    ],
+    "join": [
+        (("-",), {}),
+    ],
+    "partition": [
+        (("a",), {}),
+    ],
+    "rpartition": [
+        (("a",), {}),
+    ],
+    "removeprefix": [
+        (("A",), {}),
+        (("Do",), {}),
+        (("B",), {}),
+    ],
+    "removesuffix": [
+        (("anana",), {}),
+        (("Dog",), {}),
+        (("og",), {}),
+        (("Canon",), {}),
+    ],
+    "encode": [
+        (("utf-8",), {}),
+        (("ascii",), {}),
+        (("utf-8",), {"errors": "ignore"}),
+        (("utf-8",), {"errors": "replace"}),
+    ],
+    "translate": [
+        ((str.maketrans("abc", "123"),), {}),
+    ],
+    "count": [
+        (("an",), {}),
+        (("Ex",), {}),
+        (("a",), {}),
+    ],
+    "findall": [
+        (("Banana",), {}),
+        (("BANANA",), {"flags": re.IGNORECASE}),
+    ],
+}
+
+# List of methods that do not take in arguments
+test_map_no_arg = [
+    "upper",
+    "lower",
+    "title",
+    "swapcase",
+    "capitalize",
+    "casefold",
+    "isalpha",
+    "isnumeric",
+    "isalnum",
+    "isdigit",
+    "isdecimal",
+    "isspace",
+    "islower",
+    "isupper",
+    "istitle",
+    "len",
+]
+
+for method_name in test_map_arg:
+    test = gen_str_param_test(method_name, test_map_arg[method_name])
+    globals()[f"test_auto_{method_name}"] = test
+
+for method_name in test_map_no_arg:
+    test = gen_str_param_test(method_name, [((), {})])
+    globals()[f"test_auto_{method_name}"] = test
