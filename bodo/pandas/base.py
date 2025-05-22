@@ -86,7 +86,6 @@ def read_parquet(
         empty_df,
         path,
         storage_options,
-        __pa_schema=arrow_schema,
     )
     return wrap_plan(plan=plan)
 
