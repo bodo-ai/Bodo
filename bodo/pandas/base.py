@@ -31,7 +31,8 @@ def from_pandas(df):
     sample_size = 100
 
     # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
-    empty_df = arrow_to_empty_df(pa.Schema.from_pandas(df.iloc[:sample_size]))
+    pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
+    empty_df = arrow_to_empty_df(pa_schema)
     n_rows = len(df)
 
     res_id = None
@@ -40,10 +41,11 @@ def from_pandas(df):
         plan = LazyPlan(
             "LogicalGetPandasReadParallel",
             empty_df,
+            pa_schema,
             LazyPlanDistributedArg(None, res_id),
         )
     else:
-        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
+        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, pa_schema, df)
 
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
@@ -78,7 +80,9 @@ def read_parquet(
 
     empty_df = arrow_to_empty_df(arrow_schema)
 
-    plan = LazyPlan("LogicalGetParquetRead", empty_df, path, storage_options)
+    plan = LazyPlan(
+        "LogicalGetParquetRead", empty_df, arrow_schema, path, storage_options
+    )
     return wrap_plan(plan=plan)
 
 
@@ -136,6 +140,7 @@ def read_iceberg(
     plan = LazyPlan(
         "LogicalGetIcebergRead",
         empty_df,
+        arrow_schema,
         table_identifier,
         catalog,
         pyiceberg.expressions.AlwaysTrue(),
