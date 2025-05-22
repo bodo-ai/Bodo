@@ -14,7 +14,30 @@
 class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
    public:
     explicit PhysicalJoin(
+        duckdb::LogicalComparisonJoin& logical_join,
         const duckdb::vector<duckdb::JoinCondition>& conditions) {
+        // Initialize column indices in join build/probe that need to be
+        // produced accoding to join output bindings
+        duckdb::idx_t left_table_index = -1;
+        duckdb::idx_t right_table_index = -1;
+        std::vector<duckdb::ColumnBinding> left_findings =
+            logical_join.children[0]->GetColumnBindings();
+        std::vector<duckdb::ColumnBinding> right_findings =
+            logical_join.children[1]->GetColumnBindings();
+        if (left_findings.size() > 0) {
+            left_table_index = left_findings[0].table_index;
+        }
+        if (right_findings.size() > 0) {
+            right_table_index = right_findings[0].table_index;
+        }
+        for (auto& c : logical_join.GetColumnBindings()) {
+            if (c.table_index == left_table_index) {
+                this->bound_left_inds.insert(c.column_index);
+            } else if (c.table_index == right_table_index) {
+                this->bound_right_inds.insert(c.column_index);
+            }
+        }
+
         // Check conditions and add key columns
         for (const duckdb::JoinCondition& cond : conditions) {
             if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
@@ -57,8 +80,11 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
         initInputColumnMapping(build_col_inds, right_keys, n_build_cols);
         initInputColumnMapping(probe_col_inds, left_keys, n_probe_cols);
-        initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols);
-        initOutputColumnMapping(probe_kept_cols, left_keys, n_probe_cols);
+
+        initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols,
+                                bound_right_inds);
+        initOutputColumnMapping(probe_kept_cols, left_keys, n_probe_cols,
+                                bound_left_inds);
 
         std::shared_ptr<bodo::Schema> build_table_schema_reordered =
             build_table_schema->Project(build_col_inds);
@@ -262,10 +288,13 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      * @param col_inds output mapping to fill
      * @param keys key column indices
      * @param ncols number of columns in the table
+     * @param bound_inds set of column indices that need to be produced in the
+     * output according to bindings
      */
     static void initOutputColumnMapping(std::vector<uint64_t>& col_inds,
                                         std::vector<uint64_t>& keys,
-                                        uint64_t ncols) {
+                                        uint64_t ncols,
+                                        std::set<int64_t>& bound_inds) {
         // Map key column index to its position in keys vector
         std::unordered_map<uint64_t, size_t> key_positions;
         for (size_t i = 0; i < keys.size(); ++i) {
@@ -274,6 +303,9 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         uint64_t data_offset = keys.size();
 
         for (uint64_t i = 0; i < ncols; i++) {
+            if (bound_inds.find(i) == bound_inds.end()) {
+                continue;
+            }
             if (key_positions.find(i) != key_positions.end()) {
                 col_inds.push_back(key_positions[i]);
             } else {
@@ -281,6 +313,10 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             }
         }
     }
+
+    // build/probe table column indices that need to be produced in output
+    std::set<int64_t> bound_left_inds;
+    std::set<int64_t> bound_right_inds;
 
     std::shared_ptr<HashJoinState> join_state;
     std::vector<uint64_t> build_kept_cols;
