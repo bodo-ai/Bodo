@@ -14,10 +14,8 @@ PhysicalReadIceberg::PhysicalReadIceberg(
       out_metadata(std::make_shared<TableMetadata>(
           this->arrow_schema->metadata()->keys(),
           this->arrow_schema->metadata()->values())),
-      out_column_names(
-          this->create_out_column_names(selected_columns, this->arrow_schema)) {
-    // TODO: Handle filter expressions and limit value
-}
+      out_column_names(this->create_out_column_names(selected_columns,
+                                                     this->arrow_schema)) {}
 
 std::pair<std::shared_ptr<table_info>, OperatorResult>
 PhysicalReadIceberg::ProduceBatch() {
