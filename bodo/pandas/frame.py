@@ -532,7 +532,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
         # key columns with the same names from output
 
-        # TODO[BSE-4811]: add proper argument validation
+        # Validates only on, left_on and right_on for now
+        validate_merge_spec(self, right, on, left_on, right_on)
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
@@ -886,6 +887,28 @@ def _get_set_column_plan(
     return _add_proj_expr_to_plan(df_plan, value_plan, key)
 
 
+def validate_on(val):
+    """Validates single on-value"""
+    if val is not None:
+        if not (
+            isinstance(val, str)
+            or (isinstance(val, (list, tuple)) and all(isinstance(k, str) for k in val))
+        ):
+            raise ValueError(
+                "only str, str list, str tuple, or None are supported for on, left_on and right_on values"
+            )
+
+
+def validate_keys(keys, df):
+    """Utilizes set difference to check key membership in DataFrame df"""
+    key_diff = set(keys).difference(set(df.columns))
+    if len(key_diff) > 0:
+        raise KeyError(
+            f"merge(): invalid key {key_diff} for on/left_on/right_on\n"
+            f"merge supports only valid column names {df.columns}"
+        )
+
+
 def maybe_make_list(obj):
     """If string input, turn into singleton list"""
     if obj is None:
@@ -893,3 +916,37 @@ def maybe_make_list(obj):
     elif not isinstance(obj, (tuple, list)):
         return [obj]
     return obj
+
+
+def validate_merge_spec(left, right, on, left_on, right_on):
+    """Check on, left_on and right_on values for type correctness
+    (currently only str, str list, str tuple, or None are supported)
+    and matching number of elements. If failed to validate, raise error.
+    Also checks membership in left and right DFs to validate keys.
+    """
+    validate_on(on)
+    validate_on(left_on)
+    validate_on(right_on)
+
+    if on is None and left_on is None and right_on is None:
+        return
+
+    if on is not None:
+        if left_on is not None or right_on is not None:
+            raise ValueError(
+                'Can only pass argument "on" OR "left_on" '
+                'and "right_on", not a combination of both.'
+            )
+        left_on = right_on = maybe_make_list(on)
+
+    elif (left_on is not None) ^ (right_on is not None):
+        raise ValueError('Must pass both "left_on" and "right_on"')
+
+    elif left_on is not None and right_on is not None:
+        left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
+
+    if len(left_on) != len(right_on):
+        raise ValueError("len(right_on) must equal len(left_on)")
+
+    validate_keys(left_on, left)
+    validate_keys(right_on, right)
