@@ -131,7 +131,9 @@ class PhysicalProjection : public PhysicalSourceSink {
                         auto& colref =
                             child_expr
                                 ->Cast<duckdb::BoundColumnRefExpression>();
-                        size_t col_idx = colref.binding.column_index;
+                        size_t col_idx =
+                            col_ref_map[{colref.binding.table_index,
+                                         colref.binding.column_index}];
                         selected_columns.emplace_back(col_idx);
                     } else {
                         throw std::runtime_error(
