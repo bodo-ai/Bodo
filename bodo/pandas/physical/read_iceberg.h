@@ -19,14 +19,14 @@ class PhysicalReadIceberg : public PhysicalSource {
         const std::vector<int> &selected_columns,
         const std::shared_ptr<arrow::Schema> schema);
     static std::unique_ptr<IcebergParquetReader> create_internal_reader(
-        PyObject *catalog, const char *table_id, PyObject *iceberg_filter,
+        PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
         std::shared_ptr<arrow::Schema> arrow_schema,
         std::vector<int> &selected_columns,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val);
 
    public:
     explicit PhysicalReadIceberg(
-        PyObject *catalog, const char *table_id, PyObject *iceberg_filter,
+        PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
         std::shared_ptr<arrow::Schema> arrow_schema,
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,

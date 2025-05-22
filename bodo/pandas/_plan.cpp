@@ -468,8 +468,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
         BodoIcebergScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoIcebergScanFunctionData>(
-            arrow_schema, pyiceberg_catalog, table_name.c_str(),
-            iceberg_filter);
+            arrow_schema, pyiceberg_catalog, table_name, iceberg_filter);
 
     duckdb::virtual_column_map_t virtual_columns;
 

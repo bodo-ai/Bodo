@@ -186,7 +186,7 @@ class BodoIcebergScanFunction : public BodoScanFunction {
 class BodoIcebergScanFunctionData : public BodoScanFunctionData {
    public:
     BodoIcebergScanFunctionData(std::shared_ptr<arrow::Schema> _arrow_schema,
-                                PyObject *_catalog, const char *_table_id,
+                                PyObject *_catalog, const std::string _table_id,
                                 PyObject *_iceberg_filter)
         : arrow_schema(std::move(_arrow_schema)),
           catalog(_catalog),
@@ -202,5 +202,5 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
     const std::shared_ptr<arrow::Schema> arrow_schema;
     PyObject *catalog;
     PyObject *iceberg_filter;
-    const char *table_id;
+    const std::string table_id;
 };

@@ -3,7 +3,7 @@
 #include "physical/operator.h"
 
 PhysicalReadIceberg::PhysicalReadIceberg(
-    PyObject *catalog, const char *table_id, PyObject *iceberg_filter,
+    PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
     std::shared_ptr<arrow::Schema> arrow_schema,
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val)
@@ -53,7 +53,7 @@ std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
 
 std::unique_ptr<IcebergParquetReader>
 PhysicalReadIceberg::create_internal_reader(
-    PyObject *catalog, const char *table_id, PyObject *iceberg_filter,
+    PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
     std::shared_ptr<arrow::Schema> arrow_schema,
     std::vector<int> &selected_columns,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
@@ -75,7 +75,7 @@ PhysicalReadIceberg::create_internal_reader(
     }
 
     auto reader = std::make_unique<IcebergParquetReader>(
-        catalog, table_id, true, -1, iceberg_filter, "", Py_None,
+        catalog, table_id.c_str(), true, -1, iceberg_filter, "", Py_None,
         selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
         get_streaming_batch_size(), -1, total_rows_to_read);
     // TODO: Figure out cols to dict encode
