@@ -343,7 +343,7 @@ class LazyPlan:
     can be used to convert to an isolated set of DuckDB objects for execution.
     """
 
-    def __init__(self, plan_class, empty_data, *args, __pa_schema=None, **kwargs):
+    def __init__(self, plan_class, empty_data, *args, **kwargs):
         self.plan_class = plan_class
         self.args = args
         self.kwargs = kwargs
@@ -358,11 +358,15 @@ class LazyPlan:
             name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
             self.empty_data = empty_data.to_frame(name=name)
 
-        if __pa_schema is None:
+        if (pa_schema := kwargs.get("__pa_schema", None)) is None:
             # Use the schema of the empty data to create the schema for the plan
             # Passing in a separate schema is useful for some operators that need
             # schema metadat like iceberg.
-            self.pa_schema = pa.Schema.from_pandas(self.empty_data)
+            pa_schema = pa.Schema.from_pandas(self.empty_data)
+        else:
+            # We don't want this passing to the operator constructors
+            del kwargs["__pa_schema"]
+        self.pa_schema = pa_schema
 
     def __str__(self):
         out = f"{self.plan_class}: \n"
