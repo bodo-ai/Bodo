@@ -74,8 +74,11 @@ PhysicalReadIceberg::create_internal_reader(
         total_rows_to_read = limit_val->GetConstantValue();
     }
 
-    return std::make_unique<IcebergParquetReader>(
+    auto reader = std::make_unique<IcebergParquetReader>(
         catalog, table_id, true, -1, iceberg_filter, "", Py_None,
         selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
         get_streaming_batch_size(), -1, total_rows_to_read);
+    // TODO: Figure out cols to dict encode
+    reader->init_iceberg_reader({}, false);
+    return reader;
 }
