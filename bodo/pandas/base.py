@@ -63,19 +63,15 @@ def read_parquet(
     filters=None,
     **kwargs,
 ):
-    from bodo.io.parquet_pio import get_parquet_dataset
-
     if storage_options is None:
         storage_options = {}
 
     # Read Parquet schema
     use_hive = True
-    pq_dataset = get_parquet_dataset(
+    pq_dataset = _get_dataset_unify_nulls(
         path,
-        get_row_counts=False,
-        storage_options=storage_options,
-        read_categories=True,
-        partitioning="hive" if use_hive else None,
+        storage_options,
+        "hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
 
@@ -140,3 +136,67 @@ def read_iceberg(
 
     plan = LazyPlan("LogicalGetIcebergRead", empty_df, table_identifier, catalog)
     return wrap_plan(plan=plan)
+
+
+def _get_dataset_unify_nulls(fpath, storage_options, paritioning):
+    import pyarrow.dataset as ds
+
+    from bodo.io.fs_io import getfs, parse_fpath
+    from bodo.io.parquet_pio import (
+        ParquetDataset,
+        get_bodo_pq_dataset_from_fpath,
+        unify_schemas,
+    )
+    from bodo.utils.typing import BodoError
+
+    fpath, parsed_url, protocol = parse_fpath(fpath)
+    fs = getfs(fpath, protocol, storage_options, parallel=False)
+
+    dataset_or_err = get_bodo_pq_dataset_from_fpath(
+        fpath,
+        protocol,
+        parsed_url,
+        fs,
+        partitioning=paritioning,
+        filters=None,
+        typing_pa_schema=None,
+    )
+
+    if isinstance(dataset_or_err, Exception):  # pragma: no cover
+        error = dataset_or_err
+        raise error
+    dataset = pt.cast(ParquetDataset, dataset_or_err)
+    dataset.set_fs(fs)
+
+    pieces = dataset.pieces
+    fpaths = [p.path for p in dataset.pieces]
+    dataset_ = ds.dataset(
+        fpaths,
+        filesystem=dataset.filesystem,
+        partitioning=dataset.partitioning,
+    )
+    piece_framents = zip(pieces, dataset_.get_fragments())
+    while any(pa.types.is_null(typ) for typ in dataset.schema.types):
+        piece, frag = next(piece_framents)
+        # Two files are compatible if arrow can unify their schemas.
+        file_schema = frag.metadata.schema.to_arrow_schema()
+        fileset_schema_names = set(file_schema.names)
+        # Check the names are the same because pa.unify_schemas
+        # will unify a schema where a column is in 1 file but not
+        # another.
+        dataset_schema_names = set(dataset.schema.names) - set(dataset.partition_names)
+        # File schema can only be a (potentially) more restrictive
+        # version of the starting schema, therefore, the file shouldn't
+        # have extra columns. Any columns that are expected but are
+        # missing from the file will be filled with nulls at read time.
+        added_columns = fileset_schema_names - dataset_schema_names
+        if added_columns:
+            msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
+            raise BodoError(msg)
+        try:
+            dataset.schema = unify_schemas([dataset.schema, file_schema], "permissive")
+        except Exception as e:
+            msg = f"Schema in {piece} was different.\n{str(e)}"
+            raise BodoError(msg)
+
+    return dataset
