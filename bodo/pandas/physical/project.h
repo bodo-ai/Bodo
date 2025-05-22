@@ -41,14 +41,12 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
 class PhysicalProjection : public PhysicalSourceSink {
    public:
     explicit PhysicalProjection(
-        duckdb::unique_ptr<duckdb::LogicalOperator>& source,
+        std::vector<duckdb::ColumnBinding>& source_cols,
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs,
         std::shared_ptr<bodo::Schema> input_schema)
         : exprs(std::move(exprs)) {
         // Initialize map of column bindings to column indices in physical input
         // table.
-        std::vector<duckdb::ColumnBinding> source_cols =
-            source->GetColumnBindings();
         for (size_t i = 0; i < source_cols.size(); i++) {
             duckdb::ColumnBinding& col = source_cols[i];
             col_ref_map[{col.table_index, col.column_index}] = i;
