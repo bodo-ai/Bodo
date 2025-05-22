@@ -585,19 +585,17 @@ cdef class LogicalGetPandasReadParallel(LogicalOperator):
         cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_parallel_node(result_id.encode(), out_schema)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
-cdef class LogicalIcebergRead(LogicalOperator):
+cdef class LogicalGetIcebergRead(LogicalOperator):
     """
     Wrapper around DuckDB's LogicalGet for reading Iceberg datasets.
     """
     cdef readonly c_string table_identifier
-    cdef readonly object catalog
 
     def __cinit__(self, object out_schema, str table_identifier, object catalog, object iceberg_filter):
         self.out_schema = out_schema
         cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
         self.table_identifier = table_identifier
-        self.catalog = catalog
 
     def __str__(self):
         return f"LogicalGetIcebergRead({self.table_identifier})"
