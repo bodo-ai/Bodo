@@ -422,6 +422,9 @@ def execute_plan(plan: LazyPlan):
 
         duckdb_plan = plan.generate_duckdb()
 
+        if bodo.dataframe_library_dump_plans:
+            print(duckdb_plan.toString())
+
         # Print the plan before optimization
         if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
             pre_optimize_graphviz = duckdb_plan.toGraphviz()
@@ -429,6 +432,9 @@ def execute_plan(plan: LazyPlan):
                 print(pre_optimize_graphviz, file=f)
 
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
+
+        if bodo.dataframe_library_dump_plans:
+            print(optimized_plan.toString())
 
         # Print the plan after optimization
         if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
@@ -447,6 +453,20 @@ def execute_plan(plan: LazyPlan):
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
+
+
+def get_plan_cardinality(plan: LazyPlan):
+    """See if we can statically know the cardinality of the result of the plan.
+
+    Args:
+        plan (LazyPlan): query plan to get cardinality of.
+
+    Returns:
+        int (if cardinality is known) or None (if not known)
+    """
+
+    duckdb_plan = plan.generate_duckdb()
+    return duckdb_plan.getCardinality()
 
 
 def getPlanStatistics(plan: LazyPlan):
@@ -856,3 +876,33 @@ class LazyPlanDistributedArg:
         so we just send the result ID instead.
         """
         return (str, (self.res_id,))
+
+
+def count_plan(self):
+    from bodo.pandas.utils import execute_plan, get_plan_cardinality
+
+    # See if we can get the cardinality statically.
+    static_cardinality = get_plan_cardinality(self._plan)
+    if static_cardinality is not None:
+        return static_cardinality
+
+    # Can't be known statically so create count plan on top of
+    # existing plan.
+    count_star_schema = pd.Series(dtype="uint64", name="count_star()")
+    aggregate_plan = LazyPlan(
+        "LogicalAggregate",
+        count_star_schema,
+        self._plan,
+        0,
+        0,
+        [LazyPlan("FunctionExpression", count_star_schema, "count_star()")],
+    )
+    projection_plan = LazyPlan(
+        "LogicalProjection",
+        count_star_schema,
+        aggregate_plan,
+        make_col_ref_exprs([0], aggregate_plan),
+    )
+
+    data = execute_plan(projection_plan)
+    return data[0]

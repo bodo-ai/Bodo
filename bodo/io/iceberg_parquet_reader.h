@@ -107,7 +107,7 @@ class IcebergParquetReader : public ArrowReader {
      * Initialize IcebergParquetReader.
      * See iceberg_pq_read_py_entry function below for description of arguments.
      */
-    IcebergParquetReader(const char* _conn, const char* _table_id,
+    IcebergParquetReader(PyObject* catalog, const char* _table_id,
                          bool _parallel, int64_t tot_rows_to_read,
                          PyObject* _iceberg_filter,
                          std::string _expr_filter_f_str,
@@ -177,9 +177,10 @@ class IcebergParquetReader : public ArrowReader {
     void ReportReadStageMetrics(std::vector<MetricBase>& metrics_out) override;
 
    private:
+    // Pyiceberg catalog to read table metadata
+    PyObject* catalog;
     // Table identifiers for the iceberg table
     // provided by the user.
-    const char* conn;
     const char* table_id;
 
     /// @brief Executor to use for CPU bound tasks.

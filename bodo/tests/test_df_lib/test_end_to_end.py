@@ -155,12 +155,35 @@ def test_read_parquet_len_shape(datapath):
     py_out = pd.read_parquet(path)
 
     assert len(bodo_out) == len(py_out)
+    # len directly on parquet file doesn't require plan execution
+    assert bodo_out.is_lazy_plan()
 
     # create a new lazy DF
     bodo_out2 = bd.read_parquet(path)
 
     # test shape
     assert bodo_out2.shape == py_out.shape
+    # shape directly on parquet file doesn't require plan execution
+    assert bodo_out2.is_lazy_plan()
+
+
+def test_read_parquet_series_len_shape(datapath):
+    """Test length/shape after read parquet is correct"""
+    path = datapath("dataframe_library/df1.parquet")
+
+    bodo_out = bd.read_parquet(path)
+    bodo_out = bodo_out["A"]
+    py_out = pd.read_parquet(path)
+    py_out = py_out["A"]
+
+    assert len(bodo_out) == len(py_out)
+    # len directly on parquet file doesn't require plan execution
+    assert bodo_out.is_lazy_plan()
+
+    # test shape
+    assert bodo_out.shape == py_out.shape
+    # shape directly on parquet file doesn't require plan execution
+    assert bodo_out.is_lazy_plan()
 
 
 def test_projection(datapath):
@@ -789,16 +812,16 @@ def test_merge():
     )
     df2 = pd.DataFrame(
         {
-            "D": ["a1", "b222", "c33"],
-            "C": pd.array([2, 3, 8], "Int64"),
+            "Cat": pd.array([2, 3, 8], "Int64"),
+            "Dog": ["a1", "b222", "c33"],
         },
     )
 
     bdf1 = bd.from_pandas(df1)
     bdf2 = bd.from_pandas(df2)
 
-    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["C"])
-    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["C"])
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
     # Make sure bdf3 is unevaluated at this point.
     assert bdf3.is_lazy_plan()
 

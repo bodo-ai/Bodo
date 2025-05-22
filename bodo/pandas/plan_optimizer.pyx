@@ -11,6 +11,7 @@ from libcpp cimport bool as c_bool
 import operator
 from libc.stdint cimport int64_t
 import pandas as pd
+import pyarrow.parquet as pq
 
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
@@ -253,6 +254,10 @@ cdef extern from "duckdb/planner/operator/logical_projection.hpp" namespace "duc
     cdef cppclass CLogicalProjection" duckdb::LogicalProjection"(CLogicalOperator):
         pass
 
+cdef extern from "duckdb/planner/operator/logical_aggregate.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalAggregate" duckdb::LogicalAggregate"(CLogicalOperator):
+        pass
+
 cdef extern from "duckdb/planner/operator/logical_filter.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalFilter" duckdb::LogicalFilter"(CLogicalOperator):
         pass
@@ -278,6 +283,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
+    cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, idx_t group_index, idx_t aggregate_index, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
@@ -289,6 +295,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
+    cdef unique_ptr[CExpression] make_function_expr(c_string function_name) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
     cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
@@ -348,6 +355,8 @@ cdef class LogicalOperator:
     def toString(self):
         return plan_to_string(self.c_logical_operator, False).decode("utf-8")
 
+    def getCardinality(self):
+        return None
 
 cdef class Expression:
     """Wrapper around DuckDB's Expression to provide access in Python.
@@ -396,6 +405,29 @@ cdef class LogicalProjection(LogicalOperator):
     def __str__(self):
         return f"LogicalProjection({self.out_schema})"
 
+    def getCardinality(self):
+        return self.sources[0].getCardinality()
+
+
+cdef class LogicalAggregate(LogicalOperator):
+    """Wrapper around DuckDB's LogicalAggregate to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, LogicalOperator source, idx_t group_index, idx_t aggregate_index, object exprs):
+        cdef vector[unique_ptr[CExpression]] expr_vec
+
+        for expr in exprs:
+            expr_vec.push_back(move((<Expression>expr).c_expression))
+
+        self.out_schema = out_schema
+        self.sources = [source]
+
+        cdef unique_ptr[CLogicalAggregate] c_logical_projection = make_aggregate(source.c_logical_operator, group_index, aggregate_index, expr_vec, out_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
+
+    def __str__(self):
+        return f"LogicalAggregate({self.out_schema})"
+
 
 cdef class LogicalColRef(LogicalOperator):
     cdef readonly vector[int] select_vec
@@ -427,6 +459,18 @@ cdef class ColRefExpression(Expression):
 
     def __str__(self):
         return f"ColRefExpression({self.out_schema})"
+
+
+cdef class FunctionExpression(Expression):
+    """Wrapper around DuckDB's FunctionExpression to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, str function_name):
+        self.out_schema = out_schema
+        self.c_expression = make_function_expr(function_name.encode())
+
+    def __str__(self):
+        return f"FunctionExpression({self.function_name})"
 
 
 cdef class PythonScalarFuncExpression(Expression):
@@ -581,6 +625,9 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
+    def getCardinality(self):
+        return pq.read_table(self.path, columns=[]).num_rows
+
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
     """Represents an already materialized BodoSeries."""
@@ -599,13 +646,26 @@ cdef class LogicalGetPandasReadSeq(LogicalOperator):
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
         self.df = df
 
+    def getCardinality(self):
+        return len(self.df)
+
 
 cdef class LogicalGetPandasReadParallel(LogicalOperator):
+    cdef int nrows
+
     """Represents parallel scan of a Pandas dataframe passed into from_pandas."""
-    def __cinit__(self, object out_schema, str result_id):
+    def __cinit__(self, object out_schema, int nrows, object result_id):
+        # result_id could be a string or LazyPlanDistributedArg if we are constructing the
+        # plan locally for cardinality.  If so, extract res_id from that object.
+        if not isinstance(result_id, str):
+            result_id = result_id.res_id
         self.out_schema = out_schema
         cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_parallel_node(result_id.encode(), out_schema)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
+        self.nrows = nrows
+
+    def getCardinality(self):
+        return self.nrows
 
 cdef class LogicalIcebergRead(LogicalOperator):
     """
