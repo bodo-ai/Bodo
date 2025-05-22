@@ -73,6 +73,9 @@ PhysicalReadIceberg::create_internal_reader(
         // Limit the rows to read to the limit value.
         total_rows_to_read = limit_val->GetConstantValue();
     }
+    // We're borrowing a reference to the catalog object, so we need to
+    // increment the reference count since the reader steals it.
+    Py_INCREF(catalog);
 
     auto reader = std::make_unique<IcebergParquetReader>(
         catalog, table_id.c_str(), true, -1, iceberg_filter, "", Py_None,
