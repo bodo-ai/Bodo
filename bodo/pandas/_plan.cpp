@@ -155,6 +155,27 @@ std::unique_ptr<duckdb::Expression> make_binop_expr(
         etype, std::move(lhs_duck), std::move(rhs_duck));
 }
 
+std::unique_ptr<duckdb::Expression> make_arithop_expr(
+    std::unique_ptr<duckdb::Expression> &lhs,
+    std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto lhs_duck = to_duckdb(lhs);
+    auto rhs_duck = to_duckdb(rhs);
+
+    // If the left and right side of a binary op expression don't have
+    // matching types then filter pushdown will be skipped.  Here we force
+    // the constant to have the type as the other side of the binary op.
+    if (lhs_duck->GetExpressionClass() ==
+        duckdb::ExpressionClass::BOUND_CONSTANT) {
+        lhs_duck = matchType(rhs_duck, lhs_duck);
+    } else if (rhs_duck->GetExpressionClass() ==
+               duckdb::ExpressionClass::BOUND_CONSTANT) {
+        rhs_duck = matchType(lhs_duck, rhs_duck);
+    }
+    return duckdb::make_uniq<duckdb::BoundComparisonExpression>(
+        etype, std::move(lhs_duck), std::move(rhs_duck));
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype) {
