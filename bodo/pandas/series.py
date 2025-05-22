@@ -59,16 +59,19 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     if getattr(self._mgr, "_md_result_id", None) is not None:
                         # If the plan has been executed but the results are still
                         # distributed then re-use those results as is.
+                        nrows = self._mgr._md_nrows
                         res_id = self._mgr._md_result_id
                         mgr = self._mgr
                     else:
                         # The data has been collected and is no longer distributed
                         # so we need to re-distribute the results.
+                        nrows = len(self)
                         res_id = bodo.spawn.utils.scatter_data(self)
                         mgr = None
                     self._source_plan = LazyPlan(
                         "LogicalGetPandasReadParallel",
                         empty_data,
+                        nrows,
                         LazyPlanDistributedArg(mgr, res_id),
                     )
                 else:
@@ -261,13 +264,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
-        self.execute_plan()
+        from bodo.pandas.utils import count_plan
 
-        if isinstance(self._mgr, LazyMetadataMixin) and (
-            self._mgr._md_nrows is not None
-        ):
-            return (self._mgr._md_nrows,)
-        return super().shape
+        match self._exec_state:
+            case ExecState.PLAN:
+                return (count_plan(self),)
+            case ExecState.DISTRIBUTED:
+                return (self._mgr._md_nrows,)
+            case ExecState.COLLECTED:
+                return super().shape
 
     def head(self, n: int = 5):
         """
@@ -302,10 +307,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return self._head_s.head(n)
 
     def __len__(self):
-        self.execute_plan()
-        if self._lazy:
-            return self._mgr._md_nrows
-        return super().__len__()
+        from bodo.pandas.utils import count_plan
+
+        match self._exec_state:
+            case ExecState.PLAN:
+                return count_plan(self)
+            case ExecState.DISTRIBUTED:
+                return self._mgr._md_nrows
+            case ExecState.COLLECTED:
+                return super().__len__()
 
     @property
     def index(self):

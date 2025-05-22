@@ -156,12 +156,35 @@ def test_read_parquet_len_shape(datapath):
     py_out = pd.read_parquet(path)
 
     assert len(bodo_out) == len(py_out)
+    # len directly on parquet file doesn't require plan execution
+    assert bodo_out.is_lazy_plan()
 
     # create a new lazy DF
     bodo_out2 = bd.read_parquet(path)
 
     # test shape
     assert bodo_out2.shape == py_out.shape
+    # shape directly on parquet file doesn't require plan execution
+    assert bodo_out2.is_lazy_plan()
+
+
+def test_read_parquet_series_len_shape(datapath):
+    """Test length/shape after read parquet is correct"""
+    path = datapath("dataframe_library/df1.parquet")
+
+    bodo_out = bd.read_parquet(path)
+    bodo_out = bodo_out["A"]
+    py_out = pd.read_parquet(path)
+    py_out = py_out["A"]
+
+    assert len(bodo_out) == len(py_out)
+    # len directly on parquet file doesn't require plan execution
+    assert bodo_out.is_lazy_plan()
+
+    # test shape
+    assert bodo_out.shape == py_out.shape
+    # shape directly on parquet file doesn't require plan execution
+    assert bodo_out.is_lazy_plan()
 
 
 def test_projection(datapath):
