@@ -5,6 +5,7 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/logical_operator.hpp"
 #include "operator.h"
 
 /**
@@ -40,16 +41,27 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
 class PhysicalProjection : public PhysicalSourceSink {
    public:
     explicit PhysicalProjection(
+        duckdb::unique_ptr<duckdb::LogicalOperator>& source,
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs,
         std::shared_ptr<bodo::Schema> input_schema)
         : exprs(std::move(exprs)) {
+        // Initialize map of column bindings to column indices in physical input
+        // table.
+        std::vector<duckdb::ColumnBinding> source_cols =
+            source->GetColumnBindings();
+        for (size_t i = 0; i < source_cols.size(); i++) {
+            duckdb::ColumnBinding& col = source_cols[i];
+            col_ref_map[{col.table_index, col.column_index}] = i;
+        }
+
         // Create the output schema from expressions
         this->output_schema = std::make_shared<bodo::Schema>();
         std::vector<std::string> col_names;
         for (const auto& expr : this->exprs) {
             if (expr->type == duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
-                size_t col_idx = colref.binding.column_index;
+                size_t col_idx = col_ref_map[{colref.binding.table_index,
+                                              colref.binding.column_index}];
                 std::unique_ptr<bodo::DataType> col_type =
                     input_schema->column_types[col_idx]->copy();
                 this->output_schema->append_column(std::move(col_type));
@@ -100,7 +112,8 @@ class PhysicalProjection : public PhysicalSourceSink {
         for (const auto& expr : this->exprs) {
             if (expr->type == duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
-                size_t col_idx = colref.binding.column_index;
+                size_t col_idx = col_ref_map[{colref.binding.table_index,
+                                              colref.binding.column_index}];
                 out_cols.emplace_back(input_batch->columns[col_idx]);
                 if (input_batch->column_names.size() > 0) {
                     col_names.emplace_back(input_batch->column_names[col_idx]);
@@ -183,4 +196,7 @@ class PhysicalProjection : public PhysicalSourceSink {
 
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs;
     std::shared_ptr<bodo::Schema> output_schema;
+
+    // Map of column bindings to column indices in physical input table
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map;
 };
