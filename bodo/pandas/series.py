@@ -418,33 +418,39 @@ def sig_bind(name, *args, **kwargs):
     Single exception case is Series.str.wrap() which takes in **kwargs in place of individual
     keyword arguments. Thus, wrap_signature is manually created, to which the provided arguments are bound.
     """
-    if name == "wrap":
-        wrap_params = [
-            inspect.Parameter("width", inspect.Parameter.POSITIONAL_OR_KEYWORD),
-            inspect.Parameter(
-                "expand_tabs", inspect.Parameter.KEYWORD_ONLY, default=True
-            ),
-            inspect.Parameter(
-                "replace_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
-            ),
-            inspect.Parameter(
-                "drop_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
-            ),
-            inspect.Parameter(
-                "break_long_words", inspect.Parameter.KEYWORD_ONLY, default=True
-            ),
-            inspect.Parameter(
-                "break_on_hyphens", inspect.Parameter.KEYWORD_ONLY, default=True
-            ),
-        ]
-        wrap_signature = inspect.Signature(wrap_params)
-        wrap_signature.bind(*args, **kwargs)
-    else:
-        sample_series = pd.Series(["a"])
-        str_accessor = sample_series.str
-        func = getattr(str_accessor, name)
-        signature = inspect.signature(func)
-        signature.bind(*args, **kwargs)
+    msg = ""
+    try:
+        if name == "wrap":
+            wrap_params = [
+                inspect.Parameter("width", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+                inspect.Parameter(
+                    "expand_tabs", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+                inspect.Parameter(
+                    "replace_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+                inspect.Parameter(
+                    "drop_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+                inspect.Parameter(
+                    "break_long_words", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+                inspect.Parameter(
+                    "break_on_hyphens", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+            ]
+            wrap_signature = inspect.Signature(wrap_params)
+            wrap_signature.bind(*args, **kwargs)
+        else:
+            sample_series = pd.Series(["a"])
+            str_accessor = sample_series.str
+            func = getattr(str_accessor, name)
+            signature = inspect.signature(func)
+            signature.bind(*args, **kwargs)
+        return ""
+    except TypeError as e:
+        msg = e
+    raise TypeError(f"StringMethods.{name}() {msg}")
 
 
 def gen_str_method_func_inspect(name, rettype):
