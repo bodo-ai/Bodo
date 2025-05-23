@@ -251,7 +251,6 @@ def test_filter_pushdown(datapath, file_path, op):
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
 def test_filter_distributed(datapath, op):
-    bodo.set_verbose_level(2)
     """Very simple test for filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))

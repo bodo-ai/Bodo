@@ -80,7 +80,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
             else:
                 self._source_plan = LazyPlan(
-                    "LogicalGetPandasReadSeq", empty_data, self
+                    "LogicalGetPandasReadSeq",
+                    empty_data,
+                    self,
                 )
 
             return self._source_plan
@@ -164,9 +166,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ):
                 from bodo.pandas.base import _empty_like
 
+                empty_df = _empty_like(self)
                 planLimit = LazyPlan(
                     "LogicalLimit",
-                    _empty_like(self),
+                    empty_df,
                     self._plan,
                     n,
                 )
@@ -629,7 +632,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             zero_size_key = _empty_like(key)
             empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
-                plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
+                plan=LazyPlan(
+                    "LogicalFilter",
+                    empty_data,
+                    self._plan,
+                    key_plan,
+                ),
             )
         else:
             """ This is selecting one or more columns. Be a bit more
