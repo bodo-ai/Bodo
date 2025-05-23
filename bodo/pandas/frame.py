@@ -511,7 +511,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], self, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["left_on", "right_on"])
+    @check_args_fallback(supported=["on", "left_on", "right_on"])
     def merge(
         self,
         right: "BodoDataFrame | BodoSeries",
@@ -549,33 +549,55 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             suffixes=suffixes,
         )
 
-        if on is None:
-            if left_on is None:
-                on = tuple(set(self.columns).intersection(set(right.columns)))
-            else:
-                on = []
-        elif not isinstance(on, list):
-            on = (on,)
+        # Join on common keys if keys not specified
+        if on is None and left_on is None and right_on is None:
+            on = tuple(set(self.columns).intersection(set(right.columns)))
+
+        on = maybe_make_list(on)
+        if left_on is None and right_on is None:
+            left_on = on
+            right_on = on
 
         left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
 
         key_indices = [
-            (self.columns.get_loc(c), right.columns.get_loc(c)) for c in on
-        ] + [
             (self.columns.get_loc(a), right.columns.get_loc(b))
             for a, b in zip(left_on, right_on)
         ]
 
+        # Dummy output with all probe/build columns with unique names to enable
+        # make_col_ref_exprs() below
+        empty_join_out = pd.concat([_empty_like(self), _empty_like(right)], axis=1)
+        empty_join_out.columns = [
+            c + str(i) for i, c in enumerate(empty_join_out.columns)
+        ]
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
-            empty_data,
+            empty_join_out,
             self._plan,
             right._plan,
             plan_optimizer.CJoinType.INNER,
             key_indices,
         )
 
-        return wrap_plan(planComparisonJoin)
+        # Column indices in output that need to be selected
+        col_indices = list(range(len(self.columns)))
+        common_keys = set(left_on).intersection(set(right_on))
+        for i, col in enumerate(right.columns):
+            # Ignore common keys that are in the right side to match Pandas
+            if col not in common_keys:
+                col_indices.append(len(self.columns) + i)
+
+        # Create column reference expressions for selected columns
+        exprs = make_col_ref_exprs(col_indices, planComparisonJoin)
+        proj_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            planComparisonJoin,
+            exprs,
+        )
+
+        return wrap_plan(proj_plan)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
