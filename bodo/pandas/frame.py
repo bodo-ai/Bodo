@@ -3,11 +3,20 @@ from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 
 import pandas as pd
-from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
+from pandas._libs import lib
+from pandas._typing import (
+    AnyArrayLike,
+    Axis,
+    IndexLabel,
+    MergeHow,
+    MergeValidate,
+    Suffixes,
+)
 
 import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazyArrayManager
+from bodo.pandas.groupby import DataFrameGroupBy
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
@@ -598,6 +607,24 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
 
         return wrap_plan(proj_plan)
+
+    @check_args_fallback(supported=["by"])
+    def groupby(
+        self,
+        by=None,
+        axis: Axis | lib.NoDefault = lib.no_default,
+        level: IndexLabel | None = None,
+        as_index: bool = True,
+        sort: bool = True,
+        group_keys: bool = True,
+        observed: bool | lib.NoDefault = lib.no_default,
+        dropna: bool = True,
+    ) -> DataFrameGroupBy:
+        """
+        Provides support for groupby similar to Pandas:
+        https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L9148
+        """
+        return DataFrameGroupBy(self, by)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
