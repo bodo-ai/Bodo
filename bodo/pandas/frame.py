@@ -624,6 +624,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         Provides support for groupby similar to Pandas:
         https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L9148
         """
+        if isinstance(by, str):
+            by = [by]
         return DataFrameGroupBy(self, by)
 
     @check_args_fallback("all")
