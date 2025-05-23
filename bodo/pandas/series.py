@@ -447,7 +447,7 @@ def sig_bind(name, *args, **kwargs):
             func = getattr(str_accessor, name)
             signature = inspect.signature(func)
             signature.bind(*args, **kwargs)
-        return ""
+        return
     # Separated raising error from except statement to avoid nested errors
     except TypeError as e:
         msg = e
@@ -474,22 +474,6 @@ def gen_str_method_func_inspect(name, rettype):
 
     return str_method
 
-
-# List of unsupported methods for now
-series_str_methods_unsupported = [
-    "cat",
-    "decode",
-    "encode",
-    "extract",
-    "extractall",
-    "join",
-    "normalize",
-    "partition",
-    "rpartition",
-    "split",
-    "rsplit",
-    "get_dummies",
-]
 
 # Maps series_str_methods to return types
 series_str_methods = [
