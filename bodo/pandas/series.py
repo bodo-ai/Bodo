@@ -458,83 +458,90 @@ series_str_methods_unsupported = [
     "get_dummies",
 ]
 
+# Maps series_str_methods to return types
 series_str_methods = [
     # idx = 0: Series(String)
-    [
-        # no args
-        "upper",
-        "lower",
-        "title",
-        "swapcase",
-        "capitalize",
-        "casefold",
-        # args
-        "strip",
-        "lstrip",
-        "rstrip",
-        "center",
-        "get",
-        "removeprefix",
-        "removesuffix",
-        "pad",
-        "rjust",
-        "ljust",
-        "repeat",
-        "slice",
-        "slice_replace",
-        "translate",
-        "zfill",
-        "replace",
-        "wrap",
-    ],
+    (
+        [
+            # no args
+            "upper",
+            "lower",
+            "title",
+            "swapcase",
+            "capitalize",
+            "casefold",
+            # args
+            "strip",
+            "lstrip",
+            "rstrip",
+            "center",
+            "get",
+            "removeprefix",
+            "removesuffix",
+            "pad",
+            "rjust",
+            "ljust",
+            "repeat",
+            "slice",
+            "slice_replace",
+            "translate",
+            "zfill",
+            "replace",
+            "wrap",
+        ],
+        pd.ArrowDtype(pa.large_string()),
+    ),
     # idx = 1: Series(Bool)
-    [
-        # no args
-        "isalpha",
-        "isnumeric",
-        "isalnum",
-        "isdigit",
-        "isdecimal",
-        "isspace",
-        "islower",
-        "isupper",
-        "istitle",
-        # args
-        "startswith",
-        "endswith",
-        "contains",
-        "match",
-        "fullmatch",
-    ],
+    (
+        [
+            # no args
+            "isalpha",
+            "isnumeric",
+            "isalnum",
+            "isdigit",
+            "isdecimal",
+            "isspace",
+            "islower",
+            "isupper",
+            "istitle",
+            # args
+            "startswith",
+            "endswith",
+            "contains",
+            "match",
+            "fullmatch",
+        ],
+        pd.ArrowDtype(pa.bool_()),
+    ),
     # idx = 2: Series(Float)
-    [
-        "len",
-    ],
+    (
+        [
+            "len",
+        ],
+        pd.ArrowDtype(pa.float64()),
+    ),
     # idx = 3: Series(Int)
-    [
-        "find",
-        "index",
-        "rindex",
-        "count",
-        "rfind",
-    ],
+    (
+        [
+            "find",
+            "index",
+            "rindex",
+            "count",
+            "rfind",
+        ],
+        pd.ArrowDtype(pa.int64()),
+    ),
     # idx = 4: Series(List(String))
-    [
-        "findall",
-    ],
-]
-
-# Maps series_str_methods-rettypes via indices
-rettypes = [
-    pd.ArrowDtype(pa.large_string()),  # idx = 0: Series(String)
-    pd.ArrowDtype(pa.bool_()),  # idx = 1: Series(Bool)
-    pd.ArrowDtype(pa.float64()),  # idx = 2: Series(Float)
-    pd.ArrowDtype(pa.int64()),  # idx = 3: Series(Int)
-    pd.ArrowDtype(pa.large_list(pa.large_string())),  # idx = 4: Series(List(String))
+    (
+        [
+            "findall",
+        ],
+        pd.ArrowDtype(pa.large_list(pa.large_string())),
+    ),
 ]
 
 # Generates Series.str methods
-for idx in range(len(series_str_methods)):
-    for func_name in series_str_methods[idx]:
-        func = gen_str_method_func_inspect(func_name, rettypes[idx])
+for rettype_pair in series_str_methods:
+    for func_name in rettype_pair[0]:
+        func = gen_str_method_func_inspect(func_name, rettype_pair[1])
         setattr(BodoStringMethods, func_name, func)
