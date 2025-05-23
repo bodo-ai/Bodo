@@ -521,7 +521,6 @@ series_str_methods = [
     # idx = 4: Series(List(String))
     [
         "findall",
-        "join",
     ],
 ]
 
