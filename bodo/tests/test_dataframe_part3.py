@@ -731,7 +731,14 @@ def test_df_merge_error_handling(func, err_regex):
 
 
 pd_supported_merge_cols = [
-    pytest.param(pd.Categorical([1, 1, 1, 2, 3]), id="CategoricalArrayType"),
+    pytest.param(
+        pd.Categorical([1, 1, 1, 2, 3]),
+        id="CategoricalArrayType",
+        marks=pytest.mark.skipif(
+            bodo.test_dataframe_library_enabled,
+            reason="[BSE-XXX] General categorical support in DF lib.",
+        ),
+    ),
     pytest.param(np.array([1, 2, 3, 4, 5]), id="Array"),
     pytest.param(
         pd.array([1, 2, 3, 4, 5], dtype=pd.Int32Dtype()), id="IntegerArrayType"
@@ -762,6 +769,10 @@ pd_supported_merge_cols = [
             for year in range(1999, 2004)
         ),
         id="DatetimeTimedeltaArrayType",
+        marks=pytest.mark.skipif(
+            bodo.test_dataframe_library_enabled,
+            reason="[BSE-XXX] Timedelta support in DF lib.",
+        ),
     ),
     # TODO [BE-1804]: test once intervals are supported
     # pytest.param(
@@ -796,6 +807,7 @@ bodo_only_merge_cols = [
 ]
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize("key", pd_supported_merge_cols)
 def test_df_merge_col_key_types(key, memory_leak_check):
     def impl(df1, df2):
@@ -814,6 +826,7 @@ def test_df_merge_col_key_types(key, memory_leak_check):
     check_func(impl, (df1, df2), reset_index=True, sort_output=True)
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize("val", pd_supported_merge_cols + bodo_only_merge_cols)
 # TODO: [BE-1738]: Add memory_leak_check
 def test_df_merge_col_value_types(val):
@@ -823,7 +836,12 @@ def test_df_merge_col_value_types(val):
     df1 = pd.DataFrame({"key": ["bar", "bar", "baz", "foo", "foo"], "value": val})
     df2 = pd.DataFrame({"key": ["bar", "bar", "baz", "foo", "foo"], "value": val})
 
-    check_func(impl, (df1, df2))
+    check_func(
+        impl,
+        (df1, df2),
+        sort_output=bodo.test_dataframe_library_enabled,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.parametrize("key", bodo_only_merge_cols)
