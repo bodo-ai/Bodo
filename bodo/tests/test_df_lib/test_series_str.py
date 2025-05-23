@@ -90,13 +90,14 @@ test_map_arg = {
         (("b",), {"start": 1}),
         (("D",), {"end": 3}),
     ],
-    # TODO
+    # TODO [BSE-4842] Below test case should correctly raise ValueError instead of stalling
     "index": [
         # (("e",), {}),
         # (("an",), {"start": 0}),
         # (("l",), {"end": 3}),
         (("",), {"end": 3}),
     ],
+    # TODO [BSE-4842] Below test case should correctly raise ValueError instead of stalling
     "rindex": [
         # (("e",), {}),
         # (("an",), {"start": 0}),
