@@ -412,22 +412,48 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
     )
 
 
+def sig_bind(name, *args, **kwargs):
+    """
+    Binds args and kwargs to method's signature for argument validation.
+    Single exception case is Series.str.wrap() which takes in **kwargs in place of individual
+    keyword arguments. Thus, wrap_signature is manually created, to which the provided arguments are bound.
+    """
+    if name == "wrap":
+        wrap_params = [
+            inspect.Parameter("width", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+            inspect.Parameter(
+                "expand_tabs", inspect.Parameter.KEYWORD_ONLY, default=True
+            ),
+            inspect.Parameter(
+                "replace_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
+            ),
+            inspect.Parameter(
+                "drop_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
+            ),
+            inspect.Parameter(
+                "break_long_words", inspect.Parameter.KEYWORD_ONLY, default=True
+            ),
+            inspect.Parameter(
+                "break_on_hyphens", inspect.Parameter.KEYWORD_ONLY, default=True
+            ),
+        ]
+        wrap_signature = inspect.Signature(wrap_params)
+        wrap_signature.bind(*args, **kwargs)
+    else:
+        sample_series = pd.Series(["a"])
+        str_accessor = sample_series.str
+        func = getattr(str_accessor, name)
+        signature = inspect.signature(func)
+        signature.bind(*args, **kwargs)
+
+
 def gen_str_method_func_inspect(name, rettype):
     """Generalized generator for Series.str methods with optional/positional args."""
-    sample_series = pd.Series(["a"])
-    str_accessor = sample_series.str
-    func = getattr(str_accessor, name)
-    signature = inspect.signature(func)
 
     def str_method(self, *args, **kwargs):
-        key_args = tuple(
-            kwargs[param_name] if param_name in kwargs else param.default
-            for param_name, param in signature.parameters.items()
-            if param_name not in kwargs
-            and param.default is not inspect._empty
-            or param_name in kwargs
-        )
-        params = args + key_args
+        """Generalized template for Series.str methods and argument validation using signature"""
+        sig_bind(name, *args, **kwargs)  # Argument validation
+
         index = self._series.head(0).index
         new_metadata = pd.Series(
             dtype=rettype,
@@ -436,7 +462,7 @@ def gen_str_method_func_inspect(name, rettype):
         )
         func_name = f"str.{name}"
         return _get_series_python_func_plan(
-            self._series._plan, new_metadata, func_name, params, {}
+            self._series._plan, new_metadata, func_name, args, kwargs
         )
 
     return str_method
