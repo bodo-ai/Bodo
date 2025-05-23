@@ -546,14 +546,7 @@ series_str_methods = [
         ],
         pd.ArrowDtype(pa.bool_()),
     ),
-    # idx = 2: Series(Float)
-    (
-        [
-            "len",
-        ],
-        pd.ArrowDtype(pa.float64()),
-    ),
-    # idx = 3: Series(Int)
+    # idx = 2: Series(Int)
     (
         [
             "find",
@@ -561,10 +554,11 @@ series_str_methods = [
             "rindex",
             "count",
             "rfind",
+            "len",
         ],
         pd.ArrowDtype(pa.int64()),
     ),
-    # idx = 4: Series(List(String))
+    # idx = 3: Series(List(String))
     (
         [
             "findall",

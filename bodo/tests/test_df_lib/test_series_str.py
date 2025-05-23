@@ -28,7 +28,6 @@ def gen_str_param_test(name, arg_sets):
                 "C": pd.array([4, 5, 6, -1], dtype="Int64"),
             }
         )
-        df.index = pd.RangeIndex(len(df))
         bdf = bd.from_pandas(df)
 
         pd_func = getattr(df.B.str, name)
