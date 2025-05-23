@@ -285,8 +285,8 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, idx_t group_index, idx_t aggregate_index, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
-    cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
-    cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
@@ -518,7 +518,7 @@ cdef class LogicalFilter(LogicalOperator):
         return f"LogicalFilter()"
 
 
-cdef class BinaryOpExpression(Expression):
+cdef class ComparisonOpExpression(Expression):
     """Wrapper around DuckDB's BoundComparisonExpression and other binary operators to provide access in Python.
     """
 
@@ -530,20 +530,36 @@ cdef class BinaryOpExpression(Expression):
         rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
 
         self.out_schema = out_schema
-        self.c_expression = make_binop_expr(
+        self.c_expression = make_comparison_expr(
             lhs_expr,
             rhs_expr,
             str_to_expr_type(binop))
 
     def __str__(self):
-        return f"BinaryOpExpression({self.out_schema})"
+        return f"ComparisonOpExpression({self.out_schema})"
+
+
+def python_arith_dunder_to_duckdb(str opstr):
+    """
+    Convert a Python arithmetic dunder method name to duckdb catalog name.
+    """
+    if opstr == "__add__" or opstr == "__radd__":
+        return "+"
+    elif opstr == "__sub__" or opstr == "__rsub__":
+        return "-"
+    elif opstr == "__mul__" or opstr == "__rmul__":
+        return "*"
+    elif opstr == "__truediv__" or opstr == "__rtruediv__":
+        return "/"
+    else:
+        raise NotImplementedError("Unknown Python arith dunder method name")
 
 
 cdef class ArithOpExpression(Expression):
     """Wrapper around DuckDB's BoundComparisonExpression and other binary operators to provide access in Python.
     """
 
-    def __cinit__(self, object out_schema, lhs, rhs, binop):
+    def __cinit__(self, object out_schema, lhs, rhs, str opstr):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
@@ -551,10 +567,11 @@ cdef class ArithOpExpression(Expression):
         rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
 
         self.out_schema = out_schema
+        duckdb_op = python_arith_dunder_to_duckdb(opstr)
         self.c_expression = make_arithop_expr(
             lhs_expr,
             rhs_expr,
-            str_to_expr_type(binop))
+            duckdb_op.encode())
 
     def __str__(self):
         return f"ArithOpExpression({self.out_schema})"

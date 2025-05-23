@@ -11,6 +11,8 @@
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
+#include "duckdb/main/database.hpp"
+#include "duckdb/main/attached_database.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/expression.hpp"
 
@@ -164,7 +166,7 @@ duckdb::unique_ptr<duckdb::Expression> make_function_expr(
  * @param etype - the expression type comparing the two sources
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
-std::unique_ptr<duckdb::Expression> make_binop_expr(
+std::unique_ptr<duckdb::Expression> make_comparison_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
 
@@ -178,7 +180,8 @@ std::unique_ptr<duckdb::Expression> make_binop_expr(
  */
 std::unique_ptr<duckdb::Expression> make_arithop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
-    std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
+    std::unique_ptr<duckdb::Expression> &rhs,
+    std::string opstr);
 
 /**
  * @brief Create a conjunction (and/or) expression from two sources.
@@ -278,11 +281,18 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyiceberg_catalog);
 
 /**
+ * @brief Returns a statically created DuckDB database.
+ *
+ * @return duckdb::DuckDB& static context object
+ */
+duckdb::shared_ptr<duckdb::DuckDB> get_duckdb();
+
+/**
  * @brief Returns a statically created DuckDB client context.
  *
  * @return duckdb::ClientContext& static context object
  */
-duckdb::ClientContext &get_duckdb_context();
+duckdb::shared_ptr<duckdb::ClientContext> get_duckdb_context();
 
 /**
  * @brief Returns a statically created DuckDB binder.
@@ -296,7 +306,14 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder();
  *
  * @return duckdb::Optimizer& static optimizer object
  */
-duckdb::Optimizer &get_duckdb_optimizer();
+duckdb::shared_ptr<duckdb::Optimizer> get_duckdb_optimizer();
+
+/**
+ * @brief Returns a statically created AttachedDatabase.
+ *
+ * @return duckdb::AttachedDatabase& static context object
+ */
+//duckdb::AttachedDatabase &get_attached_db();
 
 /**
  * @brief Convert an Arrow schema to DuckDB column names and data types to pass

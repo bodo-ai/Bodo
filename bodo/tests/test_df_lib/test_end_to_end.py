@@ -836,7 +836,6 @@ def test_dataframe_copy(index_val):
 def test_projection_expression1(datapath):
     """Very simple test for projection expressions."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    breakpoint()
     bodo_df2 = bodo_df1[bodo_df1.A + 50 < bodo_df1.D * 2]
 
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))

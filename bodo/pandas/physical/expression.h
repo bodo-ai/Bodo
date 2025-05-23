@@ -386,7 +386,25 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         children.push_back(right);
         switch (etype) {
             default:
-                throw std::runtime_error("Unhandled binary expression type.");
+                throw std::runtime_error("Unhandled binary expression type " + std::to_string(static_cast<int>(etype)));
+        }
+    }
+
+    PhysicalBinaryExpression(std::shared_ptr<PhysicalExpression> left,
+                             std::shared_ptr<PhysicalExpression> right,
+                             std::string &opstr) {
+        children.push_back(left);
+        children.push_back(right);
+        if (opstr == "+") {
+            comparator = "add";
+        } else if (opstr == "-") {
+            comparator = "substract";
+        } else if (opstr == "*") {
+            comparator = "multiply";
+        } else if (opstr == "/") {
+            comparator = "divide";
+        } else {
+            throw std::runtime_error("Unhandled binary expression opstr " + opstr);
         }
     }
 

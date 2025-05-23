@@ -107,7 +107,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("BinaryOpExpression", empty_data, lhs, rhs, op)
+        expr = LazyPlan("ComparisonOpExpression", empty_data, lhs, rhs, op)
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -290,11 +290,17 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback("all")
     def __floordiv__(self, other):
         """Called when a BodoSeries is element-wise and'ed with a different entity (other)"""
+        raise NotImplementedError(
+            "Series __floordiv__ not yet implemente"
+        )
         return self._arith_binop(other, "__floordiv__", False)
 
     @check_args_fallback("all")
     def __rfloordiv__(self, other):
         """Called when a BodoSeries is element-wise and'ed with a different entity (other)"""
+        raise NotImplementedError(
+            "Series __rfloordiv__ not yet implemente"
+        )
         return self._arith_binop(other, "__rfloordiv__", True)
 
     @staticmethod

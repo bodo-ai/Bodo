@@ -152,9 +152,28 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                         "Unsupported number of children for bound operator");
             }
         } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_FUNCTION: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            duckdb::unique_ptr<duckdb::BoundFunctionExpression> bfe =
+                dynamic_cast_unique_ptr<duckdb::BoundFunctionExpression>(
+                    std::move(expr));
+            switch (bfe->children.size()) {
+                case 2: {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalBinaryExpression>(
+                            buildPhysicalExprTree(bfe->children[0]),
+                            buildPhysicalExprTree(bfe->children[1]),
+                            bfe->function.name));
+                } break;
+                default:
+                    throw std::runtime_error(
+                        "Unsupported number of children for bound function");
+            }
+        } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
-                "Unsupported duckdb expression type " +
+                "Unsupported duckdb expression class " +
                 std::to_string(static_cast<int>(expr_class)));
     }
     throw std::logic_error("Control should never reach here");
