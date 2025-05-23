@@ -2,6 +2,8 @@
 Provides a Bodo implementation of the pandas groupby API.
 """
 
+from __future__ import annotations
+
 from typing import Literal
 
 from bodo.pandas.utils import BodoLibNotImplementedException, check_args_fallback
@@ -18,7 +20,7 @@ class DataFrameGroupBy:
         self._keys = keys
         self._selection = selection
 
-    def __getitem__(self, key) -> "DataFrameGroupBy" | "SeriesGroupBy":
+    def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
         """
         Return a DataFrameGroupBy or SeriesGroupBy for the selected data columns.
         """
