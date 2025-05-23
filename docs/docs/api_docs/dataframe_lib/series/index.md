@@ -8,6 +8,10 @@
 
 ### String handling
 
+
+Methods below are available through `BodoSeries.str` and follow the same behavior as their Pandas equivalents. For details on usage, we link to the corresponding Pandas documentation.
+
+
 - [`bodo.pandas.BodoSeries.str.capitalize`][bodoseriesstrcapitalize]
 - [`bodo.pandas.BodoSeries.str.casefold`][bodoseriesstrcasefold]
 - [`bodo.pandas.BodoSeries.str.center`][bodoseriesstrcenter]
