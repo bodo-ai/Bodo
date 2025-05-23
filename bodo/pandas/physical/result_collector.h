@@ -13,12 +13,8 @@ class PhysicalResultCollector : public PhysicalSink {
     explicit PhysicalResultCollector(std::shared_ptr<bodo::Schema> in_schema,
                                      std::shared_ptr<bodo::Schema> out_schema)
         : in_schema(in_schema), out_schema(out_schema) {
-        if (in_schema->column_names.empty() ||
-            out_schema->column_names.empty()) {
-            throw std::runtime_error(
-                "PhysicalResultCollector::GetResult: Input/output schema must "
-                "have column names.");
-        }
+        // TODO: check that the input schema is compatible with the output
+        // schema
         if (in_schema->ncols() != out_schema->ncols()) {
             throw std::runtime_error(
                 "Input and output schemas must have the same number of "
@@ -48,29 +44,7 @@ class PhysicalResultCollector : public PhysicalSink {
     void Finalize() override {}
 
     std::shared_ptr<table_info> GetResult() override {
-        std::shared_ptr<table_info> in_table = buffer->data_table;
-
-        // Reorder the columns of the table according to the output schema
-        // (expected by Python). Necessary since DuckDB's optimizer may change
-        // the order of columns (e.g. reorder build/probe sides in join).
-        std::unordered_map<std::string, size_t> col_name_to_idx;
-        for (size_t i = 0; i < in_schema->ncols(); i++) {
-            col_name_to_idx[in_schema->column_names[i]] = i;
-        }
-        std::vector<std::shared_ptr<array_info>> out_columns;
-        for (std::string& col_name : out_schema->column_names) {
-            if (col_name_to_idx.find(col_name) == col_name_to_idx.end()) {
-                throw std::runtime_error(
-                    "PhysicalResultCollector::GetResult(): Column " + col_name +
-                    " not found in input schema");
-            }
-            auto out_col = in_table->columns[col_name_to_idx[col_name]];
-            out_columns.push_back(out_col);
-        }
-        std::shared_ptr<table_info> out_table = std::make_shared<table_info>(
-            out_columns, in_table->nrows(), out_schema->column_names,
-            out_schema->metadata);
-        return out_table;
+        return buffer->data_table;
     }
 
    private:

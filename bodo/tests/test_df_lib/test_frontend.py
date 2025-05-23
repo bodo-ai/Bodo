@@ -73,3 +73,78 @@ def test_df_apply_bad_dtype_fallback_warning():
     # Unsupported arrow types
     with pytest.warns(BodoLibFallbackWarning):
         bdf.apply(lambda a: (1, "a"), axis=1)
+
+
+def test_merge_validation_checks():
+    """Simple test for DataFrame merge validation."""
+    import pandas as pds
+
+    df1 = pds.DataFrame(
+        {
+            "A": pd.array([2, 2, 3], "Int64"),
+            "B": ["a1", "b11", "c111"],
+            "E": [1.1, 2.2, 3.3],
+        },
+    )
+    df2 = pds.DataFrame(
+        {
+            "C": pd.array([2, 3, 8], "Int64"),
+            "D": ["a1", "b222", "c33"],
+        },
+    )
+
+    bdf1 = pd.from_pandas(df1)
+    bdf2 = pd.from_pandas(df2)
+
+    # Pandas merge should raise ValueError due to mismatched key lengths
+    with pytest.raises(ValueError):
+        df1.merge(df2, how="inner", left_on=["A", "B"], right_on=["C"])
+
+    # BodoDataFrame merge should raise ValueError as well
+    with pytest.raises(ValueError):
+        bdf1.merge(bdf2, how="inner", left_on=["A", "B"], right_on=["C"])
+
+    # bdf1.merge(bdf2, how="inner", left_on=["C"], right_on=["C"])
+    df1.merge(df2, how="inner", left_on=["A"], right_on="C")
+    bdf1.merge(bdf2, how="inner", left_on=["A"], right_on="C")
+
+    # Number of elements mismatch, should raise ValueError
+    with pytest.raises(ValueError):
+        bdf1.merge(bdf2, how="inner", left_on=["A", "B"], right_on="C")
+
+    # Validation checks should pass: tuple vs. tuple, tuple vs. string
+    bdf1.merge(bdf2, how="inner", left_on=("A",), right_on=("C",))
+    bdf1.merge(bdf2, how="inner", left_on=("A",), right_on="C")
+
+    df3 = pds.DataFrame(
+        {
+            "cat": pd.array([2, 3, 8], "Int64"),
+            "duck": ["a1", "b222", "c33"],
+        },
+    )
+
+    bdf3 = pd.from_pandas(df3)
+
+    # Pandas passes checks when column names are multi-character strings
+    df1.merge(df3, how="inner", left_on=("A",), right_on="cat")
+
+    # Bodo should pass checks when column names are multi-character strings
+    bdf1.merge(bdf3, how="inner", left_on=("A",), right_on="cat")
+    bdf1.merge(bdf3, how="inner", left_on=("A",), right_on=["cat"])
+
+    # Check should fail if only one of left_on and right_on is provided
+    with pytest.raises(ValueError):
+        bdf1.merge(bdf2, how="inner", left_on=["A", "B"], right_on=None)
+
+    # Check should fail if invalid key contained in on
+    with pytest.raises(KeyError):
+        bdf1.merge(bdf2, how="inner", left_on=["A", "C"], right_on=["C", "D"])
+
+    # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
+    # key columns with the same names from output
+    # With "on" argument support, below test cases should work
+
+    # bdf1.merge(bdf3, how="inner")
+    # with pytest.raises(ValueError):
+    #     bdf1.merge(bdf2, how="inner", on=["A", "C"])
+    # bdf1.merge(bdf1, how="inner", on=["A", "B", "E"])

@@ -1,3 +1,4 @@
+import inspect
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
@@ -454,42 +455,6 @@ class BodoStringMethods:
         self._series = series
 
     @check_args_fallback(unsupported="none")
-    def lower(self):
-        index = self._series.head(0).index
-        new_metadata = pd.Series(
-            dtype=pd.ArrowDtype(pa.large_string()),
-            name=self._series.name,
-            index=index,
-        )
-        return _get_series_python_func_plan(
-            self._series._plan, new_metadata, "str.lower", (), {}
-        )
-
-    @check_args_fallback(unsupported="none")
-    def upper(self):
-        index = self._series.head(0).index
-        new_metadata = pd.Series(
-            dtype=pd.ArrowDtype(pa.large_string()),
-            name=self._series.name,
-            index=index,
-        )
-        return _get_series_python_func_plan(
-            self._series._plan, new_metadata, "str.upper", (), {}
-        )
-
-    @check_args_fallback(unsupported="none")
-    def strip(self, to_strip=None):
-        index = self._series.head(0).index
-        new_metadata = pd.Series(
-            dtype=pd.ArrowDtype(pa.large_string()),
-            name=self._series.name,
-            index=index,
-        )
-        return _get_series_python_func_plan(
-            self._series._plan, new_metadata, "str.strip", (to_strip,), {}
-        )
-
-    @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
         try:
             return object.__getattribute__(self, name)
@@ -543,3 +508,149 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
             (expr,) + index_col_refs,
         ),
     )
+
+
+def sig_bind(name, *args, **kwargs):
+    """
+    Binds args and kwargs to method's signature for argument validation.
+    Single exception case is Series.str.wrap() which takes in **kwargs in place of individual
+    keyword arguments. Thus, wrap_signature is manually created, to which the provided arguments are bound.
+    """
+    msg = ""
+    try:
+        if name == "wrap":
+            wrap_params = [
+                inspect.Parameter("width", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+                inspect.Parameter(
+                    "expand_tabs", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+                inspect.Parameter(
+                    "replace_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+                inspect.Parameter(
+                    "drop_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+                inspect.Parameter(
+                    "break_long_words", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+                inspect.Parameter(
+                    "break_on_hyphens", inspect.Parameter.KEYWORD_ONLY, default=True
+                ),
+            ]
+            wrap_signature = inspect.Signature(wrap_params)
+            wrap_signature.bind(*args, **kwargs)
+        else:
+            sample_series = pd.Series(["a"])
+            str_accessor = sample_series.str
+            func = getattr(str_accessor, name)
+            signature = inspect.signature(func)
+            signature.bind(*args, **kwargs)
+        return
+    # Separated raising error from except statement to avoid nested errors
+    except TypeError as e:
+        msg = e
+    raise TypeError(f"StringMethods.{name}() {msg}")
+
+
+def gen_str_method_func_inspect(name, rettype):
+    """Generalized generator for Series.str methods with optional/positional args."""
+
+    def str_method(self, *args, **kwargs):
+        """Generalized template for Series.str methods and argument validation using signature"""
+        sig_bind(name, *args, **kwargs)  # Argument validation
+
+        index = self._series.head(0).index
+        new_metadata = pd.Series(
+            dtype=rettype,
+            name=self._series.name,
+            index=index,
+        )
+        func_name = f"str.{name}"
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, func_name, args, kwargs
+        )
+
+    return str_method
+
+
+# Maps series_str_methods to return types
+series_str_methods = [
+    # idx = 0: Series(String)
+    (
+        [
+            # no args
+            "upper",
+            "lower",
+            "title",
+            "swapcase",
+            "capitalize",
+            "casefold",
+            # args
+            "strip",
+            "lstrip",
+            "rstrip",
+            "center",
+            "get",
+            "removeprefix",
+            "removesuffix",
+            "pad",
+            "rjust",
+            "ljust",
+            "repeat",
+            "slice",
+            "slice_replace",
+            "translate",
+            "zfill",
+            "replace",
+            "wrap",
+        ],
+        pd.ArrowDtype(pa.large_string()),
+    ),
+    # idx = 1: Series(Bool)
+    (
+        [
+            # no args
+            "isalpha",
+            "isnumeric",
+            "isalnum",
+            "isdigit",
+            "isdecimal",
+            "isspace",
+            "islower",
+            "isupper",
+            "istitle",
+            # args
+            "startswith",
+            "endswith",
+            "contains",
+            "match",
+            "fullmatch",
+        ],
+        pd.ArrowDtype(pa.bool_()),
+    ),
+    # idx = 2: Series(Int)
+    (
+        [
+            "find",
+            "index",
+            "rindex",
+            "count",
+            "rfind",
+            "len",
+        ],
+        pd.ArrowDtype(pa.int64()),
+    ),
+    # idx = 3: Series(List(String))
+    (
+        [
+            "findall",
+        ],
+        pd.ArrowDtype(pa.large_list(pa.large_string())),
+    ),
+]
+
+# Generates Series.str methods
+for rettype_pair in series_str_methods:
+    for func_name in rettype_pair[0]:
+        func = gen_str_method_func_inspect(func_name, rettype_pair[1])
+        setattr(BodoStringMethods, func_name, func)
