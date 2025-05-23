@@ -448,6 +448,7 @@ def sig_bind(name, *args, **kwargs):
             signature = inspect.signature(func)
             signature.bind(*args, **kwargs)
         return ""
+    # Separated raising error from except statement to avoid nested errors
     except TypeError as e:
         msg = e
     raise TypeError(f"StringMethods.{name}() {msg}")
