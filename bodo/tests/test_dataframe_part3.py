@@ -736,7 +736,7 @@ pd_supported_merge_cols = [
         id="CategoricalArrayType",
         marks=pytest.mark.skipif(
             bodo.test_dataframe_library_enabled,
-            reason="[BSE-XXX] General categorical support in DF lib.",
+            reason="[BSE-4804] General categorical support in DF lib.",
         ),
     ),
     pytest.param(np.array([1, 2, 3, 4, 5]), id="Array"),
@@ -771,7 +771,7 @@ pd_supported_merge_cols = [
         id="DatetimeTimedeltaArrayType",
         marks=pytest.mark.skipif(
             bodo.test_dataframe_library_enabled,
-            reason="[BSE-XXX] Timedelta support in DF lib.",
+            reason="[BSE-4779] Timedelta support in DF lib.",
         ),
     ),
     # TODO [BE-1804]: test once intervals are supported
@@ -828,8 +828,7 @@ def test_df_merge_col_key_types(key, memory_leak_check):
 
 @pytest.mark.df_lib
 @pytest.mark.parametrize("val", pd_supported_merge_cols + bodo_only_merge_cols)
-# TODO: [BE-1738]: Add memory_leak_check
-def test_df_merge_col_value_types(val):
+def test_df_merge_col_value_types(val, memory_leak_check):
     def impl(df1, df2):
         return df1.merge(df2, on="key")
 
@@ -839,14 +838,14 @@ def test_df_merge_col_value_types(val):
     check_func(
         impl,
         (df1, df2),
-        sort_output=bodo.test_dataframe_library_enabled,
-        reset_index=bodo.test_dataframe_library_enabled,
+        sort_output=True,
+        reset_index=True,
     )
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize("key", bodo_only_merge_cols)
-# TODO: [BE-1738]: Add memory_leak_check
-def test_df_merge_col_key_bodo_only(key):
+def test_df_merge_col_key_bodo_only(key, memory_leak_check):
     def impl(df1, df2):
         return df1.merge(df2, on="key")
 
@@ -856,8 +855,13 @@ def test_df_merge_col_key_bodo_only(key):
     df2 = pd.DataFrame({"key": key, "value": val_y})
 
     df_exp = pd.DataFrame({"key": key, "value_x": val_x, "value_y": val_y})
-    df_act = bodo.jit(impl)(df1, df2)
-    pd.testing.assert_frame_equal(df_act, df_exp, check_column_type=False)
+    check_func(
+        impl,
+        (df1, df2),
+        py_output=df_exp,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 @pytest.mark.parametrize(

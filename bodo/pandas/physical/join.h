@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <sstream>
 #include "../../libs/streaming/_join.h"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"

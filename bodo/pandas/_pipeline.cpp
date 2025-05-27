@@ -1,5 +1,7 @@
 #include "_pipeline.h"
 
+#include <sstream>
+#include <string>
 #include "physical/result_collector.h"
 
 /*
