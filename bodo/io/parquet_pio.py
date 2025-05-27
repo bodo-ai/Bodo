@@ -657,6 +657,40 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     ev.finalize()
 
 
+def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
+    """Unifies schema of *dataset* with incoming piece/fragment.
+
+    Args:
+        dataset (ParquetDataset): The Parquet dataset to update with the unified
+            schema.
+        piece (ParquetPiece): Piece corresponding to the fragment being unified.
+        frag (pa.Dataset.Fragment): Fragment of the dataset to unify.
+
+    Raises:
+        BodoError: If the schemas cannot be unified
+    """
+    # Two files are compatible if arrow can unify their schemas.
+    file_schema = frag.metadata.schema.to_arrow_schema()
+    fileset_schema_names = set(file_schema.names)
+    # Check the names are the same because pa.unify_schemas
+    # will unify a schema where a column is in 1 file but not
+    # another.
+    dataset_schema_names = set(dataset.schema.names) - set(dataset.partition_names)
+    # File schema can only be a (potentially) more restrictive
+    # version of the starting schema, therefore, the file shouldn't
+    # have extra columns. Any columns that are expected but are
+    # missing from the file will be filled with nulls at read time.
+    added_columns = fileset_schema_names - dataset_schema_names
+    if added_columns:
+        msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
+        raise BodoError(msg)
+    try:
+        dataset.schema = unify_schemas([dataset.schema, file_schema], "permissive")
+    except Exception as e:
+        msg = f"Schema in {piece} was different.\n{str(e)}"
+        raise BodoError(msg)
+
+
 def populate_row_counts_in_pq_dataset_pieces(
     dataset: ParquetDataset,
     fpath: str | list[str],
@@ -741,30 +775,7 @@ def populate_row_counts_in_pq_dataset_pieces(
             # file schema doesn't match the dataset schema exactly.
             # Currently this is only applicable for Iceberg reads.
             if validate_schema:
-                # Two files are compatible if arrow can unify their schemas.
-                file_schema = frag.metadata.schema.to_arrow_schema()
-                fileset_schema_names = set(file_schema.names)
-                # Check the names are the same because pa.unify_schemas
-                # will unify a schema where a column is in 1 file but not
-                # another.
-                dataset_schema_names = set(dataset.schema.names) - set(
-                    dataset.partition_names
-                )
-                # File schema can only be a (potentially) more restrictive
-                # version of the starting schema, therefore, the file shouldn't
-                # have extra columns. Any columns that are expected but are
-                # missing from the file will be filled with nulls at read time.
-                added_columns = fileset_schema_names - dataset_schema_names
-                if added_columns:
-                    msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
-                    raise BodoError(msg)
-                try:
-                    dataset.schema = unify_schemas(
-                        [dataset.schema, file_schema], "permissive"
-                    )
-                except Exception as e:
-                    msg = f"Schema in {piece} was different.\n{str(e)}"
-                    raise BodoError(msg)
+                unify_fragment_schema(dataset, piece, frag)
 
             t0 = time.time()
             # We use the expected schema instead of the file schema. This schema
@@ -1545,3 +1556,57 @@ def _get_partition_cat_dtype(dictionary):
     else:
         cat_dtype = PDCategoricalDtype(tuple(S), elem_type, False)
     return CategoricalArrayType(cat_dtype)
+
+
+def get_dataset_unify_nulls(
+    fpath, storage_options: dict, partitioning: str | None
+) -> ParquetDataset:
+    """
+    Gets the ParquetDataset from fpath, unifying types of null columns if present.
+
+    NOTE: This function must be called on the spawner and is intended to handle
+    the common case where the first file opened contains some null columns which have
+    non-null values in other files.
+    """
+    # Get FileSystem and create ParquetDataset object similar to
+    # https://github.com/bodo-ai/Bodo/blob/294d0ea13ebba84f07d8e6ebfe297449c1e0b77b/bodo/io/parquet_pio.py#L916
+    fpath, parsed_url, protocol = parse_fpath(fpath)
+    fs = getfs(fpath, protocol, storage_options, parallel=False)
+
+    dataset_or_err = get_bodo_pq_dataset_from_fpath(
+        fpath,
+        protocol,
+        parsed_url,
+        fs,
+        partitioning=partitioning,
+        filters=None,
+        typing_pa_schema=None,
+    )
+
+    if isinstance(dataset_or_err, Exception):  # pragma: no cover
+        error = dataset_or_err
+        raise error
+    dataset = pt.cast(ParquetDataset, dataset_or_err)
+    dataset.set_fs(fs)
+    # If there are no null columns, skip unify step.
+    if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
+        return dataset
+
+    # Open the dataset similar to
+    # https://github.com/bodo-ai/Bodo/blob/294d0ea13ebba84f07d8e6ebfe297449c1e0b77b/bodo/io/parquet_pio.py#L717
+    pieces = dataset.pieces
+    fpaths = [p.path for p in dataset.pieces]
+    dataset_ = ds.dataset(
+        fpaths,
+        filesystem=dataset.filesystem,
+        partitioning=dataset.partitioning,
+    )
+
+    # If there are nulls in the schema, inspect the fragments
+    # until the null columns can be resolved to a non-null type.
+    for piece, frag in zip(pieces, dataset_.get_fragments()):
+        unify_fragment_schema(dataset, piece, frag)
+        if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
+            break
+
+    return dataset

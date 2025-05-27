@@ -514,7 +514,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], self, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["left_on", "right_on"])
+    @check_args_fallback(supported=["on", "left_on", "right_on"])
     def merge(
         self,
         right: "BodoDataFrame | BodoSeries",
@@ -535,7 +535,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
         # key columns with the same names from output
 
-        # TODO[BSE-4811]: add proper argument validation
+        # Validates only on, left_on and right_on for now
+        validate_merge_spec(self, right, on, left_on, right_on)
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
@@ -551,33 +552,55 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             suffixes=suffixes,
         )
 
-        if on is None:
-            if left_on is None:
-                on = tuple(set(self.columns).intersection(set(right.columns)))
-            else:
-                on = []
-        elif not isinstance(on, list):
-            on = (on,)
+        # Join on common keys if keys not specified
+        if on is None and left_on is None and right_on is None:
+            on = tuple(set(self.columns).intersection(set(right.columns)))
+
+        on = maybe_make_list(on)
+        if left_on is None and right_on is None:
+            left_on = on
+            right_on = on
 
         left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
 
         key_indices = [
-            (self.columns.get_loc(c), right.columns.get_loc(c)) for c in on
-        ] + [
             (self.columns.get_loc(a), right.columns.get_loc(b))
             for a, b in zip(left_on, right_on)
         ]
 
+        # Dummy output with all probe/build columns with unique names to enable
+        # make_col_ref_exprs() below
+        empty_join_out = pd.concat([_empty_like(self), _empty_like(right)], axis=1)
+        empty_join_out.columns = [
+            c + str(i) for i, c in enumerate(empty_join_out.columns)
+        ]
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
-            empty_data,
+            empty_join_out,
             self._plan,
             right._plan,
             plan_optimizer.CJoinType.INNER,
             key_indices,
         )
 
-        return wrap_plan(planComparisonJoin)
+        # Column indices in output that need to be selected
+        col_indices = list(range(len(self.columns)))
+        common_keys = set(left_on).intersection(set(right_on))
+        for i, col in enumerate(right.columns):
+            # Ignore common keys that are in the right side to match Pandas
+            if col not in common_keys:
+                col_indices.append(len(self.columns) + i)
+
+        # Create column reference expressions for selected columns
+        exprs = make_col_ref_exprs(col_indices, planComparisonJoin)
+        proj_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            planComparisonJoin,
+            exprs,
+        )
+
+        return wrap_plan(proj_plan)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
@@ -894,6 +917,28 @@ def _get_set_column_plan(
     return _add_proj_expr_to_plan(df_plan, value_plan, key)
 
 
+def validate_on(val):
+    """Validates single on-value"""
+    if val is not None:
+        if not (
+            isinstance(val, str)
+            or (isinstance(val, (list, tuple)) and all(isinstance(k, str) for k in val))
+        ):
+            raise ValueError(
+                "only str, str list, str tuple, or None are supported for on, left_on and right_on values"
+            )
+
+
+def validate_keys(keys, df):
+    """Utilizes set difference to check key membership in DataFrame df"""
+    key_diff = set(keys).difference(set(df.columns))
+    if len(key_diff) > 0:
+        raise KeyError(
+            f"merge(): invalid key {key_diff} for on/left_on/right_on\n"
+            f"merge supports only valid column names {df.columns}"
+        )
+
+
 def maybe_make_list(obj):
     """If string input, turn into singleton list"""
     if obj is None:
@@ -901,3 +946,37 @@ def maybe_make_list(obj):
     elif not isinstance(obj, (tuple, list)):
         return [obj]
     return obj
+
+
+def validate_merge_spec(left, right, on, left_on, right_on):
+    """Check on, left_on and right_on values for type correctness
+    (currently only str, str list, str tuple, or None are supported)
+    and matching number of elements. If failed to validate, raise error.
+    Also checks membership in left and right DFs to validate keys.
+    """
+    validate_on(on)
+    validate_on(left_on)
+    validate_on(right_on)
+
+    if on is None and left_on is None and right_on is None:
+        return
+
+    if on is not None:
+        if left_on is not None or right_on is not None:
+            raise ValueError(
+                'Can only pass argument "on" OR "left_on" '
+                'and "right_on", not a combination of both.'
+            )
+        left_on = right_on = maybe_make_list(on)
+
+    elif (left_on is not None) ^ (right_on is not None):
+        raise ValueError('Must pass both "left_on" and "right_on"')
+
+    elif left_on is not None and right_on is not None:
+        left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
+
+    if len(left_on) != len(right_on):
+        raise ValueError("len(right_on) must equal len(left_on)")
+
+    validate_keys(left_on, left)
+    validate_keys(right_on, right)

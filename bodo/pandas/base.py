@@ -63,19 +63,17 @@ def read_parquet(
     filters=None,
     **kwargs,
 ):
-    from bodo.io.parquet_pio import get_parquet_dataset
+    from bodo.io.parquet_pio import get_dataset_unify_nulls
 
     if storage_options is None:
         storage_options = {}
 
     # Read Parquet schema
     use_hive = True
-    pq_dataset = get_parquet_dataset(
+    pq_dataset = get_dataset_unify_nulls(
         path,
-        get_row_counts=False,
-        storage_options=storage_options,
-        read_categories=True,
-        partitioning="hive" if use_hive else None,
+        storage_options,
+        "hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
 
