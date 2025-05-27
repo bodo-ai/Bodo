@@ -1,5 +1,6 @@
 #include "read_iceberg.h"
 #include <arrow/util/key_value_metadata.h>
+#include <iostream>
 #include "physical/operator.h"
 
 PhysicalReadIceberg::PhysicalReadIceberg(
@@ -58,10 +59,7 @@ PhysicalReadIceberg::create_internal_reader(
     std::vector<int> &selected_columns,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     assert(arrow_schema->num_fields() == selected_columns.size());
-    std::vector<bool> is_nullable;
-    for (int i = 0; i < arrow_schema->num_fields(); i++) {
-        is_nullable.push_back(arrow_schema->field(i)->nullable());
-    }
+    std::vector<bool> is_nullable(selected_columns.size(), true);
 
     int64_t total_rows_to_read = -1;  // Default to read everything.
     if (limit_val) {
@@ -76,7 +74,6 @@ PhysicalReadIceberg::create_internal_reader(
     // We're borrowing a reference to the catalog object, so we need to
     // increment the reference count since the reader steals it.
     Py_INCREF(catalog);
-
     auto reader = std::make_unique<IcebergParquetReader>(
         catalog, table_id.c_str(), true, -1, iceberg_filter, "", Py_None,
         selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
