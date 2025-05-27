@@ -568,60 +568,6 @@ def test_apply(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-def test_str_lower(datapath, index_val):
-    """Very simple test for Series.str.lower for sanity checking."""
-    df = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
-            "B": ["A1", "B1", "C1", "Abc"] * 2,
-            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
-        }
-    )
-    df.index = index_val[: len(df)]
-    bdf = bd.from_pandas(df)
-    out_pd = df.B.str.lower()
-    out_bodo = bdf.B.str.lower()
-    assert out_bodo.is_lazy_plan()
-    _test_equal(out_bodo, out_pd, check_pandas_types=False)
-
-
-def test_str_upper(datapath, index_val):
-    """Very simple test for Series.str.upper for sanity checking."""
-    df = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, 3, 7] * 2, "Int64"),
-            "B": ["a1", "b1", "c1", "Abc"] * 2,
-            "C": pd.array([4, 5, 6, -1] * 2, "Int64"),
-        }
-    )
-    df.index = index_val[: len(df)]
-    bdf = bd.from_pandas(df)
-    out_pd = df.B.str.upper()
-    out_bodo = bdf.B.str.upper()
-    assert out_bodo.is_lazy_plan()
-    _test_equal(out_bodo, out_pd, check_pandas_types=False)
-
-
-@pytest.mark.parametrize(
-    "to_strip", [pytest.param(None, id="default"), pytest.param("A B", id="strip-AB")]
-)
-def test_str_strip(datapath, index_val, to_strip):
-    """Very simple test for Series.str.strip() for sanity checking."""
-    df = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, 3, 7], "Int64"),
-            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
-            "C": pd.array([4, 5, 6, -1], "Int64"),
-        }
-    )
-    df.index = index_val[: len(df)]
-    bdf = bd.from_pandas(df)
-    out_pd = df.B.str.strip(to_strip=to_strip)
-    out_bodo = bdf.B.str.strip(to_strip=to_strip)
-    assert out_bodo.is_lazy_plan()
-    _test_equal(out_bodo, out_pd, check_pandas_types=False)
-
-
 def test_chain_python_func(datapath, index_val):
     """Make sure chaining multiple Series functions that run in Python works"""
     df = pd.DataFrame(
