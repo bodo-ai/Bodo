@@ -533,14 +533,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # key columns with the same names from output
 
         # Validates only on, left_on and right_on for now
-        validate_merge_spec(self, right, on, left_on, right_on)
+        left_on, right_on = validate_merge_spec(self, right, on, left_on, right_on)
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
         empty_data = zero_size_self.merge(
             zero_size_right,
             how=how,
-            on=on,
+            on=None,
             left_on=left_on,
             right_on=right_on,
             left_index=left_index,
@@ -548,17 +548,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             sort=sort,
             suffixes=suffixes,
         )
-
-        # Join on common keys if keys not specified
-        if on is None and left_on is None and right_on is None:
-            on = tuple(set(self.columns).intersection(set(right.columns)))
-
-        on = maybe_make_list(on)
-        if left_on is None and right_on is None:
-            left_on = on
-            right_on = on
-
-        left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
 
         key_indices = [
             (self.columns.get_loc(a), right.columns.get_loc(b))
@@ -951,9 +940,18 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_on(right_on)
 
     if on is None and left_on is None and right_on is None:
-        return
+        # Join on common keys if keys not specified
+        common_cols = on = tuple(set(left.columns).intersection(set(right.columns)))
+        if len(common_cols) == 0:
+            raise ValueError(
+                "No common columns to perform merge on. "
+                f"Merge options: left_on={left_on}, "
+                f"right_on={right_on}"
+            )
+        left_on = right_on = common_cols
+        return left_on, right_on
 
-    if on is not None:
+    elif on is not None:
         if left_on is not None or right_on is not None:
             raise ValueError(
                 'Can only pass argument "on" OR "left_on" '
@@ -972,3 +970,5 @@ def validate_merge_spec(left, right, on, left_on, right_on):
 
     validate_keys(left_on, left)
     validate_keys(right_on, right)
+
+    return left_on, right_on
