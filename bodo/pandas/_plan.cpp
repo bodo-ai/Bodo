@@ -9,11 +9,13 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/function/aggregate_function.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
@@ -105,6 +107,45 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
 
     return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
         ctype, source_cols[col_idx]);
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    std::string function_name, std::vector<int> input_column_indices) {
+    // Get DuckDB output type
+    auto field_res = arrow::py::unwrap_field(field_py);
+    std::shared_ptr<arrow::Field> field;
+    CHECK_ARROW_AND_ASSIGN(field_res, "make_agg_expr: unable to unwrap field",
+                           field);
+    auto [_, out_type] = arrow_field_to_duckdb(field);
+
+    // Get arguments and their types for the aggregate function.
+    source->ResolveOperatorTypes();
+    std::vector<duckdb::ColumnBinding> source_cols =
+        source->GetColumnBindings();
+    duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> children;
+    duckdb::vector<duckdb::LogicalType> arg_types;
+    for (int col_idx : input_column_indices) {
+        if (col_idx < 0 || col_idx >= source_cols.size()) {
+            throw std::runtime_error(
+                fmt::format("make_agg_expr: Column index {} out of bounds for "
+                            "source columns",
+                            col_idx));
+        }
+        duckdb::LogicalType col_type = source->types[col_idx];
+        children.push_back(
+            std::move(duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+                col_type, source_cols[col_idx])));
+        arg_types.push_back(col_type);
+    }
+
+    duckdb::AggregateFunction function(
+        function_name, arg_types, out_type, nullptr, nullptr, nullptr, nullptr,
+        nullptr, duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
+
+    return duckdb::make_uniq<duckdb::BoundAggregateExpression>(
+        function, std::move(children), nullptr, nullptr,
+        duckdb::AggregateType::NON_DISTINCT);
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_function_expr(

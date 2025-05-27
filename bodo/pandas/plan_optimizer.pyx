@@ -295,6 +295,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
     cdef unique_ptr[CExpression] make_function_expr(c_string function_name) except +
+    cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object field, c_string function_name, vector[int] input_column_indices) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
     cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
@@ -470,6 +471,20 @@ cdef class FunctionExpression(Expression):
 
     def __str__(self):
         return f"FunctionExpression({self.function_name})"
+
+
+cdef class AggregateExpression(Expression):
+    """Wrapper around DuckDB's AggregateExpression to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, LogicalOperator source, str function_name, vector[int] input_column_indices):
+        self.out_schema = out_schema
+        self.function_name = function_name
+        self.c_expression = make_agg_expr(source.c_logical_operator, out_schema[0], function_name.encode(), input_column_indices)
+
+    def __str__(self):
+        return f"AggregateExpression({self.function_name})"
+
 
 
 cdef class PythonScalarFuncExpression(Expression):
