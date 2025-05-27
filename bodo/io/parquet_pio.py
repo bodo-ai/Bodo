@@ -661,7 +661,8 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
     """Unifies schema of *dataset* with incoming piece/fragment.
 
     Args:
-        dataset (ParquetDataset): The Parquet dataset with schema to unify.
+        dataset (ParquetDataset): The Parquet dataset to update with the unified
+            schema.
         piece (ParquetPiece): Piece corresponding to the fragment being unified.
         frag (pa.Dataset.Fragment): Fragment of the dataset to unify.
 
@@ -1567,6 +1568,8 @@ def get_dataset_unify_nulls(
     the common case where the first file opened contains some null columns which have
     non-null values in other files.
     """
+    # Get FileSystem and create ParquetDataset object similar to
+    # https://github.com/bodo-ai/Bodo/blob/294d0ea13ebba84f07d8e6ebfe297449c1e0b77b/bodo/io/parquet_pio.py#L916
     fpath, parsed_url, protocol = parse_fpath(fpath)
     fs = getfs(fpath, protocol, storage_options, parallel=False)
 
@@ -1589,6 +1592,8 @@ def get_dataset_unify_nulls(
     if not any(pa.types.is_null(typ) for typ in dataset.schema.types):
         return dataset
 
+    # Open the dataset similar to
+    # https://github.com/bodo-ai/Bodo/blob/294d0ea13ebba84f07d8e6ebfe297449c1e0b77b/bodo/io/parquet_pio.py#L717
     pieces = dataset.pieces
     fpaths = [p.path for p in dataset.pieces]
     dataset_ = ds.dataset(
