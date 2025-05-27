@@ -6,7 +6,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from bodo.pandas.utils import BodoLibNotImplementedException, check_args_fallback
+from bodo.pandas.utils import (
+    BodoLibNotImplementedException,
+    LazyPlan,
+    check_args_fallback,
+    make_col_ref_exprs,
+    wrap_plan,
+)
 
 
 class DataFrameGroupBy:
@@ -25,7 +31,7 @@ class DataFrameGroupBy:
         Return a DataFrameGroupBy or SeriesGroupBy for the selected data columns.
         """
         if isinstance(key, str):
-            return SeriesGroupBy(self._obj, self._keys, key)
+            return SeriesGroupBy(self._obj, self._keys, [key])
         else:
             raise BodoLibNotImplementedException(
                 f"DataFrameGroupBy: Invalid key type: {type(key)}"
@@ -53,3 +59,47 @@ class SeriesGroupBy:
         """
         Compute the sum of each group.
         """
+        from bodo.pandas.base import _empty_like
+
+        zero_size_df = _empty_like(self._obj)
+
+        assert len(self._selection) == 1, (
+            "SeriesGroupBy.sum() should only be called on a single column selection."
+        )
+
+        empty_data = zero_size_df.groupby(self._keys)[self._selection[0]].sum()
+
+        key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
+        exprs = [
+            LazyPlan(
+                "AggregateExpression",
+                zero_size_df[c],
+                self._obj._plan,
+                "sum",
+                [self._obj.columns.get_loc(c)],
+            )
+            for c in self._selection
+        ]
+
+        agg_plan = LazyPlan(
+            "LogicalAggregate",
+            empty_data,
+            self._obj._plan,
+            key_indices,
+            exprs,
+        )
+
+        # Add the data column then the keys since they become Index columns in output.
+        # DuckDB generates keys first in output so we need to reverse the order.
+        col_indices = [len(self._keys)]
+        col_indices += list(range(len(self._keys)))
+
+        exprs = make_col_ref_exprs(col_indices, agg_plan)
+        proj_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            agg_plan,
+            exprs,
+        )
+
+        return wrap_plan(proj_plan)
