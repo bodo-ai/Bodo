@@ -287,6 +287,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr) except +
+    cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
@@ -567,11 +568,20 @@ cdef class ArithOpExpression(Expression):
         rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
 
         self.out_schema = out_schema
-        duckdb_op = python_arith_dunder_to_duckdb(opstr)
-        self.c_expression = make_arithop_expr(
-            lhs_expr,
-            rhs_expr,
-            duckdb_op.encode())
+        # The // operator in Python we have to implement as a truediv followed by a floor.
+        # Do the semantics work here for negative divisors?
+        if opstr in ["__floordiv__", "__rfloordiv__"]:
+            truediv_expression = make_arithop_expr(
+                lhs_expr,
+                rhs_expr,
+                "/".encode())
+            self.c_expression = make_unaryop_expr(truediv_expression, "floor".encode())
+        else:
+            duckdb_op = python_arith_dunder_to_duckdb(opstr)
+            self.c_expression = make_arithop_expr(
+                lhs_expr,
+                rhs_expr,
+                duckdb_op.encode())
 
     def __str__(self):
         return f"ArithOpExpression({self.out_schema})"

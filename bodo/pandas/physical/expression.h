@@ -403,6 +403,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
             comparator = "multiply";
         } else if (opstr == "/") {
             comparator = "divide";
+        } else if (opstr == "floor") {
+            comparator = "floor";
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " + opstr);
         }
