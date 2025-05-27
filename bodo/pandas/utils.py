@@ -587,7 +587,10 @@ def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
         func = input
         for atr in func_path_str.split("."):
             func = getattr(func, atr)
-        out = func(*args, **kwargs)
+        if not callable(func):
+            out = func
+        else:
+            out = func(*args, **kwargs)
     else:
         # TODO: test this path
         func = _get_function_from_path(func_path_str)
@@ -596,6 +599,7 @@ def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
     # astype can fail in some cases when input is empty
     if len(out):
         # TODO: verify this is correct for all possible result_type's
+        print(result_type)
         out_df = pd.DataFrame({"OUT": out.astype(pd.ArrowDtype(result_type))})
     else:
         out_df = pd.DataFrame({"OUT": _empty_pd_array(result_type)})

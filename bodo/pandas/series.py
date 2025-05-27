@@ -349,6 +349,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
+    @property
+    def dt(self):
+        return BodoDateTimeMethods(self)
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -368,6 +372,38 @@ class BodoStringMethods:
             )
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
+
+
+class BodoDateTimeMethods:
+    def __init__(self, series):
+        # Add validation
+        self._series = series
+
+    # @property
+    # def year(self):
+    #     index = self._series.head(0).index
+
+    #     new_metadata = pd.Series(
+    #         dtype=pd.ArrowDtype(pa.int64()),
+    #         name=self._series.name,
+    #         index=index,
+    #     )
+    #     return _get_series_python_func_plan(
+    #         self._series._plan, new_metadata, "dt.year", (), {}
+    #     )
+
+    # @property
+    # def date(self):
+    #     index = self._series.head(0).index
+
+    #     new_metadata = pd.Series(
+    #         dtype=pd.ArrowDtype(pa.date32()),
+    #         name=self._series.name,
+    #         index=index,
+    #     )
+    #     return _get_series_python_func_plan(
+    #         self._series._plan, new_metadata, "dt.date", (), {}
+    #     )
 
 
 def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
@@ -454,7 +490,7 @@ def sig_bind(name, *args, **kwargs):
     raise TypeError(f"StringMethods.{name}() {msg}")
 
 
-def gen_str_method_func_inspect(name, rettype):
+def gen_str_method(name, rettype):
     """Generalized generator for Series.str methods with optional/positional args."""
 
     def str_method(self, *args, **kwargs):
@@ -467,12 +503,26 @@ def gen_str_method_func_inspect(name, rettype):
             name=self._series.name,
             index=index,
         )
-        func_name = f"str.{name}"
         return _get_series_python_func_plan(
-            self._series._plan, new_metadata, func_name, args, kwargs
+            self._series._plan, new_metadata, f"str.{name}", args, kwargs
         )
 
     return str_method
+
+
+def gen_dt_accessor(name, rettype):
+    def dt_accessor(self):
+        index = self._series.head(0).index
+        new_metadata = pd.Series(
+            dtype=rettype,
+            name=self._series.name,
+            index=index,
+        )
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, f"dt.{name}", (), {}
+        )
+
+    return dt_accessor
 
 
 # Maps series_str_methods to return types
@@ -554,5 +604,32 @@ series_str_methods = [
 # Generates Series.str methods
 for rettype_pair in series_str_methods:
     for func_name in rettype_pair[0]:
-        func = gen_str_method_func_inspect(func_name, rettype_pair[1])
+        func = gen_str_method(func_name, rettype_pair[1])
         setattr(BodoStringMethods, func_name, func)
+
+dt_accessors = [
+    # idx = 0: Series(Int)
+    (
+        [
+            "year",
+            "month",
+            "day",
+            "hour",
+            "minute",
+            "second",
+            "microsecond",
+        ],
+        pd.ArrowDtype(pa.int64()),
+    ),
+    # idx = 1: Series(Date)
+    (
+        ["date"],
+        pd.ArrowDtype(pa.date32()),
+    ),
+]
+
+for accessor_pair in dt_accessors:
+    for accessor_name in accessor_pair[0]:
+        accessor = gen_dt_accessor(accessor_name, accessor_pair[1])
+        print(accessor_pair[1])
+        setattr(BodoDateTimeMethods, accessor_name, property(accessor))
