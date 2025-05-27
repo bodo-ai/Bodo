@@ -5,6 +5,8 @@ import bodo.pandas as bpd
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.utils import _test_equal
 
+pytest_mark = pytest.mark.iceberg
+
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
@@ -41,4 +43,6 @@ def test_simple_table_read(
         bodo_out,
         py_out,
         check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
     )
