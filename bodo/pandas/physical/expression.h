@@ -386,7 +386,9 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         children.push_back(right);
         switch (etype) {
             default:
-                throw std::runtime_error("Unhandled binary expression type " + std::to_string(static_cast<int>(etype)));
+                throw std::runtime_error(
+                    "Unhandled binary expression type " +
+                    std::to_string(static_cast<int>(etype)));
         }
     }
 
@@ -404,7 +406,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         } else if (opstr == "/") {
             comparator = "divide";
         } else {
-            throw std::runtime_error("Unhandled binary expression opstr " + opstr);
+            throw std::runtime_error("Unhandled binary expression opstr " +
+                                     opstr);
         }
     }
 
