@@ -698,6 +698,8 @@ class JoinState {
     const bool build_table_outer;
     const bool probe_table_outer;
     const bool force_broadcast;
+    // For matching Pandas behavior
+    const bool is_na_equal;
     // Note: This isn't constant because we may change it
     // via broadcast decisions.
     bool build_parallel;
@@ -770,7 +772,8 @@ class JoinState {
               uint64_t n_keys_, bool build_table_outer_, bool force_broadcast_,
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
-              int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_);
+              int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
+              bool is_na_equal = false);
 
     virtual ~JoinState() {}
 
@@ -965,7 +968,8 @@ class HashJoinState : public JoinState {
                   // If -1, we'll use 100% of the total buffer
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
-                  size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH);
+                  size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH,
+                  bool is_na_equal = false);
 
     ~HashJoinState() { MPI_Comm_free(&this->shuffle_comm); }
 
