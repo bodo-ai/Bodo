@@ -191,9 +191,15 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         : arrow_schema(std::move(_arrow_schema)),
           catalog(_catalog),
           iceberg_filter(_iceberg_filter),
-          table_id(_table_id) {};
+          table_id(_table_id) {
+        Py_INCREF(this->catalog);
+        Py_INCREF(this->iceberg_filter);
+    };
 
-    ~BodoIcebergScanFunctionData() override = default;
+    ~BodoIcebergScanFunctionData() override {
+        Py_DECREF(this->catalog);
+        Py_DECREF(this->iceberg_filter);
+    };
 
     std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
         std::vector<int> &selected_columns,
