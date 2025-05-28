@@ -358,6 +358,16 @@ class LazyPlan:
             name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
             self.empty_data = empty_data.to_frame(name=name)
 
+        if (pa_schema := kwargs.get("__pa_schema", None)) is None:
+            # Use the schema of the empty data to create the schema for the plan
+            # Passing in a separate schema is useful for some operators that need
+            # schema metadat like iceberg.
+            pa_schema = pa.Schema.from_pandas(self.empty_data)
+        else:
+            # We don't want this passing to the operator constructors
+            del kwargs["__pa_schema"]
+        self.pa_schema = pa_schema
+
     def __str__(self):
         out = f"{self.plan_class}: \n"
         for arg in self.args:
@@ -396,10 +406,7 @@ class LazyPlan:
         kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
 
         # Create real duckdb class.
-        pa_schema = pa.Schema.from_pandas(
-            self.empty_data
-        )  # do this in filter case? preserve_index=(self.plan_class == "LogicalFilter")
-        ret = getattr(plan_optimizer, self.plan_class)(pa_schema, *args, **kwargs)
+        ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args, **kwargs)
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret
         return ret
@@ -710,12 +717,12 @@ def make_col_ref_exprs(key_indices, src_plan):
     """Create column reference expressions for the given key indices for the input
     source plan.
     """
-    pa_schema = pa.Schema.from_pandas(src_plan.empty_data)
+
     exprs = []
     for k in key_indices:
         # Using Arrow schema instead of zero_size_self.iloc to handle Index
         # columns correctly.
-        empty_data = arrow_to_empty_df(pa.schema([pa_schema[k]]))
+        empty_data = arrow_to_empty_df(pa.schema([src_plan.pa_schema[k]]))
         p = LazyPlan("ColRefExpression", empty_data, src_plan, k)
         exprs.append(p)
 
