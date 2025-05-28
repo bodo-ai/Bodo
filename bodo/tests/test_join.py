@@ -1669,7 +1669,7 @@ def test_merge_outer(memory_leak_check):
 
 
 # TODO [BSE-4851]: DataFrame Lib: fix unique ptr error.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_overlap(memory_leak_check):
     """

@@ -1,6 +1,7 @@
 import typing as pt
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
+from copy import deepcopy
 
 import pandas as pd
 from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes
@@ -575,11 +576,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_join_out.columns = [
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
+        right_plan = deepcopy(right._plan) if self is right else right._plan
+
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
             empty_join_out,
             self._plan,
-            right._plan,
+            right_plan,
             plan_optimizer.CJoinType.INNER,
             key_indices,
         )

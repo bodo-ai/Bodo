@@ -400,8 +400,8 @@ class LazyPlan:
         if cache is None:
             cache = {}
         # If previously converted then use the last result.
-        # if id(self) in cache:
-        #     return cache[id(self)]
+        if id(self) in cache:
+            return cache[id(self)]
 
         def recursive_check(x):
             """Recursively convert LazyPlans but return other types unmodified."""
