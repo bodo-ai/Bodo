@@ -101,7 +101,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             // TODO: support forcing broadcast by the planner
             false, nullptr, true, true, get_streaming_batch_size(), -1,
             // TODO: support query profiling
-            -1);
+            -1, -1, JOIN_MAX_PARTITION_DEPTH, /*is_na_equal*/ true);
 
         // Create the probe output schema, same as here for consistency:
         // https://github.com/bodo-ai/Bodo/blob/a2e8bb7ba455dcba7372e6e92bd8488ed2b2d5cc/bodo/libs/streaming/_join.cpp#L1138

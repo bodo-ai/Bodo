@@ -276,8 +276,6 @@ def _gen_df_binary(n, seed=None):
 
 
 # ------------------------------ merge() ------------------------------ #
-# TODO: Fix fallback when merge arguments unsupported.
-# @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_nonascii_values(memory_leak_check):
     """
@@ -302,15 +300,13 @@ def test_merge_nonascii_values(memory_leak_check):
         {"key": ["a", "bb", "ccc", "DDDD", "e"], "value": [6, 7, 8, 9, 10]}
     )
 
-    pd.DataFrame({"key": gen_nonascii_list(5), "value": [6, 7, 8, 9, 10]})
+    df3 = pd.DataFrame({"key": gen_nonascii_list(5), "value": [6, 7, 8, 9, 10]})
 
-    # pairs = ((df1, df2), (df1, df3), (df2, df3))
-    check_func(test_impl3, (df1, df2), sort_output=True, reset_index=True)
-
-    # for left, right in pairs:
-    #     check_func(test_impl1, (left, right), sort_output=True, reset_index=True)
-    #     check_func(test_impl2, (left, right), sort_output=True, reset_index=True)
-    #     check_func(test_impl3, (left, right), sort_output=True, reset_index=True)
+    pairs = ((df1, df2), (df1, df3), (df2, df3))
+    for left, right in pairs:
+        check_func(test_impl1, (left, right), sort_output=True, reset_index=True)
+        check_func(test_impl2, (left, right), sort_output=True, reset_index=True)
+        check_func(test_impl3, (left, right), sort_output=True, reset_index=True)
 
 
 @pytest_mark_pandas
@@ -512,7 +508,7 @@ def test_merge_empty_suffix_keys(memory_leak_check):
         assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
-# TODO [BSE-XXXX]: DataFrame Lib: Merge on index
+# TODO [BSE-4820]: DataFrame Lib: Merge on index
 # @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_left_right_index(memory_leak_check):
@@ -817,9 +813,8 @@ def test_list_string_array_type_specific(memory_leak_check):
     )
 
 
-# TODO [BSE-XXXX]: DataFrame Lib: DataFrames are different.
-# @pytest.mark.df_lib
 @pytest.mark.slow
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_list_string_array_type_random(memory_leak_check):
     def test_impl(df1, df2):
@@ -2492,8 +2487,7 @@ def test_indicator_true_deadcol(memory_leak_check):
     assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
-# TODO [BSE-XXXX]: DataFrame Lib: Handle all NA column case.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_all_nan_cols(memory_leak_check):
     """
@@ -4687,8 +4681,7 @@ def test_merge_repeat_key(memory_leak_check):
     check_func(impl8, (df1, df2), sort_output=True, reset_index=True)
 
 
-# TODO [BSE-XXXX]: DataFrame Lib: Wrong shape in output
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_repeat_key_same_frame(memory_leak_check):
     """tests pd.merge when the same key is repeated twice and keys
