@@ -132,6 +132,7 @@ def get_iceberg_file_list_parallel(
     table_id: str,
     filters: BooleanExpression,
     snapshot_id: int = -1,
+    limit: int = -1,
 ) -> tuple[list[IcebergParquetInfo], dict, int, FileIO, int]:
     """
     Wrapper around 'get_iceberg_file_list' which calls it
@@ -145,6 +146,7 @@ def get_iceberg_file_list_parallel(
         table_id (str): Iceberg table identifier
         filters (optional): Filters for file pruning. Defaults to None.
         snapshot_id (int, optional): Snapshot ID to read from. Defaults to -1.
+        limit (int, optional): Limit on the number of rows to read. Defaults to -1.
 
     Returns:
         tuple[IcebergParquetInfo, int, dict[int, pa.Schema]]:
@@ -163,7 +165,9 @@ def get_iceberg_file_list_parallel(
         pq_infos, get_file_to_schema_us = _construct_parquet_infos(
             table,
             table.scan(
-                filters, snapshot_id=snapshot_id if snapshot_id > -1 else None
+                filters,
+                snapshot_id=snapshot_id if snapshot_id > -1 else None,
+                limit=limit if limit > -1 else None,
             ).plan_files(),
         )
 
