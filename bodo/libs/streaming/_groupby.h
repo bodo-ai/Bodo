@@ -1612,3 +1612,38 @@ class GroupingSetsState {
     // Dictionary builders that are shared between all group by states.
     std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
 };
+
+/**
+ * @brief Logic to consume a build table batch. This is called
+ * directly by groupby_build_consume_batch_py_entry to avoid
+ * complex exception handling with grouping sets.
+ *
+ * @param groupby_state groupby state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch (in this pipeline) locally
+ * @param is_final_pipeline Is this the final pipeline. Only relevant for the
+ * Union-Distinct case where this is called in multiple pipelines. For regular
+ * groupby, this should always be true. We only call FinalizeBuild in the last
+ * pipeline.
+ * @param[out] request_input whether to request input rows from preceding
+ * operators.
+ * @return updated global is_last with possibility of false negatives due to
+ * iterations between syncs
+ */
+bool groupby_build_consume_batch(GroupbyState* groupby_state,
+                                 std::shared_ptr<table_info> input_table,
+                                 bool is_last, const bool is_final_pipeline,
+                                 bool* request_input);
+
+/**
+ * @brief Function to produce an output table called directly from
+ * Python. This is handles all the functionality separately for exception
+ * handling with grouping sets.
+ *
+ * @param groupby_state groupby state pointer
+ * @param[out] out_is_last is last batch
+ * @param produce_output whether to produce output
+ * @return table_info* output table batch
+ */
+std::shared_ptr<table_info> groupby_produce_output_batch_wrapper(
+    GroupbyState* groupby_state, bool* out_is_last, bool produce_output);
