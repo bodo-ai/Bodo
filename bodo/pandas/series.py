@@ -76,7 +76,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     )
                 else:
                     self._source_plan = LazyPlan(
-                        "LogicalGetPandasReadSeq", empty_data, self
+                        "LogicalGetPandasReadSeq",
+                        empty_data,
+                        self,
                     )
 
                 return self._source_plan
@@ -106,7 +108,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("BinaryOpExpression", empty_data, lhs, rhs, op)
+        expr = LazyPlan(
+            "BinaryOpExpression",
+            empty_data,
+            lhs,
+            rhs,
+            op,
+        )
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -150,7 +158,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan("ConjunctionOpExpression", empty_data, lhs, rhs, op)
+        expr = LazyPlan(
+            "ConjunctionOpExpression",
+            empty_data,
+            lhs,
+            rhs,
+            op,
+        )
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -189,7 +203,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         assert isinstance(empty_data, pd.Series), "Series expected"
         source_expr = get_proj_expr_single(self._plan)
-        expr = LazyPlan("UnaryOpExpression", empty_data, source_expr, "__invert__")
+        expr = LazyPlan(
+            "UnaryOpExpression",
+            empty_data,
+            source_expr,
+            "__invert__",
+        )
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,

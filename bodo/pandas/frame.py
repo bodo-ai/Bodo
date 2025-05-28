@@ -80,7 +80,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
             else:
                 self._source_plan = LazyPlan(
-                    "LogicalGetPandasReadSeq", empty_data, self
+                    "LogicalGetPandasReadSeq",
+                    empty_data,
+                    self,
                 )
 
             return self._source_plan
@@ -567,7 +569,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         # Dummy output with all probe/build columns with unique names to enable
         # make_col_ref_exprs() below
-        empty_join_out = pd.concat([_empty_like(self), _empty_like(right)], axis=1)
+        empty_left = _empty_like(self)
+        empty_right = _empty_like(right)
+        empty_join_out = pd.concat([empty_left, empty_right], axis=1)
         empty_join_out.columns = [
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
@@ -582,11 +586,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         # Column indices in output that need to be selected
         col_indices = list(range(len(self.columns)))
+        # Skip index columns
+        # TODO [BSE-4820]: unless indexes are a key.
+        n_left_indices = get_n_index_arrays(empty_left.index)
         common_keys = set(left_on).intersection(set(right_on))
         for i, col in enumerate(right.columns):
             # Ignore common keys that are in the right side to match Pandas
             if col not in common_keys:
-                col_indices.append(len(self.columns) + i)
+                col_indices.append(len(self.columns) + n_left_indices + i)
 
         # Create column reference expressions for selected columns
         exprs = make_col_ref_exprs(col_indices, planComparisonJoin)

@@ -4,8 +4,10 @@
 #include <utility>
 
 #include <arrow/python/pyarrow.h>
+#include <arrow/table.h>
 
 #include "../libs/_bodo_to_arrow.h"
+#include "../libs/_table_builder_utils.h"
 #include "operator.h"
 
 /// @brief Physical node for reading Parquet files in pipelines.
@@ -128,12 +130,18 @@ class PhysicalReadPandas : public PhysicalSource {
         std::shared_ptr<arrow::Table> table =
             arrow::py::unwrap_table(pa_table).ValueOrDie();
 
-        // Convert Arrow arrays to Bodo arrays
-        // (passing nullptr for pool since not allocated through Bodo so can't
-        // support spilling etc,
-        // TODO: pass bodo's buffer pool to Arrow)
-        std::shared_ptr<table_info> out_table =
-            arrow_table_to_bodo(table, nullptr);
+        std::shared_ptr<table_info> out_table;
+        if (table->num_rows() == 0) {
+            // Use alloc_table here since calling from_pandas on an empty slice
+            // might return different types.
+            out_table = alloc_table(output_schema);
+        } else {
+            // Convert Arrow arrays to Bodo arrays
+            // (passing nullptr for pool since not allocated through Bodo so
+            // can't support spilling etc,
+            // TODO: pass bodo's buffer pool to Arrow)
+            out_table = arrow_table_to_bodo(table, nullptr);
+        }
 
         // Clean up Python references
         Py_DECREF(iloc);
