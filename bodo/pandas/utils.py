@@ -599,7 +599,6 @@ def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
     # astype can fail in some cases when input is empty
     if len(out):
         # TODO: verify this is correct for all possible result_type's
-        print(result_type)
         out_df = pd.DataFrame({"OUT": out.astype(pd.ArrowDtype(result_type))})
     else:
         out_df = pd.DataFrame({"OUT": _empty_pd_array(result_type)})

@@ -379,32 +379,6 @@ class BodoDateTimeMethods:
         # Add validation
         self._series = series
 
-    # @property
-    # def year(self):
-    #     index = self._series.head(0).index
-
-    #     new_metadata = pd.Series(
-    #         dtype=pd.ArrowDtype(pa.int64()),
-    #         name=self._series.name,
-    #         index=index,
-    #     )
-    #     return _get_series_python_func_plan(
-    #         self._series._plan, new_metadata, "dt.year", (), {}
-    #     )
-
-    # @property
-    # def date(self):
-    #     index = self._series.head(0).index
-
-    #     new_metadata = pd.Series(
-    #         dtype=pd.ArrowDtype(pa.date32()),
-    #         name=self._series.name,
-    #         index=index,
-    #     )
-    #     return _get_series_python_func_plan(
-    #         self._series._plan, new_metadata, "dt.date", (), {}
-    #     )
-
 
 def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
     """Create a plan for calling a Series method in Python. Creates a proper
@@ -511,7 +485,11 @@ def gen_str_method(name, rettype):
 
 
 def gen_dt_accessor(name, rettype):
+    """Generalized generator for Series.dt accessors"""
+
     def dt_accessor(self):
+        """Generalized template for Series.dt accessors"""
+
         index = self._series.head(0).index
         new_metadata = pd.Series(
             dtype=rettype,
@@ -601,12 +579,7 @@ series_str_methods = [
     ),
 ]
 
-# Generates Series.str methods
-for rettype_pair in series_str_methods:
-    for func_name in rettype_pair[0]:
-        func = gen_str_method(func_name, rettype_pair[1])
-        setattr(BodoStringMethods, func_name, func)
-
+# Maps Series.dt accessors to return types
 dt_accessors = [
     # idx = 0: Series(Int)
     (
@@ -618,6 +591,22 @@ dt_accessors = [
             "minute",
             "second",
             "microsecond",
+            "nanosecond",
+            "dayofweek",
+            "day_of_week",
+            "weekday",
+            "dayofyear",
+            "day_of_year",
+            "days_in_month",
+            "quarter",
+            "is_month_start",
+            "is_month_end",
+            "is_quarter_start",
+            "is_quarter_end",
+            "is_year_start",
+            "is_year_end",
+            "is_leap_year",
+            "daysinmonth",
         ],
         pd.ArrowDtype(pa.int64()),
     ),
@@ -626,10 +615,23 @@ dt_accessors = [
         ["date"],
         pd.ArrowDtype(pa.date32()),
     ),
+    # idx = 2: Series(Time)
+    (
+        [
+            "time",
+        ],
+        pd.ArrowDtype(pa.time64("ns")),
+    ),
 ]
 
+# Generates Series.str methods
+for rettype_pair in series_str_methods:
+    for func_name in rettype_pair[0]:
+        func = gen_str_method(func_name, rettype_pair[1])
+        setattr(BodoStringMethods, func_name, func)
+
+# Generates Series.dt accessors
 for accessor_pair in dt_accessors:
     for accessor_name in accessor_pair[0]:
         accessor = gen_dt_accessor(accessor_name, accessor_pair[1])
-        print(accessor_pair[1])
         setattr(BodoDateTimeMethods, accessor_name, property(accessor))

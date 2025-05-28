@@ -452,7 +452,7 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
             dtype = arrow::date32();
             break;
         case Bodo_CTypes::TIME:
-            dtype = arrow::time64(arrow::TimeUnit::SECOND);
+            dtype = arrow::time64(arrow::TimeUnit::NANO);
             break;
         // TODO: Is there a way to get timezone?
         case Bodo_CTypes::DATETIME:
