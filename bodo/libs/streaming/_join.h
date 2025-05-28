@@ -283,7 +283,8 @@ class JoinPartition {
         bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_,
         bodo::OperatorScratchPool* op_scratch_pool_,
-        const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_);
+        const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_,
+        bool is_na_equal_ = false);
 
     // The types of the columns in the build table and probe tables.
     const std::shared_ptr<bodo::Schema> build_table_schema;
@@ -395,6 +396,9 @@ class JoinPartition {
     // vector (using .data()) or the uint32_t[] shared_ptr directly (using
     // .get())
     uint32_t* probe_table_hashes;
+
+    // Matches Pandas behavior by treating NA values as equal.
+    const bool is_na_equal;
 
     /// @brief Get number of bits in the 'top_bitmask'.
     size_t get_num_top_bits() const { return this->num_top_bits; }
@@ -698,6 +702,8 @@ class JoinState {
     const bool build_table_outer;
     const bool probe_table_outer;
     const bool force_broadcast;
+    // Matches Pandas behavior by treating NA values as equal.
+    const bool is_na_equal;
     // Note: This isn't constant because we may change it
     // via broadcast decisions.
     bool build_parallel;
@@ -770,7 +776,8 @@ class JoinState {
               uint64_t n_keys_, bool build_table_outer_, bool force_broadcast_,
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
-              int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_);
+              int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
+              bool is_na_equal_ = false);
 
     virtual ~JoinState() {}
 
@@ -965,7 +972,8 @@ class HashJoinState : public JoinState {
                   // If -1, we'll use 100% of the total buffer
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
-                  size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH);
+                  size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH,
+                  bool is_na_equal_ = false);
 
     ~HashJoinState() { MPI_Comm_free(&this->shuffle_comm); }
 

@@ -66,9 +66,9 @@ bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
     const std::shared_ptr<table_info>& table_B =
         is_build_B ? build_table : probe_table;
 
-    // All NA keys have already been pruned.
-    bool test =
-        TestEqualJoin(table_A, table_B, jRowA, jRowB, this->n_keys, false);
+    // For joins in SQL, all NA keys have already been pruned.
+    bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, this->n_keys,
+                              this->join_partition->is_na_equal);
     return test;
 }
 
@@ -90,7 +90,8 @@ JoinPartition::JoinPartition(
     bodo::OperatorBufferPool* op_pool_,
     const std::shared_ptr<::arrow::MemoryManager> op_mm_,
     bodo::OperatorScratchPool* op_scratch_pool_,
-    const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_)
+    const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_,
+    bool is_na_equal_)
     : build_table_schema(build_table_schema_),
       probe_table_schema(probe_table_schema_),
       build_table_dict_builders(build_table_dict_builders_),
@@ -110,6 +111,7 @@ JoinPartition::JoinPartition(
       groups_offsets(op_scratch_pool_),
       build_table_matched(op_scratch_pool_),
       dummy_probe_table(alloc_table(probe_table_schema_)),
+      is_na_equal(is_na_equal_),
       num_top_bits(num_top_bits_),
       top_bitmask(top_bitmask_),
       build_table_outer(build_table_outer_),
@@ -219,14 +221,14 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders,
         is_active, this->metrics, this->op_pool, this->op_mm,
-        this->op_scratch_pool, this->op_scratch_mm);
+        this->op_scratch_pool, this->op_scratch_mm, this->is_na_equal);
     std::shared_ptr<JoinPartition> new_part2 = std::make_shared<JoinPartition>(
         this->num_top_bits + 1, (this->top_bitmask << 1) + 1,
         this->build_table_schema, this->probe_table_schema, this->n_keys,
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders, false,
         this->metrics, this->op_pool, this->op_mm, this->op_scratch_pool,
-        this->op_scratch_mm);
+        this->op_scratch_mm, this->is_na_equal);
 
     std::vector<bool> append_partition1;
     if (is_active) {
@@ -1050,7 +1052,7 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                      bool probe_table_outer_, bool force_broadcast_,
                      cond_expr_fn_t cond_func_, bool build_parallel_,
                      bool probe_parallel_, int64_t output_batch_size_,
-                     int64_t sync_iter_, int64_t op_id_)
+                     int64_t sync_iter_, int64_t op_id_, bool is_na_equal_)
     : build_table_schema(build_table_schema_),
       probe_table_schema(probe_table_schema_),
       n_keys(n_keys_),
@@ -1058,10 +1060,10 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
       build_table_outer(build_table_outer_),
       probe_table_outer(probe_table_outer_),
       force_broadcast(force_broadcast_),
+      is_na_equal(is_na_equal_),
       build_parallel(build_parallel_),
       probe_parallel(probe_parallel_),
       output_batch_size(output_batch_size_),
-
       dummy_probe_table(alloc_table(probe_table_schema_)),
       op_id(op_id_) {
     this->key_dict_builders.resize(this->n_keys);
@@ -1253,11 +1255,11 @@ HashJoinState::HashJoinState(
     bool build_table_outer_, bool probe_table_outer_, bool force_broadcast_,
     cond_expr_fn_t cond_func_, bool build_parallel_, bool probe_parallel_,
     int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
-    int64_t op_pool_size_bytes, size_t max_partition_depth_)
+    int64_t op_pool_size_bytes, size_t max_partition_depth_, bool is_na_equal_)
     : JoinState(build_table_schema_, probe_table_schema_, n_keys_,
                 build_table_outer_, probe_table_outer_, force_broadcast_,
                 cond_func_, build_parallel_, probe_parallel_,
-                output_batch_size_, sync_iter_, op_id_),
+                output_batch_size_, sync_iter_, op_id_, is_na_equal_),
       // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -1334,7 +1336,7 @@ HashJoinState::HashJoinState(
         build_table_outer_, probe_table_outer_, this->build_table_dict_builders,
         this->probe_table_dict_builders,
         /*is_active*/ true, this->metrics, this->op_pool.get(), this->op_mm,
-        this->op_scratch_pool.get(), this->op_scratch_mm));
+        this->op_scratch_pool.get(), this->op_scratch_mm, this->is_na_equal));
 
     this->global_bloom_filter = create_bloom_filter();
 
@@ -1515,7 +1517,7 @@ void HashJoinState::ResetPartitions() {
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders,
         /*is_active*/ true, this->metrics, this->op_pool.get(), this->op_mm,
-        this->op_scratch_pool.get(), this->op_scratch_mm));
+        this->op_scratch_pool.get(), this->op_scratch_mm, this->is_na_equal));
 }
 
 void HashJoinState::AppendBuildBatchHelper(
@@ -3158,28 +3160,31 @@ bool join_build_consume_batch(HashJoinState* join_state,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = join_state->GetDictionaryHashesForKeys();
 
-    // Prune any rows with NA keys. If this is an build_table_outer = False,
+    // Prune any rows with NA keys (if matching SQL behavior).
+    // If this is an build_table_outer = False,
     // then we can prune these rows from the table entirely. If
     // build_table_outer = True then we can skip adding these rows to the
     // hash table (as they can't match), but must write them to the Join
     // output.
     // TODO: Have outer join skip the build table/avoid shuffling.
-    time_pt start_filter = start_timer();
-    if (join_state->build_table_outer) {
-        in_table = filter_na_values<true, false>(
-            std::move(in_table), join_state->n_keys, join_state->build_parallel,
-            join_state->probe_parallel, join_state->build_na_counter,
-            join_state->build_na_key_buffer, nullptr, std::vector<uint64_t>(),
-            std::vector<uint64_t>());
-    } else {
-        in_table = filter_na_values<false, false>(
-            std::move(in_table), join_state->n_keys, join_state->build_parallel,
-            join_state->probe_parallel, join_state->build_na_counter,
-            join_state->build_na_key_buffer, nullptr, std::vector<uint64_t>(),
-            std::vector<uint64_t>());
+    if (!join_state->is_na_equal) {
+        time_pt start_filter = start_timer();
+        if (join_state->build_table_outer) {
+            in_table = filter_na_values<true, false>(
+                std::move(in_table), join_state->n_keys,
+                join_state->build_parallel, join_state->probe_parallel,
+                join_state->build_na_counter, join_state->build_na_key_buffer,
+                nullptr, std::vector<uint64_t>(), std::vector<uint64_t>());
+        } else {
+            in_table = filter_na_values<false, false>(
+                std::move(in_table), join_state->n_keys,
+                join_state->build_parallel, join_state->probe_parallel,
+                join_state->build_na_counter, join_state->build_na_key_buffer,
+                nullptr, std::vector<uint64_t>(), std::vector<uint64_t>());
+        }
+        join_state->metrics.build_filter_na_time += end_timer(start_filter);
+        join_state->metrics.build_filter_na_output_nrows += in_table->nrows();
     }
-    join_state->metrics.build_filter_na_time += end_timer(start_filter);
-    join_state->metrics.build_filter_na_output_nrows += in_table->nrows();
 
     if (!join_state->probe_table_outer) {
         // If this is not an outer probe, use the latest batch

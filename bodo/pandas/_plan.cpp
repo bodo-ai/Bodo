@@ -559,7 +559,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_name,
-    PyObject *pyiceberg_catalog) {
+    PyObject *pyiceberg_catalog, PyObject *iceberg_filter) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Convert Arrow schema to DuckDB
@@ -569,7 +569,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     BodoIcebergScanFunction table_function =
         BodoIcebergScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoIcebergScanFunctionData>(arrow_schema);
+        duckdb::make_uniq<BodoIcebergScanFunctionData>(
+            arrow_schema, pyiceberg_catalog, table_name, iceberg_filter);
 
     duckdb::virtual_column_map_t virtual_columns;
 
