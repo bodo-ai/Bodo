@@ -161,15 +161,6 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
     std::string function_name, std::vector<int> input_column_indices);
 
 /**
- * @brief Create an expression for a given function name.
- *
- * @param function_name - the function name to create expression for
- * @return duckdb::unique_ptr<duckdb::Expression> - the function expression
- */
-duckdb::unique_ptr<duckdb::Expression> make_function_expr(
-    std::string function_name);
-
-/**
  * @brief Create an expression from two sources and an operator.
  *
  * @param lhs - the left-hand side of the expression

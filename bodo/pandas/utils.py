@@ -895,14 +895,17 @@ def count_plan(self):
 
     # Can't be known statically so create count plan on top of
     # existing plan.
-    count_star_schema = pd.Series(dtype="uint64", name="count_star()")
+    count_star_schema = pd.Series(dtype="uint64", name="count_star")
     aggregate_plan = LazyPlan(
         "LogicalAggregate",
         count_star_schema,
         self._plan,
-        0,
-        0,
-        [LazyPlan("FunctionExpression", count_star_schema, "count_star()")],
+        [],
+        [
+            LazyPlan(
+                "AggregateExpression", count_star_schema, self._plan, "count_star", []
+            )
+        ],
     )
     projection_plan = LazyPlan(
         "LogicalProjection",

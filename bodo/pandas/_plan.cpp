@@ -148,18 +148,6 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
         duckdb::AggregateType::NON_DISTINCT);
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_function_expr(
-    std::string function_name) {
-    if (function_name == "count_star()") {
-        return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            "count_star()", duckdb::LogicalType::BIGINT,
-            duckdb::ColumnBinding(-1, 0), 0);
-    } else {
-        throw std::runtime_error("make_function_expr unsupported function " +
-                                 function_name);
-    }
-}
-
 /**
  * @brief Change the type of a constant to match the type of the other side
  *        of a binary op expr.

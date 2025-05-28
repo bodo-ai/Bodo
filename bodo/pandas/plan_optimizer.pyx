@@ -294,7 +294,6 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
-    cdef unique_ptr[CExpression] make_function_expr(c_string function_name) except +
     cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object field, c_string function_name, vector[int] input_column_indices) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
     cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
@@ -459,18 +458,6 @@ cdef class ColRefExpression(Expression):
 
     def __str__(self):
         return f"ColRefExpression({self.out_schema})"
-
-
-cdef class FunctionExpression(Expression):
-    """Wrapper around DuckDB's FunctionExpression to provide access in Python.
-    """
-
-    def __cinit__(self, object out_schema, str function_name):
-        self.out_schema = out_schema
-        self.c_expression = make_function_expr(function_name.encode())
-
-    def __str__(self):
-        return f"FunctionExpression({self.function_name})"
 
 
 cdef class AggregateExpression(Expression):

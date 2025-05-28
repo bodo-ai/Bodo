@@ -3,6 +3,7 @@
 #include "_bodo_scan_function.h"
 
 #include "_util.h"
+#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
@@ -187,14 +188,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    if (op.expressions.size() != 1) {
-        throw std::runtime_error(
-            "LogicalAggregate does not yet support more than one expression.");
-    }
-
-    const std::string& alias = op.expressions[0]->GetAlias();
-
-    if (alias == "count_star()") {
+    if (op.expressions.size() == 1 &&
+        op.expressions[0]
+                ->Cast<duckdb::BoundAggregateExpression>()
+                .function.name == "count_star") {
         auto physical_op = std::make_shared<PhysicalCountStar>();
         // Finish the pipeline at this point so that Finalize can run
         // to reduce the number of collected rows to the desired amount.
