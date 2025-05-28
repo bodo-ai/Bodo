@@ -1,9 +1,11 @@
 #pragma once
 
+#include <Python.h>
 #include <arrow/api.h>
 #include <cstdint>
 #include <variant>
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/planner/table_filter.hpp"
 
 /**
  * @brief Convert duckdb value to C++ variant.
@@ -45,3 +47,6 @@ duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
     // If the cast fails, return a nullptr unique_ptr
     return nullptr;
 }
+
+PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
+                                       PyObject *schema_fields);
