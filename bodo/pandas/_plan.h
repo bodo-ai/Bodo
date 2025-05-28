@@ -11,8 +11,8 @@
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
-#include "duckdb/main/database.hpp"
 #include "duckdb/main/attached_database.hpp"
+#include "duckdb/main/database.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/expression.hpp"
 
@@ -180,8 +180,7 @@ std::unique_ptr<duckdb::Expression> make_comparison_expr(
  */
 std::unique_ptr<duckdb::Expression> make_arithop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
-    std::unique_ptr<duckdb::Expression> &rhs,
-    std::string opstr);
+    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr);
 
 /**
  * @brief Create an expression from a source and function as a string.
@@ -324,7 +323,7 @@ duckdb::shared_ptr<duckdb::Optimizer> get_duckdb_optimizer();
  *
  * @return duckdb::AttachedDatabase& static context object
  */
-//duckdb::AttachedDatabase &get_attached_db();
+// duckdb::AttachedDatabase &get_attached_db();
 
 /**
  * @brief Convert an Arrow schema to DuckDB column names and data types to pass

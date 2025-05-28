@@ -6,6 +6,7 @@
 #include "../io/arrow_compat.h"
 #include "_bodo_scan_function.h"
 #include "_executor.h"
+#include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/unique_ptr.hpp"
@@ -28,7 +29,6 @@
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
 #include "duckdb/transaction/duck_transaction_manager.hpp"
-#include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "physical/project.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
@@ -171,8 +171,7 @@ std::unique_ptr<duckdb::Expression> make_comparison_expr(
 
 std::unique_ptr<duckdb::Expression> make_arithop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
-    std::unique_ptr<duckdb::Expression> &rhs,
-    std::string opstr) {
+    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
@@ -183,28 +182,33 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     duckdb::ErrorData error;
     duckdb::QueryErrorContext error_context;
 
-    duckdb::shared_ptr<duckdb::ClientContext> client_context = get_duckdb_context();
+    duckdb::shared_ptr<duckdb::ClientContext> client_context =
+        get_duckdb_context();
     client_context->transaction.BeginTransaction();
-    duckdb::EntryLookupInfo function_lookup(duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
+    duckdb::EntryLookupInfo function_lookup(
+        duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
-    duckdb::optional_ptr<duckdb::CatalogEntry> entry = binder->GetCatalogEntry("system", "", function_lookup, duckdb::OnEntryNotFound::RETURN_NULL);
+    duckdb::optional_ptr<duckdb::CatalogEntry> entry = binder->GetCatalogEntry(
+        "system", "", function_lookup, duckdb::OnEntryNotFound::RETURN_NULL);
     if (!entry) {
         throw std::runtime_error("make_arithop_expr GetCatalogEntry failed");
     }
-    duckdb::ScalarFunctionCatalogEntry &func = entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
+    duckdb::ScalarFunctionCatalogEntry &func =
+        entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
 
     duckdb::FunctionBinder function_binder(*binder);
     duckdb::unique_ptr<duckdb::Expression> result =
-        function_binder.BindScalarFunction(func,
-                                           std::move(children),
-                                           error,
-                                           true, // function is an operator
-                                           duckdb::optional_ptr<duckdb::Binder>(*binder));
+        function_binder.BindScalarFunction(
+            func, std::move(children), error,
+            true,  // function is an operator
+            duckdb::optional_ptr<duckdb::Binder>(*binder));
     if (!result) {
         throw std::runtime_error("make_arithop_expr BindScalarFunction failed");
     }
     if (result->GetExpressionType() != duckdb::ExpressionType::BOUND_FUNCTION) {
-        throw std::runtime_error("make_arithop_expr BindScalarFunction did not return a BOUND_FUNCTION");
+        throw std::runtime_error(
+            "make_arithop_expr BindScalarFunction did not return a "
+            "BOUND_FUNCTION");
     }
     client_context->transaction.ClearTransaction();
     return result;
@@ -639,13 +643,15 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
 }
 
 duckdb::shared_ptr<duckdb::DuckDB> get_duckdb() {
-    static duckdb::shared_ptr<duckdb::DuckDB> db = duckdb::make_shared_ptr<duckdb::DuckDB>(nullptr);
+    static duckdb::shared_ptr<duckdb::DuckDB> db =
+        duckdb::make_shared_ptr<duckdb::DuckDB>(nullptr);
     return db;
 }
 
 duckdb::shared_ptr<duckdb::ClientContext> get_duckdb_context() {
     duckdb::shared_ptr<duckdb::DuckDB> db = get_duckdb();
-    static duckdb::shared_ptr<duckdb::ClientContext> context = duckdb::make_shared_ptr<duckdb::ClientContext>(db->instance);
+    static duckdb::shared_ptr<duckdb::ClientContext> context =
+        duckdb::make_shared_ptr<duckdb::ClientContext>(db->instance);
     return context;
 }
 
@@ -659,7 +665,8 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder() {
 duckdb::shared_ptr<duckdb::Optimizer> get_duckdb_optimizer() {
     duckdb::shared_ptr<duckdb::ClientContext> cc = get_duckdb_context();
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
-    static duckdb::shared_ptr<duckdb::Optimizer> optimizer = duckdb::make_shared_ptr<duckdb::Optimizer>(*binder, *cc);
+    static duckdb::shared_ptr<duckdb::Optimizer> optimizer =
+        duckdb::make_shared_ptr<duckdb::Optimizer>(*binder, *cc);
     return optimizer;
 }
 
