@@ -306,8 +306,8 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
 }
 
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
-    std::unique_ptr<duckdb::LogicalOperator> &source, duckdb::idx_t group_index,
-    duckdb::idx_t aggregate_index,
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<int> &key_indices,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
     PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
@@ -315,46 +315,38 @@ duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
     std::vector<duckdb::ColumnBinding> source_cols =
         source_duck->GetColumnBindings();
 
+    source_duck->ResolveOperatorTypes();
+
     std::vector<duckdb::unique_ptr<duckdb::Expression>> aggregate_expressions;
     for (auto &expr : expr_vec) {
         // Convert std::unique_ptr to duckdb::unique_ptr.
         auto expr_duck = to_duckdb(expr);
-        duckdb::ExpressionClass expr_class = expr_duck->GetExpressionClass();
-
-        switch (expr_class) {
-            case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
-                // Convert the base duckdb::Expression node to its actual
-                // derived type.
-                duckdb::unique_ptr<duckdb::BoundColumnRefExpression> bce =
-                    dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(
-                        std::move(expr_duck));
-                duckdb::ColumnBinding binding = bce->binding;
-                // In duckdb, the expr (e.g., FunctionExpression) in the
-                // aggregate is created first in an unbound state and in the
-                // binding process it goes from the aggregate node first into
-                // the exprs and converts them to bound versions.  In our
-                // integration with duckdb, we don't have a binding phase so
-                // we create a BoundColumnRefExpression which requires a
-                // ColumnBinding but we can't set that correctly because we
-                // don't have the aggregate node yet.  In this function where
-                // we create the aggregate node, we go into the exprs and
-                // update these placeholders ColumnBindings to a correct
-                // version.
-                bce->binding = source_cols[binding.column_index];
-                expr_duck = std::move(bce);
-            } break;  // suppress wrong fallthrough error
-            default:
-                throw std::runtime_error(
-                    "Unsupported duckdb expression type in aggregate " +
-                    std::to_string(static_cast<int>(expr_class)));
-        }
         aggregate_expressions.push_back(std::move(expr_duck));
     }
+
+    duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Create aggregate node.
     duckdb::unique_ptr<duckdb::LogicalAggregate> aggr =
         duckdb::make_uniq<duckdb::LogicalAggregate>(
-            group_index, aggregate_index, std::move(aggregate_expressions));
+            binder->GenerateTableIndex(), binder->GenerateTableIndex(),
+            std::move(aggregate_expressions));
+
+    std::vector<duckdb::unique_ptr<duckdb::Expression>> group_exprs;
+    for (int key_idx : key_indices) {
+        if (key_idx < 0 || key_idx >= source_cols.size()) {
+            throw std::runtime_error(
+                fmt::format("make_aggregate: Key index {} out of bounds for "
+                            "source columns",
+                            key_idx));
+        }
+        duckdb::LogicalType col_type = source_duck->types[key_idx];
+        group_exprs.push_back(
+            duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+                col_type, source_cols[key_idx]));
+    }
+
+    aggr->groups = std::move(group_exprs);
 
     // Add the source to be aggregated on.
     aggr->children.push_back(std::move(source_duck));

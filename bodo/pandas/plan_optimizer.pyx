@@ -283,7 +283,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
-    cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, idx_t group_index, idx_t aggregate_index, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
+    cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
@@ -413,7 +413,7 @@ cdef class LogicalAggregate(LogicalOperator):
     """Wrapper around DuckDB's LogicalAggregate to provide access in Python.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, idx_t group_index, idx_t aggregate_index, object exprs):
+    def __cinit__(self, object out_schema, LogicalOperator source, vector[int] key_indices, object exprs):
         cdef vector[unique_ptr[CExpression]] expr_vec
 
         for expr in exprs:
@@ -422,7 +422,7 @@ cdef class LogicalAggregate(LogicalOperator):
         self.out_schema = out_schema
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalAggregate] c_logical_projection = make_aggregate(source.c_logical_operator, group_index, aggregate_index, expr_vec, out_schema)
+        cdef unique_ptr[CLogicalAggregate] c_logical_projection = make_aggregate(source.c_logical_operator, key_indices, expr_vec, out_schema)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
 
     def __str__(self):
@@ -476,6 +476,7 @@ cdef class FunctionExpression(Expression):
 cdef class AggregateExpression(Expression):
     """Wrapper around DuckDB's AggregateExpression to provide access in Python.
     """
+    cdef readonly str function_name
 
     def __cinit__(self, object out_schema, LogicalOperator source, str function_name, vector[int] input_column_indices):
         self.out_schema = out_schema
