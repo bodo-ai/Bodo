@@ -59,6 +59,7 @@ PhysicalReadIceberg::create_internal_reader(
     std::vector<int> &selected_columns,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     assert(arrow_schema->num_fields() == selected_columns.size());
+    // Pipeline buffers assume everything is nullable
     std::vector<bool> is_nullable(selected_columns.size(), true);
 
     int64_t total_rows_to_read = -1;  // Default to read everything.
