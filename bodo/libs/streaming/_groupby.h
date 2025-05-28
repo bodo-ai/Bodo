@@ -1055,10 +1055,10 @@ class GroupbyState {
     // f_in_cols is a list of physical column indices.
     // For example:
     //
-    // f_in_offsets = (0, 1, 5)
+    // f_in_offsets = (0, 1, 6)
     // f_in_cols = (0, 7, 1, 3, 4, 0)
     // The first function uses the columns in f_in_cols[0:1]. IE physical index
-    // 0 in the input table. The second function uses the column f_in_cols[1:5].
+    // 0 in the input table. The second function uses the column f_in_cols[1:6].
     // IE physical index 7, 1, 3, 4, 0 in the input table.
     const std::vector<int32_t> f_in_offsets;
     const std::vector<int32_t> f_in_cols;
