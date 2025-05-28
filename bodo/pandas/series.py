@@ -607,12 +607,15 @@ dt_accessors = [
             "is_year_end",
             "is_leap_year",
             "daysinmonth",
+            "days_in_month",
         ],
         pd.ArrowDtype(pa.int64()),
     ),
     # idx = 1: Series(Date)
     (
-        ["date"],
+        [
+            "date",
+        ],
         pd.ArrowDtype(pa.date32()),
     ),
     # idx = 2: Series(Time)
@@ -625,13 +628,13 @@ dt_accessors = [
 ]
 
 # Generates Series.str methods
-for rettype_pair in series_str_methods:
-    for func_name in rettype_pair[0]:
-        func = gen_str_method(func_name, rettype_pair[1])
+for str_pair in series_str_methods:
+    for func_name in str_pair[0]:
+        func = gen_str_method(func_name, str_pair[1])
         setattr(BodoStringMethods, func_name, func)
 
 # Generates Series.dt accessors
-for accessor_pair in dt_accessors:
-    for accessor_name in accessor_pair[0]:
-        accessor = gen_dt_accessor(accessor_name, accessor_pair[1])
+for dt_accessor_pair in dt_accessors:
+    for accessor_name in dt_accessor_pair[0]:
+        accessor = gen_dt_accessor(accessor_name, dt_accessor_pair[1])
         setattr(BodoDateTimeMethods, accessor_name, property(accessor))
