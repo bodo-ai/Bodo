@@ -668,7 +668,8 @@ PyObject* IcebergParquetReader::get_dataset() {
         this->table_id, this->pyarrow_schema, str_as_dict_cols_py,
         this->iceberg_filter, this->expr_filter_f_str.c_str(),
         this->filter_scalars, force_row_level_py,
-        static_cast<long long>(this->snapshot_id), this->tot_rows_to_read);
+        static_cast<long long>(this->snapshot_id),
+        static_cast<long long>(this->tot_rows_to_read));
     if (ds == nullptr && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
