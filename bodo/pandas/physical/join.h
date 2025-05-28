@@ -175,7 +175,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         if (global_is_last) {
             return OperatorResult::FINISHED;
         }
-        return !join_state->build_shuffle_state.BuffersFull()
+        return join_state->build_shuffle_state.BuffersFull()
                    ? OperatorResult::HAVE_MORE_OUTPUT
                    : OperatorResult::NEED_MORE_INPUT;
     }
