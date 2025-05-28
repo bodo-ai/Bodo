@@ -281,14 +281,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback("all")
     def __floordiv__(self, other):
-        """Called when a BodoSeries is element-wise and'ed with a different entity (other)"""
-        raise NotImplementedError("Series __floordiv__ not yet implemente")
         return self._arith_binop(other, "__floordiv__", False)
 
     @check_args_fallback("all")
     def __rfloordiv__(self, other):
-        """Called when a BodoSeries is element-wise and'ed with a different entity (other)"""
-        raise NotImplementedError("Series __rfloordiv__ not yet implemente")
         return self._arith_binop(other, "__rfloordiv__", True)
 
     @staticmethod

@@ -45,3 +45,11 @@ duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
     // If the cast fails, return a nullptr unique_ptr
     return nullptr;
 }
+
+/**
+ * @brief Convert duckdb type to arrow type.
+ *
+ * @param type - the duckdb type to convert
+ * @return the converted type
+ */
+std::shared_ptr<arrow::DataType> duckdbTypeToArrow(const duckdb::LogicalType &type);

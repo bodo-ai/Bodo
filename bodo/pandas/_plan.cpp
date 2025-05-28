@@ -225,7 +225,6 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
     duckdb::ErrorData error;
     duckdb::QueryErrorContext error_context;
 
-    std::cout << "make_unaryop_expr " << opstr << std::endl;
     duckdb::shared_ptr<duckdb::ClientContext> client_context = get_duckdb_context();
     client_context->transaction.BeginTransaction();
     duckdb::EntryLookupInfo function_lookup(duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
