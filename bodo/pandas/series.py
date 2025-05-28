@@ -311,10 +311,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             ):
                 from bodo.pandas.base import _empty_like
 
-                empty_data = _empty_like(self)
                 planLimit = LazyPlan(
                     "LogicalLimit",
-                    empty_data,
+                    _empty_like(self),
                     self._plan,
                     n,
                 )
