@@ -194,28 +194,24 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
     const std::string& alias = op.expressions[0]->GetAlias();
 
-    if (alias.empty()) {
-        throw std::runtime_error(
-            "PhysicalPlanBuilder::Visit(LogicalAggregate) expr alias cannot be "
-            "empty");
+    if (alias == "count_star()") {
+        auto physical_op = std::make_shared<PhysicalCountStar>();
+        // Finish the pipeline at this point so that Finalize can run
+        // to reduce the number of collected rows to the desired amount.
+        finished_pipelines.emplace_back(
+            this->active_pipeline->Build(physical_op));
+        // The same operator will exist in both pipelines.  The sink of the
+        // previous pipeline and the source of the next one.
+        // We record the pipeline dependency between these two pipelines.
+        this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
     } else {
-        if (alias == "count_star()") {
-            auto physical_op = std::make_shared<PhysicalCountStar>();
-            // Finish the pipeline at this point so that Finalize can run
-            // to reduce the number of collected rows to the desired amount.
-            finished_pipelines.emplace_back(
-                this->active_pipeline->Build(physical_op));
-            // The same operator will exist in both pipelines.  The sink of the
-            // previous pipeline and the source of the next one.
-            // We record the pipeline dependency between these two pipelines.
-            this->active_pipeline =
-                std::make_shared<PipelineBuilder>(physical_op);
-        } else {
-            throw std::runtime_error(
-                "PhysicalPlanBuilder::Visit(LogicalAggregate) unsupported "
-                "aggregate " +
-                alias);
-        }
+        auto physical_agg = std::make_shared<PhysicalAggregate>(
+            in_table_schema, op.expressions, op.groups);
+        // Finish the current pipeline with groupby build sink
+        finished_pipelines.emplace_back(
+            this->active_pipeline->Build(physical_agg));
+        // Create a new pipeline with groupby output as source
+        this->active_pipeline = std::make_shared<PipelineBuilder>(physical_agg);
     }
 }
 
