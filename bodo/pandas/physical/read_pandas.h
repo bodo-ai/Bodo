@@ -132,6 +132,8 @@ class PhysicalReadPandas : public PhysicalSource {
 
         std::shared_ptr<table_info> out_table;
         if (table->num_rows() == 0) {
+            // Use alloc_table here since calling from_pandas on an empty slice
+            // might return different types.
             out_table = alloc_table(output_schema);
         } else {
             // Convert Arrow arrays to Bodo arrays
