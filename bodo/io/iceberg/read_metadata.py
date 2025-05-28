@@ -160,7 +160,6 @@ def get_iceberg_file_list_parallel(
         ev_iceberg_fl.add_attribute("g_filters", filters)
     try:
         table = catalog.load_table(table_id)
-
         pq_infos, get_file_to_schema_us = _construct_parquet_infos(
             table,
             table.scan(

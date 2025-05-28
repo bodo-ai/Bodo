@@ -18,10 +18,15 @@ class PhysicalReadIceberg : public PhysicalSource {
     static std::vector<std::string> create_out_column_names(
         const std::vector<int> &selected_columns,
         const std::shared_ptr<arrow::Schema> schema);
-    static std::unique_ptr<IcebergParquetReader> create_internal_reader();
+    static std::unique_ptr<IcebergParquetReader> create_internal_reader(
+        PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
+        std::shared_ptr<arrow::Schema> arrow_schema,
+        std::vector<int> &selected_columns,
+        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val);
 
    public:
     explicit PhysicalReadIceberg(
+        PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
         std::shared_ptr<arrow::Schema> arrow_schema,
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
@@ -42,6 +47,6 @@ class PhysicalReadIceberg : public PhysicalSource {
 
     // Column names and metadata (Pandas Index info) used for dataframe
     // construction
-    const std::unique_ptr<TableMetadata> out_metadata;
+    const std::shared_ptr<TableMetadata> out_metadata;
     const std::vector<std::string> out_column_names;
 };
