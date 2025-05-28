@@ -363,12 +363,10 @@ class PhysicalCastExpression : public PhysicalExpression {
      */
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::cout << "cast batch" << std::endl;
         // Process child first.
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
         auto result = do_arrow_compute_cast(left_res, return_type);
-        std::cout << "cast batch done" << std::endl;
         return std::make_shared<ArrayExprResult>(result);
     }
 

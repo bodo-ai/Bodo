@@ -152,7 +152,6 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     std::shared_ptr<ScalarExprResult> left_as_scalar =
         std::dynamic_pointer_cast<ScalarExprResult>(left_res);
 
-    std::cout << "do_arrow_compute_cast 0 " << static_cast<int>(return_type.id())<< std::endl;
     arrow::Datum src1;
     if (left_as_array) {
         src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
@@ -164,10 +163,8 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
         throw std::runtime_error(
             "do_arrow_compute left is neither array nor scalar.");
     }
-    std::cout << "do_arrow_compute_cast 1" << std::endl;
 
     std::shared_ptr<arrow::DataType> arrow_ret_type = duckdbTypeToArrow(return_type);
-    std::cout << "do_arrow_compute_cast 2" << std::endl;
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::Cast(src1, arrow_ret_type);
     if (!cmp_res.ok()) [[unlikely]] {
@@ -175,7 +172,6 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
                                  cmp_res.status().message());
     }
 
-    std::cout << "do_arrow_compute_cast 3" << std::endl;
     return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
                                bodo::BufferPool::DefaultPtr());
 }
