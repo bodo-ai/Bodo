@@ -416,7 +416,7 @@ def test_merge_join_datetime(memory_leak_check):
     check_func(test_impl, (df1_date, df2), sort_output=True, reset_index=True)
 
 
-# TODO [BSE-XXXX]: DataFrame Lib: Fix Decimal from_pandas
+# TODO [BSE-4789]: DataFrame Lib: Fix Decimal from_pandas
 # @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_decimal(memory_leak_check):
@@ -1668,7 +1668,7 @@ def test_merge_outer(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-# TODO [BSE-XXXX]: DataFrame Lib: fix unique ptr error.
+# TODO [BSE-4851]: DataFrame Lib: fix unique ptr error.
 # @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_overlap(memory_leak_check):
@@ -3551,7 +3551,7 @@ def test_merge_general_bool_columns(memory_leak_check):
 
 
 @pytest.mark.slow
-# TODO [BSE-XXXX]: DataFrame Lib: Support matching keys with different types.
+# TODO [BSE-4852]: DataFrame Lib: Support matching keys with different types.
 # @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_match_key_types(memory_leak_check):
@@ -3581,7 +3581,7 @@ def test_merge_match_key_types(memory_leak_check):
 
 
 @pytest.mark.slow
-# TODO [BSE-XXXX]: DataFrame Lib: Support matching keys with different types.
+# TODO [BSE-4852]: DataFrame Lib: Support matching keys with different types.
 # @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_match_key_types2(memory_leak_check):
@@ -3610,7 +3610,7 @@ def test_merge_match_key_types2(memory_leak_check):
 
 
 @pytest.mark.slow
-# TODO [BSE-XXXX]: DataFrame Lib: Support matching keys with different types.
+# TODO [BSE-4852]: DataFrame Lib: Support matching keys with different types.
 # @pytest.mark.df_lib
 @pytest_mark_pandas
 def test_merge_match_key_types_nullable(memory_leak_check):

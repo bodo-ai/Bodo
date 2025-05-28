@@ -397,7 +397,7 @@ class JoinPartition {
     // .get())
     uint32_t* probe_table_hashes;
 
-    // Matches Pandas behavior by treating NA values as equal
+    // Matches Pandas behavior by treating NA values as equal.
     const bool is_na_equal;
 
     /// @brief Get number of bits in the 'top_bitmask'.
@@ -702,7 +702,7 @@ class JoinState {
     const bool build_table_outer;
     const bool probe_table_outer;
     const bool force_broadcast;
-    // For matching Pandas behavior
+    // Matches Pandas behavior by treating NA values as equal.
     const bool is_na_equal;
     // Note: This isn't constant because we may change it
     // via broadcast decisions.

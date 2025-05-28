@@ -585,7 +585,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Column indices in output that need to be selected
         col_indices = list(range(len(self.columns)))
         # Skip index columns
-        # TODO: unless they are a key!
+        # TODO [BSE-4820]: unless indexes are a key.
         n_left_indices = get_n_index_arrays(empty_left.index)
         common_keys = set(left_on).intersection(set(right_on))
         for i, col in enumerate(right.columns):
