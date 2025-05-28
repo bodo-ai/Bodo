@@ -2,8 +2,6 @@ import typing as pt
 
 import pandas as pd
 import pyarrow as pa
-import pyiceberg.catalog
-import pyiceberg.expressions
 from pandas._libs import lib
 
 from bodo.pandas.frame import BodoDataFrame
@@ -129,6 +127,9 @@ def read_iceberg(
     limit: int | None = None,
     scan_properties: dict[str, pt.Any] | None = None,
 ) -> BodoDataFrame:
+    import pyiceberg.catalog
+    import pyiceberg.expressions
+
     if catalog_properties is None:
         catalog_properties = {}
     catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
