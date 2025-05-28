@@ -189,8 +189,7 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
 std::unique_ptr<duckdb::Expression> make_unaryop_expr(
-    std::unique_ptr<duckdb::Expression> &source,
-    std::string opstr);
+    std::unique_ptr<duckdb::Expression> &source, std::string opstr);
 
 /**
  * @brief Create a conjunction (and/or) expression from two sources.
