@@ -633,6 +633,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """
         if isinstance(by, str):
             by = [by]
+
+        # Only list of string column names for keys is supported for now.
+        if not isinstance(by, (list, tuple)) or not all(isinstance(b, str) for b in by):
+            raise BodoLibNotImplementedException(
+                "groupby: only string keys are supported"
+            )
+
         return DataFrameGroupBy(self, by)
 
     @check_args_fallback("all")

@@ -132,7 +132,7 @@ class SeriesGroupBy:
             return object.__getattribute__(self, name)
         except AttributeError:
             msg = (
-                f"DataFrameGroupBy.{name} is not "
+                f"SeriesGroupBy.{name} is not "
                 "implemented in Bodo dataframe library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
