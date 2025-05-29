@@ -6,7 +6,7 @@
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
-#include "fmt/format.h"
+#include "fmt/core.h"
 #include "physical/operator.h"
 
 /**
@@ -172,7 +172,7 @@ class BodoIcebergScanFunction : public BodoScanFunction {
                           schemaColumnNamesToString(arrow_schema))) {
         // filter_pushdown = true;
         // filter_prune = true;
-        // projection_pushdown = true;
+        projection_pushdown = true;
         limit_pushdown = true;
         // TODO: set statistics and other optimization flags as needed
         // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/include/duckdb/function/table_function.hpp#L357
