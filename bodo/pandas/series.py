@@ -1,4 +1,3 @@
-import datetime
 import inspect
 import typing as pt
 import warnings
@@ -381,8 +380,10 @@ class BodoStringMethods:
         self._series = series
 
         # Validates series type
-        if not isinstance(series, BodoSeries) or not all(
-            isinstance(elem, str) for elem in series
+        if not (
+            isinstance(series, BodoSeries)
+            and isinstance(series.dtype, pd.ArrowDtype)
+            and series.dtype.type is str
         ):
             raise AttributeError("Can only use .str accessor with string values!")
 
@@ -409,8 +410,11 @@ class BodoDatetimeProperties:
         self._series = series
 
         # Validates series type
-        if not isinstance(series, BodoSeries) or not all(
-            isinstance(elem, datetime.datetime) for elem in series
+        if not (
+            isinstance(series, BodoSeries)
+            and series.dtype
+            in (pd.ArrowDtype(pa.timestamp("ns")), pd.ArrowDtype(pa.date64())),
+            pd.ArrowDtype(pa.time64("ns")),
         ):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
 
@@ -647,17 +651,10 @@ dt_accessors = [
             "day_of_year",
             "days_in_month",
             "quarter",
-            "is_month_start",
-            "is_month_end",
-            "is_quarter_start",
-            "is_quarter_end",
-            "is_year_start",
-            "is_year_end",
-            "is_leap_year",
             "daysinmonth",
             "days_in_month",
         ],
-        pd.ArrowDtype(pa.int64()),
+        pd.ArrowDtype(pa.int32()),
     ),
     # idx = 1: Series(Date)
     (
@@ -672,6 +669,19 @@ dt_accessors = [
             "time",
         ],
         pd.ArrowDtype(pa.time64("ns")),
+    ),
+    # idx = 3: Series(Boolean)
+    (
+        [
+            "is_month_start",
+            "is_month_end",
+            "is_quarter_start",
+            "is_quarter_end",
+            "is_year_start",
+            "is_year_end",
+            "is_leap_year",
+        ],
+        pd.ArrowDtype(pa.bool_()),
     ),
 ]
 
