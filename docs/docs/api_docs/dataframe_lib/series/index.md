@@ -8,7 +8,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ### Datetime Properties
 
 !!! note
-	Input must be a Series of `datetime64` data.
+	Input must be a Series of `datetime-like` data.
 
 - [`bodo.pandas.BodoSeries.dt.year`][bodoseriesdtyear] 
 - [`bodo.pandas.BodoSeries.dt.month`][bodoseriesdtmonth] 

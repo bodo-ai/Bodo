@@ -355,6 +355,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def str(self):
         return BodoStringMethods(self)
 
+    @property
+    def dt(self):
+        return BodoDatetimeProperties(self)
+
     @check_args_fallback(unsupported="none")
     def map(self, arg, na_action=None):
         """
@@ -368,9 +372,21 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
-    @property
-    def dt(self):
-        return BodoDatetimeProperties(self)
+    def isin(self, values):
+        """
+        Whether elements in Series are contained in values.
+
+        """
+
+        index = self.head(0).index
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.bool_()),
+            name=self.name,
+            index=index,
+        )
+        return _get_series_python_func_plan(
+            self._plan, new_metadata, "isin", (values,), {}
+        )
 
 
 class BodoStringMethods:
