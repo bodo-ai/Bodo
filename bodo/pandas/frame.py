@@ -529,9 +529,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     ):  # -> BodoDataFrame:
         from bodo.pandas.base import _empty_like
 
-        # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
-        # key columns with the same names from output
-
         # Validates only on, left_on and right_on for now
         left_on, right_on = validate_merge_spec(self, right, on, left_on, right_on)
 
