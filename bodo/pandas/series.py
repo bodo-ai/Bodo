@@ -1,3 +1,4 @@
+import datetime
 import inspect
 import typing as pt
 import warnings
@@ -370,7 +371,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @property
     def dt(self):
-        return BodoDateTimeMethods(self)
+        return BodoDatetimeProperties(self)
 
 
 class BodoStringMethods:
@@ -378,6 +379,12 @@ class BodoStringMethods:
 
     def __init__(self, series):
         self._series = series
+
+        # Validates series type
+        if not isinstance(series, BodoSeries) or not all(
+            isinstance(elem, str) for elem in series
+        ):
+            raise AttributeError("Can only use .str accessor with string values!")
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
@@ -393,10 +400,32 @@ class BodoStringMethods:
             return object.__getattribute__(pd.Series(self._series).str, name)
 
 
-class BodoDateTimeMethods:
+class BodoDatetimeProperties:
+    """Support Series.dt datetime accessors same as Pandas."""
+
+    # TODO [BSE-4854]: support datetime methods
+
     def __init__(self, series):
-        # Add validation
         self._series = series
+
+        # Validates series type
+        if not isinstance(series, BodoSeries) or not all(
+            isinstance(elem, datetime.datetime) for elem in series
+        ):
+            raise AttributeError("Can only use .dt accessor with datetimelike values")
+
+    @check_args_fallback(unsupported="none")
+    def __getattribute__(self, name: str, /) -> pt.Any:
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            msg = (
+                f"Series.dt.{name} is not "
+                "implemented in Bodo dataframe library yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            warnings.warn(BodoLibFallbackWarning(msg))
+            return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
 def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
@@ -656,4 +685,4 @@ for str_pair in series_str_methods:
 for dt_accessor_pair in dt_accessors:
     for accessor_name in dt_accessor_pair[0]:
         accessor = gen_dt_accessor(accessor_name, dt_accessor_pair[1])
-        setattr(BodoDateTimeMethods, accessor_name, property(accessor))
+        setattr(BodoDatetimeProperties, accessor_name, property(accessor))

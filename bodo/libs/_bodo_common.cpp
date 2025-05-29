@@ -451,6 +451,7 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
         case Bodo_CTypes::DATE:
             dtype = arrow::date32();
             break;
+        // TODO: check precision
         case Bodo_CTypes::TIME:
             dtype = arrow::time64(arrow::TimeUnit::NANO);
             break;

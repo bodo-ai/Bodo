@@ -584,17 +584,18 @@ def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
     return the result as a C++ table and column names.
     """
     input = cpp_table_to_df(cpp_table, arrow_schema)
-    func_path_str, is_series, is_method, args, kwargs = in_args
+    func_path_str, is_series, is_attr, args, kwargs = in_args
 
     if is_series:
         assert input.shape[1] == 1, "run_func_on_table: single column expected"
         input = input.iloc[:, 0]
 
-    if is_method:
+    if is_attr:
         func = input
         for atr in func_path_str.split("."):
             func = getattr(func, atr)
         if not callable(func):
+            # func is assumed to be an accessor
             out = func
         else:
             out = func(*args, **kwargs)
