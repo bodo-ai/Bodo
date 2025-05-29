@@ -841,7 +841,7 @@ def test_projection_expression1(datapath):
     py_df2 = py_df1[(py_df1.A + 50) / 2 < py_df1.D * 2]
 
     _test_equal(
-        bodo_df2.copy(),
+        bodo_df2,
         py_df2,
         check_pandas_types=False,
         sort_output=True,
