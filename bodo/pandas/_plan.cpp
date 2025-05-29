@@ -674,14 +674,6 @@ duckdb::shared_ptr<duckdb::Optimizer> get_duckdb_optimizer() {
     return optimizer;
 }
 
-/*
-duckdb::AttachedDatabase &get_attached_db() {
-    duckdb::DuckDB &db = get_duckdb();
-    static duckdb::AttachedDatabase adb(*(db.instance));
-    return adb;
-}
-*/
-
 std::pair<duckdb::vector<duckdb::string>, duckdb::vector<duckdb::LogicalType>>
 arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema) {
     // See Arrow type handling in DuckDB for possible cases:

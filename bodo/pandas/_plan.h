@@ -318,13 +318,6 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder();
 duckdb::shared_ptr<duckdb::Optimizer> get_duckdb_optimizer();
 
 /**
- * @brief Returns a statically created AttachedDatabase.
- *
- * @return duckdb::AttachedDatabase& static context object
- */
-// duckdb::AttachedDatabase &get_attached_db();
-
-/**
  * @brief Convert an Arrow schema to DuckDB column names and data types to pass
  * to plan nodes.
  *
