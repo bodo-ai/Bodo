@@ -849,7 +849,7 @@ def test_projection_expression1(datapath):
     )
 
 
-def test_projection_expression2(datapath):
+def test_projection_expression_floordiv(datapath):
     """Test for floordiv."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1[(bodo_df1.A // 3) * 7 > 15]
