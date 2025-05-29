@@ -576,6 +576,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_join_out.columns = [
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
+        # We want to avoid having self appear on the rhs so we get a copy instead.
+        # TODO: check right._plan for self recursively.
         right_plan = deepcopy(right._plan) if self is right else right._plan
 
         planComparisonJoin = LazyPlan(

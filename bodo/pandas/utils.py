@@ -369,8 +369,6 @@ class LazyPlan:
         self.pa_schema = pa_schema
 
     def __str__(self):
-        out = f"{self.plan_class}: \n"
-
         args = self.args
 
         # Avoid duplicated plan strings by omitting data_source.
@@ -381,6 +379,7 @@ class LazyPlan:
             func_name, col_indices = args[1][0], args[2]
             return f"PythonScalarFuncExpression({func_name}, {col_indices})"
 
+        out = f"{self.plan_class}: \n"
         args_str = ""
         for arg in args:
             if isinstance(arg, pd.DataFrame):
@@ -402,6 +401,7 @@ class LazyPlan:
     __repr__ = __str__
 
     def generate_duckdb(self, cache=None):
+        # breakpoint()
         from bodo.ext import plan_optimizer
 
         # Sometimes the same LazyPlan object is encountered twice during the same
