@@ -647,9 +647,31 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     return out_get;
 }
 
+void registerFloor(duckdb::shared_ptr<duckdb::DuckDB> db) {
+    duckdb::LogicalType double_type(duckdb::LogicalType::DOUBLE);
+    duckdb::LogicalType float_type(duckdb::LogicalType::FLOAT);
+    duckdb::vector<duckdb::LogicalType> double_arguments = {double_type};
+    duckdb::vector<duckdb::LogicalType> float_arguments = {float_type};
+    duckdb::ScalarFunction floor_fun_double("floor", double_arguments, double_type, nullptr);
+    duckdb::ScalarFunction floor_fun_float("floor", float_arguments, float_type, nullptr);
+    duckdb::ScalarFunctionSet floor_set("floor");
+    floor_set.AddFunction(floor_fun_double);
+    floor_set.AddFunction(floor_fun_float);
+    duckdb::CreateScalarFunctionInfo floor_info(floor_set);
+    auto &system_catalog = duckdb::Catalog::GetSystemCatalog(*(db->instance));
+    auto data = duckdb::CatalogTransaction::GetSystemTransaction(*(db->instance));
+    system_catalog.CreateFunction(data, floor_info);
+}
+
 duckdb::shared_ptr<duckdb::DuckDB> get_duckdb() {
     static duckdb::shared_ptr<duckdb::DuckDB> db =
         duckdb::make_shared_ptr<duckdb::DuckDB>(nullptr);
+    static bool floor_registered = []() {
+        registerFloor(db);
+        return true;
+    }();
+    // Prevent unused variable error.
+    (void)floor_registered;
     return db;
 }
 

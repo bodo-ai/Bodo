@@ -227,26 +227,8 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	scheduler->RelaunchThreads();
 }
 
-void registerFloor(DuckDB *db) {
-    LogicalType double_type(LogicalType::DOUBLE);
-    LogicalType float_type(LogicalType::FLOAT);
-    vector<LogicalType> double_arguments = {double_type};
-    vector<LogicalType> float_arguments = {float_type};
-    ScalarFunction floor_fun_double("floor", double_arguments, double_type, nullptr);
-    ScalarFunction floor_fun_float("floor", float_arguments, float_type, nullptr);
-    ScalarFunctionSet floor_set("floor");
-    floor_set.AddFunction(floor_fun_double);
-    floor_set.AddFunction(floor_fun_float);
-    CreateScalarFunctionInfo floor_info(floor_set);
-    auto &system_catalog = Catalog::GetSystemCatalog(*(db->instance));
-    auto data = CatalogTransaction::GetSystemTransaction(*(db->instance));
-    system_catalog.CreateFunction(data, floor_info);
-}
-
 DuckDB::DuckDB(const char *path, DBConfig *new_config) : instance(make_shared_ptr<DatabaseInstance>()) {
 	instance->Initialize(path, new_config);
-
-    registerFloor(this);
 }
 
 DuckDB::DuckDB(const string &path, DBConfig *config) : DuckDB(path.c_str(), config) {
