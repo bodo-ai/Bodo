@@ -401,7 +401,6 @@ class LazyPlan:
     __repr__ = __str__
 
     def generate_duckdb(self, cache=None):
-        # breakpoint()
         from bodo.ext import plan_optimizer
 
         # Sometimes the same LazyPlan object is encountered twice during the same
