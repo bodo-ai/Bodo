@@ -168,7 +168,9 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                 } break;
                 default:
                     throw std::runtime_error(
-                        "Unsupported number of children " + std::to_string(bfe->children.size()) + " for bound function");
+                        "Unsupported number of children " +
+                        std::to_string(bfe->children.size()) +
+                        " for bound function");
             }
         } break;  // suppress wrong fallthrough error
         default:
