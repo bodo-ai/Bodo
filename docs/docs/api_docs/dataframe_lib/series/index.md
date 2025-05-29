@@ -1,7 +1,7 @@
 # Series API
 The Bodo DataFrame Library supports Pandas Series methods and accessors that are listed below. They can be accessed through `BodoSeries` and follow the same behavior as their Pandas equivalents. For details on usage, we link to the corresponding Pandas documentation.
 
-### DateTime accessors
+### Datetime Properties
 
 !!! note
 	Input must be a Series of `datetime64` data.
