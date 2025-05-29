@@ -259,28 +259,6 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
    private:
     /**
-     * @brief Initialize mapping of input column orders so that keys are in the
-     * beginning of build/probe tables to match streaming join APIs. See
-     * https://github.com/bodo-ai/Bodo/blob/905664de2c37741d804615cdbb3fb437621ff0bd/bodo/libs/streaming/join.py#L189
-     * @param col_inds input mapping to fill
-     * @param keys key column indices
-     * @param ncols number of columns in the table
-     */
-    static void initInputColumnMapping(std::vector<int64_t>& col_inds,
-                                       std::vector<uint64_t>& keys,
-                                       uint64_t ncols) {
-        for (uint64_t i : keys) {
-            col_inds.push_back(i);
-        }
-        for (uint64_t i = 0; i < ncols; i++) {
-            if (std::find(keys.begin(), keys.end(), i) != keys.end()) {
-                continue;
-            }
-            col_inds.push_back(i);
-        }
-    }
-
-    /**
      * @brief  Initialize mapping of output column orders to reorder keys that
      * were moved to the beginning of of build/probe tables to match streaming
      * join APIs. See

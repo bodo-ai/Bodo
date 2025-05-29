@@ -202,8 +202,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
         // We record the pipeline dependency between these two pipelines.
         this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
     } else {
-        auto physical_agg = std::make_shared<PhysicalAggregate>(
-            in_table_schema, op.expressions, op.groups);
+        auto physical_agg =
+            std::make_shared<PhysicalAggregate>(in_table_schema, op);
         // Finish the current pipeline with groupby build sink
         finished_pipelines.emplace_back(
             this->active_pipeline->Build(physical_agg));

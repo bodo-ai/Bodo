@@ -54,3 +54,16 @@ std::string schemaColumnNamesToString(
     }
     return ret;
 }
+
+void initInputColumnMapping(std::vector<int64_t>& col_inds,
+                            std::vector<uint64_t>& keys, uint64_t ncols) {
+    for (uint64_t i : keys) {
+        col_inds.push_back(i);
+    }
+    for (uint64_t i = 0; i < ncols; i++) {
+        if (std::find(keys.begin(), keys.end(), i) != keys.end()) {
+            continue;
+        }
+        col_inds.push_back(i);
+    }
+}
