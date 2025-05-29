@@ -35,6 +35,17 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
         std::vector<bool> cols_to_keep_vec(ncols, true);
 
+        // Add keys to output schema
+        this->output_schema = std::make_shared<bodo::Schema>();
+        for (size_t i = 0; i < this->keys.size(); i++) {
+            this->output_schema->append_column(
+                in_table_schema_reordered->column_types[i]->copy());
+            this->output_schema->column_names.push_back(
+                in_table_schema_reordered->column_names[i]);
+        }
+        this->output_schema->metadata = std::make_shared<TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+
         std::vector<int32_t> ftypes;
         // Create input data column indices (only single data column for now)
         std::vector<int32_t> f_in_cols;
@@ -72,6 +83,15 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             }
 
             ftypes.push_back(function_to_ftype.at(agg_expr.function.name));
+
+            std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
+                out_arr_type = get_groupby_output_dtype(
+                    ftypes.back(),
+                    in_table_schema->column_types[col_idx]->array_type,
+                    in_table_schema->column_types[col_idx]->c_type);
+
+            this->output_schema->append_column(std::make_unique<bodo::DataType>(
+                std::get<0>(out_arr_type), std::get<1>(out_arr_type)));
         }
 
         // Offsets for the input data columns, which are trivial since we have a
@@ -84,9 +104,6 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
             get_streaming_batch_size(), true, -1, -1, -1);
-
-        // TODO
-        this->output_schema = in_table_schema_reordered;
     }
 
     virtual ~PhysicalAggregate() = default;
