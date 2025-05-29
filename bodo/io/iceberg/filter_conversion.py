@@ -58,7 +58,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         type = schema_to_pyarrow(term.ref().field.field_type)
         field_name = term.ref().field.name
         array_literals = pa.array(literals, type=type)
-        return f"pc.field({{{field_name}}}).isin(f0)", [("f0", array_literals)]
+        return f"pc.field('{{{field_name}}}').isin(f0)", [("f0", array_literals)]
 
     def visit_not_in(
         self, term: BoundTerm[Any], literals: set[Any]
@@ -68,21 +68,21 @@ class _ConvertToArrowExpressionStringAndScalar(
         type = schema_to_pyarrow(term.ref().field.field_type)
         field_name = term.ref().field.name
         array_literals = pa.array(literals, type=type)
-        return f"~pc.field({{{field_name}}}).isin(f0)", [("f0", array_literals)]
+        return f"~pc.field('{{{field_name}}}').isin(f0)", [("f0", array_literals)]
 
     def visit_is_nan(self, term: BoundTerm[Any]) -> tuple[str, list[tuple[str, Any]]]:
         ref = pc.field(term.ref().field.name)
-        return f"pc.is_nan({{{ref}}})", []
+        return f"pc.is_nan('{{{ref}}}')", []
 
     def visit_not_nan(self, term: BoundTerm[Any]) -> tuple[str, list[tuple[str, Any]]]:
         ref = pc.field(term.ref().field.name)
-        return f"~pc.is_nan({{{ref}}})", []
+        return f"~pc.is_nan('{{{ref}}}')", []
 
     def visit_is_null(self, term: BoundTerm[Any]) -> tuple[str, list[tuple[str, Any]]]:
-        return f"pc.field({{{term.ref().field.name}}}).is_null(nan_is_null=False)", []
+        return f"pc.field('{{{term.ref().field.name}}}').is_null(nan_is_null=False)", []
 
     def visit_not_null(self, term: BoundTerm[Any]) -> tuple[str, list[tuple[str, Any]]]:
-        return f"pc.field({{{term.ref().field.name}}}).is_valid()", []
+        return f"pc.field('{{{term.ref().field.name}}}').is_valid()", []
 
     def visit_equal(
         self, term: BoundTerm[Any], literal: Literal[Any]
@@ -90,7 +90,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
-        return f"pc.field({{{term.ref().field.name}}}) == f0", [("f0", scalar)]
+        return f"pc.field('{{{term.ref().field.name}}}') == f0", [("f0", scalar)]
 
     def visit_not_equal(
         self, term: BoundTerm[Any], literal: Literal[Any]
@@ -98,7 +98,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
-        return f"pc.field({{{term.ref().field.name}}}) != f0", [("f0", scalar)]
+        return f"pc.field('{{{term.ref().field.name}}}') != f0", [("f0", scalar)]
 
     def visit_greater_than_or_equal(
         self, term: BoundTerm[Any], literal: Literal[Any]
@@ -106,7 +106,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
-        return f"pc.field({{{term.ref().field.name}}}) >= f0", [("f0", scalar)]
+        return f"pc.field('{{{term.ref().field.name}}}') >= f0", [("f0", scalar)]
 
     def visit_greater_than(
         self, term: BoundTerm[Any], literal: Literal[Any]
@@ -114,7 +114,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
-        return f"pc.field({{{term.ref().field.name}}}) > f0", [("f0", scalar)]
+        return f"pc.field('{{{term.ref().field.name}}}') > f0", [("f0", scalar)]
 
     def visit_less_than(
         self, term: BoundTerm[Any], literal: Literal[Any]
@@ -122,7 +122,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
-        return f"pc.field({{{term.ref().field.name}}}) < f0", [("f0", scalar)]
+        return f"pc.field('{{{term.ref().field.name}}}') < f0", [("f0", scalar)]
 
     def visit_less_than_or_equal(
         self, term: BoundTerm[Any], literal: Literal[Any]
@@ -130,19 +130,19 @@ class _ConvertToArrowExpressionStringAndScalar(
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
-        return f"pc.field({{{term.ref().field.name}}}) <= f0", [("f0", scalar)]
+        return f"pc.field('{{{term.ref().field.name}}}') <= f0", [("f0", scalar)]
 
     def visit_starts_with(
         self, term: BoundTerm[Any], literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
-        return f"pc.starts_with({{pc.field({term.ref().field.name}}}), f0)", [
+        return f"pc.starts_with(pc.field('{{{term.ref().field.name}}}'), f0)", [
             ("f0", literal.value)
         ]
 
     def visit_not_starts_with(
         self, term: BoundTerm[Any], literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
-        return f"pc.starts_with({{pc.field({term.ref().field.name}}}), f0)", [
+        return f"pc.starts_with(pc.field('{{{term.ref().field.name}}}'), f0)", [
             ("f0", literal.value)
         ]
 
@@ -155,7 +155,7 @@ class _ConvertToArrowExpressionStringAndScalar(
     def visit_not(
         self, child_result: tuple[str, list[tuple[str, Any]]]
     ) -> tuple[str, list[tuple[str, Any]]]:
-        return f"~{child_result[0]}", child_result[1]
+        return f"~({child_result[0]})", child_result[1]
 
     def visit_and(
         self,
@@ -163,7 +163,9 @@ class _ConvertToArrowExpressionStringAndScalar(
         right_result: tuple[str, list[tuple[str, Any]]],
     ) -> tuple[str, list[tuple[str, Any]]]:
         left_result, right_result = self.make_names_unique(left_result, right_result)
-        return f"{left_result} & {right_result}", left_result[1] + right_result[1]
+        return f"({left_result[0]}) & ({right_result[0]})", left_result[
+            1
+        ] + right_result[1]
 
     def visit_or(
         self,
@@ -171,4 +173,6 @@ class _ConvertToArrowExpressionStringAndScalar(
         right_result: tuple[str, list[tuple[str, Any]]],
     ) -> tuple[str, list[tuple[str, Any]]]:
         left_result, right_result = self.make_names_unique(left_result, right_result)
-        return f"{left_result} | {right_result}", left_result[1] + right_result[1]
+        return f"({left_result[0]}) | ({right_result[0]})", left_result[
+            1
+        ] + right_result[1]
