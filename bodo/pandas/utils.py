@@ -372,21 +372,30 @@ class LazyPlan:
         out = f"{self.plan_class}: \n"
 
         args = self.args
-        if self.plan_class == "LogicalProjection":
-            expr_args = [_format_project_expression(expr) for expr in self.args[1]]
-            args = (self.args[0], expr_args)
+
+        # Avoid duplicated plan strings by omitting data_source.
+        if self.plan_class == "ColRefExpression":
+            col_index = args[1]
+            return f"ColRefExpression({col_index})"
+        elif self.plan_class == "PythonScalarFuncExpression":
+            func_name, col_indices = args[1][0], args[2]
+            return f"PythonScalarFuncExpression({func_name}, {col_indices})"
 
         args_str = ""
         for arg in args:
             if isinstance(arg, pd.DataFrame):
                 args_str += f"{arg.columns.tolist()}\n"
-            else:
+            elif arg is not None:
                 args_str += f"{arg}\n"
 
         for k, v in self.kwargs.items():
             args_str += f"{k}: {v}\n"
 
-        out += "\n".join(f"  {arg_line}" for arg_line in args_str.split("\n"))
+        out += "\n".join(
+            f"  {arg_line}"
+            for arg_line in args_str.split("\n")
+            if not arg_line.isspace()
+        )
 
         return out
 
@@ -421,16 +430,6 @@ class LazyPlan:
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret
         return ret
-
-
-def _format_project_expression(expr: LazyPlan):
-    """Get a simplified representation of an expression to a LogicalProjection to
-    avoid duplicated plan strings."""
-    assert isinstance(expr, LazyPlan)
-    if expr.plan_class == "ColRefExpression":
-        return expr.args[1]
-    else:
-        return expr.plan_class
 
 
 def execute_plan(plan: LazyPlan):
