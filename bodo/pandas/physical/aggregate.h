@@ -2,11 +2,15 @@
 
 #include <memory>
 #include <utility>
+#include "../_util.h"
 #include "../io/arrow_reader.h"
 #include "../libs/_array_utils.h"
 #include "../libs/_utils.h"
 #include "../libs/groupby/_groupby_ftypes.h"
 #include "../libs/streaming/_groupby.h"
+#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "expression.h"
 #include "operator.h"
 
@@ -16,33 +20,79 @@
  */
 class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalAggregate(
-        std::shared_ptr<bodo::Schema> in_table_schema,
-        std::vector<duckdb::unique_ptr<duckdb::Expression>>& agg_exprs,
-        std::vector<duckdb::unique_ptr<duckdb::Expression>>& group_exprs) {
-        std::vector<bool> cols_to_keep_vec(in_table_schema->ncols(), true);
+    explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
+                               duckdb::LogicalAggregate& op) {
+        std::vector<duckdb::ColumnBinding> source_cols =
+            op.children[0]->GetColumnBindings();
+        // Map of column bindings to column indices in physical input table
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map;
+        // Initialize map of column bindings to column indices in physical input
+        // table.
+        for (size_t i = 0; i < source_cols.size(); i++) {
+            duckdb::ColumnBinding& col = source_cols[i];
+            col_ref_map[{col.table_index, col.column_index}] = i;
+        }
 
-        // TODO: handle keys properly
-        uint64_t n_keys = 1;
+        for (const auto& expr : op.groups) {
+            if (expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                throw std::runtime_error(
+                    "Groupby key expression is not a column reference: " +
+                    expr->ToString());
+            }
+            auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
+            this->keys.push_back(col_ref_map[{colref.binding.table_index,
+                                              colref.binding.column_index}]);
+        }
+
+        uint64_t ncols = in_table_schema->ncols();
+        initInputColumnMapping(this->input_col_inds, this->keys, ncols);
+
+        std::shared_ptr<bodo::Schema> in_table_schema_reordered =
+            in_table_schema->Project(this->input_col_inds);
+
+        std::vector<bool> cols_to_keep_vec(ncols, true);
+
+        std::vector<int32_t> f_in_cols;
+        for (const auto& expr : op.expressions) {
+            if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
+                throw std::runtime_error(
+                    "Aggregate expression is not a bound aggregate: " +
+                    expr->ToString());
+            }
+            auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
+            if (agg_expr.children.size() != 1 ||
+                agg_expr.children[0]->type !=
+                    duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                throw std::runtime_error(
+                    "Aggregate expression does not have a single column "
+                    "reference child: " +
+                    expr->ToString());
+            }
+            auto& colref =
+                agg_expr.children[0]->Cast<duckdb::BoundColumnRefExpression>();
+            size_t col_idx = col_ref_map[{colref.binding.table_index,
+                                          colref.binding.column_index}];
+
+            size_t reorder_col_idx =
+                std::find(this->input_col_inds.begin(),
+                          this->input_col_inds.end(), col_idx) -
+                this->input_col_inds.begin();
+            f_in_cols.push_back(reorder_col_idx);
+        }
+
+        std::vector<int32_t> f_in_offsets(f_in_cols.size() + 1);
+        std::iota(f_in_offsets.begin(), f_in_offsets.end(), 0);
 
         this->groupby_state = std::make_unique<GroupbyState>(
-            std::make_unique<bodo::Schema>(*in_table_schema),
+            std::make_unique<bodo::Schema>(*in_table_schema_reordered),
             // TODO
             std::vector<int32_t>({Bodo_FTypes::sum}),  // ftypes
-            std::vector<int32_t>(),
-            // TODO
-            std::vector<int32_t>({0, 1}),  // f_in_offsets
-            // TODO
-            std::vector<int32_t>({1}),  // f_in_cols
-            n_keys, std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec,
-            nullptr, get_streaming_batch_size(), true, -1, -1, -1);
+            std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
+            std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
+            get_streaming_batch_size(), true, -1, -1, -1);
 
         // TODO
-        this->output_schema = std::make_shared<bodo::Schema>();
-        output_schema->append_column(in_table_schema->column_types[0]->copy());
-        output_schema->append_column(in_table_schema->column_types[1]->copy());
-        output_schema->metadata = in_table_schema->metadata;
-        output_schema->column_names = in_table_schema->column_names;
+        this->output_schema = in_table_schema_reordered;
     }
 
     virtual ~PhysicalAggregate() = default;
@@ -59,9 +109,11 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
         bool request_input = true;
-        bool global_is_last =
-            groupby_build_consume_batch(this->groupby_state.get(), input_batch,
-                                        local_is_last, true, &request_input);
+        std::shared_ptr<table_info> input_batch_reordered =
+            ProjectTable(input_batch, this->input_col_inds);
+        bool global_is_last = groupby_build_consume_batch(
+            this->groupby_state.get(), input_batch_reordered, local_is_last,
+            true, &request_input);
 
         if (global_is_last) {
             return OperatorResult::FINISHED;
@@ -99,6 +151,9 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
    private:
     std::shared_ptr<GroupbyState> groupby_state;
     std::shared_ptr<bodo::Schema> output_schema;
+    std::vector<uint64_t> keys;
+    // Mapping of input table column indices to move keys to the front.
+    std::vector<int64_t> input_col_inds;
 };
 
 /**
