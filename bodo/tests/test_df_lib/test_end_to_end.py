@@ -849,4 +849,3 @@ def test_projection_expression1(datapath):
         sort_output=True,
         reset_index=True,
     )
-    print(bodo_df2)
