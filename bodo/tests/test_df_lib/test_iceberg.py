@@ -70,6 +70,13 @@ def test_table_read_limit(
         },
         limit=10,
     )
+    assert bodo_out.is_lazy_plan()
+
+    # Check that the plan has been optimized to a single read
+    pre, post = bpd.utils.getPlanStatistics(bodo_out._plan)
+    assert pre == 2
+    assert post == 1
+
     _test_equal(
         bodo_out,
         py_out.iloc[:10],
@@ -104,6 +111,11 @@ def test_table_read_head(
         },
     ).head(10)
     assert bodo_out.is_lazy_plan()
+
+    # Check that the plan has been optimized to a single read
+    pre, post = bpd.utils.getPlanStatistics(bodo_out._plan)
+    assert pre == 2
+    assert post == 1
 
     _test_equal(
         bodo_out,
