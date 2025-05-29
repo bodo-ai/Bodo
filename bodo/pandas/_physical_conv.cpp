@@ -188,8 +188,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     std::move(expr));
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalCastExpression>(
-                    buildPhysicalExprTree(bce->child),
-                    bce->return_type));
+                    buildPhysicalExprTree(bce->child), bce->return_type));
         } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
