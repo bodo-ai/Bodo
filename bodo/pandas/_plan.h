@@ -7,7 +7,6 @@
 #include <arrow/type.h>
 #include <fmt/format.h>
 #include <utility>
-#include "_util.h"
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
@@ -190,8 +189,7 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
 std::unique_ptr<duckdb::Expression> make_unaryop_expr(
-    std::unique_ptr<duckdb::Expression> &source,
-    std::string opstr);
+    std::unique_ptr<duckdb::Expression> &source, std::string opstr);
 
 /**
  * @brief Create a conjunction (and/or) expression from two sources.
@@ -284,11 +282,12 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
  * @param pyarrow_schema schema of the Iceberg dataset
  * @param table_name Identifier for the Iceberg table, includes schema and table
  * @param pyiceberg_catalog Iceberg catalog object
+ * @param iceberg_filter Iceberg filter expression
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_identifier,
-    PyObject *pyiceberg_catalog);
+    PyObject *pyiceberg_catalog, PyObject *iceberg_filter);
 
 /**
  * @brief Returns a statically created DuckDB database.
@@ -317,13 +316,6 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder();
  * @return duckdb::Optimizer& static optimizer object
  */
 duckdb::shared_ptr<duckdb::Optimizer> get_duckdb_optimizer();
-
-/**
- * @brief Returns a statically created AttachedDatabase.
- *
- * @return duckdb::AttachedDatabase& static context object
- */
-// duckdb::AttachedDatabase &get_attached_db();
 
 /**
  * @brief Convert an Arrow schema to DuckDB column names and data types to pass

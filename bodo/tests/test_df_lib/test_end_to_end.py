@@ -251,7 +251,6 @@ def test_filter_pushdown(datapath, file_path, op):
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
 def test_filter_distributed(datapath, op):
-    bodo.set_verbose_level(2)
     """Very simple test for filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -836,10 +835,10 @@ def test_dataframe_copy(index_val):
 def test_projection_expression1(datapath):
     """Very simple test for projection expressions."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bodo_df1[bodo_df1.A + 50 < bodo_df1.D * 2]
+    bodo_df2 = bodo_df1[(bodo_df1.A + 50) / 2 < bodo_df1.D * 2]
 
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1[py_df1.A + 50 < py_df1.D * 2]
+    py_df2 = py_df1[(py_df1.A + 50) / 2 < py_df1.D * 2]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     # TODO: remove forcing collect when copy() bug with RangeIndex(1) is fixed
@@ -850,4 +849,3 @@ def test_projection_expression1(datapath):
         sort_output=True,
         reset_index=True,
     )
-    print(bodo_df2)

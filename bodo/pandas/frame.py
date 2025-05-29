@@ -80,7 +80,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
             else:
                 self._source_plan = LazyPlan(
-                    "LogicalGetPandasReadSeq", empty_data, self
+                    "LogicalGetPandasReadSeq",
+                    empty_data,
+                    self,
                 )
 
             return self._source_plan
