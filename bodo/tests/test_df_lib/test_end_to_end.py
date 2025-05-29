@@ -832,7 +832,7 @@ def test_dataframe_copy(index_val):
     _test_equal(df1, pdf_from_bodo, sort_output=True)
 
 
-def test_projection_expression1(datapath):
+def test_compound_projection_expression(datapath):
     """Very simple test for projection expressions."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1[(bodo_df1.A + 50) / 2 < bodo_df1.D * 2]
@@ -849,7 +849,7 @@ def test_projection_expression1(datapath):
     )
 
 
-def test_projection_expression2(datapath):
+def test_projection_expression_floordiv(datapath):
     """Test for floordiv."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1[(bodo_df1.A // 3) * 7 > 15]
