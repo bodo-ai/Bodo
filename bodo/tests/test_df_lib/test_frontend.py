@@ -142,9 +142,17 @@ def test_merge_validation_checks():
 
     # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
     # key columns with the same names from output
-    # With "on" argument support, below test cases should work
 
-    # bdf1.merge(bdf3, how="inner")
-    # with pytest.raises(ValueError):
-    #     bdf1.merge(bdf2, how="inner", on=["A", "C"])
-    # bdf1.merge(bdf1, how="inner", on=["A", "B", "E"])
+    # Check should pass since merging with self
+    bdf1.merge(bdf1, how="inner")
+
+    # Check should fail since merging with other, without on-args
+    with pytest.raises(ValueError):
+        bdf1.merge(bdf2, how="inner")
+
+    # Check should fail since on-arg isn't a subset of the common columns
+    with pytest.raises(KeyError):
+        bdf1.merge(bdf2, how="inner", on=["A", "C"])
+
+    # Check should pass since merging with self
+    bdf1.merge(bdf1, how="inner", on=["A", "B", "E"])
