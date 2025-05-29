@@ -1,6 +1,5 @@
 #pragma once
 
-#include "_util.h"
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
 #include <arrow/type_traits.h>
@@ -9,6 +8,7 @@
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../tests/utils.h"
+#include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "operator.h"
 
@@ -122,7 +122,8 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
  *
  */
 std::shared_ptr<array_info> do_arrow_compute_cast(
-    std::shared_ptr<ExprResult> left_res, const duckdb::LogicalType &return_type);
+    std::shared_ptr<ExprResult> left_res,
+    const duckdb::LogicalType &return_type);
 
 /**
  * @brief Physical expression tree node type for comparisons resulting in
@@ -351,7 +352,8 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
 class PhysicalCastExpression : public PhysicalExpression {
    public:
     PhysicalCastExpression(std::shared_ptr<PhysicalExpression> left,
-                           duckdb::LogicalType _return_type) : return_type(_return_type) {
+                           duckdb::LogicalType _return_type)
+        : return_type(_return_type) {
         children.push_back(left);
     }
 

@@ -144,7 +144,8 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
 }
 
 std::shared_ptr<array_info> do_arrow_compute_cast(
-    std::shared_ptr<ExprResult> left_res, const duckdb::LogicalType &return_type) {
+    std::shared_ptr<ExprResult> left_res,
+    const duckdb::LogicalType &return_type) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprResult> left_as_array =
@@ -164,7 +165,8 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
             "do_arrow_compute left is neither array nor scalar.");
     }
 
-    std::shared_ptr<arrow::DataType> arrow_ret_type = duckdbTypeToArrow(return_type);
+    std::shared_ptr<arrow::DataType> arrow_ret_type =
+        duckdbTypeToArrow(return_type);
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::Cast(src1, arrow_ret_type);
     if (!cmp_res.ok()) [[unlikely]] {
