@@ -840,10 +840,25 @@ def test_projection_expression1(datapath):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1[(py_df1.A + 50) / 2 < py_df1.D * 2]
 
-    # TODO: remove copy when df.apply(axis=0) is implemented
-    # TODO: remove forcing collect when copy() bug with RangeIndex(1) is fixed
     _test_equal(
         bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_projection_expression2(datapath):
+    """Test for floordiv."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[(bodo_df1.A // 3) * 7 > 15]
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[(py_df1.A // 3) * 7 > 15]
+
+    _test_equal(
+        bodo_df2,
         py_df2,
         check_pandas_types=False,
         sort_output=True,
