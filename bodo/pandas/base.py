@@ -117,7 +117,13 @@ def _empty_like(val):
 
 
 @check_args_fallback(
-    supported=["catalog_name", "catalog_properties", "selected_fields", "limit"]
+    supported=[
+        "catalog_name",
+        "catalog_properties",
+        "selected_fields",
+        "limit",
+        "row_filter",
+    ]
 )
 def read_iceberg(
     table_identifier: str,
