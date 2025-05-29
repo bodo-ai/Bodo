@@ -35,6 +35,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
         std::vector<bool> cols_to_keep_vec(ncols, true);
 
+        std::vector<int32_t> ftypes;
+        // Create input data column indices (only single data column for now)
         std::vector<int32_t> f_in_cols;
         for (const auto& expr : op.expressions) {
             if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
@@ -61,15 +63,24 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                           this->input_col_inds.end(), col_idx) -
                 this->input_col_inds.begin();
             f_in_cols.push_back(reorder_col_idx);
+
+            // Check if the aggregate function is supported
+            if (function_to_ftype.find(agg_expr.function.name) ==
+                function_to_ftype.end()) {
+                throw std::runtime_error("Unsupported aggregate function: " +
+                                         agg_expr.function.name);
+            }
+
+            ftypes.push_back(function_to_ftype.at(agg_expr.function.name));
         }
 
+        // Offsets for the input data columns, which are trivial since we have a
+        // single data column
         std::vector<int32_t> f_in_offsets(f_in_cols.size() + 1);
         std::iota(f_in_offsets.begin(), f_in_offsets.end(), 0);
 
         this->groupby_state = std::make_unique<GroupbyState>(
-            std::make_unique<bodo::Schema>(*in_table_schema_reordered),
-            // TODO
-            std::vector<int32_t>({Bodo_FTypes::sum}),  // ftypes
+            std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
             get_streaming_batch_size(), true, -1, -1, -1);
@@ -158,6 +169,14 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     std::vector<uint64_t> keys;
     // Mapping of input table column indices to move keys to the front.
     std::vector<int64_t> input_col_inds;
+
+    // Map from function name to Bodo_FTypes
+    static const std::map<std::string, int32_t> function_to_ftype;
+};
+
+// Definition of the static member
+const std::map<std::string, int32_t> PhysicalAggregate::function_to_ftype = {
+    {"sum", Bodo_FTypes::sum},
 };
 
 /**
