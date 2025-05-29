@@ -132,6 +132,7 @@ def read_iceberg(
 ) -> BodoDataFrame:
     import pyiceberg.catalog
     import pyiceberg.expressions
+    import pyiceberg.table
 
     if catalog_properties is None:
         catalog_properties = {}
@@ -148,7 +149,10 @@ def read_iceberg(
         empty_df,
         table_identifier,
         catalog,
-        pyiceberg.expressions.AlwaysTrue(),
+        pyiceberg.table._parse_row_filter(row_filter)
+        if row_filter
+        else pyiceberg.expressions.AlwaysTrue(),
+        pyiceberg_schema,
         __pa_schema=arrow_schema,
     )
 
