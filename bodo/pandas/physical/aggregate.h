@@ -25,16 +25,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
 
-        for (const auto& expr : op.groups) {
-            if (expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
-                throw std::runtime_error(
-                    "Groupby key expression is not a column reference: " +
-                    expr->ToString());
-            }
-            auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
-            this->keys.push_back(col_ref_map[{colref.binding.table_index,
-                                              colref.binding.column_index}]);
-        }
+        this->initKeys(col_ref_map, op.groups);
 
         uint64_t ncols = in_table_schema->ncols();
         initInputColumnMapping(this->input_col_inds, this->keys, ncols);
@@ -141,6 +132,27 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     }
 
    private:
+    /**
+     * @brief Initialize the key column indices for the groupby operation.
+     *
+     * @param col_ref_map Mapping of column references to indices.
+     * @param groups List of group expressions.
+     */
+    void initKeys(
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map,
+        const duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& groups) {
+        for (const auto& expr : groups) {
+            if (expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                throw std::runtime_error(
+                    "Groupby key expression is not a column reference: " +
+                    expr->ToString());
+            }
+            auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
+            this->keys.push_back(col_ref_map[{colref.binding.table_index,
+                                              colref.binding.column_index}]);
+        }
+    }
+
     std::shared_ptr<GroupbyState> groupby_state;
     std::shared_ptr<bodo::Schema> output_schema;
     std::vector<uint64_t> keys;
