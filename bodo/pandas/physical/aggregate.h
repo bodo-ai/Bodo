@@ -22,16 +22,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
                                duckdb::LogicalAggregate& op) {
-        std::vector<duckdb::ColumnBinding> source_cols =
-            op.children[0]->GetColumnBindings();
-        // Map of column bindings to column indices in physical input table
-        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map;
-        // Initialize map of column bindings to column indices in physical input
-        // table.
-        for (size_t i = 0; i < source_cols.size(); i++) {
-            duckdb::ColumnBinding& col = source_cols[i];
-            col_ref_map[{col.table_index, col.column_index}] = i;
-        }
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+            getColRefMap(op.children[0]->GetColumnBindings());
 
         for (const auto& expr : op.groups) {
             if (expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {

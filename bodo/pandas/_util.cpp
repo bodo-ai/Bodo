@@ -67,3 +67,13 @@ void initInputColumnMapping(std::vector<int64_t>& col_inds,
         col_inds.push_back(i);
     }
 }
+
+std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
+    std::vector<duckdb::ColumnBinding> source_cols) {
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map;
+    for (size_t i = 0; i < source_cols.size(); i++) {
+        duckdb::ColumnBinding& col = source_cols[i];
+        col_ref_map[{col.table_index, col.column_index}] = i;
+    }
+    return col_ref_map;
+}

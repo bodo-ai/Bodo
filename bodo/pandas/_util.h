@@ -2,8 +2,10 @@
 
 #include <arrow/api.h>
 #include <cstdint>
+#include <map>
 #include <variant>
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/planner/column_binding.hpp"
 
 /**
  * @brief Convert duckdb value to C++ variant.
@@ -56,3 +58,13 @@ duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
  */
 void initInputColumnMapping(std::vector<int64_t> &col_inds,
                             std::vector<uint64_t> &keys, uint64_t ncols);
+
+/**
+ * @brief Create a map of column bindings to column indices in physical input
+ * table
+ *
+ * @param source_cols column bindings in source table
+ * @return std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+ */
+std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
+    std::vector<duckdb::ColumnBinding> source_cols);
