@@ -1,6 +1,7 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
+#include <cstddef>
 #include <utility>
 
 #include "../io/arrow_compat.h"
@@ -126,7 +127,7 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> children;
     duckdb::vector<duckdb::LogicalType> arg_types;
     for (int col_idx : input_column_indices) {
-        if (col_idx < 0 || col_idx >= source_cols.size()) {
+        if (col_idx < 0 || static_cast<size_t>(col_idx) >= source_cols.size()) {
             throw std::runtime_error(
                 fmt::format("make_agg_expr: Column index {} out of bounds for "
                             "source columns",
@@ -322,7 +323,7 @@ duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
 
     std::vector<duckdb::unique_ptr<duckdb::Expression>> group_exprs;
     for (int key_idx : key_indices) {
-        if (key_idx < 0 || key_idx >= source_cols.size()) {
+        if (key_idx < 0 || static_cast<size_t>(key_idx) >= source_cols.size()) {
             throw std::runtime_error(
                 fmt::format("make_aggregate: Key index {} out of bounds for "
                             "source columns",
