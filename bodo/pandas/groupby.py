@@ -25,7 +25,9 @@ class DataFrameGroupBy:
     https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/groupby/generic.py#L1329
     """
 
-    def __init__(self, obj, keys, selection=None):
+    def __init__(
+        self, obj: pd.DataFrame, keys: list[str], selection: list[str] | None = None
+    ):
         self._obj = obj
         self._keys = keys
         self._selection = selection
@@ -63,7 +65,7 @@ class SeriesGroupBy:
     Similar to pandas SeriesGroupBy.
     """
 
-    def __init__(self, obj, keys, selection):
+    def __init__(self, obj: pd.DataFrame, keys: list[str], selection: list[str]):
         self._obj = obj
         self._keys = keys
         self._selection = selection
