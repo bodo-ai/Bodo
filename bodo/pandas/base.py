@@ -12,6 +12,7 @@ from bodo.pandas.utils import (
     LazyPlanDistributedArg,
     arrow_to_empty_df,
     check_args_fallback,
+    make_col_ref_exprs,
     wrap_plan,
 )
 
@@ -115,7 +116,9 @@ def _empty_like(val):
     return out
 
 
-@check_args_fallback(supported=["catalog_name", "catalog_properties"])
+@check_args_fallback(
+    supported=["catalog_name", "catalog_properties", "selected_fields", "limit"]
+)
 def read_iceberg(
     table_identifier: str,
     catalog_name: str | None = None,
@@ -148,4 +151,26 @@ def read_iceberg(
         pyiceberg.expressions.AlwaysTrue(),
         __pa_schema=arrow_schema,
     )
+
+    if selected_fields is not None:
+        col_idxs = {
+            arrow_schema.get_field_index(field_name) for field_name in selected_fields
+        }
+        exprs = make_col_ref_exprs(col_idxs, plan)
+        empty_df = empty_df[list(selected_fields)]
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_df,
+            plan,
+            exprs,
+        )
+
+    if limit is not None:
+        plan = LazyPlan(
+            "LogicalLimit",
+            empty_df,
+            plan,
+            limit,
+        )
+
     return wrap_plan(plan=plan)

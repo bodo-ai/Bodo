@@ -18,7 +18,9 @@ class PhysicalResultCollector : public PhysicalSink {
         if (in_schema->ncols() != out_schema->ncols()) {
             throw std::runtime_error(
                 "Input and output schemas must have the same number of "
-                "columns.");
+                "columns. Input schema has " +
+                std::to_string(in_schema->ncols()) + " and output schema has " +
+                std::to_string(out_schema->ncols()) + " columns.");
         }
         for (auto& col : in_schema->column_types) {
             // Note that none of the columns are "keys" from the perspective of

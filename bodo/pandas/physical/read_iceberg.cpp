@@ -1,6 +1,5 @@
 #include "read_iceberg.h"
 #include <arrow/util/key_value_metadata.h>
-#include <iostream>
 #include "physical/operator.h"
 
 PhysicalReadIceberg::PhysicalReadIceberg(
@@ -9,6 +8,8 @@ PhysicalReadIceberg::PhysicalReadIceberg(
     std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val)
     : arrow_schema(std::move(arrow_schema)),
+      out_arrow_schema(
+          this->create_out_arrow_schema(this->arrow_schema, selected_columns)),
       internal_reader(this->create_internal_reader(
           catalog, table_id, iceberg_filter, this->arrow_schema,
           selected_columns, limit_val)),
@@ -33,7 +34,7 @@ PhysicalReadIceberg::ProduceBatch() {
 }
 
 const std::shared_ptr<bodo::Schema> PhysicalReadIceberg::getOutputSchema() {
-    return bodo::Schema::FromArrowSchema(this->arrow_schema);
+    return bodo::Schema::FromArrowSchema(this->out_arrow_schema);
 }
 
 std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
@@ -58,7 +59,6 @@ PhysicalReadIceberg::create_internal_reader(
     std::shared_ptr<arrow::Schema> arrow_schema,
     std::vector<int> &selected_columns,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
-    assert(arrow_schema->num_fields() == selected_columns.size());
     // Pipeline buffers assume everything is nullable
     std::vector<bool> is_nullable(selected_columns.size(), true);
 
@@ -76,10 +76,29 @@ PhysicalReadIceberg::create_internal_reader(
     // increment the reference count since the reader steals it.
     Py_INCREF(catalog);
     auto reader = std::make_unique<IcebergParquetReader>(
-        catalog, table_id.c_str(), true, -1, iceberg_filter, "", Py_None,
-        selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
-        get_streaming_batch_size(), -1, total_rows_to_read);
+        catalog, table_id.c_str(), true, total_rows_to_read, iceberg_filter, "",
+        Py_None, selected_columns, is_nullable,
+        arrow::py::wrap_schema(arrow_schema), get_streaming_batch_size(), -1,
+        -1);
     // TODO: Figure out cols to dict encode
     reader->init_iceberg_reader({}, false);
     return reader;
+}
+
+std::shared_ptr<arrow::Schema> PhysicalReadIceberg::create_out_arrow_schema(
+    std::shared_ptr<arrow::Schema> arrow_schema,
+    const std::vector<int> &selected_columns) {
+    // Create a new schema with only the selected columns.
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(selected_columns.size());
+    for (int i : selected_columns) {
+        if (!(i >= 0 && i < arrow_schema->num_fields())) {
+            throw std::runtime_error(
+                "PhysicalReadParquet(): invalid column index " +
+                std::to_string(i) + " for schema with " +
+                std::to_string(arrow_schema->num_fields()) + " fields");
+        }
+        fields.push_back(arrow_schema->field(i));
+    }
+    return arrow::schema(fields, arrow_schema->metadata());
 }
