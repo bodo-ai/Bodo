@@ -832,6 +832,32 @@ def test_dataframe_copy(index_val):
     _test_equal(df1, pdf_from_bodo, sort_output=True)
 
 
+def test_basic_groupby():
+    """
+    Test a simple groupby operation.
+    """
+    df1 = pd.DataFrame(
+        {
+            "B": ["a1", "b11", "c111"] * 2,
+            "E": [1.1, 2.2, 13.3] * 2,
+            "A": pd.array([2, 2, 3] * 2, "Int64"),
+        },
+        index=[0, 41, 2] * 2,
+    )
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bdf1.groupby("A")["E"].sum()
+    assert bdf2.is_lazy_plan()
+
+    df2 = df1.groupby("A")["E"].sum()
+
+    _test_equal(
+        bdf2,
+        df2,
+        sort_output=True,
+    )
+
+
 def test_compound_projection_expression(datapath):
     """Very simple test for projection expressions."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
