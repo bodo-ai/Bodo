@@ -1,6 +1,7 @@
 #include "read_iceberg.h"
 #include <arrow/util/key_value_metadata.h>
 #include "../../libs/_utils.h"
+#include "../_util.h"
 #include "physical/operator.h"
 
 PhysicalReadIceberg::PhysicalReadIceberg(
@@ -132,14 +133,28 @@ PhysicalReadIceberg::create_internal_reader(
         Py_INCREF(filter_scalars);
     }
 
+    // We need to & the iceberg_filter with converted duckdb table filters
+    // to apply the filters at the file level.
+    PyObjectPtr duckdb_iceberg_filter =
+        duckdbFilterToPyicebergFilter(filter_exprs, arrow_schema);
+
+    // Perform the python & to combine the filters
+    // IcebergParquetReader takes ownership
+    PyObject *py_iceberg_filter_and_duckdb_filter = PyObject_CallMethod(
+        duckdb_iceberg_filter, "__and__", "O", iceberg_filter);
+    if (!py_iceberg_filter_and_duckdb_filter) {
+        throw std::runtime_error(
+            "failed to combine iceberg filter with duckdb table filters");
+    }
+
     // We're borrowing a reference to the catalog object, so we need to
     // increment the reference count since the reader steals it.
     Py_INCREF(catalog);
     auto reader = std::make_unique<IcebergParquetReader>(
-        catalog, table_id.c_str(), true, total_rows_to_read, iceberg_filter,
-        iceberg_filter_str, filter_scalars, selected_columns, is_nullable,
-        arrow::py::wrap_schema(arrow_schema), get_streaming_batch_size(), -1,
-        -1);
+        catalog, table_id.c_str(), true, total_rows_to_read,
+        py_iceberg_filter_and_duckdb_filter, iceberg_filter_str, filter_scalars,
+        selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
+        get_streaming_batch_size(), -1, -1);
     // TODO: Figure out cols to dict encode
     reader->init_iceberg_reader({}, false);
     return reader;

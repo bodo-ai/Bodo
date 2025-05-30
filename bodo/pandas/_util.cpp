@@ -2,6 +2,7 @@
 #include <arrow/compute/api.h>
 #include <arrow/python/pyarrow.h>
 #include "../io/arrow_compat.h"
+#include "../libs/_utils.h"
 #include "duckdb/planner/filter/constant_filter.hpp"
 
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
@@ -181,4 +182,20 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +
                 std::to_string(static_cast<int>(type.id())));
     }
+}
+
+PyObject *duckdbFilterToPyicebergFilter(
+    duckdb::TableFilterSet &filters,
+    std::shared_ptr<arrow::Schema> arrow_schema) {
+    PyObjectPtr pyiceberg_expression_mod =
+        PyImport_ImportModule("pyiceberg.expressions");
+    if (!pyiceberg_expression_mod) {
+        throw std::runtime_error(
+            "Failed to import pyiceberg.expressions module");
+    }
+    // Default return is pyiceberg.expressions.AlwaysTrue()
+    PyObject *ret = PyObject_CallMethod(pyiceberg_expression_mod.get(),
+                                        "AlwaysTrue", nullptr);
+
+    return ret;
 }
