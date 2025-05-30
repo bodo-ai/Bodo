@@ -40,8 +40,10 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         for (size_t i = 0; i < this->keys.size(); i++) {
             this->output_schema->append_column(
                 in_table_schema_reordered->column_types[i]->copy());
-            this->output_schema->column_names.push_back(
-                in_table_schema_reordered->column_names[i]);
+            if (in_table_schema_reordered->column_names.size() > 0) {
+                this->output_schema->column_names.push_back(
+                    in_table_schema_reordered->column_names[i]);
+            }
         }
         this->output_schema->metadata = std::make_shared<TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
