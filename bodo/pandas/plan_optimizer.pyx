@@ -168,7 +168,7 @@ def str_to_expr_type(val):
     elif val == "__invert__":
         return CExpressionType.OPERATOR_NOT
     else:
-        raise NotImplementedError("Unhandled case in str_to_expr_type")
+        raise NotImplementedError(f"Unhandled case {str(val)} in str_to_expr_type")
 
 cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" nogil:
     cpdef enum class CExpressionClass "duckdb::ExpressionClass":
@@ -285,7 +285,9 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, idx_t group_index, idx_t aggregate_index, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
-    cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr) except +
+    cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
@@ -517,7 +519,7 @@ cdef class LogicalFilter(LogicalOperator):
         return f"LogicalFilter()"
 
 
-cdef class BinaryOpExpression(Expression):
+cdef class ComparisonOpExpression(Expression):
     """Wrapper around DuckDB's BoundComparisonExpression and other binary operators to provide access in Python.
     """
 
@@ -529,13 +531,60 @@ cdef class BinaryOpExpression(Expression):
         rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
 
         self.out_schema = out_schema
-        self.c_expression = make_binop_expr(
+        self.c_expression = make_comparison_expr(
             lhs_expr,
             rhs_expr,
             str_to_expr_type(binop))
 
     def __str__(self):
-        return f"BinaryOpExpression({self.out_schema})"
+        return f"ComparisonOpExpression({self.out_schema})"
+
+
+def python_arith_dunder_to_duckdb(str opstr):
+    """
+    Convert a Python arithmetic dunder method name to duckdb catalog name.
+    """
+    if opstr == "__add__" or opstr == "__radd__":
+        return "+"
+    elif opstr == "__sub__" or opstr == "__rsub__":
+        return "-"
+    elif opstr == "__mul__" or opstr == "__rmul__":
+        return "*"
+    elif opstr == "__truediv__" or opstr == "__rtruediv__":
+        return "/"
+    else:
+        raise NotImplementedError("Unknown Python arith dunder method name")
+
+
+cdef class ArithOpExpression(Expression):
+    """Wrapper around DuckDB's BoundComparisonExpression and other binary operators to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, lhs, rhs, str opstr):
+        cdef unique_ptr[CExpression] lhs_expr
+        cdef unique_ptr[CExpression] rhs_expr
+
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+
+        self.out_schema = out_schema
+        # The // operator in Python we have to implement as a truediv followed by a floor.
+        # Do the semantics work here for negative divisors?
+        if opstr in ["__floordiv__", "__rfloordiv__"]:
+            truediv_expression = make_arithop_expr(
+                lhs_expr,
+                rhs_expr,
+                "/".encode())
+            self.c_expression = make_unaryop_expr(truediv_expression, "floor".encode())
+        else:
+            duckdb_op = python_arith_dunder_to_duckdb(opstr)
+            self.c_expression = make_arithop_expr(
+                lhs_expr,
+                rhs_expr,
+                duckdb_op.encode())
+
+    def __str__(self):
+        return f"ArithOpExpression({self.out_schema})"
 
 
 cdef class ConjunctionOpExpression(Expression):
@@ -651,7 +700,9 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     """
     cdef readonly str table_identifier
 
-    def __cinit__(self, object out_schema, str table_identifier, object catalog, object iceberg_filter, object iceberg_schema):
+    def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema):
+        import pyiceberg.catalog
+        cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
         self.out_schema = out_schema
         self.table_identifier = table_identifier
         cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter, iceberg_schema)

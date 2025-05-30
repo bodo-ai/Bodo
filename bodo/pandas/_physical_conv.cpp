@@ -3,6 +3,7 @@
 #include "_bodo_scan_function.h"
 
 #include "_util.h"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
@@ -152,9 +153,46 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                         "Unsupported number of children for bound operator");
             }
         } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_FUNCTION: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            duckdb::unique_ptr<duckdb::BoundFunctionExpression> bfe =
+                dynamic_cast_unique_ptr<duckdb::BoundFunctionExpression>(
+                    std::move(expr));
+            switch (bfe->children.size()) {
+                case 1: {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalUnaryExpression>(
+                            buildPhysicalExprTree(bfe->children[0]),
+                            bfe->function.name));
+                } break;
+                case 2: {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalBinaryExpression>(
+                            buildPhysicalExprTree(bfe->children[0]),
+                            buildPhysicalExprTree(bfe->children[1]),
+                            bfe->function.name));
+                } break;
+                default:
+                    throw std::runtime_error(
+                        "Unsupported number of children " +
+                        std::to_string(bfe->children.size()) +
+                        " for bound function");
+            }
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CAST: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            duckdb::unique_ptr<duckdb::BoundCastExpression> bce =
+                dynamic_cast_unique_ptr<duckdb::BoundCastExpression>(
+                    std::move(expr));
+            return std::static_pointer_cast<PhysicalExpression>(
+                std::make_shared<PhysicalCastExpression>(
+                    buildPhysicalExprTree(bce->child), bce->return_type));
+        } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
-                "Unsupported duckdb expression type " +
+                "Unsupported duckdb expression class " +
                 std::to_string(static_cast<int>(expr_class)));
     }
     throw std::logic_error("Control should never reach here");

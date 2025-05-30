@@ -369,14 +369,33 @@ class LazyPlan:
         self.pa_schema = pa_schema
 
     def __str__(self):
+        args = self.args
+
+        # Avoid duplicated plan strings by omitting data_source.
+        if self.plan_class == "ColRefExpression":
+            col_index = args[1]
+            return f"ColRefExpression({col_index})"
+        elif self.plan_class == "PythonScalarFuncExpression":
+            func_name, col_indices = args[1][0], args[2]
+            return f"PythonScalarFuncExpression({func_name}, {col_indices})"
+
         out = f"{self.plan_class}: \n"
-        for arg in self.args:
+        args_str = ""
+        for arg in args:
             if isinstance(arg, pd.DataFrame):
-                out += f"  {arg.columns.tolist()}\n"
-                continue
-            out += f"  {arg}\n"
+                args_str += f"{arg.columns.tolist()}\n"
+            elif arg is not None:
+                args_str += f"{arg}\n"
+
         for k, v in self.kwargs.items():
-            out += f"  {k}: {v}\n"
+            args_str += f"{k}: {v}\n"
+
+        out += "\n".join(
+            f"  {arg_line}"
+            for arg_line in args_str.split("\n")
+            if not arg_line.isspace()
+        )
+
         return out
 
     __repr__ = __str__
@@ -429,7 +448,10 @@ def execute_plan(plan: LazyPlan):
 
         duckdb_plan = plan.generate_duckdb()
 
-        if bodo.dataframe_library_dump_plans:
+        if (
+            bodo.dataframe_library_dump_plans
+            and bodo.libs.distributed_api.get_rank() == 0
+        ):
             print(duckdb_plan.toString())
 
         # Print the plan before optimization
@@ -440,7 +462,10 @@ def execute_plan(plan: LazyPlan):
 
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
 
-        if bodo.dataframe_library_dump_plans:
+        if (
+            bodo.dataframe_library_dump_plans
+            and bodo.libs.distributed_api.get_rank() == 0
+        ):
             print(optimized_plan.toString())
 
         # Print the plan after optimization
@@ -584,17 +609,21 @@ def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
     return the result as a C++ table and column names.
     """
     input = cpp_table_to_df(cpp_table, arrow_schema)
-    func_path_str, is_series, is_method, args, kwargs = in_args
+    func_path_str, is_series, is_attr, args, kwargs = in_args
 
     if is_series:
         assert input.shape[1] == 1, "run_func_on_table: single column expected"
         input = input.iloc[:, 0]
 
-    if is_method:
+    if is_attr:
         func = input
         for atr in func_path_str.split("."):
             func = getattr(func, atr)
-        out = func(*args, **kwargs)
+        if not callable(func):
+            # func is assumed to be an accessor
+            out = func
+        else:
+            out = func(*args, **kwargs)
     else:
         # TODO: test this path
         func = _get_function_from_path(func_path_str)

@@ -154,7 +154,8 @@ def read_iceberg(
         "LogicalGetIcebergRead",
         empty_df,
         table_identifier,
-        catalog,
+        catalog_name,
+        catalog_properties,
         pyiceberg.table._parse_row_filter(row_filter)
         if row_filter
         else pyiceberg.expressions.AlwaysTrue(),

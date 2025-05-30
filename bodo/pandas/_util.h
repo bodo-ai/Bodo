@@ -50,3 +50,12 @@ duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
 
 PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
                                        PyObject *schema_fields);
+
+/**
+ * @brief Convert duckdb type to arrow type.
+ *
+ * @param type - the duckdb type to convert
+ * @return the converted type
+ */
+std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
+    const duckdb::LogicalType &type);
