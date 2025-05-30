@@ -1637,7 +1637,7 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
 
 /**
  * @brief Function to produce an output table called directly from
- * Python. This is handles all the functionality separately for exception
+ * Python. This handles all the functionality separately for exception
  * handling with grouping sets.
  *
  * @param groupby_state groupby state pointer
