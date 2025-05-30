@@ -125,59 +125,60 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
     ret = arrow::py::wrap_expression(whole);
 
     return ret;
-    void initInputColumnMapping(std::vector<int64_t> & col_inds,
-                                std::vector<uint64_t> & keys, uint64_t ncols) {
-        for (uint64_t i : keys) {
-            col_inds.push_back(i);
-        }
-        for (uint64_t i = 0; i < ncols; i++) {
-            if (std::find(keys.begin(), keys.end(), i) != keys.end()) {
-                continue;
-            }
-            col_inds.push_back(i);
-        }
+}
+void initInputColumnMapping(std::vector<int64_t> &col_inds,
+                            std::vector<uint64_t> &keys, uint64_t ncols) {
+    for (uint64_t i : keys) {
+        col_inds.push_back(i);
     }
+    for (uint64_t i = 0; i < ncols; i++) {
+        if (std::find(keys.begin(), keys.end(), i) != keys.end()) {
+            continue;
+        }
+        col_inds.push_back(i);
+    }
+}
 
-    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
-        std::vector<duckdb::ColumnBinding> source_cols) {
-        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map;
-        for (size_t i = 0; i < source_cols.size(); i++) {
-            duckdb::ColumnBinding &col = source_cols[i];
-            col_ref_map[{col.table_index, col.column_index}] = i;
-        }
-        return col_ref_map;
+std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
+    std::vector<duckdb::ColumnBinding> source_cols) {
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map;
+    for (size_t i = 0; i < source_cols.size(); i++) {
+        duckdb::ColumnBinding &col = source_cols[i];
+        col_ref_map[{col.table_index, col.column_index}] = i;
     }
+    return col_ref_map;
+}
 
-    std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
-        const duckdb::LogicalType &type) {
-        switch (type.id()) {
-            case duckdb::LogicalTypeId::TINYINT:
-                return arrow::int8();
-            case duckdb::LogicalTypeId::SMALLINT:
-                return arrow::int16();
-            case duckdb::LogicalTypeId::INTEGER:
-                return arrow::int32();
-            case duckdb::LogicalTypeId::BIGINT:
-                return arrow::int64();
-            case duckdb::LogicalTypeId::UTINYINT:
-                return arrow::uint8();
-            case duckdb::LogicalTypeId::USMALLINT:
-                return arrow::uint16();
-            case duckdb::LogicalTypeId::UINTEGER:
-                return arrow::uint32();
-            case duckdb::LogicalTypeId::UBIGINT:
-                return arrow::uint64();
-            case duckdb::LogicalTypeId::FLOAT:
-                return arrow::float32();
-            case duckdb::LogicalTypeId::DOUBLE:
-                return arrow::float64();
-            case duckdb::LogicalTypeId::BOOLEAN:
-                return arrow::boolean();
-            case duckdb::LogicalTypeId::VARCHAR:
-                return arrow::large_utf8();
-            default:
-                throw std::runtime_error(
-                    "duckdbTypeToArrow unsupported LogicalType conversion " +
-                    std::to_string(static_cast<int>(type.id())));
-        }
+std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
+    const duckdb::LogicalType &type) {
+    switch (type.id()) {
+        case duckdb::LogicalTypeId::TINYINT:
+            return arrow::int8();
+        case duckdb::LogicalTypeId::SMALLINT:
+            return arrow::int16();
+        case duckdb::LogicalTypeId::INTEGER:
+            return arrow::int32();
+        case duckdb::LogicalTypeId::BIGINT:
+            return arrow::int64();
+        case duckdb::LogicalTypeId::UTINYINT:
+            return arrow::uint8();
+        case duckdb::LogicalTypeId::USMALLINT:
+            return arrow::uint16();
+        case duckdb::LogicalTypeId::UINTEGER:
+            return arrow::uint32();
+        case duckdb::LogicalTypeId::UBIGINT:
+            return arrow::uint64();
+        case duckdb::LogicalTypeId::FLOAT:
+            return arrow::float32();
+        case duckdb::LogicalTypeId::DOUBLE:
+            return arrow::float64();
+        case duckdb::LogicalTypeId::BOOLEAN:
+            return arrow::boolean();
+        case duckdb::LogicalTypeId::VARCHAR:
+            return arrow::large_utf8();
+        default:
+            throw std::runtime_error(
+                "duckdbTypeToArrow unsupported LogicalType conversion " +
+                std::to_string(static_cast<int>(type.id())));
     }
+}
