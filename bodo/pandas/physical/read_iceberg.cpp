@@ -139,7 +139,7 @@ PhysicalReadIceberg::create_internal_reader(
         duckdbFilterToPyicebergFilter(filter_exprs, arrow_schema);
 
     // Perform the python & to combine the filters
-    // IcebergParquetReader takes ownership
+    // IcebergParquetReader takes ownership, so don't decref
     PyObject *py_iceberg_filter_and_duckdb_filter = PyObject_CallMethod(
         duckdb_iceberg_filter, "__and__", "O", iceberg_filter);
     if (!py_iceberg_filter_and_duckdb_filter) {
