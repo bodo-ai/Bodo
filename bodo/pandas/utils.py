@@ -369,14 +369,33 @@ class LazyPlan:
         self.pa_schema = pa_schema
 
     def __str__(self):
+        args = self.args
+
+        # Avoid duplicated plan strings by omitting data_source.
+        if self.plan_class == "ColRefExpression":
+            col_index = args[1]
+            return f"ColRefExpression({col_index})"
+        elif self.plan_class == "PythonScalarFuncExpression":
+            func_name, col_indices = args[1][0], args[2]
+            return f"PythonScalarFuncExpression({func_name}, {col_indices})"
+
         out = f"{self.plan_class}: \n"
-        for arg in self.args:
+        args_str = ""
+        for arg in args:
             if isinstance(arg, pd.DataFrame):
-                out += f"  {arg.columns.tolist()}\n"
-                continue
-            out += f"  {arg}\n"
+                args_str += f"{arg.columns.tolist()}\n"
+            elif arg is not None:
+                args_str += f"{arg}\n"
+
         for k, v in self.kwargs.items():
-            out += f"  {k}: {v}\n"
+            args_str += f"{k}: {v}\n"
+
+        out += "\n".join(
+            f"  {arg_line}"
+            for arg_line in args_str.split("\n")
+            if not arg_line.isspace()
+        )
+
         return out
 
     __repr__ = __str__
