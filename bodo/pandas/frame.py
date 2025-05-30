@@ -201,6 +201,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             case ExecState.COLLECTED:
                 return super().__len__()
 
+    def __repr__(self):
+        # Pandas repr implementation calls len() first which will execute an extra
+        # count query before the actual plan which is unnecessary.
+        if self._exec_state == ExecState.PLAN:
+            self.execute_plan()
+        return super().__repr__()
+
     @property
     def index(self):
         self.execute_plan()
