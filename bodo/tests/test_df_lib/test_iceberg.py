@@ -1,7 +1,9 @@
 import pyiceberg.catalog
+import pyiceberg.expressions
 import pytest
 
 import bodo.pandas as bpd
+from bodo.io.iceberg.catalog.dir import DirCatalog
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.utils import _test_equal
 
@@ -183,6 +185,51 @@ def test_table_read_select_columns(
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
     )[["A", "C"]]
+
+    _test_equal(
+        bodo_out,
+        py_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "SIMPLE_NUMERIC_TABLE",
+    ],
+)
+def test_table_read_row_filter(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    catalog = DirCatalog(
+        None,
+        **{
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    table = catalog.load_table(f"{db_schema}.{table_name}")
+    filter_expr = pyiceberg.expressions.And(
+        pyiceberg.expressions.LessThan("A", 5),
+        pyiceberg.expressions.Not(pyiceberg.expressions.GreaterThanOrEqual("C", 10)),
+    )
+    py_out = table.scan(row_filter=filter_expr).to_pandas()
+
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+        row_filter=filter_expr,
+    )
 
     _test_equal(
         bodo_out,

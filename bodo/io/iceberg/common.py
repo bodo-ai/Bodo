@@ -15,7 +15,11 @@ from pyarrow.fs import FileSystem, FSSpecHandler
 from bodo.utils.utils import BodoError, run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
+    from typing import Any
+
+    from pyiceberg.expressions import BooleanExpression
     from pyiceberg.io import FileIO
+    from pyiceberg.schema import Schema
     from pyiceberg.table import FileScanTask
 
 
@@ -215,3 +219,19 @@ def _format_data_loc(data_loc: str, fs: FileSystem) -> str:
         parsed = urlparse(data_loc)
         return f"{parsed.username}{parsed.path}"
     return data_loc
+
+
+def pyiceberg_filter_to_pyarrow_format_str_and_scalars(
+    expr: BooleanExpression, schema: Schema, case_sensitive: bool
+) -> tuple[str, list[tuple[str, Any]]]:
+    """Turns a pyiceberg filter into expr_filter_f_str and filter_scalars for use in other functions like get_iceberg_pq_dataset."""
+    # We need to bind the PyIceberg filter expression to the schema
+    from pyiceberg.expressions.visitors import bind, visit
+
+    from bodo.io.iceberg.filter_conversion import (
+        _ConvertToArrowExpressionStringAndScalar,
+    )
+
+    bound_expr = bind(schema, expr, case_sensitive=case_sensitive)
+
+    return visit(bound_expr, _ConvertToArrowExpressionStringAndScalar())
