@@ -655,6 +655,14 @@ def test_set_df_column(datapath, index_val):
     assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf, check_pandas_types=False)
 
+    # Trivial case: set a column to existing column
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["B"]
+    pdf = df.copy()
+    pdf["D"] = pdf["B"]
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
 
 def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
