@@ -147,7 +147,8 @@ def read_iceberg(
         "LogicalGetIcebergRead",
         empty_df,
         table_identifier,
-        catalog,
+        catalog_name,
+        catalog_properties,
         pyiceberg.expressions.AlwaysTrue(),
         __pa_schema=arrow_schema,
     )

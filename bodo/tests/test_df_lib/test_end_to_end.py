@@ -840,6 +840,58 @@ def test_sort(datapath):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1.sort_values(by=["A", "D"], ascending=[True, False], na_position="last")
 
+
+def test_basic_groupby():
+    """
+    Test a simple groupby operation.
+    """
+    df1 = pd.DataFrame(
+        {
+            "B": ["a1", "b11", "c111"] * 2,
+            "E": [1.1, 2.2, 13.3] * 2,
+            "A": pd.array([2, 2, 3] * 2, "Int64"),
+        },
+        index=[0, 41, 2] * 2,
+    )
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bdf1.groupby("A")["E"].sum()
+    assert bdf2.is_lazy_plan()
+
+    df2 = df1.groupby("A")["E"].sum()
+
+    _test_equal(
+        bdf2,
+        df2,
+        sort_output=True,
+    )
+
+
+def test_compound_projection_expression(datapath):
+    """Very simple test for projection expressions."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[(bodo_df1.A + 50) / 2 < bodo_df1.D * 2]
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[(py_df1.A + 50) / 2 < py_df1.D * 2]
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_projection_expression_floordiv(datapath):
+    """Test for floordiv."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[(bodo_df1.A // 3) * 7 > 15]
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[(py_df1.A // 3) * 7 > 15]
+
     _test_equal(
         bodo_df2,
         py_df2,

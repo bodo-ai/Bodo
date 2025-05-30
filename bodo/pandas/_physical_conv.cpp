@@ -3,6 +3,8 @@
 #include "_bodo_scan_function.h"
 
 #include "_util.h"
+#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
@@ -152,9 +154,46 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                         "Unsupported number of children for bound operator");
             }
         } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_FUNCTION: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            duckdb::unique_ptr<duckdb::BoundFunctionExpression> bfe =
+                dynamic_cast_unique_ptr<duckdb::BoundFunctionExpression>(
+                    std::move(expr));
+            switch (bfe->children.size()) {
+                case 1: {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalUnaryExpression>(
+                            buildPhysicalExprTree(bfe->children[0]),
+                            bfe->function.name));
+                } break;
+                case 2: {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalBinaryExpression>(
+                            buildPhysicalExprTree(bfe->children[0]),
+                            buildPhysicalExprTree(bfe->children[1]),
+                            bfe->function.name));
+                } break;
+                default:
+                    throw std::runtime_error(
+                        "Unsupported number of children " +
+                        std::to_string(bfe->children.size()) +
+                        " for bound function");
+            }
+        } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_CAST: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            duckdb::unique_ptr<duckdb::BoundCastExpression> bce =
+                dynamic_cast_unique_ptr<duckdb::BoundCastExpression>(
+                    std::move(expr));
+            return std::static_pointer_cast<PhysicalExpression>(
+                std::make_shared<PhysicalCastExpression>(
+                    buildPhysicalExprTree(bce->child), bce->return_type));
+        } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
-                "Unsupported duckdb expression type " +
+                "Unsupported duckdb expression class " +
                 std::to_string(static_cast<int>(expr_class)));
     }
     throw std::logic_error("Control should never reach here");
@@ -187,35 +226,27 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    if (op.expressions.size() != 1) {
-        throw std::runtime_error(
-            "LogicalAggregate does not yet support more than one expression.");
-    }
-
-    const std::string& alias = op.expressions[0]->GetAlias();
-
-    if (alias.empty()) {
-        throw std::runtime_error(
-            "PhysicalPlanBuilder::Visit(LogicalAggregate) expr alias cannot be "
-            "empty");
+    if (op.expressions.size() == 1 &&
+        op.expressions[0]
+                ->Cast<duckdb::BoundAggregateExpression>()
+                .function.name == "count_star") {
+        auto physical_op = std::make_shared<PhysicalCountStar>();
+        // Finish the pipeline at this point so that Finalize can run
+        // to reduce the number of collected rows to the desired amount.
+        finished_pipelines.emplace_back(
+            this->active_pipeline->Build(physical_op));
+        // The same operator will exist in both pipelines.  The sink of the
+        // previous pipeline and the source of the next one.
+        // We record the pipeline dependency between these two pipelines.
+        this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
     } else {
-        if (alias == "count_star()") {
-            auto physical_op = std::make_shared<PhysicalCountStar>();
-            // Finish the pipeline at this point so that Finalize can run
-            // to reduce the number of collected rows to the desired amount.
-            finished_pipelines.emplace_back(
-                this->active_pipeline->Build(physical_op));
-            // The same operator will exist in both pipelines.  The sink of the
-            // previous pipeline and the source of the next one.
-            // We record the pipeline dependency between these two pipelines.
-            this->active_pipeline =
-                std::make_shared<PipelineBuilder>(physical_op);
-        } else {
-            throw std::runtime_error(
-                "PhysicalPlanBuilder::Visit(LogicalAggregate) unsupported "
-                "aggregate " +
-                alias);
-        }
+        auto physical_agg =
+            std::make_shared<PhysicalAggregate>(in_table_schema, op);
+        // Finish the current pipeline with groupby build sink
+        finished_pipelines.emplace_back(
+            this->active_pipeline->Build(physical_agg));
+        // Create a new pipeline with groupby output as source
+        this->active_pipeline = std::make_shared<PipelineBuilder>(physical_agg);
     }
 }
 

@@ -2,13 +2,25 @@ from __future__ import annotations
 import typing as pt
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
+from copy import deepcopy
 
 import pandas as pd
-from pandas._typing import AnyArrayLike, IndexLabel, MergeHow, MergeValidate, Suffixes, Axis, SortKind, ValueKeyFunc
+from pandas._libs import lib
+from pandas._typing import (
+    AnyArrayLike,
+    Axis,
+    IndexLabel,
+    MergeHow,
+    MergeValidate,
+    SortKind,
+    Suffixes,
+    ValueKeyFunc,
+)
 
 import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazyArrayManager
+from bodo.pandas.groupby import DataFrameGroupBy
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
@@ -562,11 +574,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_join_out.columns = [
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
+        # We want to avoid having self appear on the rhs since the unique_ptr
+        # to the duckdb plan will delete it on the lhs first before it processes the rhs
+        # TODO [BSE-4865]: check right._plan for self recursively.
+        right_plan = deepcopy(right._plan) if self is right else right._plan
+
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
             empty_join_out,
             self._plan,
-            right._plan,
+            right_plan,
             plan_optimizer.CJoinType.INNER,
             key_indices,
         )
@@ -592,6 +609,33 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
 
         return wrap_plan(proj_plan)
+
+    @check_args_fallback(supported=["by"])
+    def groupby(
+        self,
+        by=None,
+        axis: Axis | lib.NoDefault = lib.no_default,
+        level: IndexLabel | None = None,
+        as_index: bool = True,
+        sort: bool = True,
+        group_keys: bool = True,
+        observed: bool | lib.NoDefault = lib.no_default,
+        dropna: bool = True,
+    ) -> DataFrameGroupBy:
+        """
+        Provides support for groupby similar to Pandas:
+        https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L9148
+        """
+        if isinstance(by, str):
+            by = [by]
+
+        # Only list of string column names for keys is supported for now.
+        if not isinstance(by, (list, tuple)) or not all(isinstance(b, str) for b in by):
+            raise BodoLibNotImplementedException(
+                "groupby: only string keys are supported"
+            )
+
+        return DataFrameGroupBy(self, by)
 
     @check_args_fallback("all")
     def __getitem__(self, key):

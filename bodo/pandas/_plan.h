@@ -10,6 +10,8 @@
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
+#include "duckdb/main/attached_database.hpp"
+#include "duckdb/main/database.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
@@ -90,15 +92,14 @@ duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
  * @brief Creates a LogicalAggregate node.
  *
  * @param source - the data source to aggregate
- * @param group_index - the group index for the aggregate
- * @param aggregate_index - the aggregate index for the aggregate
+ * @param key_indices - key column indices to group by
  * @param exprs - vector of aggregate exprs
  * @param out_schema_py - the schema of data coming out of the aggregate
  * @return duckdb::unique_ptr<duckdb::LogicalAggregate> output node
  */
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
-    std::unique_ptr<duckdb::LogicalOperator> &source, duckdb::idx_t group_index,
-    duckdb::idx_t aggregate_index,
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<int> &key_indices,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
     PyObject *out_schema_py);
 
@@ -174,13 +175,19 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
     int col_idx);
 
 /**
- * @brief Create an expression for a given function name.
+ * @brief Create an aggregate expression for a given function name and input
+ * source node
  *
- * @param function_name - the function name to create expression for
- * @return duckdb::unique_ptr<duckdb::Expression> - the function expression
+ * @param source input source node to aggregate
+ * @param field_py output field type for the aggregate function
+ * @param function_name function name for matching in backend
+ * @param input_column_indices argument column indices for the input source
+ * @return duckdb::unique_ptr<duckdb::Expression> new BoundAggregateExpression
+ * object
  */
-duckdb::unique_ptr<duckdb::Expression> make_function_expr(
-    std::string function_name);
+duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    std::string function_name, std::vector<int> input_column_indices);
 
 /**
  * @brief Create an expression from two sources and an operator.
@@ -190,9 +197,31 @@ duckdb::unique_ptr<duckdb::Expression> make_function_expr(
  * @param etype - the expression type comparing the two sources
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
-std::unique_ptr<duckdb::Expression> make_binop_expr(
+std::unique_ptr<duckdb::Expression> make_comparison_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
+
+/**
+ * @brief Create an expression from two sources and an operator.
+ *
+ * @param lhs - the left-hand side of the expression
+ * @param rhs - the right-hand side of the expression
+ * @param opstr - the name of the function combining the two sources
+ * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
+ */
+std::unique_ptr<duckdb::Expression> make_arithop_expr(
+    std::unique_ptr<duckdb::Expression> &lhs,
+    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr);
+
+/**
+ * @brief Create an expression from a source and function as a string.
+ *
+ * @param source - the source of the expression
+ * @param opstr - the name of the function to apply to the source
+ * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
+ */
+std::unique_ptr<duckdb::Expression> make_unaryop_expr(
+    std::unique_ptr<duckdb::Expression> &source, std::string opstr);
 
 /**
  * @brief Create a conjunction (and/or) expression from two sources.
@@ -293,11 +322,18 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyiceberg_catalog, PyObject *iceberg_filter);
 
 /**
+ * @brief Returns a statically created DuckDB database.
+ *
+ * @return duckdb::DuckDB& static context object
+ */
+duckdb::shared_ptr<duckdb::DuckDB> get_duckdb();
+
+/**
  * @brief Returns a statically created DuckDB client context.
  *
  * @return duckdb::ClientContext& static context object
  */
-duckdb::ClientContext &get_duckdb_context();
+duckdb::shared_ptr<duckdb::ClientContext> get_duckdb_context();
 
 /**
  * @brief Returns a statically created DuckDB binder.
@@ -311,7 +347,7 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder();
  *
  * @return duckdb::Optimizer& static optimizer object
  */
-duckdb::Optimizer &get_duckdb_optimizer();
+duckdb::shared_ptr<duckdb::Optimizer> get_duckdb_optimizer();
 
 /**
  * @brief Convert an Arrow schema to DuckDB column names and data types to pass

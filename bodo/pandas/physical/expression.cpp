@@ -142,3 +142,38 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
     return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
                                bodo::BufferPool::DefaultPtr());
 }
+
+std::shared_ptr<array_info> do_arrow_compute_cast(
+    std::shared_ptr<ExprResult> left_res,
+    const duckdb::LogicalType &return_type) {
+    // Try to convert the results of our children into array
+    // or scalar results to see which one they are.
+    std::shared_ptr<ArrayExprResult> left_as_array =
+        std::dynamic_pointer_cast<ArrayExprResult>(left_res);
+    std::shared_ptr<ScalarExprResult> left_as_scalar =
+        std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+
+    arrow::Datum src1;
+    if (left_as_array) {
+        src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
+    } else if (left_as_scalar) {
+        src1 = arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
+                                     ->GetScalar(0)
+                                     .ValueOrDie());
+    } else {
+        throw std::runtime_error(
+            "do_arrow_compute left is neither array nor scalar.");
+    }
+
+    std::shared_ptr<arrow::DataType> arrow_ret_type =
+        duckdbTypeToArrow(return_type);
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::Cast(src1, arrow_ret_type);
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error("do_array_compute: Error in Arrow compute: " +
+                                 cmp_res.status().message());
+    }
+
+    return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
+                               bodo::BufferPool::DefaultPtr());
+}
