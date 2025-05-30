@@ -11,6 +11,8 @@ from pyiceberg.expressions.visitors import BoundBooleanExpressionVisitor
 
 
 # Adapted from https://github.com/apache/iceberg-python/blob/3070e7a2b8d681cd02f753b3a46e6ff1b27b76cf/pyiceberg/io/pyarrow.py#L702
+# The changes are that we return a string expression and a list of name, scalar pairs instead of a PyArrow expression.
+# This is so we can format the expression string with remapped column names from schema evolution.
 class _ConvertToArrowExpressionStringAndScalar(
     BoundBooleanExpressionVisitor[tuple[str, list[tuple[str, Any]]]]
 ):
@@ -142,7 +144,7 @@ class _ConvertToArrowExpressionStringAndScalar(
     def visit_not_starts_with(
         self, term: BoundTerm[Any], literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
-        return f"pc.starts_with(pc.field('{{{term.ref().field.name}}}'), f0)", [
+        return f"~pc.starts_with(pc.field('{{{term.ref().field.name}}}'), f0)", [
             ("f0", literal.value)
         ]
 

@@ -159,6 +159,8 @@ def read_iceberg(
         pyiceberg.table._parse_row_filter(row_filter)
         if row_filter
         else pyiceberg.expressions.AlwaysTrue(),
+        # We need to pass the pyiceberg schema so we can bind the iceberg filter to it
+        # during filter conversion. See bodo/io/iceberg/common.py::pyiceberg_filter_to_pyarrow_format_str_and_scalars
         pyiceberg_schema,
         __pa_schema=arrow_schema,
     )
