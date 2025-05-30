@@ -224,6 +224,10 @@ cdef extern from "duckdb/planner/expression.hpp" namespace "duckdb" nogil:
         CExpression(CExpressionType type, CExpressionClass expression_class, CLogicalType return_type)
         CLogicalType return_type
 
+cdef extern from "duckdb/planner/bound_result_modifier.hpp" namespace "duckdb" nogil:
+    cdef cppclass CBoundOrderByNode "duckdb::BoundOrderByNode":
+        pass
+
 cdef extern from "duckdb/planner/logical_operator.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalOperator "duckdb::LogicalOperator":
         vector[unique_ptr[CLogicalOperator]] children
@@ -252,6 +256,10 @@ cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace
 
 cdef extern from "duckdb/planner/operator/logical_projection.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalProjection" duckdb::LogicalProjection"(CLogicalOperator):
+        pass
+
+cdef extern from "duckdb/planner/operator/logical_order.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalOrder" duckdb::LogicalOrder"(CLogicalOperator):
         pass
 
 cdef extern from "duckdb/planner/operator/logical_aggregate.hpp" namespace "duckdb" nogil:
@@ -283,6 +291,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
+    cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CBoundOrderByNode]] order_vec, object out_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, idx_t group_index, idx_t aggregate_index, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
     cdef unique_ptr[CExpression] make_binop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
@@ -302,6 +311,7 @@ cdef extern from "_plan.h" nogil:
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
     cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema) except +
+    cdef unique_ptr[CBoundOrderByNode] make_order_by_node(c_bool asc, c_bool na_first, unique_ptr[CExpression] col_ref_expr) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -426,6 +436,33 @@ cdef class LogicalAggregate(LogicalOperator):
 
     def __str__(self):
         return f"LogicalAggregate({self.out_schema})"
+
+
+cdef class LogicalOrder(LogicalOperator):
+    """Wrapper around DuckDB's LogicalOrder to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, LogicalOperator source, order_by_info):
+        cdef vector[unique_ptr[CBoundOrderByNode]] order_vec
+
+        for col_order in order_by_info:
+            order_vec.push_back(move(
+                make_order_by_node(
+                    col_order[0],
+                    col_order[1],
+                    move((<Expression>col_order[2]).c_expression))))
+
+        self.out_schema = out_schema
+        self.sources = [source]
+
+        cdef unique_ptr[CLogicalOrder] c_logical_order = make_order(source.c_logical_operator, order_vec, out_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_order.release())
+
+    def __str__(self):
+        return f"LogicalOrder({self.out_schema})"
+
+    def getCardinality(self):
+        return self.sources[0].getCardinality()
 
 
 cdef class LogicalColRef(LogicalOperator):

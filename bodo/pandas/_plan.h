@@ -12,6 +12,7 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
 
 /**
  * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
@@ -57,6 +58,32 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
+    PyObject *out_schema_py);
+
+/**
+ * @brief Creates a BoundOrderByNode object.
+ *
+ * @param asc - true if sorted ascending
+ * @param na_first - true if null go first in ordering
+ * @param col_ref_expr - column reference expr to sort on
+ * @return duckdb::unique_ptr<duckdb::LogicalProjection> output node
+ */
+duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
+    bool asc,
+    bool na_first,
+    std::unique_ptr<duckdb::Expression> col_ref_expr);
+
+/**
+ * @brief Creates a LogicalOrder node.
+ *
+ * @param source - the data source to project from
+ * @param order_vec - vector of BoundOrderByNode to say how to order
+ * @param out_schema_py - the schema of data coming out of the order
+ * @return duckdb::unique_ptr<duckdb::LogicalOrder> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<std::unique_ptr<duckdb::BoundOrderByNode>> &order_vec,
     PyObject *out_schema_py);
 
 /**

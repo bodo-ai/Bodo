@@ -264,6 +264,37 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     return proj;
 }
 
+duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
+    bool asc,
+    bool na_first,
+    std::unique_ptr<duckdb::Expression> col_ref_expr) {
+    auto col_duck = to_duckdb(col_ref_expr);
+    duckdb::OrderType type = asc ? duckdb::OrderType::ASCENDING : duckdb::OrderType::DESCENDING;
+    duckdb::OrderByNullType null_order = na_first ? duckdb::OrderByNullType::NULLS_FIRST : duckdb::OrderByNullType::NULLS_LAST;
+    return duckdb::make_uniq<duckdb::BoundOrderByNode>(type, null_order, std::move(col_duck));
+}
+
+duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<std::unique_ptr<duckdb::BoundOrderByNode>> &order_vec,
+    PyObject *out_schema_py) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    duckdb::vector<duckdb::BoundOrderByNode> col_orders;
+    for (const auto &col_order : order_vec) {
+        col_orders.push_back(std::move(*col_order));
+    }
+
+    // Create projection node.
+    duckdb::unique_ptr<duckdb::LogicalOrder> order =
+        duckdb::make_uniq<duckdb::LogicalOrder>(std::move(col_orders));
+
+    // Add the source of the order.
+    order->children.push_back(std::move(source_duck));
+
+    return order;
+}
+
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
     std::unique_ptr<duckdb::LogicalOperator> &source, duckdb::idx_t group_index,
     duckdb::idx_t aggregate_index,

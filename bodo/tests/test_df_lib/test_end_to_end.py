@@ -830,3 +830,20 @@ def test_dataframe_copy(index_val):
     pdf_from_bodo = pd.DataFrame(bdf)
 
     _test_equal(df1, pdf_from_bodo, sort_output=True)
+
+
+def test_sort(datapath):
+    """Very simple test for projection for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1.sort_values(by=["A", "D"], ascending=[True, False], na_position="last")
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1.sort_values(by=["A", "D"], ascending=[True, False], na_position="last")
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
