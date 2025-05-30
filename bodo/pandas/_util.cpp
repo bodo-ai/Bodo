@@ -232,7 +232,49 @@ std::string expressionTypeToPyicebergclass(duckdb::ExpressionType expr_type) {
     }
 }
 
-PyObject *duckdbFilterToPyicebergFilter(
+// Helper for duckdbFilterSetToPyicebergFilter. We need to call this recursively
+// for conjunction filters.
+PyObject *_duckdbFilterToPyicebergFilter(
+    duckdb::unique_ptr<duckdb::TableFilter> tf, const std::string field_name,
+    PyObjectPtr &pyiceberg_expression_mod) {
+    PyObject *py_expr;
+    switch (tf->filter_type) {
+        case duckdb::TableFilterType::CONSTANT_COMPARISON: {
+            duckdb::unique_ptr<duckdb::ConstantFilter> constantFilter =
+                dynamic_cast_unique_ptr<duckdb::ConstantFilter>(std::move(tf));
+
+            std::shared_ptr<arrow::Scalar> scalar =
+                convertDuckdbValueToArrowScalar(constantFilter->constant);
+            std::string pyiceberg_class =
+                expressionTypeToPyicebergclass(constantFilter->comparison_type);
+
+            py_expr = PyObject_CallMethod(
+                pyiceberg_expression_mod, pyiceberg_class.c_str(), "sO",
+                field_name.c_str(), arrow::py::wrap_scalar(scalar));
+        } break;
+        case duckdb::TableFilterType::IS_NULL: {
+            py_expr = PyObject_CallMethod(pyiceberg_expression_mod, "IsNull",
+                                          "s", field_name.c_str());
+        } break;
+        case duckdb::TableFilterType::IS_NOT_NULL: {
+            py_expr = PyObject_CallMethod(pyiceberg_expression_mod, "IsNotNull",
+                                          "s", field_name.c_str());
+        } break;
+        default:
+            throw std::runtime_error(
+                "duckdbFilterToPyicebergFilter unsupported filter "
+                "type " +
+                std::to_string(static_cast<int>(tf->filter_type)));
+    }
+    if (!py_expr) {
+        throw std::runtime_error(
+            "Failed to create pyiceberg expression for filter " +
+            tf->DebugToString());
+    }
+    return py_expr;
+}
+
+PyObject *duckdbFilterSetToPyicebergFilter(
     duckdb::TableFilterSet &filters,
     std::shared_ptr<arrow::Schema> arrow_schema) {
     PyObjectPtr pyiceberg_expression_mod =
@@ -246,45 +288,9 @@ PyObject *duckdbFilterToPyicebergFilter(
                                         "AlwaysTrue", nullptr);
     for (auto &tf : filters.filters) {
         std::shared_ptr<arrow::Field> field = arrow_schema->field(tf.first);
-        PyObject *py_expr;
-        switch (tf.second->filter_type) {
-            case duckdb::TableFilterType::CONSTANT_COMPARISON: {
-                duckdb::unique_ptr<duckdb::ConstantFilter> constantFilter =
-                    dynamic_cast_unique_ptr<duckdb::ConstantFilter>(
-                        std::move(tf.second));
-
-                std::shared_ptr<arrow::Scalar> scalar =
-                    convertDuckdbValueToArrowScalar(constantFilter->constant);
-                std::string pyiceberg_class = expressionTypeToPyicebergclass(
-                    constantFilter->comparison_type);
-                std::string field_name = field->name();
-
-                py_expr = PyObject_CallMethod(
-                    pyiceberg_expression_mod, pyiceberg_class.c_str(), "sO",
-                    field_name.c_str(), arrow::py::wrap_scalar(scalar));
-            } break;
-            case duckdb::TableFilterType::IS_NULL: {
-                py_expr =
-                    PyObject_CallMethod(pyiceberg_expression_mod, "IsNull", "s",
-                                        field->name().c_str());
-            } break;
-            case duckdb::TableFilterType::IS_NOT_NULL: {
-                py_expr =
-                    PyObject_CallMethod(pyiceberg_expression_mod, "IsNotNull",
-                                        "s", field->name().c_str());
-            } break;
-            default:
-                throw std::runtime_error(
-                    "duckdbFilterToPyicebergFilter unsupported filter "
-                    "type " +
-                    std::to_string(static_cast<int>(tf.second->filter_type)));
-        }
-        if (!py_expr) {
-            throw std::runtime_error(
-                "Failed to create pyiceberg expression for filter " +
-                std::to_string(tf.first) + " of type " +
-                tf.second->DebugToString());
-        }
+        std::string field_name = field->name();
+        PyObject *py_expr = _duckdbFilterToPyicebergFilter(
+            std::move(tf.second), field_name, pyiceberg_expression_mod);
         PyObject *original_ret = ret;
         ret = PyObject_CallMethod(ret, "__and__", "O", py_expr);
         if (!ret) {
