@@ -2,8 +2,10 @@
 
 #include <arrow/api.h>
 #include <cstdint>
+#include <map>
 #include <variant>
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/planner/column_binding.hpp"
 
 /**
  * @brief Convert duckdb value to C++ variant.
@@ -45,6 +47,27 @@ duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
     // If the cast fails, return a nullptr unique_ptr
     return nullptr;
 }
+
+/**
+ * @brief Initialize mapping of input column orders so that keys are in the
+ * beginning of build/probe tables to match streaming join APIs. See
+ * https://github.com/bodo-ai/Bodo/blob/905664de2c37741d804615cdbb3fb437621ff0bd/bodo/libs/streaming/join.py#L189
+ * @param col_inds input mapping to fill
+ * @param keys key column indices
+ * @param ncols number of columns in the table
+ */
+void initInputColumnMapping(std::vector<int64_t> &col_inds,
+                            std::vector<uint64_t> &keys, uint64_t ncols);
+
+/**
+ * @brief Create a map of column bindings to column indices in physical input
+ * table
+ *
+ * @param source_cols column bindings in source table
+ * @return std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+ */
+std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
+    std::vector<duckdb::ColumnBinding> source_cols);
 
 /**
  * @brief Convert duckdb type to arrow type.

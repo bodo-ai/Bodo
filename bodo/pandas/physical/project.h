@@ -1,6 +1,7 @@
 #pragma once
 
 #include <utility>
+#include "../_util.h"
 #include "../libs/_array_utils.h"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
@@ -45,12 +46,7 @@ class PhysicalProjection : public PhysicalSourceSink {
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs,
         std::shared_ptr<bodo::Schema> input_schema)
         : exprs(std::move(exprs)) {
-        // Initialize map of column bindings to column indices in physical input
-        // table.
-        for (size_t i = 0; i < source_cols.size(); i++) {
-            duckdb::ColumnBinding& col = source_cols[i];
-            col_ref_map[{col.table_index, col.column_index}] = i;
-        }
+        col_ref_map = getColRefMap(source_cols);
 
         // Create the output schema from expressions
         this->output_schema = std::make_shared<bodo::Schema>();
