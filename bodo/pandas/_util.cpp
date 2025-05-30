@@ -81,7 +81,7 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
         case duckdb::LogicalTypeId::BOOLEAN:
             return arrow::boolean();
         case duckdb::LogicalTypeId::VARCHAR:
-            return arrow::utf8();
+            return arrow::large_utf8();
         default:
             throw std::runtime_error(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +
