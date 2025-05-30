@@ -8,6 +8,7 @@
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../tests/utils.h"
+#include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "operator.h"
 
@@ -115,6 +116,14 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator);
+
+/**
+ * @brief Convert ExprResult to arrow and cast to the requested type.
+ *
+ */
+std::shared_ptr<array_info> do_arrow_compute_cast(
+    std::shared_ptr<ExprResult> left_res,
+    const duckdb::LogicalType &return_type);
 
 /**
  * @brief Physical expression tree node type for comparisons resulting in
@@ -337,6 +346,37 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
 };
 
 /**
+ * @brief Physical expression tree node type for casting.
+ *
+ */
+class PhysicalCastExpression : public PhysicalExpression {
+   public:
+    PhysicalCastExpression(std::shared_ptr<PhysicalExpression> left,
+                           duckdb::LogicalType _return_type)
+        : return_type(_return_type) {
+        children.push_back(left);
+    }
+
+    virtual ~PhysicalCastExpression() = default;
+
+    /**
+     * @brief How to process this expression tree node.
+     *
+     */
+    virtual std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch) {
+        // Process child first.
+        std::shared_ptr<ExprResult> left_res =
+            children[0]->ProcessBatch(input_batch);
+        auto result = do_arrow_compute_cast(left_res, return_type);
+        return std::make_shared<ArrayExprResult>(result);
+    }
+
+   protected:
+    duckdb::LogicalType return_type;
+};
+
+/**
  * @brief Physical expression tree node type for unary of array.
  *
  */
@@ -351,6 +391,16 @@ class PhysicalUnaryExpression : public PhysicalExpression {
                 break;
             default:
                 throw std::runtime_error("Unhandled unary op expression type.");
+        }
+    }
+    PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
+                            std::string &opstr) {
+        children.push_back(left);
+        if (opstr == "floor") {
+            comparator = "floor";
+        } else {
+            throw std::runtime_error("Unhandled unary expression opstr " +
+                                     opstr);
         }
     }
 
@@ -386,7 +436,30 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         children.push_back(right);
         switch (etype) {
             default:
-                throw std::runtime_error("Unhandled binary expression type.");
+                throw std::runtime_error(
+                    "Unhandled binary expression type " +
+                    std::to_string(static_cast<int>(etype)));
+        }
+    }
+
+    PhysicalBinaryExpression(std::shared_ptr<PhysicalExpression> left,
+                             std::shared_ptr<PhysicalExpression> right,
+                             std::string &opstr) {
+        children.push_back(left);
+        children.push_back(right);
+        if (opstr == "+") {
+            comparator = "add";
+        } else if (opstr == "-") {
+            comparator = "substract";
+        } else if (opstr == "*") {
+            comparator = "multiply";
+        } else if (opstr == "/") {
+            comparator = "divide";
+        } else if (opstr == "floor") {
+            comparator = "floor";
+        } else {
+            throw std::runtime_error("Unhandled binary expression opstr " +
+                                     opstr);
         }
     }
 

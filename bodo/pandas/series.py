@@ -1,4 +1,5 @@
 import inspect
+import numbers
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
@@ -109,7 +110,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
         expr = LazyPlan(
-            "BinaryOpExpression",
+            "ComparisonOpExpression",
             empty_data,
             lhs,
             rhs,
@@ -217,6 +218,93 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             (expr,),
         )
         return wrap_plan(plan=plan)
+
+    def _arith_binop(self, other, op, reverse):
+        """Called when a BodoSeries is element-wise arithmetically combined with a different entity (other)"""
+        from bodo.pandas.base import _empty_like
+
+        if not (
+            (
+                isinstance(other, BodoSeries)
+                and isinstance(other.dtype, pd.ArrowDtype)
+                and pd.api.types.is_numeric_dtype(other.dtype)
+            )
+            or isinstance(other, numbers.Number)
+        ):
+            raise BodoLibNotImplementedException(
+                "'other' should be numeric BodoSeries or a numeric. "
+                f"Got {type(other).__name__} instead."
+            )
+
+        # Get empty Pandas objects for self and other with same schema.
+        zero_size_self = _empty_like(self)
+        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
+        # This is effectively a check for a dataframe or series.
+        if hasattr(other, "_plan"):
+            other = other._plan
+
+        # Compute schema of new series.
+        empty_data = getattr(zero_size_self, op)(zero_size_other)
+        assert isinstance(empty_data, pd.Series), (
+            "_arith_binop: empty_data is not a Series"
+        )
+
+        # Extract argument expressions
+        lhs = get_proj_expr_single(self._plan)
+        rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        if reverse:
+            lhs, rhs = rhs, lhs
+
+        expr = LazyPlan("ArithOpExpression", empty_data, lhs, rhs, op)
+
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            # Use the original table without the Series projection node.
+            self._plan.args[0],
+            (expr,),
+        )
+        return wrap_plan(plan=plan)
+
+    @check_args_fallback("all")
+    def __add__(self, other):
+        return self._arith_binop(other, "__add__", False)
+
+    @check_args_fallback("all")
+    def __radd__(self, other):
+        return self._arith_binop(other, "__radd__", True)
+
+    @check_args_fallback("all")
+    def __sub__(self, other):
+        return self._arith_binop(other, "__sub__", False)
+
+    @check_args_fallback("all")
+    def __rsub__(self, other):
+        return self._arith_binop(other, "__rsub__", True)
+
+    @check_args_fallback("all")
+    def __mul__(self, other):
+        return self._arith_binop(other, "__mul__", False)
+
+    @check_args_fallback("all")
+    def __rmul__(self, other):
+        return self._arith_binop(other, "__rmul__", True)
+
+    @check_args_fallback("all")
+    def __truediv__(self, other):
+        return self._arith_binop(other, "__truediv__", False)
+
+    @check_args_fallback("all")
+    def __rtruediv__(self, other):
+        return self._arith_binop(other, "__rtruediv__", True)
+
+    @check_args_fallback("all")
+    def __floordiv__(self, other):
+        return self._arith_binop(other, "__floordiv__", False)
+
+    @check_args_fallback("all")
+    def __rfloordiv__(self, other):
+        return self._arith_binop(other, "__rfloordiv__", True)
 
     @staticmethod
     def from_lazy_mgr(
