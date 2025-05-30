@@ -1,6 +1,7 @@
 import typing as pt
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
+from copy import deepcopy
 
 import pandas as pd
 from pandas._libs import lib
@@ -540,18 +541,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     ):  # -> BodoDataFrame:
         from bodo.pandas.base import _empty_like
 
-        # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
-        # key columns with the same names from output
-
         # Validates only on, left_on and right_on for now
-        validate_merge_spec(self, right, on, left_on, right_on)
+        left_on, right_on = validate_merge_spec(self, right, on, left_on, right_on)
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
         empty_data = zero_size_self.merge(
             zero_size_right,
             how=how,
-            on=on,
+            on=None,
             left_on=left_on,
             right_on=right_on,
             left_index=left_index,
@@ -559,17 +557,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             sort=sort,
             suffixes=suffixes,
         )
-
-        # Join on common keys if keys not specified
-        if on is None and left_on is None and right_on is None:
-            on = tuple(set(self.columns).intersection(set(right.columns)))
-
-        on = maybe_make_list(on)
-        if left_on is None and right_on is None:
-            left_on = on
-            right_on = on
-
-        left_on, right_on = maybe_make_list(left_on), maybe_make_list(right_on)
 
         key_indices = [
             (self.columns.get_loc(a), right.columns.get_loc(b))
@@ -584,11 +571,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_join_out.columns = [
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
+        # We want to avoid having self appear on the rhs since the unique_ptr
+        # to the duckdb plan will delete it on the lhs first before it processes the rhs
+        # TODO [BSE-4865]: check right._plan for self recursively.
+        right_plan = deepcopy(right._plan) if self is right else right._plan
+
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
             empty_join_out,
             self._plan,
-            right._plan,
+            right_plan,
             plan_optimizer.CJoinType.INNER,
             key_indices,
         )
@@ -994,9 +986,18 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_on(right_on)
 
     if on is None and left_on is None and right_on is None:
-        return
+        # Join on common keys if keys not specified
+        common_cols = on = tuple(set(left.columns).intersection(set(right.columns)))
+        if len(common_cols) == 0:
+            raise ValueError(
+                "No common columns to perform merge on. "
+                f"Merge options: left_on={left_on}, "
+                f"right_on={right_on}"
+            )
+        left_on = right_on = common_cols
+        return left_on, right_on
 
-    if on is not None:
+    elif on is not None:
         if left_on is not None or right_on is not None:
             raise ValueError(
                 'Can only pass argument "on" OR "left_on" '
@@ -1015,3 +1016,5 @@ def validate_merge_spec(left, right, on, left_on, right_on):
 
     validate_keys(left_on, left)
     validate_keys(right_on, right)
+
+    return left_on, right_on

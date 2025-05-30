@@ -68,3 +68,12 @@ void initInputColumnMapping(std::vector<int64_t> &col_inds,
  */
 std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
     std::vector<duckdb::ColumnBinding> source_cols);
+
+/**
+ * @brief Convert duckdb type to arrow type.
+ *
+ * @param type - the duckdb type to convert
+ * @return the converted type
+ */
+std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
+    const duckdb::LogicalType &type);

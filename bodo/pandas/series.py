@@ -1,4 +1,5 @@
 import inspect
+import numbers
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
@@ -109,7 +110,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
         expr = LazyPlan(
-            "BinaryOpExpression",
+            "ComparisonOpExpression",
             empty_data,
             lhs,
             rhs,
@@ -217,6 +218,93 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             (expr,),
         )
         return wrap_plan(plan=plan)
+
+    def _arith_binop(self, other, op, reverse):
+        """Called when a BodoSeries is element-wise arithmetically combined with a different entity (other)"""
+        from bodo.pandas.base import _empty_like
+
+        if not (
+            (
+                isinstance(other, BodoSeries)
+                and isinstance(other.dtype, pd.ArrowDtype)
+                and pd.api.types.is_numeric_dtype(other.dtype)
+            )
+            or isinstance(other, numbers.Number)
+        ):
+            raise BodoLibNotImplementedException(
+                "'other' should be numeric BodoSeries or a numeric. "
+                f"Got {type(other).__name__} instead."
+            )
+
+        # Get empty Pandas objects for self and other with same schema.
+        zero_size_self = _empty_like(self)
+        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
+        # This is effectively a check for a dataframe or series.
+        if hasattr(other, "_plan"):
+            other = other._plan
+
+        # Compute schema of new series.
+        empty_data = getattr(zero_size_self, op)(zero_size_other)
+        assert isinstance(empty_data, pd.Series), (
+            "_arith_binop: empty_data is not a Series"
+        )
+
+        # Extract argument expressions
+        lhs = get_proj_expr_single(self._plan)
+        rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        if reverse:
+            lhs, rhs = rhs, lhs
+
+        expr = LazyPlan("ArithOpExpression", empty_data, lhs, rhs, op)
+
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            # Use the original table without the Series projection node.
+            self._plan.args[0],
+            (expr,),
+        )
+        return wrap_plan(plan=plan)
+
+    @check_args_fallback("all")
+    def __add__(self, other):
+        return self._arith_binop(other, "__add__", False)
+
+    @check_args_fallback("all")
+    def __radd__(self, other):
+        return self._arith_binop(other, "__radd__", True)
+
+    @check_args_fallback("all")
+    def __sub__(self, other):
+        return self._arith_binop(other, "__sub__", False)
+
+    @check_args_fallback("all")
+    def __rsub__(self, other):
+        return self._arith_binop(other, "__rsub__", True)
+
+    @check_args_fallback("all")
+    def __mul__(self, other):
+        return self._arith_binop(other, "__mul__", False)
+
+    @check_args_fallback("all")
+    def __rmul__(self, other):
+        return self._arith_binop(other, "__rmul__", True)
+
+    @check_args_fallback("all")
+    def __truediv__(self, other):
+        return self._arith_binop(other, "__truediv__", False)
+
+    @check_args_fallback("all")
+    def __rtruediv__(self, other):
+        return self._arith_binop(other, "__rtruediv__", True)
+
+    @check_args_fallback("all")
+    def __floordiv__(self, other):
+        return self._arith_binop(other, "__floordiv__", False)
+
+    @check_args_fallback("all")
+    def __rfloordiv__(self, other):
+        return self._arith_binop(other, "__rfloordiv__", True)
 
     @staticmethod
     def from_lazy_mgr(
@@ -355,6 +443,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def str(self):
         return BodoStringMethods(self)
 
+    @property
+    def dt(self):
+        return BodoDatetimeProperties(self)
+
     @check_args_fallback(unsupported="none")
     def map(self, arg, na_action=None):
         """
@@ -368,12 +460,36 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
+    def isin(self, values):
+        """
+        Whether elements in Series are contained in values.
+
+        """
+
+        index = self.head(0).index
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.bool_()),
+            name=self.name,
+            index=index,
+        )
+        return _get_series_python_func_plan(
+            self._plan, new_metadata, "isin", (values,), {}
+        )
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
     def __init__(self, series):
         self._series = series
+
+        # Validates series type
+        if not (
+            isinstance(series, BodoSeries)
+            and isinstance(series.dtype, pd.ArrowDtype)
+            and series.dtype.type is str
+        ):
+            raise AttributeError("Can only use .str accessor with string values!")
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
@@ -387,6 +503,37 @@ class BodoStringMethods:
             )
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
+
+
+class BodoDatetimeProperties:
+    """Support Series.dt datetime accessors same as Pandas."""
+
+    # TODO [BSE-4854]: support datetime methods
+
+    def __init__(self, series):
+        self._series = series
+
+        # Validates series type
+        if not (
+            isinstance(series, BodoSeries)
+            and series.dtype
+            in (pd.ArrowDtype(pa.timestamp("ns")), pd.ArrowDtype(pa.date64())),
+            pd.ArrowDtype(pa.time64("ns")),
+        ):
+            raise AttributeError("Can only use .dt accessor with datetimelike values")
+
+    @check_args_fallback(unsupported="none")
+    def __getattribute__(self, name: str, /) -> pt.Any:
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            msg = (
+                f"Series.dt.{name} is not "
+                "implemented in Bodo dataframe library yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            warnings.warn(BodoLibFallbackWarning(msg))
+            return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
 def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
@@ -473,7 +620,7 @@ def sig_bind(name, *args, **kwargs):
     raise TypeError(f"StringMethods.{name}() {msg}")
 
 
-def gen_str_method_func_inspect(name, rettype):
+def gen_str_method(name, rettype):
     """Generalized generator for Series.str methods with optional/positional args."""
 
     def str_method(self, *args, **kwargs):
@@ -486,12 +633,30 @@ def gen_str_method_func_inspect(name, rettype):
             name=self._series.name,
             index=index,
         )
-        func_name = f"str.{name}"
         return _get_series_python_func_plan(
-            self._series._plan, new_metadata, func_name, args, kwargs
+            self._series._plan, new_metadata, f"str.{name}", args, kwargs
         )
 
     return str_method
+
+
+def gen_dt_accessor(name, rettype):
+    """Generalized generator for Series.dt accessors"""
+
+    def dt_accessor(self):
+        """Generalized template for Series.dt accessors"""
+
+        index = self._series.head(0).index
+        new_metadata = pd.Series(
+            dtype=rettype,
+            name=self._series.name,
+            index=index,
+        )
+        return _get_series_python_func_plan(
+            self._series._plan, new_metadata, f"dt.{name}", (), {}
+        )
+
+    return dt_accessor
 
 
 # Maps series_str_methods to return types
@@ -570,8 +735,68 @@ series_str_methods = [
     ),
 ]
 
+# Maps Series.dt accessors to return types
+dt_accessors = [
+    # idx = 0: Series(Int)
+    (
+        [
+            "year",
+            "month",
+            "day",
+            "hour",
+            "minute",
+            "second",
+            "microsecond",
+            "nanosecond",
+            "dayofweek",
+            "day_of_week",
+            "weekday",
+            "dayofyear",
+            "day_of_year",
+            "days_in_month",
+            "quarter",
+            "daysinmonth",
+            "days_in_month",
+        ],
+        pd.ArrowDtype(pa.int32()),
+    ),
+    # idx = 1: Series(Date)
+    (
+        [
+            "date",
+        ],
+        pd.ArrowDtype(pa.date32()),
+    ),
+    # idx = 2: Series(Time)
+    (
+        [
+            "time",
+        ],
+        pd.ArrowDtype(pa.time64("ns")),
+    ),
+    # idx = 3: Series(Boolean)
+    (
+        [
+            "is_month_start",
+            "is_month_end",
+            "is_quarter_start",
+            "is_quarter_end",
+            "is_year_start",
+            "is_year_end",
+            "is_leap_year",
+        ],
+        pd.ArrowDtype(pa.bool_()),
+    ),
+]
+
 # Generates Series.str methods
-for rettype_pair in series_str_methods:
-    for func_name in rettype_pair[0]:
-        func = gen_str_method_func_inspect(func_name, rettype_pair[1])
+for str_pair in series_str_methods:
+    for func_name in str_pair[0]:
+        func = gen_str_method(func_name, str_pair[1])
         setattr(BodoStringMethods, func_name, func)
+
+# Generates Series.dt accessors
+for dt_accessor_pair in dt_accessors:
+    for accessor_name in dt_accessor_pair[0]:
+        accessor = gen_dt_accessor(accessor_name, dt_accessor_pair[1])
+        setattr(BodoDatetimeProperties, accessor_name, property(accessor))

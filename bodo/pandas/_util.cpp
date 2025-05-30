@@ -77,3 +77,37 @@ std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
     }
     return col_ref_map;
 }
+
+std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
+    const duckdb::LogicalType& type) {
+    switch (type.id()) {
+        case duckdb::LogicalTypeId::TINYINT:
+            return arrow::int8();
+        case duckdb::LogicalTypeId::SMALLINT:
+            return arrow::int16();
+        case duckdb::LogicalTypeId::INTEGER:
+            return arrow::int32();
+        case duckdb::LogicalTypeId::BIGINT:
+            return arrow::int64();
+        case duckdb::LogicalTypeId::UTINYINT:
+            return arrow::uint8();
+        case duckdb::LogicalTypeId::USMALLINT:
+            return arrow::uint16();
+        case duckdb::LogicalTypeId::UINTEGER:
+            return arrow::uint32();
+        case duckdb::LogicalTypeId::UBIGINT:
+            return arrow::uint64();
+        case duckdb::LogicalTypeId::FLOAT:
+            return arrow::float32();
+        case duckdb::LogicalTypeId::DOUBLE:
+            return arrow::float64();
+        case duckdb::LogicalTypeId::BOOLEAN:
+            return arrow::boolean();
+        case duckdb::LogicalTypeId::VARCHAR:
+            return arrow::large_utf8();
+        default:
+            throw std::runtime_error(
+                "duckdbTypeToArrow unsupported LogicalType conversion " +
+                std::to_string(static_cast<int>(type.id())));
+    }
+}

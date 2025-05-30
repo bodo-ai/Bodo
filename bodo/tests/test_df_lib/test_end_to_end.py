@@ -856,3 +856,37 @@ def test_basic_groupby():
         df2,
         sort_output=True,
     )
+
+
+def test_compound_projection_expression(datapath):
+    """Very simple test for projection expressions."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[(bodo_df1.A + 50) / 2 < bodo_df1.D * 2]
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[(py_df1.A + 50) / 2 < py_df1.D * 2]
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_projection_expression_floordiv(datapath):
+    """Test for floordiv."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1[(bodo_df1.A // 3) * 7 > 15]
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1[(py_df1.A // 3) * 7 > 15]
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
