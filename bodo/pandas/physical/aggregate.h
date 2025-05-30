@@ -43,6 +43,9 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             if (in_table_schema_reordered->column_names.size() > 0) {
                 this->output_schema->column_names.push_back(
                     in_table_schema_reordered->column_names[i]);
+            } else {
+                this->output_schema->column_names.push_back("key_" +
+                                                            std::to_string(i));
             }
         }
         this->output_schema->metadata = std::make_shared<TableMetadata>(
@@ -94,6 +97,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
             this->output_schema->append_column(std::make_unique<bodo::DataType>(
                 std::get<0>(out_arr_type), std::get<1>(out_arr_type)));
+            this->output_schema->column_names.push_back(agg_expr.function.name);
         }
 
         // Offsets for the input data columns, which are trivial since we have a
