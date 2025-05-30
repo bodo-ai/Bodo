@@ -752,6 +752,21 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = inner_type;
             break;
         }
+        case arrow::Type::TIME64: {
+            auto time64_type =
+                std::static_pointer_cast<arrow::Time64Type>(arrow_type);
+            switch (time64_type->unit()) {
+                case arrow::TimeUnit::MICRO:
+                    duckdb_type = duckdb::LogicalType::TIME;
+                    break;
+                case arrow::TimeUnit::NANO:
+                    duckdb_type = duckdb::LogicalType::TIME;
+                    break;
+                default:
+                    throw std::runtime_error("Unsupported Time64 unit");
+            }
+            break;
+        }
         default:
             throw std::runtime_error(
                 "Unsupported Arrow type: " + arrow_type->ToString() +
