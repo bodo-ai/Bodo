@@ -494,6 +494,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
 
         # Execute the plan if we have one
         if self._plan is not None:
+            print(self._plan)
             debug_msg(
                 self.logger,
                 "[LazySingleBlockManager] Executing Plan and collecting data...",

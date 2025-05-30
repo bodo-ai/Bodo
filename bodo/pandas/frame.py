@@ -147,6 +147,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if self.is_lazy_plan() and not self._mgr._disable_collect:
             return self._mgr.execute_plan()
 
+    def collect(self):
+        """Execute plan and collects BodoDataFrame on the spawner."""
+        if isinstance(self._mgr, LazyMetadataMixin) and not self._mgr._disable_collect:
+            self._mgr._collect()
+        return self
+
     def head(self, n: int = 5):
         """
         Return the first n rows. If head_df is available and larger than n, then use it directly.

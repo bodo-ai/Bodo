@@ -278,6 +278,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if self.is_lazy_plan():
             return self._mgr.execute_plan()
 
+    def collect(self):
+        """Execute plan and collects BodoSeries on the spawner."""
+        if isinstance(self._mgr, LazyMetadataMixin):
+            self._mgr._collect()
+        return self
+
     @property
     def shape(self):
         """
