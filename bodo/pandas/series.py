@@ -227,7 +227,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             (
                 isinstance(other, BodoSeries)
                 and isinstance(other.dtype, pd.ArrowDtype)
-                and pd.api.types.is_numeric_type(other.dtype)
+                and pd.api.types.is_numeric_dtype(other.dtype)
             )
             or isinstance(other, numbers.Number)
         ):
