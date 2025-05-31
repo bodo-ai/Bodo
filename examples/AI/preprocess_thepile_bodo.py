@@ -62,14 +62,14 @@ def tokenize_data(row):
 
 @bodo.jit
 def preprocess_pile(df, out_file):
-    t0 = time.time()
+    t0 = time.perf_counter()
     df["text"] = df["text"].map(clean_text)
     df["text_hash"] = df["text"].map(hash_text)
     df = df.drop_duplicates(subset=["text_hash"])
     df = df.drop("text_hash", axis=1)
     processed_data = df.apply(tokenize_data, axis=1)
     processed_data.to_json(out_file, orient="records", lines=True)
-    print("Execution Time:", time.time() - t0)
+    print("Execution Time:", time.perf_counter() - t0)
 
 
 if __name__ == "__main__":

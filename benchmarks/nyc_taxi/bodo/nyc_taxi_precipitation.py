@@ -14,7 +14,7 @@ import bodo
 
 @bodo.jit(cache=True)
 def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
-    start_read = time.time()
+    start_read = time.perf_counter()
     central_park_weather_observations = pd.read_csv(
         weather_dataset,
         parse_dates=["DATE"],
@@ -23,10 +23,10 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
         columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
     )
     fhvhv_tripdata = pd.read_parquet(hvfhv_dataset)
-    end = time.time()
+    end = time.perf_counter()
     print("Reading Time: ", (end - start_read))
 
-    start_compute = time.time()
+    start_compute = time.perf_counter()
 
     central_park_weather_observations["date"] = central_park_weather_observations[
         "date"
@@ -88,12 +88,12 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
         },
         copy=False,
     )
-    end = time.time()
+    end = time.perf_counter()
     print("Monthly Taxi Travel Times Computation Time: ", end - start_compute)
 
-    start_write = time.time()
+    start_write = time.perf_counter()
     monthly_trips_weather.to_parquet("monthly_trips_weather.pq")
-    end = time.time()
+    end = time.perf_counter()
     print("Writing time:", (end - start_write))
     print("Total E2E time:", (end - start_read))
     return monthly_trips_weather
