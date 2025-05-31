@@ -840,6 +840,14 @@ def test_sort(datapath):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1.sort_values(by=["A", "D"], ascending=[True, False], na_position="last")
 
+    print(bodo_df2)
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )
 
 def test_basic_groupby():
     """

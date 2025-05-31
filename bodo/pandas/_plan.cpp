@@ -95,13 +95,10 @@ duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
         duckdb::Value(val));
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr_internal(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::shared_ptr<arrow::Field> field,
     int col_idx) {
-    auto field_res = arrow::py::unwrap_field(field_py);
-    std::shared_ptr<arrow::Field> field;
-    CHECK_ARROW_AND_ASSIGN(field_res,
-                           "make_col_ref_expr: unable to unwrap field", field);
     auto [_, ctype] = arrow_field_to_duckdb(field);
 
     std::vector<duckdb::ColumnBinding> source_cols =
@@ -110,6 +107,16 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
 
     return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
         ctype, source_cols[col_idx]);
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    int col_idx) {
+    auto field_res = arrow::py::unwrap_field(field_py);
+    std::shared_ptr<arrow::Field> field;
+    CHECK_ARROW_AND_ASSIGN(field_res,
+                           "make_col_ref_expr: unable to unwrap field", field);
+    return make_col_ref_expr_internal(source, field, col_idx);
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
@@ -385,24 +392,39 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
 }
 
 duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
     bool asc,
     bool na_first,
-    std::unique_ptr<duckdb::Expression> col_ref_expr) {
-    auto col_duck = to_duckdb(col_ref_expr);
+    PyObject *field_py,
+    int col_idx) {
     duckdb::OrderType type = asc ? duckdb::OrderType::ASCENDING : duckdb::OrderType::DESCENDING;
     duckdb::OrderByNullType null_order = na_first ? duckdb::OrderByNullType::NULLS_FIRST : duckdb::OrderByNullType::NULLS_LAST;
-    return duckdb::make_uniq<duckdb::BoundOrderByNode>(type, null_order, std::move(col_duck));
+    return duckdb::make_uniq<duckdb::BoundOrderByNode>(type, null_order, std::move(make_col_ref_expr(source, field_py, col_idx)));
 }
 
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::vector<std::unique_ptr<duckdb::BoundOrderByNode>> &order_vec,
-    PyObject *out_schema_py) {
+    //PyObject *out_schema_py,
+    std::vector<bool> &asc,
+    std::vector<bool> &na_position,
+    std::vector<int> &cols,
+    PyObject *schema_py) {
+    //std::vector<PyObject *> &col_types) {
+
+    auto schema_res = arrow::py::unwrap_schema(schema_py);
+    std::shared_ptr<arrow::Schema> schema;
+    CHECK_ARROW_AND_ASSIGN(schema_res,
+                           "make_order: unable to unwrap schema", schema);
+
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     duckdb::vector<duckdb::BoundOrderByNode> col_orders;
-    for (const auto &col_order : order_vec) {
-        col_orders.push_back(std::move(*col_order));
+    for (size_t i = 0; i < asc.size(); ++i) {
+        col_orders.emplace_back(
+            duckdb::BoundOrderByNode(
+                asc[i] ? duckdb::OrderType::ASCENDING : duckdb::OrderType::DESCENDING,
+                na_position[i] ? duckdb::OrderByNullType::NULLS_FIRST: duckdb::OrderByNullType::NULLS_LAST,
+                make_col_ref_expr_internal(source_duck, schema->field(i), cols[i])));
     }
 
     // Create projection node.
@@ -414,6 +436,29 @@ duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
 
     return order;
 }
+
+/*
+duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<std::unique_ptr<duckdb::BoundOrderByNode>> &order_vec,
+    PyObject *out_schema_py) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    duckdb::vector<duckdb::BoundOrderByNode> col_orders;
+    for (const auto &col_order : order_vec) {
+        col_orders.emplace_back(duckdb::BoundOrderByNode(col_order->type, col_order->null_order, std::move(col_order->expression)));
+    }
+
+    // Create projection node.
+    duckdb::unique_ptr<duckdb::LogicalOrder> order =
+        duckdb::make_uniq<duckdb::LogicalOrder>(std::move(col_orders));
+
+    // Add the source of the order.
+    order->children.push_back(std::move(source_duck));
+
+    return order;
+}
+*/
 
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
     std::unique_ptr<duckdb::LogicalOperator> &source,

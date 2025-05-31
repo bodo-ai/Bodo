@@ -71,9 +71,11 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
  * @return duckdb::unique_ptr<duckdb::LogicalProjection> output node
  */
 duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
     bool asc,
     bool na_first,
-    std::unique_ptr<duckdb::Expression> col_ref_expr);
+    PyObject *field_py,
+    int col_idx);
 
 /**
  * @brief Creates a LogicalOrder node.
@@ -85,8 +87,12 @@ duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
  */
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::vector<std::unique_ptr<duckdb::BoundOrderByNode>> &order_vec,
-    PyObject *out_schema_py);
+    //PyObject *out_schema_py,
+    std::vector<bool> &asc,
+    std::vector<bool> &na_position,
+    std::vector<int> &cols,
+    //std::vector<PyObject *> &col_types);
+    PyObject *schema_py);
 
 /**
  * @brief Creates a LogicalAggregate node.
@@ -171,7 +177,8 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
  * expression
  */
 duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    PyObject *field_py,
     int col_idx);
 
 /**

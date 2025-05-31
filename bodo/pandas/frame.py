@@ -29,6 +29,7 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
+    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_manager_class,
     get_n_index_arrays,
@@ -862,20 +863,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 raise BodoError(
                     f"DataFrame.sort_values(): lengths of by {len(by)} and na_position {len(na_position)}"
                 )
+        # Convert to True/False list instead of str.
+        na_position = [True if x == "first" else False for x in na_position]
 
-        # Create list of tuples that contain all the information necessary to
-        # create BoundOrderByNodes.
-        # First tuple element is True if that column is to be sorted ascending.
-        # Second tuple element is True if that column is to have null sort to the beginning.
-        # Third tuple element is the ColRefExpression for the column to be sorted.
-        order_by_info = [
-            (
-                asc,
-                True if na_order == "first" else False,
-                make_col_ref_exprs([self.columns.get_loc(col)], self._plan),
-            )
-            for col, asc, na_order in zip(by, ascending, na_position)
-        ]
+        # Convert column names to indices.
+        cols = [self.columns.get_loc(col) for col in by]
 
         """ Create 0 length versions of the dataframe as sorted dataframe
             has the same structure. """
@@ -886,7 +878,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "LogicalOrder",
                 zero_size_self,
                 self._plan,
-                order_by_info,
+                ascending,
+                na_position,
+                cols,
+                self._plan.pa_schema
             ),
         )
 

@@ -291,7 +291,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
-    cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CBoundOrderByNode]] order_vec, object out_schema) except +
+    cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
@@ -313,7 +313,7 @@ cdef extern from "_plan.h" nogil:
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
     cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema) except +
-    cdef unique_ptr[CBoundOrderByNode] make_order_by_node(c_bool asc, c_bool na_first, unique_ptr[CExpression] col_ref_expr) except +
+    cdef unique_ptr[CBoundOrderByNode] make_order_by_node(unique_ptr[CLogicalOperator] source, c_bool asc, c_bool na_first, object field, int col_idx) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -444,20 +444,32 @@ cdef class LogicalOrder(LogicalOperator):
     """Wrapper around DuckDB's LogicalOrder to provide access in Python.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, order_by_info):
-        cdef vector[unique_ptr[CBoundOrderByNode]] order_vec
-
-        for col_order in order_by_info:
-            order_vec.push_back(move(
-                make_order_by_node(
-                    col_order[0],
-                    col_order[1],
-                    move((<Expression>col_order[2]).c_expression))))
-
+    def __cinit__(self,
+                  object out_schema,
+                  LogicalOperator source,
+                  vector[c_bool] asc,
+                  vector[c_bool] na_position,
+                  vector[int] cols,
+                  object in_schema):
         self.out_schema = out_schema
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalOrder] c_logical_order = make_order(source.c_logical_operator, order_vec, out_schema)
+        print("LogicalOrder", type(in_schema))
+        """
+        cdef vector[PyObject*] col_types
+        cdef object py_obj
+        cdef PyObject* df_obj
+
+        print("LogicalOrder", type(in_schema))
+        for k in cols:
+            py_obj = in_schema[k]
+            print("py_obj", type(py_obj), py_obj)
+            df_obj = <PyObject*> py_obj 
+            print("df_obj", type(df_obj), df_obj)
+            col_types.push_back(df_obj)
+        """
+
+        cdef unique_ptr[CLogicalOrder] c_logical_order = make_order(source.c_logical_operator, asc, na_position, cols, in_schema)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_order.release())
 
     def __str__(self):
