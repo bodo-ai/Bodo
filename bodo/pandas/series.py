@@ -653,13 +653,13 @@ sig_map = {
 }
 
 
-def gen_method(name, return_type, sig_bind=None, accessor_type=""):
+def gen_method(name, return_type, is_method=True, accessor_type=""):
     """Generates Series methods, supports optional/positional args."""
 
     def method(self, *args, **kwargs):
         """Generalized template for Series methods and argument validation using signature"""
-        if sig_bind:
-            sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
+        if is_method:
+            bind(name, accessor_type, *args, **kwargs)  # Argument validation
 
         series = self._series if accessor_type else self
         index = series.head(0).index
@@ -877,23 +877,25 @@ dt_methods = [
 # Generates Series.str methods
 for str_pair in series_str_methods:
     for name in str_pair[0]:
-        method = gen_method(name, str_pair[1], sig_bind=bind, accessor_type="str.")
+        method = gen_method(name, str_pair[1], accessor_type="str.")
         setattr(BodoStringMethods, name, method)
 
 # Generates Series.dt accessors
 for dt_accessor_pair in dt_accessors:
     for name in dt_accessor_pair[0]:
-        accessor = gen_method(name, dt_accessor_pair[1], accessor_type="dt.")
+        accessor = gen_method(
+            name, dt_accessor_pair[1], is_method=False, accessor_type="dt."
+        )
         setattr(BodoDatetimeProperties, name, property(accessor))
 
 # Generates Series.dt methods
 for dt_method_pair in dt_methods:
     for name in dt_method_pair[0]:
-        method = gen_method(name, dt_method_pair[1], sig_bind=bind, accessor_type="dt.")
+        method = gen_method(name, dt_method_pair[1], accessor_type="dt.")
         setattr(BodoDatetimeProperties, name, method)
 
 # Generates direct Series.<method>
 for dir_method_pair in dir_methods:
     for name in dir_method_pair[0]:
-        method = gen_method(name, dir_method_pair[1], sig_bind=bind)
+        method = gen_method(name, dir_method_pair[1])
         setattr(BodoSeries, name, method)
