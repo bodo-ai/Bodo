@@ -504,6 +504,8 @@ cdef unique_ptr[CExpression] make_expr(val):
     """Convert a filter expression tree from Cython wrappers
        to duckdb.
     """
+    # TODO: support other scalar types
+    # See pandas scalars in pd.api.types.is_scalar
     cdef c_string val_cstr
 
     if isinstance(val, int):
