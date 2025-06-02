@@ -462,6 +462,17 @@ cdef class ColRefExpression(Expression):
         return f"ColRefExpression({self.out_schema})"
 
 
+cdef class ConstantExpression(Expression):
+    """Wrapper around DuckDB's BoundConstantExpression to provide access in Python.
+    """
+
+    def __cinit__(self, object value):
+        self.c_expression = make_expr(value)
+
+    def __str__(self):
+        return f"ConstantExpression()"
+
+
 cdef class AggregateExpression(Expression):
     """Wrapper around DuckDB's AggregateExpression to provide access in Python.
     """
