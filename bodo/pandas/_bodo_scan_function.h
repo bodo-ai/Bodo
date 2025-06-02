@@ -170,8 +170,8 @@ class BodoIcebergScanFunction : public BodoScanFunction {
         : BodoScanFunction(
               fmt::format("bodo_read_iceberg({})",
                           schemaColumnNamesToString(arrow_schema))) {
-        // filter_pushdown = true;
-        // filter_prune = true;
+        filter_pushdown = true;
+        filter_prune = true;
         projection_pushdown = true;
         limit_pushdown = true;
         // TODO: set statistics and other optimization flags as needed
