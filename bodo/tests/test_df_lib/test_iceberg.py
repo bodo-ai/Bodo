@@ -238,3 +238,10 @@ def test_table_read_row_filter(
         sort_output=True,
         reset_index=True,
     )
+
+
+# TODO: Test filter pushdown
+# Need multiple filters
+# Need to test on schema evolution
+# Need to test file and row filters
+# Need to test with the row_filter argument and filter pushdown

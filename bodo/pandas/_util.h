@@ -92,3 +92,16 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
 PyObject *duckdbFilterSetToPyicebergFilter(
     duckdb::TableFilterSet &filters,
     std::shared_ptr<arrow::Schema> arrow_schema);
+
+/**
+ * @brief Convert duckdb table filters to an Arrow filter format string and
+ * scalars.
+ * @param filters - the duckdb table filters to convert
+ * @param arrow_schema - the arrow schema to bind the filters to
+ * @return a Python tuple containing the filter format string and scalars
+ * The second element of the tuple is a list of tuples, where each tuple
+ * contains the variable name and the corresponding scalar value.
+ */
+PyObject *duckdbFilterSettoArrowFilterFStrAndScalars(
+    duckdb::TableFilterSet &filters,
+    std::shared_ptr<arrow::Schema> arrow_schema);

@@ -100,20 +100,35 @@ PhysicalReadIceberg::create_internal_reader(
         throw std::runtime_error(
             "failed to convert iceberg filter to arrow filter format string");
     }
+    // Convert the pushed duckb table filters to an Arrow filter format string
+    // and scalars.
+    PyObjectPtr pushed_iceberg_filter_f_str_and_scalars =
+        duckdbFilterSettoArrowFilterFStrAndScalars(filter_exprs, arrow_schema);
+    // Combine the convert iceberg filter with the converted pushed duckdb table
+    // filters.
+    PyObjectPtr combine_func = PyObject_GetAttrString(
+        iceberg_common_mod, "combine_format_str_and_scalars");
+    if (!combine_func || !PyCallable_Check(combine_func)) {
+        throw std::runtime_error(
+            "failed to get combine_format_str_and_scalars function from "
+            "bodo.io.iceberg.common module");
+    }
+    PyObjectPtr filter_f_str_and_scalars = PyObject_CallFunctionObjArgs(
+        combine_func, iceberg_filter_f_str_and_scalars.get(),
+        pushed_iceberg_filter_f_str_and_scalars.get(), nullptr);
+
     // The result is a tuple of (iceberg_filter_f_str, filter_scalars)
     // we need to unpack it.
     PyObject *iceberg_filter_f_str =
-        PyTuple_GetItem(iceberg_filter_f_str_and_scalars, 0);
+        PyTuple_GetItem(filter_f_str_and_scalars, 0);
     if (!iceberg_filter_f_str) {
         throw std::runtime_error(
             "failed to get iceberg filter format string from tuple");
     }
-    PyObject *filter_scalars =
-        PyTuple_GetItem(iceberg_filter_f_str_and_scalars, 1);
+    PyObject *filter_scalars = PyTuple_GetItem(filter_f_str_and_scalars, 1);
     if (!filter_scalars) {
         throw std::runtime_error("failed to get filter scalars from tuple");
     }
-
     // Convert the PyObject to a std::string
     std::string iceberg_filter_str;
     if (iceberg_filter_f_str != Py_None) {

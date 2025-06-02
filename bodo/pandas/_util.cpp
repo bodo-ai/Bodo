@@ -345,3 +345,28 @@ PyObject *duckdbFilterSetToPyicebergFilter(
 
     return ret;
 }
+
+PyObject *duckdbFilterSettoArrowFilterFStrAndScalars(
+    duckdb::TableFilterSet &filters,
+    std::shared_ptr<arrow::Schema> arrow_schema) {
+    PyObjectPtr convert_func = PyObject_GetAttrString(
+        PyImport_ImportModule("bodo.io.iceberg.common"),
+        "pyiceberg_filter_to_pyarrow_format_str_and_scalars");
+    if (!convert_func || !PyCallable_Check(convert_func)) {
+        throw std::runtime_error(
+            "failed to get convert_iceberg_filter_to_arrow function from "
+            "bodo.io.iceberg.common module");
+    }
+    PyObjectPtr pyiceberg_filter =
+        duckdbFilterToPyicebergFilter(filters, arrow_schema);
+    PyObject *iceberg_filter_f_str_and_scalars = PyObject_CallFunctionObjArgs(
+        convert_func, pyiceberg_filter.get(),
+        arrow::py::wrap_schema(arrow_schema), Py_True, nullptr);
+    if (!iceberg_filter_f_str_and_scalars || PyErr_Occurred()) {
+        throw std::runtime_error(
+            "failed to convert iceberg filter to arrow filter format string");
+    }
+    // Incref filter and scalars so we can pass it to the reader.
+    Py_INCREF(iceberg_filter_f_str_and_scalars);
+    return iceberg_filter_f_str_and_scalars;
+}
