@@ -467,7 +467,7 @@ cdef class ConstantExpression(Expression):
     """
 
     def __cinit__(self, object dummy_schema, object value):
-        self.c_expression = make_expr(value)
+        self.c_expression = make_const_expr(value)
 
     def __str__(self):
         return f"ConstantExpression()"
@@ -500,7 +500,7 @@ cdef class PythonScalarFuncExpression(Expression):
         return f"PythonScalarFuncExpression({self.out_schema})"
 
 
-cdef unique_ptr[CExpression] make_expr(val):
+cdef unique_ptr[CExpression] make_const_expr(val):
     """Convert a filter expression tree from Cython wrappers
        to duckdb.
     """
@@ -521,7 +521,7 @@ cdef unique_ptr[CExpression] make_expr(val):
         else:
             raise NotImplementedError("Only support ns timestamp resolution currently, not " + str(val.resolution))
     else:
-        raise NotImplementedError("Unknown expr type in make_expr " + str(type(val)))
+        raise NotImplementedError("Unknown expr type in make_const_expr " + str(type(val)))
 
 
 cdef class LogicalFilter(LogicalOperator):
@@ -543,8 +543,8 @@ cdef class ComparisonOpExpression(Expression):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
-        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(rhs))
 
         self.out_schema = out_schema
         self.c_expression = make_comparison_expr(
@@ -580,8 +580,8 @@ cdef class ArithOpExpression(Expression):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
-        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(rhs))
 
         self.out_schema = out_schema
         # The // operator in Python we have to implement as a truediv followed by a floor.
@@ -611,8 +611,8 @@ cdef class ConjunctionOpExpression(Expression):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
-        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(rhs))
 
         self.out_schema = out_schema
         self.c_expression = make_conjunction_expr(
@@ -628,7 +628,7 @@ cdef class UnaryOpExpression(Expression):
     def __cinit__(self, object out_schema, source, op):
         cdef unique_ptr[CExpression] source_expr
 
-        source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_expr(source))
+        source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_const_expr(source))
 
         self.out_schema = out_schema
         self.c_expression = make_unary_expr(
