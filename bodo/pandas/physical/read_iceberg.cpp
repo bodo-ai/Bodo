@@ -7,14 +7,16 @@
 PhysicalReadIceberg::PhysicalReadIceberg(
     PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
     PyObject *iceberg_schema, std::shared_ptr<arrow::Schema> arrow_schema,
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    int64_t snapshot_id, std::vector<int> &selected_columns,
+    duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val)
     : arrow_schema(std::move(arrow_schema)),
       out_arrow_schema(
           this->create_out_arrow_schema(this->arrow_schema, selected_columns)),
       internal_reader(this->create_internal_reader(
-          catalog, table_id, iceberg_filter, iceberg_schema, filter_exprs,
-          this->arrow_schema, selected_columns, limit_val)),
+          catalog, table_id, iceberg_filter, iceberg_schema, snapshot_id,
+          filter_exprs, this->arrow_schema, selected_columns, limit_val)),
+
       out_metadata(std::make_shared<TableMetadata>(
           this->arrow_schema->metadata()->keys(),
           this->arrow_schema->metadata()->values())),
@@ -58,7 +60,8 @@ std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
 std::unique_ptr<IcebergParquetReader>
 PhysicalReadIceberg::create_internal_reader(
     PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, duckdb::TableFilterSet &filter_exprs,
+    PyObject *iceberg_schema, int64_t snapshot_id,
+    duckdb::TableFilterSet &filter_exprs,
     std::shared_ptr<arrow::Schema> arrow_schema,
     std::vector<int> &selected_columns,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
@@ -158,7 +161,7 @@ PhysicalReadIceberg::create_internal_reader(
         catalog, table_id.c_str(), true, total_rows_to_read,
         py_iceberg_filter_and_duckdb_filter, iceberg_filter_str, filter_scalars,
         selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
-        get_streaming_batch_size(), -1, -1);
+        get_streaming_batch_size(), -1, snapshot_id);
     // TODO: Figure out cols to dict encode
     reader->init_iceberg_reader({}, false);
     return reader;

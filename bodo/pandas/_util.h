@@ -93,3 +93,13 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
 PyObject *duckdbFilterSetToPyicebergFilter(
     duckdb::TableFilterSet &filters,
     std::shared_ptr<arrow::Schema> arrow_schema);
+
+/**
+ * @brief Convert a DuckDB Value object which is used in constant expressions
+ * (BoundConstantExpression) to an Arrow scalar.
+ *
+ * @param value DuckDB Value object to convert
+ * @return std::shared_ptr<arrow::Scalar> equivalent Arrow scalar object
+ */
+std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
+    const duckdb::Value &value);

@@ -188,15 +188,18 @@ class PhysicalComparisonExpression : public PhysicalExpression {
 template <typename T, typename std::enable_if<std::is_arithmetic<T>::value &&
                                                   !std::is_same<T, bool>::value,
                                               int>::type = 0>
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const T &value) {
+std::shared_ptr<arrow::Array> ScalarToArrowArray(const T &value,
+                                                 size_t num_elements = 1) {
     using ArrowType = typename arrow::CTypeTraits<T>::ArrowType;
     using BuilderType = arrow::NumericBuilder<ArrowType>;
 
     BuilderType builder;
     arrow::Status status;
-    status = builder.Append(value);
-    if (!status.ok()) {
-        throw std::runtime_error("builder.Append failed.");
+    for (size_t i = 0; i < num_elements; ++i) {
+        status = builder.Append(value);
+        if (!status.ok()) {
+            throw std::runtime_error("builder.Append failed.");
+        }
     }
     std::shared_ptr<arrow::Array> array;
     status = builder.Finish(&array);
@@ -207,15 +210,19 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const T &value) {
 }
 
 // String specialization
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
-    const std::string &value);
+std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string &value,
+                                                 size_t num_elements = 1);
 
 // arrow::Scalar specialization
 std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
     const std::shared_ptr<arrow::Scalar> &value);
 
+std::shared_ptr<arrow::Array> ScalarToArrowArray(const arrow::Scalar &value,
+                                                 size_t num_elements = 1);
+
 // bool specialization
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value);
+std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
+                                                 size_t num_elements = 1);
 
 /**
  * @brief Physical expression tree node type for scalar constants.
@@ -229,8 +236,7 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::shared_ptr<arrow::Array> array =
-            CreateOneElementArrowArray(constant);
+        std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
 
         auto result =
             arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
@@ -255,8 +261,7 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::shared_ptr<arrow::Array> array =
-            CreateOneElementArrowArray(constant);
+        std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
 
         auto result =
             arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());

@@ -70,6 +70,6 @@ BodoIcebergScanFunctionData::CreatePhysicalOperator(
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
     return std::make_shared<PhysicalReadIceberg>(
         this->catalog, this->table_id, this->iceberg_filter,
-        this->iceberg_schema, this->arrow_schema, selected_columns,
-        filter_exprs, limit_val);
+        this->iceberg_schema, this->arrow_schema, this->snapshot_id,
+        selected_columns, filter_exprs, limit_val);
 }
