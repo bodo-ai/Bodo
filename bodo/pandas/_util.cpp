@@ -208,6 +208,7 @@ std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
     }
     return scalar_res.ValueOrDie();
 }
+
 std::string expressionTypeToPyicebergclass(duckdb::ExpressionType expr_type) {
     switch (expr_type) {
         case duckdb::ExpressionType::COMPARE_EQUAL:
