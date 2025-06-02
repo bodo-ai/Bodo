@@ -164,11 +164,12 @@ class PhysicalProjection : public PhysicalSourceSink {
             } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
                 auto& const_expr =
                     expr->Cast<duckdb::BoundConstantExpression>();
+                size_t nrows = input_batch->nrows();
 
                 // Create an Arrow array filled with the constant value
                 std::shared_ptr<arrow::Array> arr = std::visit(
-                    [](const auto&& value) {
-                        return CreateOneElementArrowArray(value);
+                    [nrows](const auto&& value) {
+                        return ScalarToArrowArray(value, nrows);
                     },
                     extractValue(const_expr.value));
 
