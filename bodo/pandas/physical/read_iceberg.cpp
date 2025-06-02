@@ -92,9 +92,8 @@ PhysicalReadIceberg::create_internal_reader(
 
     // We need to convert the combined pyiceberg iceberg filter to an Arrow
     // filter format string so it can be applied at the row level in addition to
-    // the file level. call python function
-    // bodo.io.iceberg.common.convert_iceberg_filter_to_arrow(iceberg_filter,
-    // iceberg_schema, true) import bodo.io.iceberg.common
+    // the file level.
+    //  import bodo.io.iceberg.common
     PyObjectPtr iceberg_common_mod =
         PyImport_ImportModule("bodo.io.iceberg.common");
     if (PyErr_Occurred()) {
@@ -110,6 +109,9 @@ PhysicalReadIceberg::create_internal_reader(
             "failed to get convert_iceberg_filter_to_arrow function from "
             "bodo.io.iceberg.common module");
     }
+    // call python function to convert the combined pyiceberg filter
+    // bodo.io.iceberg.common.convert_iceberg_filter_to_arrow(iceberg_filter,iceberg_schema,
+    // true)
     PyObjectPtr filter_f_str_and_scalars = PyObject_CallFunctionObjArgs(
         convert_func, py_iceberg_filter_and_duckdb_filter, iceberg_schema,
         Py_True, nullptr);
