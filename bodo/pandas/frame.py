@@ -723,24 +723,33 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             if (
                 new_plan := _get_set_column_plan(self._plan, value._plan, key)
             ) is not None:
-                # Update internal state
-                self._mgr._plan = new_plan
                 head_val = value._head_s
-                # Copy and update head in case reused
-                new_df_head = self._head_df.copy()
-                new_df_head[key] = head_val
-                self._head_df = new_df_head
-                self._mgr._md_head = new_df_head._mgr
-                with self.disable_collect():
-                    # Update internal data manager (e.g. insert a new block or update an
-                    # existing one). See:
-                    # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
-                    super().__setitem__(key, head_val)
+                self._update_setitem_internal_state(new_plan, key, head_val)
                 return
 
         raise BodoLibNotImplementedException(
             "Only setting a column with a Series created from the same dataframe is supported."
         )
+
+    def _update_setitem_internal_state(
+        self, new_plan: LazyPlan, key: str, head_val: pd.Series
+    ):
+        """Update internal state of the dataframe for setting a column.
+        new_plan: the updated plan that adds the column to the dataframe.
+        key: the name of the column to be set.
+        head_val: new head Series value for the column to be set.
+        """
+        self._mgr._plan = new_plan
+        # Copy and update head in case reused
+        new_df_head = self._head_df.copy()
+        new_df_head[key] = head_val
+        self._head_df = new_df_head
+        self._mgr._md_head = new_df_head._mgr
+        with self.disable_collect():
+            # Update internal data manager (e.g. insert a new block or update an
+            # existing one). See:
+            # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
+            super().__setitem__(key, head_val)
 
     @check_args_fallback(supported=["func", "axis", "args"])
     def apply(
