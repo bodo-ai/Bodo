@@ -82,3 +82,13 @@ std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
  */
 std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
     const duckdb::LogicalType &type);
+
+/**
+ * @brief Convert duckdb table filters to pyiceberg expressions.
+ * @param filters - the duckdb table filters to convert
+ * @param arrow_schema - the arrow schema to bind the filters to
+ * @return a PyObject representing the pyiceberg expression
+ */
+PyObject *duckdbFilterSetToPyicebergFilter(
+    duckdb::TableFilterSet &filters,
+    std::shared_ptr<arrow::Schema> arrow_schema);
