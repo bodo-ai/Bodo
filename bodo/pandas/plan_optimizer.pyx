@@ -292,7 +292,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
     cdef unique_ptr[CExpression] make_const_int_expr(int64_t val) except +
-    cdef unique_ptr[CExpression] make_const_float_expr(double val) except +
+    cdef unique_ptr[CExpression] make_const_double_expr(double val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
@@ -511,7 +511,7 @@ cdef unique_ptr[CExpression] make_const_expr(val):
     if isinstance(val, int):
         return move(make_const_int_expr(val))
     elif isinstance(val, float):
-        return move(make_const_float_expr(val))
+        return move(make_const_double_expr(val))
     elif isinstance(val, str):
         val_cstr = val.encode()
         return move(make_const_string_expr(val_cstr))

@@ -78,7 +78,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int64_t val) {
         duckdb::Value(val));
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(double val) {
+duckdb::unique_ptr<duckdb::Expression> make_const_double_expr(double val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(val));
 }

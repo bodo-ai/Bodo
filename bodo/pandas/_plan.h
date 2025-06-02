@@ -115,7 +115,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int64_t val);
  * @param val - the constant float for the expression
  * @return duckdb::unique_ptr<duckdb::Expression> - the const float expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(double val);
+duckdb::unique_ptr<duckdb::Expression> make_const_double_expr(double val);
 
 /**
  * @brief Create an expression from a constant string.
