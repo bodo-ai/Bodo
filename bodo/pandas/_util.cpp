@@ -239,7 +239,7 @@ std::string expressionTypeToPyicebergclass(duckdb::ExpressionType expr_type) {
 PyObject *_duckdbFilterToPyicebergFilter(
     duckdb::unique_ptr<duckdb::TableFilter> tf, const std::string field_name,
     PyObjectPtr &pyiceberg_expression_mod) {
-    PyObject *py_expr;
+    PyObject *py_expr = nullptr;
     switch (tf->filter_type) {
         case duckdb::TableFilterType::CONSTANT_COMPARISON: {
             duckdb::unique_ptr<duckdb::ConstantFilter> constantFilter =

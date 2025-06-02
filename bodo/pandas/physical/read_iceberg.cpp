@@ -136,7 +136,7 @@ PhysicalReadIceberg::create_internal_reader(
     // We need to & the iceberg_filter with converted duckdb table filters
     // to apply the filters at the file level.
     PyObjectPtr duckdb_iceberg_filter =
-        duckdbFilterToPyicebergFilter(filter_exprs, arrow_schema);
+        duckdbFilterSetToPyicebergFilter(filter_exprs, arrow_schema);
 
     // Perform the python & to combine the filters
     // IcebergParquetReader takes ownership, so don't decref
