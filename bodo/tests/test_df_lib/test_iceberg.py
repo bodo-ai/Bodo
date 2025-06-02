@@ -261,8 +261,6 @@ def test_table_read_filter_pushdown(
     iceberg_table_conn,
     memory_leak_check,
 ):
-    # This is a placeholder for a more complex test that would involve filter pushdown
-    # and multiple filters.
     db_schema, warehouse_loc = iceberg_database(table_name)
     DirCatalog(
         None,

@@ -506,11 +506,7 @@ cdef unique_ptr[CExpression] make_expr(val):
         if val.resolution.nanoseconds == 1:
             return move(make_const_timestamp_ns_expr(val.value))
         else:
-            try:
-                return move(make_const_timestamp_ns_expr(val.as_unit("ns", round_ok=False).value))
-            except ValueError:
-                raise NotImplementedError("Only timestamps representable in nanoseconds are supported.")
-            
+            raise NotImplementedError("Only support ns timestamp resolution currently, not " + str(val.resolution))
     else:
         raise NotImplementedError("Unknown expr type in make_expr " + str(type(val)))
 

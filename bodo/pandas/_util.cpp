@@ -1,5 +1,4 @@
 #include "_util.h"
-#include <abstract.h>
 #include <arrow/compute/api.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/result.h>
@@ -201,7 +200,7 @@ std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
         [](const auto &&value) {
             if constexpr (std::is_same_v<decltype(value),
                                          std::shared_ptr<arrow::Scalar>>) {
-                // If the value is already a scalar, we cam just wrap it
+                // If the value is already a scalar, we can just wrap it
                 // in an arrow::Result and return it.
                 arrow::Result<std::shared_ptr<arrow::Scalar>> ret =
                     arrow::ToResult(value);
@@ -260,14 +259,14 @@ PyObject *_duckdbFilterToPyicebergFilter(
                 convertDuckdbValueToArrowScalar(constantFilter->constant);
             std::string pyiceberg_class =
                 expressionTypeToPyicebergclass(constantFilter->comparison_type);
-            PyObjectPtr scalar_pyobect = arrow::py::wrap_scalar(scalar);
-            if (!scalar_pyobect) {
+            PyObjectPtr scalar_pyobject = arrow::py::wrap_scalar(scalar);
+            if (!scalar_pyobject) {
                 throw std::runtime_error(
                     "Failed to convert duckdb value to pyarrow scalar");
             }
             // Call scalar.as_py() to get the Python object representation
             PyObjectPtr scalar_as_py =
-                PyObject_CallMethod(scalar_pyobect.get(), "as_py", nullptr);
+                PyObject_CallMethod(scalar_pyobject.get(), "as_py", nullptr);
 
             py_expr = PyObject_CallMethod(
                 pyiceberg_expression_mod, pyiceberg_class.c_str(), "sO",
