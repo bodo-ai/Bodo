@@ -1,6 +1,7 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
+#include <cstddef>
 #include <utility>
 
 #include "../io/arrow_compat.h"
@@ -10,11 +11,13 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/function/aggregate_function.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
@@ -109,16 +112,43 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
         ctype, source_cols[col_idx]);
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_function_expr(
-    std::string function_name) {
-    if (function_name == "count_star()") {
-        return duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            "count_star()", duckdb::LogicalType::BIGINT,
-            duckdb::ColumnBinding(-1, 0), 0);
-    } else {
-        throw std::runtime_error("make_function_expr unsupported function " +
-                                 function_name);
+duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    std::string function_name, std::vector<int> input_column_indices) {
+    // Get DuckDB output type
+    auto field_res = arrow::py::unwrap_field(field_py);
+    std::shared_ptr<arrow::Field> field;
+    CHECK_ARROW_AND_ASSIGN(field_res, "make_agg_expr: unable to unwrap field",
+                           field);
+    auto [_, out_type] = arrow_field_to_duckdb(field);
+
+    // Get arguments and their types for the aggregate function.
+    source->ResolveOperatorTypes();
+    std::vector<duckdb::ColumnBinding> source_cols =
+        source->GetColumnBindings();
+    duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> children;
+    duckdb::vector<duckdb::LogicalType> arg_types;
+    for (int col_idx : input_column_indices) {
+        if (col_idx < 0 || static_cast<size_t>(col_idx) >= source_cols.size()) {
+            throw std::runtime_error(
+                fmt::format("make_agg_expr: Column index {} out of bounds for "
+                            "source columns",
+                            col_idx));
+        }
+        duckdb::LogicalType col_type = source->types[col_idx];
+        children.push_back(
+            std::move(duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+                col_type, source_cols[col_idx])));
+        arg_types.push_back(col_type);
     }
+
+    duckdb::AggregateFunction function(
+        function_name, arg_types, out_type, nullptr, nullptr, nullptr, nullptr,
+        nullptr, duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
+
+    return duckdb::make_uniq<duckdb::BoundAggregateExpression>(
+        function, std::move(children), nullptr, nullptr,
+        duckdb::AggregateType::NON_DISTINCT);
 }
 
 /**
@@ -276,7 +306,7 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     switch (etype) {
         case duckdb::ExpressionType::OPERATOR_NOT: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
-                etype, duckdb::LogicalType::BOOLEAN);
+                etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
             ret->children.push_back(std::move(lhs_duck));
             return ret;
         } break;
@@ -355,8 +385,8 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
 }
 
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
-    std::unique_ptr<duckdb::LogicalOperator> &source, duckdb::idx_t group_index,
-    duckdb::idx_t aggregate_index,
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<int> &key_indices,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
     PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
@@ -364,46 +394,38 @@ duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
     std::vector<duckdb::ColumnBinding> source_cols =
         source_duck->GetColumnBindings();
 
+    source_duck->ResolveOperatorTypes();
+
     std::vector<duckdb::unique_ptr<duckdb::Expression>> aggregate_expressions;
     for (auto &expr : expr_vec) {
         // Convert std::unique_ptr to duckdb::unique_ptr.
         auto expr_duck = to_duckdb(expr);
-        duckdb::ExpressionClass expr_class = expr_duck->GetExpressionClass();
-
-        switch (expr_class) {
-            case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
-                // Convert the base duckdb::Expression node to its actual
-                // derived type.
-                duckdb::unique_ptr<duckdb::BoundColumnRefExpression> bce =
-                    dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(
-                        std::move(expr_duck));
-                duckdb::ColumnBinding binding = bce->binding;
-                // In duckdb, the expr (e.g., FunctionExpression) in the
-                // aggregate is created first in an unbound state and in the
-                // binding process it goes from the aggregate node first into
-                // the exprs and converts them to bound versions.  In our
-                // integration with duckdb, we don't have a binding phase so
-                // we create a BoundColumnRefExpression which requires a
-                // ColumnBinding but we can't set that correctly because we
-                // don't have the aggregate node yet.  In this function where
-                // we create the aggregate node, we go into the exprs and
-                // update these placeholders ColumnBindings to a correct
-                // version.
-                bce->binding = source_cols[binding.column_index];
-                expr_duck = std::move(bce);
-            } break;  // suppress wrong fallthrough error
-            default:
-                throw std::runtime_error(
-                    "Unsupported duckdb expression type in aggregate " +
-                    std::to_string(static_cast<int>(expr_class)));
-        }
         aggregate_expressions.push_back(std::move(expr_duck));
     }
+
+    duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Create aggregate node.
     duckdb::unique_ptr<duckdb::LogicalAggregate> aggr =
         duckdb::make_uniq<duckdb::LogicalAggregate>(
-            group_index, aggregate_index, std::move(aggregate_expressions));
+            binder->GenerateTableIndex(), binder->GenerateTableIndex(),
+            std::move(aggregate_expressions));
+
+    std::vector<duckdb::unique_ptr<duckdb::Expression>> group_exprs;
+    for (int key_idx : key_indices) {
+        if (key_idx < 0 || static_cast<size_t>(key_idx) >= source_cols.size()) {
+            throw std::runtime_error(
+                fmt::format("make_aggregate: Key index {} out of bounds for "
+                            "source columns",
+                            key_idx));
+        }
+        duckdb::LogicalType col_type = source_duck->types[key_idx];
+        group_exprs.push_back(
+            duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
+                col_type, source_cols[key_idx]));
+    }
+
+    aggr->groups = std::move(group_exprs);
 
     // Add the source to be aggregated on.
     aggr->children.push_back(std::move(source_duck));
@@ -616,7 +638,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_name,
-    PyObject *pyiceberg_catalog, PyObject *iceberg_filter) {
+    PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
+    PyObject *iceberg_schema) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Convert Arrow schema to DuckDB
@@ -627,7 +650,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
         BodoIcebergScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoIcebergScanFunctionData>(
-            arrow_schema, pyiceberg_catalog, table_name, iceberg_filter);
+            arrow_schema, pyiceberg_catalog, table_name, iceberg_filter,
+            iceberg_schema);
 
     duckdb::virtual_column_map_t virtual_columns;
 

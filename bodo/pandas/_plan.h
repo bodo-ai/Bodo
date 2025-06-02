@@ -65,15 +65,14 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
  * @brief Creates a LogicalAggregate node.
  *
  * @param source - the data source to aggregate
- * @param group_index - the group index for the aggregate
- * @param aggregate_index - the aggregate index for the aggregate
+ * @param key_indices - key column indices to group by
  * @param exprs - vector of aggregate exprs
  * @param out_schema_py - the schema of data coming out of the aggregate
  * @return duckdb::unique_ptr<duckdb::LogicalAggregate> output node
  */
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
-    std::unique_ptr<duckdb::LogicalOperator> &source, duckdb::idx_t group_index,
-    duckdb::idx_t aggregate_index,
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<int> &key_indices,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
     PyObject *out_schema_py);
 
@@ -149,13 +148,19 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
     int col_idx);
 
 /**
- * @brief Create an expression for a given function name.
+ * @brief Create an aggregate expression for a given function name and input
+ * source node
  *
- * @param function_name - the function name to create expression for
- * @return duckdb::unique_ptr<duckdb::Expression> - the function expression
+ * @param source input source node to aggregate
+ * @param field_py output field type for the aggregate function
+ * @param function_name function name for matching in backend
+ * @param input_column_indices argument column indices for the input source
+ * @return duckdb::unique_ptr<duckdb::Expression> new BoundAggregateExpression
+ * object
  */
-duckdb::unique_ptr<duckdb::Expression> make_function_expr(
-    std::string function_name);
+duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    std::string function_name, std::vector<int> input_column_indices);
 
 /**
  * @brief Create an expression from two sources and an operator.
@@ -283,11 +288,13 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
  * @param table_name Identifier for the Iceberg table, includes schema and table
  * @param pyiceberg_catalog Iceberg catalog object
  * @param iceberg_filter Iceberg filter expression
+ * @param iceberg_schema Iceberg schema object
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_identifier,
-    PyObject *pyiceberg_catalog, PyObject *iceberg_filter);
+    PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
+    PyObject *iceberg_schema);
 
 /**
  * @brief Returns a statically created DuckDB database.
