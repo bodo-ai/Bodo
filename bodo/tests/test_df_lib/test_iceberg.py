@@ -244,7 +244,6 @@ def test_table_read_row_filter(
 
 
 # TODO: Test filter pushdown
-# Need multiple filters
 @pytest.mark.parametrize(
     "table_name",
     [
@@ -279,27 +278,28 @@ def test_table_read_row_filter_pushdown(
             pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
-    )[eval(f"bodo_df1.A {op_str} 20")]
+    )
+    bodo_out2 = bodo_out[eval(f"bodo_out.A {op_str} 20")]
 
-    assert bodo_out.is_lazy_plan()
+    assert bodo_out2.is_lazy_plan()
 
-    pre, post = bpd.utils.getPlanStatistics(bodo_out._mgr._plan)
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
-    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)[
-        eval(f"py_df1.A {op_str} 20")
-    ]
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[eval(f"py_out.A {op_str} 20")]
 
     _test_equal(
-        bodo_out,
-        py_out,
+        bodo_out2,
+        py_out2,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
     )
 
 
+# Need multiple filters
 # Need to test on schema evolution
 # Need to test file and row filters
 # Need to test with the row_filter argument and filter pushdown
