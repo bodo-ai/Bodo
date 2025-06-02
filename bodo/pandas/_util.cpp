@@ -1,4 +1,5 @@
 #include "_util.h"
+#include <abstract.h>
 #include <arrow/compute/api.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/result.h>
@@ -220,9 +221,9 @@ std::string expressionTypeToPyicebergclass(duckdb::ExpressionType expr_type) {
         case duckdb::ExpressionType::COMPARE_LESSTHAN:
             return "LessThan";
         case duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
-            return "GreaterThanOrEqualTo";
+            return "GreaterThanOrEqual";
         case duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO:
-            return "LessThanOrEqualTo";
+            return "LessThanOrEqual";
         case duckdb::ExpressionType::OPERATOR_IS_NULL:
             return "IsNull";
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL:
@@ -249,10 +250,18 @@ PyObject *_duckdbFilterToPyicebergFilter(
                 convertDuckdbValueToArrowScalar(constantFilter->constant);
             std::string pyiceberg_class =
                 expressionTypeToPyicebergclass(constantFilter->comparison_type);
+            PyObjectPtr scalar_pyobect = arrow::py::wrap_scalar(scalar);
+            if (!scalar_pyobect) {
+                throw std::runtime_error(
+                    "Failed to convert duckdb value to pyarrow scalar");
+            }
+            // Call scalar.as_py() to get the Python object representation
+            PyObjectPtr scalar_as_py =
+                PyObject_CallMethod(scalar_pyobect.get(), "as_py", nullptr);
 
             py_expr = PyObject_CallMethod(
                 pyiceberg_expression_mod, pyiceberg_class.c_str(), "sO",
-                field_name.c_str(), arrow::py::wrap_scalar(scalar));
+                field_name.c_str(), scalar_as_py.get());
         } break;
         case duckdb::TableFilterType::IS_NULL: {
             py_expr = PyObject_CallMethod(pyiceberg_expression_mod, "IsNull",
