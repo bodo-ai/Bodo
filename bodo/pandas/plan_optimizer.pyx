@@ -466,7 +466,7 @@ cdef class ConstantExpression(Expression):
     """Wrapper around DuckDB's BoundConstantExpression to provide access in Python.
     """
 
-    def __cinit__(self, object value):
+    def __cinit__(self, object dummy_schema, object value):
         self.c_expression = make_expr(value)
 
     def __str__(self):
