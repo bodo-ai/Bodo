@@ -4,6 +4,7 @@
 #include <arrow/result.h>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
+#include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
@@ -259,6 +260,44 @@ PyObject *_duckdbFilterToPyicebergFilter(
         case duckdb::TableFilterType::IS_NOT_NULL: {
             py_expr = PyObject_CallMethod(pyiceberg_expression_mod, "IsNotNull",
                                           "s", field_name.c_str());
+        } break;
+        case duckdb::TableFilterType::CONJUNCTION_AND: {
+            duckdb::unique_ptr<duckdb::ConjunctionAndFilter> conjunctionFilter =
+                dynamic_cast_unique_ptr<duckdb::ConjunctionAndFilter>(
+                    std::move(tf));
+            for (auto &child_filter : conjunctionFilter->child_filters) {
+                PyObject *child_expr = _duckdbFilterToPyicebergFilter(
+                    std::move(child_filter), field_name,
+                    pyiceberg_expression_mod);
+                if (!py_expr) {
+                    py_expr = child_expr;
+                } else {
+                    PyObject *original_py_expr = py_expr;
+                    py_expr = PyObject_CallMethod(py_expr, "__and__", "O",
+                                                  child_expr);
+                    Py_DECREF(original_py_expr);
+                    Py_DECREF(child_expr);
+                }
+            }
+        } break;
+        case duckdb::TableFilterType::CONJUNCTION_OR: {
+            duckdb::unique_ptr<duckdb::ConjunctionOrFilter> conjunctionFilter =
+                dynamic_cast_unique_ptr<duckdb::ConjunctionOrFilter>(
+                    std::move(tf));
+            for (auto &child_filter : conjunctionFilter->child_filters) {
+                PyObject *child_expr = _duckdbFilterToPyicebergFilter(
+                    std::move(child_filter), field_name,
+                    pyiceberg_expression_mod);
+                if (!py_expr) {
+                    py_expr = child_expr;
+                } else {
+                    PyObject *original_py_expr = py_expr;
+                    py_expr =
+                        PyObject_CallMethod(py_expr, "__or__", "O", child_expr);
+                    Py_DECREF(original_py_expr);
+                    Py_DECREF(child_expr);
+                }
+            }
         } break;
         default:
             throw std::runtime_error(
