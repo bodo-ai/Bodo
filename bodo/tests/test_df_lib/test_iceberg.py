@@ -1,3 +1,4 @@
+import pyarrow as pa
 import pyiceberg.catalog
 import pyiceberg.expressions
 import pytest
@@ -234,6 +235,84 @@ def test_table_read_row_filter(
     _test_equal(
         bodo_out,
         py_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "SIMPLE_NUMERIC_TABLE",
+    ],
+)
+def test_table_read_time_travel(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    catalog = DirCatalog(
+        None,
+        **{
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    table = catalog.load_table(f"{db_schema}.{table_name}")
+    # Get the current snapshot ID
+    snapshot_id = table.current_snapshot().snapshot_id
+    # Read the table at the current snapshot to get the initial state
+    py_out_orig = table.scan().to_pandas()
+
+    # Append to the table to create a new snapshot
+    table.append(
+        pa.Table.from_pydict(
+            {
+                "A": [10],
+                "B": [15],
+                "C": [20],
+                "D": [25],
+                "E": [30],
+                "F": [36],
+            },
+            schema=table.schema().as_arrow(),
+        )
+    )
+
+    # Read the table at the previous snapshot ID
+    bodo_out_orig = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+        snapshot_id=snapshot_id,
+    )
+
+    _test_equal(
+        bodo_out_orig,
+        py_out_orig,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    # Read the table at the current snapshot to get the new state
+    py_out_new = table.scan().to_pandas()
+    bodo_out_new = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    _test_equal(
+        bodo_out_new,
+        py_out_new,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
