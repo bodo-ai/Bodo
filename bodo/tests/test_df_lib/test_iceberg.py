@@ -1,3 +1,6 @@
+import operator
+
+import numba.core.utils
 import pyiceberg.catalog
 import pyiceberg.expressions
 import pytest
@@ -242,6 +245,61 @@ def test_table_read_row_filter(
 
 # TODO: Test filter pushdown
 # Need multiple filters
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "SIMPLE_NUMERIC_TABLE",
+    ],
+)
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_table_read_row_filter_pushdown(
+    table_name,
+    op,
+    iceberg_database,
+    iceberg_table_conn,
+    memory_leak_check,
+):
+    # This is a placeholder for a more complex test that would involve filter pushdown
+    # and multiple filters.
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    DirCatalog(
+        None,
+        **{
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )[eval(f"bodo_df1.A {op_str} 20")]
+
+    assert bodo_out.is_lazy_plan()
+
+    pre, post = bpd.utils.getPlanStatistics(bodo_out._mgr._plan)
+    _test_equal(pre, 2)
+    _test_equal(post, 1)
+
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)[
+        eval(f"py_df1.A {op_str} 20")
+    ]
+
+    _test_equal(
+        bodo_out,
+        py_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 # Need to test on schema evolution
 # Need to test file and row filters
 # Need to test with the row_filter argument and filter pushdown
