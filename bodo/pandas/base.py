@@ -123,6 +123,7 @@ def _empty_like(val):
         "selected_fields",
         "limit",
         "row_filter",
+        "snapshot_id",
     ]
 )
 def read_iceberg(
@@ -162,6 +163,7 @@ def read_iceberg(
         # We need to pass the pyiceberg schema so we can bind the iceberg filter to it
         # during filter conversion. See bodo/io/iceberg/common.py::pyiceberg_filter_to_pyarrow_format_str_and_scalars
         pyiceberg_schema,
+        snapshot_id if snapshot_id is not None else -1,
         __pa_schema=arrow_schema,
     )
 

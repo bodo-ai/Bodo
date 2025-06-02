@@ -279,7 +279,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema) except +
-    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema) except +
+    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
@@ -715,12 +715,12 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     """
     cdef readonly str table_identifier
 
-    def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema):
+    def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema, object snapshot_id):
         import pyiceberg.catalog
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
         self.out_schema = out_schema
         self.table_identifier = table_identifier
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter, iceberg_schema)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
