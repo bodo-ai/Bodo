@@ -1,6 +1,8 @@
+import datetime
 import operator
 
 import numba.core.utils
+import pandas as pd
 import pyiceberg.catalog
 import pyiceberg.expressions
 import pytest
@@ -378,4 +380,79 @@ def test_table_read_filter_pushdown_and_row_filter(
 
 
 # Need to test on schema evolved table
-# Need to test file pruning on partitioned tables
+@pytest.mark.parametrize(
+    "table_name",
+    ["ADVERSARIAL_SCHEMA_EVOLUTION_TABLE"],
+)
+def test_table_read_schema_evolved_filter_pushdown(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    bodo_out2 = bodo_out[bodo_out.B < 4]
+    assert bodo_out2.is_lazy_plan()
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 2
+    assert post == 1
+
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[py_out.B < 4]
+
+    _test_equal(
+        bodo_out2,
+        py_out2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "PARTITIONS_DT_TABLE",
+    ],
+)
+def test_table_read_partitioned_file_pruning(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    bodo_out2 = bodo_out[bodo_out.A <= pd.Timestamp("2018-12-12")]
+    assert bodo_out2.is_lazy_plan()
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 2
+    assert post == 1
+
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[py_out.A <= datetime.date(2018, 12, 12)]
+    # TODO: Figure out how to test that not all files are read automatically.
+    # It was manually confirmed when the test was written.
+
+    _test_equal(
+        bodo_out2,
+        py_out2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
