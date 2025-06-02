@@ -516,10 +516,9 @@ cdef unique_ptr[CExpression] make_const_expr(val):
         val_cstr = val.encode()
         return move(make_const_string_expr(val_cstr))
     elif isinstance(val, pd.Timestamp):
-        if val.resolution.nanoseconds == 1:
-            return move(make_const_timestamp_ns_expr(val.value))
-        else:
-            raise NotImplementedError("Only support ns timestamp resolution currently, not " + str(val.resolution))
+        # NOTE: Timestamp.value always converts to nanoseconds
+        # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/_libs/tslibs/timestamps.pyx#L242
+        return move(make_const_timestamp_ns_expr(val.value))
     else:
         raise NotImplementedError("Unknown expr type in make_const_expr " + str(type(val)))
 

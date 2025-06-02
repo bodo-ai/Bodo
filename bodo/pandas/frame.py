@@ -712,6 +712,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         This is done by creating a new plan that add the new
         column in the existing dataframe plan using a projection.
         """
+        import pyarrow as pa
+
         from bodo.pandas.base import _empty_like
 
         # Match cases like df["B"] = df["A"].str.lower()
@@ -755,6 +757,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 empty_data, self._plan, ikey, is_replace, const_expr
             )
             empty_data[key] = value
+
+            # Make sure proper Arrow type is used for the column to match backend and
+            # there is no object dtype.
+            pa_type = pa.scalar(value).type
+            if isinstance(pa_type, pa.TimestampType):
+                # Convert to nanosecond precision as required by backend
+                pa_type = pa.timestamp("ns", pa_type.tz)
+            empty_data[key] = empty_data[key].astype(pd.ArrowDtype(pa_type))
+
             new_plan = LazyPlan(
                 "LogicalProjection",
                 empty_data,
