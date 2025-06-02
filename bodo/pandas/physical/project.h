@@ -1,12 +1,16 @@
 #pragma once
 
+#include <arrow/type.h>
 #include <utility>
+#include "../../libs/_bodo_to_arrow.h"
 #include "../_util.h"
 #include "../libs/_array_utils.h"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/logical_operator.hpp"
+#include "expression.h"
 #include "operator.h"
 
 /**
@@ -76,6 +80,16 @@ class PhysicalProjection : public PhysicalSourceSink {
                 this->output_schema->append_column(std::move(col_type));
                 col_names.emplace_back(
                     scalar_func_data.out_schema->field(0)->name());
+            } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
+                auto& const_expr =
+                    expr->Cast<duckdb::BoundConstantExpression>();
+
+                std::unique_ptr<bodo::DataType> col_type =
+                    arrow_type_to_bodo_data_type(
+                        convertDuckdbValueToArrowScalar(const_expr.value)->type)
+                        ->copy();
+                this->output_schema->append_column(std::move(col_type));
+                col_names.emplace_back(const_expr.value.ToString());
             } else {
                 throw std::runtime_error(
                     "Unsupported expression type in projection " +
@@ -147,6 +161,21 @@ class PhysicalProjection : public PhysicalSourceSink {
                 // exprs.
                 out_cols.emplace_back(udf_output->columns[0]);
                 col_names.emplace_back(func_expr.GetName());
+            } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
+                auto& const_expr =
+                    expr->Cast<duckdb::BoundConstantExpression>();
+                size_t nrows = input_batch->nrows();
+
+                // Create an Arrow array filled with the constant value
+                std::shared_ptr<arrow::Array> arr = std::visit(
+                    [nrows](const auto&& value) {
+                        return ScalarToArrowArray(value, nrows);
+                    },
+                    extractValue(const_expr.value));
+
+                out_cols.emplace_back(
+                    arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr()));
+                col_names.emplace_back(const_expr.value.ToString());
             } else {
                 throw std::runtime_error(
                     "Unsupported expression type in projection " +

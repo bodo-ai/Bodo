@@ -664,6 +664,50 @@ def test_set_df_column(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+def test_set_df_column_const(datapath, index_val):
+    """Test setting a dataframe column with a constant value."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+
+    # New integer column
+    bdf["D"] = 111
+    pdf = df.copy()
+    pdf["D"] = 111
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Replace existing column with float
+    bdf = bd.from_pandas(df)
+    bdf["B"] = 1.23
+    pdf = df.copy()
+    pdf["B"] = 1.23
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Replace existing column with string
+    bdf = bd.from_pandas(df)
+    bdf["C"] = "ABC"
+    pdf = df.copy()
+    pdf["C"] = "ABC"
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Replace existing column with Timestamp
+    bdf = bd.from_pandas(df)
+    bdf["A"] = pd.Timestamp("2024-01-1")
+    pdf = df.copy()
+    pdf["A"] = pd.Timestamp("2024-01-1")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+
 def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
