@@ -149,7 +149,6 @@ PhysicalReadIceberg::create_internal_reader(
         Py_INCREF(filter_scalars);
     }
 
-
     // We're borrowing a reference to the catalog object, so we need to
     // increment the reference count since the reader steals it.
     Py_INCREF(catalog);
