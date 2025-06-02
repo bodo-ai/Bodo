@@ -107,7 +107,7 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
  * @param val - the constant int for the expression
  * @return duckdb::unique_ptr<duckdb::Expression> - the const int expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val);
+duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int64_t val);
 
 /**
  * @brief Create an expression from a constant float.
@@ -115,7 +115,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val);
  * @param val - the constant float for the expression
  * @return duckdb::unique_ptr<duckdb::Expression> - the const float expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val);
+duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(double val);
 
 /**
  * @brief Create an expression from a constant string.

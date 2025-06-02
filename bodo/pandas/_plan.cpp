@@ -73,12 +73,12 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     return out_plan;
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val) {
+duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(val));
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val) {
+duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(double val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(val));
 }
