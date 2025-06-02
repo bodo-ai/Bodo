@@ -243,7 +243,6 @@ def test_table_read_row_filter(
     )
 
 
-# TODO: Test filter pushdown
 @pytest.mark.parametrize(
     "table_name",
     [
@@ -253,7 +252,7 @@ def test_table_read_row_filter(
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-def test_table_read_row_filter_pushdown(
+def test_table_read_filter_pushdown(
     table_name,
     op,
     iceberg_database,
@@ -279,16 +278,16 @@ def test_table_read_row_filter_pushdown(
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
     )
-    bodo_out2 = bodo_out[eval(f"bodo_out.A {op_str} 20")]
+    bodo_out2 = bodo_out[eval(f"bodo_out.A {op_str} 3")]
 
     assert bodo_out2.is_lazy_plan()
 
     pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
-    _test_equal(pre, 2)
-    _test_equal(post, 1)
+    assert pre == 2
+    assert post == 1
 
     py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
-    py_out2 = py_out[eval(f"py_out.A {op_str} 20")]
+    py_out2 = py_out[eval(f"py_out.A {op_str} 3")]
 
     _test_equal(
         bodo_out2,
@@ -299,7 +298,84 @@ def test_table_read_row_filter_pushdown(
     )
 
 
-# Need multiple filters
-# Need to test on schema evolution
-# Need to test file and row filters
-# Need to test with the row_filter argument and filter pushdown
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "SIMPLE_NUMERIC_TABLE",
+    ],
+)
+def test_table_read_filter_pushdown_multiple(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    bodo_out2 = bodo_out[(bodo_out.A < 5) & (bodo_out.C >= 3) & (bodo_out.A != 3)]
+    assert bodo_out2.is_lazy_plan()
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 2
+    assert post == 1
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[(py_out.A < 5) & (py_out.C >= 3) & (py_out.A != 3)]
+
+    _test_equal(
+        bodo_out2,
+        py_out2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "SIMPLE_NUMERIC_TABLE",
+    ],
+)
+def test_table_read_filter_pushdown_and_row_filter(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+        row_filter="A < 3",
+    )
+
+    bodo_out2 = bodo_out[bodo_out.C >= 3]
+    assert bodo_out2.is_lazy_plan()
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 2
+    assert post == 1
+
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[(py_out.C >= 3) & (py_out.A < 3)]
+
+    _test_equal(
+        bodo_out2,
+        py_out2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+# Need to test on schema evolved table
+# Need to test file pruning on partitioned tables
