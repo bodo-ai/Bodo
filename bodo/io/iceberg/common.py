@@ -235,16 +235,3 @@ def pyiceberg_filter_to_pyarrow_format_str_and_scalars(
     bound_expr = bind(schema, expr, case_sensitive=case_sensitive)
 
     return visit(bound_expr, _ConvertToArrowExpressionStringAndScalar())
-
-
-def combine_format_str_and_scalars(
-    left: tuple[str, list[tuple[str, Any]]],
-    right: tuple[str, list[tuple[str, Any]]],
-) -> tuple[str, list[tuple[str, Any]]]:
-    """Combine two format strings and scalars into one."""
-
-    from bodo.io.iceberg.filter_conversion import (
-        _ConvertToArrowExpressionStringAndScalar,
-    )
-
-    return _ConvertToArrowExpressionStringAndScalar().visit_and(left, right)
