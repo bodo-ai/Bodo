@@ -9,7 +9,8 @@
 #include "duckdb/planner/filter/constant_filter.hpp"
 
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
-             uint64_t, bool, std::string, float, double, arrow::TimestampScalar>
+             uint64_t, bool, std::string, float, double,
+             std::shared_ptr<arrow::Scalar>>
 extractValue(const duckdb::Value &value) {
     duckdb::LogicalTypeId type = value.type().id();
     switch (type) {
@@ -43,7 +44,15 @@ extractValue(const duckdb::Value &value) {
             duckdb::timestamp_ns_t extracted =
                 value.GetValue<duckdb::timestamp_ns_t>();
             // Create a TimestampScalar with nanosecond value
-            return arrow::TimestampScalar(extracted.value, timestamp_type);
+            return std::make_shared<arrow::Scalar>(
+                arrow::TimestampScalar(extracted.value, timestamp_type));
+        } break;
+        case duckdb::LogicalTypeId::DATE: {
+            // Define a date type
+            auto date_type = arrow::date32();
+            duckdb::date_t extracted = value.GetValue<duckdb::date_t>();
+            // Create a DateScalar with the date value
+            return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
         } break;
         default:
             throw std::runtime_error("extractValue unhandled type." +
@@ -190,12 +199,13 @@ std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
     const duckdb::Value &value) {
     arrow::Result<std::shared_ptr<arrow::Scalar>> scalar_res = std::visit(
         [](const auto &&value) {
-            if constexpr (std::is_same_v<std::decay_t<decltype(value)>,
-                                         arrow::TimestampScalar>) {
+            if constexpr (std::is_same_v<decltype(value),
+                                         std::shared_ptr<arrow::Scalar>>) {
+                // If the value is already a scalar, we cam just wrap it
+                // in an arrow::Result and return it.
                 arrow::Result<std::shared_ptr<arrow::Scalar>> ret =
-                    arrow::ToResult(
-                        std::make_shared<arrow::TimestampScalar>(value));
-                return ret;
+                    arrow::ToResult(value);
+                return value;
             } else {
                 arrow::Result<std::shared_ptr<arrow::Scalar>> ret =
                     arrow::MakeScalar(value);

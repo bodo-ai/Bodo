@@ -27,20 +27,14 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
 }
 
 std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
-    const arrow::TimestampScalar &value) {
-    arrow::TimestampBuilder builder(arrow::timestamp(arrow::TimeUnit::NANO),
-                                    arrow::default_memory_pool());
-    arrow::Status status;
-    status = builder.Append(value.value);
-    if (!status.ok()) {
-        throw std::runtime_error("builder.Append failed.");
+    const std::shared_ptr<arrow::Scalar> &value) {
+    arrow::Result<std::shared_ptr<arrow::Array>> array_result =
+        arrow::MakeArrayFromScalar(*value, 1);
+    if (!array_result.ok()) {
+        throw std::runtime_error("MakeArrayFromScalar failed: " +
+                                 array_result.status().message());
     }
-    std::shared_ptr<arrow::Array> array;
-    status = builder.Finish(&array);
-    if (!status.ok()) {
-        throw std::runtime_error("builder.Finish failed.");
-    }
-    return array;
+    return array_result.ValueOrDie();
 }
 
 std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value) {
