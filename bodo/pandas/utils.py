@@ -234,6 +234,7 @@ def check_args_fallback(
                     flist = supported
                 else:
                     flist = unsupported
+                    inverted = False
                 unsupported_args = {
                     idx: param
                     for idx, (name, param) in enumerate(signature.parameters.items())

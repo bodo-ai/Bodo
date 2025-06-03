@@ -432,6 +432,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return super().__repr__()
 
     @property
+    def name(self) -> Hashable:
+        return self._name
+
+    @property
     def index(self):
         self.execute_plan()
         return super().index
@@ -871,8 +875,6 @@ dt_methods = [
         pd.ArrowDtype(pa.large_string()),
     ),
 ]
-
-# TODO: combine below for loops into a single loop
 
 # Generates Series.str methods
 for str_pair in series_str_methods:

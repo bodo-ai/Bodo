@@ -4,12 +4,17 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 !!! note
 	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info. 
 
+## Computations / descriptive stats
+- [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
+- [`bodo.pandas.BodoSeries.clip`][bodoseriesclip]
+- [`bodo.pandas.BodoSeries.round`][bodoseriesround]
 
-### Datetime Properties
+## Datetimelike properties
 
 !!! note
 	Input must be a Series of `datetime-like` data.
 
+### Datetime properties
 - [`bodo.pandas.BodoSeries.dt.year`][bodoseriesdtyear] 
 - [`bodo.pandas.BodoSeries.dt.month`][bodoseriesdtmonth] 
 - [`bodo.pandas.BodoSeries.dt.day`][bodoseriesdtday] 
@@ -37,15 +42,33 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.date`][bodoseriesdtdate] 
 - [`bodo.pandas.BodoSeries.dt.time`][bodoseriesdttime] 
 
+### Datetime methods
+!!! note
+	In `month_name` and `day_name`, the locale argument is not yet supported and may trigger a fallback to Pandas. Additionally, `strftime` format strings include precision up to nanoseconds by default.
+	
+- [`bodo.pandas.BodoSeries.dt.normalize`][bodoseriesdtnormalize]
+- [`bodo.pandas.BodoSeries.dt.floor`][bodoseriesdtfloor]
+- [`bodo.pandas.BodoSeries.dt.ceil`][bodoseriesdtceil]
+- [`bodo.pandas.BodoSeries.dt.month_name`][bodoseriesdtmonth_name] 
+- [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name] 
+- [`bodo.pandas.BodoSeries.dt.strftime`][bodoseriesdtstrftime] 
 
-### Function application
+
+## Function application
 - [`bodo.pandas.BodoSeries.map`][bodoseriesmap]
 
-### Selection
+## Missing data handling
+- [`bodo.pandas.BodoSeries.bfill`][bodoseriesbfill]
+- [`bodo.pandas.BodoSeries.ffill`][bodoseriesffill]
+- [`bodo.pandas.BodoSeries.isnull`][bodoseriesisnull]
+- [`bodo.pandas.BodoSeries.notnull`][bodoseriesnotnull]
+- [`bodo.pandas.BodoSeries.replace`][bodoseriesreplace]
 
+## Reindexing / Selection / Label manipulation
 - [`bodo.pandas.BodoSeries.head`][bodoserieshead]
+- [`bodo.pandas.BodoSeries.isin`][bodoseriesisin]
 
-### String handling
+## String handling
 
 - [`bodo.pandas.BodoSeries.str.capitalize`][bodoseriesstrcapitalize]
 - [`bodo.pandas.BodoSeries.str.casefold`][bodoseriesstrcasefold]
@@ -170,3 +193,20 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesdtdays_in_month]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.days_in_month.html
 [bodoseriesdtdate]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.date.html
 [bodoseriesdttime]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.time.html
+
+[bodoseriesisin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isin.html
+[bodoseriesnotnull]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notnull.html
+[bodoseriesisnull]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isnull.html
+[bodoseriesffill]: https://pandas.pydata.org/docs/reference/api/pandas.Series.ffill.html
+[bodoseriesbfill]: https://pandas.pydata.org/docs/reference/api/pandas.Series.bfill.html
+[bodoseriesreplace]: https://pandas.pydata.org/docs/reference/api/pandas.Series.replace.html
+[bodoseriesclip]: https://pandas.pydata.org/docs/reference/api/pandas.Series.clip.html
+[bodoseriesabs]: https://pandas.pydata.org/docs/reference/api/pandas.Series.abs.html
+[bodoseriesround]: https://pandas.pydata.org/docs/reference/api/pandas.Series.round.html
+
+[bodoseriesdtnormalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.normalize.html
+[bodoseriesdtfloor]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.floor.html
+[bodoseriesdtceil]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.ceil.html
+[bodoseriesdtmonth_name]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.month_name.html
+[bodoseriesdtday_name]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.day_name.html
+[bodoseriesdtstrftime]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.strftime.html
