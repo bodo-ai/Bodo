@@ -267,7 +267,7 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
    private:
     const T constant;
-    bool generate_array;
+    const bool generate_array;
 };
 
 template <>
