@@ -188,7 +188,8 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
 
 std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     duckdb::unique_ptr<duckdb::Expression>& expr,
-    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map) {
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
+    bool no_scalars) {
     // Class and type here are really like the general type of the
     // expression node (expr_class) and a sub-type of that general
     // type (expr_type).
@@ -206,8 +207,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalComparisonExpression>(
-                    buildPhysicalExprTree(bce.left, col_ref_map),
-                    buildPhysicalExprTree(bce.right, col_ref_map),
+                    buildPhysicalExprTree(bce.left, col_ref_map, no_scalars),
+                    buildPhysicalExprTree(bce.right, col_ref_map, no_scalars),
                     expr_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
@@ -232,10 +233,10 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // Return a PhysicalConstantExpression<T> where T is the actual
             // type of the value contained within bce.value.
             auto ret = std::visit(
-                [](const auto& value) {
+                [no_scalars](const auto& value) {
                     return std::static_pointer_cast<PhysicalExpression>(
                         std::make_shared<PhysicalConstantExpression<
-                            std::decay_t<decltype(value)>>>(value));
+                            std::decay_t<decltype(value)>>>(value, no_scalars));
                 },
                 extracted_value);
             return ret;
@@ -250,8 +251,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalConjunctionExpression>(
-                    buildPhysicalExprTree(bce.children[0], col_ref_map),
-                    buildPhysicalExprTree(bce.children[1], col_ref_map),
+                    buildPhysicalExprTree(bce.children[0], col_ref_map, no_scalars),
+                    buildPhysicalExprTree(bce.children[1], col_ref_map, no_scalars),
                     expr_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_OPERATOR: {
@@ -262,14 +263,14 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                 case 1: {
                     return std::static_pointer_cast<PhysicalExpression>(
                         std::make_shared<PhysicalUnaryExpression>(
-                            buildPhysicalExprTree(boe.children[0], col_ref_map),
+                            buildPhysicalExprTree(boe.children[0], col_ref_map, no_scalars),
                             expr_type));
                 } break;
                 case 2: {
                     return std::static_pointer_cast<PhysicalExpression>(
                         std::make_shared<PhysicalBinaryExpression>(
-                            buildPhysicalExprTree(boe.children[0], col_ref_map),
-                            buildPhysicalExprTree(boe.children[1], col_ref_map),
+                            buildPhysicalExprTree(boe.children[0], col_ref_map, no_scalars),
+                            buildPhysicalExprTree(boe.children[1], col_ref_map, no_scalars),
                             expr_type));
                 } break;
                 default:
@@ -285,7 +286,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                 BodoPythonScalarFunctionData &scalar_func_data = bfe.bind_info->Cast<BodoPythonScalarFunctionData>();
                 std::vector<std::shared_ptr<PhysicalExpression>> phys_children;
                 for (auto& child_expr : bfe.children) {
-                    phys_children.emplace_back(buildPhysicalExprTree(child_expr, col_ref_map));
+                    phys_children.emplace_back(buildPhysicalExprTree(child_expr, col_ref_map, no_scalars));
                 }
 
                 const std::shared_ptr<arrow::DataType>& result_type =
@@ -300,14 +301,14 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     case 1: {
                         return std::static_pointer_cast<PhysicalExpression>(
                             std::make_shared<PhysicalUnaryExpression>(
-                                buildPhysicalExprTree(bfe.children[0], col_ref_map),
+                                buildPhysicalExprTree(bfe.children[0], col_ref_map, no_scalars),
                                 bfe.function.name));
                     } break;
                     case 2: {
                         return std::static_pointer_cast<PhysicalExpression>(
                             std::make_shared<PhysicalBinaryExpression>(
-                                buildPhysicalExprTree(bfe.children[0], col_ref_map),
-                                buildPhysicalExprTree(bfe.children[1], col_ref_map),
+                                buildPhysicalExprTree(bfe.children[0], col_ref_map, no_scalars),
+                                buildPhysicalExprTree(bfe.children[1], col_ref_map, no_scalars),
                                 bfe.function.name));
                     } break;
                     default:
@@ -324,7 +325,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             auto& bce = expr->Cast<duckdb::BoundCastExpression>();
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalCastExpression>(
-                    buildPhysicalExprTree(bce.child, col_ref_map),
+                    buildPhysicalExprTree(bce.child, col_ref_map, no_scalars),
                     bce.return_type));
         } break;  // suppress wrong fallthrough error
         default:

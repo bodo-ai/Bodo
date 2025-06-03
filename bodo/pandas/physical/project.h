@@ -31,8 +31,8 @@ class PhysicalProjection : public PhysicalSourceSink {
 
         // Create the output schema from expressions
         this->output_schema = std::make_shared<bodo::Schema>();
-        for (const auto& expr : this->exprs) {
-            physical_exprs.emplace_back(buildPhysicalExprTree(expr, col_ref_map));
+        for (auto& expr : this->exprs) {
+            physical_exprs.emplace_back(buildPhysicalExprTree(expr, col_ref_map, true));
 
             if (expr->type == duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
@@ -105,25 +105,6 @@ class PhysicalProjection : public PhysicalSourceSink {
             std::shared_ptr<ArrayExprResult> res_as_array =
                 std::dynamic_pointer_cast<ArrayExprResult>(phys_res);
             if (!res_as_array) {
-
-/*
-                    } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
-                auto& const_expr =
-                    expr->Cast<duckdb::BoundConstantExpression>();
-                size_t nrows = input_batch->nrows();
-
-                // Create an Arrow array filled with the constant value
-                std::shared_ptr<arrow::Array> arr = std::visit(
-                    [nrows](const auto&& value) {
-                        return ScalarToArrowArray(value, nrows);
-                    },
-                    extractValue(const_expr.value));
-
-                out_cols.emplace_back(
-                    arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr()));
-                col_names.emplace_back(const_expr.value.ToString());
-            } else {
-            */
                 throw std::runtime_error(
                     "Expression in projection did not result in an array");
             }

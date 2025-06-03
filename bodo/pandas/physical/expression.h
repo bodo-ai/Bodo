@@ -232,16 +232,24 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
 template <typename T>
 class PhysicalConstantExpression : public PhysicalExpression {
    public:
-    PhysicalConstantExpression(const T &val) : constant(val) {}
+    PhysicalConstantExpression(const T &val, bool no_scalars) : constant(val), generate_array(no_scalars) {}
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
+        if (generate_array) {
+            std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant, input_batch->nrows());
 
-        auto result =
-            arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
-        return std::make_shared<ScalarExprResult>(std::move(result));
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ArrayExprResult>(std::move(result), "Constant");
+        } else {
+            std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
+
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ScalarExprResult>(std::move(result));
+        }
     }
 
     friend std::ostream &operator<<(std::ostream &os,
@@ -252,21 +260,30 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
    private:
     const T constant;
+    bool generate_array;
 };
 
 template <>
 class PhysicalConstantExpression<std::string> : public PhysicalExpression {
    public:
-    PhysicalConstantExpression(const std::string &val) : constant(val) {}
+    PhysicalConstantExpression(const std::string &val, bool no_scalars) : constant(val), generate_array(no_scalars) {}
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
+        if (generate_array) {
+            std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant, input_batch->nrows());
 
-        auto result =
-            arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
-        return std::make_shared<ScalarExprResult>(std::move(result));
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ArrayExprResult>(std::move(result), "StringConstant");
+        } else {
+            std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
+
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ScalarExprResult>(std::move(result));
+        }
     }
 
     friend std::ostream &operator<<(
@@ -278,6 +295,7 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
 
    private:
     const std::string constant;
+    bool generate_array;
 };
 
 /**
@@ -503,7 +521,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
  */
 std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     duckdb::unique_ptr<duckdb::Expression>& expr,
-    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map);
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
+    bool no_scalars=false);
 
 /**
  * @brief Physical expression tree node type for UDF.
