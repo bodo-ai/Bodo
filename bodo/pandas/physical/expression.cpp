@@ -10,7 +10,7 @@ std::shared_ptr<arrow::Array> prepare_arrow_compute(
 }
 
 // String specialization
-std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string &value,
+std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string& value,
                                                  size_t num_elements) {
     arrow::StringBuilder builder;
     arrow::Status status;
@@ -29,7 +29,7 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string &value,
 }
 
 std::shared_ptr<arrow::Array> ScalarToArrowArray(
-    const arrow::TimestampScalar &value, size_t num_elements) {
+    const arrow::TimestampScalar& value, size_t num_elements) {
     arrow::TimestampBuilder builder(arrow::timestamp(arrow::TimeUnit::NANO),
                                     arrow::default_memory_pool());
     arrow::Status status;
@@ -72,7 +72,7 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
-    const std::string &comparator) {
+    const std::string& comparator) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprResult> left_as_array =
@@ -120,7 +120,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 }
 
 std::shared_ptr<array_info> do_arrow_compute_unary(
-    std::shared_ptr<ExprResult> left_res, const std::string &comparator) {
+    std::shared_ptr<ExprResult> left_res, const std::string& comparator) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprResult> left_as_array =
@@ -153,7 +153,7 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
 
 std::shared_ptr<array_info> do_arrow_compute_cast(
     std::shared_ptr<ExprResult> left_res,
-    const duckdb::LogicalType &return_type) {
+    const duckdb::LogicalType& return_type) {
     // Try to convert the results of our children into array
     // or scalar results to see which one they are.
     std::shared_ptr<ArrayExprResult> left_as_array =
@@ -188,7 +188,7 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
 
 std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     duckdb::unique_ptr<duckdb::Expression>& expr,
-    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map) {
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>& col_ref_map) {
     // Class and type here are really like the general type of the
     // expression node (expr_class) and a sub-type of that general
     // type (expr_type).
@@ -207,20 +207,19 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalComparisonExpression>(
                     buildPhysicalExprTree(bce.left, col_ref_map),
-                    buildPhysicalExprTree(bce.right, col_ref_map),
-                    expr_type));
+                    buildPhysicalExprTree(bce.right, col_ref_map), expr_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             auto& bce = expr->Cast<duckdb::BoundColumnRefExpression>();
             duckdb::ColumnBinding binding = bce.binding;
-            size_t col_idx = col_ref_map[{binding.table_index,
-                                          binding.column_index}];
+            size_t col_idx =
+                col_ref_map[{binding.table_index, binding.column_index}];
             return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalColumnRefExpression>(
-                    col_idx, bce.GetName()));
-                    //binding.table_index, binding.column_index));
+                std::make_shared<PhysicalColumnRefExpression>(col_idx,
+                                                              bce.GetName()));
+            // binding.table_index, binding.column_index));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_CONSTANT: {
             // Convert the base duckdb::Expression node to its actual derived
@@ -281,33 +280,37 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             auto& bfe = expr->Cast<duckdb::BoundFunctionExpression>();
-            if (bfe.bind_info && bfe.bind_info->Cast<BodoPythonScalarFunctionData>().args) {
-                BodoPythonScalarFunctionData &scalar_func_data = bfe.bind_info->Cast<BodoPythonScalarFunctionData>();
+            if (bfe.bind_info &&
+                bfe.bind_info->Cast<BodoPythonScalarFunctionData>().args) {
+                BodoPythonScalarFunctionData& scalar_func_data =
+                    bfe.bind_info->Cast<BodoPythonScalarFunctionData>();
                 std::vector<std::shared_ptr<PhysicalExpression>> phys_children;
                 for (auto& child_expr : bfe.children) {
-                    phys_children.emplace_back(buildPhysicalExprTree(child_expr, col_ref_map));
+                    phys_children.emplace_back(
+                        buildPhysicalExprTree(child_expr, col_ref_map));
                 }
 
                 const std::shared_ptr<arrow::DataType>& result_type =
                     scalar_func_data.out_schema->field(0)->type();
                 return std::static_pointer_cast<PhysicalExpression>(
                     std::make_shared<PhysicalUDFExpression>(
-                        phys_children,
-                        scalar_func_data,
-                        result_type));
+                        phys_children, scalar_func_data, result_type));
             } else {
                 switch (bfe.children.size()) {
                     case 1: {
                         return std::static_pointer_cast<PhysicalExpression>(
                             std::make_shared<PhysicalUnaryExpression>(
-                                buildPhysicalExprTree(bfe.children[0], col_ref_map),
+                                buildPhysicalExprTree(bfe.children[0],
+                                                      col_ref_map),
                                 bfe.function.name));
                     } break;
                     case 2: {
                         return std::static_pointer_cast<PhysicalExpression>(
                             std::make_shared<PhysicalBinaryExpression>(
-                                buildPhysicalExprTree(bfe.children[0], col_ref_map),
-                                buildPhysicalExprTree(bfe.children[1], col_ref_map),
+                                buildPhysicalExprTree(bfe.children[0],
+                                                      col_ref_map),
+                                buildPhysicalExprTree(bfe.children[1],
+                                                      col_ref_map),
                                 bfe.function.name));
                     } break;
                     default:
@@ -315,7 +318,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                             "Unsupported number of children " +
                             std::to_string(bfe.children.size()) +
                             " for bound function");
-                    }
+                }
             }
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_CAST: {

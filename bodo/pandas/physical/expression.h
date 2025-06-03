@@ -45,7 +45,8 @@ class TableExprResult : public ExprResult {
  */
 class ArrayExprResult : public ExprResult {
    public:
-    ArrayExprResult(std::shared_ptr<array_info> val, std::string col) : result(val), column_name(col) {}
+    ArrayExprResult(std::shared_ptr<array_info> val, std::string col)
+        : result(val), column_name(col) {}
     virtual ~ArrayExprResult() = default;
     const std::shared_ptr<array_info> result;
     std::string column_name;
@@ -76,7 +77,9 @@ class ScalarExprResult : public ExprResult {
 class PhysicalExpression {
    public:
     PhysicalExpression() {}
-    PhysicalExpression(std::vector<std::shared_ptr<PhysicalExpression>> &_children) : children(_children) {}
+    PhysicalExpression(
+        std::vector<std::shared_ptr<PhysicalExpression>> &_children)
+        : children(_children) {}
     virtual ~PhysicalExpression() = default;
 
     /**
@@ -181,7 +184,8 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             children[1]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_binary(left_res, right_res, comparator);
-        return std::make_shared<ArrayExprResult>(result, "Comparison"+comparator);
+        return std::make_shared<ArrayExprResult>(result,
+                                                 "Comparison" + comparator);
     }
 
    protected:
@@ -348,7 +352,8 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
             children[1]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_binary(left_res, right_res, comparator);
-        return std::make_shared<ArrayExprResult>(result, "Conjunction"+comparator);
+        return std::make_shared<ArrayExprResult>(result,
+                                                 "Conjunction" + comparator);
     }
 
    protected:
@@ -426,7 +431,7 @@ class PhysicalUnaryExpression : public PhysicalExpression {
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
         auto result = do_arrow_compute_unary(left_res, comparator);
-        return std::make_shared<ArrayExprResult>(result, "Unary"+comparator);
+        return std::make_shared<ArrayExprResult>(result, "Unary" + comparator);
     }
 
    protected:
@@ -488,7 +493,7 @@ class PhysicalBinaryExpression : public PhysicalExpression {
             children[1]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_binary(left_res, right_res, comparator);
-        return std::make_shared<ArrayExprResult>(result, "Binary"+comparator);
+        return std::make_shared<ArrayExprResult>(result, "Binary" + comparator);
     }
 
    protected:
@@ -502,7 +507,7 @@ class PhysicalBinaryExpression : public PhysicalExpression {
  * @return the root of output Bodo Physical expression tree
  */
 std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
-    duckdb::unique_ptr<duckdb::Expression>& expr,
+    duckdb::unique_ptr<duckdb::Expression> &expr,
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map);
 
 /**
@@ -511,12 +516,13 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
  */
 class PhysicalUDFExpression : public PhysicalExpression {
    public:
-    PhysicalUDFExpression(std::vector<std::shared_ptr<PhysicalExpression>> &children,
-                          BodoPythonScalarFunctionData &_scalar_func_data,
-                          const std::shared_ptr<arrow::DataType> &_result_type) :
-        PhysicalExpression(children),
-        scalar_func_data(_scalar_func_data),
-        result_type(_result_type) {}
+    PhysicalUDFExpression(
+        std::vector<std::shared_ptr<PhysicalExpression>> &children,
+        BodoPythonScalarFunctionData &_scalar_func_data,
+        const std::shared_ptr<arrow::DataType> &_result_type)
+        : PhysicalExpression(children),
+          scalar_func_data(_scalar_func_data),
+          result_type(_result_type) {}
 
     virtual ~PhysicalUDFExpression() = default;
 
@@ -529,12 +535,12 @@ class PhysicalUDFExpression : public PhysicalExpression {
         std::vector<std::shared_ptr<array_info>> child_results;
         std::vector<std::string> column_names;
 
-        for (const auto& child : children) {
+        for (const auto &child : children) {
             std::shared_ptr<ExprResult> child_res =
                 child->ProcessBatch(input_batch);
-      
+
             std::shared_ptr<ArrayExprResult> child_as_array =
-               std::dynamic_pointer_cast<ArrayExprResult>(child_res);
+                std::dynamic_pointer_cast<ArrayExprResult>(child_res);
             if (!child_as_array) {
                 throw std::runtime_error(
                     "Child of UDF did not return an array.");
@@ -542,13 +548,13 @@ class PhysicalUDFExpression : public PhysicalExpression {
             child_results.emplace_back(child_as_array->result);
             column_names.emplace_back(child_as_array->column_name);
         }
-        std::shared_ptr<table_info> udf_input = std::make_shared<table_info>(child_results, column_names, input_batch->metadata);
+        std::shared_ptr<table_info> udf_input = std::make_shared<table_info>(
+            child_results, column_names, input_batch->metadata);
 
-        std::shared_ptr<table_info> udf_output =
-            runPythonScalarFunction(udf_input,
-                                    result_type,
-                                    scalar_func_data.args);
-        return std::make_shared<ArrayExprResult>(udf_output->columns[0], udf_output->column_names[0]);
+        std::shared_ptr<table_info> udf_output = runPythonScalarFunction(
+            udf_input, result_type, scalar_func_data.args);
+        return std::make_shared<ArrayExprResult>(udf_output->columns[0],
+                                                 udf_output->column_names[0]);
     }
 
    protected:

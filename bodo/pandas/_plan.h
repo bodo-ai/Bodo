@@ -98,10 +98,8 @@ std::vector<int> get_projection_pushed_down_columns(
  * @return duckdb::unique_ptr<duckdb::Expression> Expression node for UDF
  */
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    PyObject *out_schema_py,
-    PyObject *args,
-    const std::vector<int> &selected_columns);
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
+    PyObject *args, const std::vector<int> &selected_columns);
 
 /**
  * @brief Create an expression from a constant integer.
@@ -186,8 +184,7 @@ std::unique_ptr<duckdb::Expression> make_comparison_expr(
  */
 std::unique_ptr<duckdb::Expression> make_arithop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
-    std::unique_ptr<duckdb::Expression> &rhs,
-    std::string opstr,
+    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr,
     PyObject *out_schema_py);
 
 /**
