@@ -49,7 +49,7 @@ class ArrayExprResult : public ExprResult {
         : result(val), column_name(col) {}
     virtual ~ArrayExprResult() = default;
     const std::shared_ptr<array_info> result;
-    std::string column_name;
+    const std::string column_name;
 };
 
 /**
