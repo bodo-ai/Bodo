@@ -214,11 +214,8 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string &value,
                                                  size_t num_elements = 1);
 
 // arrow::Scalar specialization
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
-    const std::shared_ptr<arrow::Scalar> &value);
-
-std::shared_ptr<arrow::Array> ScalarToArrowArray(const arrow::Scalar &value,
-                                                 size_t num_elements = 1);
+std::shared_ptr<arrow::Array> ScalarToArrowArray(
+    const std::shared_ptr<arrow::Scalar> &value, size_t num_elements = 1);
 
 // bool specialization
 std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
