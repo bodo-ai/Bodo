@@ -205,6 +205,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             case ExecState.COLLECTED:
                 return super().__len__()
 
+    def __repr__(self):
+        # Pandas repr implementation calls len() first which will execute an extra
+        # count query before the actual plan which is unnecessary.
+        if self._exec_state == ExecState.PLAN:
+            self.execute_plan()
+        return super().__repr__()
+
     @property
     def index(self):
         self.execute_plan()
@@ -709,6 +716,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         This is done by creating a new plan that add the new
         column in the existing dataframe plan using a projection.
         """
+        import pyarrow as pa
+
+        from bodo.pandas.base import _empty_like
 
         # Match cases like df["B"] = df["A"].str.lower()
         if (
@@ -720,24 +730,78 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             if (
                 new_plan := _get_set_column_plan(self._plan, value._plan, key)
             ) is not None:
-                # Update internal state
-                self._mgr._plan = new_plan
                 head_val = value._head_s
-                # Copy and update head in case reused
-                new_df_head = self._head_df.copy()
-                new_df_head[key] = head_val
-                self._head_df = new_df_head
-                self._mgr._md_head = new_df_head._mgr
-                with self.disable_collect():
-                    # Update internal data manager (e.g. insert a new block or update an
-                    # existing one). See:
-                    # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
-                    super().__setitem__(key, head_val)
+                self._update_setitem_internal_state(new_plan, key, head_val)
                 return
+
+        # Match cases like df["B"] = 1
+        if (
+            self.is_lazy_plan()
+            and isinstance(key, str)
+            and pd.api.types.is_scalar(value)
+        ):
+            # Create a projection with the scalar column included
+            empty_data = _empty_like(self)
+
+            # Check if the column already exists in the dataframe
+            if key in empty_data.columns:
+                ikey = empty_data.columns.get_loc(key)
+                is_replace = True
+            else:
+                ikey = None
+                is_replace = False
+
+            const_expr = LazyPlan(
+                "ConstantExpression",
+                # Dummy empty data for LazyPlan
+                empty_data,
+                value,
+            )
+            proj_exprs = _get_setitem_proj_exprs(
+                empty_data, self._plan, ikey, is_replace, const_expr
+            )
+            empty_data[key] = value
+
+            # Make sure proper Arrow type is used for the column to match backend and
+            # there is no object dtype.
+            pa_type = pa.scalar(value).type
+            if isinstance(pa_type, pa.TimestampType):
+                # Convert to nanosecond precision as required by backend
+                pa_type = pa.timestamp("ns", pa_type.tz)
+            empty_data[key] = empty_data[key].astype(pd.ArrowDtype(pa_type))
+
+            new_plan = LazyPlan(
+                "LogicalProjection",
+                empty_data,
+                self._plan,
+                proj_exprs,
+            )
+            self._update_setitem_internal_state(new_plan, key, value)
+            return
 
         raise BodoLibNotImplementedException(
             "Only setting a column with a Series created from the same dataframe is supported."
         )
+
+    def _update_setitem_internal_state(
+        self, new_plan: LazyPlan, key: str, head_val: pd.Series
+    ):
+        """Update internal state of the dataframe for setting a column.
+        new_plan: the updated plan that adds the column to the dataframe.
+        key: the name of the column to be set.
+        head_val: new head value for the column to be set (Series, array or scalar).
+        """
+        self._mgr._plan = new_plan
+        # Copy and update head in case reused
+        new_df_head = self._head_df.copy()
+        new_df_head[key] = head_val
+        self._head_df = new_df_head
+        self._mgr._md_head = new_df_head._mgr
+        with self.disable_collect():
+            # Update internal data manager (e.g. insert a new block or update an
+            # existing one). See:
+            # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
+            super().__setitem__(key, head_val)
 
     @check_args_fallback(supported=["func", "axis", "args"])
     def apply(
@@ -943,23 +1007,50 @@ def _add_proj_expr_to_plan(
 
     # Get the function expression from the value plan to be added
     func_expr = value_plan.args[1][0]
-    if func_expr.plan_class != "PythonScalarFuncExpression":
-        return None
-    func_expr = (
-        _update_func_expr_source(func_expr, df_plan, ikey)
-        if replace_func_source
-        # Copy the function expression to avoid modifying the original one below
-        else LazyPlan(
-            "PythonScalarFuncExpression",
+
+    # Handle trivial cases like df["C"] = df["B"]
+    if func_expr.plan_class == "ColRefExpression":
+        # Copy since empty_data is changed below
+        func_expr = LazyPlan(
+            "ColRefExpression",
             func_expr.empty_data,
             *func_expr.args,
             **func_expr.kwargs,
         )
-    )
+    elif func_expr.plan_class == "PythonScalarFuncExpression":
+        func_expr = (
+            _update_func_expr_source(func_expr, df_plan, ikey)
+            if replace_func_source
+            # Copy the function expression to avoid modifying the original one below
+            else LazyPlan(
+                "PythonScalarFuncExpression",
+                func_expr.empty_data,
+                *func_expr.args,
+                **func_expr.kwargs,
+            )
+        )
+    else:
+        return None
+
     # Update output column name
     func_expr.empty_data = func_expr.empty_data.set_axis([key], axis=1)
 
-    # Get projection expressions
+    proj_exprs = _get_setitem_proj_exprs(
+        in_empty_df, df_plan, ikey, is_replace, func_expr
+    )
+    empty_data = df_plan.empty_data.copy()
+    empty_data[key] = value_plan.empty_data.copy()
+    new_plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df_plan,
+        proj_exprs,
+    )
+    return new_plan
+
+
+def _get_setitem_proj_exprs(in_empty_df, df_plan, ikey, is_replace, func_expr):
+    """Create projection expressions for setting a column in a dataframe."""
     n_cols = len(in_empty_df.columns)
     key_indices = [k for k in range(n_cols) if (not is_replace or k != ikey)]
     data_cols = make_col_ref_exprs(key_indices, df_plan)
@@ -971,16 +1062,7 @@ def _add_proj_expr_to_plan(
     index_cols = make_col_ref_exprs(
         range(n_cols, n_cols + get_n_index_arrays(in_empty_df.index)), df_plan
     )
-
-    empty_data = df_plan.empty_data.copy()
-    empty_data[key] = value_plan.empty_data.copy()
-    new_plan = LazyPlan(
-        "LogicalProjection",
-        empty_data,
-        df_plan,
-        tuple(data_cols + index_cols),
-    )
-    return new_plan
+    return tuple(data_cols + index_cols)
 
 
 def _get_set_column_plan(

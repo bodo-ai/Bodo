@@ -73,12 +73,12 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     return out_plan;
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val) {
+duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(val));
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val) {
+duckdb::unique_ptr<duckdb::Expression> make_const_double_expr(double val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(val));
 }
@@ -714,7 +714,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_name,
-    PyObject *pyiceberg_catalog, PyObject *iceberg_filter) {
+    PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
+    PyObject *iceberg_schema, int64_t snapshot_id) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Convert Arrow schema to DuckDB
@@ -725,7 +726,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
         BodoIcebergScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoIcebergScanFunctionData>(
-            arrow_schema, pyiceberg_catalog, table_name, iceberg_filter);
+            arrow_schema, pyiceberg_catalog, table_name, iceberg_filter,
+            iceberg_schema, snapshot_id);
 
     duckdb::virtual_column_map_t virtual_columns;
 
