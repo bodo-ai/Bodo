@@ -188,12 +188,13 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
     BodoIcebergScanFunctionData(std::shared_ptr<arrow::Schema> _arrow_schema,
                                 PyObject *_catalog, const std::string _table_id,
                                 PyObject *_iceberg_filter,
-                                PyObject *_iceberg_schema)
+                                PyObject *_iceberg_schema, int64_t _snapshot_id)
         : arrow_schema(std::move(_arrow_schema)),
           catalog(_catalog),
           iceberg_filter(_iceberg_filter),
           iceberg_schema(_iceberg_schema),
-          table_id(_table_id) {
+          table_id(_table_id),
+          snapshot_id(_snapshot_id) {
         Py_INCREF(this->catalog);
         Py_INCREF(this->iceberg_filter);
         Py_INCREF(this->iceberg_schema);
@@ -214,4 +215,5 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
     PyObject *iceberg_filter;
     PyObject *iceberg_schema;
     const std::string table_id;
+    const int64_t snapshot_id;
 };

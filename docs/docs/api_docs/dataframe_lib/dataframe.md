@@ -130,12 +130,12 @@ Output:
 
 ---
 
-### Setting BodoDataFrame Columns
+### Setting DataFrame Columns
 
-BodoDataFrames support setting columns lazily when the value is a projection from the same DataFrame.
+Bodo DataFrames support setting columns lazily when the value is a Series created from the same DataFrame or a constant value.
 Other cases will fallback to Pandas.
 
-<p class="api-header">Example</p>
+<p class="api-header">Examples</p>
 
 ``` py
 import bodo.pandas as bodo_pd
@@ -172,6 +172,44 @@ Output:
 10     c1
 11    abc
 Name: D, dtype: string
+```
+
+
+``` py
+import bodo.pandas as bodo_pd
+import pandas as pd
+
+df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+            "B": ["A1", "B1 ", "C1", "Abc"] * 3,
+            "C": pd.array([4, 5, 6, -1] * 3, "Int64"),
+        }
+    )
+
+bdf = bodo_pd.from_pandas(df)
+
+bdf["D"] = 11
+print(type(bdf))
+print(bdf.D)
+```
+
+Output:
+```
+<class 'bodo.pandas.frame.BodoDataFrame'>
+0     11
+1     11
+2     11
+3     11
+4     11
+5     11
+6     11
+7     11
+8     11
+9     11
+10    11
+11    11
+Name: D, dtype: int64[pyarrow]
 ```
 
 ---

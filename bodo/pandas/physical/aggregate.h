@@ -250,8 +250,7 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
-        std::shared_ptr<arrow::Array> array =
-            CreateOneElementArrowArray(global_count);
+        std::shared_ptr<arrow::Array> array = ScalarToArrowArray(global_count);
 
         std::shared_ptr<array_info> result =
             arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
