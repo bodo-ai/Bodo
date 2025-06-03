@@ -528,6 +528,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
  * @brief Convert duckdb expression tree to Bodo physical expression tree.
  *
  * @param expr - the root of input duckdb expression tree
+ * @param col_ref_map - mapping of table and column indices to overall index
+ * @param no_scalars - true if batch sized arrays should be generated for consts
  * @return the root of output Bodo Physical expression tree
  */
 std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
@@ -556,31 +558,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
      *
      */
     virtual std::shared_ptr<ExprResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) {
-        std::vector<std::shared_ptr<array_info>> child_results;
-        std::vector<std::string> column_names;
-
-        for (const auto &child : children) {
-            std::shared_ptr<ExprResult> child_res =
-                child->ProcessBatch(input_batch);
-
-            std::shared_ptr<ArrayExprResult> child_as_array =
-                std::dynamic_pointer_cast<ArrayExprResult>(child_res);
-            if (!child_as_array) {
-                throw std::runtime_error(
-                    "Child of UDF did not return an array.");
-            }
-            child_results.emplace_back(child_as_array->result);
-            column_names.emplace_back(child_as_array->column_name);
-        }
-        std::shared_ptr<table_info> udf_input = std::make_shared<table_info>(
-            child_results, column_names, input_batch->metadata);
-
-        std::shared_ptr<table_info> udf_output = runPythonScalarFunction(
-            udf_input, result_type, scalar_func_data.args);
-        return std::make_shared<ArrayExprResult>(udf_output->columns[0],
-                                                 udf_output->column_names[0]);
-    }
+        std::shared_ptr<table_info> input_batch);
 
    protected:
     BodoPythonScalarFunctionData &scalar_func_data;
