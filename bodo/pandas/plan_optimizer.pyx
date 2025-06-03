@@ -286,7 +286,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
-    cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr) except +
+    cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
@@ -577,14 +577,16 @@ cdef class ArithOpExpression(Expression):
             truediv_expression = make_arithop_expr(
                 lhs_expr,
                 rhs_expr,
-                "/".encode())
+                "/".encode(),
+                self.out_schema)
             self.c_expression = make_unaryop_expr(truediv_expression, "floor".encode())
         else:
             duckdb_op = python_arith_dunder_to_duckdb(opstr)
             self.c_expression = make_arithop_expr(
                 lhs_expr,
                 rhs_expr,
-                duckdb_op.encode())
+                duckdb_op.encode(),
+                self.out_schema)
 
     def __str__(self):
         return f"ArithOpExpression({self.out_schema})"

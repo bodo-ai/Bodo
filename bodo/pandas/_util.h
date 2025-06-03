@@ -4,8 +4,18 @@
 #include <cstdint>
 #include <map>
 #include <variant>
+#include "../libs/_array_utils.h"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/function/function.hpp"
 #include "duckdb/planner/column_binding.hpp"
+#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/bound_comparison_expression.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/expression/bound_operator_expression.hpp"
 
 /**
  * @brief Convert duckdb value to C++ variant.
@@ -77,3 +87,47 @@ std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
  */
 std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
     const duckdb::LogicalType &type);
+
+/**
+ * @brief UDF plan node data to pass around in DuckDB plans in
+ * BoundFunctionExpression.
+ *
+ */
+struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
+    BodoPythonScalarFunctionData(PyObject* args,
+                                 std::shared_ptr<arrow::Schema> out_schema)
+        : args(args), out_schema(std::move(out_schema)) {
+        if (args) Py_INCREF(args);
+    }
+    BodoPythonScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema)
+        : args(nullptr), out_schema(std::move(out_schema)) {
+    }
+    ~BodoPythonScalarFunctionData() override { if (args) Py_DECREF(args); }
+    bool Equals(const FunctionData& other_p) const override {
+        const BodoPythonScalarFunctionData& other =
+            other_p.Cast<BodoPythonScalarFunctionData>();
+        return (other.args == this->args);
+    }
+    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
+        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args,
+                                                               out_schema);
+    }
+
+    PyObject* args;  // If present then a UDF.
+    std::shared_ptr<arrow::Schema> out_schema;
+};
+
+/**
+ * @brief Run Python scalar function on the input batch and return the
+ * output table (single data column plus Index columns).
+ *
+ * @param input_batch input table batch
+ * @param result_type The expected result type of the function
+ * @param args Python arguments for the function
+ * @return std::shared_ptr<table_info> output table from the Python function
+ */
+std::shared_ptr<table_info> runPythonScalarFunction(
+    std::shared_ptr<table_info> input_batch,
+    const std::shared_ptr<arrow::DataType>& result_type,
+    PyObject* args);
+
