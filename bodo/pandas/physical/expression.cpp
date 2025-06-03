@@ -345,7 +345,6 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     throw std::logic_error("Control should never reach here");
 }
 
-
 std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
     std::shared_ptr<table_info> input_batch) {
     std::vector<std::shared_ptr<array_info>> child_results;
@@ -353,15 +352,14 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
 
     // All the sources of the UDF will be separate projections.
     // Create each one of them here.
-    for (const auto &child : children) {
+    for (const auto& child : children) {
         std::shared_ptr<ExprResult> child_res =
             child->ProcessBatch(input_batch);
 
         std::shared_ptr<ArrayExprResult> child_as_array =
             std::dynamic_pointer_cast<ArrayExprResult>(child_res);
         if (!child_as_array) {
-            throw std::runtime_error(
-                "Child of UDF did not return an array.");
+            throw std::runtime_error("Child of UDF did not return an array.");
         }
         child_results.emplace_back(child_as_array->result);
         column_names.emplace_back(child_as_array->column_name);
@@ -371,8 +369,8 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
         child_results, column_names, input_batch->metadata);
 
     // Actually run the UDF.
-    std::shared_ptr<table_info> udf_output = runPythonScalarFunction(
-        udf_input, result_type, scalar_func_data.args);
+    std::shared_ptr<table_info> udf_output =
+        runPythonScalarFunction(udf_input, result_type, scalar_func_data.args);
     return std::make_shared<ArrayExprResult>(udf_output->columns[0],
                                              udf_output->column_names[0]);
 }
