@@ -303,7 +303,6 @@ cdef extern from "_plan.h" nogil:
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format) except +
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
-    cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema) except +
     cdef int64_t pyarrow_to_cpp_table(object arrow_table) except +
 
 
@@ -736,14 +735,6 @@ cpdef count_nodes(object root):
     wrapped_operator = root
 
     return planCountNodes(wrapped_operator.c_logical_operator)
-
-
-cpdef set_cpp_table_meta(table_pointer, object arrow_schema):
-    """Set the metadata of a C++ table from an Arrow schema.
-    """
-    cdef int64_t cpp_table = table_pointer
-    set_table_meta_from_arrow(cpp_table, arrow_schema)
-
 
 
 cpdef arrow_to_cpp_table(arrow_table):
