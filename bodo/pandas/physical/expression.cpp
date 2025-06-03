@@ -10,13 +10,15 @@ std::shared_ptr<arrow::Array> prepare_arrow_compute(
 }
 
 // String specialization
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
-    const std::string &value) {
+std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string &value,
+                                                 size_t num_elements) {
     arrow::StringBuilder builder;
     arrow::Status status;
-    status = builder.Append(value);
-    if (!status.ok()) {
-        throw std::runtime_error("builder.Append failed.");
+    for (size_t i = 0; i < num_elements; ++i) {
+        status = builder.Append(value);
+        if (!status.ok()) {
+            throw std::runtime_error("builder.Append failed.");
+        }
     }
     std::shared_ptr<arrow::Array> array;
     status = builder.Finish(&array);
@@ -26,14 +28,16 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
     return array;
 }
 
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
-    const arrow::TimestampScalar &value) {
+std::shared_ptr<arrow::Array> ScalarToArrowArray(
+    const arrow::TimestampScalar &value, size_t num_elements) {
     arrow::TimestampBuilder builder(arrow::timestamp(arrow::TimeUnit::NANO),
                                     arrow::default_memory_pool());
     arrow::Status status;
-    status = builder.Append(value.value);
-    if (!status.ok()) {
-        throw std::runtime_error("builder.Append failed.");
+    for (size_t i = 0; i < num_elements; ++i) {
+        status = builder.Append(value.value);
+        if (!status.ok()) {
+            throw std::runtime_error("builder.Append failed.");
+        }
     }
     std::shared_ptr<arrow::Array> array;
     status = builder.Finish(&array);
@@ -43,13 +47,17 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
     return array;
 }
 
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value) {
+std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
+                                                 size_t num_elements) {
     arrow::BooleanBuilder builder;
+    arrow::Status status;
 
-    // Append boolean value
-    arrow::Status status = builder.Append(value);
-    if (!status.ok()) {
-        throw std::runtime_error("builder.Append failed.");
+    for (size_t i = 0; i < num_elements; ++i) {
+        // Append boolean value
+        status = builder.Append(value);
+        if (!status.ok()) {
+            throw std::runtime_error("builder.Append failed.");
+        }
     }
 
     // Finalize the Arrow array

@@ -1,18 +1,22 @@
 #include "read_iceberg.h"
 #include <arrow/util/key_value_metadata.h>
+#include "../../libs/_utils.h"
+#include "../_util.h"
 #include "physical/operator.h"
 
 PhysicalReadIceberg::PhysicalReadIceberg(
     PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
-    std::shared_ptr<arrow::Schema> arrow_schema,
-    std::vector<int> &selected_columns, duckdb::TableFilterSet &filter_exprs,
+    PyObject *iceberg_schema, std::shared_ptr<arrow::Schema> arrow_schema,
+    int64_t snapshot_id, std::vector<int> &selected_columns,
+    duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val)
     : arrow_schema(std::move(arrow_schema)),
       out_arrow_schema(
           this->create_out_arrow_schema(this->arrow_schema, selected_columns)),
       internal_reader(this->create_internal_reader(
-          catalog, table_id, iceberg_filter, this->arrow_schema,
-          selected_columns, limit_val)),
+          catalog, table_id, iceberg_filter, iceberg_schema, snapshot_id,
+          filter_exprs, this->arrow_schema, selected_columns, limit_val)),
+
       out_metadata(std::make_shared<TableMetadata>(
           this->arrow_schema->metadata()->keys(),
           this->arrow_schema->metadata()->values())),
@@ -56,6 +60,8 @@ std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
 std::unique_ptr<IcebergParquetReader>
 PhysicalReadIceberg::create_internal_reader(
     PyObject *catalog, const std::string table_id, PyObject *iceberg_filter,
+    PyObject *iceberg_schema, int64_t snapshot_id,
+    duckdb::TableFilterSet &filter_exprs,
     std::shared_ptr<arrow::Schema> arrow_schema,
     std::vector<int> &selected_columns,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
@@ -72,14 +78,86 @@ PhysicalReadIceberg::create_internal_reader(
         // Limit the rows to read to the limit value.
         total_rows_to_read = limit_val->GetConstantValue();
     }
+    // We need to convert the iceberg filter to an Arrow filter format string so
+    // it can be applied at the row level in addition to the file level. call
+    // python function
+    // bodo.io.iceberg.common.convert_iceberg_filter_to_arrow(iceberg_filter,
+    // iceberg_schema, true) import bodo.io.iceberg.common
+    PyObjectPtr iceberg_common_mod =
+        PyImport_ImportModule("bodo.io.iceberg.common");
+    if (PyErr_Occurred()) {
+        throw std::runtime_error(
+            "failed to import bodo.io.iceberg.common module");
+    }
+    PyObjectPtr convert_func = PyObject_GetAttrString(
+        iceberg_common_mod,
+        "pyiceberg_filter_to_pyarrow_format_str_and_scalars");
+    if (!convert_func || !PyCallable_Check(convert_func)) {
+        throw std::runtime_error(
+            "failed to get convert_iceberg_filter_to_arrow function from "
+            "bodo.io.iceberg.common module");
+    }
+    PyObjectPtr iceberg_filter_f_str_and_scalars = PyObject_CallFunctionObjArgs(
+        convert_func, iceberg_filter, iceberg_schema, Py_True, nullptr);
+    if (!iceberg_filter_f_str_and_scalars) {
+        throw std::runtime_error(
+            "failed to convert iceberg filter to arrow filter format string");
+    }
+    // The result is a tuple of (iceberg_filter_f_str, filter_scalars)
+    // we need to unpack it.
+    PyObject *iceberg_filter_f_str =
+        PyTuple_GetItem(iceberg_filter_f_str_and_scalars, 0);
+    if (!iceberg_filter_f_str) {
+        throw std::runtime_error(
+            "failed to get iceberg filter format string from tuple");
+    }
+    PyObject *filter_scalars =
+        PyTuple_GetItem(iceberg_filter_f_str_and_scalars, 1);
+    if (!filter_scalars) {
+        throw std::runtime_error("failed to get filter scalars from tuple");
+    }
+
+    // Convert the PyObject to a std::string
+    std::string iceberg_filter_str;
+    if (iceberg_filter_f_str != Py_None) {
+        iceberg_filter_str = PyUnicode_AsUTF8(iceberg_filter_f_str);
+        if (PyErr_Occurred()) {
+            throw std::runtime_error(
+                "failed to convert iceberg filter format string to "
+                "std::string");
+        }
+    } else {
+        iceberg_filter_str = "";
+    }
+
+    // Incref filter scalars so we can pass it to the reader.
+    // The reader will decref it when it's done.
+    if (filter_scalars != Py_None) {
+        Py_INCREF(filter_scalars);
+    }
+
+    // We need to & the iceberg_filter with converted duckdb table filters
+    // to apply the filters at the file level.
+    PyObjectPtr duckdb_iceberg_filter =
+        duckdbFilterSetToPyicebergFilter(filter_exprs, arrow_schema);
+
+    // Perform the python & to combine the filters
+    // IcebergParquetReader takes ownership, so don't decref
+    PyObject *py_iceberg_filter_and_duckdb_filter = PyObject_CallMethod(
+        duckdb_iceberg_filter, "__and__", "O", iceberg_filter);
+    if (!py_iceberg_filter_and_duckdb_filter) {
+        throw std::runtime_error(
+            "failed to combine iceberg filter with duckdb table filters");
+    }
+
     // We're borrowing a reference to the catalog object, so we need to
     // increment the reference count since the reader steals it.
     Py_INCREF(catalog);
     auto reader = std::make_unique<IcebergParquetReader>(
-        catalog, table_id.c_str(), true, total_rows_to_read, iceberg_filter, "",
-        Py_None, selected_columns, is_nullable,
-        arrow::py::wrap_schema(arrow_schema), get_streaming_batch_size(), -1,
-        -1);
+        catalog, table_id.c_str(), true, total_rows_to_read,
+        py_iceberg_filter_and_duckdb_filter, iceberg_filter_str, filter_scalars,
+        selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
+        get_streaming_batch_size(), -1, snapshot_id);
     // TODO: Figure out cols to dict encode
     reader->init_iceberg_reader({}, false);
     return reader;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Python.h>
 #include <arrow/api.h>
 #include <cstdint>
 #include <map>
@@ -16,6 +17,7 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
+#include "duckdb/planner/table_filter.hpp"
 
 /**
  * @brief Convert duckdb value to C++ variant.
@@ -57,6 +59,9 @@ duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
     // If the cast fails, return a nullptr unique_ptr
     return nullptr;
 }
+
+PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
+                                       PyObject *schema_fields);
 
 /**
  * @brief Initialize mapping of input column orders so that keys are in the
@@ -131,3 +136,22 @@ std::shared_ptr<table_info> runPythonScalarFunction(
     const std::shared_ptr<arrow::DataType>& result_type,
     PyObject* args);
 
+/**
+ * @brief Convert duckdb table filters to pyiceberg expressions.
+ * @param filters - the duckdb table filters to convert
+ * @param arrow_schema - the arrow schema to bind the filters to
+ * @return a PyObject representing the pyiceberg expression
+ */
+PyObject *duckdbFilterSetToPyicebergFilter(
+    duckdb::TableFilterSet &filters,
+    std::shared_ptr<arrow::Schema> arrow_schema);
+
+/**
+ * @brief Convert a DuckDB Value object which is used in constant expressions
+ * (BoundConstantExpression) to an Arrow scalar.
+ *
+ * @param value DuckDB Value object to convert
+ * @return std::shared_ptr<arrow::Scalar> equivalent Arrow scalar object
+ */
+std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
+    const duckdb::Value &value);

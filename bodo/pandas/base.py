@@ -117,7 +117,14 @@ def _empty_like(val):
 
 
 @check_args_fallback(
-    supported=["catalog_name", "catalog_properties", "selected_fields", "limit"]
+    supported=[
+        "catalog_name",
+        "catalog_properties",
+        "selected_fields",
+        "limit",
+        "row_filter",
+        "snapshot_id",
+    ]
 )
 def read_iceberg(
     table_identifier: str,
@@ -132,6 +139,7 @@ def read_iceberg(
 ) -> BodoDataFrame:
     import pyiceberg.catalog
     import pyiceberg.expressions
+    import pyiceberg.table
 
     if catalog_properties is None:
         catalog_properties = {}
@@ -149,7 +157,13 @@ def read_iceberg(
         table_identifier,
         catalog_name,
         catalog_properties,
-        pyiceberg.expressions.AlwaysTrue(),
+        pyiceberg.table._parse_row_filter(row_filter)
+        if row_filter
+        else pyiceberg.expressions.AlwaysTrue(),
+        # We need to pass the pyiceberg schema so we can bind the iceberg filter to it
+        # during filter conversion. See bodo/io/iceberg/common.py::pyiceberg_filter_to_pyarrow_format_str_and_scalars
+        pyiceberg_schema,
+        snapshot_id if snapshot_id is not None else -1,
         __pa_schema=arrow_schema,
     )
 

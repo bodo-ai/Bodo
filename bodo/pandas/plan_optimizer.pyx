@@ -279,7 +279,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema) except +
-    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter) except +
+    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
@@ -291,8 +291,8 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
-    cdef unique_ptr[CExpression] make_const_int_expr(int val) except +
-    cdef unique_ptr[CExpression] make_const_float_expr(float val) except +
+    cdef unique_ptr[CExpression] make_const_int_expr(int64_t val) except +
+    cdef unique_ptr[CExpression] make_const_double_expr(double val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
@@ -462,6 +462,17 @@ cdef class ColRefExpression(Expression):
         return f"ColRefExpression({self.out_schema})"
 
 
+cdef class ConstantExpression(Expression):
+    """Wrapper around DuckDB's BoundConstantExpression to provide access in Python.
+    """
+
+    def __cinit__(self, object dummy_schema, object value):
+        self.c_expression = make_const_expr(value)
+
+    def __str__(self):
+        return f"ConstantExpression()"
+
+
 cdef class AggregateExpression(Expression):
     """Wrapper around DuckDB's AggregateExpression to provide access in Python.
     """
@@ -489,26 +500,27 @@ cdef class PythonScalarFuncExpression(Expression):
         return f"PythonScalarFuncExpression({self.out_schema})"
 
 
-cdef unique_ptr[CExpression] make_expr(val):
+cdef unique_ptr[CExpression] make_const_expr(val):
     """Convert a filter expression tree from Cython wrappers
        to duckdb.
     """
+    # TODO: support other scalar types
+    # See pandas scalars in pd.api.types.is_scalar
     cdef c_string val_cstr
 
     if isinstance(val, int):
         return move(make_const_int_expr(val))
     elif isinstance(val, float):
-        return move(make_const_float_expr(val))
+        return move(make_const_double_expr(val))
     elif isinstance(val, str):
         val_cstr = val.encode()
         return move(make_const_string_expr(val_cstr))
     elif isinstance(val, pd.Timestamp):
-        if val.resolution.nanoseconds == 1:
-            return move(make_const_timestamp_ns_expr(val.value))
-        else:
-            raise NotImplementedError("Only support ns timestamp resolution currently, not " + str(val.resolution))
+        # NOTE: Timestamp.value always converts to nanoseconds
+        # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/_libs/tslibs/timestamps.pyx#L242
+        return move(make_const_timestamp_ns_expr(val.value))
     else:
-        raise NotImplementedError("Unknown expr type in make_expr " + str(type(val)))
+        raise NotImplementedError("Unknown expr type in make_const_expr " + str(type(val)))
 
 
 cdef class LogicalFilter(LogicalOperator):
@@ -530,8 +542,8 @@ cdef class ComparisonOpExpression(Expression):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
-        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(rhs))
 
         self.out_schema = out_schema
         self.c_expression = make_comparison_expr(
@@ -567,8 +579,8 @@ cdef class ArithOpExpression(Expression):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
-        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(rhs))
 
         self.out_schema = out_schema
         # The // operator in Python we have to implement as a truediv followed by a floor.
@@ -600,8 +612,8 @@ cdef class ConjunctionOpExpression(Expression):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_expr(lhs))
-        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_expr(rhs))
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(rhs))
 
         self.out_schema = out_schema
         self.c_expression = make_conjunction_expr(
@@ -617,7 +629,7 @@ cdef class UnaryOpExpression(Expression):
     def __cinit__(self, object out_schema, source, op):
         cdef unique_ptr[CExpression] source_expr
 
-        source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_expr(source))
+        source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_const_expr(source))
 
         self.out_schema = out_schema
         self.c_expression = make_unary_expr(
@@ -705,12 +717,12 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     """
     cdef readonly str table_identifier
 
-    def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter):
+    def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema, object snapshot_id):
         import pyiceberg.catalog
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
         self.out_schema = out_schema
         self.table_identifier = table_identifier
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
