@@ -83,6 +83,9 @@ Creates a BodoDataFrame object for reading from an Iceberg table lazily.
 
 Refer to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/api/pandas.read_iceberg.html) for more details.
 
+!!! warning
+    This function is experimental in Pandas and may change in future releases.
+
 <p class="api-header">Parameters</p>
 
 : __table_identifier: *str*:__ Identifier of the Iceberg table to read. This should be in the format `schema.table`
