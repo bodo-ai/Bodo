@@ -967,5 +967,13 @@ void set_table_meta_from_arrow(int64_t table_pointer,
         arrow_schema->metadata()->keys(), arrow_schema->metadata()->values());
 }
 
+int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table) {
+    // Unwrap Arrow table from Python object
+    std::shared_ptr<arrow::Table> table =
+        arrow::py::unwrap_table(pyarrow_table).ValueOrDie();
+    std::shared_ptr<table_info> out_table = arrow_table_to_bodo(table, nullptr);
+    return reinterpret_cast<int64_t>(new table_info(*out_table));
+}
+
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN

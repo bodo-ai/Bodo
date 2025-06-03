@@ -547,24 +547,9 @@ def df_to_cpp_table(df):
     """
     from bodo.ext import plan_optimizer
 
-    n_table_cols = len(df.columns)
-    n_index_arrs = get_n_index_arrays(df.index)
-    n_all_cols = n_table_cols + n_index_arrs
-    in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_all_cols)))
-
-    @numba.jit
-    def impl_df_to_cpp_table(df):
-        table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
-        index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
-        index_arrs = bodo.utils.conversion.index_to_array_list(index, False)
-        cpp_table = bodo.libs.array.py_data_to_cpp_table(
-            table, index_arrs, in_col_inds, n_table_cols
-        )
-        return cast_table_ptr_to_int64(cpp_table)
-
-    cpp_table = impl_df_to_cpp_table(df)
-    plan_optimizer.set_cpp_table_meta(cpp_table, pa.Schema.from_pandas(df))
-    return cpp_table
+    # TODO: test nthreads, safe
+    arrow_table = pa.Table.from_pandas(df)
+    return plan_optimizer.arrow_to_cpp_table(arrow_table)
 
 
 def _empty_pd_array(pa_type):
@@ -951,3 +936,24 @@ def count_plan(self):
 
     data = execute_plan(projection_plan)
     return data[0]
+
+
+def ensure_datetime64ns(df):
+    """Convert datetime columns in a DataFrame to 'datetime64[ns]' dtype.
+    Avoids datetime64[us] that is commonly used in Pandas but not supported in Bodo.
+    """
+    import numpy as np
+
+    for c in df.columns:
+        dtype = df[c].dtype
+        if isinstance(dtype, np.dtype) and dtype.kind == "M":
+            df[c] = df[c].astype("datetime64[ns]")
+
+    if (
+        isinstance(df.index, pd.DatetimeIndex)
+        and isinstance(df.index.dtype, np.dtype)
+        and df.index.dtype.kind == "M"
+    ):
+        df.index = df.index.astype("datetime64[ns]")
+
+    return df
