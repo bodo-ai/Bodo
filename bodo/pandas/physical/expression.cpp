@@ -251,8 +251,10 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalConjunctionExpression>(
-                    buildPhysicalExprTree(bce.children[0], col_ref_map, no_scalars),
-                    buildPhysicalExprTree(bce.children[1], col_ref_map, no_scalars),
+                    buildPhysicalExprTree(bce.children[0], col_ref_map,
+                                          no_scalars),
+                    buildPhysicalExprTree(bce.children[1], col_ref_map,
+                                          no_scalars),
                     expr_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_OPERATOR: {
@@ -263,14 +265,17 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                 case 1: {
                     return std::static_pointer_cast<PhysicalExpression>(
                         std::make_shared<PhysicalUnaryExpression>(
-                            buildPhysicalExprTree(boe.children[0], col_ref_map, no_scalars),
+                            buildPhysicalExprTree(boe.children[0], col_ref_map,
+                                                  no_scalars),
                             expr_type));
                 } break;
                 case 2: {
                     return std::static_pointer_cast<PhysicalExpression>(
                         std::make_shared<PhysicalBinaryExpression>(
-                            buildPhysicalExprTree(boe.children[0], col_ref_map, no_scalars),
-                            buildPhysicalExprTree(boe.children[1], col_ref_map, no_scalars),
+                            buildPhysicalExprTree(boe.children[0], col_ref_map,
+                                                  no_scalars),
+                            buildPhysicalExprTree(boe.children[1], col_ref_map,
+                                                  no_scalars),
                             expr_type));
                 } break;
                 default:
@@ -288,10 +293,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     bfe.bind_info->Cast<BodoPythonScalarFunctionData>();
                 std::vector<std::shared_ptr<PhysicalExpression>> phys_children;
                 for (auto& child_expr : bfe.children) {
-                    phys_children.emplace_back(
-                        buildPhysicalExprTree(child_expr,
-                                              col_ref_map,
-                                              no_scalars));
+                    phys_children.emplace_back(buildPhysicalExprTree(
+                        child_expr, col_ref_map, no_scalars));
                 }
 
                 const std::shared_ptr<arrow::DataType>& result_type =
@@ -305,19 +308,16 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                         return std::static_pointer_cast<PhysicalExpression>(
                             std::make_shared<PhysicalUnaryExpression>(
                                 buildPhysicalExprTree(bfe.children[0],
-                                                      col_ref_map,
-                                                      no_scalars),
+                                                      col_ref_map, no_scalars),
                                 bfe.function.name));
                     } break;
                     case 2: {
                         return std::static_pointer_cast<PhysicalExpression>(
                             std::make_shared<PhysicalBinaryExpression>(
                                 buildPhysicalExprTree(bfe.children[0],
-                                                      col_ref_map,
-                                                      no_scalars),
+                                                      col_ref_map, no_scalars),
                                 buildPhysicalExprTree(bfe.children[1],
-                                                      col_ref_map,
-                                                      no_scalars),
+                                                      col_ref_map, no_scalars),
                                 bfe.function.name));
                     } break;
                     default:
