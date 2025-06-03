@@ -43,8 +43,8 @@ extractValue(const duckdb::Value &value) {
             duckdb::timestamp_ns_t extracted =
                 value.GetValue<duckdb::timestamp_ns_t>();
             // Create a TimestampScalar with nanosecond value
-            return std::make_shared<arrow::Scalar>(
-                arrow::TimestampScalar(extracted.value, timestamp_type));
+            return std::make_shared<arrow::TimestampScalar>(extracted.value,
+                                                            timestamp_type);
         } break;
         case duckdb::LogicalTypeId::DATE: {
             // Define a date type

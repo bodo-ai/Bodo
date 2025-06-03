@@ -326,6 +326,12 @@ def test_table_read_time_travel(
 
 
 @pytest.mark.parametrize(
+    "table_name",
+    [
+        "SIMPLE_NUMERIC_TABLE",
+    ],
+)
+@pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
 def test_table_read_filter_pushdown(
