@@ -42,9 +42,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
         this->active_pipeline->getPrevOpOutputSchema();
 
     auto physical_op = std::make_shared<PhysicalProjection>(
-        source_cols,
-        std::move(op.expressions),
-        in_table_schema);
+        source_cols, std::move(op.expressions), in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
 }
 
@@ -55,7 +53,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
         this->active_pipeline->getPrevOpOutputSchema();
     std::vector<duckdb::ColumnBinding> source_cols =
         op.children[0]->GetColumnBindings();
-    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map = getColRefMap(source_cols);
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+        getColRefMap(source_cols);
 
     std::shared_ptr<PhysicalExpression> physExprTree =
         buildPhysicalExprTree(op.expressions[0], col_ref_map);

@@ -99,17 +99,20 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
  *
  */
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
-    BodoPythonScalarFunctionData(PyObject* args,
+    BodoPythonScalarFunctionData(PyObject *args,
                                  std::shared_ptr<arrow::Schema> out_schema)
         : args(args), out_schema(std::move(out_schema)) {
-        if (args) Py_INCREF(args);
+        if (args)
+            Py_INCREF(args);
     }
     BodoPythonScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema)
-        : args(nullptr), out_schema(std::move(out_schema)) {
+        : args(nullptr), out_schema(std::move(out_schema)) {}
+    ~BodoPythonScalarFunctionData() override {
+        if (args)
+            Py_DECREF(args);
     }
-    ~BodoPythonScalarFunctionData() override { if (args) Py_DECREF(args); }
-    bool Equals(const FunctionData& other_p) const override {
-        const BodoPythonScalarFunctionData& other =
+    bool Equals(const FunctionData &other_p) const override {
+        const BodoPythonScalarFunctionData &other =
             other_p.Cast<BodoPythonScalarFunctionData>();
         return (other.args == this->args);
     }
@@ -118,7 +121,7 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
                                                                out_schema);
     }
 
-    PyObject* args;  // If present then a UDF.
+    PyObject *args;  // If present then a UDF.
     std::shared_ptr<arrow::Schema> out_schema;
 };
 
@@ -133,8 +136,7 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
  */
 std::shared_ptr<table_info> runPythonScalarFunction(
     std::shared_ptr<table_info> input_batch,
-    const std::shared_ptr<arrow::DataType>& result_type,
-    PyObject* args);
+    const std::shared_ptr<arrow::DataType> &result_type, PyObject *args);
 
 /**
  * @brief Convert duckdb table filters to pyiceberg expressions.

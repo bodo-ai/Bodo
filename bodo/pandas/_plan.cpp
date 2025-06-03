@@ -96,8 +96,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    PyObject *field_py,
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
     int col_idx) {
     auto field_res = arrow::py::unwrap_field(field_py);
     std::shared_ptr<arrow::Field> field;
@@ -202,8 +201,7 @@ std::unique_ptr<duckdb::Expression> make_comparison_expr(
 
 std::unique_ptr<duckdb::Expression> make_arithop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
-    std::unique_ptr<duckdb::Expression> &rhs,
-    std::string opstr,
+    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr,
     PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
@@ -246,8 +244,8 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
             "BOUND_FUNCTION");
     }
 
-    auto& bound_func_expr = result->Cast<duckdb::BoundFunctionExpression>();
-    bound_func_expr.bind_info = 
+    auto &bound_func_expr = result->Cast<duckdb::BoundFunctionExpression>();
+    bound_func_expr.bind_info =
         duckdb::make_uniq<BodoPythonScalarFunctionData>(out_schema);
 
     client_context->transaction.ClearTransaction();

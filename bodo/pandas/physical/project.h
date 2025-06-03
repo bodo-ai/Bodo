@@ -12,7 +12,6 @@
 #include "duckdb/planner/logical_operator.hpp"
 #include "expression.h"
 #include "operator.h"
-#include "expression.h"
 
 /**
  * @brief Physical node for projection.
@@ -25,14 +24,15 @@ class PhysicalProjection : public PhysicalSourceSink {
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs,
         std::shared_ptr<bodo::Schema> input_schema)
         : exprs(std::move(exprs)) {
-
         // Map of column bindings to column indices in physical input table
-        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map = getColRefMap(source_cols);
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+            getColRefMap(source_cols);
 
         // Create the output schema from expressions
         this->output_schema = std::make_shared<bodo::Schema>();
         for (auto& expr : this->exprs) {
-            physical_exprs.emplace_back(buildPhysicalExprTree(expr, col_ref_map, true));
+            physical_exprs.emplace_back(
+                buildPhysicalExprTree(expr, col_ref_map, true));
 
             if (expr->type == duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
@@ -50,9 +50,11 @@ class PhysicalProjection : public PhysicalSourceSink {
                 auto& func_expr = expr->Cast<duckdb::BoundFunctionExpression>();
                 if (func_expr.bind_info) {
                     BodoPythonScalarFunctionData& scalar_func_data =
-                        func_expr.bind_info->Cast<BodoPythonScalarFunctionData>();
+                        func_expr.bind_info
+                            ->Cast<BodoPythonScalarFunctionData>();
                     std::unique_ptr<bodo::DataType> col_type =
-                        bodo::Schema::FromArrowSchema(scalar_func_data.out_schema)
+                        bodo::Schema::FromArrowSchema(
+                            scalar_func_data.out_schema)
                             ->column_types[0]
                             ->copy();
                     this->output_schema->append_column(std::move(col_type));
@@ -101,7 +103,8 @@ class PhysicalProjection : public PhysicalSourceSink {
         std::vector<std::shared_ptr<array_info>> out_cols;
 
         for (auto& phys_expr : this->physical_exprs) {
-            std::shared_ptr<ExprResult> phys_res = phys_expr->ProcessBatch(input_batch);
+            std::shared_ptr<ExprResult> phys_res =
+                phys_expr->ProcessBatch(input_batch);
             std::shared_ptr<ArrayExprResult> res_as_array =
                 std::dynamic_pointer_cast<ArrayExprResult>(phys_res);
             if (!res_as_array) {
