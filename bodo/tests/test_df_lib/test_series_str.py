@@ -205,10 +205,18 @@ test_map_no_arg = [
     "len",
 ]
 
-for method_name in test_map_arg:
-    test = gen_str_param_test(method_name, test_map_arg[method_name])
-    globals()[f"test_auto_{method_name}"] = test
 
-for method_name in test_map_no_arg:
-    test = gen_str_param_test(method_name, [((), {})])
-    globals()[f"test_auto_{method_name}"] = test
+def _install_series_str_tests():
+    """Install Series.str tests."""
+    # Tests Series.str methods with arguments
+    for method_name in test_map_arg:
+        test = gen_str_param_test(method_name, test_map_arg[method_name])
+        globals()[f"test_auto_{method_name}"] = test
+
+    # Tests Series.str methods that require no arguments
+    for method_name in test_map_no_arg:
+        test = gen_str_param_test(method_name, [((), {})])
+        globals()[f"test_auto_{method_name}"] = test
+
+
+_install_series_str_tests()

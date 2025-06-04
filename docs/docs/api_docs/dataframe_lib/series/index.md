@@ -43,23 +43,20 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.time`][bodoseriesdttime] 
 
 ### Datetime methods
-!!! note
-	In `month_name` and `day_name`, the locale argument is not yet supported and may trigger a fallback to Pandas. Additionally, `strftime` format strings include precision up to nanoseconds by default.
-	
+!!! warning
+	Locale format must be strict: The locale parameter in `month_name` and `day_name` must follow the exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8"). Variants like "pt_BR.utf8" may not be recognized and trigger an error.
+
 - [`bodo.pandas.BodoSeries.dt.normalize`][bodoseriesdtnormalize]
 - [`bodo.pandas.BodoSeries.dt.floor`][bodoseriesdtfloor]
 - [`bodo.pandas.BodoSeries.dt.ceil`][bodoseriesdtceil]
 - [`bodo.pandas.BodoSeries.dt.month_name`][bodoseriesdtmonth_name] 
 - [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name] 
-- [`bodo.pandas.BodoSeries.dt.strftime`][bodoseriesdtstrftime] 
 
 
 ## Function application
 - [`bodo.pandas.BodoSeries.map`][bodoseriesmap]
 
 ## Missing data handling
-- [`bodo.pandas.BodoSeries.bfill`][bodoseriesbfill]
-- [`bodo.pandas.BodoSeries.ffill`][bodoseriesffill]
 - [`bodo.pandas.BodoSeries.isnull`][bodoseriesisnull]
 - [`bodo.pandas.BodoSeries.notnull`][bodoseriesnotnull]
 - [`bodo.pandas.BodoSeries.replace`][bodoseriesreplace]

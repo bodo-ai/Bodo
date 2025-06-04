@@ -452,8 +452,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @property
     def empty(self):
-        self.execute_plan()
-        return super().empty
+        return len(self) == 0
 
     @property
     def str(self):
@@ -578,9 +577,6 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
     )
 
 
-# TODO: create sample series dictionary
-
-
 def bind(name, accessor_type, *args, **kwargs):
     """
     Binds args and kwargs to method's signature for argument validation.
@@ -590,7 +586,6 @@ def bind(name, accessor_type, *args, **kwargs):
     accessor_names = {"str.": "BodoStringMethods.", "dt.": "BodoDatetimeProperties."}
     msg = ""
     try:
-        # print("Binding args and kwargs for Series method:", name)
         if name in sig_map:
             params = [
                 inspect.Parameter(param[0], param[1])
@@ -600,9 +595,15 @@ def bind(name, accessor_type, *args, **kwargs):
             ]
             signature = inspect.Signature(params)
         else:
-            sample_series = pd.Series(["a"])
+            sample_series = (
+                pd.Series(pd.to_datetime(["2023-01-01"]))
+                if accessor_type == "dt."
+                else pd.Series(["a"])
+            )
             if accessor_type:
-                sample_series = sample_series.str
+                sample_series = (
+                    sample_series.str if accessor_type == "str." else sample_series.dt
+                )
             func = getattr(sample_series, name)
             signature = inspect.signature(func)
 
@@ -614,8 +615,8 @@ def bind(name, accessor_type, *args, **kwargs):
     raise TypeError(f"{accessor_names.get(accessor_type, '')}{name}() {msg}")
 
 
-# Maps Series methods to signatures
-sig_map = {
+# Maps Series methods to signatures. Empty default parameter tuple means argument is required.
+sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]] = {
     "clip": [
         ("lower", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("upper", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
@@ -657,6 +658,21 @@ sig_map = {
 }
 
 
+def infer_type(type):
+    """Maps input dtype to corresponding ArrowDtype to infer output dtype."""
+    map = {
+        bool: pd.ArrowDtype(pa.bool_()),
+        int: pd.ArrowDtype(pa.int64()),
+        float: pd.ArrowDtype(pa.float64()),
+    }
+    try:
+        return map[type]
+    except Exception:
+        raise NotImplementedError(
+            f"Output dtype cannot be inferred from input dtype {type}."
+        )
+
+
 def gen_method(name, return_type, is_method=True, accessor_type=""):
     """Generates Series methods, supports optional/positional args."""
 
@@ -666,9 +682,11 @@ def gen_method(name, return_type, is_method=True, accessor_type=""):
             bind(name, accessor_type, *args, **kwargs)  # Argument validation
 
         series = self._series if accessor_type else self
+        dtype = infer_type(self.dtype.type) if not return_type else return_type
+
         index = series.head(0).index
         new_metadata = pd.Series(
-            dtype=return_type,
+            dtype=dtype,
             name=series.name,
             index=index,
         )
@@ -756,6 +774,7 @@ series_str_methods = [
     ),
 ]
 
+
 # Maps Series.dt accessors to return types
 dt_accessors = [
     # idx = 0: Series(Int)
@@ -808,14 +827,6 @@ dt_accessors = [
         ],
         pd.ArrowDtype(pa.bool_()),
     ),
-    # idx = 4: Series(Timestamp)
-    (
-        [
-            # "end_time",
-        ],
-        pd.ArrowDtype(pa.timestamp("ns")),
-    ),
-    # idx = 5: Series(String)
 ]
 
 # Maps direct Series methods to return types
@@ -831,73 +842,89 @@ dir_methods = [
     ),
     (  # idx = 1: Series(Float)
         [
-            "ffill",
-            "clip",
-            "bfill",
             "replace",
-            "abs",
             "round",
+            # TODO: implement ffill, bfill,
         ],
-        # TODO: for clip, output type should be same as input type.
-        # For now, we assume float64.
         pd.ArrowDtype(pa.float64()),
+    ),
+    (
+        # idx = 2: None(outputdtype == inputdtype)
+        [
+            "clip",
+            "abs",
+        ],
+        None,
     ),
 ]
 
 # Maps Series.dt methods to return types
 dt_methods = [
-    # idx = 0: Series(Boolean)
+    # idx = 0: Series(Timestamp)
     (
         [
             "normalize",
             "floor",
             "ceil",
+            # TODO: implement end_time
         ],
         pd.ArrowDtype(pa.timestamp("ns")),
     ),
-    # idx = 1: Series(String)
+    # idx = 1: Series(Float)
     (
         [
-            # TODO: implement total_seconds (support timedelta)
-            # "total_seconds",
+            # TODO: implement total_seconds (+support timedelta)
         ],
         pd.ArrowDtype(pa.float64()),
     ),
     # idx = 2: Series(String)
     (
         [
-            # TODO: Add locale support
             "month_name",
             "day_name",
-            # TODO: fix precision of seconds (%S by default prints up to nanoseconds)
-            "strftime",
+            # TODO [BSE-4880]: fix precision of seconds (%S by default prints up to nanoseconds)
+            # "strftime",
         ],
         pd.ArrowDtype(pa.large_string()),
     ),
 ]
 
-# Generates Series.str methods
-for str_pair in series_str_methods:
-    for name in str_pair[0]:
-        method = gen_method(name, str_pair[1], accessor_type="str.")
-        setattr(BodoStringMethods, name, method)
 
-# Generates Series.dt accessors
-for dt_accessor_pair in dt_accessors:
-    for name in dt_accessor_pair[0]:
-        accessor = gen_method(
-            name, dt_accessor_pair[1], is_method=False, accessor_type="dt."
-        )
-        setattr(BodoDatetimeProperties, name, property(accessor))
+def _install_series_str_methods():
+    """Install Series.str.<method>() methods."""
+    for str_pair in series_str_methods:
+        for name in str_pair[0]:
+            method = gen_method(name, str_pair[1], accessor_type="str.")
+            setattr(BodoStringMethods, name, method)
 
-# Generates Series.dt methods
-for dt_method_pair in dt_methods:
-    for name in dt_method_pair[0]:
-        method = gen_method(name, dt_method_pair[1], accessor_type="dt.")
-        setattr(BodoDatetimeProperties, name, method)
 
-# Generates direct Series.<method>
-for dir_method_pair in dir_methods:
-    for name in dir_method_pair[0]:
-        method = gen_method(name, dir_method_pair[1])
-        setattr(BodoSeries, name, method)
+def _install_series_dt_accessors():
+    """Install Series.dt.<acc> accessors."""
+    for dt_accessor_pair in dt_accessors:
+        for name in dt_accessor_pair[0]:
+            accessor = gen_method(
+                name, dt_accessor_pair[1], is_method=False, accessor_type="dt."
+            )
+            setattr(BodoDatetimeProperties, name, property(accessor))
+
+
+def _install_series_dt_methods():
+    """Install Series.dt.<method>() methods."""
+    for dt_method_pair in dt_methods:
+        for name in dt_method_pair[0]:
+            method = gen_method(name, dt_method_pair[1], accessor_type="dt.")
+            setattr(BodoDatetimeProperties, name, method)
+
+
+def _install_series_direct_methods():
+    """Install direct Series.<method>() methods."""
+    for dir_method_pair in dir_methods:
+        for name in dir_method_pair[0]:
+            method = gen_method(name, dir_method_pair[1])
+            setattr(BodoSeries, name, method)
+
+
+_install_series_direct_methods()
+_install_series_dt_accessors()
+_install_series_dt_methods()
+_install_series_str_methods()
