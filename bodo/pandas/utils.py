@@ -59,7 +59,7 @@ def get_lazy_single_manager_class() -> type[
     )
 
 
-def cpp_table_to_df(cpp_table, arrow_schema):
+def cpp_table_to_df(cpp_table, arrow_schema=None):
     """Convert a C++ table (table_info) to a pandas DataFrame."""
     from bodo.ext import plan_optimizer
 
@@ -556,11 +556,11 @@ def _get_function_from_path(path_str: str):
     return getattr(module, func_name)
 
 
-def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
+def run_func_on_table(cpp_table, result_type, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
-    input = cpp_table_to_df(cpp_table, arrow_schema)
+    input = cpp_table_to_df(cpp_table)
     func_path_str, is_series, is_attr, args, kwargs = in_args
 
     if is_series:

@@ -198,15 +198,12 @@ std::shared_ptr<table_info> runPythonScalarFunction(
         throw std::runtime_error("Failed to import bodo.pandas.utils module");
     }
 
-    // Call the run_apply_udf() with the table_info pointer, Arrow schema
-    // and UDF function
-    PyObject *pyarrow_schema =
-        arrow::py::wrap_schema(input_batch->schema()->ToArrowSchema());
+    // Call the run_apply_udf() with the table_info pointer and UDF function
     PyObject *result_type_py(arrow::py::wrap_data_type(result_type));
     PyObject *result = PyObject_CallMethod(
-        bodo_module, "run_func_on_table", "LOOO",
-        reinterpret_cast<int64_t>(new table_info(*input_batch)), pyarrow_schema,
-        result_type_py, args);
+        bodo_module, "run_func_on_table", "LOO",
+        reinterpret_cast<int64_t>(new table_info(*input_batch)), result_type_py,
+        args);
     if (!result) {
         PyErr_Print();
         Py_DECREF(bodo_module);
