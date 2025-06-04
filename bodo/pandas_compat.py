@@ -140,6 +140,30 @@ if _check_pandas_change:
 pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type = _concat_same_type
 
 
+pd_str_find = pd.core.arrays.arrow.array.ArrowExtensionArray._str_find
+
+
+def _str_find(self, sub: str, start: int = 0, end: int | None = None):
+    # Bodo change: add fallback to regular Series.str.find() if args not supported by
+    # ArrowExtensionArray. See: test_df_lib/test_series_str.py::test_auto_find
+    if (start != 0 and end is not None) or (start == 0 and end is None):
+        return pd_str_find(self, sub, start, end)
+    else:
+        return pd.Series(self.to_numpy()).str.find(sub, start, end)
+
+
+if _check_pandas_change:
+    lines = inspect.getsource(pd.core.arrays.arrow.array.ArrowExtensionArray._str_find)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "179388243335db6b590d875b3ac1c249efffac4194b8bc56c9c54d956ab5f370"
+    ):  # pragma: no cover
+        warnings.warn(
+            "pd.core.arrays.arrow.array.ArrowExtensionArray._str_find has changed"
+        )
+
+pd.core.arrays.arrow.array.ArrowExtensionArray._str_find = _str_find
+
 # Add support for pow() in join conditions
 pd.core.computation.ops.MATHOPS = pd.core.computation.ops.MATHOPS + ("pow",)
 
