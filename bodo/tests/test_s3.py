@@ -771,6 +771,23 @@ def test_s3_json_write_records_lines_seq(
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df, f"s3://{bucket_name}/df_records_lines_seq.json")
 
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(
+            endpoint_override="http://localhost:9000",
+            region="us-east-1" if bucket_name == "bodo-test" else "us-west-2",
+        )
+        dataset = ds.dataset(
+            "bodo-test/df_records_lines_seq.json", format="json", filesystem=fs
+        )
+        out_df = dataset.to_table().to_pandas()
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
+
 
 @pytest.mark.timeout(1000)
 def test_s3_json_write_records_lines_1D(minio_server_with_s3_envs, s3_bucket, test_df):
@@ -785,6 +802,20 @@ def test_s3_json_write_records_lines_1D(minio_server_with_s3_envs, s3_bucket, te
 
     bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
+
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        dataset = ds.dataset(
+            "bodo-test/df_records_lines_1D.json", format="json", filesystem=fs
+        )
+        out_df = dataset.to_table().to_pandas()
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
 
 
 @pytest.mark.timeout(1000)
@@ -802,6 +833,20 @@ def test_s3_json_write_records_lines_1D_var(
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
+
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        dataset = ds.dataset(
+            "bodo-test/df_records_lines_1D_var.json", format="json", filesystem=fs
+        )
+        out_df = dataset.to_table().to_pandas()
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
 
 
 def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
@@ -1024,75 +1069,34 @@ def test_s3_np_fromfile_1D_var(minio_server_with_s3_envs, s3_bucket, test_np_arr
 
 
 @pytest.mark.timeout(1000)
-def test_s3_json_read_records_lines_seq(minio_server_with_s3_envs, s3_bucket, test_df):
+def test_s3_json_read(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_json(orient="records", lines=True)
     test the json file we just wrote sequentially
     """
 
+    @run_rank0
+    def write_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        with fs.open_output_stream("bodo-test/df_records_lines.json") as f:
+            test_df.to_json(
+                f,
+                orient="records",
+                lines=True,
+            )
+
+    write_table()
+
     def test_read():
         return pd.read_json(
-            "s3://bodo-test/df_records_lines_seq.json",
+            "s3://bodo-test/df_records_lines.json",
             orient="records",
             lines=True,
         )
 
     def test_read_infer_dtype():
         return pd.read_json(
-            "s3://bodo-test/df_records_lines_seq.json",
-            orient="records",
-            lines=True,
-            dtype={"A": float, "B": "bool", "C": int},  # type: ignore
-        )
-
-    check_func(test_read, (), py_output=test_df)
-    check_func(test_read_infer_dtype, (), py_output=test_df)
-
-
-@pytest.mark.timeout(1000)
-def test_s3_json_read_records_lines_1D(minio_server_with_s3_envs, s3_bucket, test_df):
-    """
-    read_json(orient="records", lines=True)
-    test the json file we just wrote in 1D
-    """
-
-    def test_read():
-        return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D.json",
-            orient="records",
-            lines=True,
-        )
-
-    def test_read_infer_dtype():
-        return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D.json",
-            orient="records",
-            lines=True,
-        )
-
-    check_func(test_read, (), py_output=test_df)
-    check_func(test_read_infer_dtype, (), py_output=test_df)
-
-
-@pytest.mark.timeout(1000)
-def test_s3_json_read_records_lines_1D_var(
-    minio_server_with_s3_envs, s3_bucket, test_df
-):
-    """
-    read_json(orient="records", lines=True)
-    test the json file we just wrote in 1D Var
-    """
-
-    def test_read():
-        return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D_var.json",
-            orient="records",
-            lines=True,
-        )
-
-    def test_read_infer_dtype():
-        return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D_var.json",
+            "s3://bodo-test/df_records_lines.json",
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},  # type: ignore
