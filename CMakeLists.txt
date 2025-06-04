@@ -549,7 +549,6 @@ set(sources_list
   "bodo/pandas/_util.cpp"
   "bodo/pandas/physical/expression.cpp"
   "bodo/pandas/physical/operator.cpp"
-  "bodo/pandas/physical/project.cpp"
   "bodo/pandas/physical/read_iceberg.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
