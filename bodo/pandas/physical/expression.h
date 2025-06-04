@@ -221,9 +221,9 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(const T &value,
 std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string &value,
                                                  size_t num_elements = 1);
 
-// arrow::TimestampScalar specialization
+// arrow::Scalar specialization
 std::shared_ptr<arrow::Array> ScalarToArrowArray(
-    const arrow::TimestampScalar &value, size_t num_elements = 1);
+    const std::shared_ptr<arrow::Scalar> &value, size_t num_elements = 1);
 
 // bool specialization
 std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,

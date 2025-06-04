@@ -29,22 +29,14 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string& value,
 }
 
 std::shared_ptr<arrow::Array> ScalarToArrowArray(
-    const arrow::TimestampScalar& value, size_t num_elements) {
-    arrow::TimestampBuilder builder(arrow::timestamp(arrow::TimeUnit::NANO),
-                                    arrow::default_memory_pool());
-    arrow::Status status;
-    for (size_t i = 0; i < num_elements; ++i) {
-        status = builder.Append(value.value);
-        if (!status.ok()) {
-            throw std::runtime_error("builder.Append failed.");
-        }
+    const std::shared_ptr<arrow::Scalar>& value, size_t num_elements) {
+    arrow::Result<std::shared_ptr<arrow::Array>> array_result =
+        arrow::MakeArrayFromScalar(*value, num_elements);
+    if (!array_result.ok()) {
+        throw std::runtime_error("MakeArrayFromScalar failed: " +
+                                 array_result.status().message());
     }
-    std::shared_ptr<arrow::Array> array;
-    status = builder.Finish(&array);
-    if (!status.ok()) {
-        throw std::runtime_error("builder.Finish failed.");
-    }
-    return array;
+    return array_result.ValueOrDie();
 }
 
 std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
