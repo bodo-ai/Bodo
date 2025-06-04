@@ -886,10 +886,14 @@ def test_dataframe_copy(index_val):
 def test_sort(datapath):
     """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bodo_df1.sort_values(by=["D", "A"], ascending=[True, False], na_position="last")
+    bodo_df2 = bodo_df1.sort_values(
+        by=["D", "A"], ascending=[True, False], na_position="last"
+    )
 
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = py_df1.sort_values(by=["D", "A"], ascending=[True, False], na_position="last")
+    py_df2 = py_df1.sort_values(
+        by=["D", "A"], ascending=[True, False], na_position="last"
+    )
 
     _test_equal(
         bodo_df2,
@@ -898,6 +902,7 @@ def test_sort(datapath):
         sort_output=False,
         reset_index=True,
     )
+
 
 def test_basic_groupby():
     """

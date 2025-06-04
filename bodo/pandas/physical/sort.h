@@ -13,10 +13,10 @@
  */
 class PhysicalSort : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalSort(
-        duckdb::LogicalOrder& logical_order,
-        std::shared_ptr<bodo::Schema> input_schema,
-        std::vector<duckdb::ColumnBinding>& source_cols) : output_schema(input_schema) {
+    explicit PhysicalSort(duckdb::LogicalOrder& logical_order,
+                          std::shared_ptr<bodo::Schema> input_schema,
+                          std::vector<duckdb::ColumnBinding>& source_cols)
+        : output_schema(input_schema) {
         std::vector<int64_t> ascending;
         std::vector<int64_t> na_first;
         std::vector<uint64_t> keys;
@@ -25,39 +25,43 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
         // Convert BoundOrderByNode's to keys, asc, and na_first.
         for (const auto& order : logical_order.orders) {
-            switch(order.type) {
-            case duckdb::OrderType::ASCENDING:
-                ascending.push_back(1);
-                break;
-            case duckdb::OrderType::DESCENDING:
-                ascending.push_back(0);
-                break;
-            default:
-                throw std::runtime_error(
-                    "PhysicalSort order type not ascending or descending.");
+            switch (order.type) {
+                case duckdb::OrderType::ASCENDING:
+                    ascending.push_back(1);
+                    break;
+                case duckdb::OrderType::DESCENDING:
+                    ascending.push_back(0);
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "PhysicalSort order type not ascending or descending.");
             }
-            switch(order.null_order) {
-            case duckdb::OrderByNullType::NULLS_FIRST:
-                na_first.push_back(1);
-                break;
-            case duckdb::OrderByNullType::NULLS_LAST:
-                na_first.push_back(0);
-                break;
-            default:
-                throw std::runtime_error(
-                    "PhysicalSort orderbynull type not first or last.");
+            switch (order.null_order) {
+                case duckdb::OrderByNullType::NULLS_FIRST:
+                    na_first.push_back(1);
+                    break;
+                case duckdb::OrderByNullType::NULLS_LAST:
+                    na_first.push_back(0);
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "PhysicalSort orderbynull type not first or last.");
             }
-            duckdb::ExpressionClass expr_class = order.expression->GetExpressionClass();
+            duckdb::ExpressionClass expr_class =
+                order.expression->GetExpressionClass();
             if (expr_class != duckdb::ExpressionClass::BOUND_COLUMN_REF) {
                 throw std::runtime_error(
                     "PhysicalSort expression is not column ref.");
             }
-            auto& bce = order.expression->Cast<duckdb::BoundColumnRefExpression>();
-            keys.push_back(col_ref_map[{bce.binding.table_index, bce.binding.column_index}]);
+            auto& bce =
+                order.expression->Cast<duckdb::BoundColumnRefExpression>();
+            keys.push_back(col_ref_map[{bce.binding.table_index,
+                                        bce.binding.column_index}]);
         }
 
         // Establish table reordering so key are at beginning.
-        bidirectionalColumnMapping(col_inds, inverse_col_inds, keys, output_schema->ncols());
+        bidirectionalColumnMapping(col_inds, inverse_col_inds, keys,
+                                   output_schema->ncols());
 
         std::shared_ptr<bodo::Schema> build_table_schema_reordered =
             output_schema->Project(col_inds);
@@ -69,9 +73,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalSort() = default;
 
-    void Finalize() override {
-        stream_sorter->FinalizeBuild();
-    }
+    void Finalize() override { stream_sorter->FinalizeBuild(); }
 
     /**
      * @brief process input tables to sort
@@ -87,9 +89,8 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
         stream_sorter->ConsumeBatch(input_batch_reordered);
 
-        return local_is_last
-                   ? OperatorResult::FINISHED
-                   : OperatorResult::NEED_MORE_INPUT;
+        return local_is_last ? OperatorResult::FINISHED
+                             : OperatorResult::NEED_MORE_INPUT;
     }
 
     /**
@@ -98,12 +99,12 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
      * @param input_batch input batch to probe
      * @return output batch of probe and return flag
      */
-    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch() override {
+    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
+        override {
         auto sorted_res = stream_sorter->GetOutput();
         return {ProjectTable(sorted_res.first, inverse_col_inds),
-                sorted_res.second
-                    ? OperatorResult::FINISHED
-                    : OperatorResult::HAVE_MORE_OUTPUT};
+                sorted_res.second ? OperatorResult::FINISHED
+                                  : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
     /**
@@ -124,10 +125,9 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     }
 
    private:
-    static void bidirectionalColumnMapping(std::vector<int64_t>& col_inds,
-                                           std::vector<int64_t>& inverse_col_inds,
-                                           const std::vector<uint64_t>& keys,
-                                           uint64_t ncols) {
+    static void bidirectionalColumnMapping(
+        std::vector<int64_t>& col_inds, std::vector<int64_t>& inverse_col_inds,
+        const std::vector<uint64_t>& keys, uint64_t ncols) {
         initInputColumnMapping(inverse_col_inds, keys, ncols);
 
         col_inds.resize(ncols);

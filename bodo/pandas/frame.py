@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import typing as pt
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
@@ -29,7 +30,6 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
-    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_manager_class,
     get_n_index_arrays,
@@ -121,7 +121,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
         plan: plan_optimizer.LogicalOperator | None = None,
-    ) -> "BodoDataFrame":
+    ) -> BodoDataFrame:
         """
         Create a BodoDataFrame from a lazy metadata object.
         """
@@ -537,7 +537,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     @check_args_fallback(supported=["on", "left_on", "right_on"])
     def merge(
         self,
-        right: "BodoDataFrame | BodoSeries",
+        right: BodoDataFrame | BodoSeries,
         how: MergeHow = "inner",
         on: IndexLabel | AnyArrayLike | None = None,
         left_on: IndexLabel | AnyArrayLike | None = None,
@@ -945,7 +945,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 ascending,
                 na_position,
                 cols,
-                self._plan.pa_schema
+                self._plan.pa_schema,
             ),
         )
 
