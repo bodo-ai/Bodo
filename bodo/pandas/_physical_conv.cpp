@@ -252,11 +252,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {
+    std::vector<duckdb::ColumnBinding> source_cols =
+        op.children[0]->GetColumnBindings();
     this->Visit(*op.children[0]);
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    auto physical_sort = std::make_shared<PhysicalSort>(op, in_table_schema);
+    auto physical_sort = std::make_shared<PhysicalSort>(op, in_table_schema, source_cols);
     finished_pipelines.emplace_back(this->active_pipeline->Build(physical_sort));
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_sort);
 }

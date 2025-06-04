@@ -15,10 +15,13 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalSort(
         duckdb::LogicalOrder& logical_order,
-        std::shared_ptr<bodo::Schema> input_schema) : output_schema(input_schema) {
+        std::shared_ptr<bodo::Schema> input_schema,
+        std::vector<duckdb::ColumnBinding>& source_cols) : output_schema(input_schema) {
         std::vector<int64_t> ascending;
         std::vector<int64_t> na_first;
         std::vector<uint64_t> keys;
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map;
+        col_ref_map = getColRefMap(source_cols);
 
         // Convert BoundOrderByNode's to keys, asc, and na_first.
         for (const auto& order : logical_order.orders) {
@@ -50,12 +53,11 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
                     "PhysicalSort expression is not column ref.");
             }
             auto& bce = order.expression->Cast<duckdb::BoundColumnRefExpression>();
-            // Is this right or need col_ref_map?
-            keys.push_back(bce.binding.column_index);
+            keys.push_back(col_ref_map[{bce.binding.table_index, bce.binding.column_index}]);
         }
 
         // Establish table reordering so key are at beginning.
-        initInputColumnMapping(col_inds, keys, output_schema->ncols());
+        bidirectionalColumnMapping(col_inds, inverse_col_inds, keys, output_schema->ncols());
 
         std::shared_ptr<bodo::Schema> build_table_schema_reordered =
             output_schema->Project(col_inds);
@@ -98,7 +100,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch() override {
         auto sorted_res = stream_sorter->GetOutput();
-        return {sorted_res.first,
+        return {ProjectTable(sorted_res.first, inverse_col_inds),
                 sorted_res.second
                     ? OperatorResult::FINISHED
                     : OperatorResult::HAVE_MORE_OUTPUT};
@@ -122,27 +124,20 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     }
 
    private:
-    static void initOutputColumnMapping(std::vector<uint64_t>& col_inds,
-                                        const std::vector<uint64_t>& keys,
-                                        uint64_t ncols) {
-        // Map key column index to its position in keys vector
-        std::unordered_map<uint64_t, size_t> key_positions;
-        for (size_t i = 0; i < keys.size(); ++i) {
-            key_positions[keys[i]] = i;
-        }
-        uint64_t data_offset = keys.size();
+    static void bidirectionalColumnMapping(std::vector<int64_t>& col_inds,
+                                           std::vector<int64_t>& inverse_col_inds,
+                                           const std::vector<uint64_t>& keys,
+                                           uint64_t ncols) {
+        initInputColumnMapping(inverse_col_inds, keys, ncols);
 
+        col_inds.resize(ncols);
         for (uint64_t i = 0; i < ncols; i++) {
-            if (key_positions.find(i) != key_positions.end()) {
-                col_inds.push_back(key_positions[i]);
-            } else {
-                col_inds.push_back(data_offset++);
-            }
+            col_inds[inverse_col_inds[i]] = i;
         }
     }
 
-
     std::vector<int64_t> col_inds;
+    std::vector<int64_t> inverse_col_inds;
     std::shared_ptr<bodo::Schema> output_schema;
     std::unique_ptr<StreamSortState> stream_sorter;
 };
