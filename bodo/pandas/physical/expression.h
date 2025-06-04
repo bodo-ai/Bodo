@@ -242,6 +242,12 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
+        // The current rule is that if the expression infrastructure
+        // is used for filtering then constants are treated as
+        // scalars and if used for projection then constants become
+        // full columns.  If used in a projection then generate_array
+        // will be true and we generate an array the size of the
+        // batch and return an ArrayExprResult.
         if (generate_array) {
             std::shared_ptr<arrow::Array> array =
                 ScalarToArrowArray(constant, input_batch->nrows());
