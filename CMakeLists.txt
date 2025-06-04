@@ -406,7 +406,7 @@ python_add_library(csv_json_reader
 )
 target_include_directories(csv_json_reader PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/io/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/")
 target_link_directories(csv_json_reader PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(csv_json_reader PRIVATE arrow  ${MPI_LIBRARIES})
+target_link_libraries(csv_json_reader PRIVATE arrow arrow_python ${MPI_LIBRARIES})
 install(TARGETS csv_json_reader DESTINATION "bodo/io/")
 
 # ------------------------ Cython Target - bodo.io.pyarrow_wrappers ---------------
@@ -426,7 +426,7 @@ target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_
 # On Windows this is necessary to define due to importing/exporting DLL semantics.
 # See https://github.com/apache/arrow/blob/9105a4109a80a1c01eabb24ee4b9f7c94ee942cb/python/CMakeLists.txt#L472
 target_compile_definitions(pyarrow_wrappers PRIVATE ARROW_PYTHON_EXPORTING)
-target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_dataset "${MPI_LIBRARIES}")
+target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset "${MPI_LIBRARIES}")
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
 
 # ---------------------- Cython Target - bodo.io.tracing ----------------------
@@ -464,7 +464,7 @@ add_custom_command(
 python_add_library(memory MODULE WITH_SOABI "bodo/memory.cpp")
 target_include_directories(memory PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
 target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR})
-target_link_libraries(memory PRIVATE arrow)
+target_link_libraries(memory PRIVATE arrow arrow_python)
 install(TARGETS memory DESTINATION "bodo/")
 
 # ---------------------- Cython Target - bodo.tests.memory_tester -----------------------
@@ -490,7 +490,7 @@ python_add_library(
 
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
 target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" arrow  fmt::fmt)
+target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" arrow arrow_python fmt::fmt)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
     memory_tester
@@ -769,7 +769,7 @@ target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(ext PRIVATE
   npymath
   arrow
-  # arrow_python
+  arrow_python
   arrow_dataset
   parquet
   fmt::fmt
