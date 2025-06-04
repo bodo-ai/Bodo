@@ -946,13 +946,18 @@ def ensure_datetime64ns(df):
 
     for c in df.columns:
         dtype = df[c].dtype
-        if isinstance(dtype, np.dtype) and dtype.kind == "M":
+        if (
+            isinstance(dtype, np.dtype)
+            and dtype.kind == "M"
+            and dtype.name != "datetime64[ns]"
+        ):
             df[c] = df[c].astype("datetime64[ns]")
 
     if (
         isinstance(df.index, pd.DatetimeIndex)
         and isinstance(df.index.dtype, np.dtype)
         and df.index.dtype.kind == "M"
+        and df.index.dtype.name != "datetime64[ns]"
     ):
         df.index = df.index.astype("datetime64[ns]")
 
