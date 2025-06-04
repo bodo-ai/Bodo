@@ -658,21 +658,6 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
 }
 
 
-def infer_type(type):
-    """Maps input dtype to corresponding ArrowDtype to infer output dtype."""
-    map = {
-        bool: pd.ArrowDtype(pa.bool_()),
-        int: pd.ArrowDtype(pa.int64()),
-        float: pd.ArrowDtype(pa.float64()),
-    }
-    try:
-        return map[type]
-    except Exception:
-        raise NotImplementedError(
-            f"Output dtype cannot be inferred from input dtype {type}."
-        )
-
-
 def gen_method(name, return_type, is_method=True, accessor_type=""):
     """Generates Series methods, supports optional/positional args."""
 
@@ -682,7 +667,7 @@ def gen_method(name, return_type, is_method=True, accessor_type=""):
             bind(name, accessor_type, *args, **kwargs)  # Argument validation
 
         series = self._series if accessor_type else self
-        dtype = infer_type(self.dtype.type) if not return_type else return_type
+        dtype = self.dtype if not return_type else return_type
 
         index = series.head(0).index
         new_metadata = pd.Series(
