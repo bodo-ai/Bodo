@@ -47,7 +47,8 @@ requirements:
     - fsspec >=2021.09
     - libarrow =19.0.0
     - pyarrow =19.0.0
-    - boost-cpp =1.85
+    - libboost-headers =1.85  # [not win]
+    - libboost-devel =1.85  # [win]
     - libcurl ~= 8.0
     - hdf5 >=1.14.3,<1.14.4.0a0=mpi_mpich_* # [not win]
     - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_impi_* # [win]
