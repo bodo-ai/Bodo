@@ -164,6 +164,16 @@ if _check_pandas_change:
 
 pd.core.arrays.arrow.array.ArrowExtensionArray._str_find = _str_find
 
+
+# Bodo change: add missing str_map() for ArrowExtensionArray that is used in operations
+# like zfill.
+def arrow_arr_str_map(self, f, na_value=None, dtype=None, convert=True):
+    return pd.Series(self.to_numpy()).array._str_map(f, na_value, dtype, convert)
+
+
+pd.core.arrays.arrow.array.ArrowExtensionArray._str_map = arrow_arr_str_map
+
+
 # Add support for pow() in join conditions
 pd.core.computation.ops.MATHOPS = pd.core.computation.ops.MATHOPS + ("pow",)
 
