@@ -21,6 +21,7 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalProjection& op);
     void Visit(duckdb::LogicalFilter& op);
     void Visit(duckdb::LogicalAggregate& op);
+    void Visit(duckdb::LogicalOrder& op);
     void Visit(duckdb::LogicalComparisonJoin& op);
     void Visit(duckdb::LogicalLimit& op);
     void Visit(duckdb::LogicalSample& op);
@@ -35,6 +36,8 @@ class PhysicalPlanBuilder {
         } else if (op.type == duckdb::LogicalOperatorType::
                                   LOGICAL_AGGREGATE_AND_GROUP_BY) {
             Visit(op.Cast<duckdb::LogicalAggregate>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_ORDER_BY) {
+            Visit(op.Cast<duckdb::LogicalOrder>());
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
             Visit(op.Cast<duckdb::LogicalComparisonJoin>());
