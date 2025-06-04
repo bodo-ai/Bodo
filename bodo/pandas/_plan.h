@@ -371,3 +371,11 @@ int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op);
  * @return int64_t C++ table pointer cast to int64_t
  */
 int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table);
+
+/**
+ * @brief convert a Bodo C++ table pointer to a PyArrow table object.
+ *
+ * @param cpp_table C++ table pointer cast to int64_t
+ * @return PyObject* PyArrow table object
+ */
+PyObject *cpp_table_to_pyarrow(int64_t cpp_table);

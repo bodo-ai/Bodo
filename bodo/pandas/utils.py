@@ -10,7 +10,7 @@ from llvmlite import ir as lir
 from numba.extending import intrinsic
 
 import bodo
-from bodo.libs.array import cpp_table_to_py_table, delete_table, table_type
+from bodo.libs.array import table_type
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 from bodo.utils.typing import check_unsupported_args_fallback
@@ -59,46 +59,13 @@ def get_lazy_single_manager_class() -> type[
     )
 
 
-@intrinsic
-def cast_int64_to_table_ptr(typingctx, val):
-    """Cast int64 value to C++ table pointer"""
-
-    def codegen(context, builder, signature, args):
-        return builder.inttoptr(args[0], lir.IntType(8).as_pointer())
-
-    return table_type(numba.core.types.int64), codegen
-
-
-@numba.njit
-def cpp_table_to_py(in_table, out_cols_arr, out_table_type):
-    """Convert a C++ table pointer to a Python table.
-    Args:
-        in_table (int64): C++ table pointer
-        out_cols_arr (array(int64)): Array of column indices to be extracted
-        out_table_type (types.Type): Type of the output table
-    """
-    cpp_table = cast_int64_to_table_ptr(in_table)
-    out_table = cpp_table_to_py_table(cpp_table, out_cols_arr, out_table_type, 0)
-    delete_table(cpp_table)
-    return out_table
-
-
 def cpp_table_to_df(cpp_table, arrow_schema):
     """Convert a C++ table (table_info) to a pandas DataFrame."""
+    from bodo.ext import plan_optimizer
 
-    import numpy as np
-
-    from bodo.hiframes.table import TableType
-    from bodo.io.helpers import pyarrow_type_to_numba
-
-    out_cols_arr = np.array(range(len(arrow_schema)), dtype=np.int64)
-    table_type = TableType(
-        tuple([pyarrow_type_to_numba(field.type) for field in arrow_schema])
-    )
-
-    out_df = cpp_table_to_py(cpp_table, out_cols_arr, table_type).to_pandas()
-    out_df.columns = [f.name for f in arrow_schema]
-    return _reconstruct_pandas_index(out_df, arrow_schema)
+    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
+    df = arrow_table_to_pandas(arrow_table, arrow_schema)
+    return df
 
 
 def cpp_table_to_series(cpp_table, arrow_schema):
@@ -807,6 +774,46 @@ def arrow_to_empty_df(arrow_schema):
         {field.name: _empty_pd_array(field.type) for field in arrow_schema}
     )
     return _reconstruct_pandas_index(empty_df, arrow_schema)
+
+
+def _arrow_to_pd_array(arrow_array, pa_type):
+    """Convert a PyArrow array to a pandas array with the specified Arrow type."""
+
+    # Our type inference may fail for some object columns so use the proper Arrow type
+    if pa_type == pa.null():
+        pa_type = arrow_array.type
+
+    # Cast to expected type to match Pandas (as determined by the frontend)
+    if pa_type != arrow_array.type:
+        arrow_array = arrow_array.cast(pa_type)
+
+    return pd.array(arrow_array, dtype=pd.ArrowDtype(pa_type))
+
+
+def arrow_table_to_pandas(arrow_table, arrow_schema=None):
+    """Convert a PyArrow Table to a pandas DataFrame. Not using Table.to_pandas()
+    since it doesn't use ArrowDtype and has issues (e.g. repeated column names fails).
+
+    Args:
+        arrow_table (pa.Table): The input Arrow table.
+        arrow_schema (pa.Schema, optional): The schema to use for the DataFrame.
+            If None, uses the schema from the Arrow table.
+
+    Returns:
+        pd.DataFrame: The converted pandas DataFrame.
+    """
+    if arrow_schema is None:
+        arrow_schema = arrow_table.schema
+
+    df = pd.DataFrame(
+        {
+            i: _arrow_to_pd_array(arrow_table.columns[i], field.type)
+            for i, field in enumerate(arrow_schema)
+        }
+    )
+    # Set column names separately to handle duplicate names
+    df.columns = [f.name for f in arrow_schema]
+    return _reconstruct_pandas_index(df, arrow_schema)
 
 
 def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:

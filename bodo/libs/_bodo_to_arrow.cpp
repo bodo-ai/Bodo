@@ -702,9 +702,20 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     size_t num_cols = table->ncols();
     std::vector<std::string> field_names(num_cols);
     for (size_t i = 0; i < num_cols; i++) {
-        field_names[i] = "A" + std::to_string(i);
+        // Use column names if available
+        if (table->column_names.size() > 0) {
+            field_names[i] = table->column_names[i];
+        } else {
+            field_names[i] = "A" + std::to_string(i);
+        }
     }
-    return bodo_table_to_arrow(std::move(table), std::move(field_names));
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = {};
+    if (table->metadata != nullptr) {
+        schema_metadata = std::make_shared<arrow::KeyValueMetadata>(
+            table->metadata->keys, table->metadata->values);
+    }
+    return bodo_table_to_arrow(std::move(table), std::move(field_names),
+                               schema_metadata);
 }
 
 std::shared_ptr<arrow::Table> bodo_table_to_arrow(

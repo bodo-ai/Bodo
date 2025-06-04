@@ -947,5 +947,12 @@ int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table) {
     return reinterpret_cast<int64_t>(new table_info(*out_table));
 }
 
+PyObject *cpp_table_to_pyarrow(int64_t cpp_table) {
+    std::shared_ptr<table_info> table =
+        std::shared_ptr<table_info>(reinterpret_cast<table_info *>(cpp_table));
+    std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(table);
+    return arrow::py::wrap_table(arrow_table);
+}
+
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN
