@@ -55,15 +55,15 @@ Repository = "https://github.com/bodo-ai/Bodo"
 
 [project.optional-dependencies]
 hdf5 = ["h5py"]
-sklearn = ["scikit-learn==1.4.*"]
-plot = ["matplotlib <=3.8.2"]
+sklearn = ["scikit-learn"]
+plot = ["matplotlib"]
 s3fs = ["s3fs >=2022.1.0"]
 adlfs = ["adlfs >=2022.1.0"]
 snowflake = ["snowflake-connector-python"]
 mysql = ["sqlalchemy", "PyMySQL"]
 postgres = ["sqlalchemy", "psycopg2"]
 oracle = ["sqlalchemy", "cx-Oracle", "libaio"]
-iceberg = ["pyiceberg[glue]>=0.9,<0.10"]
+iceberg = ["pyiceberg[glue]>=0.9"]
 huggingface_hub = ["huggingface_hub"]
 
 
