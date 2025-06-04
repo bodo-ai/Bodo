@@ -208,10 +208,13 @@ std::unique_ptr<duckdb::Expression> make_comparison_expr(
 
 std::unique_ptr<duckdb::Expression> make_arithop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
-    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr) {
+    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr,
+    PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
+    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
+
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> children;
     children.emplace_back(std::move(lhs_duck));
     children.emplace_back(std::move(rhs_duck));
@@ -247,6 +250,11 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
             "make_arithop_expr BindScalarFunction did not return a "
             "BOUND_FUNCTION");
     }
+
+    auto &bound_func_expr = result->Cast<duckdb::BoundFunctionExpression>();
+    bound_func_expr.bind_info =
+        duckdb::make_uniq<BodoPythonScalarFunctionData>(out_schema);
+
     client_context->transaction.ClearTransaction();
     return result;
 }

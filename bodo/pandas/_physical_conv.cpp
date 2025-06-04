@@ -3,13 +3,6 @@
 #include "_bodo_scan_function.h"
 
 #include "_util.h"
-#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
-#include "duckdb/planner/expression/bound_cast_expression.hpp"
-#include "duckdb/planner/expression/bound_columnref_expression.hpp"
-#include "duckdb/planner/expression/bound_comparison_expression.hpp"
-#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
-#include "duckdb/planner/expression/bound_constant_expression.hpp"
-#include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "physical/aggregate.h"
 #include "physical/filter.h"
 #include "physical/join.h"
@@ -54,163 +47,21 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     this->active_pipeline->AddOperator(physical_op);
 }
 
-/**
- * @brief Convert duckdb expression tree to Bodo physical expression tree.
- *
- * @param expr - the root of input duckdb expression tree
- * @return the root of output Bodo Physical expression tree
- */
-std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
-    duckdb::unique_ptr<duckdb::Expression>& expr) {
-    // Class and type here are really like the general type of the
-    // expression node (expr_class) and a sub-type of that general
-    // type (expr_type).
-    duckdb::ExpressionClass expr_class = expr->GetExpressionClass();
-    duckdb::ExpressionType expr_type = expr->GetExpressionType();
-
-    switch (expr_class) {
-        case duckdb::ExpressionClass::BOUND_COMPARISON: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundComparisonExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundComparisonExpression>(
-                    std::move(expr));
-            // This node type has left and right children which are recursively
-            // processed first and then the resulting Bodo Physical expression
-            // subtrees are combined with the expression sub-type (e.g., equal,
-            // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
-            return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalComparisonExpression>(
-                    buildPhysicalExprTree(bce->left),
-                    buildPhysicalExprTree(bce->right), expr_type));
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundColumnRefExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(
-                    std::move(expr));
-            duckdb::ColumnBinding binding = bce->binding;
-            return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalColumnRefExpression>(
-                    binding.table_index, binding.column_index));
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_CONSTANT: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundConstantExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(
-                    std::move(expr));
-            // Get the constant out of the duckdb node as a C++ variant.
-            // Using auto since variant set will be extended.
-            auto extracted_value = extractValue(bce->value);
-            // Return a PhysicalConstantExpression<T> where T is the actual
-            // type of the value contained within bce->value.
-            auto ret = std::visit(
-                [](const auto& value) {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalConstantExpression<
-                            std::decay_t<decltype(value)>>>(value));
-                },
-                extracted_value);
-            return ret;
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundConjunctionExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundConjunctionExpression>(
-                    std::move(expr));
-            // This node type has left and right children which are recursively
-            // processed first and then the resulting Bodo Physical expression
-            // subtrees are combined with the expression sub-type (e.g., equal,
-            // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
-            return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalConjunctionExpression>(
-                    buildPhysicalExprTree(bce->children[0]),
-                    buildPhysicalExprTree(bce->children[1]), expr_type));
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_OPERATOR: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundOperatorExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundOperatorExpression>(
-                    std::move(expr));
-            switch (bce->children.size()) {
-                case 1: {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalUnaryExpression>(
-                            buildPhysicalExprTree(bce->children[0]),
-                            expr_type));
-                } break;
-                case 2: {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalBinaryExpression>(
-                            buildPhysicalExprTree(bce->children[0]),
-                            buildPhysicalExprTree(bce->children[1]),
-                            expr_type));
-                } break;
-                default:
-                    throw std::runtime_error(
-                        "Unsupported number of children for bound operator");
-            }
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_FUNCTION: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundFunctionExpression> bfe =
-                dynamic_cast_unique_ptr<duckdb::BoundFunctionExpression>(
-                    std::move(expr));
-            switch (bfe->children.size()) {
-                case 1: {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalUnaryExpression>(
-                            buildPhysicalExprTree(bfe->children[0]),
-                            bfe->function.name));
-                } break;
-                case 2: {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalBinaryExpression>(
-                            buildPhysicalExprTree(bfe->children[0]),
-                            buildPhysicalExprTree(bfe->children[1]),
-                            bfe->function.name));
-                } break;
-                default:
-                    throw std::runtime_error(
-                        "Unsupported number of children " +
-                        std::to_string(bfe->children.size()) +
-                        " for bound function");
-            }
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_CAST: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundCastExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundCastExpression>(
-                    std::move(expr));
-            return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalCastExpression>(
-                    buildPhysicalExprTree(bce->child), bce->return_type));
-        } break;  // suppress wrong fallthrough error
-        default:
-            throw std::runtime_error(
-                "Unsupported duckdb expression class " +
-                std::to_string(static_cast<int>(expr_class)));
-    }
-    throw std::logic_error("Control should never reach here");
-}
-
 void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     // Process the source of this filter.
     this->Visit(*op.children[0]);
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
+    std::vector<duckdb::ColumnBinding> source_cols =
+        op.children[0]->GetColumnBindings();
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+        getColRefMap(source_cols);
 
     std::shared_ptr<PhysicalExpression> physExprTree =
-        buildPhysicalExprTree(op.expressions[0]);
+        buildPhysicalExprTree(op.expressions[0], col_ref_map);
     for (size_t i = 1; i < op.expressions.size(); ++i) {
         std::shared_ptr<PhysicalExpression> subExprTree =
-            buildPhysicalExprTree(op.expressions[i]);
+            buildPhysicalExprTree(op.expressions[i], col_ref_map);
         physExprTree = std::static_pointer_cast<PhysicalExpression>(
             std::make_shared<PhysicalConjunctionExpression>(
                 physExprTree, subExprTree,

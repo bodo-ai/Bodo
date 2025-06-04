@@ -218,7 +218,8 @@ std::unique_ptr<duckdb::Expression> make_comparison_expr(
  */
 std::unique_ptr<duckdb::Expression> make_arithop_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
-    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr);
+    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr,
+    PyObject *out_schema_py);
 
 /**
  * @brief Create an expression from a source and function as a string.
