@@ -116,7 +116,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     }
 
     /**
-     * @brief Get the output schema of join probe
+     * @brief Get the output schema
      *
      * @return std::shared_ptr<bodo::Schema>
      */
