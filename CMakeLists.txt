@@ -111,6 +111,8 @@ if(WIN32)
   find_package(OpenSSL REQUIRED)
 endif()
 
+find_package(Boost 1.85 REQUIRED COMPONENTS json)
+
 # ----------------------------- Download Apache Datasketches -------------------------
 include(ExternalProject)
 ExternalProject_Add(datasketches
