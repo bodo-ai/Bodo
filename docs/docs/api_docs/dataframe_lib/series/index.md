@@ -41,6 +41,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.days_in_month`][bodoseriesdtdays_in_month] 
 - [`bodo.pandas.BodoSeries.dt.date`][bodoseriesdtdate] 
 - [`bodo.pandas.BodoSeries.dt.time`][bodoseriesdttime] 
+- [`bodo.pandas.BodoSeries.dt.quarter`][bodoseriesdtquarter] 
 
 ### Datetime methods
 !!! warning
@@ -211,3 +212,4 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesdtstrftime]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.strftime.html
 [bodoseriesstrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.partition.html
 [bodoseriesstrrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rpartition.html
+[bodoseriesdtquarter]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.quarter.html
