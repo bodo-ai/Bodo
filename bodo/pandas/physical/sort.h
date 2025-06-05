@@ -96,8 +96,8 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     /**
      * @brief Act as data source producing sorted rows.
      *
-     * @param input_batch input batch to probe
-     * @return output batch of probe and return flag
+     * @param input_batch input batch to sort
+     * @return output batch of sorted data and return flag
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
