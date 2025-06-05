@@ -93,6 +93,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.lstrip`][bodoseriesstrlstrip]
 - [`bodo.pandas.BodoSeries.str.match`][bodoseriesstrmatch]
 - [`bodo.pandas.BodoSeries.str.pad`][bodoseriesstrpad]
+- [`bodo.pandas.BodoSeries.str.partition`][bodoseriesstrpartition]
 - [`bodo.pandas.BodoSeries.str.removeprefix`][bodoseriesstrremoveprefix]
 - [`bodo.pandas.BodoSeries.str.removesuffix`][bodoseriesstrremovesuffix]
 - [`bodo.pandas.BodoSeries.str.repeat`][bodoseriesstrrepeat]
@@ -100,6 +101,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.rfind`][bodoseriesstrrfind]
 - [`bodo.pandas.BodoSeries.str.rindex`][bodoseriesstrrindex]
 - [`bodo.pandas.BodoSeries.str.rjust`][bodoseriesstrrjust]
+- [`bodo.pandas.BodoSeries.str.rpartition`][bodoseriesstrrpartition]
 - [`bodo.pandas.BodoSeries.str.rstrip`][bodoseriesstrrstrip]
 - [`bodo.pandas.BodoSeries.str.slice`][bodoseriesstrslice]
 - [`bodo.pandas.BodoSeries.str.slice_replace`][bodoseriesstrslicereplace]
@@ -207,3 +209,5 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesdtmonth_name]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.month_name.html
 [bodoseriesdtday_name]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.day_name.html
 [bodoseriesdtstrftime]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.strftime.html
+[bodoseriesstrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.partition.html
+[bodoseriesstrrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rpartition.html

@@ -652,7 +652,7 @@ def gen_partition(rpartition=False):
     return partition
 
 
-def bind(name, accessor_type, *args, **kwargs):
+def sig_bind(name, accessor_type, *args, **kwargs):
     """
     Binds args and kwargs to method's signature for argument validation.
     Exception cases, in which methods take *args and **kwargs, are handled separately using sig_map.
@@ -739,7 +739,7 @@ def gen_method(name, return_type, is_method=True, accessor_type=""):
     def method(self, *args, **kwargs):
         """Generalized template for Series methods and argument validation using signature"""
         if is_method:
-            bind(name, accessor_type, *args, **kwargs)  # Argument validation
+            sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
 
         series = self._series if accessor_type else self
         dtype = self.dtype if not return_type else return_type
