@@ -149,7 +149,7 @@ def _str_find(self, sub: str, start: int = 0, end: int | None = None):
     if (start != 0 and end is not None) or (start == 0 and end is None):
         return pd_str_find(self, sub, start, end)
     else:
-        return pd.Series(self.to_numpy()).str.find(sub, start, end)
+        return pd.Series(self.to_numpy()).str.find(sub, start, end).array
 
 
 if _check_pandas_change:
