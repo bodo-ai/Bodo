@@ -63,18 +63,6 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     PyObject *out_schema_py);
 
 /**
- * @brief Creates a BoundOrderByNode object.
- *
- * @param asc - true if sorted ascending
- * @param na_first - true if null go first in ordering
- * @param col_ref_expr - column reference expr to sort on
- * @return duckdb::unique_ptr<duckdb::LogicalProjection> output node
- */
-duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
-    std::unique_ptr<duckdb::LogicalOperator> &source, bool asc, bool na_first,
-    PyObject *field_py, int col_idx);
-
-/**
  * @brief Creates a LogicalOrder node.
  *
  * @param source - the data source to project from

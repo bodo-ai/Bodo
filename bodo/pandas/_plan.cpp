@@ -398,19 +398,6 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     return proj;
 }
 
-duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
-    std::unique_ptr<duckdb::LogicalOperator> &source, bool asc, bool na_first,
-    PyObject *field_py, int col_idx) {
-    duckdb::OrderType type =
-        asc ? duckdb::OrderType::ASCENDING : duckdb::OrderType::DESCENDING;
-    duckdb::OrderByNullType null_order =
-        na_first ? duckdb::OrderByNullType::NULLS_FIRST
-                 : duckdb::OrderByNullType::NULLS_LAST;
-    return duckdb::make_uniq<duckdb::BoundOrderByNode>(
-        type, null_order,
-        std::move(make_col_ref_expr(source, field_py, col_idx)));
-}
-
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
     std::vector<bool> &na_position, std::vector<int> &cols,

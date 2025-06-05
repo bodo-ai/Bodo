@@ -313,7 +313,6 @@ cdef extern from "_plan.h" nogil:
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
     cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema) except +
-    cdef unique_ptr[CBoundOrderByNode] make_order_by_node(unique_ptr[CLogicalOperator] source, c_bool asc, c_bool na_first, object field, int col_idx) except +
 
 
 def join_type_to_string(CJoinType join_type):
