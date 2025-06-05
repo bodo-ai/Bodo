@@ -797,7 +797,11 @@ def _fix_struct_arr_names(arr, pa_type):
     ]
     names = [pa_type.field(i).name for i in range(pa_type.num_fields)]
     new_arr = pa.StructArray.from_arrays(new_arrs, names)
-    return new_arr
+    # Arrow's from_arrays ignores nulls (bug as of Arrow 19) so we add them back
+    # manually
+    return pa.Array.from_buffers(
+        new_arr.type, len(new_arr), arr.buffers()[:1], children=new_arrs
+    )
 
 
 def _arrow_to_pd_array(arrow_array, pa_type):
