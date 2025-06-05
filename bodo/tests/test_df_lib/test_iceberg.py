@@ -13,7 +13,7 @@ from bodo.io.iceberg.catalog.dir import DirCatalog
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.utils import _test_equal
 
-pytest_mark = pytest.mark.iceberg
+pytestmark = pytest.mark.iceberg
 
 
 @pytest.mark.parametrize(
