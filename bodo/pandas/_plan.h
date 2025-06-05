@@ -13,8 +13,8 @@
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
-#include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
+#include "duckdb/planner/expression.hpp"
 
 /**
  * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
@@ -71,11 +71,8 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
  * @return duckdb::unique_ptr<duckdb::LogicalProjection> output node
  */
 duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    bool asc,
-    bool na_first,
-    PyObject *field_py,
-    int col_idx);
+    std::unique_ptr<duckdb::LogicalOperator> &source, bool asc, bool na_first,
+    PyObject *field_py, int col_idx);
 
 /**
  * @brief Creates a LogicalOrder node.
@@ -87,11 +84,10 @@ duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
  */
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    //PyObject *out_schema_py,
-    std::vector<bool> &asc,
-    std::vector<bool> &na_position,
+    // PyObject *out_schema_py,
+    std::vector<bool> &asc, std::vector<bool> &na_position,
     std::vector<int> &cols,
-    //std::vector<PyObject *> &col_types);
+    // std::vector<PyObject *> &col_types);
     PyObject *schema_py);
 
 /**
@@ -177,8 +173,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
  * expression
  */
 duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    PyObject *field_py,
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
     int col_idx);
 
 /**
