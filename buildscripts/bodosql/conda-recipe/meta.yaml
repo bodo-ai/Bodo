@@ -10,7 +10,7 @@ build:
 
 requirements:
     host:
-        - python >=3.10,<3.13
+        - python >=3.10,<3.14
         - setuptools >=64
         - setuptools_scm >=8
         - openjdk >=11.0, <18
@@ -20,8 +20,8 @@ requirements:
     run:
         - openjdk >=11.0, <18
         - bodo  {{ BODOSQL_VERSION }}
-        - py4j ==0.10.9.7
-        - python >=3.10,<3.13
+        - py4j ==0.10.9.9
+        - python >=3.10,<3.14
 
 
 test:
