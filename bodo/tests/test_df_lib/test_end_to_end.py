@@ -884,7 +884,7 @@ def test_dataframe_copy(index_val):
 
 
 def test_dataframe_sort(datapath):
-    """Very simple test for projection for sanity checking."""
+    """Very simple test for sorting for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1.sort_values(
         by=["D", "A"], ascending=[True, False], na_position="last"
