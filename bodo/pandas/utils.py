@@ -785,6 +785,9 @@ def _fix_struct_arr_names(arr, pa_type):
     if not pa.types.is_struct(arr.type):
         return arr
 
+    if arr.type == pa_type:
+        return arr
+
     if isinstance(arr, pa.ChunkedArray):
         arr = arr.combine_chunks()
 
