@@ -8,7 +8,7 @@
 #include "operator.h"
 
 /**
- * @brief Physical node for join.
+ * @brief Physical node for sort.
  *
  */
 class PhysicalSort : public PhysicalSource, public PhysicalSink {
