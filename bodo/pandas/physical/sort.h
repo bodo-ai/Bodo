@@ -112,7 +112,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
      */
     std::shared_ptr<table_info> GetResult() override {
         // Sort build doesn't return output results
-        throw std::runtime_error("GetResult called on a join node.");
+        throw std::runtime_error("GetResult called on a sort node.");
     }
 
     /**
