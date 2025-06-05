@@ -412,10 +412,9 @@ duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
 }
 
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::vector<bool> &asc, std::vector<bool> &na_position,
-    std::vector<int> &cols, PyObject *schema_py) {
-
+    std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
+    std::vector<bool> &na_position, std::vector<int> &cols,
+    PyObject *schema_py) {
     auto schema_res = arrow::py::unwrap_schema(schema_py);
     std::shared_ptr<arrow::Schema> schema;
     CHECK_ARROW_AND_ASSIGN(schema_res, "make_order: unable to unwrap schema",
