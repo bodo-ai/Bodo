@@ -128,11 +128,11 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
                                            std::vector<int64_t>& inverse_col_inds,
                                            const std::vector<uint64_t>& keys,
                                            uint64_t ncols) {
-        initInputColumnMapping(inverse_col_inds, keys, ncols);
+        initInputColumnMapping(col_inds, keys, ncols);
 
-        col_inds.resize(ncols);
+        inverse_col_inds.resize(ncols);
         for (uint64_t i = 0; i < ncols; i++) {
-            col_inds[inverse_col_inds[i]] = i;
+            inverse_col_inds[col_inds[i]] = i;
         }
     }
 

@@ -454,21 +454,6 @@ cdef class LogicalOrder(LogicalOperator):
         self.out_schema = out_schema
         self.sources = [source]
 
-        print("LogicalOrder", type(in_schema))
-        """
-        cdef vector[PyObject*] col_types
-        cdef object py_obj
-        cdef PyObject* df_obj
-
-        print("LogicalOrder", type(in_schema))
-        for k in cols:
-            py_obj = in_schema[k]
-            print("py_obj", type(py_obj), py_obj)
-            df_obj = <PyObject*> py_obj 
-            print("df_obj", type(df_obj), df_obj)
-            col_types.push_back(df_obj)
-        """
-
         cdef unique_ptr[CLogicalOrder] c_logical_order = make_order(source.c_logical_operator, asc, na_position, cols, in_schema)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_order.release())
 

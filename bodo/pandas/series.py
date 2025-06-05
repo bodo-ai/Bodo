@@ -1,3 +1,4 @@
+from __future__ import annotations
 import inspect
 import numbers
 import typing as pt
@@ -6,6 +7,11 @@ from collections.abc import Callable, Hashable
 
 import pandas as pd
 import pyarrow as pa
+from pandas._typing import (
+    Axis,
+    SortKind,
+    ValueKeyFunc,
+)
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -481,6 +487,57 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
         return _get_series_python_func_plan(
             self._plan, new_metadata, "isin", (values,), {}
+        )
+
+    @check_args_fallback(supported=["ascending", "na_position"])
+    def sort_values(
+        self,
+        *,
+        axis: Axis = 0,
+        ascending: bool = True,
+        inplace: bool = False,
+        kind: SortKind = "quicksort",
+        na_position: str = "last",
+        ignore_index: bool = False,
+        key: ValueKeyFunc | None = None,
+    ) -> BodoSeries | None:
+        from bodo.pandas.base import _empty_like
+
+        # Validate ascending argument.
+        if not isinstance(ascending, bool):
+            raise BodoError(
+                "DataFrame.sort_values(): argument ascending iterable does not contain only boolean"
+            )
+
+        # Validate na_position argument.
+        if not isinstance(na_position, str):
+            raise BodoError(
+                "Series.sort_values(): argument na_position not a string"
+            )
+
+        if na_position not in ["first", "last"]:
+            raise BodoError(
+                "Series.sort_values(): argument na_position does not contain only 'first' or 'last'"
+            )
+
+        ascending = [ascending]
+        na_position = [True if na_position == "first" else False]
+        cols = [0]
+
+        """ Create 0 length versions of the dataframe as sorted dataframe
+            has the same structure. """
+        zero_size_self = _empty_like(self)
+
+        return wrap_plan(
+            plan=LazyPlan(
+                "LogicalOrder",
+                zero_size_self,
+                self._plan,
+                ascending,
+                na_position,
+                cols,
+                self._plan.pa_schema
+            ),
         )
 
 

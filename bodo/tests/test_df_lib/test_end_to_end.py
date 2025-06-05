@@ -883,7 +883,7 @@ def test_dataframe_copy(index_val):
     _test_equal(df1, pdf_from_bodo, sort_output=True)
 
 
-def test_sort(datapath):
+def test_dataframe_sort(datapath):
     """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1.sort_values(by=["D", "A"], ascending=[True, False], na_position="last")
@@ -898,6 +898,26 @@ def test_sort(datapath):
         sort_output=False,
         reset_index=True,
     )
+
+
+def test_series_sort(datapath):
+    """Very simple test for projection for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1["D"]
+    bodo_df3 = bodo_df2.sort_values(ascending=False, na_position="last")
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1["D"]
+    py_df3 = py_df2.sort_values(ascending=False, na_position="last")
+
+    _test_equal(
+        bodo_df3,
+        py_df3,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )
+
 
 def test_basic_groupby():
     """

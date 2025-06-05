@@ -881,7 +881,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError(
                 "DataFrame.sort_values(): argument by not a string, list or tuple"
             )
-        elif not all(isinstance(item, str) for item in by):
+
+        if not all(isinstance(item, str) for item in by):
             raise BodoError(
                 "DataFrame.sort_values(): argument by iterable does not contain only strings"
             )
@@ -893,7 +894,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError(
                 "DataFrame.sort_values(): argument ascending not a bool, list or tuple"
             )
-        elif not all(isinstance(item, bool) for item in ascending):
+
+        if not all(isinstance(item, bool) for item in ascending):
             raise BodoError(
                 "DataFrame.sort_values(): argument ascending iterable does not contain only boolean"
             )
@@ -905,7 +907,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError(
                 "DataFrame.sort_values(): argument na_position not a string, list or tuple"
             )
-        elif not all(item in ["first", "last"] for item in na_position):
+
+        if not all(item in ["first", "last"] for item in na_position):
             raise BodoError(
                 "DataFrame.sort_values(): argument na_position iterable does not contain only 'first' or 'last'"
             )
