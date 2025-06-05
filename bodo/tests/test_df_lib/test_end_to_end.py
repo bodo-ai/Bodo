@@ -905,7 +905,7 @@ def test_dataframe_sort(datapath):
 
 
 def test_series_sort(datapath):
-    """Very simple test for projection for sanity checking."""
+    """Very simple test for sorting for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bodo_df1["D"]
     bodo_df3 = bodo_df2.sort_values(ascending=False, na_position="last")
