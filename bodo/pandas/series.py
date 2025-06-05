@@ -585,8 +585,8 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
     )
 
 
-def gen_partition(rpartition=False):
-    r = "r" if rpartition else ""
+def gen_partition(name):
+    """Generates partition and rpartition using generalized template."""
 
     def partition(self, sep=" ", expand=True):
         """
@@ -606,7 +606,7 @@ def gen_partition(rpartition=False):
         tuple_plan = _get_series_python_func_plan(
             series._plan,
             new_metadata,
-            f"str.{r}partition",
+            f"str.{name}",
             (),
             {"sep": sep, "expand": False},
         )
@@ -857,6 +857,7 @@ dt_accessors = [
             "quarter",
             "daysinmonth",
             "days_in_month",
+            "quarter",
         ],
         pd.ArrowDtype(pa.int32()),
     ),
@@ -986,9 +987,8 @@ def _install_series_direct_methods():
 
 def _install_str_partitions():
     """Install Series.str.partition and Series.str.rpartition."""
-    for rpartition in [True, False]:
-        name = "rpartition" if rpartition else "partition"
-        method = gen_partition(rpartition=rpartition)
+    for name in ["partition", "rpartition"]:
+        method = gen_partition(name)
         setattr(BodoStringMethods, name, method)
 
 
