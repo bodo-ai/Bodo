@@ -415,7 +415,6 @@ duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<bool> &asc, std::vector<bool> &na_position,
     std::vector<int> &cols, PyObject *schema_py) {
-    // std::vector<PyObject *> &col_types) {
 
     auto schema_res = arrow::py::unwrap_schema(schema_py);
     std::shared_ptr<arrow::Schema> schema;
