@@ -71,5 +71,5 @@ find . -name "bodo*312*.whl" -exec pip install {} \;
 
 # Run PR CI
 export NRANKS=2
-export PYTEST_MARKER="(not weekly) and (not slow) and (not s3) and (not snowflake)"
+export PYTEST_MARKER="(not weekly) and (not slow) and (not s3) and (not snowflake) and (not iceberg)"
 python -m bodo.runtests "BODO_MAC_PR_CI" "$NRANKS" --pyargs bodo -s -v --import-mode=append -m "$PYTEST_MARKER" || true

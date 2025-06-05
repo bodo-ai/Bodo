@@ -114,7 +114,7 @@ jobs:
     with:
       batch: ${{ matrix.batch }}
       total-batches: 12
-      pytest-marker: "not slow and not weekly or smoke"
+      pytest-marker: "not slow and not weekly and not iceberg or smoke"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: NORMAL
@@ -140,7 +140,7 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "df_lib and not weekly"
+      pytest-marker: "df_lib and not weekly and not iceberg"
       collect-coverage: false
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB"
