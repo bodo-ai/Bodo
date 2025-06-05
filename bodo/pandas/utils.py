@@ -619,6 +619,7 @@ def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
     if is_attr:
         func = input
         for atr in func_path_str.split("."):
+            print(func, atr)
             func = getattr(func, atr)
         if not callable(func):
             # func is assumed to be an accessor

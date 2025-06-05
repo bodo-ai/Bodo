@@ -28,6 +28,7 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_array_type,
     datetime_date_type,
 )
+from bodo.hiframes.datetime_timedelta_ext import DatetimeTimeDeltaArrayType
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     PDCategoricalDtype,
@@ -597,6 +598,11 @@ def pyarrow_type_to_numba(arrow_type):
     if pa.types.is_time32(arrow_type):
         precision = 3 if arrow_type.unit == "ms" else 0
         return bodo.TimeArrayType(precision)
+
+    if pa.types.is_duration(arrow_type):
+        print("reached here\n")
+        precision = 9 if arrow_type.unit == "ns" else 0
+        return DatetimeTimeDeltaArrayType()
 
     raise BodoError(
         f"Conversion from PyArrow type {arrow_type} to Bodo array type not supported yet"

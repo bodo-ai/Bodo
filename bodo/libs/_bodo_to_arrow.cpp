@@ -1463,6 +1463,10 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_numeric_array_to_bodo<arrow::Int8Array>(
                 std::static_pointer_cast<arrow::Int8Array>(arrow_arr),
                 Bodo_CTypes::INT8, src_pool);
+        case arrow::Type::DURATION:
+            return arrow_numeric_array_to_bodo<arrow::DurationArray>(
+                std::static_pointer_cast<arrow::DurationArray>(arrow_arr),
+                Bodo_CTypes::TIMEDELTA, src_pool);
         case arrow::Type::TIME64: {
             // Ensure we are always working with nanosecond precision.
             std::shared_ptr<arrow::Time64Array> time_arr =
@@ -1591,7 +1595,8 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
         case arrow::Type::UINT8:
         case arrow::Type::INT8:
         case arrow::Type::TIME32:
-        case arrow::Type::TIME64: {
+        case arrow::Type::TIME64:
+        case arrow::Type::DURATION: {
             return std::make_unique<bodo::DataType>(
                 bodo_array_type::NULLABLE_INT_BOOL,
                 arrow_to_bodo_type(arrow_type->id()));

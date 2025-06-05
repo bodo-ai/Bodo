@@ -888,6 +888,10 @@ dt_accessors = [
         ],
         pd.ArrowDtype(pa.bool_()),
     ),
+    (
+        ["freq"],
+        pd.ArrowDtype(pa.large_string()),
+    ),
 ]
 
 # Maps direct Series methods to return types
