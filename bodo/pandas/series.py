@@ -33,6 +33,7 @@ from bodo.pandas.utils import (
     make_col_ref_exprs,
     wrap_plan,
 )
+from bodo.utils.typing import BodoError
 
 
 class BodoSeries(pd.Series, BodoLazyWrapper):
