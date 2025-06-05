@@ -1,3 +1,8 @@
+import datetime
+import operator
+
+import numba.core.utils
+import pandas as pd
 import pyarrow as pa
 import pyiceberg.catalog
 import pyiceberg.expressions
@@ -260,6 +265,7 @@ def test_table_read_time_travel(
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
     )
+
     table = catalog.load_table(f"{db_schema}.{table_name}")
     # Get the current snapshot ID
     snapshot_id = table.current_snapshot().snapshot_id
@@ -313,6 +319,210 @@ def test_table_read_time_travel(
     _test_equal(
         bodo_out_new,
         py_out_new,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "SIMPLE_NUMERIC_TABLE",
+    ],
+)
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_table_read_filter_pushdown(
+    table_name,
+    op,
+    iceberg_database,
+    iceberg_table_conn,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    bodo_out2 = bodo_out[eval(f"bodo_out.A {op_str} 3")]
+    assert bodo_out2.is_lazy_plan()
+
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 2
+    assert post == 1
+
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[eval(f"py_out.A {op_str} 3")]
+
+    _test_equal(
+        bodo_out2,
+        py_out2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "SIMPLE_NUMERIC_TABLE",
+    ],
+)
+def test_table_read_filter_pushdown_multiple(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    bodo_out2 = bodo_out[(bodo_out.A < 5) & (bodo_out.C >= 3) & (bodo_out.A != 3)]
+    assert bodo_out2.is_lazy_plan()
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 2
+    assert post == 1
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[(py_out.A < 5) & (py_out.C >= 3) & (py_out.A != 3)]
+
+    _test_equal(
+        bodo_out2,
+        py_out2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "SIMPLE_NUMERIC_TABLE",
+    ],
+)
+def test_table_read_filter_pushdown_and_row_filter(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+        row_filter="A < 3",
+    )
+
+    bodo_out2 = bodo_out[bodo_out.C >= 3]
+    assert bodo_out2.is_lazy_plan()
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 2
+    assert post == 1
+
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[(py_out.C >= 3) & (py_out.A < 3)]
+
+    _test_equal(
+        bodo_out2,
+        py_out2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+# Need to test on schema evolved table
+@pytest.mark.parametrize(
+    "table_name",
+    ["ADVERSARIAL_SCHEMA_EVOLUTION_TABLE"],
+)
+def test_table_read_schema_evolved_filter_pushdown(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    bodo_out2 = bodo_out[bodo_out.B < 4]
+    assert bodo_out2.is_lazy_plan()
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 2
+    assert post == 1
+
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[py_out.B < 4]
+
+    _test_equal(
+        bodo_out2,
+        py_out2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "PARTITIONS_DT_TABLE",
+    ],
+)
+def test_table_read_partitioned_file_pruning(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+    memory_leak_check,
+):
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    bodo_out = bpd.read_iceberg(
+        f"{db_schema}.{table_name}",
+        None,
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
+        },
+    )
+    bodo_out2 = bodo_out[bodo_out.A <= pd.Timestamp("2018-12-12")]
+    assert bodo_out2.is_lazy_plan()
+    pre, post = bpd.utils.getPlanStatistics(bodo_out2._mgr._plan)
+    assert pre == 2
+    assert post == 1
+
+    py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
+    py_out2 = py_out[py_out.A <= datetime.date(2018, 12, 12)]
+    # TODO: Figure out how to test that not all files are read automatically.
+    # It was manually confirmed when the test was written.
+
+    _test_equal(
+        bodo_out2,
+        py_out2,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
