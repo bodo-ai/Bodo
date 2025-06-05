@@ -776,12 +776,38 @@ def arrow_to_empty_df(arrow_schema):
     return _reconstruct_pandas_index(empty_df, arrow_schema)
 
 
+def _fix_struct_arr_names(arr, pa_type):
+    """Fix the names of the fields in a struct array to match the Arrow type.
+    This is necessary since our C++ code may not preserve the field names in
+    struct arrays.
+    """
+
+    if not pa.types.is_struct(arr.type):
+        return arr
+
+    if isinstance(arr, pa.ChunkedArray):
+        arr = arr.combine_chunks()
+
+    new_arrs = [
+        _fix_struct_arr_names(arr.field(i), pa_type.field(i).type)
+        for i in range(arr.type.num_fields)
+    ]
+    names = [pa_type.field(i).name for i in range(pa_type.num_fields)]
+    new_arr = pa.StructArray.from_arrays(new_arrs, names)
+    return new_arr
+
+
 def _arrow_to_pd_array(arrow_array, pa_type):
     """Convert a PyArrow array to a pandas array with the specified Arrow type."""
 
     # Our type inference may fail for some object columns so use the proper Arrow type
     if pa_type == pa.null():
         pa_type = arrow_array.type
+
+    # Our C++ code may not preserve the field names in struct arrays
+    # so we fix them here to match the Arrow schema.
+    if pa.types.is_struct(arrow_array.type):
+        arrow_array = _fix_struct_arr_names(arrow_array, pa_type)
 
     # Cast to expected type to match Pandas (as determined by the frontend)
     if pa_type != arrow_array.type:
