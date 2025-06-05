@@ -13,7 +13,7 @@ def gen_dt_accessor_test(name):
 
     def test_func():
         date_m = pd.Series(pd.date_range("20130101 09:10:12", periods=10, freq="MS"))
-        date_s = pd.Series(pd.date_range("20220101 09:10:12", periods=10, freq="s"))
+        date_s = pd.Series(pd.date_range("20221201 09:10:12", periods=10, freq="s"))
         date_y = pd.Series(pd.date_range("19990303 09:10:12", periods=10, freq="YE"))
 
         df = pd.DataFrame({"A": date_m, "B": date_s, "C": date_y})
@@ -47,7 +47,7 @@ def gen_dt_method_test(name, arg_sets):
     )
     def test_func(args, kwargs):
         date_m = pd.Series(pd.date_range("20130101 09:10:12", periods=10, freq="MS"))
-        date_s = pd.Series(pd.date_range("20220101 09:10:12", periods=10, freq="s"))
+        date_s = pd.Series(pd.date_range("20221201 09:10:12", periods=10, freq="s"))
         date_y = pd.Series(pd.date_range("19990303 09:10:12", periods=10, freq="YE"))
 
         df = pd.DataFrame({"A": date_m, "B": date_s, "C": date_y})
@@ -90,7 +90,7 @@ def gen_dt_method_test(name, arg_sets):
                 """
                 if name in ["month_name", "day_name"]:  # Exception list
                     print(
-                        f"Outputs differ, manually compare: \nPandas:\n{out_pd}\nBodo:\n{out_bodo}"
+                        f"Outputs may or may not differ, manually compare: \nPandas:\n{out_pd}\nBodo:\n{out_bodo}"
                     )
                     print("Terminating loop...\n")
                     break
