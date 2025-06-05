@@ -18,6 +18,7 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
+    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_single_manager_class,
     get_n_index_arrays,
@@ -472,6 +473,17 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
 
+def _find_(s, col):
+    """Extracts column col from list series and returns as Pandas series."""
+    series = pd.Series(
+        [
+            (None if not isinstance(s[idx], list) else s[idx][col])
+            for idx in range(len(s))
+        ]
+    )
+    return series
+
+
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
@@ -571,6 +583,73 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
             (expr,) + index_col_refs,
         ),
     )
+
+
+def gen_partition(rpartition=False):
+    r = "r" if rpartition else ""
+
+    def partition(self, sep=" ", expand=True):
+        """
+        Splits string into 3 elements-before the separator, the separator itself,
+        and the part after the separator.
+        """
+        series = self._series
+        dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        tuple_plan = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            f"str.{r}partition",
+            (),
+            {"sep": sep, "expand": False},
+        )
+        # Return Series of len=3 lists
+        if not expand:
+            return tuple_plan
+
+        # Create schema for output DataFrame with 3 columns
+        arrow_schema = pa.schema(
+            [pa.field(f"{idx}", pa.large_string()) for idx in range(3)]
+        )
+        empty_data = arrow_to_empty_df(arrow_schema)
+        empty_series = pd.Series([], dtype=pd.ArrowDtype(pa.large_string()))
+
+        # Create scalar function expression for each column: extract value at index idx from each row
+        def create_expr(idx):
+            return LazyPlan(
+                "PythonScalarFuncExpression",
+                empty_series,
+                tuple_plan._plan,
+                (
+                    "bodo.pandas.series._find_",
+                    True,  # is_series
+                    False,  # is_method
+                    (idx,),  # args
+                    {},  # kwargs
+                ),
+                (0,),
+            )
+
+        expr = tuple(create_expr(idx) for idx in range(3))
+
+        # Creates DataFrame with 3 columns
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            tuple_plan._plan,
+            expr,
+        )
+
+        return wrap_plan(plan=plan)
+
+    return partition
 
 
 def bind(name, accessor_type, *args, **kwargs):
@@ -905,7 +984,16 @@ def _install_series_direct_methods():
             setattr(BodoSeries, name, method)
 
 
+def _install_str_partitions():
+    """Install Series.str.partition and Series.str.rpartition."""
+    for rpartition in [True, False]:
+        name = "rpartition" if rpartition else "partition"
+        method = gen_partition(rpartition=rpartition)
+        setattr(BodoStringMethods, name, method)
+
+
 _install_series_direct_methods()
 _install_series_dt_accessors()
 _install_series_dt_methods()
 _install_series_str_methods()
+_install_str_partitions()
