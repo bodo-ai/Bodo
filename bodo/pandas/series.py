@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import inspect
 import numbers
 import typing as pt
@@ -334,7 +335,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
         plan: plan_optimizer.LogicalOperator | None = None,
-    ) -> "BodoSeries":
+    ) -> BodoSeries:
         """
         Create a BodoSeries from a lazy metadata object.
         """
@@ -512,9 +513,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Validate na_position argument.
         if not isinstance(na_position, str):
-            raise BodoError(
-                "Series.sort_values(): argument na_position not a string"
-            )
+            raise BodoError("Series.sort_values(): argument na_position not a string")
 
         if na_position not in ["first", "last"]:
             raise BodoError(
@@ -537,7 +536,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 ascending,
                 na_position,
                 cols,
-                self._plan.pa_schema
+                self._plan.pa_schema,
             ),
         )
 
