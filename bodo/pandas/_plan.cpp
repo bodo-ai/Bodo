@@ -413,7 +413,6 @@ duckdb::unique_ptr<duckdb::BoundOrderByNode> make_order_by_node(
 
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    // PyObject *out_schema_py,
     std::vector<bool> &asc, std::vector<bool> &na_position,
     std::vector<int> &cols, PyObject *schema_py) {
     // std::vector<PyObject *> &col_types) {
