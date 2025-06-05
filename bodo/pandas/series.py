@@ -432,10 +432,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return super().__repr__()
 
     @property
-    def name(self) -> Hashable:
-        return self._name
-
-    @property
     def index(self):
         self.execute_plan()
         return super().index
