@@ -3357,7 +3357,7 @@ numba.core.byteflow.TraceRunner.op_FORMAT_VALUE = op_FORMAT_VALUE_byteflow
 numba.core.byteflow.TraceRunner.op_BUILD_STRING = op_BUILD_STRING_byteflow
 
 
-def op_FORMAT_VALUE_interpreter(self, inst, value, res, fmtvar, format_spec):
+def op_FORMAT_VALUE_interpreter(self, inst, value, res, fmtvar, format_spec=""):
     """
     FORMAT_VALUE(flags): flags argument specifies conversion (not supported yet) and
     format spec.
