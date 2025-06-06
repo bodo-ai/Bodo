@@ -830,7 +830,8 @@ def arrow_table_to_pandas(arrow_table, arrow_schema=None):
             for i, field in enumerate(arrow_schema)
         }
     )
-    # Set column names separately to handle duplicate names
+    # Set column names separately to handle duplicate names ("field.name:" in a
+    # dictionary would replace duplicated values)
     df.columns = [f.name for f in arrow_schema]
     return _reconstruct_pandas_index(df, arrow_schema)
 
