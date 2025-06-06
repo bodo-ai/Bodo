@@ -3,14 +3,10 @@ import importlib
 import inspect
 import warnings
 
-import numba
 import pandas as pd
 import pyarrow as pa
-from llvmlite import ir as lir
-from numba.extending import intrinsic
 
 import bodo
-from bodo.libs.array import cpp_table_to_py_table, delete_table, table_type
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 from bodo.utils.typing import check_unsupported_args_fallback
@@ -59,46 +55,13 @@ def get_lazy_single_manager_class() -> type[
     )
 
 
-@intrinsic
-def cast_int64_to_table_ptr(typingctx, val):
-    """Cast int64 value to C++ table pointer"""
-
-    def codegen(context, builder, signature, args):
-        return builder.inttoptr(args[0], lir.IntType(8).as_pointer())
-
-    return table_type(numba.core.types.int64), codegen
-
-
-@numba.njit
-def cpp_table_to_py(in_table, out_cols_arr, out_table_type):
-    """Convert a C++ table pointer to a Python table.
-    Args:
-        in_table (int64): C++ table pointer
-        out_cols_arr (array(int64)): Array of column indices to be extracted
-        out_table_type (types.Type): Type of the output table
-    """
-    cpp_table = cast_int64_to_table_ptr(in_table)
-    out_table = cpp_table_to_py_table(cpp_table, out_cols_arr, out_table_type, 0)
-    delete_table(cpp_table)
-    return out_table
-
-
-def cpp_table_to_df(cpp_table, arrow_schema):
+def cpp_table_to_df(cpp_table, arrow_schema=None):
     """Convert a C++ table (table_info) to a pandas DataFrame."""
+    from bodo.ext import plan_optimizer
 
-    import numpy as np
-
-    from bodo.hiframes.table import TableType
-    from bodo.io.helpers import pyarrow_type_to_numba
-
-    out_cols_arr = np.array(range(len(arrow_schema)), dtype=np.int64)
-    table_type = TableType(
-        tuple([pyarrow_type_to_numba(field.type) for field in arrow_schema])
-    )
-
-    out_df = cpp_table_to_py(cpp_table, out_cols_arr, table_type).to_pandas()
-    out_df.columns = [f.name for f in arrow_schema]
-    return _reconstruct_pandas_index(out_df, arrow_schema)
+    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
+    df = arrow_table_to_pandas(arrow_table, arrow_schema)
+    return df
 
 
 def cpp_table_to_series(cpp_table, arrow_schema):
@@ -520,16 +483,6 @@ def getPlanStatistics(plan: LazyPlan):
     return preOptNum, postOptNum
 
 
-@intrinsic
-def cast_table_ptr_to_int64(typingctx, val):
-    """Cast C++ table pointer to int64 (to pass to C++ later)"""
-
-    def codegen(context, builder, signature, args):
-        return builder.ptrtoint(args[0], lir.IntType(64))
-
-    return numba.core.types.int64(table_type), codegen
-
-
 def get_n_index_arrays(index):
     """Get the number of arrays that can hold the Index data in a table."""
     if isinstance(index, pd.RangeIndex):
@@ -548,24 +501,9 @@ def df_to_cpp_table(df):
     """
     from bodo.ext import plan_optimizer
 
-    n_table_cols = len(df.columns)
-    n_index_arrs = get_n_index_arrays(df.index)
-    n_all_cols = n_table_cols + n_index_arrs
-    in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_all_cols)))
-
-    @numba.jit
-    def impl_df_to_cpp_table(df):
-        table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
-        index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
-        index_arrs = bodo.utils.conversion.index_to_array_list(index, False)
-        cpp_table = bodo.libs.array.py_data_to_cpp_table(
-            table, index_arrs, in_col_inds, n_table_cols
-        )
-        return cast_table_ptr_to_int64(cpp_table)
-
-    cpp_table = impl_df_to_cpp_table(df)
-    plan_optimizer.set_cpp_table_meta(cpp_table, pa.Schema.from_pandas(df))
-    return cpp_table
+    # TODO: test nthreads, safe
+    arrow_table = pa.Table.from_pandas(df)
+    return plan_optimizer.arrow_to_cpp_table(arrow_table)
 
 
 def _empty_pd_array(pa_type):
@@ -605,11 +543,11 @@ def _get_function_from_path(path_str: str):
     return getattr(module, func_name)
 
 
-def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
+def run_func_on_table(cpp_table, result_type, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
-    input = cpp_table_to_df(cpp_table, arrow_schema)
+    input = cpp_table_to_df(cpp_table)
     func_path_str, is_series, is_attr, args, kwargs = in_args
 
     if is_series:
@@ -825,6 +763,80 @@ def arrow_to_empty_df(arrow_schema):
     return _reconstruct_pandas_index(empty_df, arrow_schema)
 
 
+def _fix_struct_arr_names(arr, pa_type):
+    """Fix the names of the fields in a struct array to match the Arrow type.
+    This is necessary since our C++ code may not preserve the field names in
+    struct arrays.
+    """
+
+    if not pa.types.is_struct(arr.type):
+        return arr
+
+    if arr.type == pa_type:
+        return arr
+
+    if isinstance(arr, pa.ChunkedArray):
+        arr = arr.combine_chunks()
+
+    new_arrs = [
+        _fix_struct_arr_names(arr.field(i), pa_type.field(i).type)
+        for i in range(arr.type.num_fields)
+    ]
+    names = [pa_type.field(i).name for i in range(pa_type.num_fields)]
+    new_arr = pa.StructArray.from_arrays(new_arrs, names)
+    # Arrow's from_arrays ignores nulls (bug as of Arrow 19) so we add them back
+    # manually
+    return pa.Array.from_buffers(
+        new_arr.type, len(new_arr), arr.buffers()[:1], children=new_arrs
+    )
+
+
+def _arrow_to_pd_array(arrow_array, pa_type):
+    """Convert a PyArrow array to a pandas array with the specified Arrow type."""
+
+    # Our type inference may fail for some object columns so use the proper Arrow type
+    if pa_type == pa.null():
+        pa_type = arrow_array.type
+
+    # Our C++ code may not preserve the field names in struct arrays
+    # so we fix them here to match the Arrow schema.
+    if pa.types.is_struct(arrow_array.type):
+        arrow_array = _fix_struct_arr_names(arrow_array, pa_type)
+
+    # Cast to expected type to match Pandas (as determined by the frontend)
+    if pa_type != arrow_array.type:
+        arrow_array = arrow_array.cast(pa_type)
+
+    return pd.array(arrow_array, dtype=pd.ArrowDtype(pa_type))
+
+
+def arrow_table_to_pandas(arrow_table, arrow_schema=None):
+    """Convert a PyArrow Table to a pandas DataFrame. Not using Table.to_pandas()
+    since it doesn't use ArrowDtype and has issues (e.g. repeated column names fails).
+
+    Args:
+        arrow_table (pa.Table): The input Arrow table.
+        arrow_schema (pa.Schema, optional): The schema to use for the DataFrame.
+            If None, uses the schema from the Arrow table.
+
+    Returns:
+        pd.DataFrame: The converted pandas DataFrame.
+    """
+    if arrow_schema is None:
+        arrow_schema = arrow_table.schema
+
+    df = pd.DataFrame(
+        {
+            i: _arrow_to_pd_array(arrow_table.columns[i], field.type)
+            for i, field in enumerate(arrow_schema)
+        }
+    )
+    # Set column names separately to handle duplicate names ("field.name:" in a
+    # dictionary would replace duplicated values)
+    df.columns = [f.name for f in arrow_schema]
+    return _reconstruct_pandas_index(df, arrow_schema)
+
+
 def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
     """Create an empty Series like ser possibly converting some dtype to use
     pyarrow"""
@@ -916,8 +928,6 @@ class LazyPlanDistributedArg:
 
 
 def count_plan(self):
-    from bodo.pandas.utils import execute_plan, get_plan_cardinality
-
     # See if we can get the cardinality statically.
     static_cardinality = get_plan_cardinality(self._plan)
     if static_cardinality is not None:
@@ -952,3 +962,29 @@ def count_plan(self):
 
     data = execute_plan(projection_plan)
     return data[0]
+
+
+def ensure_datetime64ns(df):
+    """Convert datetime columns in a DataFrame to 'datetime64[ns]' dtype.
+    Avoids datetime64[us] that is commonly used in Pandas but not supported in Bodo.
+    """
+    import numpy as np
+
+    for c in df.columns:
+        dtype = df[c].dtype
+        if (
+            isinstance(dtype, np.dtype)
+            and dtype.kind == "M"
+            and dtype.name != "datetime64[ns]"
+        ):
+            df[c] = df[c].astype("datetime64[ns]")
+
+    if (
+        isinstance(df.index, pd.DatetimeIndex)
+        and isinstance(df.index.dtype, np.dtype)
+        and df.index.dtype.kind == "M"
+        and df.index.dtype.name != "datetime64[ns]"
+    ):
+        df.index = df.index.astype("datetime64[ns]")
+
+    return df

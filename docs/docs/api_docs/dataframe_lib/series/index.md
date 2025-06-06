@@ -30,7 +30,6 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.weekday`][bodoseriesdtweekday] 
 - [`bodo.pandas.BodoSeries.dt.dayofyear`][bodoseriesdtdayofyear] 
 - [`bodo.pandas.BodoSeries.dt.day_of_year`][bodoseriesdtday_of_year] 
-- [`bodo.pandas.BodoSeries.dt.quarter`][bodoseriesdtquarter]
 - [`bodo.pandas.BodoSeries.dt.daysinmonth`][bodoseriesdtdaysinmonth] 
 - [`bodo.pandas.BodoSeries.dt.days_in_month`][bodoseriesdtdays_in_month] 
 - [`bodo.pandas.BodoSeries.dt.date`][bodoseriesdtdate] 
