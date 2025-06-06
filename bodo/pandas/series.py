@@ -126,12 +126,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             op,
         )
 
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
+        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
-            (expr,),
+            (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
 
@@ -176,12 +179,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             op,
         )
 
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
+        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
-            (expr,),
+            (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
 
@@ -219,12 +225,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             source_expr,
             "__invert__",
         )
+
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
+        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
-            (expr,),
+            (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
 
@@ -266,12 +276,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         expr = LazyPlan("ArithOpExpression", empty_data, lhs, rhs, op)
 
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
+        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+
         plan = LazyPlan(
             "LogicalProjection",
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
-            (expr,),
+            (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
 
