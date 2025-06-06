@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -101,6 +102,67 @@ def gen_dt_method_test(name, arg_sets):
     return test_func
 
 
+def gen_timedelta_test(name, arg_sets):
+    """
+    Generates a test case for Series.dt.<name> method.
+    """
+
+    @pytest.mark.parametrize(
+        "args, kwargs",
+        arg_sets,
+        ids=[
+            f"{name}-args{args}-kwargs{sorted(kwargs.items())}"
+            for args, kwargs in arg_sets
+        ],
+    )
+    def test_func(args, kwargs):
+        s = pd.Series(pd.to_timedelta(np.arange(5), unit="m"))
+        df = pd.DataFrame({"A": s})
+
+        bdf = bd.from_pandas(df)
+
+        pd_obj = getattr(df, "A")
+        bodo_obj = getattr(bdf, "A")
+
+        pd_func = getattr(pd_obj.dt, name)
+        bodo_func = getattr(bodo_obj.dt, name)
+
+        pd_error, bodo_error = (False, None), (False, None)
+
+        try:
+            out_pd = pd_func(*args, **kwargs)
+        except Exception as e:
+            pd_error = (True, e)
+        try:
+            out_bodo = bodo_func(*args, **kwargs)
+            assert out_bodo.is_lazy_plan()
+            out_bodo.execute_plan()
+        except Exception as e:
+            bodo_error = (True, e)
+
+        # Precise types of Exceptions might differ
+        assert pd_error[0] == bodo_error[0]
+        if pd_error[0]:
+            return
+
+        try:
+            _test_equal(out_bodo, out_pd, check_pandas_types=False)
+        except AssertionError as e:
+            """
+            Exception case handler: currently month_name and day_name with locale arg
+            returns outputs that trivially differ from Pandas. 
+            In this case, we print out the outputs Bodo vs. Pandas for manual inspection. 
+            """
+            if name in ["month_name", "day_name"]:  # Exception list
+                print(
+                    f"Outputs may or may not differ, manually compare: \nPandas:\n{out_pd}\nBodo:\n{out_bodo}"
+                )
+            else:
+                raise AssertionError(e)
+
+    return test_func
+
+
 # Maps method name to test case for pytest param
 # More rigorous testing NEEDED
 test_map_arg = {
@@ -131,6 +193,7 @@ test_map_arg = {
         (("h"), {}),
         (("D"), {}),
     ],
+    "total_seconds": [((), {})],
     # TODO [BSE-4880]: %S prints up to nanoseconds by default, fix this to make the cases below work.
     # "strftime": [
     #     (("%Y-%m-%D %H:%M",), {}),
@@ -151,7 +214,10 @@ def _install_series_dt_tests():
     # Tests Series.dt methods
     for method_pair in dt_methods:
         for method_name in method_pair[0]:
-            test = gen_dt_method_test(method_name, test_map_arg[method_name])
+            if method_name == "total_seconds":
+                test = gen_timedelta_test(method_name, test_map_arg[method_name])
+            else:
+                test = gen_dt_method_test(method_name, test_map_arg[method_name])
             globals()[f"test_dt_{method_name}"] = test
 
 

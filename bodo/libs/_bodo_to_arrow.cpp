@@ -168,13 +168,15 @@ get_data_type_from_bodo_fixed_width_array(
                 in_num_bytes = sizeof(int64_t) * array->length;
                 type = arrow::int64();
             } else {
+                in_num_bytes = sizeof(int64_t) * array->length;
+                type = arrow::duration(arrow::TimeUnit::NANO);
                 // NOTE: Parquet/Iceberg will raise an error on Python side when
                 // _get_numba_typ_from_pa_typ is reached. raise error for any
                 // other operation.
-                throw std::runtime_error(
-                    "Converting Bodo arrays to Arrow format is "
-                    "currently "
-                    "not supported for Timedelta.");
+                // throw std::runtime_error(
+                //     "Converting Bodo arrays to Arrow format is "
+                //     "currently "
+                //     "not supported for Timedelta.");
             }
             break;
         case Bodo_CTypes::DATETIME:
