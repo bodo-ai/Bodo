@@ -281,7 +281,7 @@ def test_filter_distributed(datapath, file_path, op):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -316,7 +316,7 @@ def test_filter(datapath, op):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
