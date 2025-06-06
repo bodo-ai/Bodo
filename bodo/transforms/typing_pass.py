@@ -6185,10 +6185,17 @@ def _find_updated_containers(blocks, topo_order):
             ):
                 lhs = stmt.target.name
                 rhs = stmt.value.name
-                equiv_vars[lhs].add(rhs)
-                equiv_vars[rhs].add(lhs)
-                equiv_vars[lhs] |= equiv_vars[rhs]
-                equiv_vars[rhs] |= equiv_vars[lhs]
+                if lhs not in equiv_vars:
+                    equiv_vars[rhs].add(lhs)
+                    equiv_vars[lhs] = equiv_vars[rhs]
+                elif rhs not in equiv_vars:
+                    equiv_vars[lhs].add(rhs)
+                    equiv_vars[rhs] = equiv_vars[lhs]
+                else:
+                    equiv_vars[lhs].add(rhs)
+                    equiv_vars[lhs].add(lhs)
+                    equiv_vars[lhs] |= equiv_vars[rhs]
+                    equiv_vars[rhs] = equiv_vars[lhs]
                 if rhs in updated_containers:
                     _set_updated_container(
                         lhs, updated_containers[rhs], updated_containers, equiv_vars
