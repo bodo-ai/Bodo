@@ -138,8 +138,9 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
 
     return ret;
 }
+
 void initInputColumnMapping(std::vector<int64_t> &col_inds,
-                            std::vector<uint64_t> &keys, uint64_t ncols) {
+                            const std::vector<uint64_t> &keys, uint64_t ncols) {
     for (uint64_t i : keys) {
         col_inds.push_back(i);
     }

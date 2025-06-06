@@ -915,8 +915,6 @@ class LazyPlanDistributedArg:
 
 
 def count_plan(self):
-    from bodo.pandas.utils import execute_plan, get_plan_cardinality
-
     # See if we can get the cardinality statically.
     static_cardinality = get_plan_cardinality(self._plan)
     if static_cardinality is not None:

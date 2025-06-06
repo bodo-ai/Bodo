@@ -13,6 +13,7 @@
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/expression.hpp"
 
 /**
@@ -60,6 +61,23 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
     PyObject *out_schema_py);
+
+/**
+ * @brief Creates a LogicalOrder node.
+ *
+ * @param source - the data source to order
+ * @param asc - vector of bool to say whether corresponding key is sorted
+ *              ascending (true) or descending (false)
+ * @param na_position - vector of bool to say whether corresponding key places
+ *              na values first (true) or last (false)
+ * @param cols - vector of int specifying the key column indices for sorting
+ * @param schema_py - the schema of data coming into the order
+ * @return duckdb::unique_ptr<duckdb::LogicalOrder> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
+    std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
+    std::vector<bool> &na_position, std::vector<int> &cols,
+    PyObject *schema_py);
 
 /**
  * @brief Creates a LogicalAggregate node.
