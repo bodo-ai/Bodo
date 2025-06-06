@@ -65,17 +65,19 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
 /**
  * @brief Creates a LogicalOrder node.
  *
- * @param source - the data source to project from
- * @param order_vec - vector of BoundOrderByNode to say how to order
- * @param out_schema_py - the schema of data coming out of the order
+ * @param source - the data source to order
+ * @param asc - vector of bool to say whether corresponding key is sorted
+ *              ascending (true) or descending (false)
+ * @param na_position - vector of bool to say whether corresponding key places
+ *              na values first (true) or last (false)
+ * @param cols - vector of int specifying the key column indices for sorting
+ * @param schema_py - the schema of data coming into the order
  * @return duckdb::unique_ptr<duckdb::LogicalOrder> output node
  */
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    // PyObject *out_schema_py,
     std::vector<bool> &asc, std::vector<bool> &na_position,
     std::vector<int> &cols,
-    // std::vector<PyObject *> &col_types);
     PyObject *schema_py);
 
 /**
