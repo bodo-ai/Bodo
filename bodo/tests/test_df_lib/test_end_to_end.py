@@ -274,7 +274,7 @@ def test_filter_distributed(datapath, op):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
