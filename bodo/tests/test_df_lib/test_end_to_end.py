@@ -942,3 +942,20 @@ def test_projection_expression_floordiv(datapath):
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_series_compound_expression(datapath):
+    """Very simple test for projection expressions."""
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = (bodo_df1["A"] + 50) * 2 / 7
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = (py_df1["A"] + 50) * 2 / 7
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
