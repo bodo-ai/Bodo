@@ -669,15 +669,17 @@ def sig_bind(name, accessor_type, *args, **kwargs):
             ]
             signature = inspect.Signature(params)
         else:
-            sample_series = (
-                pd.Series(pd.to_datetime(["2023-01-01"]))
-                if accessor_type == "dt."
-                else pd.Series(["a"])
-            )
-            if accessor_type:
-                sample_series = (
-                    sample_series.str if accessor_type == "str." else sample_series.dt
+            if not accessor_type:
+                sample_series = pd.Series([])
+            elif accessor_type == "str.":
+                sample_series = pd.Series(["a"]).str
+            elif accessor_type == "dt.":
+                sample_series = pd.Series(pd.to_datetime(["2023-01-01"])).dt
+            else:
+                raise TypeError(
+                    "BodoSeries accessors other than '.dt' and '.str' are not implemented yet."
                 )
+
             func = getattr(sample_series, name)
             signature = inspect.signature(func)
 

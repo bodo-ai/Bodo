@@ -53,7 +53,6 @@ def gen_direct_series_test(name, arg_sets):
             if pd_error[0]:
                 return
 
-            print(out_bodo, out_pd)
             _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
     return test_func
