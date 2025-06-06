@@ -911,8 +911,6 @@ dt_accessors = [
             "weekday",
             "dayofyear",
             "day_of_year",
-            "days_in_month",
-            "quarter",
             "daysinmonth",
             "days_in_month",
             "quarter",
@@ -948,34 +946,6 @@ dt_accessors = [
     ),
 ]
 
-# Maps direct Series methods to return types
-dir_methods = [
-    # idx = 0: Series(Boolean)
-    (
-        [
-            "isin",
-            "notnull",
-            "isnull",
-        ],
-        pd.ArrowDtype(pa.bool_()),
-    ),
-    (  # idx = 1: Series(Float)
-        [
-            # TODO: implement ffill, bfill,
-        ],
-        pd.ArrowDtype(pa.float64()),
-    ),
-    (
-        # idx = 2: None(outputdtype == inputdtype)
-        [
-            "replace",
-            "round",
-            "clip",
-            "abs",
-        ],
-        None,
-    ),
-]
 
 # Maps Series.dt methods to return types
 dt_methods = [
@@ -1005,6 +975,35 @@ dt_methods = [
             # "strftime",
         ],
         pd.ArrowDtype(pa.large_string()),
+    ),
+]
+
+# Maps direct Series methods to return types
+dir_methods = [
+    # idx = 0: Series(Boolean)
+    (
+        [
+            "isin",
+            "notnull",
+            "isnull",
+        ],
+        pd.ArrowDtype(pa.bool_()),
+    ),
+    (  # idx = 1: Series(Float)
+        [
+            # TODO: implement ffill, bfill,
+        ],
+        pd.ArrowDtype(pa.float64()),
+    ),
+    (
+        # idx = 2: None(outputdtype == inputdtype)
+        [
+            "replace",
+            "round",
+            "clip",
+            "abs",
+        ],
+        None,
     ),
 ]
 
