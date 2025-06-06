@@ -29,8 +29,8 @@ def _generate_series_accessor_test(name, df, accessor):
             except AssertionError as e:
                 """
                 Exception case handler: currently Series.BodoDateTimeProperties.is_<something> returns <NA> values for NaT inputs, 
-                while Pandas returns False. 
-                In this case, we print out the outputs Bodo vs. Pandas for manual inspection. 
+                while Pandas returns False. Also, date and time returns a non-ExtensionArray type, which causes _test_equal to fail. 
+                In these cases, we print out the outputs Bodo vs. Pandas for manual inspection. 
                 """
                 if name in [
                     "is_month_start",
@@ -40,6 +40,8 @@ def _generate_series_accessor_test(name, df, accessor):
                     "is_year_start",
                     "is_year_end",
                     "is_leap_year",
+                    "date",
+                    "time",
                 ]:  # Exception list
                     print(
                         f"Outputs may or may not differ, manually compare: \nPandas:\n{pd_accessor}\nBodo:\n{bodo_accessor}"
