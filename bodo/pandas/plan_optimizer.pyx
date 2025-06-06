@@ -312,7 +312,8 @@ cdef extern from "_plan.h" nogil:
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format) except +
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
-    cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema) except +
+    cdef int64_t pyarrow_to_cpp_table(object arrow_table) except +
+    cdef object cpp_table_to_pyarrow(int64_t cpp_table) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -772,11 +773,17 @@ cpdef count_nodes(object root):
     return planCountNodes(wrapped_operator.c_logical_operator)
 
 
-cpdef set_cpp_table_meta(table_pointer, object arrow_schema):
-    """Set the metadata of a C++ table from an Arrow schema.
+cpdef arrow_to_cpp_table(arrow_table):
+    """Convert an Arrow table to a C++ table pointer with column names and
+    metadata set properly.
     """
-    cdef int64_t cpp_table = table_pointer
-    set_table_meta_from_arrow(cpp_table, arrow_schema)
+    return pyarrow_to_cpp_table(arrow_table)
+
+
+cpdef cpp_table_to_arrow(cpp_table):
+    """Convert a C++ table pointer to Arrow table.
+    """
+    return cpp_table_to_pyarrow(cpp_table)
 
 
 cpdef py_optimize_plan(object plan):

@@ -985,32 +985,19 @@ int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op) {
     return ret;
 }
 
-void set_table_meta_from_arrow(int64_t table_pointer,
-                               PyObject *pyarrow_schema) {
-    table_info *table = reinterpret_cast<table_info *>(table_pointer);
-    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table) {
+    // Unwrap Arrow table from Python object
+    std::shared_ptr<arrow::Table> table =
+        arrow::py::unwrap_table(pyarrow_table).ValueOrDie();
+    std::shared_ptr<table_info> out_table = arrow_table_to_bodo(table, nullptr);
+    return reinterpret_cast<int64_t>(new table_info(*out_table));
+}
 
-    // Set column names if not already set
-    if (table->column_names.size() == 0) {
-        for (int i = 0; i < arrow_schema->num_fields(); i++) {
-            table->column_names.emplace_back(arrow_schema->field(i)->name());
-        }
-    } else if (table->column_names.size() !=
-               static_cast<size_t>(arrow_schema->num_fields())) {
-        throw std::runtime_error(
-            "Number of columns in Arrow schema does not match table");
-    } else {
-        // Check that the column names match
-        for (int i = 0; i < arrow_schema->num_fields(); i++) {
-            if (table->column_names[i] != arrow_schema->field(i)->name()) {
-                throw std::runtime_error(
-                    "Column names in Arrow schema do not match table");
-            }
-        }
-    }
-
-    table->metadata = std::make_shared<TableMetadata>(
-        arrow_schema->metadata()->keys(), arrow_schema->metadata()->values());
+PyObject *cpp_table_to_pyarrow(int64_t cpp_table) {
+    std::shared_ptr<table_info> table =
+        std::shared_ptr<table_info>(reinterpret_cast<table_info *>(cpp_table));
+    std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(table);
+    return arrow::py::wrap_table(arrow_table);
 }
 
 #undef CHECK_ARROW

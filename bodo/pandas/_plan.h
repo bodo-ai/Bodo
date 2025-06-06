@@ -384,9 +384,17 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
 int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op);
 
 /**
- * @brief Set the C++ table column names and metadata from PyArrow schema object
+ * @brief convert a PyArrow table to a Bodo C++ table pointer.
  *
- * @param table_pointer C++ table pointer
- * @param pyarrow_schema input PyArrow schema object
+ * @param pyarrow_table input PyArrow table object
+ * @return int64_t C++ table pointer cast to int64_t
  */
-void set_table_meta_from_arrow(int64_t table_pointer, PyObject *pyarrow_schema);
+int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table);
+
+/**
+ * @brief convert a Bodo C++ table pointer to a PyArrow table object.
+ *
+ * @param cpp_table C++ table pointer cast to int64_t
+ * @return PyObject* PyArrow table object
+ */
+PyObject *cpp_table_to_pyarrow(int64_t cpp_table);
