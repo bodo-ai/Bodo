@@ -119,6 +119,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 [bodoserieshead]: ../series/head.md
 [bodoseriesmap]: ../series/map.md
+[bodoseriessortvalues]: ../series/sort_values.md
 
 [overview]: ../index.md/#lazy-evaluation-and-fallback-to-pandas
 
