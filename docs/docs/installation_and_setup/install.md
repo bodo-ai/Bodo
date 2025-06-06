@@ -70,7 +70,7 @@ All optional dependencies except Hadoop can be
 installed through conda using the command:
 
 ```console
-conda install sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=11 deltalake -c conda-forge
+conda install sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=17 deltalake -c conda-forge
 ```
 
 

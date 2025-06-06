@@ -77,7 +77,7 @@ requests = "*"
 cloudpickle = ">=3.0"
 psutil = "*"
 # Core Java Deps
-openjdk = "=11"
+openjdk = "=17"
 py4j = "==0.10.9.9"
 # HDFS
 h5py = "*"
