@@ -1462,6 +1462,10 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_numeric_array_to_bodo<arrow::UInt16Array>(
                 std::static_pointer_cast<arrow::UInt16Array>(arrow_arr),
                 Bodo_CTypes::UINT16, src_pool);
+        case arrow::Type::DURATION:
+            return arrow_numeric_array_to_bodo<arrow::DurationArray>(
+                std::static_pointer_cast<arrow::DurationArray>(arrow_arr),
+                Bodo_CTypes::TIMEDELTA, src_pool);
         case arrow::Type::INT16:
             return arrow_numeric_array_to_bodo<arrow::Int16Array>(
                 std::static_pointer_cast<arrow::Int16Array>(arrow_arr),
@@ -1610,7 +1614,8 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
         }
 
         case arrow::Type::TIME32:
-        case arrow::Type::TIME64: {
+        case arrow::Type::TIME64:
+        case arrow::Type::DURATION: {
             std::shared_ptr<arrow::TimeType> time_type =
                 std::static_pointer_cast<arrow::TimeType>(arrow_type);
             int8_t precision;
