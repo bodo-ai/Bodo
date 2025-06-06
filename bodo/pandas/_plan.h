@@ -75,9 +75,8 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
  * @return duckdb::unique_ptr<duckdb::LogicalOrder> output node
  */
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
-    std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::vector<bool> &asc, std::vector<bool> &na_position,
-    std::vector<int> &cols,
+    std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
+    std::vector<bool> &na_position, std::vector<int> &cols,
     PyObject *schema_py);
 
 /**
