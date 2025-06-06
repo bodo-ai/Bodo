@@ -49,11 +49,12 @@ def gen_dt_method_test(name, arg_sets):
         date_m = pd.Series(pd.date_range("20130101 09:10:12", periods=10, freq="MS"))
         date_s = pd.Series(pd.date_range("20221201 09:10:12", periods=10, freq="s"))
         date_y = pd.Series(pd.date_range("19990303 09:10:12", periods=10, freq="YE"))
+        date_none = pd.Series([pd.NaT] * 10, dtype="datetime64[ns]")
 
-        df = pd.DataFrame({"A": date_m, "B": date_s, "C": date_y})
+        df = pd.DataFrame({"A": date_m, "B": date_s, "C": date_y, "D": date_none})
         bdf = bd.from_pandas(df)
 
-        keys = ["A", "B", "C"]
+        keys = ["A", "B", "C", "D"]
 
         for key in keys:
             pd_obj = getattr(df, key)

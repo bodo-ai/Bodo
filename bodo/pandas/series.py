@@ -473,12 +473,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
 
-def _find_(s, col):
+def _str_partition_helper(s, col):
     """Extracts column col from list series and returns as Pandas series."""
     series = pd.Series(
         [
-            (None if not isinstance(s[idx], list) else s[idx][col])
-            for idx in range(len(s))
+            None if not isinstance(s.iloc[i], list) else s.iloc[i][col]
+            for i in range(len(s))
         ]
     )
     return series
@@ -519,7 +519,6 @@ class BodoDatetimeProperties:
 
     def __init__(self, series):
         self._series = series
-
         # Validates series type
         if not (
             isinstance(series, BodoSeries)
@@ -603,16 +602,16 @@ def gen_partition(name):
             index=index,
         )
 
-        tuple_plan = _get_series_python_func_plan(
+        series_out = _get_series_python_func_plan(
             series._plan,
             new_metadata,
             f"str.{name}",
             (),
             {"sep": sep, "expand": False},
         )
-        # Return Series of len=3 lists
+        # if expand=False, return Series of lists
         if not expand:
-            return tuple_plan
+            return series_out
 
         # Create schema for output DataFrame with 3 columns
         arrow_schema = pa.schema(
@@ -626,9 +625,9 @@ def gen_partition(name):
             return LazyPlan(
                 "PythonScalarFuncExpression",
                 empty_series,
-                tuple_plan._plan,
+                series_out._plan,
                 (
-                    "bodo.pandas.series._find_",
+                    "bodo.pandas.series._str_partition_helper",
                     True,  # is_series
                     False,  # is_method
                     (idx,),  # args
@@ -640,14 +639,14 @@ def gen_partition(name):
         expr = tuple(create_expr(idx) for idx in range(3))
 
         # Creates DataFrame with 3 columns
-        plan = LazyPlan(
+        df_plan = LazyPlan(
             "LogicalProjection",
             empty_data,
-            tuple_plan._plan,
+            series_out._plan,
             expr,
         )
 
-        return wrap_plan(plan=plan)
+        return wrap_plan(plan=df_plan)
 
     return partition
 
@@ -903,8 +902,6 @@ dir_methods = [
     ),
     (  # idx = 1: Series(Float)
         [
-            "replace",
-            "round",
             # TODO: implement ffill, bfill,
         ],
         pd.ArrowDtype(pa.float64()),
@@ -912,6 +909,8 @@ dir_methods = [
     (
         # idx = 2: None(outputdtype == inputdtype)
         [
+            "replace",
+            "round",
             "clip",
             "abs",
         ],

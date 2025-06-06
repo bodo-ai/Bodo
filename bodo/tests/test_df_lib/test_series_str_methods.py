@@ -23,15 +23,22 @@ def gen_str_param_test(name, arg_sets):
     def test_func(args, kwargs):
         df = pd.DataFrame(
             {
-                "A": pd.array([1, 2, 3, 7], dtype="Int64"),
-                "B": ["App-le", "B-anan-a", " E-xc i-ted ", "Do-g"],
-                "C": pd.array([4, 5, 6, -1], dtype="Int64"),
+                "A": [
+                    "Apple",
+                    "Banana",
+                    None,
+                    None,
+                    "App-le",
+                    "B-anan-a",
+                    " E-xc i-ted ",
+                    "Do-g",
+                ],
             }
         )
         bdf = bd.from_pandas(df)
 
-        pd_func = getattr(df.B.str, name)
-        bodo_func = getattr(bdf.B.str, name)
+        pd_func = getattr(df.A.str, name)
+        bodo_func = getattr(bdf.A.str, name)
         pd_error, bodo_error = (False, None), (False, None)
 
         # Pandas and Bodo methods should have identical behavior

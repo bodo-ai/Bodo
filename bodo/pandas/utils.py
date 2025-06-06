@@ -628,7 +628,7 @@ def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
     else:
         # TODO: test this path
         func = _get_function_from_path(func_path_str)
-        out = func(input, *args, **kwargs)
+        out = func(input, *args)
 
     # astype can fail in some cases when input is empty
     if len(out):
