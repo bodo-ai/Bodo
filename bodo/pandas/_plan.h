@@ -13,6 +13,7 @@
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/expression.hpp"
 
 /**
@@ -60,6 +61,23 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
     PyObject *out_schema_py);
+
+/**
+ * @brief Creates a LogicalOrder node.
+ *
+ * @param source - the data source to order
+ * @param asc - vector of bool to say whether corresponding key is sorted
+ *              ascending (true) or descending (false)
+ * @param na_position - vector of bool to say whether corresponding key places
+ *              na values first (true) or last (false)
+ * @param cols - vector of int specifying the key column indices for sorting
+ * @param schema_py - the schema of data coming into the order
+ * @return duckdb::unique_ptr<duckdb::LogicalOrder> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
+    std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
+    std::vector<bool> &na_position, std::vector<int> &cols,
+    PyObject *schema_py);
 
 /**
  * @brief Creates a LogicalAggregate node.
@@ -366,9 +384,17 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
 int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op);
 
 /**
- * @brief Set the C++ table column names and metadata from PyArrow schema object
+ * @brief convert a PyArrow table to a Bodo C++ table pointer.
  *
- * @param table_pointer C++ table pointer
- * @param pyarrow_schema input PyArrow schema object
+ * @param pyarrow_table input PyArrow table object
+ * @return int64_t C++ table pointer cast to int64_t
  */
-void set_table_meta_from_arrow(int64_t table_pointer, PyObject *pyarrow_schema);
+int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table);
+
+/**
+ * @brief convert a Bodo C++ table pointer to a PyArrow table object.
+ *
+ * @param cpp_table C++ table pointer cast to int64_t
+ * @return PyObject* PyArrow table object
+ */
+PyObject *cpp_table_to_pyarrow(int64_t cpp_table);

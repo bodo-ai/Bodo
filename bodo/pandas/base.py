@@ -12,6 +12,7 @@ from bodo.pandas.utils import (
     LazyPlanDistributedArg,
     arrow_to_empty_df,
     check_args_fallback,
+    ensure_datetime64ns,
     make_col_ref_exprs,
     wrap_plan,
 )
@@ -24,6 +25,9 @@ def from_pandas(df):
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame")
+
+    # Avoid datetime64[us] that is commonly used in Pandas but not supported in Bodo.
+    df = ensure_datetime64ns(df)
 
     # Make sure empty_df has proper dtypes since used in the plan output schema.
     # Using sampling to avoid large memory usage.

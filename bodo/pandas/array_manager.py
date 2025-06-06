@@ -174,7 +174,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             assert self.arrays is not None
             return len(self.arrays) == 1
 
-    def get_dtypes(self) -> np.typing.NDArray[np.object_]:
+    def get_dtypes(self) -> np._typing.NDArray[np.object_]:
         """
         Get dtypes of the arrays in the manager.
         Uses head if we don't have the data yet, otherwise uses the base ArrayManager's get_dtypes.

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as pt
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
@@ -11,7 +13,9 @@ from pandas._typing import (
     IndexLabel,
     MergeHow,
     MergeValidate,
+    SortKind,
     Suffixes,
+    ValueKeyFunc,
 )
 
 import bodo
@@ -117,7 +121,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
         plan: plan_optimizer.LogicalOperator | None = None,
-    ) -> "BodoDataFrame":
+    ) -> BodoDataFrame:
         """
         Create a BodoDataFrame from a lazy metadata object.
         """
@@ -533,7 +537,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     @check_args_fallback(supported=["on", "left_on", "right_on"])
     def merge(
         self,
-        right: "BodoDataFrame | BodoSeries",
+        right: BodoDataFrame | BodoSeries,
         how: MergeHow = "inner",
         on: IndexLabel | AnyArrayLike | None = None,
         left_on: IndexLabel | AnyArrayLike | None = None,
@@ -854,6 +858,99 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             (udf_arg,) + index_col_refs,
         )
         return wrap_plan(plan=plan)
+
+    @check_args_fallback(supported=["by", "ascending", "na_position"])
+    def sort_values(
+        self,
+        by: IndexLabel,
+        *,
+        axis: Axis = 0,
+        ascending: bool | list[bool] | tuple[bool, ...] = True,
+        inplace: bool = False,
+        kind: SortKind = "quicksort",
+        na_position: str | list[str] | tuple[str, ...] = "last",
+        ignore_index: bool = False,
+        key: ValueKeyFunc | None = None,
+    ) -> BodoDataFrame | None:
+        from bodo.pandas.base import _empty_like
+
+        # Validate by argument.
+        if isinstance(by, str):
+            by = [by]
+        elif not isinstance(by, (list, tuple)):
+            raise BodoError(
+                "DataFrame.sort_values(): argument by not a string, list or tuple"
+            )
+
+        if not all(isinstance(item, str) for item in by):
+            raise BodoError(
+                "DataFrame.sort_values(): argument by iterable does not contain only strings"
+            )
+
+        # Validate ascending argument.
+        if isinstance(ascending, bool):
+            ascending = [ascending]
+        elif not isinstance(ascending, (list, tuple)):
+            raise BodoError(
+                "DataFrame.sort_values(): argument ascending not a bool, list or tuple"
+            )
+
+        if not all(isinstance(item, bool) for item in ascending):
+            raise BodoError(
+                "DataFrame.sort_values(): argument ascending iterable does not contain only boolean"
+            )
+
+        # Validate na_position argument.
+        if isinstance(na_position, str):
+            na_position = [na_position]
+        elif not isinstance(na_position, (list, tuple)):
+            raise BodoError(
+                "DataFrame.sort_values(): argument na_position not a string, list or tuple"
+            )
+
+        if not all(item in ["first", "last"] for item in na_position):
+            raise BodoError(
+                "DataFrame.sort_values(): argument na_position iterable does not contain only 'first' or 'last'"
+            )
+
+        # Apply singular ascending param to all columns.
+        if len(by) != len(ascending):
+            if len(ascending) == 1:
+                ascending = ascending * len(by)
+            else:
+                raise BodoError(
+                    f"DataFrame.sort_values(): lengths of by {len(by)} and ascending {len(ascending)}"
+                )
+
+        # Apply singular na_position param to all columns.
+        if len(by) != len(na_position):
+            if len(na_position) == 1:
+                na_position = na_position * len(by)
+            else:
+                raise BodoError(
+                    f"DataFrame.sort_values(): lengths of by {len(by)} and na_position {len(na_position)}"
+                )
+        # Convert to True/False list instead of str.
+        na_position = [True if x == "first" else False for x in na_position]
+
+        # Convert column names to indices.
+        cols = [self.columns.get_loc(col) for col in by]
+
+        """ Create 0 length versions of the dataframe as sorted dataframe
+            has the same structure. """
+        zero_size_self = _empty_like(self)
+
+        return wrap_plan(
+            plan=LazyPlan(
+                "LogicalOrder",
+                zero_size_self,
+                self._plan,
+                ascending,
+                na_position,
+                cols,
+                self._plan.pa_schema,
+            ),
+        )
 
     @contextmanager
     def disable_collect(self):
