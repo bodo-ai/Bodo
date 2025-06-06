@@ -327,6 +327,33 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __rfloordiv__(self, other):
         return self._arith_binop(other, "__rfloordiv__", True)
 
+    @check_args_fallback("all")
+    def __getitem__(self, key):
+        """Called when df[key] is used."""
+
+        from bodo.pandas.base import _empty_like
+
+        # Only selecting columns or filtering with BodoSeries is supported
+        if not isinstance(key, BodoSeries):
+            raise BodoLibNotImplementedException(
+                "only string and BodoSeries keys are supported"
+            )
+
+        zero_size_self = _empty_like(self)
+
+        key_plan = (
+            # TODO: error checking for key to be a projection on the same dataframe
+            # with a binary operator
+            get_proj_expr_single(key._plan)
+            if key._plan is not None
+            else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
+        )
+        zero_size_key = _empty_like(key)
+        empty_data = zero_size_self.__getitem__(zero_size_key)
+        return wrap_plan(
+            plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
+        )
+
     @staticmethod
     def from_lazy_mgr(
         lazy_mgr: LazySingleArrayManager | LazySingleBlockManager,
