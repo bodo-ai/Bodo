@@ -1034,6 +1034,7 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "raw_query, expected_hashes",
     [
