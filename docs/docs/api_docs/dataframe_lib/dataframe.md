@@ -215,8 +215,19 @@ Name: D, dtype: int64[pyarrow]
 ---
 
 ## bodo.pandas.BodoDataFrame.sort\_values
-```
-BodoDataFrame.sort_values(ascending=True, na_position='last') -> BodoDataFrame
+``` py
+BodoDataFrame.sort_values(
+        self,
+        by: IndexLabel,
+        *,
+        axis: Axis = 0,
+        ascending: bool | list[bool] | tuple[bool, ...] = True,
+        inplace: bool = False,
+        kind: SortKind = "quicksort",
+        na_position: str | list[str] | tuple[str, ...] = "last",
+        ignore_index: bool = False,
+        key: ValueKeyFunc | None = None,
+    ) -> BodoDataFrame
 ```
 Sorts the elements of the BodoDataFrame and returns a new sorted BodoDataFrame.
 
@@ -227,6 +238,8 @@ Sorts the elements of the BodoDataFrame and returns a new sorted BodoDataFrame.
 : __ascending : *bool or list of bool, default True*:__ Sort ascending vs. descending. Specify list for multiple sort orders. If this is a list of bools, must match the length of the by.
 
 : __na_position: *str {'first', 'last'} or list of str, default 'last'*:__ Puts NaNs at the beginning if first; last puts NaNs at the end. Specify list for multiple NaN orders by key.  If this is a list of strings, must match the length of the by.
+
+: All other parameters will trigger a fallback to [`pandas.DataFrame.sort_values`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.sort_values.html) if a non-default value is provided.
 
 <p class="api-header">Returns</p>
 
