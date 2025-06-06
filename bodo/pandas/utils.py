@@ -3,14 +3,10 @@ import importlib
 import inspect
 import warnings
 
-import numba
 import pandas as pd
 import pyarrow as pa
-from llvmlite import ir as lir
-from numba.extending import intrinsic
 
 import bodo
-from bodo.libs.array import table_type
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 from bodo.utils.typing import check_unsupported_args_fallback
@@ -484,16 +480,6 @@ def getPlanStatistics(plan: LazyPlan):
     optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
     postOptNum = plan_optimizer.count_nodes(optimized_plan)
     return preOptNum, postOptNum
-
-
-@intrinsic
-def cast_table_ptr_to_int64(typingctx, val):
-    """Cast C++ table pointer to int64 (to pass to C++ later)"""
-
-    def codegen(context, builder, signature, args):
-        return builder.ptrtoint(args[0], lir.IntType(64))
-
-    return numba.core.types.int64(table_type), codegen
 
 
 def get_n_index_arrays(index):
