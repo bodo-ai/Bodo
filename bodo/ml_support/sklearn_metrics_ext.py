@@ -13,7 +13,6 @@ from sklearn.utils.validation import column_or_1d
 
 import bodo
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.ml_support.sklearn_ext import check_sklearn_version
 from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
@@ -134,7 +133,6 @@ def overload_precision_score(
     zero_division="warn",
     _is_data_distributed=False,
 ):
-    check_sklearn_version()
     if is_overload_none(average):
         # this case returns an array of floats, one for each label
         if is_overload_false(_is_data_distributed):
@@ -245,7 +243,6 @@ def overload_recall_score(
     zero_division="warn",
     _is_data_distributed=False,
 ):
-    check_sklearn_version()
     if is_overload_none(average):
         # this case returns an array of floats, one for each label
         if is_overload_false(_is_data_distributed):
@@ -356,7 +353,6 @@ def overload_f1_score(
     zero_division="warn",
     _is_data_distributed=False,
 ):
-    check_sklearn_version()
     if is_overload_none(average):
         # this case returns an array of floats, one for each label
         if is_overload_false(_is_data_distributed):
@@ -541,7 +537,6 @@ def overload_mean_squared_error(
     vs not provided for type unification purposes.
     """
 
-    check_sklearn_version()
     if (
         is_overload_constant_str(multioutput)
         and get_overload_const_str(multioutput) == "raw_values"
@@ -704,7 +699,6 @@ def overload_mean_absolute_error(
     vs not provided for type unification purposes.
     """
 
-    check_sklearn_version()
     if (
         is_overload_constant_str(multioutput)
         and get_overload_const_str(multioutput) == "raw_values"
@@ -889,7 +883,7 @@ def overload_log_loss(
     Provide separate impl for case where sample_weight is provided
     vs not provided for type unification purposes.
     """
-    check_sklearn_version()
+
     if isinstance(y_pred, numba.core.types.containers.List) and isinstance(
         y_pred.dtype, numba.core.types.List
     ):
@@ -980,8 +974,6 @@ def overload_metrics_cosine_similarity(
         kernel_matrix (ndarray of shape (n_samples_X, n_samples_Y):
           Pairwise cosine similarities between elements in X and Y.
     """
-
-    check_sklearn_version()
 
     # We only support dense_output=True
     args_dict = {
@@ -1132,7 +1124,6 @@ def overload_accuracy_score(
     vs not provided for type unification purposes.
     """
 
-    check_sklearn_version()
     if is_overload_false(_is_data_distributed):
         if is_overload_none(sample_weight):
 
@@ -1363,7 +1354,6 @@ def overload_r2_score(
     vs not provided for type unification purposes.
     """
 
-    check_sklearn_version()
     # Check that value of multioutput is valid
     if is_overload_constant_str(multioutput) and get_overload_const_str(
         multioutput
@@ -1608,8 +1598,6 @@ def overload_confusion_matrix(
     Provide separate impl for case where sample_weight is provided
     vs not provided for type unificaiton purposes
     """
-
-    check_sklearn_version()
 
     func_text = "def _confusion_matrix_impl(\n"
     func_text += "    y_true, y_pred, labels=None,\n"

@@ -25,7 +25,6 @@ from sklearn.utils.extmath import (
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.csr_matrix_ext import CSRMatrixType
-from bodo.ml_support.sklearn_ext import check_sklearn_version
 from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
@@ -192,8 +191,6 @@ def sklearn_preprocessing_one_hot_encoder_overload(
             zeros. In the inverse transform, an unknown category will be
             denoted as None.
     """
-
-    check_sklearn_version()
 
     # Because we only support dense float64 matrix output for now, check that
     # `sparse_output=False` and that `dtype=np.float64`. For compatibility with
@@ -495,8 +492,6 @@ def sklearn_preprocessing_standard_scaler_overload(
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_standard_scaler_impl(
         copy=True, with_mean=True, with_std=True
     ):  # pragma: no cover
@@ -790,8 +785,6 @@ def sklearn_preprocessing_max_abs_scaler_overload(copy=True):
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_max_abs_scaler_impl(copy=True):  # pragma: no cover
         with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
             m = sklearn.preprocessing.MaxAbsScaler(copy=copy)
@@ -1023,8 +1016,6 @@ def sklearn_preprocessing_minmax_scaler_overload(
     Provide implementation for __init__ functions of MinMaxScaler.
     We simply call sklearn in objmode.
     """
-
-    check_sklearn_version()
 
     def _sklearn_preprocessing_minmax_scaler_impl(
         feature_range=(0, 1),
@@ -1282,8 +1273,6 @@ def sklearn_preprocessing_robust_scaler_overload(
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_robust_scaler_impl(
         with_centering=True,
         with_scaling=True,
@@ -1318,8 +1307,6 @@ def overload_preprocessing_robust_scaler_fit(
     We only support numpy arrays and Pandas DataFrames at the moment.
     CSR matrices are not yet supported.
     """
-
-    check_sklearn_version()
 
     # TODO Add general error-checking [BE-52]
 
@@ -1427,8 +1414,6 @@ def overload_preprocessing_robust_scaler_transform(
     We simply call sklearn's transform on each rank.
     """
 
-    check_sklearn_version()
-
     def _preprocessing_robust_scaler_transform_impl(
         m,
         X,
@@ -1451,8 +1436,6 @@ def overload_preprocessing_robust_scaler_inverse_transform(
     Provide implementation for the inverse_transform function.
     We simply call sklearn's inverse_transform on each rank.
     """
-
-    check_sklearn_version()
 
     def _preprocessing_robust_scaler_inverse_transform_impl(
         m,
@@ -1500,8 +1483,6 @@ def sklearn_preprocessing_label_encoder_overload():
     Provide implementation for __init__ functions of LabelEncoder.
     We simply call sklearn in objmode.
     """
-
-    check_sklearn_version()
 
     def _sklearn_preprocessing_label_encoder_impl():  # pragma: no cover
         with bodo.objmode(m="preprocessing_label_encoder_type"):

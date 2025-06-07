@@ -11,7 +11,6 @@ from numba.extending import (
 
 import bodo
 from bodo.libs.distributed_api import get_host_ranks
-from bodo.ml_support.sklearn_ext import check_sklearn_version
 from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 
@@ -45,8 +44,6 @@ def sklearn_cluster_kmeans_overload(
     copy_x=True,
     algorithm="lloyd",
 ):
-    check_sklearn_version()
-
     def _sklearn_cluster_kmeans_impl(
         n_clusters=8,
         init="k-means++",
