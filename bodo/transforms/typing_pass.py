@@ -6418,13 +6418,15 @@ def _bc_stream_to_bytecode(bc_stream, original_code):
     from numba.core.bytecode import ARG_LEN, CODE_LEN
 
     out = bytearray(original_code.co_code)
+    # TODO: Update this to match Python 3.13 dis code:
+    # https://github.com/python/cpython/blob/6280bb547840b609feedb78887c6491af75548e8/Lib/dis.py#L862
     for (
         offset,
         op,
         arg,
     ) in bc_stream:
         out[offset] = op
-        if op >= dis.HAVE_ARGUMENT:
+        if op in dis.hasarg:
             for i in range(ARG_LEN):
                 out[offset + CODE_LEN + i] = arg & 0xFF
                 arg >>= 8
