@@ -98,6 +98,8 @@ def get_gateway():
                     die_on_exit=True,
                     redirect_stdout=out_fd,
                     redirect_stderr=err_fd,
+                    # Required by Arrow: https://arrow.apache.org/docs/java/install.html
+                    javaopts=["--add-opens=java.base/java.nio=ALL-UNNAMED"],
                 ),
             )
             gateway = JavaGateway(gateway_parameters=GatewayParameters(port=port_no))

@@ -107,6 +107,8 @@ def launch_jvm() -> JavaGateway:
                 redirect_stderr=sys.stderr,
                 redirect_stdout=sys.stdout,
                 die_on_exit=True,
+                # Required by Arrow: https://arrow.apache.org/docs/java/install.html
+                javaopts=["--add-opens=java.base/java.nio=ALL-UNNAMED"],
             ),
         )
 
