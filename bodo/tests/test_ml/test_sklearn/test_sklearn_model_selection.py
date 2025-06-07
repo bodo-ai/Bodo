@@ -1,12 +1,17 @@
 """Test supported sklearn model selection methods"""
 
+from unittest import TestCase
+
 import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.utils import shuffle
-from sklearn.utils._testing import assert_array_equal, assert_raises
+from sklearn.utils._testing import assert_array_equal
+
+_dummy = TestCase("__init__")
+assert_raises = _dummy.assertRaises
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func

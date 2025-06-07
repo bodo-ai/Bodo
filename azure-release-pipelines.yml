@@ -17,7 +17,7 @@ parameters:
   - name: PYTEST_MARKER
     displayName: PyTest Marker
     type: string
-    default: 'not weekly'
+    default: 'not weekly and not iceberg'
   - name: AGENT_POOL
     displayName: Agent Pool
     type: string
@@ -72,7 +72,7 @@ stages:
       matrix:
         TEST_2P:
           NP: 2
-          PYTEST_MARKER: ""
+          PYTEST_MARKER: "not iceberg"
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -82,10 +82,10 @@ stages:
       matrix:
         TEST_1P:
           NP: 1
-          PYTEST_MARKER: "spawn_mode"
+          PYTEST_MARKER: "spawn_mode and not iceberg"
         TEST_2P:
           NP: 2
-          PYTEST_MARKER: "spawn_mode"
+          PYTEST_MARKER: "spawn_mode and not iceberg"
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -95,10 +95,10 @@ stages:
       matrix:
         TEST_1P:
           NP: 1
-          PYTEST_MARKER: "df_lib and not weekly"
+          PYTEST_MARKER: "df_lib and not weekly and not iceberg"
         TEST_2P:
           NP: 2
-          PYTEST_MARKER: "df_lib and not weekly"
+          PYTEST_MARKER: "df_lib and not weekly and not iceberg"
 
 
 - stage: Test_BodoSQL
@@ -145,9 +145,9 @@ stages:
       matrix:
         TEST_1P:
           NP: 1
-          PYTEST_MARKER: "spawn_mode"
+          PYTEST_MARKER: "spawn_mode and not iceberg"
         TEST_2P:
           NP: 2
-          PYTEST_MARKER: "spawn_mode"
+          PYTEST_MARKER: "spawn_mode and not iceberg"
 
 

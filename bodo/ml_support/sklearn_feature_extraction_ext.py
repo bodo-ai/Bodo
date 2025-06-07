@@ -13,7 +13,6 @@ from numba.extending import (
 
 import bodo
 from bodo.libs.csr_matrix_ext import CSRMatrixType
-from bodo.ml_support.sklearn_ext import check_sklearn_version
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,
@@ -67,8 +66,6 @@ def sklearn_hashing_vectorizer_overload(
     Provide implementation for __init__ functions of HashingVectorizer.
     We simply call sklearn in objmode.
     """
-
-    check_sklearn_version()
 
     def _sklearn_hashing_vectorizer_impl(
         input="content",
@@ -183,8 +180,6 @@ def sklearn_count_vectorizer_overload(
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     # Per sklearn documentation, min_df: ignore terms that have a document
     # frequency strictly lower than the given threshold.
 
@@ -282,7 +277,7 @@ def overload_count_vectorizer_fit_transform(
     Then, run fit_transform with combined vocabulary
     If replicated, simply call fit_transform on each rank.
     """
-    check_sklearn_version()
+
     types.csr_matrix_int64_int64 = CSRMatrixType(types.int64, types.int64)
     if is_overload_true(_is_data_distributed):
         types.dict_str_int = types.DictType(types.unicode_type, types.int64)
@@ -346,8 +341,6 @@ def overload_count_vectorizer_fit_transform(
 )
 def overload_count_vectorizer_get_feature_names_out(m):
     """Array mapping from feature integer indices to feature name."""
-
-    check_sklearn_version()
 
     def impl(m):  # pragma: no cover
         with bodo.objmode(result=bodo.string_array_type):

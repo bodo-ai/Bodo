@@ -3338,6 +3338,20 @@ def op_FORMAT_VALUE_byteflow(self, state, inst):
     state.push(res)
 
 
+def op_FORMAT_WITH_SPEC_byteflow(self, state, inst):
+    """
+    FORMAT_WITH_SPEC(spec), introduced in Python 3.13:
+    Required for supporting f-strings with format specifiers.
+    https://docs.python.org/3/library/dis.html#opcode-FORMAT_WITH_SPEC
+    """
+    format_spec = state.pop()
+    value = state.pop()
+    fmtvar = state.make_temp()
+    res = state.make_temp()
+    state.append(inst, value=value, res=res, fmtvar=fmtvar, format_spec=format_spec)
+    state.push(res)
+
+
 def op_BUILD_STRING_byteflow(self, state, inst):
     """
     BUILD_STRING(count): Concatenates count strings from the stack and pushes the
@@ -3354,10 +3368,11 @@ def op_BUILD_STRING_byteflow(self, state, inst):
 
 
 numba.core.byteflow.TraceRunner.op_FORMAT_VALUE = op_FORMAT_VALUE_byteflow
+numba.core.byteflow.TraceRunner.op_FORMAT_WITH_SPEC = op_FORMAT_WITH_SPEC_byteflow
 numba.core.byteflow.TraceRunner.op_BUILD_STRING = op_BUILD_STRING_byteflow
 
 
-def op_FORMAT_VALUE_interpreter(self, inst, value, res, fmtvar, format_spec):
+def op_FORMAT_VALUE_interpreter(self, inst, value, res, fmtvar, format_spec=""):
     """
     FORMAT_VALUE(flags): flags argument specifies conversion (not supported yet) and
     format spec.
@@ -3369,6 +3384,15 @@ def op_FORMAT_VALUE_interpreter(self, inst, value, res, fmtvar, format_spec):
     args = (value, self.get(format_spec)) if format_spec else (value,)
     call = ir.Expr.call(self.get(fmtvar), args, (), loc=self.loc)
     self.store(value=call, name=res)
+
+
+def op_FORMAT_WITH_SPEC_interpreter(self, inst, value, res, fmtvar, format_spec):
+    """
+    FORMAT_WITH_SPEC(spec), introduced in Python 3.13.
+    Same as FORMAT_VALUE but with a format specifier.
+    https://docs.python.org/3/library/dis.html#opcode-FORMAT_WITH_SPEC
+    """
+    return self.op_FORMAT_VALUE(inst, value, res, fmtvar, format_spec)
 
 
 def op_BUILD_STRING_interpreter(self, inst, strings, tmps):
@@ -3388,6 +3412,7 @@ def op_BUILD_STRING_interpreter(self, inst, strings, tmps):
 
 
 numba.core.interpreter.Interpreter.op_FORMAT_VALUE = op_FORMAT_VALUE_interpreter
+numba.core.interpreter.Interpreter.op_FORMAT_WITH_SPEC = op_FORMAT_WITH_SPEC_interpreter
 numba.core.interpreter.Interpreter.op_BUILD_STRING = op_BUILD_STRING_interpreter
 
 

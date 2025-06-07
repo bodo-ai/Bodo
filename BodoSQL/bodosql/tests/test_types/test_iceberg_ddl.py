@@ -45,9 +45,11 @@ def filesystem_test_harness(test_harness_path):
     return FilesystemTestHarness(catalog)
 
 
-# Get Spark to start it with all environment variables set, not overriden by polaris_connection fixture
-with temp_env_override({"AWS_REGION": "us-east-2"}):
-    get_spark()
+@pytest.fixture(scope="session", autouse=True)
+def setup_spark():
+    # Get Spark to start it with all environment variables set, not overriden by polaris_connection fixture
+    with temp_env_override({"AWS_REGION": "us-east-2"}):
+        get_spark()
 
 
 @pytest.fixture

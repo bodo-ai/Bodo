@@ -499,7 +499,7 @@ def test_jarowinkler_similarity(args, answer, memory_leak_check):
                     [
                         15.112345,
                         1234567890,
-                        np.NAN,
+                        np.nan,
                         17,
                         -13.6413,
                         1.2345,

@@ -1281,7 +1281,7 @@ def test_np_select_none_default(arr_tuple_val, memory_leak_check):
     )  # .astype(arr_tuple_val[0].dtype)
 
     if arr_tuple_val[0].dtype.name.startswith("float"):
-        py_out[pd.isna(py_out)] = np.NAN
+        py_out[pd.isna(py_out)] = np.nan
         py_out = py_out.astype(float)
 
     if isinstance(py_out[0], bool):

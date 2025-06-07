@@ -10,7 +10,6 @@ from numba.extending import (
 
 import bodo
 from bodo.ml_support.sklearn_ext import (
-    check_sklearn_version,
     parallel_predict,
     parallel_score,
 )
@@ -55,8 +54,6 @@ def sklearn_svm_linear_svc_overload(
     random_state=None,
     max_iter=1000,
 ):
-    check_sklearn_version()
-
     def _sklearn_svm_linear_svc_impl(
         penalty="l2",
         loss="squared_hinge",

@@ -877,7 +877,7 @@ def test_cast_int_opt(memory_leak_check):
             for flag2 in [True, False]:
                 for flag3 in [True, False]:
                     answer = (
-                        np.int8(136) if flag0 else None,
+                        np.int8(-120) if flag0 else None,
                         np.int16(12) if flag1 else None,
                         np.int32(_round_float(140.5)) if flag2 else None,
                         np.int64(12) if flag3 else None,

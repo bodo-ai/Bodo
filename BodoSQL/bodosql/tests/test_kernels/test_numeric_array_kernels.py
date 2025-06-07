@@ -1300,7 +1300,7 @@ single_arg_np_map = {
     "abs": "np.abs",
     "cbrt": "np.cbrt",
     "exp": "np.exp",
-    "factorial": "(lambda x: np.math.factorial(np.int64(x)) if np.abs(np.int64(x)) == x else None)",
+    "factorial": "(lambda x: math.factorial(np.int64(x)) if np.abs(np.int64(x)) == x else None)",
     "ln": "np.log",
     "log2": "np.log2",
     "log10": "np.log10",

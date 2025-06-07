@@ -18,7 +18,7 @@ For production environments, we recommend creating a `conda` environment and ins
 Bodo and its dependencies in it as shown below:
 
 ```console
-conda create -n Bodo python=3.12 -c conda-forge
+conda create -n Bodo python=3.13 -c conda-forge
 conda activate Bodo
 conda install bodo -c bodo.ai -c conda-forge
 ```
@@ -70,7 +70,7 @@ All optional dependencies except Hadoop can be
 installed through conda using the command:
 
 ```console
-conda install sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=11 deltalake -c conda-forge
+conda install sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=17 deltalake -c conda-forge
 ```
 
 

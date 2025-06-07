@@ -3541,7 +3541,7 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
 
     if series_val.dtype.name.startswith("float"):
         py_out = impl(A1, A2, cond1, cond2)
-        py_out[pd.isna(py_out)] = np.NAN
+        py_out[pd.isna(py_out)] = np.nan
         py_out = py_out.astype(float)
     else:
         py_out = no_default
