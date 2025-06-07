@@ -172,7 +172,7 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
         cur_loss_sum = comm.allreduce(cur_loss, op=MPI.SUM)
         cur_loss = cur_loss_sum / nranks
         # https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/linear_model/_sgd_fast.pyx#L620
-        if m.tol > np.NINF and cur_loss > best_loss - m.tol * total_datasize:
+        if m.tol > -np.inf and cur_loss > best_loss - m.tol * total_datasize:
             no_improvement_count += 1
         else:
             no_improvement_count = 0
