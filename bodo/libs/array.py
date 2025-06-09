@@ -26,6 +26,7 @@ from numba.np.arrayobj import _getitem_array_single_int
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import DatetimeTimeDeltaArrayType
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     get_categories_int_type,
@@ -105,6 +106,7 @@ ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
 ll.add_symbol("info_to_null_array", array_ext.info_to_null_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
 ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
+ll.add_symbol("info_to_timedelta_array", array_ext.info_to_timedelta_array)
 ll.add_symbol("info_to_timestamptz_array", array_ext.info_to_timestamptz_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol(
@@ -170,6 +172,7 @@ ll.add_symbol(
     "BODO_NRT_MemInfo_alloc_safe_aligned", array_ext.NRT_MemInfo_alloc_safe_aligned
 )
 ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
+ll.add_symbol("timedelta_array_to_info", array_ext.timedelta_array_to_info)
 
 
 # Sentinal for field names when converting tuple arrays to struct arrays (workaround
@@ -595,6 +598,7 @@ def array_to_info_codegen(context, builder, sig, args):
             DecimalArrayType,
             TimeArrayType,
             DatetimeArrayType,
+            DatetimeTimeDeltaArrayType,
         ),
     ) or arr_type in (
         boolean_array_type,
@@ -611,6 +615,8 @@ def array_to_info_codegen(context, builder, sig, args):
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             np_dtype = types.int8
+        elif isinstance(arr_type, DatetimeTimeDeltaArrayType):
+            np_dtype = bodo.timedelta64ns
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
             context, builder, arr.data
         )
@@ -684,6 +690,11 @@ def array_to_info_codegen(context, builder, sig, args):
                     bitmap_arr.meminfo,
                     lir.Constant(lir.IntType(32), arr_type.precision),
                 ],
+            )
+        # TODO: implement
+        elif isinstance(arr_type, DatetimeTimeDeltaArrayType):
+            raise NotImplementedError(
+                "array_to_info_codegen() not implemented for DatetimeTimeDeltaArrayType yet."
             )
         else:
             fnty = lir.FunctionType(
@@ -1131,6 +1142,11 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         )
 
         return dict_array._getvalue()
+
+    if isinstance(arr_type, DatetimeTimeDeltaArrayType):
+        raise NotImplementedError(
+            "info_to_array(): DatetimeTimeDeltaArrayType not implemented yet."
+        )
 
     # categorical array
     if isinstance(arr_type, CategoricalArrayType):

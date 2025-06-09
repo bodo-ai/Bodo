@@ -205,6 +205,11 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
+array_info* timedelta_array_to_info() {
+    // TODO: Implement
+    return nullptr;
+}
+
 array_info* interval_array_to_info(uint64_t n_items, char* left_data,
                                    char* right_data, int typ_enum,
                                    NRT_MemInfo* left_meminfo,
@@ -472,6 +477,11 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
     NRT_MemInfo* nulls_meminfo = info->buffers[1]->getMeminfo();
     incref_meminfo(nulls_meminfo);
     *meminfo_bitmask = nulls_meminfo;
+}
+
+void info_to_timedelta_array() {
+    // TODO: Implement
+    return;
 }
 
 void info_to_interval_array(array_info* info, uint64_t* n_items,
@@ -1072,6 +1082,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, decimal_array_to_info);
     SetAttrStringFromVoidPtr(m, time_array_to_info);
+    SetAttrStringFromVoidPtr(m, timedelta_array_to_info);
     SetAttrStringFromVoidPtr(m, info_to_string_array);
     SetAttrStringFromVoidPtr(m, info_to_array_item_array);
     SetAttrStringFromVoidPtr(m, info_to_struct_array);
@@ -1080,6 +1091,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, info_to_null_array);
     SetAttrStringFromVoidPtr(m, info_to_nullable_array);
     SetAttrStringFromVoidPtr(m, info_to_interval_array);
+    SetAttrStringFromVoidPtr(m, info_to_timedelta_array);
     SetAttrStringFromVoidPtr(m, info_to_timestamptz_array);
     SetAttrStringFromVoidPtr(m, alloc_numpy);
     SetAttrStringFromVoidPtr(m, alloc_string_array);
