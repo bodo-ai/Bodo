@@ -14,7 +14,6 @@ from sklearn.utils.validation import _check_sample_weight
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.ml_support.sklearn_ext import (
-    check_sklearn_version,
     parallel_predict,
     parallel_score,
 )
@@ -51,8 +50,6 @@ def sklearn_naive_bayes_multinomialnb_overload(
     fit_prior=True,
     class_prior=None,
 ):
-    check_sklearn_version()
-
     def _sklearn_naive_bayes_multinomialnb_impl(
         alpha=1.0,
         fit_prior=True,

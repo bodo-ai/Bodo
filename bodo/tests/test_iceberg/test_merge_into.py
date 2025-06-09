@@ -1,6 +1,5 @@
 import os
 
-import bodo_iceberg_connector
 import numpy as np
 import pandas as pd
 import pytest
@@ -36,6 +35,8 @@ def test_merge_into_cow_write_api(
     iceberg_database,
     iceberg_table_conn,
 ):
+    import bodo_iceberg_connector
+
     comm = MPI.COMM_WORLD
     bodo.barrier()
 
@@ -124,6 +125,7 @@ def test_merge_into_cow_write_api_partitioned(
     Test the Iceberg Connectors MERGE INTO COW Write Operation
     with partitioned Iceberg tables
     """
+    import bodo_iceberg_connector
 
     comm = MPI.COMM_WORLD
     bodo.barrier()
@@ -226,6 +228,8 @@ def test_merge_into_cow_write_api_snapshot_check(
     iceberg_database,
     iceberg_table_conn,
 ):
+    import bodo_iceberg_connector
+
     comm = MPI.COMM_WORLD
     bodo.barrier()
 

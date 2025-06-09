@@ -342,7 +342,7 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
                     scalar_text += "if arg0 > 20 or np.abs(np.int64(arg0)) != arg0:\n"
                     scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
                     scalar_text += "else:\n"
-                    scalar_text += "  res[i] = np.math.factorial(np.int64(arg0))"
+                    scalar_text += "  res[i] = math.factorial(np.int64(arg0))"
                 elif func_name == "LN":
                     scalar_text += "res[i] = np.log(arg0)"
                 else:

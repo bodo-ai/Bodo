@@ -67,6 +67,9 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.head`][bodoserieshead]
 - [`bodo.pandas.BodoSeries.isin`][bodoseriesisin]
 
+## Reshaping, sorting
+- [`bodo.pandas.BodoSeries.sort_values`][bodoseriessortvalues]
+
 ## String handling
 
 - [`bodo.pandas.BodoSeries.str.capitalize`][bodoseriesstrcapitalize]
@@ -120,6 +123,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 [bodoserieshead]: ../series/head.md
 [bodoseriesmap]: ../series/map.md
+[bodoseriessortvalues]: ../series/sort_values.md
 
 [overview]: ../index.md/#lazy-evaluation-and-fallback-to-pandas
 
