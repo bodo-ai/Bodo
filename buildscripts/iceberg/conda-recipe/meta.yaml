@@ -13,17 +13,17 @@ build:
 
 requirements:
   host:
-    - python >=3.10,<3.13
+    - python >=3.10,<3.14
     - setuptools >=64
     - setuptools_scm >=8
-    - openjdk >=9.0,<12
+    - openjdk 17
     - maven
 
   run:
-    - python >=3.10,<3.13
-    - openjdk >=9.0,<12
-    - py4j ==0.10.9.7
-    - pyiceberg >=0.9,<0.10
+    - python >=3.10,<3.14
+    - openjdk 17
+    - py4j ==0.10.9.9
+    - pyiceberg >=0.9
     - boto3 *
     - mypy-boto3-glue *
 

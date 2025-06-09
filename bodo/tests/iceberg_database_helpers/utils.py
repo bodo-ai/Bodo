@@ -98,6 +98,15 @@ def get_spark(
     if bodo.get_rank() != 0:
         return None
 
+    # TODO[BSE-4883]: enable Iceberg tests after Iceberg 1.10 upgrade
+    builder = SparkSession.builder.appName("spark")
+    builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
+    builder.config("spark.sql.execution.arrow.enabled", "true")
+    builder.config("spark.sql.ansi.enabled", "false")
+    spark = builder.getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
+    return spark
+
     def add_catalog(builder: SparkSession.Builder, catalog: SparkIcebergCatalog):
         match catalog:
             case SparkFilesystemIcebergCatalog():
@@ -156,6 +165,7 @@ def get_spark(
         # don't work without it. Let's try to avoid using Spark for those tests
         # as much as possible.
         builder.config("spark.sql.execution.arrow.enabled", "true")
+        builder.config("spark.sql.ansi.enabled", "false")
         builder.config(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
