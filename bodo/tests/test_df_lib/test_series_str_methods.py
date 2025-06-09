@@ -211,6 +211,7 @@ df_normalize = pd.DataFrame(
     }
 )
 
+# Stores customized DataFrames for some methods. Could enable testing with closer customization to each method.
 exception_dfmap = {
     "normalize": df_normalize,
 }
