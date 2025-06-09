@@ -6185,10 +6185,17 @@ def _find_updated_containers(blocks, topo_order):
             ):
                 lhs = stmt.target.name
                 rhs = stmt.value.name
-                equiv_vars[lhs].add(rhs)
-                equiv_vars[rhs].add(lhs)
-                equiv_vars[lhs] |= equiv_vars[rhs]
-                equiv_vars[rhs] |= equiv_vars[lhs]
+                if lhs not in equiv_vars:
+                    equiv_vars[rhs].add(lhs)
+                    equiv_vars[lhs] = equiv_vars[rhs]
+                elif rhs not in equiv_vars:
+                    equiv_vars[lhs].add(rhs)
+                    equiv_vars[rhs] = equiv_vars[lhs]
+                else:
+                    equiv_vars[lhs].add(rhs)
+                    equiv_vars[lhs].add(lhs)
+                    equiv_vars[lhs] |= equiv_vars[rhs]
+                    equiv_vars[rhs] = equiv_vars[lhs]
                 if rhs in updated_containers:
                     _set_updated_container(
                         lhs, updated_containers[rhs], updated_containers, equiv_vars
@@ -6411,13 +6418,15 @@ def _bc_stream_to_bytecode(bc_stream, original_code):
     from numba.core.bytecode import ARG_LEN, CODE_LEN
 
     out = bytearray(original_code.co_code)
+    # TODO: Update this to match Python 3.13 dis code:
+    # https://github.com/python/cpython/blob/6280bb547840b609feedb78887c6491af75548e8/Lib/dis.py#L862
     for (
         offset,
         op,
         arg,
     ) in bc_stream:
         out[offset] = op
-        if op >= dis.HAVE_ARGUMENT:
+        if op in dis.hasarg:
             for i in range(ARG_LEN):
                 out[offset + CODE_LEN + i] = arg & 0xFF
                 arg >>= 8

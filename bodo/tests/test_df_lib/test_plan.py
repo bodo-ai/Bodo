@@ -11,17 +11,27 @@ from bodo.ext import plan_optimizer
 
 def test_join_node():
     """Make sure Cython wrapper around the join node works. Just tests node creation."""
-    P1 = plan_optimizer.LogicalGetParquetRead(pa.schema([]), b"example.parquet1", {})
-    P2 = plan_optimizer.LogicalGetParquetRead(pa.schema([]), b"example.parquet2", {})
+    P1 = plan_optimizer.LogicalGetParquetRead(
+        pa.schema([("A", pa.int64()), ("B", pa.string())]), b"example.parquet1", {}
+    )
+    P2 = plan_optimizer.LogicalGetParquetRead(
+        pa.schema([("A", pa.int64()), ("B", pa.string())]), b"example.parquet2", {}
+    )
     A = plan_optimizer.LogicalComparisonJoin(
-        pa.schema([]), P1, P2, plan_optimizer.CJoinType.INNER, [(0, 0)]
+        pa.schema([("A", pa.int64()), ("B", pa.string())]),
+        P1,
+        P2,
+        plan_optimizer.CJoinType.INNER,
+        [(0, 0)],
     )
     assert str(A) == "LogicalComparisonJoin(INNER)"
 
 
 def test_projection_node():
     """Make sure Cython wrapper around the projection node works. Just tests node creation."""
-    P1 = plan_optimizer.LogicalGetParquetRead(pa.schema([]), b"example.parquet1", {})
+    P1 = plan_optimizer.LogicalGetParquetRead(
+        pa.schema([("A", pa.int64()), ("B", pa.string())]), b"example.parquet1", {}
+    )
     exprs = [
         plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), P1, 0),
         plan_optimizer.ColRefExpression(pa.schema([("B", pa.string())]), P1, 1),
@@ -36,7 +46,9 @@ def test_projection_node():
 
 def test_filter_node():
     """Make sure Cython wrapper around the filter node works. Just tests node creation."""
-    P1 = plan_optimizer.LogicalGetParquetRead(pa.schema([]), b"example.parquet1", {})
+    P1 = plan_optimizer.LogicalGetParquetRead(
+        pa.schema([("A", pa.int64()), ("B", pa.string())]), b"example.parquet1", {}
+    )
     A = plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), P1, 0)
     B = plan_optimizer.ComparisonOpExpression(
         pa.schema([("A", pa.bool_())]), A, 5, operator.gt

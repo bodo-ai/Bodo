@@ -493,17 +493,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
-
-def _str_partition_helper(s, col):
-    """Extracts column col from list series and returns as Pandas series."""
-    series = pd.Series(
-        [
-            None if not isinstance(s.iloc[i], list) else s.iloc[i][col]
-            for i in range(len(s))
-        ]
-    )
-    return series
-
     @check_args_fallback(supported=["ascending", "na_position"])
     def sort_values(
         self,
@@ -552,6 +541,17 @@ def _str_partition_helper(s, col):
                 self._plan.pa_schema,
             ),
         )
+
+
+def _str_partition_helper(s, col):
+    """Extracts column col from list series and returns as Pandas series."""
+    series = pd.Series(
+        [
+            None if not isinstance(s.iloc[i], list) else s.iloc[i][col]
+            for i in range(len(s))
+        ]
+    )
+    return series
 
 
 class BodoStringMethods:

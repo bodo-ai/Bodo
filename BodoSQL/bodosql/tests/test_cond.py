@@ -1034,12 +1034,13 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "raw_query, expected_hashes",
     [
         pytest.param(
             "SELECT HASH(A) AS H FROM T",
-            (10 if PYVERSION == (3, 11) else 14),
+            (10 if PYVERSION in ((3, 11), (3, 13)) else 14),
             id="one_col_A",
         ),
         pytest.param(
@@ -1047,40 +1048,40 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
         ),
         pytest.param(
             "SELECT HASH(*) AS H FROM T",
-            (17 if PYVERSION == (3, 11) else 21),
+            (17 if PYVERSION in ((3, 11), (3, 13)) else 21),
             id="star",
         ),
         pytest.param(
             "SELECT HASH(S.*) AS H FROM S",
-            (25 if PYVERSION == (3, 11) else 37),
+            (25 if PYVERSION in ((3, 11), (3, 13)) else 37),
             id="dot_star",
         ),
         pytest.param(
             "SELECT HASH(*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (34 if PYVERSION == (3, 11) else 44),
+            (34 if PYVERSION in ((3, 11), (3, 13)) else 44),
             id="join_star",
         ),
         pytest.param(
             "SELECT HASH(T.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (15 if PYVERSION == (3, 11) else 19),
+            (15 if PYVERSION in ((3, 11), (3, 13)) else 19),
             id="join_dot_star_A",
         ),
         pytest.param(
             "SELECT HASH(S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (18 if PYVERSION == (3, 11) else 29),
+            (18 if PYVERSION in ((3, 11), (3, 13)) else 29),
             id="join_dot_star_B",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT HASH(T.*, 16, *, S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            (34 if PYVERSION == (3, 11) else 44),
+            (34 if PYVERSION in ((3, 11), (3, 13)) else 44),
             id="join_star_multiple",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT HASH(ARRAY_CONSTRUCT_COMPACT(NULLIF(NULLIF(NULLIF(A, 'A'), 'T'), 'E'), NULLIF(NULLIF(NULLIF(A, 'A'), 'C'), 'E'))) AS H FROM S",
             # There are 16 distinct values but for some reason only 14 distinct hashes are produced
-            (14 if PYVERSION == (3, 11) else 16),
+            (14 if PYVERSION in ((3, 11), (3, 13)) else 16),
             id="array",
             marks=pytest.mark.slow,
         ),
