@@ -421,8 +421,9 @@ class LazyPlan:
                 return x
 
         # Convert any LazyPlan in the args or kwargs.
-        args = [recursive_check(x) for x in self.args]
         kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
+        args = [recursive_check(x) for x in reversed(self.args)]
+        args.reverse()
 
         # Create real duckdb class.
         ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args, **kwargs)
