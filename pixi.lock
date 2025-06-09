@@ -15900,7 +15900,7 @@ packages:
   - libstdcxx >=13
   - llvmlite >=0.44.0,<0.45.0a0
   - numpy >=1.21,<3
-  - numpy >=1.24
+  - numpy >=1.24,<2.3
   - python >=3.13,<3.14.0a0
   - python_abi 3.13.* *_cp313
   constrains:
@@ -15923,7 +15923,7 @@ packages:
   - libstdcxx >=13
   - llvmlite >=0.44.0,<0.45.0a0
   - numpy >=1.21,<3
-  - numpy >=1.24
+  - numpy >=1.24,<2.3
   - python >=3.13,<3.14.0a0
   - python >=3.13,<3.14.0a0 *_cp313
   - python_abi 3.13.* *_cp313
@@ -15947,7 +15947,7 @@ packages:
   - llvm-openmp >=20.1.2
   - llvmlite >=0.44.0,<0.45.0a0
   - numpy >=1.21,<3
-  - numpy >=1.24
+  - numpy >=1.24,<2.3
   - python >=3.13,<3.14.0a0
   - python_abi 3.13.* *_cp313
   constrains:
@@ -15971,7 +15971,7 @@ packages:
   - llvm-openmp >=20.1.2
   - llvmlite >=0.44.0,<0.45.0a0
   - numpy >=1.21,<3
-  - numpy >=1.24
+  - numpy >=1.24,<2.3
   - python >=3.13,<3.14.0a0
   - python >=3.13,<3.14.0a0 *_cp313
   - python_abi 3.13.* *_cp313
@@ -15992,7 +15992,7 @@ packages:
   depends:
   - llvmlite >=0.44.0,<0.45.0a0
   - numpy >=1.21,<3
-  - numpy >=1.24
+  - numpy >=1.24,<2.3
   - python >=3.13,<3.14.0a0
   - python_abi 3.13.* *_cp313
   - ucrt >=10.0.20348.0
