@@ -1002,3 +1002,27 @@ def test_series_compound_expression(datapath):
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_map_partitions():
+    """Simple test for map_partition that creates a lazy plan."""
+    df = pd.DataFrame(
+        {
+            "B": ["a1", "b11", "c111"] * 2,
+            "E": [1.1, 2.2, 13.3] * 2,
+            "A": pd.array([2, 2, 3] * 2, "Int64"),
+        },
+        index=[0, 41, 2] * 2,
+    )
+
+    bodo_df = bd.from_pandas(df)
+
+    def f(df, a, b=1):
+        return df.A + df.E + a + b
+
+    bodo_df2 = bodo_df.map_partitions(f, 2, b=3)
+    py_out = df.A + df.E + 2 + 3
+
+    assert bodo_df2.is_lazy_plan()
+
+    _test_equal(bodo_df2, py_out, check_pandas_types=False)

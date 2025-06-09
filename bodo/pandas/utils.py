@@ -866,14 +866,15 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
         Empty Series with the dtype matching the output of the UDF
         (or equivalent pyarrow dtype)
     """
-    assert method_name in ("map", "apply", "map_partitions")(
-        "expected method to be one of {'apply', 'map'}"
+    assert method_name in {"map", "apply", "map_partitions"}, (
+        "expected method to be one of {'apply', 'map', 'map_partitions'}"
     )
 
-    # map_partitions is not in Pandas
+    base_class = obj.__class__.__bases__[0]
+
+    # map_partitions is not a pandas.DataFrame method.
     apply_method = None
-    if method_name == "map_partitions":
-        base_class = obj.__class__.__bases__[0]
+    if method_name != "map_partitions":
         apply_method = getattr(base_class, method_name)
 
     # TODO: Tune sample sizes
@@ -882,7 +883,7 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
     except_msg = ""
     for sample_size in sample_sizes:
         df_sample = obj.head(sample_size).execute_plan()
-        pd_sample = type(obj)(df_sample)
+        pd_sample = base_class(df_sample)
         out_sample = (
             func(pd_sample, *args, **kwargs)
             if apply_method is None

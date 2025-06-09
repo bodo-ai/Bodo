@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import typing as pt
+import warnings
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 from copy import deepcopy
@@ -27,6 +28,7 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
@@ -527,24 +529,45 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def map_partitions(self, func, *args, **kwargs):
         """
         Apply a function to each partition of the dataframe.
+
+        If self is a lazy plan, then the result will also be a lazy plan
+        (assuming result is Series and the dtype can be infered). Otherwise, the lazy
+        plan will be evaluated.
         NOTE: this pickles the function and sends it to the workers, so globals are
         pickled. The use of lazy data structures as globals causes issues.
+
+        Args:
+            func (Callable): A callable which takes in a DataFrame as it's first
+                argument and returns a DataFrame or Series that has the same length
+                it's input.
+            *args: Additional positional arguments to pass to func.
+            **kwargs: Additional key-word arguments to pass to func.
+
+        Returns:
+            DataFrame or Series: The result of applying the func.
         """
+        import bodo.spawn.spawner
+
         if self._exec_state == ExecState.PLAN:
+            required_fallback = False
             try:
                 empty_series = get_scalar_udf_result_type(
                     self, "map_partitions", func, *args, **kwargs
                 )
             except BodoLibNotImplementedException:
-                collected_self = self.execute_plan()
-                return collected_self.map_partitions(func, *args, **kwargs)
+                required_fallback = True
+                msg = ("",)
+                warnings.warn(BodoLibFallbackWarning(msg))
 
-            return _get_df_python_func_plan(
-                self._plan, empty_series, func, args, kwargs
-            )
+                df_arg = self.execute_plan()
+
+            if not required_fallback:
+                return _get_df_python_func_plan(self, empty_series, func, args, kwargs)
+        else:
+            df_arg = self
 
         return bodo.spawn.spawner.submit_func_to_workers(
-            func, [], self, *args, **kwargs
+            func, [], df_arg, *args, **kwargs
         )
 
     @check_args_fallback(supported=["on", "left_on", "right_on"])
@@ -845,7 +868,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         apply_kwargs = {"axis": 1, "args": args} | kwargs
 
         return _get_df_python_func_plan(
-            self._plan, empty_series, "apply", (func,), apply_kwargs
+            self, empty_series, "apply", (func,), apply_kwargs
         )
 
     @check_args_fallback(supported=["by", "ascending", "na_position"])
