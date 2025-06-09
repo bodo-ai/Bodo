@@ -600,7 +600,6 @@ def pyarrow_type_to_numba(arrow_type):
         return bodo.TimeArrayType(precision)
 
     if pa.types.is_duration(arrow_type):
-        print("reached here\n")
         precision = 9 if arrow_type.unit == "ns" else 0
         return DatetimeTimeDeltaArrayType()
 
