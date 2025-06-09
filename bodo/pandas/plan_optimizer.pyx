@@ -224,6 +224,10 @@ cdef extern from "duckdb/planner/expression.hpp" namespace "duckdb" nogil:
         CExpression(CExpressionType type, CExpressionClass expression_class, CLogicalType return_type)
         CLogicalType return_type
 
+cdef extern from "duckdb/planner/bound_result_modifier.hpp" namespace "duckdb" nogil:
+    cdef cppclass CBoundOrderByNode "duckdb::BoundOrderByNode":
+        pass
+
 cdef extern from "duckdb/planner/logical_operator.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalOperator "duckdb::LogicalOperator":
         vector[unique_ptr[CLogicalOperator]] children
@@ -252,6 +256,10 @@ cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace
 
 cdef extern from "duckdb/planner/operator/logical_projection.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalProjection" duckdb::LogicalProjection"(CLogicalOperator):
+        pass
+
+cdef extern from "duckdb/planner/operator/logical_order.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalOrder" duckdb::LogicalOrder"(CLogicalOperator):
         pass
 
 cdef extern from "duckdb/planner/operator/logical_aggregate.hpp" namespace "duckdb" nogil:
@@ -283,6 +291,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
+    cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
@@ -303,7 +312,8 @@ cdef extern from "_plan.h" nogil:
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format) except +
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
-    cdef void set_table_meta_from_arrow(int64_t table_pointer, object arrow_schema) except +
+    cdef int64_t pyarrow_to_cpp_table(object arrow_table) except +
+    cdef object cpp_table_to_pyarrow(int64_t cpp_table) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -428,6 +438,30 @@ cdef class LogicalAggregate(LogicalOperator):
 
     def __str__(self):
         return f"LogicalAggregate({self.out_schema})"
+
+
+cdef class LogicalOrder(LogicalOperator):
+    """Wrapper around DuckDB's LogicalOrder to provide access in Python.
+    """
+
+    def __cinit__(self,
+                  object out_schema,
+                  LogicalOperator source,
+                  vector[c_bool] asc,
+                  vector[c_bool] na_position,
+                  vector[int] cols,
+                  object in_schema):
+        self.out_schema = out_schema
+        self.sources = [source]
+
+        cdef unique_ptr[CLogicalOrder] c_logical_order = make_order(source.c_logical_operator, asc, na_position, cols, in_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_order.release())
+
+    def __str__(self):
+        return f"LogicalOrder({self.out_schema})"
+
+    def getCardinality(self):
+        return self.sources[0].getCardinality()
 
 
 cdef class LogicalColRef(LogicalOperator):
@@ -739,11 +773,17 @@ cpdef count_nodes(object root):
     return planCountNodes(wrapped_operator.c_logical_operator)
 
 
-cpdef set_cpp_table_meta(table_pointer, object arrow_schema):
-    """Set the metadata of a C++ table from an Arrow schema.
+cpdef arrow_to_cpp_table(arrow_table):
+    """Convert an Arrow table to a C++ table pointer with column names and
+    metadata set properly.
     """
-    cdef int64_t cpp_table = table_pointer
-    set_table_meta_from_arrow(cpp_table, arrow_schema)
+    return pyarrow_to_cpp_table(arrow_table)
+
+
+cpdef cpp_table_to_arrow(cpp_table):
+    """Convert a C++ table pointer to Arrow table.
+    """
+    return cpp_table_to_pyarrow(cpp_table)
 
 
 cpdef py_optimize_plan(object plan):

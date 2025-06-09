@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import numbers
 import typing as pt
@@ -6,6 +8,11 @@ from collections.abc import Callable, Hashable
 
 import pandas as pd
 import pyarrow as pa
+from pandas._typing import (
+    Axis,
+    SortKind,
+    ValueKeyFunc,
+)
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -18,6 +25,7 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
+    arrow_to_empty_df,
     check_args_fallback,
     get_lazy_single_manager_class,
     get_n_index_arrays,
@@ -27,6 +35,7 @@ from bodo.pandas.utils import (
     make_col_ref_exprs,
     wrap_plan,
 )
+from bodo.utils.typing import BodoError
 
 
 class BodoSeries(pd.Series, BodoLazyWrapper):
@@ -340,7 +349,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
         plan: plan_optimizer.LogicalOperator | None = None,
-    ) -> "BodoSeries":
+    ) -> BodoSeries:
         """
         Create a BodoSeries from a lazy metadata object.
         """
@@ -460,6 +469,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return None
 
     @property
+    def empty(self):
+        return len(self) == 0
+
+    @property
     def str(self):
         return BodoStringMethods(self)
 
@@ -480,20 +493,64 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
-    def isin(self, values):
-        """
-        Whether elements in Series are contained in values.
 
-        """
+def _str_partition_helper(s, col):
+    """Extracts column col from list series and returns as Pandas series."""
+    series = pd.Series(
+        [
+            None if not isinstance(s.iloc[i], list) else s.iloc[i][col]
+            for i in range(len(s))
+        ]
+    )
+    return series
 
-        index = self.head(0).index
-        new_metadata = pd.Series(
-            dtype=pd.ArrowDtype(pa.bool_()),
-            name=self.name,
-            index=index,
-        )
-        return _get_series_python_func_plan(
-            self._plan, new_metadata, "isin", (values,), {}
+    @check_args_fallback(supported=["ascending", "na_position"])
+    def sort_values(
+        self,
+        *,
+        axis: Axis = 0,
+        ascending: bool = True,
+        inplace: bool = False,
+        kind: SortKind = "quicksort",
+        na_position: str = "last",
+        ignore_index: bool = False,
+        key: ValueKeyFunc | None = None,
+    ) -> BodoSeries | None:
+        from bodo.pandas.base import _empty_like
+
+        # Validate ascending argument.
+        if not isinstance(ascending, bool):
+            raise BodoError(
+                "DataFrame.sort_values(): argument ascending iterable does not contain only boolean"
+            )
+
+        # Validate na_position argument.
+        if not isinstance(na_position, str):
+            raise BodoError("Series.sort_values(): argument na_position not a string")
+
+        if na_position not in ["first", "last"]:
+            raise BodoError(
+                "Series.sort_values(): argument na_position does not contain only 'first' or 'last'"
+            )
+
+        ascending = [ascending]
+        na_position = [True if na_position == "first" else False]
+        cols = [0]
+
+        """ Create 0 length versions of the dataframe as sorted dataframe
+            has the same structure. """
+        zero_size_self = _empty_like(self)
+
+        return wrap_plan(
+            plan=LazyPlan(
+                "LogicalOrder",
+                zero_size_self,
+                self._plan,
+                ascending,
+                na_position,
+                cols,
+                self._plan.pa_schema,
+            ),
         )
 
 
@@ -532,7 +589,6 @@ class BodoDatetimeProperties:
 
     def __init__(self, series):
         self._series = series
-
         # Validates series type
         if not (
             isinstance(series, BodoSeries)
@@ -598,85 +654,179 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
     )
 
 
-def sig_bind(name, *args, **kwargs):
+def gen_partition(name):
+    """Generates partition and rpartition using generalized template."""
+
+    def partition(self, sep=" ", expand=True):
+        """
+        Splits string into 3 elements-before the separator, the separator itself,
+        and the part after the separator.
+        """
+        series = self._series
+        dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            f"str.{name}",
+            (),
+            {"sep": sep, "expand": False},
+        )
+        # if expand=False, return Series of lists
+        if not expand:
+            return series_out
+
+        # Create schema for output DataFrame with 3 columns
+        arrow_schema = pa.schema(
+            [pa.field(f"{idx}", pa.large_string()) for idx in range(3)]
+        )
+        empty_data = arrow_to_empty_df(arrow_schema)
+        empty_series = pd.Series([], dtype=pd.ArrowDtype(pa.large_string()))
+
+        # Create scalar function expression for each column: extract value at index idx from each row
+        def create_expr(idx):
+            return LazyPlan(
+                "PythonScalarFuncExpression",
+                empty_series,
+                series_out._plan,
+                (
+                    "bodo.pandas.series._str_partition_helper",
+                    True,  # is_series
+                    False,  # is_method
+                    (idx,),  # args
+                    {},  # kwargs
+                ),
+                (0,),
+            )
+
+        expr = tuple(create_expr(idx) for idx in range(3))
+
+        # Creates DataFrame with 3 columns
+        df_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            series_out._plan,
+            expr,
+        )
+
+        return wrap_plan(plan=df_plan)
+
+    return partition
+
+
+def sig_bind(name, accessor_type, *args, **kwargs):
     """
     Binds args and kwargs to method's signature for argument validation.
-    Single exception case is Series.str.wrap() which takes in **kwargs in place of individual
-    keyword arguments. Thus, wrap_signature is manually created, to which the provided arguments are bound.
+    Exception cases, in which methods take *args and **kwargs, are handled separately using sig_map.
+    Signatures are manually created and mapped in sig_map, to which the provided arguments are bound.
     """
+    accessor_names = {"str.": "BodoStringMethods.", "dt.": "BodoDatetimeProperties."}
     msg = ""
     try:
-        if name == "wrap":
-            wrap_params = [
-                inspect.Parameter("width", inspect.Parameter.POSITIONAL_OR_KEYWORD),
-                inspect.Parameter(
-                    "expand_tabs", inspect.Parameter.KEYWORD_ONLY, default=True
-                ),
-                inspect.Parameter(
-                    "replace_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
-                ),
-                inspect.Parameter(
-                    "drop_whitespace", inspect.Parameter.KEYWORD_ONLY, default=True
-                ),
-                inspect.Parameter(
-                    "break_long_words", inspect.Parameter.KEYWORD_ONLY, default=True
-                ),
-                inspect.Parameter(
-                    "break_on_hyphens", inspect.Parameter.KEYWORD_ONLY, default=True
-                ),
+        if name in sig_map:
+            params = [
+                inspect.Parameter(param[0], param[1])
+                if not param[2]
+                else inspect.Parameter(param[0], param[1], default=param[2][0])
+                for param in sig_map[name]
             ]
-            wrap_signature = inspect.Signature(wrap_params)
-            wrap_signature.bind(*args, **kwargs)
+            signature = inspect.Signature(params)
         else:
-            sample_series = pd.Series(["a"])
-            str_accessor = sample_series.str
-            func = getattr(str_accessor, name)
+            if not accessor_type:
+                sample_series = pd.Series([])
+            elif accessor_type == "str.":
+                sample_series = pd.Series(["a"]).str
+            elif accessor_type == "dt.":
+                sample_series = pd.Series(pd.to_datetime(["2023-01-01"])).dt
+            else:
+                raise TypeError(
+                    "BodoSeries accessors other than '.dt' and '.str' are not implemented yet."
+                )
+
+            func = getattr(sample_series, name)
             signature = inspect.signature(func)
-            signature.bind(*args, **kwargs)
+
+        signature.bind(*args, **kwargs)
         return
     # Separated raising error from except statement to avoid nested errors
     except TypeError as e:
         msg = e
-    raise TypeError(f"StringMethods.{name}() {msg}")
+    raise TypeError(f"{accessor_names.get(accessor_type, '')}{name}() {msg}")
 
 
-def gen_str_method(name, rettype):
-    """Generalized generator for Series.str methods with optional/positional args."""
+# Maps Series methods to signatures. Empty default parameter tuple means argument is required.
+sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]] = {
+    "clip": [
+        ("lower", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
+        ("upper", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
+        ("axis", inspect.Parameter.KEYWORD_ONLY, (None,)),
+        ("inplace", inspect.Parameter.KEYWORD_ONLY, (False,)),
+    ],
+    "replace": [
+        ("to_replace", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
+        ("value", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
+        ("regex", inspect.Parameter.KEYWORD_ONLY, (False,)),
+        ("inplace", inspect.Parameter.KEYWORD_ONLY, (False,)),
+    ],
+    "wrap": [
+        ("width", inspect.Parameter.POSITIONAL_OR_KEYWORD, ()),
+        ("expand_tabs", inspect.Parameter.KEYWORD_ONLY, (True,)),
+        ("replace_whitespace", inspect.Parameter.KEYWORD_ONLY, (True,)),
+        ("drop_whitespace", inspect.Parameter.KEYWORD_ONLY, (True,)),
+        ("break_long_words", inspect.Parameter.KEYWORD_ONLY, (True,)),
+        ("break_on_hyphens", inspect.Parameter.KEYWORD_ONLY, (True,)),
+    ],
+    "normalize": [],
+    "strftime": [
+        ("date_format", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
+    ],
+    "month_name": [
+        ("locale", inspect.Parameter.KEYWORD_ONLY, (None,)),
+    ],
+    "day_name": [
+        ("locale", inspect.Parameter.KEYWORD_ONLY, (None,)),
+    ],
+    "floor": [
+        ("freq", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
+        ("normalize", inspect.Parameter.KEYWORD_ONLY, (True,)),
+    ],
+    "ceil": [
+        ("freq", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
+        ("normalize", inspect.Parameter.KEYWORD_ONLY, (True,)),
+    ],
+}
 
-    def str_method(self, *args, **kwargs):
-        """Generalized template for Series.str methods and argument validation using signature"""
-        sig_bind(name, *args, **kwargs)  # Argument validation
 
-        index = self._series.head(0).index
+def gen_method(name, return_type, is_method=True, accessor_type=""):
+    """Generates Series methods, supports optional/positional args."""
+
+    def method(self, *args, **kwargs):
+        """Generalized template for Series methods and argument validation using signature"""
+        if is_method:
+            sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
+
+        series = self._series if accessor_type else self
+        dtype = self.dtype if not return_type else return_type
+
+        index = series.head(0).index
         new_metadata = pd.Series(
-            dtype=rettype,
-            name=self._series.name,
+            dtype=dtype,
+            name=series.name,
             index=index,
         )
+
         return _get_series_python_func_plan(
-            self._series._plan, new_metadata, f"str.{name}", args, kwargs
+            series._plan, new_metadata, accessor_type + name, args, kwargs
         )
 
-    return str_method
-
-
-def gen_dt_accessor(name, rettype):
-    """Generalized generator for Series.dt accessors"""
-
-    def dt_accessor(self):
-        """Generalized template for Series.dt accessors"""
-
-        index = self._series.head(0).index
-        new_metadata = pd.Series(
-            dtype=rettype,
-            name=self._series.name,
-            index=index,
-        )
-        return _get_series_python_func_plan(
-            self._series._plan, new_metadata, f"dt.{name}", (), {}
-        )
-
-    return dt_accessor
+    return method
 
 
 # Maps series_str_methods to return types
@@ -755,6 +905,7 @@ series_str_methods = [
     ),
 ]
 
+
 # Maps Series.dt accessors to return types
 dt_accessors = [
     # idx = 0: Series(Int)
@@ -777,6 +928,7 @@ dt_accessors = [
             "quarter",
             "daysinmonth",
             "days_in_month",
+            "quarter",
         ],
         pd.ArrowDtype(pa.int32()),
     ),
@@ -809,14 +961,110 @@ dt_accessors = [
     ),
 ]
 
-# Generates Series.str methods
-for str_pair in series_str_methods:
-    for func_name in str_pair[0]:
-        func = gen_str_method(func_name, str_pair[1])
-        setattr(BodoStringMethods, func_name, func)
+# Maps direct Series methods to return types
+dir_methods = [
+    # idx = 0: Series(Boolean)
+    (
+        [
+            "isin",
+            "notnull",
+            "isnull",
+        ],
+        pd.ArrowDtype(pa.bool_()),
+    ),
+    (  # idx = 1: Series(Float)
+        [
+            # TODO: implement ffill, bfill,
+        ],
+        pd.ArrowDtype(pa.float64()),
+    ),
+    (
+        # idx = 2: None(outputdtype == inputdtype)
+        [
+            "replace",
+            "round",
+            "clip",
+            "abs",
+        ],
+        None,
+    ),
+]
 
-# Generates Series.dt accessors
-for dt_accessor_pair in dt_accessors:
-    for accessor_name in dt_accessor_pair[0]:
-        accessor = gen_dt_accessor(accessor_name, dt_accessor_pair[1])
-        setattr(BodoDatetimeProperties, accessor_name, property(accessor))
+# Maps Series.dt methods to return types
+dt_methods = [
+    # idx = 0: Series(Timestamp)
+    (
+        [
+            "normalize",
+            "floor",
+            "ceil",
+            # TODO: implement end_time
+        ],
+        pd.ArrowDtype(pa.timestamp("ns")),
+    ),
+    # idx = 1: Series(Float)
+    (
+        [
+            # TODO: implement total_seconds (+support timedelta)
+        ],
+        pd.ArrowDtype(pa.float64()),
+    ),
+    # idx = 2: Series(String)
+    (
+        [
+            "month_name",
+            "day_name",
+            # TODO [BSE-4880]: fix precision of seconds (%S by default prints up to nanoseconds)
+            # "strftime",
+        ],
+        pd.ArrowDtype(pa.large_string()),
+    ),
+]
+
+
+def _install_series_str_methods():
+    """Install Series.str.<method>() methods."""
+    for str_pair in series_str_methods:
+        for name in str_pair[0]:
+            method = gen_method(name, str_pair[1], accessor_type="str.")
+            setattr(BodoStringMethods, name, method)
+
+
+def _install_series_dt_accessors():
+    """Install Series.dt.<acc> accessors."""
+    for dt_accessor_pair in dt_accessors:
+        for name in dt_accessor_pair[0]:
+            accessor = gen_method(
+                name, dt_accessor_pair[1], is_method=False, accessor_type="dt."
+            )
+            setattr(BodoDatetimeProperties, name, property(accessor))
+
+
+def _install_series_dt_methods():
+    """Install Series.dt.<method>() methods."""
+    for dt_method_pair in dt_methods:
+        for name in dt_method_pair[0]:
+            method = gen_method(name, dt_method_pair[1], accessor_type="dt.")
+            setattr(BodoDatetimeProperties, name, method)
+
+
+def _install_series_direct_methods():
+    """Install direct Series.<method>() methods."""
+    for dir_method_pair in dir_methods:
+        for name in dir_method_pair[0]:
+            method = gen_method(name, dir_method_pair[1])
+            setattr(BodoSeries, name, method)
+
+
+def _install_str_partitions():
+    """Install Series.str.partition and Series.str.rpartition."""
+    for name in ["partition", "rpartition"]:
+        method = gen_partition(name)
+        setattr(BodoStringMethods, name, method)
+
+
+_install_series_direct_methods()
+_install_series_dt_accessors()
+_install_series_dt_methods()
+_install_series_str_methods()
+_install_str_partitions()
