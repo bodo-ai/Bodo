@@ -651,9 +651,8 @@ def test_confusion_matrix_string_labels(data, normalize, memory_leak_check):
         gen_random_k_dims(20, 3),
     ],
 )
-@pytest.mark.parametrize("squared", [True, False])
 @pytest.mark.parametrize("multioutput", ["uniform_average", "raw_values", "array"])
-def test_mse(data, squared, multioutput, memory_leak_check):
+def test_mse(data, multioutput, memory_leak_check):
     """
     Tests for the sklearn.metrics.mean_squared_error implementation in Bodo.
     """
@@ -665,16 +664,13 @@ def test_mse(data, squared, multioutput, memory_leak_check):
             return
 
     def test_mse_0(y_true, y_pred):
-        return mean_squared_error(
-            y_true, y_pred, squared=squared, multioutput=multioutput
-        )
+        return mean_squared_error(y_true, y_pred, multioutput=multioutput)
 
     def test_mse_1(y_true, y_pred, sample_weight_):
         return mean_squared_error(
             y_true,
             y_pred,
             sample_weight=sample_weight_,
-            squared=squared,
             multioutput=multioutput,
         )
 
