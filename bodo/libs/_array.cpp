@@ -205,9 +205,31 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
-array_info* timedelta_array_to_info() {
+array_info* timedelta_array_to_info(uint64_t n_items, char* days_data,
+                                    char* seconds_data, char* microseconds_data,
+                                    char* null_bitmap, int typ_enum,
+                                    NRT_MemInfo* days_meminfo,
+                                    NRT_MemInfo* seconds_meminfo,
+                                    NRT_MemInfo* microseconds_meminfo,
+                                    NRT_MemInfo* meminfo_bitmask) {
     // TODO: Implement
-    return nullptr;
+    std::shared_ptr<BodoBuffer> days_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)days_meminfo->data, n_items * numpy_item_size[4], days_data);
+    std::shared_ptr<BodoBuffer> seconds_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)seconds_meminfo->data, n_items * numpy_item_size[4],
+        seconds_data);
+    std::shared_ptr<BodoBuffer> microseconds_buff =
+        std::make_shared<BodoBuffer>((uint8_t*)microseconds_meminfo->data,
+                                     n_items * numpy_item_size[4],
+                                     seconds_data);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+    return new array_info(
+        bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
+        n_items, {days_buff, seconds_buff, microseconds_buff, null_bitmap_buff},
+        {}, 0, 0, 0, -1, false, false, false,
+        /*offset*/ days_data - (char*)days_meminfo->data);
 }
 
 array_info* interval_array_to_info(uint64_t n_items, char* left_data,

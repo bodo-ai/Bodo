@@ -605,6 +605,64 @@ def array_to_info_codegen(context, builder, sig, args):
         datetime_date_array_type,
     ):
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
+        if isinstance(arr_type, DatetimeTimeDeltaArrayType):
+            np_dtype = bodo.timedelta64ns
+            # TODO: maybe change dtype
+            # Collect data
+            days_data_arr = context.make_array(types.Array(types.int64, 1, "C"))(
+                context, builder, arr.days_data
+            )
+            seconds_data_arr = context.make_array(types.Array(types.int64, 1, "C"))(
+                context, builder, arr.seconds_data
+            )
+            microseconds_data_arr = context.make_array(
+                types.Array(types.int64, 1, "C")
+            )(context, builder, arr.microseconds_data)
+            bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
+                context, builder, arr.null_bitmap
+            )
+            typ_enum = numba_to_c_type(dtype)
+            typ_arg = cgutils.alloca_once_value(
+                builder, lir.Constant(lir.IntType(32), typ_enum)
+            )
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    # TODO: Fix accordingly to match cpp implementation sig
+                    lir.IntType(64),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="timedelta_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    # TODO: Fix accordingly to match cpp implementation sig
+                    length,
+                    builder.bitcast(days_data_arr.data, lir.IntType(8).as_pointer()),
+                    builder.bitcast(seconds_data_arr.data, lir.IntType(8).as_pointer()),
+                    builder.bitcast(
+                        microseconds_data_arr.data, lir.IntType(8).as_pointer()
+                    ),
+                    builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
+                    builder.load(typ_arg),
+                    days_data_arr.meminfo,
+                    seconds_data_arr.meminfo,
+                    microseconds_data_arr.meminfo,
+                    bitmap_arr.meminfo,
+                ],
+            )
+
         dtype = arr_type.dtype
         np_dtype = dtype
         if isinstance(arr_type, DecimalArrayType):
@@ -615,8 +673,6 @@ def array_to_info_codegen(context, builder, sig, args):
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             np_dtype = types.int8
-        elif isinstance(arr_type, DatetimeTimeDeltaArrayType):
-            np_dtype = bodo.timedelta64ns
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
             context, builder, arr.data
         )
@@ -690,11 +746,6 @@ def array_to_info_codegen(context, builder, sig, args):
                     bitmap_arr.meminfo,
                     lir.Constant(lir.IntType(32), arr_type.precision),
                 ],
-            )
-        # TODO: implement
-        elif isinstance(arr_type, DatetimeTimeDeltaArrayType):
-            raise NotImplementedError(
-                "array_to_info_codegen() not implemented for DatetimeTimeDeltaArrayType yet."
             )
         else:
             fnty = lir.FunctionType(
@@ -1143,11 +1194,6 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
 
         return dict_array._getvalue()
 
-    if isinstance(arr_type, DatetimeTimeDeltaArrayType):
-        raise NotImplementedError(
-            "info_to_array(): DatetimeTimeDeltaArrayType not implemented yet."
-        )
-
     # categorical array
     if isinstance(arr_type, CategoricalArrayType):
         out_arr = cgutils.create_struct_proxy(arr_type)(context, builder)
@@ -1342,6 +1388,111 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         arr.null_bitmap = arrs[2]
 
         return arr._getvalue()
+
+    # TODO: implement
+    if isinstance(arr_type, DatetimeTimeDeltaArrayType):
+        arr = cgutils.create_struct_proxy(arr_type)(context, builder)
+        np_dtype = bodo.timedelta64ns
+        days_data_arr_type = types.Array(types.int64, 1, "C")
+        seconds_data_arr = context.make_array(days_data_arr_type)(context, builder)
+        types.Array(types.int64, 1, "C")
+        context.make_array(seconds_data_arr)(context, builder)
+        microseconds_data_arr_type = types.Array(types.int64, 1, "C")
+        context.make_array(microseconds_data_arr_type)(context, builder)
+        nulls_arr_type = types.Array(types.uint8, 1, "C")
+        nulls_arr = context.make_array(nulls_arr_type)(context, builder)
+
+        length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        n_bytes_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        nulls_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        meminfo_nulls_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+            ],
+        )  # meminfo_nulls
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="info_to_timedelta_array"
+        )
+        builder.call(
+            fn_tp,
+            [
+                # TODO: implement cpp function and update this accordingly to match cpp sig.
+            ],
+        )
+        if raise_py_err:
+            bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+        intp_t = context.get_value_type(types.intp)
+
+        # TODO: implement below code.
+        # data_length_ptr = length_ptr
+        # shape_array = cgutils.pack_array(
+        #     builder, [builder.load(data_length_ptr)], ty=intp_t
+        # )
+        # itemsize = context.get_constant(
+        #     types.intp,
+        #     context.get_abi_sizeof(context.get_data_type(np_dtype)),
+        # )
+        # strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
+
+        # data = builder.bitcast(
+        #     builder.load(data_ptr),
+        #     context.get_data_type(np_dtype).as_pointer(),
+        # )
+
+        # numba.np.arrayobj.populate_array(
+        #     data_arr,
+        #     data=data,
+        #     shape=shape_array,
+        #     strides=strides_array,
+        #     itemsize=itemsize,
+        #     meminfo=builder.load(meminfo_ptr),
+        # )
+        # arr.data = data_arr._getvalue()
+
+        # # nulls array
+        # shape_array = cgutils.pack_array(
+        #     builder, [builder.load(n_bytes_ptr)], ty=intp_t
+        # )
+        # itemsize = context.get_constant(
+        #     types.intp, context.get_abi_sizeof(context.get_data_type(types.uint8))
+        # )
+        # strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
+
+        # data = builder.bitcast(
+        #     builder.load(nulls_ptr), context.get_data_type(types.uint8).as_pointer()
+        # )
+
+        # numba.np.arrayobj.populate_array(
+        #     nulls_arr,
+        #     data=data,
+        #     shape=shape_array,
+        #     strides=strides_array,
+        #     itemsize=itemsize,
+        #     meminfo=builder.load(meminfo_nulls_ptr),
+        # )
+        # arr.null_bitmap = nulls_arr._getvalue()
+        # if arr_type == boolean_array_type:
+        #     # Boolean array needs the total array length.
+        #     arr.length = builder.load(length_ptr)
+        # return arr._getvalue()
 
     # nullable integer/bool array
     if isinstance(

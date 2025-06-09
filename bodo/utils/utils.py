@@ -120,7 +120,7 @@ _numba_to_c_type_map = {
     int128_type: CTypeEnum.Int128.value,
     bodo.hiframes.datetime_date_ext.datetime_date_type: CTypeEnum.Date.value,
     # TODO: Timedelta arrays need to be supported
-    # bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type: CTypeEnum.Timedelta.value,
+    bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type: CTypeEnum.Timedelta.value,
     types.unicode_type: CTypeEnum.STRING.value,
     bodo.libs.binary_arr_ext.bytes_type: CTypeEnum.BINARY.value,
     # Null arrays are passed as nullable bool arrays to C++ currently.
