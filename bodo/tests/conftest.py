@@ -373,7 +373,7 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
             for path in glob.glob(pat):
                 fname = path[len(prefix) + 1 :]
                 fname = f"{dst_dirname}/{fname}"
-                s3.meta.client.upload_file(path, bucket_name, fname)
+                bucket.upload_file(path, fname)
 
         upload_dir(datapath("example_single.json"), "example_single.json", "json")
         upload_dir(datapath("example_multi.json"), "example_multi.json", "json")
