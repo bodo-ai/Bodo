@@ -266,7 +266,7 @@ def sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X):
         fit_result_or_err = m._fit(
             X,
             handle_unknown=m.handle_unknown,
-            force_all_finite="allow-nan",
+            ensure_all_finite="allow-nan",
         )
     except ValueError as e:  # pragma: no cover
         # Catch if any rank raises a ValueError for unknown categories,
