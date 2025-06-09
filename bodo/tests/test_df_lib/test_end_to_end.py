@@ -1022,19 +1022,19 @@ def test_series_compound_expression(datapath):
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
 def test_series_filter_pushdown(datapath, file_path, op):
-    """Test for filter with filter pushdown into read parquet."""
+    """Test for series filter with filter pushdown into read parquet."""
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
     bodo_df1 = bd.read_parquet(datapath(file_path))
     bodo_series_a = bodo_df1["A"]
     bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
 
-    # Make sure bodo_df2 is unevaluated at this point.
+    # Make sure bodo_filter_a is unevaluated at this point.
     assert bodo_filter_a.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.utils.getPlanStatistics(bodo_filter_a._mgr._plan)
     _test_equal(pre, 3)
-    _test_equal(post, 1)
+    _test_equal(post, 2)
 
     py_df1 = pd.read_parquet(datapath(file_path))
     py_series_a = py_df1["A"]
@@ -1062,7 +1062,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
 def test_series_filter_distributed(datapath, file_path, op):
-    """Very simple test for filter for sanity checking."""
+    """Very simple test for series filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath(file_path))
     py_df1 = pd.read_parquet(datapath(file_path))
 
@@ -1077,7 +1077,7 @@ def test_series_filter_distributed(datapath, file_path, op):
     bodo_series_a = bodo_df1["A"]
     bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
 
-    # Make sure bodo_df2 is unevaluated at this point.
+    # Make sure bodo_filter_a is unevaluated at this point.
     assert bodo_filter_a.is_lazy_plan()
 
     py_series_a = py_df1["A"]
