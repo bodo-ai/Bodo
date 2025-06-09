@@ -530,6 +530,19 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         NOTE: this pickles the function and sends it to the workers, so globals are
         pickled. The use of lazy data structures as globals causes issues.
         """
+        if self._exec_state == ExecState.PLAN:
+            try:
+                empty_series = get_scalar_udf_result_type(
+                    self, "map_partitions", func, *args, **kwargs
+                )
+            except BodoLibNotImplementedException:
+                collected_self = self.execute_plan()
+                return collected_self.map_partitions(func, *args, **kwargs)
+
+            return _get_df_python_func_plan(
+                self._plan, empty_series, func, args, kwargs
+            )
+
         return bodo.spawn.spawner.submit_func_to_workers(
             func, [], self, *args, **kwargs
         )
@@ -829,35 +842,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self, "apply", func, axis=axis, args=args, **kwargs
         )
 
-        udf_arg = LazyPlan(
-            "PythonScalarFuncExpression",
-            empty_series,
-            self._plan,
-            (
-                "apply",
-                False,  # is_series
-                True,  # is_method
-                (func,),  # args
-                {"axis": 1, "args": args} | kwargs,  # kwargs
-            ),
-            tuple(range(len(self.columns) + get_n_index_arrays(self.head(0).index))),
-        )
+        apply_kwargs = {"axis": 1, "args": args} | kwargs
 
-        # Select Index columns explicitly for output
-        n_cols = len(self.columns)
-        index_col_refs = tuple(
-            make_col_ref_exprs(
-                range(n_cols, n_cols + get_n_index_arrays(self.head(0).index)),
-                self._plan,
-            )
+        return _get_df_python_func_plan(
+            self._plan, empty_series, "apply", (func,), apply_kwargs
         )
-        plan = LazyPlan(
-            "LogicalProjection",
-            empty_series,
-            self._plan,
-            (udf_arg,) + index_col_refs,
-        )
-        return wrap_plan(plan=plan)
 
     @check_args_fallback(supported=["by", "ascending", "na_position"])
     def sort_values(
@@ -1197,3 +1186,38 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_keys(right_on, right)
 
     return left_on, right_on
+
+
+def _get_df_python_func_plan(df, empty_data, func, args, kwargs, is_method=True):
+    """Create plan for calling some function or method on a DataFrame. Creates a
+    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
+    """
+    udf_arg = LazyPlan(
+        "PythonScalarFuncExpression",
+        empty_data,
+        df._plan,
+        (
+            func,
+            False,  # is_series
+            is_method,
+            args,
+            kwargs,
+        ),
+        tuple(range(len(df.columns) + get_n_index_arrays(df.head(0).index))),
+    )
+
+    # Select Index columns explicitly for output
+    n_cols = len(df.columns)
+    index_col_refs = tuple(
+        make_col_ref_exprs(
+            range(n_cols, n_cols + get_n_index_arrays(df.head(0).index)),
+            df._plan,
+        )
+    )
+    plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df._plan,
+        (udf_arg,) + index_col_refs,
+    )
+    return wrap_plan(plan=plan)
