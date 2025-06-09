@@ -102,6 +102,7 @@ def get_spark(
     builder = SparkSession.builder.appName("spark")
     builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
     builder.config("spark.sql.execution.arrow.enabled", "true")
+    builder.config("spark.sql.ansi.enabled", "false")
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
     return spark
@@ -164,6 +165,7 @@ def get_spark(
         # don't work without it. Let's try to avoid using Spark for those tests
         # as much as possible.
         builder.config("spark.sql.execution.arrow.enabled", "true")
+        builder.config("spark.sql.ansi.enabled", "false")
         builder.config(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
