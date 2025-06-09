@@ -1337,7 +1337,7 @@ def test_numeric_single_arg_funcs(arr, func):
         f"  return {single_arg_np_map[func]}(elem) if not pd.isna(elem) else None"
     )
     scalar_vars = {}
-    exec(scalar_impl, {"np": np, "pd": pd}, scalar_vars)
+    exec(scalar_impl, {"np": np, "pd": pd, "math": math}, scalar_vars)
     numeric_answer = vectorized_sol((arr,), scalar_vars["impl"], np.float64)
     check_func(
         impl_vars["impl"],
