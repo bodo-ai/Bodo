@@ -428,7 +428,7 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         def setna_datetime_date(arr, ind, int_nan_const=0):  # pragma: no cover
             # Set the actual value to a valid date (i.e. 1970, 1, 1)
-            arr._data[ind] = (1970 << 32) + (1 << 16) + 1
+            arr._data[ind] = 0
             bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
 
         return setna_datetime_date
