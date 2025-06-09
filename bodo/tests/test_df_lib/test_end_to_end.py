@@ -1015,7 +1015,7 @@ def test_series_compound_expression(datapath):
     [
         "dataframe_library/df1.parquet",
         "dataframe_library/df1_index.parquet",
-        "dataframe_library/df1_multi_index.parquet"
+        "dataframe_library/df1_multi_index.parquet",
     ],
 )
 @pytest.mark.parametrize(
@@ -1055,7 +1055,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
     [
         "dataframe_library/df1.parquet",
         "dataframe_library/df1_index.parquet",
-        "dataframe_library/df1_multi_index.parquet"
+        "dataframe_library/df1_multi_index.parquet",
     ],
 )
 @pytest.mark.parametrize(
