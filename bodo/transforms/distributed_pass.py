@@ -921,17 +921,6 @@ class DistributedPass:
                 "sklearn.metrics.log_loss", rhs.args, kws, 1, "y_pred"
             )
 
-            # eps argument
-            eps_var = ir.Var(
-                assign.target.scope,
-                mk_unique_var("log_loss_eps"),
-                rhs.loc,
-            )
-            nodes.append(ir.Assign(ir.Const(1e-15, rhs.loc), eps_var, rhs.loc))
-            self.typemap[eps_var.name] = types.float64
-            # eps cannot be specified positionally
-            eps = get_call_expr_arg("log_loss", rhs.args, kws, 1e6, "eps", eps_var)
-
             # normalize argument
             normalize_var = ir.Var(
                 assign.target.scope,
@@ -972,10 +961,9 @@ class DistributedPass:
             )
 
             f = eval(
-                "lambda y_true, y_pred, eps, normalize, sample_weight, labels: sklearn.metrics.log_loss("
+                "lambda y_true, y_pred, normalize, sample_weight, labels: sklearn.metrics.log_loss("
                 "    y_true,"
                 "    y_pred,"
-                "    eps=eps,"
                 "    normalize=normalize,"
                 "    sample_weight=sample_weight,"
                 "    labels=labels,"
@@ -984,7 +972,7 @@ class DistributedPass:
             )
             return nodes + compile_func_single_block(
                 f,
-                [y_true, y_pred, eps, normalize, sample_weight, labels],
+                [y_true, y_pred, normalize, sample_weight, labels],
                 assign.target,
                 self,
                 extra_globals={"sklearn": sklearn},

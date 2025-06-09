@@ -840,7 +840,7 @@ def overload_mean_absolute_error(
 # ----------------------------------log_loss-------------------------------------
 
 
-def log_loss_dist_helper(y_true, y_pred, eps, normalize, sample_weight, labels):
+def log_loss_dist_helper(y_true, y_pred, normalize, sample_weight, labels):
     """
     Helper for distributed log_loss computation.
     Call sklearn on each rank with normalize=False to get
@@ -850,7 +850,6 @@ def log_loss_dist_helper(y_true, y_pred, eps, normalize, sample_weight, labels):
     loss = sklearn.metrics.log_loss(
         y_true,
         y_pred,
-        eps=eps,
         normalize=False,
         sample_weight=sample_weight,
         labels=labels,
@@ -871,7 +870,6 @@ def log_loss_dist_helper(y_true, y_pred, eps, normalize, sample_weight, labels):
 def overload_log_loss(
     y_true,
     y_pred,
-    eps=1e-15,
     normalize=True,
     sample_weight=None,
     labels=None,
@@ -894,7 +892,6 @@ def overload_log_loss(
     func_text = "def _log_loss_impl(\n"
     func_text += "    y_true,\n"
     func_text += "    y_pred,\n"
-    func_text += "    eps=1e-15,\n"
     func_text += "    normalize=True,\n"
     func_text += "    sample_weight=None,\n"
     func_text += "    labels=None,\n"
@@ -931,7 +928,7 @@ def overload_log_loss(
     else:
         # For distributed data, pre-compute labels globally, then call our implementation
         func_text += "        loss = log_loss_dist_helper(\n"
-    func_text += "            y_true, y_pred, eps=eps, normalize=normalize,\n"
+    func_text += "            y_true, y_pred, normalize=normalize,\n"
     func_text += "            sample_weight=sample_weight, labels=labels\n"
     func_text += "        )\n"
     func_text += "    return loss\n"
