@@ -245,6 +245,10 @@ class DistributedAnalysisCallRegistry:
                 "sklearn.utils",
             ): meet_out_first_arg_analysis,
             (
+                "shuffle",
+                "sklearn.utils._indexing",
+            ): meet_out_first_arg_analysis,
+            (
                 "precision_score",
                 "sklearn.metrics._classification",
             ): analyze_call_sklearn_metrics,

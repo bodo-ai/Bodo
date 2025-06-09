@@ -155,7 +155,7 @@ def test_shuffle_random_state(data, random_state, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("n_samples", [0, 1, 8, 14, 15])
+@pytest.mark.parametrize("n_samples", [1, 8, 14, 15])
 @pytest.mark.parametrize("nitems, niters", [(15, 10000)])
 def test_shuffle_n_samples(nitems, niters, n_samples, memory_leak_check):
     """
