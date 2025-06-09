@@ -127,9 +127,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             op,
         )
 
-        key_indices = [
-            i + 1 for i in range(get_n_index_arrays(empty_data.index))
-        ]
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
         key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
 
         plan = LazyPlan(
@@ -182,9 +180,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             op,
         )
 
-        key_indices = [
-            i + 1 for i in range(get_n_index_arrays(empty_data.index))
-        ]
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
         key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
 
         plan = LazyPlan(
@@ -231,9 +227,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "__invert__",
         )
 
-        key_indices = [
-            i + 1 for i in range(get_n_index_arrays(empty_data.index))
-        ]
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
         key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
 
         plan = LazyPlan(
@@ -283,9 +277,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         expr = LazyPlan("ArithOpExpression", empty_data, lhs, rhs, op)
 
-        key_indices = [
-            i + 1 for i in range(get_n_index_arrays(empty_data.index))
-        ]
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
         key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
 
         plan = LazyPlan(
@@ -362,7 +354,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         zero_size_index = zero_size_key.index
         empty_data = zero_size_self.__getitem__(zero_size_key)
         empty_data_index = empty_data.index
-        if isinstance(zero_size_index, pd.RangeIndex) and not isinstance(empty_data_index, pd.RangeIndex):
+        if isinstance(zero_size_index, pd.RangeIndex) and not isinstance(
+            empty_data_index, pd.RangeIndex
+        ):
             # Drop the explicit index.
             empty_data.reset_index(drop=True, inplace=True)
         return wrap_plan(
