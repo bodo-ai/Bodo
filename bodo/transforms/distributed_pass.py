@@ -1193,31 +1193,18 @@ class DistributedPass:
                     multioutput_var,
                 )
 
-                # squared argument; since it cannot be specified positionally
-                squared_var = ir.Var(
-                    assign.target.scope,
-                    mk_unique_var("mean_squared_error_squared"),
-                    rhs.loc,
-                )
-                nodes.append(ir.Assign(ir.Const(True, rhs.loc), squared_var, rhs.loc))
-                self.typemap[squared_var.name] = types.BooleanLiteral(True)
-                squared = get_call_expr_arg(
-                    "mean_squared_error", rhs.args, kws, 1e6, "squared", squared_var
-                )
-
                 f = eval(
-                    "lambda y_true, y_pred, sample_weight, multioutput, squared: sklearn.metrics.mean_squared_error("
+                    "lambda y_true, y_pred, sample_weight, multioutput: sklearn.metrics.mean_squared_error("
                     "    y_true,"
                     "    y_pred,"
                     "    sample_weight=sample_weight,"
                     "    multioutput=multioutput,"
-                    "    squared=squared,"
                     "    _is_data_distributed=True,"
                     ")"
                 )
                 return nodes + compile_func_single_block(
                     f,
-                    [y_true, y_pred, sample_weight, multioutput, squared],
+                    [y_true, y_pred, sample_weight, multioutput],
                     assign.target,
                     self,
                     extra_globals={"sklearn": sklearn},

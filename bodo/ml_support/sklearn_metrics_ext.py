@@ -452,11 +452,10 @@ def overload_f1_score(
             return _f1_score_impl
 
 
-def mse_mae_dist_helper(y_true, y_pred, sample_weight, multioutput, squared, metric):
+def mse_mae_dist_helper(y_true, y_pred, sample_weight, multioutput, metric):
     """
     Helper for distributed mse calculation.
     metric must be one of ['mse', 'mae']
-    squared: only for mse
     """
 
     if metric == "mse":
@@ -467,7 +466,6 @@ def mse_mae_dist_helper(y_true, y_pred, sample_weight, multioutput, squared, met
             y_pred,
             sample_weight=sample_weight,
             multioutput="raw_values",
-            squared=True,
         )
     elif metric == "mae":
         # This is basically `np.average(np.abs(y_true-y_pred), axis=0, weights=sample_weight)`
@@ -508,10 +506,6 @@ def mse_mae_dist_helper(y_true, y_pred, sample_weight, multioutput, squared, met
         local_raw_values_metric_by_rank, weights=rank_weights, axis=0
     )
 
-    # Element-wise sqrt if squared=False in case of mse
-    if metric == "mse" and (not squared):
-        global_raw_values_metric = np.sqrt(global_raw_values_metric)
-
     if isinstance(multioutput, str) and multioutput == "raw_values":
         return global_raw_values_metric
     elif isinstance(multioutput, str) and multioutput == "uniform_average":
@@ -526,7 +520,6 @@ def overload_mean_squared_error(
     y_pred,
     sample_weight=None,
     multioutput="uniform_average",
-    squared=True,
     _is_data_distributed=False,
 ):
     """
@@ -550,7 +543,6 @@ def overload_mean_squared_error(
                 y_pred,
                 sample_weight=None,
                 multioutput="uniform_average",
-                squared=True,
                 _is_data_distributed=False,
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
@@ -562,7 +554,6 @@ def overload_mean_squared_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=squared,
                             metric="mse",
                         )
                     else:
@@ -571,7 +562,6 @@ def overload_mean_squared_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=squared,
                         )
                 return err
 
@@ -583,7 +573,6 @@ def overload_mean_squared_error(
                 y_pred,
                 sample_weight=None,
                 multioutput="uniform_average",
-                squared=True,
                 _is_data_distributed=False,
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
@@ -596,7 +585,6 @@ def overload_mean_squared_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=squared,
                             metric="mse",
                         )
                     else:
@@ -605,7 +593,6 @@ def overload_mean_squared_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=squared,
                         )
                 return err
 
@@ -621,7 +608,6 @@ def overload_mean_squared_error(
                 y_pred,
                 sample_weight=None,
                 multioutput="uniform_average",
-                squared=True,
                 _is_data_distributed=False,
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
@@ -633,7 +619,6 @@ def overload_mean_squared_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=squared,
                             metric="mse",
                         )
                     else:
@@ -642,7 +627,6 @@ def overload_mean_squared_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=squared,
                         )
                 return err
 
@@ -654,7 +638,6 @@ def overload_mean_squared_error(
                 y_pred,
                 sample_weight=None,
                 multioutput="uniform_average",
-                squared=True,
                 _is_data_distributed=False,
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
@@ -667,7 +650,6 @@ def overload_mean_squared_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=squared,
                             metric="mse",
                         )
                     else:
@@ -676,7 +658,6 @@ def overload_mean_squared_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=squared,
                         )
                 return err
 
@@ -723,7 +704,6 @@ def overload_mean_absolute_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=True,  # Is ignored when metric = mae
                             metric="mae",
                         )
                     else:
@@ -755,7 +735,6 @@ def overload_mean_absolute_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=True,  # Is ignored when metric = mae
                             metric="mae",
                         )
                     else:
@@ -790,7 +769,6 @@ def overload_mean_absolute_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=True,  # Is ignored when metric = mae
                             metric="mae",
                         )
                     else:
@@ -822,7 +800,6 @@ def overload_mean_absolute_error(
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
-                            squared=True,  # Is ignored when metric = mae
                             metric="mae",
                         )
                     else:
