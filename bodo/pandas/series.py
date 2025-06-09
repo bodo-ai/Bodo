@@ -5,6 +5,7 @@ import numbers
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
+from copy import deepcopy
 
 import pandas as pd
 import pyarrow as pa
@@ -116,7 +117,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(empty_data, pd.Series), "_cmp_method: Series expected"
 
         # Extract argument expressions
-        lhs = get_proj_expr_single(self._plan)
+        lhs = deepcopy(get_proj_expr_single(self._plan))
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
         expr = LazyPlan(
             "ComparisonOpExpression",
@@ -358,7 +359,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
         )
         zero_size_key = _empty_like(key)
+        zero_size_index = zero_size_key.index
         empty_data = zero_size_self.__getitem__(zero_size_key)
+        empty_data_index = empty_data.index
+        if isinstance(zero_size_index, pd.RangeIndex) and not isinstance(empty_data_index, pd.RangeIndex):
+            # Drop the explicit index.
+            empty_data = pd.Series(empty_data.values)
         return wrap_plan(
             plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
         )
