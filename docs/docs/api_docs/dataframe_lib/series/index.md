@@ -2,7 +2,7 @@
 The Bodo DataFrame Library supports Pandas Series methods and accessors that are listed below. They can be accessed through `BodoSeries` and follow the same behavior as their Pandas equivalents. For details on usage, we link to the corresponding Pandas documentation.
 
 !!! note
-	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info. 
+	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info.
 
 ## Computations / descriptive stats
 - [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
@@ -17,31 +17,31 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ### Datetime properties
 !!! note
 	For missing datetime values (`NaT`), Bodo's datetime predicate accessors (e.g., `.is_month_end`, `.is_leap_year`) return `<NA>` to preserve nullability, whereas Pandas returns `False`.
-- [`bodo.pandas.BodoSeries.dt.year`][bodoseriesdtyear] 
-- [`bodo.pandas.BodoSeries.dt.month`][bodoseriesdtmonth] 
-- [`bodo.pandas.BodoSeries.dt.day`][bodoseriesdtday] 
-- [`bodo.pandas.BodoSeries.dt.hour`][bodoseriesdthour] 
-- [`bodo.pandas.BodoSeries.dt.minute`][bodoseriesdtminute] 
-- [`bodo.pandas.BodoSeries.dt.second`][bodoseriesdtsecond] 
-- [`bodo.pandas.BodoSeries.dt.microsecond`][bodoseriesdtmicrosecond] 
-- [`bodo.pandas.BodoSeries.dt.nanosecond`][bodoseriesdtnanosecond] 
-- [`bodo.pandas.BodoSeries.dt.dayofweek`][bodoseriesdtdayofweek] 
-- [`bodo.pandas.BodoSeries.dt.day_of_week`][bodoseriesdtday_of_week] 
-- [`bodo.pandas.BodoSeries.dt.weekday`][bodoseriesdtweekday] 
-- [`bodo.pandas.BodoSeries.dt.dayofyear`][bodoseriesdtdayofyear] 
-- [`bodo.pandas.BodoSeries.dt.day_of_year`][bodoseriesdtday_of_year] 
-- [`bodo.pandas.BodoSeries.dt.daysinmonth`][bodoseriesdtdaysinmonth] 
-- [`bodo.pandas.BodoSeries.dt.days_in_month`][bodoseriesdtdays_in_month] 
-- [`bodo.pandas.BodoSeries.dt.date`][bodoseriesdtdate] 
-- [`bodo.pandas.BodoSeries.dt.time`][bodoseriesdttime] 
-- [`bodo.pandas.BodoSeries.dt.quarter`][bodoseriesdtquarter] 
-- [`bodo.pandas.BodoSeries.dt.is_month_start`][bodoseriesdtis_month_start] 
-- [`bodo.pandas.BodoSeries.dt.is_month_end`][bodoseriesdtis_month_end] 
-- [`bodo.pandas.BodoSeries.dt.is_quarter_start`][bodoseriesdtis_quarter_start] 
-- [`bodo.pandas.BodoSeries.dt.is_quarter_end`][bodoseriesdtis_quarter_end] 
-- [`bodo.pandas.BodoSeries.dt.is_year_start`][bodoseriesdtis_year_start] 
-- [`bodo.pandas.BodoSeries.dt.is_year_end`][bodoseriesdtis_year_end] 
-- [`bodo.pandas.BodoSeries.dt.is_leap_year`][bodoseriesdtis_leap_year] 
+- [`bodo.pandas.BodoSeries.dt.year`][bodoseriesdtyear]
+- [`bodo.pandas.BodoSeries.dt.month`][bodoseriesdtmonth]
+- [`bodo.pandas.BodoSeries.dt.day`][bodoseriesdtday]
+- [`bodo.pandas.BodoSeries.dt.hour`][bodoseriesdthour]
+- [`bodo.pandas.BodoSeries.dt.minute`][bodoseriesdtminute]
+- [`bodo.pandas.BodoSeries.dt.second`][bodoseriesdtsecond]
+- [`bodo.pandas.BodoSeries.dt.microsecond`][bodoseriesdtmicrosecond]
+- [`bodo.pandas.BodoSeries.dt.nanosecond`][bodoseriesdtnanosecond]
+- [`bodo.pandas.BodoSeries.dt.dayofweek`][bodoseriesdtdayofweek]
+- [`bodo.pandas.BodoSeries.dt.day_of_week`][bodoseriesdtday_of_week]
+- [`bodo.pandas.BodoSeries.dt.weekday`][bodoseriesdtweekday]
+- [`bodo.pandas.BodoSeries.dt.dayofyear`][bodoseriesdtdayofyear]
+- [`bodo.pandas.BodoSeries.dt.day_of_year`][bodoseriesdtday_of_year]
+- [`bodo.pandas.BodoSeries.dt.daysinmonth`][bodoseriesdtdaysinmonth]
+- [`bodo.pandas.BodoSeries.dt.days_in_month`][bodoseriesdtdays_in_month]
+- [`bodo.pandas.BodoSeries.dt.date`][bodoseriesdtdate]
+- [`bodo.pandas.BodoSeries.dt.time`][bodoseriesdttime]
+- [`bodo.pandas.BodoSeries.dt.quarter`][bodoseriesdtquarter]
+- [`bodo.pandas.BodoSeries.dt.is_month_start`][bodoseriesdtis_month_start]
+- [`bodo.pandas.BodoSeries.dt.is_month_end`][bodoseriesdtis_month_end]
+- [`bodo.pandas.BodoSeries.dt.is_quarter_start`][bodoseriesdtis_quarter_start]
+- [`bodo.pandas.BodoSeries.dt.is_quarter_end`][bodoseriesdtis_quarter_end]
+- [`bodo.pandas.BodoSeries.dt.is_year_start`][bodoseriesdtis_year_start]
+- [`bodo.pandas.BodoSeries.dt.is_year_end`][bodoseriesdtis_year_end]
+- [`bodo.pandas.BodoSeries.dt.is_leap_year`][bodoseriesdtis_leap_year]
 
 
 ### Datetime methods
@@ -51,8 +51,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.normalize`][bodoseriesdtnormalize]
 - [`bodo.pandas.BodoSeries.dt.floor`][bodoseriesdtfloor]
 - [`bodo.pandas.BodoSeries.dt.ceil`][bodoseriesdtceil]
-- [`bodo.pandas.BodoSeries.dt.month_name`][bodoseriesdtmonth_name] 
-- [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name] 
+- [`bodo.pandas.BodoSeries.dt.month_name`][bodoseriesdtmonth_name]
+- [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name]
 
 
 ## Function application

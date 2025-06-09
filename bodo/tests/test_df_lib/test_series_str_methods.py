@@ -9,13 +9,18 @@ def _install_series_str_tests():
     # Tests Series.str methods with arguments
     for method_name in test_map_arg:
         test = _generate_series_test(
-            method_name, df, test_map_arg[method_name], accessor="str"
+            method_name,
+            exception_dfmap.get(method_name, df),
+            test_map_arg[method_name],
+            accessor="str",
         )
         globals()[f"test_{method_name}"] = test
 
     # Tests Series.str methods that require no arguments
     for method_name in test_map_no_arg:
-        test = _generate_series_test(method_name, df, empty_arg, accessor="str")
+        test = _generate_series_test(
+            method_name, exception_dfmap.get(method_name, df), empty_arg, accessor="str"
+        )
         globals()[f"test_{method_name}"] = test
 
 
@@ -156,6 +161,10 @@ test_map_arg = {
         ((), {"sep": "-", "expand": True}),
         ((), {"sep": "-"}),
     ],
+    "normalize": [
+        (("NFC"), {}),
+        (("NFD"), {}),
+    ],
 }
 
 # List of methods that do not take in arguments
@@ -192,6 +201,18 @@ df = pd.DataFrame(
         ],
     }
 )
+
+df_normalize = pd.DataFrame(
+    {
+        "A": ["ñ", "ñ", "n\u0303"],
+        "B": ["Amélie", "Am\u00e9lie", "Am\u0065\u0301lie"],
+        "C": ["\u00f1", "\u006e\u0303", "ñ"],
+    }
+)
+
+exception_dfmap = {
+    "normalize": df_normalize,
+}
 
 empty_arg = [((), {})]
 

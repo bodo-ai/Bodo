@@ -717,12 +717,12 @@ def sig_bind(name, accessor_type, *args, **kwargs):
     accessor_names = {"str.": "BodoStringMethods.", "dt.": "BodoDatetimeProperties."}
     msg = ""
     try:
-        if name in sig_map:
+        if accessor_type + name in sig_map:
             params = [
                 inspect.Parameter(param[0], param[1])
                 if not param[2]
                 else inspect.Parameter(param[0], param[1], default=param[2][0])
-                for param in sig_map[name]
+                for param in sig_map[accessor_type + name]
             ]
             signature = inspect.Signature(params)
         else:
@@ -756,13 +756,13 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
         ("axis", inspect.Parameter.KEYWORD_ONLY, (None,)),
         ("inplace", inspect.Parameter.KEYWORD_ONLY, (False,)),
     ],
-    "replace": [
+    "str.replace": [
         ("to_replace", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("value", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("regex", inspect.Parameter.KEYWORD_ONLY, (False,)),
         ("inplace", inspect.Parameter.KEYWORD_ONLY, (False,)),
     ],
-    "wrap": [
+    "str.wrap": [
         ("width", inspect.Parameter.POSITIONAL_OR_KEYWORD, ()),
         ("expand_tabs", inspect.Parameter.KEYWORD_ONLY, (True,)),
         ("replace_whitespace", inspect.Parameter.KEYWORD_ONLY, (True,)),
@@ -770,21 +770,21 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
         ("break_long_words", inspect.Parameter.KEYWORD_ONLY, (True,)),
         ("break_on_hyphens", inspect.Parameter.KEYWORD_ONLY, (True,)),
     ],
-    "normalize": [],
-    "strftime": [
+    "dt.normalize": [],
+    "dt.strftime": [
         ("date_format", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
     ],
-    "month_name": [
+    "dt.month_name": [
         ("locale", inspect.Parameter.KEYWORD_ONLY, (None,)),
     ],
-    "day_name": [
+    "dt.day_name": [
         ("locale", inspect.Parameter.KEYWORD_ONLY, (None,)),
     ],
-    "floor": [
+    "dt.floor": [
         ("freq", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("normalize", inspect.Parameter.KEYWORD_ONLY, (True,)),
     ],
-    "ceil": [
+    "dt.ceil": [
         ("freq", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("normalize", inspect.Parameter.KEYWORD_ONLY, (True,)),
     ],
@@ -846,6 +846,7 @@ series_str_methods = [
             "zfill",
             "replace",
             "wrap",
+            "normalize",
         ],
         pd.ArrowDtype(pa.large_string()),
     ),
