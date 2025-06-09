@@ -207,6 +207,7 @@ df_normalize = pd.DataFrame(
         "A": ["ñ", "ñ", "n\u0303"],
         "B": ["Amélie", "Am\u00e9lie", "Am\u0065\u0301lie"],
         "C": ["\u00f1", "\u006e\u0303", "ñ"],
+        "D": ["ñ", "ñ", None],
     }
 )
 
