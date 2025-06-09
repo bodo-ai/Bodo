@@ -166,7 +166,7 @@ def overload_kmeans_clustering_fit(
     return _cluster_kmeans_fit_impl
 
 
-def kmeans_predict_helper(m, X, sample_weight):
+def kmeans_predict_helper(m, X):
     """
     We implement the prediction operation in parallel.
     Each rank has its own copy of the KMeans model and predicts for its
@@ -181,7 +181,7 @@ def kmeans_predict_helper(m, X, sample_weight):
         # TODO If X is replicated this should be an error (same as sklearn)
         preds = np.empty(0, dtype=np.int64)
     else:
-        preds = m.predict(X, sample_weight).astype(np.int64).flatten()
+        preds = m.predict(X).astype(np.int64).flatten()
 
     # Restore
     m._n_threads = orig_nthreads
@@ -192,12 +192,11 @@ def kmeans_predict_helper(m, X, sample_weight):
 def overload_kmeans_clustering_predict(
     m,
     X,
-    sample_weight=None,
 ):
-    def _cluster_kmeans_predict(m, X, sample_weight=None):  # pragma: no cover
+    def _cluster_kmeans_predict(m, X):  # pragma: no cover
         with bodo.objmode(preds="int64[:]"):
             # TODO: Set _n_threads to 1, even though it shouldn't be necessary
-            preds = kmeans_predict_helper(m, X, sample_weight)
+            preds = kmeans_predict_helper(m, X)
         return preds
 
     return _cluster_kmeans_predict
