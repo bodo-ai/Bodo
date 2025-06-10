@@ -1044,7 +1044,8 @@ def test_map_partitions():
     py_out = df + 2 + 3
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
     
-    @pytest.mark.parametrize(
+
+@pytest.mark.parametrize(
     "file_path",
     [
         "dataframe_library/df1.parquet",
@@ -1052,8 +1053,6 @@ def test_map_partitions():
         "dataframe_library/df1_multi_index.parquet",
     ],
 )
-
-
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
