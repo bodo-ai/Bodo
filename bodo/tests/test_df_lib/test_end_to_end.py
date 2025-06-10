@@ -1043,7 +1043,7 @@ def test_map_partitions():
 
     py_out = df + 2 + 3
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
-    
+
 
 @pytest.mark.parametrize(
     "file_path",
