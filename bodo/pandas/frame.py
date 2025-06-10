@@ -7,16 +7,21 @@ from copy import deepcopy
 
 import pandas as pd
 from pandas._libs import lib
-from pandas._typing import (
-    AnyArrayLike,
-    Axis,
-    IndexLabel,
-    MergeHow,
-    MergeValidate,
-    SortKind,
-    Suffixes,
-    ValueKeyFunc,
-)
+
+if pt.TYPE_CHECKING:
+    from pandas._typing import (
+        AnyArrayLike,
+        Axis,
+        FilePath,
+        IndexLabel,
+        MergeHow,
+        MergeValidate,
+        SortKind,
+        StorageOptions,
+        Suffixes,
+        ValueKeyFunc,
+        WriteBuffer,
+    )
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -31,6 +36,7 @@ from bodo.pandas.utils import (
     LazyPlan,
     LazyPlanDistributedArg,
     check_args_fallback,
+    execute_plan,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
@@ -42,8 +48,6 @@ from bodo.pandas.utils import (
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
-    get_overload_const_str,
-    is_overload_none,
 )
 
 
@@ -234,64 +238,50 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             case ExecState.COLLECTED:
                 return super().shape
 
+    @check_args_fallback(supported=["path", "engine", "compression", "row_group_size"])
     def to_parquet(
         self,
-        path,
-        engine="auto",
-        compression="snappy",
-        index=None,
-        partition_cols=None,
-        storage_options=None,
-        row_group_size=-1,
-    ):
-        # argument defaults should match that of to_parquet_overload in pd_dataframe_ext.py
-
-        @bodo.jit(spawn=True)
-        def to_parquet_wrapper(
-            df: pd.DataFrame,
-            path,
-            engine,
-            compression,
-            index,
-            partition_cols,
-            storage_options,
-            row_group_size,
-        ):
-            return df.to_parquet(
-                path,
-                engine,
-                compression,
-                index,
-                partition_cols,
-                storage_options,
-                row_group_size,
+        path: FilePath | WriteBuffer[bytes] | None = None,
+        engine: pt.Literal["auto", "pyarrow", "fastparquet"] = "auto",
+        compression: str | None = "snappy",
+        index: bool | None = None,
+        partition_cols: list[str] | None = None,
+        storage_options: StorageOptions | None = None,
+        row_group_size: int = -1,
+        **kwargs,
+    ) -> bytes | None:
+        if not isinstance(path, str):
+            raise BodoLibNotImplementedException(
+                "DataFrame.to_parquet(): path must be a string"
             )
 
-        # checks string arguments before jit performs conversion to unicode
-        if not is_overload_none(engine) and get_overload_const_str(engine) not in (
-            "auto",
-            "pyarrow",
-        ):  # pragma: no cover
-            raise BodoError("DataFrame.to_parquet(): only pyarrow engine supported")
-
-        if not is_overload_none(compression) and get_overload_const_str(
-            compression
-        ) not in {"snappy", "gzip", "brotli"}:
-            raise BodoError(
-                "to_parquet(): Unsupported compression: "
-                + get_overload_const_str(compression)
+        if engine not in ("auto", "pyarrow"):
+            raise BodoLibNotImplementedException(
+                "DataFrame.to_parquet(): only 'auto' and 'pyarrow' engines are supported"
             )
 
-        return to_parquet_wrapper(
-            self,
+        if compression not in (None, "snappy", "gzip", "brotli"):
+            raise BodoLibNotImplementedException(
+                "DataFrame.to_parquet(): only None, 'snappy', 'gzip' and 'brotli' compressions are supported"
+            )
+
+        # Convert None to "none" as expected by the backend.
+        # https://github.com/bodo-ai/Bodo/blob/ff39453f07d8691751d95668ab06a72a5f742dff/bodo/hiframes/pd_dataframe_ext.py#L3795
+        if compression is None:
+            compression = "none"
+
+        if not isinstance(row_group_size, int):
+            raise BodoError("DataFrame.to_parquet(): row_group_size must be an integer")
+
+        write_plan = LazyPlan(
+            "LogicalParquetWrite",
+            pd.DataFrame(),
+            self._plan,
             path,
-            engine,
             compression,
-            index,
-            partition_cols,
-            storage_options,
             row_group_size,
         )
+        execute_plan(write_plan)
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
