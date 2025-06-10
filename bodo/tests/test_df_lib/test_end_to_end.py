@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 import bodo.pandas as bd
+from bodo.pandas.utils import BodoLibFallbackWarning
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
@@ -1005,10 +1006,9 @@ def test_series_compound_expression(datapath):
 
 
 def test_map_partitions():
-    """Simple test for map_partition that creates a lazy plan."""
+    """Simple tests for map_partition on lazy DataFrame."""
     df = pd.DataFrame(
         {
-            "B": ["a1", "b11", "c111"] * 2,
             "E": [1.1, 2.2, 13.3] * 2,
             "A": pd.array([2, 2, 3] * 2, "Int64"),
         },
@@ -1025,4 +1025,15 @@ def test_map_partitions():
 
     assert bodo_df2.is_lazy_plan()
 
+    _test_equal(bodo_df2, py_out, check_pandas_types=False)
+
+    # test fallback case for unsupported func
+    # that returns a DataFrame
+    def g(df, a, b=1):
+        return df + a + b
+
+    with pytest.warns(BodoLibFallbackWarning):
+        bodo_df2 = bodo_df.map_partitions(g, 2, b=3)
+
+    py_out = df + 2 + 3
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
