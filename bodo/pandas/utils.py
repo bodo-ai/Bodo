@@ -386,6 +386,13 @@ class LazyPlan:
                 return x
 
         # Convert any LazyPlan in the args or kwargs.
+        # We do this in reverse order because we expect the first arg to be
+        # the source of the plan and for the node being created to take
+        # ownership of that source.  If other args or kwargs reference that
+        # plan then if we process them after we have taken ownership then
+        # we will get nullptr exceptions.  So, process the args that don't
+        # claim ownership first (in the reverse direction) and finally
+        # process the first arg which we expect will take ownership.
         kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
         args = [recursive_check(x) for x in reversed(self.args)]
         args.reverse()
