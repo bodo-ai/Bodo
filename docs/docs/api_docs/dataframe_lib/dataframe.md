@@ -130,6 +130,62 @@ Output:
 
 ---
 
+## bodo.pandas.BodoDataFrame.map_partitions
+``` py
+BodoDataFrame.map_partitions(func, *args, **kwargs) -> BodoSeries | BodoDataFrame
+```
+
+Apply a function to groups of rows in a DataFrame and return a DataFrame or Series of the same size.
+
+<p class="api-header">Parameters</p>
+
+: __func : *Callable*:__ A function that takes in a DataFrame and returns a DataFrame or Series (with the same number of rows). Currently, functions that return a DataFrame will trigger execution, but the function will be evaluated in parallel across all workers.
+
+: __\*args:__ Additional positional arguments to pass to *func*.
+
+: __\*\*kwargs:__ Additional keyword arguments to pass as keyword arguments to *func*.
+
+<p class="api-header">Returns</p>
+
+: __BodoSeries__ or __BodoDataFrame__:  The result of applying *func* to the BodoDataFrame.
+
+<p class="api-header">Example</p>
+
+``` py
+import bodo.pandas as bodo_pd
+import pandas as pd
+
+df = pd.DataFrame(
+    {"foo": range(15), "bar": range(15, 30)}
+   )
+
+bdf = bodo_pd.from_pandas(df)
+
+bdf.map_parititions(lambda df_: df_.foo + df_.bar)
+```
+
+Output:
+```
+0     15
+1     17
+2     19
+3     21
+4     23
+5     25
+6     27
+7     29
+8     31
+9     33
+10    35
+11    37
+12    39
+13    41
+14    43
+dtype: int64[pyarrow]
+```
+
+---
+
 ## Setting DataFrame Columns
 
 Bodo DataFrames support setting columns lazily when the value is a Series created from the same DataFrame or a constant value.

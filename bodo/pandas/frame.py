@@ -554,9 +554,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 empty_series = get_scalar_udf_result_type(
                     self, "map_partitions", func, *args, **kwargs
                 )
-            except BodoLibNotImplementedException:
+            except BodoLibNotImplementedException as e:
                 required_fallback = True
-                msg = ("",)
+                msg = (
+                    f"map_paritions(): encountered exception: {e}, while trying to "
+                    "build lazy plan. Executing plan and running map_paritions on "
+                    "workers (may be slow or run out of memory)."
+                )
                 warnings.warn(BodoLibFallbackWarning(msg))
 
                 df_arg = self.execute_plan()
