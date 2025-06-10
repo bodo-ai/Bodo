@@ -372,7 +372,8 @@ class LazyPlan:
         if cache is None:
             cache = {}
         # If previously converted then use the last result.
-        if id(self) in cache:
+        # Don't cache expression nodes.
+        if "Expression" not in self.plan_class and id(self) in cache:
             return cache[id(self)]
 
         def recursive_check(x):
