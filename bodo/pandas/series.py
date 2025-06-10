@@ -581,6 +581,30 @@ class BodoStringMethods:
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
 
+    @check_args_fallback("none")
+    def cat(self, others=None, sep=None, na_rep=None, join="left"):
+        if others is None:
+            raise BodoLibNotImplementedException(
+                "str.cat(others=None): fallback to Pandas"
+            )
+        series = self._series
+        dtype = pd.ArrowDtype(pa.large_string())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        return _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "str.cat",
+            (),
+            {"others": others, "sep": sep, "na_rep": na_rep, "join": join},
+        )
+
 
 class BodoDatetimeProperties:
     """Support Series.dt datetime accessors same as Pandas."""
@@ -859,6 +883,7 @@ series_str_methods = [
             "zfill",
             "replace",
             "wrap",
+            # "cat",
         ],
         pd.ArrowDtype(pa.large_string()),
     ),
