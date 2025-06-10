@@ -131,6 +131,7 @@ test_map_arg = {
         (("h"), {}),
         (("D"), {}),
     ],
+    "total_seconds": [((), {})],
     # TODO [BSE-4880]: %S prints up to nanoseconds by default, fix this to make the cases below work.
     # "strftime": [
     #     (("%Y-%m-%D %H:%M",), {}),
@@ -151,7 +152,11 @@ def _install_series_dt_tests():
     # Tests Series.dt methods
     for method_pair in dt_methods:
         for method_name in method_pair[0]:
-            test = gen_dt_method_test(method_name, test_map_arg[method_name])
+            if method_name == "total_seconds":
+                # TODO [BSE-4882]: include timedelta method tests in refactored test
+                continue
+            else:
+                test = gen_dt_method_test(method_name, test_map_arg[method_name])
             globals()[f"test_dt_{method_name}"] = test
 
 
