@@ -163,11 +163,7 @@ def test_shuffle_n_samples(nitems, niters, n_samples, memory_leak_check):
     """
 
     def impl(data, n_samples, random_state):
-        out = shuffle(
-            data,
-            n_samples=n_samples,
-            random_state=random_state,
-        )
+        out = shuffle(data, n_samples=n_samples, random_state=random_state)
         return out
 
     dist_impl = bodo.jit(distributed=["data"])(impl)
