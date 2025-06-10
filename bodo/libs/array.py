@@ -26,7 +26,6 @@ from numba.np.arrayobj import _getitem_array_single_int
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import DatetimeTimeDeltaArrayType
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     get_categories_int_type,
@@ -596,7 +595,6 @@ def array_to_info_codegen(context, builder, sig, args):
             DecimalArrayType,
             TimeArrayType,
             DatetimeArrayType,
-            DatetimeTimeDeltaArrayType,
         ),
     ) or arr_type in (
         boolean_array_type,
@@ -613,8 +611,6 @@ def array_to_info_codegen(context, builder, sig, args):
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             np_dtype = types.int8
-        elif isinstance(arr_type, DatetimeTimeDeltaArrayType):
-            np_dtype = types.NPTimedelta("ns")
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
             context, builder, arr.data
         )
@@ -1340,7 +1336,6 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
             DecimalArrayType,
             TimeArrayType,
             DatetimeArrayType,
-            DatetimeTimeDeltaArrayType,
         ),
     ) or arr_type in (
         boolean_array_type,
@@ -1357,8 +1352,6 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         elif arr_type == boolean_array_type:
             # Boolean array stores bits so we can't use boolean.
             np_dtype = types.uint8
-        elif isinstance(arr_type, DatetimeTimeDeltaArrayType):
-            np_dtype = types.NPTimedelta("ns")
         data_arr_type = types.Array(np_dtype, 1, "C")
         data_arr = context.make_array(data_arr_type)(context, builder)
         nulls_arr_type = types.Array(types.uint8, 1, "C")
