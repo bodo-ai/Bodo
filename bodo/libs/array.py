@@ -106,7 +106,6 @@ ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
 ll.add_symbol("info_to_null_array", array_ext.info_to_null_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
 ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
-ll.add_symbol("info_to_timedelta_array", array_ext.info_to_timedelta_array)
 ll.add_symbol("info_to_timestamptz_array", array_ext.info_to_timestamptz_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol(
@@ -172,7 +171,6 @@ ll.add_symbol(
     "BODO_NRT_MemInfo_alloc_safe_aligned", array_ext.NRT_MemInfo_alloc_safe_aligned
 )
 ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
-ll.add_symbol("timedelta_array_to_info", array_ext.timedelta_array_to_info)
 
 
 # Sentinal for field names when converting tuple arrays to struct arrays (workaround
@@ -615,6 +613,8 @@ def array_to_info_codegen(context, builder, sig, args):
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             np_dtype = types.int8
+        elif isinstance(arr_type, DatetimeTimeDeltaArrayType):
+            np_dtype = types.NPTimedelta("ns")
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
             context, builder, arr.data
         )
@@ -1340,6 +1340,7 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
             DecimalArrayType,
             TimeArrayType,
             DatetimeArrayType,
+            DatetimeTimeDeltaArrayType,
         ),
     ) or arr_type in (
         boolean_array_type,
@@ -1356,6 +1357,8 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         elif arr_type == boolean_array_type:
             # Boolean array stores bits so we can't use boolean.
             np_dtype = types.uint8
+        elif isinstance(arr_type, DatetimeTimeDeltaArrayType):
+            np_dtype = types.NPTimedelta("ns")
         data_arr_type = types.Array(np_dtype, 1, "C")
         data_arr = context.make_array(data_arr_type)(context, builder)
         nulls_arr_type = types.Array(types.uint8, 1, "C")
