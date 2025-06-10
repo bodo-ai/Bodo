@@ -167,7 +167,6 @@ def test_shuffle_n_samples(nitems, niters, n_samples, memory_leak_check):
             data,
             n_samples=n_samples,
             random_state=random_state,
-            _is_data_distributed=True,
         )
         return out
 
