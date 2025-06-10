@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 import bodo.pandas as bd
@@ -24,32 +25,21 @@ def _generate_series_accessor_test(name, df, accessor):
             bodo_accessor = getattr(bodo_obj, name)
 
             assert bodo_accessor.is_lazy_plan()
-            try:
-                _test_equal(pd_accessor, bodo_accessor, check_pandas_types=False)
-            except AssertionError as e:
-                """
-                Exception case handler: currently Series.BodoDateTimeProperties.is_<something> returns <NA> values for NaT inputs, 
-                while Pandas returns False. Also, date and time returns a non-ExtensionArray type, which causes _test_equal to fail. 
-                In these cases, we print out the outputs Bodo vs. Pandas for manual inspection. 
-                """
-                if name in [
-                    "is_month_start",
-                    "is_month_end",
-                    "is_quarter_start",
-                    "is_quarter_end",
-                    "is_year_start",
-                    "is_year_end",
-                    "is_leap_year",
-                    "date",
-                    "time",
-                ]:  # Exception list
-                    print(
-                        f"Outputs may or may not differ, manually compare: \nPandas:\n{pd_accessor}\nBodo:\n{bodo_accessor}"
+            """
+            Exception case handler: some methods return values that trivially differ from Pandas. 
+            In these cases, we compare the Bodo output with the reference outputs in the expected_results list. 
+            """
+            if name in expected_results:
+                expected_result = lookup_result(name, (), {}, col)
+                if expected_result is not None:
+                    _test_equal(
+                        bodo_accessor,
+                        expected_result,
+                        check_pandas_types=False,
+                        check_names=False,
                     )
-                    print("Terminating loop...\n")
-                    break
-                else:
-                    raise AssertionError(e)
+                    continue
+            _test_equal(pd_accessor, bodo_accessor, check_pandas_types=False)
 
     return test_func
 
@@ -82,44 +72,193 @@ def _generate_series_test(name, df, arg_sets, accessor=None):
             pd_func = getattr(pd_obj, name)
             bodo_func = getattr(bodo_obj, name)
 
-            pd_error, bodo_error = (False, None), (False, None)
+            pd_error, bodo_error = False, False
 
             try:
                 out_pd = pd_func(*args, **kwargs)
-            except Exception as e:
-                pd_error = (True, e)
+            except Exception:
+                pd_error = True
             try:
                 out_bodo = bodo_func(*args, **kwargs)
                 assert out_bodo.is_lazy_plan()
                 out_bodo.execute_plan()
-            except Exception as e:
-                bodo_error = (True, e)
+            except Exception:
+                bodo_error = True
 
-            assert pd_error[0] == bodo_error[0]
-            if pd_error[0]:
-                return
+            # Pandas and Bodo should behave the same way
+            assert pd_error == bodo_error
+            if pd_error:
+                continue
 
-            try:
-                _test_equal(out_bodo, out_pd, check_pandas_types=False)
-            except AssertionError as e:
-                """
-                Exception case handler: currently month_name and day_name with locale arg
-                returns outputs that trivially differ from Pandas. Also, partition and rpartition returns same outputs, but 
-                with different index types causing the equality test to fail. 
-                In this case, we print out the outputs Bodo vs. Pandas for manual inspection. 
-                """
-                if name in [
-                    "partition",
-                    "rpartition",
-                    "month_name",
-                    "day_name",
-                ]:  # Exception list
-                    print(
-                        f"Outputs may or may not differ, manually compare: \nPandas:\n{out_pd}\nBodo:\n{out_bodo}"
+            """
+            Exception case handler: some methods return values that trivially differ from Pandas. 
+            In these cases, we compare the Bodo output with the reference outputs in the expected_results list. 
+            """
+            if name in expected_results:
+                expected_result = lookup_result(name, args, kwargs, col)
+                if expected_result is not None:
+                    _test_equal(
+                        out_bodo,
+                        expected_result,
+                        check_pandas_types=False,
+                        check_names=False,
                     )
-                    print("Terminating loop...\n")
-                    break
-                else:
-                    raise AssertionError(e)
+                    continue
+            _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
     return test_func
+
+
+"""
+Below are expected results, which we compare our out_bodo results against
+for cases where out_bodo and out_pd have trivial differences. 
+"""
+partition_res = pd.DataFrame(
+    {
+        "0": ["Apple", "Banana", None, None, "App", "B", " E", "Do"],
+        "1": ["", "", None, None, "-", "-", "-", "-"],
+        "2": ["", "", None, None, "le", "anan-a", "xc i-ted ", "g"],
+    }
+)
+rpartition_res = pd.DataFrame(
+    {
+        "0": ["", "", None, None, "App", "B-anan", " E-xc i", "Do"],
+        "1": ["", "", None, None, "-", "-", "-", "-"],
+        "2": ["Apple", "Banana", None, None, "le", "a", "ted ", "g"],
+    }
+)
+
+month_name_res_fr_A = pd.Series(
+    [
+        "janvier",
+        "février",
+        "mars",
+        "avril",
+        "mai",
+        "juin",
+        "juillet",
+        "août",
+        "septembre",
+        "octobre",
+    ]
+)
+month_name_res_fr_BC = pd.Series(
+    [
+        "décembre",
+        "décembre",
+        "décembre",
+        "décembre",
+        "décembre",
+        "décembre",
+        "décembre",
+        "décembre",
+        "décembre",
+        "décembre",
+    ]
+)
+
+day_name_res_pt_A = pd.Series(
+    [
+        "Terça Feira",
+        "Sexta Feira",
+        "Sexta Feira",
+        "Segunda Feira",
+        "Quarta Feira",
+        "Sábado",
+        "Segunda Feira",
+        "Quinta Feira",
+        "Domingo",
+        "Terça Feira",
+    ]
+)
+day_name_res_pt_B = pd.Series(
+    [
+        "Quinta Feira",
+        "Quinta Feira",
+        "Quinta Feira",
+        "Quinta Feira",
+        "Quinta Feira",
+        "Quinta Feira",
+        "Quinta Feira",
+        "Quinta Feira",
+        "Quinta Feira",
+        "Quinta Feira",
+    ]
+)
+day_name_res_pt_C = pd.Series(
+    [
+        "Sexta Feira",
+        "Domingo",
+        "Segunda Feira",
+        "Terça Feira",
+        "Quarta Feira",
+        "Sexta Feira",
+        "Sábado",
+        "Domingo",
+        "Segunda Feira",
+        "Quarta Feira",
+    ]
+)
+
+null_array = pd.Series(
+    [pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA]
+)
+
+
+expected_results = {
+    "partition": [
+        ((), {"sep": "-", "expand": True}, "A", partition_res),
+        ((), {"sep": "-"}, "A", partition_res),
+    ],
+    "rpartition": [
+        ((), {"sep": "-", "expand": True}, "A", rpartition_res),
+        ((), {"sep": "-"}, "A", rpartition_res),
+    ],
+    "month_name": [
+        ((), {"locale": "fr_FR.UTF-8"}, "A", month_name_res_fr_A),
+        ((), {"locale": "fr_FR.UTF-8"}, "B", month_name_res_fr_BC),
+        ((), {"locale": "fr_FR.UTF-8"}, "C", month_name_res_fr_BC),
+    ],
+    "day_name": [
+        ((), {"locale": "pt_BR.UTF-8"}, "A", day_name_res_pt_A),
+        ((), {"locale": "pt_BR.UTF-8"}, "B", day_name_res_pt_B),
+        ((), {"locale": "pt_BR.UTF-8"}, "C", day_name_res_pt_C),
+    ],
+    "is_month_start": [
+        ((), {}, "D", null_array),
+    ],
+    "is_month_end": [
+        ((), {}, "D", null_array),
+    ],
+    "is_quarter_start": [
+        ((), {}, "D", null_array),
+    ],
+    "is_quarter_end": [
+        ((), {}, "D", null_array),
+    ],
+    "is_year_start": [
+        ((), {}, "D", null_array),
+    ],
+    "is_year_end": [
+        ((), {}, "D", null_array),
+    ],
+    "is_leap_year": [
+        ((), {}, "D", null_array),
+    ],
+    "date": [
+        ((), {}, "D", null_array),
+    ],
+    "time": [
+        ((), {}, "D", null_array),
+    ],
+}
+
+
+def lookup_result(name, args, kwargs, col):
+    """Look up expected result using method name, args, kwargs, and col name."""
+    for expected_args, expected_kwargs, expected_col, result in expected_results.get(
+        name, []
+    ):
+        if args == expected_args and kwargs == expected_kwargs and col == expected_col:
+            return result
+    return None
