@@ -97,6 +97,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.lower`][bodoseriesstrlower]
 - [`bodo.pandas.BodoSeries.str.lstrip`][bodoseriesstrlstrip]
 - [`bodo.pandas.BodoSeries.str.match`][bodoseriesstrmatch]
+- [`bodo.pandas.BodoSeries.str.normalize`][bodoseriesstrnormalize]
 - [`bodo.pandas.BodoSeries.str.pad`][bodoseriesstrpad]
 - [`bodo.pandas.BodoSeries.str.partition`][bodoseriesstrpartition]
 - [`bodo.pandas.BodoSeries.str.removeprefix`][bodoseriesstrremoveprefix]
@@ -218,3 +219,4 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesstrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.partition.html
 [bodoseriesstrrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rpartition.html
 [bodoseriesdtquarter]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.quarter.html
+[bodoseriesstrnormalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.normalize.html

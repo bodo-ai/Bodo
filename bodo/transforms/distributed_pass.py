@@ -718,7 +718,7 @@ class DistributedPass:
                 return [assign]
 
         if (
-            func_mod == "sklearn.utils"
+            func_mod in ("sklearn.utils", "sklearn.utils._indexing")
             and func_name == "shuffle"
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
