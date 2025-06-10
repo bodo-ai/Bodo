@@ -5,7 +5,6 @@ import numbers
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
-from copy import deepcopy
 
 import pandas as pd
 import pyarrow as pa
@@ -117,7 +116,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(empty_data, pd.Series), "_cmp_method: Series expected"
 
         # Extract argument expressions
-        lhs = deepcopy(get_proj_expr_single(self._plan))
+        lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
         expr = LazyPlan(
             "ComparisonOpExpression",
