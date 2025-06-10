@@ -2785,8 +2785,7 @@ def test_send_recv(val):
 
         return None
 
-    expected_out = val if bodo.get_rank() == recv_rank else None
-    check_func(impl, (val, recv_rank, send_rank), py_output=expected_out)
+    check_func(impl, (val, recv_rank, send_rank))
 
 
 @pytest.mark.slow
