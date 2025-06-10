@@ -337,7 +337,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Only selecting columns or filtering with BodoSeries is supported
         if not isinstance(key, BodoSeries):
             raise BodoLibNotImplementedException(
-                "only string and BodoSeries keys are supported"
+                "only BodoSeries keys are supported"
             )
 
         zero_size_self = _empty_like(self)
