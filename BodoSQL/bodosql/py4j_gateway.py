@@ -36,8 +36,8 @@ def get_java_path() -> str:
             if java_home != os.path.join(conda_prefix, "lib", "jvm"):
                 warnings.warn(
                     "$JAVA_HOME is currently set to a location that isn't installed by Conda. "
-                    "It is recommended that you use OpenJDK v11 from Conda with BodoSQL. To do so, first run\n"
-                    "    conda install openjdk=11 -c conda-forge\n"
+                    "It is recommended that you use OpenJDK v17 from Conda with BodoSQL. To do so, first run\n"
+                    "    conda install openjdk=17 -c conda-forge\n"
                     "and then reactivate your environment via\n"
                     f"    conda deactivate && conda activate {conda_prefix}"
                 )
@@ -46,8 +46,8 @@ def get_java_path() -> str:
         else:
             warnings.warn(
                 "$JAVA_HOME is currently unset. This occurs when OpenJDK is not installed in your conda environment or when your environment has recently changed by not reactivates. BodoSQL will default to using you system's Java."
-                "It is recommended that you use OpenJDK v11 from Conda with BodoSQL. To do so, first run\n"
-                "    conda install openjdk=11 -c conda-forge\n"
+                "It is recommended that you use OpenJDK v17 from Conda with BodoSQL. To do so, first run\n"
+                "    conda install openjdk=17 -c conda-forge\n"
                 "and then reactivate your environment via\n"
                 f"    conda deactivate && conda activate {conda_prefix}"
             )
@@ -98,6 +98,8 @@ def get_gateway():
                     die_on_exit=True,
                     redirect_stdout=out_fd,
                     redirect_stderr=err_fd,
+                    # Required by Arrow: https://arrow.apache.org/docs/java/install.html
+                    javaopts=["--add-opens=java.base/java.nio=ALL-UNNAMED"],
                 ),
             )
             gateway = JavaGateway(gateway_parameters=GatewayParameters(port=port_no))

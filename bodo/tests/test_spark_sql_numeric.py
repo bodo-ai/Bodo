@@ -51,7 +51,7 @@ def test_factorial(dataframe_val, memory_leak_check):
         return df.A.map(lambda x: math.factorial(x))
 
     def test_impl2(df):
-        return df.A.map(lambda x: np.math.factorial(x))
+        return df.A.map(lambda x: math.factorial(x))
 
     def test_impl3(df):
         return df.A.map(lambda x: scipy.special.factorial(x, True))

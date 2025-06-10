@@ -895,6 +895,8 @@ def test_dataframe_sort(datapath):
         by=["D", "A"], ascending=[True, False], na_position="last"
     )
 
+    assert bodo_df2.is_lazy_plan()
+
     _test_equal(
         bodo_df2,
         py_df2,
@@ -913,6 +915,8 @@ def test_series_sort(datapath):
     py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
     py_df2 = py_df1["D"]
     py_df3 = py_df2.sort_values(ascending=False, na_position="last")
+
+    assert bodo_df3.is_lazy_plan()
 
     _test_equal(
         bodo_df3,
