@@ -1,79 +1,27 @@
 import re
 
 import pandas as pd
-import pytest
-
-import bodo.pandas as bd
-from bodo.tests.utils import _test_equal
+from test_series_generator import _generate_series_test
 
 
-def gen_str_param_test(name, arg_sets):
-    """
-    Generates a parameterized test case for Series.str.<name> method.
-    """
-
-    @pytest.mark.parametrize(
-        "args, kwargs",
-        arg_sets,
-        ids=[
-            f"{name}-args{args}-kwargs{sorted(kwargs.items())}"
-            for args, kwargs in arg_sets
-        ],
-    )
-    def test_func(args, kwargs):
-        df = pd.DataFrame(
-            {
-                "A": [
-                    "Apple",
-                    "Banana",
-                    None,
-                    None,
-                    "App-le",
-                    "B-anan-a",
-                    " E-xc i-ted ",
-                    "Do-g",
-                ],
-            }
+def _install_series_str_tests():
+    """Install Series.str tests."""
+    # Tests Series.str methods with arguments
+    for method_name in test_map_arg:
+        test = _generate_series_test(
+            method_name,
+            exception_dfmap.get(method_name, df),
+            test_map_arg[method_name],
+            accessor="str",
         )
-        bdf = bd.from_pandas(df)
+        globals()[f"test_{method_name}"] = test
 
-        pd_func = getattr(df.A.str, name)
-        bodo_func = getattr(bdf.A.str, name)
-        pd_error, bodo_error = (False, None), (False, None)
-
-        # Pandas and Bodo methods should have identical behavior
-        try:
-            out_pd = pd_func(*args, **kwargs)
-        except Exception as e:
-            pd_error = (True, e)
-        try:
-            out_bodo = bodo_func(*args, **kwargs)
-            assert out_bodo.is_lazy_plan()
-            out_bodo.execute_plan()
-        except Exception as e:
-            bodo_error = (True, e)
-
-        # Precise types of Exceptions might differ
-        assert pd_error[0] == bodo_error[0]
-        if pd_error[0]:
-            return
-
-        try:
-            _test_equal(out_bodo, out_pd, check_pandas_types=False)
-        except AssertionError as e:
-            """
-            Exception case handler: currently partition and rpartition returns same outputs, but 
-            with different index types causing the equality test to fail. 
-            In this case, we print out the outputs Bodo vs. Pandas for manual inspection. 
-            """
-            if name in ["partition", "rpartition"]:  # Exception list
-                print(
-                    f"Outputs may or may not differ, manually compare: \nPandas:\n{out_pd}\nBodo:\n{out_bodo}"
-                )
-            else:
-                raise AssertionError(e)
-
-    return test_func
+    # Tests Series.str methods that require no arguments
+    for method_name in test_map_no_arg:
+        test = _generate_series_test(
+            method_name, exception_dfmap.get(method_name, df), empty_arg, accessor="str"
+        )
+        globals()[f"test_{method_name}"] = test
 
 
 # Maps method name to test case for pytest param
@@ -213,6 +161,10 @@ test_map_arg = {
         ((), {"sep": "-", "expand": True}),
         ((), {"sep": "-"}),
     ],
+    "normalize": [
+        (("NFC"), {}),
+        (("NFD"), {}),
+    ],
 }
 
 # List of methods that do not take in arguments
@@ -235,18 +187,35 @@ test_map_no_arg = [
     "len",
 ]
 
+df = pd.DataFrame(
+    {
+        "A": [
+            "Apple",
+            "Banana",
+            None,
+            None,
+            "App-le",
+            "B-anan-a",
+            " E-xc i-ted ",
+            "Do-g",
+        ],
+    }
+)
 
-def _install_series_str_tests():
-    """Install Series.str tests."""
-    # Tests Series.str methods with arguments
-    for method_name in test_map_arg:
-        test = gen_str_param_test(method_name, test_map_arg[method_name])
-        globals()[f"test_auto_{method_name}"] = test
+df_normalize = pd.DataFrame(
+    {
+        "A": ["ñ", "ñ", "n\u0303"],
+        "B": ["Amélie", "Am\u00e9lie", "Am\u0065\u0301lie"],
+        "C": ["\u00f1", "\u006e\u0303", "ñ"],
+        "D": ["ñ", "ñ", None],
+    }
+)
 
-    # Tests Series.str methods that require no arguments
-    for method_name in test_map_no_arg:
-        test = gen_str_param_test(method_name, [((), {})])
-        globals()[f"test_auto_{method_name}"] = test
+# Stores customized DataFrames for some methods. Could enable testing with closer customization to each method.
+exception_dfmap = {
+    "normalize": df_normalize,
+}
 
+empty_arg = [((), {})]
 
 _install_series_str_tests()

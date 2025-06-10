@@ -1,61 +1,12 @@
 import pandas as pd
-import pytest
-
-import bodo.pandas as bd
-from bodo.tests.utils import _test_equal
+from test_series_generator import _generate_series_test
 
 
-def gen_direct_series_test(name, arg_sets):
-    """
-    Generates a parameterized test case for direct Series.<name> method.
-    """
-
-    @pytest.mark.parametrize(
-        "args, kwargs",
-        arg_sets,
-        ids=[
-            f"{name}-args{args}-kwargs{sorted(kwargs.items())}"
-            for args, kwargs in arg_sets
-        ],
-    )
-    def test_func(args, kwargs):
-        df = pd.DataFrame(
-            {
-                "A": pd.array([1.445, 2.12, None, -4.133], dtype="Float64"),
-                "B": pd.array([1, 2, 3, 4], dtype="Int64"),
-            }
-        )
-        bdf = bd.from_pandas(df)
-
-        keys = ["A", "B"]
-
-        for key in keys:
-            pd_obj = getattr(df, key)
-            bodo_obj = getattr(bdf, key)
-
-            pd_func = getattr(pd_obj, name)
-            bodo_func = getattr(bodo_obj, name)
-
-            pd_error, bodo_error = (False, None), (False, None)
-
-            try:
-                out_pd = pd_func(*args, **kwargs)
-            except Exception as e:
-                pd_error = (True, e)
-            try:
-                out_bodo = bodo_func(*args, **kwargs)
-                assert out_bodo.is_lazy_plan()
-                out_bodo.execute_plan()
-            except Exception as e:
-                bodo_error = (True, e)
-
-            assert pd_error[0] == bodo_error[0]
-            if pd_error[0]:
-                return
-
-            _test_equal(out_bodo, out_pd, check_pandas_types=False)
-
-    return test_func
+def _install_series_direct_tests():
+    """Installs tests for direct Series.<method> methods."""
+    for method_name, arg_sets in test_map_arg_direct.items():
+        test = _generate_series_test(method_name, df, arg_sets)
+        globals()[f"test_dir_{method_name}"] = test
 
 
 test_map_arg_direct = {
@@ -87,12 +38,11 @@ test_map_arg_direct = {
     "abs": [((), {})],
 }
 
-
-def _install_series_direct_tests():
-    """Installs tests for direct Series.<method> methods."""
-    for method_name, arg_sets in test_map_arg_direct.items():
-        test = gen_direct_series_test(method_name, arg_sets)
-        globals()[f"test_dir_{method_name}"] = test
-
+df = pd.DataFrame(
+    {
+        "A": pd.array([1.445, 2.12, None, -4.133], dtype="Float64"),
+        "B": pd.array([1, 2, 3, 4], dtype="Int64"),
+    }
+)
 
 _install_series_direct_tests()
