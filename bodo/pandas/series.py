@@ -356,7 +356,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if isinstance(zero_size_index, pd.RangeIndex) and not isinstance(
             empty_data_index, pd.RangeIndex
         ):
-            # Drop the explicit index.
+            # Drop the explicit integer Index generated from filtering RangeIndex (TODO: support RangeIndex properly).
             empty_data.reset_index(drop=True, inplace=True)
         return wrap_plan(
             plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
