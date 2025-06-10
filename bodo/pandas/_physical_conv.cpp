@@ -211,10 +211,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
     this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
 
     ParquetWriteFunctionData& pq_data =
         op.bind_data->Cast<ParquetWriteFunctionData>();
-    auto physical_op = std::make_shared<PhysicalWriteParquet>(pq_data);
+    auto physical_op =
+        std::make_shared<PhysicalWriteParquet>(in_table_schema, pq_data);
 
     finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
     this->active_pipeline = nullptr;
