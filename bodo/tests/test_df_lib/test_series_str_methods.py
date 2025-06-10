@@ -165,6 +165,19 @@ test_map_arg = {
         (("NFC"), {}),
         (("NFD"), {}),
     ],
+    "cat": [
+        (
+            (),
+            {"sep": "+", "others": pd.Series(["A", "B", "C", "A", "B", "C", "A", "B"])},
+        ),
+        (
+            (),
+            {
+                "sep": " From ",
+                "others": pd.Series(["NY", "TX", "CA", "NY", "TX", "CA", "NY", "TX"]),
+            },
+        ),
+    ],
 }
 
 # List of methods that do not take in arguments

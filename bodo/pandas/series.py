@@ -583,6 +583,11 @@ class BodoStringMethods:
 
     @check_args_fallback("none")
     def cat(self, others=None, sep=None, na_rep=None, join="left"):
+        """
+        If others is specified, concatenates the Series and elements of others
+        element-wise and returns a Series. If others is not passed, then falls back to
+        Pandas, and all values in the Series are concatenated into a single string with a given sep.
+        """
         if others is None:
             raise BodoLibNotImplementedException(
                 "str.cat(others=None): fallback to Pandas"
@@ -850,6 +855,7 @@ def gen_method(name, return_type, is_method=True, accessor_type=""):
             series._plan, new_metadata, accessor_type + name, args, kwargs
         )
 
+    method.__name__ = name
     return method
 
 
