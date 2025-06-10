@@ -209,10 +209,8 @@ def test_projection(datapath):
     "file_path",
     [
         "dataframe_library/df1.parquet",
-        pytest.param("dataframe_library/df1_index.parquet", marks=pytest.mark.skip),
-        pytest.param(
-            "dataframe_library/df1_multi_index.parquet", marks=pytest.mark.skip
-        ),
+        "dataframe_library/df1_index.parquet",
+        "dataframe_library/df1_multi_index.parquet",
     ],
 )
 @pytest.mark.parametrize(
@@ -222,7 +220,7 @@ def test_filter_pushdown(datapath, file_path, op):
     """Test for filter with filter pushdown into read parquet."""
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df1 = bd.read_parquet(datapath(file_path))
     bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
     # Make sure bodo_df2 is unevaluated at this point.
@@ -247,12 +245,20 @@ def test_filter_pushdown(datapath, file_path, op):
 
 @pytest_mark_spawn_mode
 @pytest.mark.parametrize(
+    "file_path",
+    [
+        "dataframe_library/df1.parquet",
+        "dataframe_library/df1_index.parquet",
+        "dataframe_library/df1_multi_index.parquet",
+    ],
+)
+@pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-def test_filter_distributed(datapath, op):
+def test_filter_distributed(datapath, file_path, op):
     """Very simple test for filter for sanity checking."""
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df1 = bd.read_parquet(datapath(file_path))
+    py_df1 = pd.read_parquet(datapath(file_path))
 
     @bodo.jit(spawn=True)
     def f(df):
@@ -274,7 +280,7 @@ def test_filter_distributed(datapath, op):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -309,7 +315,7 @@ def test_filter(datapath, op):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
