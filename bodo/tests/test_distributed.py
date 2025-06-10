@@ -2756,18 +2756,13 @@ def test_send_recv(val):
 
     if bodo.get_size() == 1:
         return
-    np.random.seed(np.uint64(hash(val)).astype(np.uint32))
-    send_rank = np.random.randint(bodo.get_size())
-    recv_rank = np.random.randint(bodo.get_size())
-    # make sure send_rank != recv_rank
-    if send_rank == recv_rank:
-        if send_rank == 0:
-            recv_rank = 1
-        else:
-            recv_rank = send_rank - 1
-    assert send_rank != recv_rank
-    print(f"send_rank: {send_rank}")
-    print(f"recv_rank: {recv_rank}")
+
+    if val:
+        send_rank = 0
+        recv_rank = 1
+    else:
+        send_rank = 1
+        recv_rank = 0
 
     send_type = bodo.typeof(val)
 
@@ -2783,7 +2778,10 @@ def test_send_recv(val):
 
         return None
 
-    check_func(impl, (val, recv_rank, send_rank))
+    expected_out = val if bodo.get_rank() == recv_rank else None
+    check_func(
+        impl, (val, recv_rank, send_rank), py_output=expected_out, only_1DVar=True
+    )
 
 
 @pytest.mark.slow
