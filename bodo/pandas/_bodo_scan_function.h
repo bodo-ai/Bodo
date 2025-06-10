@@ -217,3 +217,41 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
     const std::string table_id;
     const int64_t snapshot_id;
 };
+
+/**
+ * @brief Data for writing Parquet datasets
+ *
+ */
+struct ParquetWriteFunctionData : public duckdb::FunctionData {
+    ParquetWriteFunctionData(std::string path,
+                             std::vector<std::string> col_names,
+                             std::string compression, std::string bucket_region,
+                             int64_t row_group_size)
+        : path(std::move(path)),
+          col_names(std::move(col_names)),
+          compression(std::move(compression)),
+          bucket_region(std::move(bucket_region)),
+          row_group_size(row_group_size) {}
+
+    bool Equals(const FunctionData &other_p) const override {
+        const ParquetWriteFunctionData &other =
+            other_p.Cast<ParquetWriteFunctionData>();
+        return (other.path == this->path &&
+                other.col_names == this->col_names &&
+                other.compression == this->compression &&
+                other.bucket_region == this->bucket_region &&
+                other.row_group_size == this->row_group_size);
+    }
+
+    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
+        return duckdb::make_uniq<ParquetWriteFunctionData>(
+            this->path, this->col_names, this->compression, this->bucket_region,
+            this->row_group_size);
+    }
+
+    std::string path;
+    std::vector<std::string> col_names;
+    std::string compression;
+    std::string bucket_region;
+    int64_t row_group_size;
+};

@@ -26,6 +26,7 @@
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
+#include "duckdb/planner/operator/logical_copy_to_file.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_limit.hpp"
@@ -580,6 +581,11 @@ std::pair<int64_t, PyObject *> execute_plan(
     Executor executor(std::move(plan), out_schema);
     std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
 
+    // Write doesn't return data
+    if (output_table == nullptr) {
+        return {0, nullptr};
+    }
+
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
@@ -617,6 +623,29 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     }
 
     return out_get;
+}
+
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, std::string path,
+    std::vector<std::string> col_names, std::string compression,
+    std::string bucket_region, int64_t row_group_size) {
+    auto source_duck = to_duckdb(source);
+
+    duckdb::CopyFunction copy_function =
+        duckdb::CopyFunction("bodo_parquet_write");
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data =
+        duckdb::make_uniq<ParquetWriteFunctionData>(
+            path, col_names, compression, bucket_region, row_group_size);
+
+    duckdb::unique_ptr<duckdb::LogicalCopyToFile> copy_node =
+        duckdb::make_uniq<duckdb::LogicalCopyToFile>(
+            copy_function, std::move(bind_data),
+            duckdb::make_uniq<duckdb::CopyInfo>());
+
+    copy_node->return_type = duckdb::CopyFunctionReturnType::CHANGED_ROWS;
+    copy_node->AddChild(std::move(source_duck));
+
+    return copy_node;
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
