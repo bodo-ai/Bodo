@@ -186,6 +186,35 @@ def test_read_parquet_series_len_shape(datapath):
     assert bodo_out.is_lazy_plan()
 
 
+def test_write_parquet(index_val):
+    """Test writing a DataFrame to parquet."""
+    df = pd.DataFrame(
+        {
+            "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+            "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
+            "three": [True, False, True, True, True, False, False],
+            "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
+            "five": ["foo", "bar", "baz", None, "bar", "baz", "foo"],
+        }
+    )
+    df.index = index_val[: len(df)]
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "test_write.parquet")
+
+        bodo_df = bd.from_pandas(df)
+        bodo_df.to_parquet(path)
+
+        # Read back to check
+        py_out = pd.read_parquet(path)
+        _test_equal(
+            py_out,
+            df,
+            check_pandas_types=False,
+            sort_output=True,
+            reset_index=True,
+        )
+
+
 def test_projection(datapath):
     """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
