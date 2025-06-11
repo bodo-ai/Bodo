@@ -559,14 +559,19 @@ class BodoStringMethods:
 
     def __init__(self, series):
         self._series = series
-
-        # Validates series type
-        if not (
+        self._is_string = (
             isinstance(series, BodoSeries)
             and isinstance(series.dtype, pd.ArrowDtype)
             and series.dtype.type is str
-        ):
-            raise AttributeError("Can only use .str accessor with string values!")
+        )
+
+        # Validates series type
+        # if not (
+        #     isinstance(series, BodoSeries)
+        #     and isinstance(series.dtype, pd.ArrowDtype)
+        #     and series.dtype.type is str
+        # ):
+        #     raise AttributeError("Can only use .str accessor with string values!")
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
@@ -580,6 +585,30 @@ class BodoStringMethods:
             )
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
+
+    def join(self, sep):
+        def join_list(l):
+            try:
+                return sep.join(l)
+            except Exception:
+                return None
+
+        if not self._is_string:
+            return self._series.map(join_list)
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.large_string())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        return _get_series_python_func_plan(
+            series._plan, new_metadata, "str.join", (sep), {}
+        )
 
 
 class BodoDatetimeProperties:
@@ -1068,3 +1097,7 @@ _install_series_dt_accessors()
 _install_series_dt_methods()
 _install_series_str_methods()
 _install_str_partitions()
+
+
+# dec = forbid_nonstring_types()
+# setattr(BodoStringMethods, 'join', )

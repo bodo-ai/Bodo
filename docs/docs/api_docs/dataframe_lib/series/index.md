@@ -74,6 +74,9 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 - [`bodo.pandas.BodoSeries.str.capitalize`][bodoseriesstrcapitalize]
 - [`bodo.pandas.BodoSeries.str.casefold`][bodoseriesstrcasefold]
+- [`bodo.pandas.BodoSeries.str.cat`][bodoseriesstrcat]
+!!! note
+	If others is not provided `(others=None)`, `BodoSeries.str.cat()` will fall back to Pandas.
 - [`bodo.pandas.BodoSeries.str.center`][bodoseriesstrcenter]
 - [`bodo.pandas.BodoSeries.str.contains`][bodoseriesstrcontains]
 - [`bodo.pandas.BodoSeries.str.count`][bodoseriesstrcount]
@@ -220,3 +223,5 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesstrrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rpartition.html
 [bodoseriesdtquarter]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.quarter.html
 [bodoseriesstrnormalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.normalize.html
+
+[bodoseriesstrcat]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.cat.html
