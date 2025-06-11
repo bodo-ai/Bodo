@@ -15,7 +15,8 @@ class PhysicalWriteParquet : public PhysicalSink {
         : path(std::move(bind_data.path)),
           compression(std::move(bind_data.compression)),
           row_group_size(bind_data.row_group_size),
-          bucket_region(std::move(bind_data.bucket_region)) {
+          bucket_region(std::move(bind_data.bucket_region)),
+          col_names(std::move(bind_data.col_names)) {
         // Similar to streaming parquet write in Bodo JIT
         // https://github.com/bodo-ai/Bodo/blob/9902c4bd19f0c1f85ef0c971c58e42cf84a35fc7/bodo/io/stream_parquet_write.py#L269
 
@@ -59,7 +60,7 @@ class PhysicalWriteParquet : public PhysicalSink {
 
             if (data->nrows() > 0) {
                 std::shared_ptr<arrow::Table> arrow_table =
-                    bodo_table_to_arrow(data);
+                    bodo_table_to_arrow(data, col_names);
 
                 std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
                 for (auto& col : data->columns) {
@@ -93,6 +94,7 @@ class PhysicalWriteParquet : public PhysicalSink {
     const std::string compression;
     const int64_t row_group_size;
     const std::string bucket_region;
+    std::vector<std::string> col_names;
     std::shared_ptr<TableBuildBuffer> buffer;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     std::shared_ptr<IsLastState> is_last_state;
