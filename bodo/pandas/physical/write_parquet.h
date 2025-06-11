@@ -16,7 +16,9 @@ class PhysicalWriteParquet : public PhysicalSink {
           compression(std::move(bind_data.compression)),
           row_group_size(bind_data.row_group_size),
           bucket_region(std::move(bind_data.bucket_region)),
-          arrow_schema(std::move(bind_data.arrow_schema)) {
+          arrow_schema(std::move(bind_data.arrow_schema)),
+          is_last_state(std::make_shared<IsLastState>()),
+          finished(false) {
         // Similar to streaming parquet write in Bodo JIT
         // https://github.com/bodo-ai/Bodo/blob/9902c4bd19f0c1f85ef0c971c58e42cf84a35fc7/bodo/io/stream_parquet_write.py#L269
 
@@ -28,9 +30,6 @@ class PhysicalWriteParquet : public PhysicalSink {
                 create_dict_builder_for_array(col->copy(), false));
         }
         buffer = std::make_shared<TableBuildBuffer>(in_schema, dict_builders);
-
-        is_last_state = std::make_shared<IsLastState>();
-        finished = false;
     }
 
     virtual ~PhysicalWriteParquet() = default;
@@ -98,12 +97,12 @@ class PhysicalWriteParquet : public PhysicalSink {
     const std::string compression;
     const int64_t row_group_size;
     const std::string bucket_region;
-    std::shared_ptr<arrow::Schema> arrow_schema;
+    const std::shared_ptr<arrow::Schema> arrow_schema;
     std::shared_ptr<TableBuildBuffer> buffer;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    std::shared_ptr<IsLastState> is_last_state;
+    const std::shared_ptr<IsLastState> is_last_state;
     bool finished = false;
-    int64_t chunk_size = get_parquet_chunk_size();
+    const int64_t chunk_size = get_parquet_chunk_size();
     int64_t iter = 0;
 
     // Generate a Parquet file name prefix for each iteration in such a way that
