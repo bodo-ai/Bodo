@@ -224,11 +224,11 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
  */
 struct ParquetWriteFunctionData : public duckdb::FunctionData {
     ParquetWriteFunctionData(std::string path,
-                             std::vector<std::string> col_names,
+                             std::shared_ptr<arrow::Schema> arrow_schema,
                              std::string compression, std::string bucket_region,
                              int64_t row_group_size)
         : path(std::move(path)),
-          col_names(std::move(col_names)),
+          arrow_schema(std::move(arrow_schema)),
           compression(std::move(compression)),
           bucket_region(std::move(bucket_region)),
           row_group_size(row_group_size) {}
@@ -237,7 +237,7 @@ struct ParquetWriteFunctionData : public duckdb::FunctionData {
         const ParquetWriteFunctionData &other =
             other_p.Cast<ParquetWriteFunctionData>();
         return (other.path == this->path &&
-                other.col_names == this->col_names &&
+                other.arrow_schema->Equals(this->arrow_schema) &&
                 other.compression == this->compression &&
                 other.bucket_region == this->bucket_region &&
                 other.row_group_size == this->row_group_size);
@@ -245,12 +245,12 @@ struct ParquetWriteFunctionData : public duckdb::FunctionData {
 
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
         return duckdb::make_uniq<ParquetWriteFunctionData>(
-            this->path, this->col_names, this->compression, this->bucket_region,
-            this->row_group_size);
+            this->path, this->arrow_schema, this->compression,
+            this->bucket_region, this->row_group_size);
     }
 
     std::string path;
-    std::vector<std::string> col_names;
+    std::shared_ptr<arrow::Schema> arrow_schema;
     std::string compression;
     std::string bucket_region;
     int64_t row_group_size;

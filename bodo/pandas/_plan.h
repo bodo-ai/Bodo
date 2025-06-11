@@ -283,17 +283,17 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
  * @brief Create a LogicalCopyToFile node for writing a Parquet dataset.
  *
  * @param source input data to write
+ * @param pyarrow_schema schema of the data to write
  * @param path path to write
- * @param col_names output column names to write
  * @param compression compression type to use (e.g., "snappy")
  * @param bucket_region region for the S3 bucket (if applicable)
  * @param row_group_size row group size for Parquet files
  * @return duckdb::unique_ptr<duckdb::LogicalCopyToFile> created node
  */
 duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
-    std::unique_ptr<duckdb::LogicalOperator> &source, std::string path,
-    std::vector<std::string> col_names, std::string compression,
-    std::string bucket_region, int64_t row_group_size);
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string path, std::string compression, std::string bucket_region,
+    int64_t row_group_size);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe sequentially

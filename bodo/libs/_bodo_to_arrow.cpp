@@ -742,6 +742,27 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     return arrow_table;
 }
 
+std::shared_ptr<arrow::Table> bodo_table_to_arrow(
+    std::shared_ptr<table_info> table,
+    std::shared_ptr<arrow::Schema> arrow_schema,
+    bool convert_timedelta_to_int64, std::string tz,
+    arrow::TimeUnit::type time_unit, bool downcast_time_ns_to_us,
+    bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+    std::vector<std::shared_ptr<arrow::Array>> arrow_arrs(table->ncols());
+
+    for (size_t i = 0; i < table->ncols(); i++) {
+        std::shared_ptr<array_info> arr = table->columns[i];
+        arrow_arrs[i] =
+            bodo_array_to_arrow(pool, arr, convert_timedelta_to_int64, tz,
+                                time_unit, downcast_time_ns_to_us, mm);
+    }
+
+    std::shared_ptr<arrow::Table> arrow_table =
+        arrow::Table::Make(arrow_schema, arrow_arrs, table->nrows());
+    return arrow_table;
+}
+
 extern "C" {
 
 // meminfo destructor function that releases the meminfo's Arrow buffer

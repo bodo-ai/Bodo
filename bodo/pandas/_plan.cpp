@@ -626,16 +626,17 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
 }
 
 duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
-    std::unique_ptr<duckdb::LogicalOperator> &source, std::string path,
-    std::vector<std::string> col_names, std::string compression,
-    std::string bucket_region, int64_t row_group_size) {
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string path, std::string compression, std::string bucket_region,
+    int64_t row_group_size) {
     auto source_duck = to_duckdb(source);
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
     duckdb::CopyFunction copy_function =
         duckdb::CopyFunction("bodo_parquet_write");
     duckdb::unique_ptr<duckdb::FunctionData> bind_data =
         duckdb::make_uniq<ParquetWriteFunctionData>(
-            path, col_names, compression, bucket_region, row_group_size);
+            path, arrow_schema, compression, bucket_region, row_group_size);
 
     duckdb::unique_ptr<duckdb::LogicalCopyToFile> copy_node =
         duckdb::make_uniq<duckdb::LogicalCopyToFile>(

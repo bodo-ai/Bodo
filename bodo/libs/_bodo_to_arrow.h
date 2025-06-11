@@ -75,6 +75,18 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+// Same as above, but with a provided Arrow schema instead of field names and
+// metadata.
+std::shared_ptr<arrow::Table> bodo_table_to_arrow(
+    std::shared_ptr<table_info> table,
+    std::shared_ptr<arrow::Schema> arrow_schema,
+    bool convert_timedelta_to_int64 = false, std::string tz = "",
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
+    bool downcast_time_ns_to_us = false,
+    bodo::IBufferPool *const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
 /**
  * @brief Convert Arrow array to Bodo array_info with zero-copy.
  * The output Bodo array holds references to the Arrow array's buffers and

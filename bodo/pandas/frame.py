@@ -250,6 +250,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         row_group_size: int = -1,
         **kwargs,
     ) -> bytes | None:
+        from bodo.pandas.base import _empty_like
+
         if not isinstance(path, str):
             raise BodoLibNotImplementedException(
                 "DataFrame.to_parquet(): path must be a string"
@@ -274,14 +276,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError("DataFrame.to_parquet(): row_group_size must be an integer")
 
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, False)
-        col_names = [c.encode() for c in self.columns]
 
         write_plan = LazyPlan(
             "LogicalParquetWrite",
-            pd.DataFrame(),
+            _empty_like(self),
             self._plan,
             path,
-            col_names,
             compression,
             bucket_region,
             row_group_size,
