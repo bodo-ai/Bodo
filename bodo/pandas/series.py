@@ -577,7 +577,6 @@ class BodoStringMethods:
             raise AttributeError("Series.dtype should be a valid ArrowDtype!")
 
         inferred_dtype = series_dtype.type
-
         if inferred_dtype not in (str, list, bytes):
             raise AttributeError("Can only use .str accessor with string values!")
 
@@ -629,7 +628,7 @@ class BodoStringMethods:
             )
 
         return _get_series_python_func_plan(
-            series._plan, new_metadata, "str.join", (sep), {}
+            series._plan, new_metadata, "str.join", (sep,), {}
         )
 
 
