@@ -1385,10 +1385,6 @@ class AbstractChunkedTableBuilder {
     void UnifyDictionariesAndAppend(
         const std::shared_ptr<table_info>& in_table);
 
-    void UnifyDictionariesAndAppend(
-        const std::shared_ptr<table_info>& in_table,
-        const std::span<const int64_t> selected_rows);
-
    private:
     template <typename IndexT>
     void AppendBatch(const std::shared_ptr<table_info>& build_table,

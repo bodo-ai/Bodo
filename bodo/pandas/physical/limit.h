@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <utility>
+#include "../../libs/streaming/_join.h"
 #include "../libs/_array_utils.h"
 #include "../libs/_distributed.h"
 #include "../libs/_table_builder.h"
@@ -64,8 +65,11 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
             auto next_batch = collected_rows->builder->PopChunk();
             uint64_t select_local =
                 std::min(local_remaining, (uint64_t)std::get<1>(next_batch));
-            reduced_collected_rows->builder->UnifyDictionariesAndAppend(
-                std::get<0>(next_batch), get_n_rows(select_local));
+            auto unified_table = unify_dictionary_arrays_helper(
+                std::get<0>(next_batch), reduced_collected_rows->dict_builders,
+                0);
+            reduced_collected_rows->builder->AppendBatch(
+                unified_table, get_n_rows(select_local));
             reduced_collected_rows->builder->FinalizeActiveChunk();
             local_remaining -= select_local;
         }
@@ -106,8 +110,12 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
         }
         // Every rank will collect n rows.  We remove extras in Finalize.
         uint64_t select_local = std::min(local_remaining, input_batch->nrows());
-        collected_rows->builder->UnifyDictionariesAndAppend(
-            input_batch, get_n_rows(select_local));
+        auto unified_table = unify_dictionary_arrays_helper(
+            input_batch, collected_rows->dict_builders, 0);
+        collected_rows->builder->AppendBatch(unified_table,
+                                             get_n_rows(select_local));
+        // collected_rows->builder->UnifyDictionariesAndAppend(
+        //     input_batch, get_n_rows(select_local));
         collected_rows->builder->FinalizeActiveChunk();
         local_remaining -= select_local;
         return (local_remaining == 0 ||
