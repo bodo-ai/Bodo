@@ -1152,7 +1152,3 @@ _install_series_dt_accessors()
 _install_series_dt_methods()
 _install_series_str_methods()
 _install_str_partitions()
-
-
-# dec = forbid_nonstring_types()
-# setattr(BodoStringMethods, 'join', )

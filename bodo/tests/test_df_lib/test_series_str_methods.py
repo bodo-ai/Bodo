@@ -8,20 +8,29 @@ def _install_series_str_tests():
     """Install Series.str tests."""
     # Tests Series.str methods with arguments
     for method_name in test_map_arg:
-        test = _generate_series_test(
-            method_name,
-            exception_dfmap.get(method_name, df),
-            test_map_arg[method_name],
-            accessor="str",
-        )
-        globals()[f"test_{method_name}"] = test
+        idx = 0
+        for frame in exception_dfmap.get(method_name, (df,)):
+            test = _generate_series_test(
+                method_name,
+                frame,
+                test_map_arg[method_name],
+                accessor="str",
+            )
+            globals()[f"test_{method_name}_df{idx}"] = test
+            idx += 1
 
     # Tests Series.str methods that require no arguments
     for method_name in test_map_no_arg:
-        test = _generate_series_test(
-            method_name, exception_dfmap.get(method_name, df), empty_arg, accessor="str"
-        )
-        globals()[f"test_{method_name}"] = test
+        idx = 0
+        for frame in exception_dfmap.get(method_name, (df,)):
+            test = _generate_series_test(
+                method_name,
+                frame,
+                empty_arg,
+                accessor="str",
+            )
+            globals()[f"test_{method_name}_df{idx}"] = test
+            idx += 1
 
 
 # Maps method name to test case for pytest param
@@ -221,16 +230,31 @@ df_normalize = pd.DataFrame(
 df_join = pd.DataFrame(
     {
         "A": [["h"], ["None", "Play"], ["Bad", "News", "A"]],
-        "B": ["hoveroverrover", "123", None],
-        # TODO: fix this segfaulting case
-        # "C": [["h"], None, ["Bad", "News", "A"]],
+        "B": [["hoveroverrover"], None, None],
+        "C": [["A", "B", "C", "D", "E"], None, ["California", "Sports", "Cars"]],
+    }
+)
+
+df_join_flat = pd.DataFrame(
+    {
+        "A": ["hi", "my", "name", "0000"],
+        "B": ["None", None, None, None],
+        "C": ["A", "B", "C", "D"],
+        "D": ["hover", "over", "rover", None],
     }
 )
 
 df_decode = pd.DataFrame({"A": [b"hi", b"()", b"hello my name is chris.", None]})
 
 # Stores customized DataFrames for some methods. Could enable testing with closer customization to each method.
-exception_dfmap = {"normalize": df_normalize, "join": df_join, "decode": df_decode}
+exception_dfmap = {
+    "normalize": (df_normalize,),
+    "join": (
+        df_join,
+        df_join_flat,
+    ),
+    "decode": (df_decode,),
+}
 
 empty_arg = [((), {})]
 
