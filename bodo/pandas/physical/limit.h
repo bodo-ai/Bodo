@@ -114,8 +114,6 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
             input_batch, collected_rows->dict_builders, 0);
         collected_rows->builder->AppendBatch(unified_table,
                                              get_n_rows(select_local));
-        // collected_rows->builder->UnifyDictionariesAndAppend(
-        //     input_batch, get_n_rows(select_local));
         collected_rows->builder->FinalizeActiveChunk();
         local_remaining -= select_local;
         return (local_remaining == 0 ||
