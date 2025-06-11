@@ -2,6 +2,7 @@
 #include <numeric>
 #include <utility>
 
+#include "_array_utils.h"
 #include "_dict_builder.h"
 #include "_query_profile_collector.h"
 #include "_table_builder_utils.h"
@@ -1732,6 +1733,13 @@ void AbstractChunkedTableBuilder::Reset() {
 
 bool AbstractChunkedTableBuilder::empty() const {
     return this->total_remaining == 0;
+}
+
+void AbstractChunkedTableBuilder::UnifyDictionariesAndAppend(
+    const std::shared_ptr<table_info>& in_table,
+    std::vector<int64_t> selected_rows) {
+    auto sel_in_table = RetrieveTable(in_table, selected_rows);
+    this->UnifyDictionariesAndAppend(sel_in_table);
 }
 
 void AbstractChunkedTableBuilder::UnifyDictionariesAndAppend(

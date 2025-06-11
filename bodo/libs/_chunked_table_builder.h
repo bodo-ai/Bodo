@@ -1375,6 +1375,9 @@ class AbstractChunkedTableBuilder {
     /// @brief True if there are 0 rows in the table, prepared or active
     bool empty() const;
 
+    void UnifyDictionariesAndAppend(const std::shared_ptr<table_info>& in_table,
+                                    std::vector<int64_t> selected_rows);
+
     /**
      * @brief Wrapper method over AppendBatch to append an input table
      * with string columns that should be converted to dictionary-encoded
