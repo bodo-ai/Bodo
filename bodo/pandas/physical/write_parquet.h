@@ -37,6 +37,10 @@ class PhysicalWriteParquet : public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
 
+        bool is_last = prev_op_result == OperatorResult::FINISHED;
+        is_last = static_cast<bool>(sync_is_last_non_blocking(
+            is_last_state.get(), static_cast<int32_t>(is_last)));
+
         std::shared_ptr<arrow::Table> arrow_table =
             bodo_table_to_arrow(input_batch);
 
