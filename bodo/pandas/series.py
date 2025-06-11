@@ -559,19 +559,28 @@ class BodoStringMethods:
 
     def __init__(self, series):
         self._series = series
-        self._is_string = (
-            isinstance(series, BodoSeries)
-            and isinstance(series.dtype, pd.ArrowDtype)
-            and series.dtype.type is str
-        )
+        self._inferred_dtype = self._validate(series)
+        self._is_string = self._inferred_dtype is str
 
-        # Validates series type
-        # if not (
-        #     isinstance(series, BodoSeries)
-        #     and isinstance(series.dtype, pd.ArrowDtype)
-        #     and series.dtype.type is str
-        # ):
-        #     raise AttributeError("Can only use .str accessor with string values!")
+    @staticmethod
+    def _validate(series):
+        """
+        Analogous to _validate in Pandas, except Bodo supports fewer dtypes than Pandas.
+        Currently, only string and list are valid dtypes for BodoStringMethods.
+        Among them, most methods reject list dtypes, with join being one exception case.
+        """
+        if not isinstance(series, BodoSeries):
+            raise AttributeError("Series should be a valid BodoSeries!")
+
+        series_dtype = series.dtype
+        if not isinstance(series_dtype, pd.ArrowDtype):
+            raise AttributeError("Series.dtype should be a valid ArrowDtype!")
+
+        inferred_dtype = series_dtype.type
+        if inferred_dtype not in (str, list):
+            raise AttributeError("Can only use .str accessor with string values!")
+
+        return inferred_dtype
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
@@ -586,15 +595,20 @@ class BodoStringMethods:
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
 
+    @check_args_fallback(unsupported="none")
     def join(self, sep):
+        """
+        Join lists contained as elements in the Series/Index with passed delimiter.
+        If the elements of a Series are lists themselves, join the content of these lists using
+        the delimiter passed to the function.
+        """
+
         def join_list(l):
+            """Performs String join with sep=sep if list.dtype == String, returns None otherwise."""
             try:
                 return sep.join(l)
             except Exception:
                 return None
-
-        if not self._is_string:
-            return self._series.map(join_list)
 
         series = self._series
         dtype = pd.ArrowDtype(pa.large_string())
@@ -606,6 +620,12 @@ class BodoStringMethods:
             index=index,
         )
 
+        # If input Series is a series of lists, creates plan that maps 'join_list'.
+        if not self._is_string:
+            return _get_series_python_func_plan(
+                series._plan, new_metadata, "map", (join_list, None), {}
+            )
+
         return _get_series_python_func_plan(
             series._plan, new_metadata, "str.join", (sep), {}
         )
@@ -613,8 +633,6 @@ class BodoStringMethods:
 
 class BodoDatetimeProperties:
     """Support Series.dt datetime accessors same as Pandas."""
-
-    # TODO [BSE-4854]: support datetime methods
 
     def __init__(self, series):
         self._series = series
@@ -691,6 +709,11 @@ def gen_partition(name):
         Splits string into 3 elements-before the separator, the separator itself,
         and the part after the separator.
         """
+        if not self._is_string:
+            raise AttributeError(
+                "Can only use .str accessor with string values!. Did you mean: 'std'?"
+            )
+
         series = self._series
         dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
 
@@ -838,6 +861,11 @@ def gen_method(name, return_type, is_method=True, accessor_type=""):
 
     def method(self, *args, **kwargs):
         """Generalized template for Series methods and argument validation using signature"""
+        if not self._is_string:
+            raise AttributeError(
+                "Can only use .str accessor with string values!. Did you mean: 'std'?"
+            )
+
         if is_method:
             sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
 

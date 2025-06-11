@@ -95,6 +95,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.isspace`][bodoseriesstrisspace]
 - [`bodo.pandas.BodoSeries.str.istitle`][bodoseriesstristitle]
 - [`bodo.pandas.BodoSeries.str.isupper`][bodoseriesstrisupper]
+- [`bodo.pandas.BodoSeries.str.join`][bodoseriesstrjoin]
 - [`bodo.pandas.BodoSeries.str.len`][bodoseriesstrlen]
 - [`bodo.pandas.BodoSeries.str.ljust`][bodoseriesstrljust]
 - [`bodo.pandas.BodoSeries.str.lower`][bodoseriesstrlower]
@@ -225,3 +226,5 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesstrnormalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.normalize.html
 
 [bodoseriesstrcat]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.cat.html
+
+[bodoseriesstrjoin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.join.html
