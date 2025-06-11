@@ -578,7 +578,10 @@ class BodoStringMethods:
                 "implemented in Bodo dataframe library for the specified arguments yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
+            # Prevents internal fallbacks causing a flood of warnings.
+            if not name.startswith("_"):
+                warnings.warn(BodoLibFallbackWarning(msg))
+
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
