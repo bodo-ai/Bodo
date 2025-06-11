@@ -1372,3 +1372,23 @@ std::unique_ptr<array_info> recv_shuffle_data(
     size_t child_len = child->length;
     return alloc_map(child_len, std::move(child));
 }
+
+/**
+ * @brief State for non-blocking is_last synchronization using IBarrier.
+ Used in streaming Iceberg and Parquet writes currently.
+ *
+ */
+class IsLastState {
+   public:
+    // The IBarrier request used for is_last synchronization
+    MPI_Request is_last_request = MPI_REQUEST_NULL;
+    bool is_last_barrier_started = false;
+    bool global_is_last = false;
+    MPI_Comm is_last_comm;
+
+    IsLastState() {
+        CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->is_last_comm),
+                  "IsLastState: MPI error on MPI_Comm_dup:");
+    }
+    ~IsLastState() { MPI_Comm_free(&this->is_last_comm); }
+};

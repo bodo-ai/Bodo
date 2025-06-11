@@ -4,6 +4,7 @@
 
 #include "../../io/parquet_write.h"
 #include "../../libs/_bodo_to_arrow.h"
+#include "../../libs/streaming/_shuffle.h"
 #include "_bodo_scan_function.h"
 #include "physical/operator.h"
 
@@ -26,6 +27,8 @@ class PhysicalWriteParquet : public PhysicalSink {
                 create_dict_builder_for_array(col->copy(), false));
         }
         buffer = std::make_shared<TableBuildBuffer>(in_schema, dict_builders);
+
+        is_last_state = std::make_shared<IsLastState>();
     }
 
     virtual ~PhysicalWriteParquet() = default;
@@ -64,4 +67,5 @@ class PhysicalWriteParquet : public PhysicalSink {
     const std::string bucket_region;
     std::shared_ptr<TableBuildBuffer> buffer;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    std::shared_ptr<IsLastState> is_last_state;
 };
