@@ -67,19 +67,7 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
  */
 std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     std::shared_ptr<table_info> table, std::vector<std::string> field_names,
-    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = {},
-    bool convert_timedelta_to_int64 = false, std::string tz = "",
-    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
-    bool downcast_time_ns_to_us = false,
-    bodo::IBufferPool *const pool = bodo::BufferPool::DefaultPtr(),
-    std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
-
-// Same as above, but with a provided Arrow schema instead of field names and
-// metadata.
-std::shared_ptr<arrow::Table> bodo_table_to_arrow(
-    std::shared_ptr<table_info> table,
-    std::shared_ptr<arrow::Schema> arrow_schema,
+    const std::shared_ptr<const arrow::KeyValueMetadata> schema_metadata = {},
     bool convert_timedelta_to_int64 = false, std::string tz = "",
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
     bool downcast_time_ns_to_us = false,

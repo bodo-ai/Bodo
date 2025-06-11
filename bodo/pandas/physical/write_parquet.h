@@ -62,7 +62,8 @@ class PhysicalWriteParquet : public PhysicalSink {
 
             if (data->nrows() > 0) {
                 std::shared_ptr<arrow::Table> arrow_table =
-                    bodo_table_to_arrow(data, this->arrow_schema);
+                    bodo_table_to_arrow(data, arrow_schema->field_names(),
+                                        arrow_schema->metadata());
 
                 std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
                 for (auto& col : data->columns) {
