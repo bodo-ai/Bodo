@@ -3,8 +3,9 @@ import inspect
 import warnings
 
 import numpy as np
-import pandas as pd
 import pyarrow as pa
+
+import pandas as pd
 
 pandas_version = tuple(map(int, pd.__version__.split(".")[:2]))
 
@@ -62,6 +63,7 @@ if pandas_version < (1, 4):
 # Pandas code: https://github.com/pandas-dev/pandas/blob/ca60aab7340d9989d9428e11a51467658190bb6b/pandas/core/arrays/string_arrow.py#L141
 def ArrowStringArray__init__(self, values):
     import pyarrow as pa
+
     from pandas.core.arrays.string_ import StringDtype
     from pandas.core.arrays.string_arrow import ArrowStringArray
 
@@ -335,7 +337,27 @@ if pandas_version >= (3, 0):
             decorator: Callable | None,
             skip_na: bool,
         ):
-            raise NotImplementedError("BodoExecutionEngine: map not implemented yet.")
+            if not isinstance(data, pd.Series):
+                raise ValueError(
+                    f"BodoExecutionEngine: map() expected input data to be Series, got: {type(data)}"
+                )
+
+            if skip_na:
+                raise ValueError(
+                    "BodoExecutionEngine: na_action not supported other than the default None for map()."
+                )
+
+            if args or kwargs:
+                raise ValueError(
+                    "BodoExecutionEngine: passing additional arguments to UDF not supported for map()."
+                )
+
+            def map_func(data):
+                return data.map(func)
+
+            map_func_jit = decorator(map_func)
+
+            return map_func_jit(data)
 
         @staticmethod
         def apply(
