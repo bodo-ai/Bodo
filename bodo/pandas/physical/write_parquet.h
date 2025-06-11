@@ -53,23 +53,34 @@ class PhysicalWriteParquet : public PhysicalSink {
         is_last = static_cast<bool>(sync_is_last_non_blocking(
             is_last_state.get(), static_cast<int32_t>(is_last)));
 
+        // ===== Part 2: Write Parquet file if file size threshold is exceeded
+        // =====
         if (is_last || buffer_nbytes >= this->chunk_size) {
-            std::shared_ptr<arrow::Table> arrow_table =
-                bodo_table_to_arrow(input_batch);
+            std::shared_ptr<table_info> data = buffer->data_table;
 
-            std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
-            for (auto& col : input_batch->columns) {
-                bodo_array_types.emplace_back(col->arr_type);
+            if (data->nrows() > 0) {
+                std::shared_ptr<arrow::Table> arrow_table =
+                    bodo_table_to_arrow(data);
+
+                std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
+                for (auto& col : data->columns) {
+                    bodo_array_types.emplace_back(col->arr_type);
+                }
+
+                pq_write(path.c_str(), arrow_table, compression.c_str(), true,
+                         bucket_region.c_str(), row_group_size, "part-",
+                         bodo_array_types, false, "", nullptr);
             }
-
-            pq_write(path.c_str(), arrow_table, compression.c_str(), true,
-                     bucket_region.c_str(), row_group_size, "part-",
-                     bodo_array_types, false, "", nullptr);
+            // Reset the buffer for the next batch
+            buffer->Reset();
         }
 
-        return prev_op_result == OperatorResult::FINISHED
-                   ? OperatorResult::FINISHED
-                   : OperatorResult::NEED_MORE_INPUT;
+        if (is_last) {
+            finished = true;
+        }
+
+        return is_last ? OperatorResult::FINISHED
+                       : OperatorResult::NEED_MORE_INPUT;
     }
 
     void Finalize() override {}
