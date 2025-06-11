@@ -141,7 +141,7 @@ jobs:
       batch: 1
       total-batches: 1
       pytest-marker: "df_lib and not weekly and not iceberg"
-      collect-coverage: false
+      collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB"
     secrets: inherit
