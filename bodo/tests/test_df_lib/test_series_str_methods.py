@@ -165,6 +165,13 @@ test_map_arg = {
         (("NFC"), {}),
         (("NFD"), {}),
     ],
+    "join": [(("*"), {}), ((" and "), {})],
+    "decode": [
+        (("ascii"), {}),
+    ],
+    "encode": [
+        (("ascii"), {}),
+    ],
 }
 
 # List of methods that do not take in arguments
@@ -211,10 +218,19 @@ df_normalize = pd.DataFrame(
     }
 )
 
+df_join = pd.DataFrame(
+    {
+        "A": [["h"], ["None", "Play"], ["Bad", "News", "A"]],
+        "B": ["hoveroverrover", "123", None],
+        # TODO: fix this segfaulting case
+        # "C": [["h"], None, ["Bad", "News", "A"]],
+    }
+)
+
+df_decode = pd.DataFrame({"A": [b"hi", b"()", b"hello my name is chris.", None]})
+
 # Stores customized DataFrames for some methods. Could enable testing with closer customization to each method.
-exception_dfmap = {
-    "normalize": df_normalize,
-}
+exception_dfmap = {"normalize": df_normalize, "join": df_join, "decode": df_decode}
 
 empty_arg = [((), {})]
 

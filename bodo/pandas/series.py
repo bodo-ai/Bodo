@@ -577,7 +577,8 @@ class BodoStringMethods:
             raise AttributeError("Series.dtype should be a valid ArrowDtype!")
 
         inferred_dtype = series_dtype.type
-        if inferred_dtype not in (str, list):
+
+        if inferred_dtype not in (str, list, bytes):
             raise AttributeError("Can only use .str accessor with string values!")
 
         return inferred_dtype
@@ -610,6 +611,7 @@ class BodoStringMethods:
             except Exception:
                 return None
 
+        validate_dtype("str.join", self)
         series = self._series
         dtype = pd.ArrowDtype(pa.large_string())
 
@@ -644,6 +646,7 @@ class BodoDatetimeProperties:
             pd.ArrowDtype(pa.time64("ns")),
         ):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
+        self._inferred_dtype = series.dtype
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
@@ -709,10 +712,7 @@ def gen_partition(name):
         Splits string into 3 elements-before the separator, the separator itself,
         and the part after the separator.
         """
-        if not self._is_string:
-            raise AttributeError(
-                "Can only use .str accessor with string values!. Did you mean: 'std'?"
-            )
+        validate_dtype(f"str.{name}", self)
 
         series = self._series
         dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
@@ -856,15 +856,31 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
 }
 
 
-def gen_method(name, return_type, is_method=True, accessor_type=""):
+def validate_dtype(name, obj):
+    """Validates dtype of input series for Series.<name> methods."""
+    if "." not in name:
+        return
+
+    dtype = obj._inferred_dtype
+    parts = name.split(".")
+    accessor, method = parts[0], parts[1]
+    if accessor == "str.":
+        if dtype not in allowed_types_map.get(method, [str]):
+            raise AttributeError(
+                "Can only use .str accessor with string values!. Did you mean: 'std'?"
+            )
+    # Implement accessor == "dt." case if necessary.
+
+
+def gen_method(
+    name, return_type, is_method=True, accessor_type="", allowed_types=[str]
+):
     """Generates Series methods, supports optional/positional args."""
 
     def method(self, *args, **kwargs):
         """Generalized template for Series methods and argument validation using signature"""
-        if not self._is_string:
-            raise AttributeError(
-                "Can only use .str accessor with string values!. Did you mean: 'std'?"
-            )
+
+        validate_dtype(accessor_type + name, self)
 
         if is_method:
             sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
@@ -917,6 +933,7 @@ series_str_methods = [
             "replace",
             "wrap",
             "normalize",
+            "decode",
         ],
         pd.ArrowDtype(pa.large_string()),
     ),
@@ -960,6 +977,12 @@ series_str_methods = [
             "findall",
         ],
         pd.ArrowDtype(pa.large_list(pa.large_string())),
+    ),
+    (
+        [
+            "encode",
+        ],
+        pd.ArrowDtype(pa.binary()),
     ),
 ]
 
@@ -1077,6 +1100,11 @@ dir_methods = [
         None,
     ),
 ]
+
+allowed_types_map = {
+    "decode": [str, bytes],
+    "join": [str, list],
+}
 
 
 def _install_series_str_methods():
