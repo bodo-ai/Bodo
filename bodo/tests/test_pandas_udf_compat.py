@@ -145,7 +145,7 @@ def test_udf_map_unsupported():
 
     # additional kwargs are not supported
     with pytest.raises(ValueError, match=r"BodoExecutionEngine:.*"):
-        ser.map(udf, y=1, z="B", engine=engine)
+        ser.map(udf, y=1, engine=engine)
 
     # na_action='ignore' not supported
     with pytest.raises(ValueError, match=r"BodoExecutionEngine:.*"):
