@@ -128,7 +128,7 @@ jobs:
       batch: 1
       total-batches: 1
       pytest-marker: "spawn_mode and not iceberg"
-      collect-coverage: false
+      collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: SPAWN
     secrets: inherit
