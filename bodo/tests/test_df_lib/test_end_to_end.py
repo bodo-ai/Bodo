@@ -203,6 +203,7 @@ def test_write_parquet(index_val):
 
         bodo_df = bd.from_pandas(df)
         bodo_df.to_parquet(path)
+        assert bodo_df.is_lazy_plan()
 
         # Read back to check
         py_out = pd.read_parquet(path)
@@ -211,7 +212,6 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
-            reset_index=True,
         )
 
 
