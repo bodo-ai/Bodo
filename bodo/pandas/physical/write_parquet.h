@@ -29,29 +29,43 @@ class PhysicalWriteParquet : public PhysicalSink {
         buffer = std::make_shared<TableBuildBuffer>(in_schema, dict_builders);
 
         is_last_state = std::make_shared<IsLastState>();
+        finished = false;
     }
 
     virtual ~PhysicalWriteParquet() = default;
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
-        buffer->UnifyTablesAndAppend(input_batch, dict_builders);
+        // Similar to streaming parquet write in Bodo JIT
+        // https://github.com/bodo-ai/Bodo/blob/3741f4e05e4236b5c3cc35ef5ecccad921f17dc4/bodo/io/stream_parquet_write.py#L433
 
+        if (finished) {
+            return OperatorResult::FINISHED;
+        }
+
+        // ===== Part 1: Accumulate batch in writer and compute total size =====
+        buffer->UnifyTablesAndAppend(input_batch, dict_builders);
+        int64_t buffer_nbytes =
+            table_local_memory_size(buffer->data_table, true);
+
+        // Sync is_last flag
         bool is_last = prev_op_result == OperatorResult::FINISHED;
         is_last = static_cast<bool>(sync_is_last_non_blocking(
             is_last_state.get(), static_cast<int32_t>(is_last)));
 
-        std::shared_ptr<arrow::Table> arrow_table =
-            bodo_table_to_arrow(input_batch);
+        if (is_last || buffer_nbytes >= this->chunk_size) {
+            std::shared_ptr<arrow::Table> arrow_table =
+                bodo_table_to_arrow(input_batch);
 
-        std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
-        for (auto& col : input_batch->columns) {
-            bodo_array_types.emplace_back(col->arr_type);
+            std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
+            for (auto& col : input_batch->columns) {
+                bodo_array_types.emplace_back(col->arr_type);
+            }
+
+            pq_write(path.c_str(), arrow_table, compression.c_str(), true,
+                     bucket_region.c_str(), row_group_size, "part-",
+                     bodo_array_types, false, "", nullptr);
         }
-
-        pq_write(path.c_str(), arrow_table, compression.c_str(), true,
-                 bucket_region.c_str(), row_group_size, "part-",
-                 bodo_array_types, false, "", nullptr);
 
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
@@ -72,4 +86,6 @@ class PhysicalWriteParquet : public PhysicalSink {
     std::shared_ptr<TableBuildBuffer> buffer;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     std::shared_ptr<IsLastState> is_last_state;
+    bool finished = false;
+    int64_t chunk_size = get_parquet_chunk_size();
 };
