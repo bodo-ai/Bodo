@@ -53,8 +53,7 @@ class PhysicalWriteParquet : public PhysicalSink {
         is_last = static_cast<bool>(sync_is_last_non_blocking(
             is_last_state.get(), static_cast<int32_t>(is_last)));
 
-        // ===== Part 2: Write Parquet file if file size threshold is exceeded
-        // =====
+        // === Part 2: Write Parquet file if file size threshold is exceeded ===
         if (is_last || buffer_nbytes >= this->chunk_size) {
             std::shared_ptr<table_info> data = buffer->data_table;
 
