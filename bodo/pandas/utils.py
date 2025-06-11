@@ -548,13 +548,14 @@ def run_func_on_table(cpp_table, result_type, in_args):
     return the result as a C++ table and column names.
     """
     input = cpp_table_to_df(cpp_table)
-    func_path_str, is_series, is_attr, args, kwargs = in_args
+    func, is_series, is_attr, args, kwargs = in_args
 
     if is_series:
         assert input.shape[1] == 1, "run_func_on_table: single column expected"
         input = input.iloc[:, 0]
 
-    if is_attr:
+    if isinstance(func, str) and is_attr:
+        func_path_str = func
         func = input
         for atr in func_path_str.split("."):
             func = getattr(func, atr)
@@ -563,9 +564,10 @@ def run_func_on_table(cpp_table, result_type, in_args):
             out = func
         else:
             out = func(*args, **kwargs)
+    elif isinstance(func, str):
+        func = _get_function_from_path(func)
+        out = func(input, *args, **kwargs)
     else:
-        # TODO: test this path
-        func = _get_function_from_path(func_path_str)
         out = func(input, *args, **kwargs)
 
     # astype can fail in some cases when input is empty
@@ -844,13 +846,14 @@ def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
     return empty_series
 
 
-def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
+def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Series:
     """Infer the output type of a scalar UDF by running it on a
     sample of the data.
 
     Args:
         obj (BodoDataFrame | BodoSeries): The object the UDF is being applied over.
-        method_name ("apply" | "map"): The name of the method applying the UDF.
+        method_name ({"apply", "map", "map_parititons"}): The name of the method
+            applying the UDF.
         func (Any): The UDF argument to pass to apply/map.
         kwargs (dict): Optional keyword arguments to pass to apply/map.
 
@@ -861,12 +864,16 @@ def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
         Empty Series with the dtype matching the output of the UDF
         (or equivalent pyarrow dtype)
     """
-    assert method_name == "apply" or method_name == "map", (
-        "expected method to be one of {'apply', 'map'}"
+    assert method_name in {"map", "apply", "map_partitions"}, (
+        "expected method to be one of {'apply', 'map', 'map_partitions'}"
     )
 
     base_class = obj.__class__.__bases__[0]
-    apply_method = getattr(base_class, method_name)
+
+    # map_partitions is not a pandas.DataFrame method.
+    apply_method = None
+    if method_name != "map_partitions":
+        apply_method = getattr(base_class, method_name)
 
     # TODO: Tune sample sizes
     sample_sizes = (1, 4, 9, 25, 100)
@@ -874,8 +881,12 @@ def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
     except_msg = ""
     for sample_size in sample_sizes:
         df_sample = obj.head(sample_size).execute_plan()
-        pd_sample = type(obj)(df_sample)
-        out_sample = apply_method(pd_sample, func, **kwargs)
+        pd_sample = base_class(df_sample)
+        out_sample = (
+            func(pd_sample, *args, **kwargs)
+            if apply_method is None
+            else apply_method(pd_sample, func, *args, **kwargs)
+        )
 
         if not isinstance(out_sample, pd.Series):
             raise BodoLibNotImplementedException(
