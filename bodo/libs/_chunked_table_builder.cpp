@@ -1737,7 +1737,7 @@ bool AbstractChunkedTableBuilder::empty() const {
 
 void AbstractChunkedTableBuilder::UnifyDictionariesAndAppend(
     const std::shared_ptr<table_info>& in_table,
-    std::vector<int64_t> selected_rows) {
+    const std::span<const int64_t> selected_rows) {
     auto sel_in_table = RetrieveTable(in_table, selected_rows);
     this->UnifyDictionariesAndAppend(sel_in_table);
 }

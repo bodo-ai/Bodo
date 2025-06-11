@@ -1,8 +1,5 @@
 #pragma once
 
-#include <iostream>
-#include <sstream>
-
 #include "../libs/_table_builder.h"
 
 #include "physical/operator.h"
@@ -39,10 +36,6 @@ class PhysicalResultCollector : public PhysicalSink {
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
-        std::stringstream ss;
-        DEBUG_PrintTable(ss, input_batch);
-        std::cout << ss.str() << std::endl;
-
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
 
         return prev_op_result == OperatorResult::FINISHED
