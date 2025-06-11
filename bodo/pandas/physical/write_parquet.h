@@ -40,6 +40,8 @@ class PhysicalWriteParquet : public PhysicalSink {
         // Similar to streaming parquet write in Bodo JIT
         // https://github.com/bodo-ai/Bodo/blob/3741f4e05e4236b5c3cc35ef5ecccad921f17dc4/bodo/io/stream_parquet_write.py#L433
 
+        iter++;
+
         if (finished) {
             return OperatorResult::FINISHED;
         }
@@ -68,8 +70,9 @@ class PhysicalWriteParquet : public PhysicalSink {
                 }
 
                 pq_write(path.c_str(), arrow_table, compression.c_str(), true,
-                         bucket_region.c_str(), row_group_size, "part-",
-                         bodo_array_types, false, "", nullptr);
+                         bucket_region.c_str(), row_group_size,
+                         get_fname_prefix().c_str(), bodo_array_types, false,
+                         "", nullptr);
             }
             // Reset the buffer for the next batch
             buffer->Reset();
@@ -100,4 +103,29 @@ class PhysicalWriteParquet : public PhysicalSink {
     std::shared_ptr<IsLastState> is_last_state;
     bool finished = false;
     int64_t chunk_size = get_parquet_chunk_size();
+    int64_t iter = 0;
+
+    // Generate a Parquet file name prefix for each iteration in such a way that
+    // iteration file names are lexicographically sorted. This allows the data
+    // to be read in the written order later. Same as the Bodo JIT
+    // implementation:
+    // https://github.com/bodo-ai/Bodo/blob/ebf3022eb443d7562dbc0282c346b4d8cf65f209/bodo/io/stream_parquet_write.py#L337
+    std::string get_fname_prefix() {
+        std::string base_prefix = "part-";
+
+        int MAX_ITER = 1000;
+        int n_max_digits = static_cast<int>(std::ceil(std::log10(MAX_ITER)));
+
+        // Number of prefix characters to add ("batch" number)
+        int n_prefix = (iter == 0) ? 0
+                                   : static_cast<int>(std::floor(
+                                         std::log(iter) / std::log(MAX_ITER)));
+
+        std::string iter_str = std::to_string(iter);
+        int n_zeros = ((n_prefix + 1) * n_max_digits) -
+                      static_cast<int>(iter_str.length());
+        iter_str = std::string(n_zeros, '0') + iter_str;
+
+        return base_prefix + std::string(n_prefix, 'b') + iter_str + "-";
+    }
 };
