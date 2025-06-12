@@ -2561,7 +2561,8 @@ GroupbyState::GroupbyState(
     bool parallel_, int64_t sync_iter_, int64_t op_id_,
     int64_t op_pool_size_bytes_, bool allow_any_work_stealing,
     std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
-        key_dict_builders_)
+        key_dict_builders_,
+    bool use_sql_rules)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -2712,9 +2713,7 @@ GroupbyState::GroupbyState(
     // safely set skip_na_data to true for all SQL aggregations. There is an
     // issue to fix this behavior so that use_sql_rules trumps the value of
     // skip_na_data: https://bodo.atlassian.net/browse/BSE-841
-    bool skip_na_data = true;
-    bool use_sql_rules = true;
-
+    bool skip_na_data = use_sql_rules;
     if (!ftypes.empty() && ftypes[0] == Bodo_FTypes::window) {
         // Handle a collection of window functions.
         this->accumulate_before_update = true;

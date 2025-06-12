@@ -109,7 +109,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
-            get_streaming_batch_size(), true, -1, -1, -1);
+            get_streaming_batch_size(), true, -1, -1, -1, false, std::nullopt,
+            /*use SQL rules*/ false);
     }
 
     virtual ~PhysicalAggregate() = default;
