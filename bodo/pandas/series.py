@@ -554,6 +554,23 @@ def _str_partition_helper(s, col):
     return series
 
 
+def _str_cat_helper(df, sep):
+    """Concatenates col0 and col1 of each row in df, separated by sep."""
+    columns = df.columns
+    res = []
+    bitmap_lhs = df[columns[0]].isnull()
+    bitmap_rhs = df[columns[1]].isnull()
+    for i in df.index:
+        lhs = df.loc[i, columns[0]]
+        rhs = df.loc[i, columns[1]]
+        if bitmap_lhs[i] or bitmap_rhs[i]:
+            res.append(pd.NA)
+        else:
+            res.append(f"{lhs}{sep}{rhs}")
+    series = pd.Series(res)
+    return series
+
+
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
@@ -591,26 +608,32 @@ class BodoStringMethods:
         element-wise and returns a Series. If others is not passed, then falls back to
         Pandas, and all values in the Series are concatenated into a single string with a given sep.
         """
+        # Validates input series and others series
+        # From the same df
+        # Same length
+
         if others is None:
             raise BodoLibNotImplementedException(
                 "str.cat(others=None): fallback to Pandas"
             )
-        series = self._series
+
+        lhs, rhs = self._series, others
         dtype = pd.ArrowDtype(pa.large_string())
 
-        index = series.head(0).index
+        index = lhs.head(0).index
         new_metadata = pd.Series(
             dtype=dtype,
-            name=series.name,
+            name=lhs.name,
             index=index,
         )
 
-        return _get_series_python_func_plan(
-            series._plan,
+        return _get_series_python_binary_func_plan(
+            lhs._plan,
+            rhs._plan,
             new_metadata,
-            "str.cat",
-            (),
-            {"others": others, "sep": sep, "na_rep": na_rep, "join": join},
+            "bodo.pandas.series._str_cat_helper",
+            (sep,),
+            {},
         )
 
 
@@ -642,6 +665,60 @@ class BodoDatetimeProperties:
             )
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).dt, name)
+
+
+def _get_series_python_binary_func_plan(lhs, rhs, empty_data, func_name, args, kwargs):
+    """Create a plan for calling a Series method in Python. Creates a proper
+    PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
+    """
+    # Optimize out trivial df["col"] projections to simplify plans
+    if is_single_colref_projection(lhs):
+        source_data_lhs = lhs.args[0]
+        input_expr = lhs.args[1][0]
+        col_index_lhs = input_expr.args[1]
+    else:
+        source_data_lhs = lhs
+        col_index_rhs = 0
+    if is_single_colref_projection(rhs):
+        source_data_rhs = lhs.args[0]
+        input_expr = rhs.args[1][0]
+        col_index_rhs = input_expr.args[1]
+    else:
+        source_data_rhs = rhs
+        col_index_rhs = 0
+
+    n_cols = len(source_data_lhs.empty_data.columns)
+    index_cols_lhs = range(
+        n_cols, n_cols + get_n_index_arrays(source_data_lhs.empty_data.index)
+    )
+    range(n_cols, n_cols + get_n_index_arrays(source_data_rhs.empty_data.index))
+
+    expr = LazyPlan(
+        "PythonBinaryScalarFuncExpression",
+        empty_data,
+        source_data_lhs,
+        source_data_rhs,
+        (
+            func_name,
+            False,  # is_series
+            False,  # is_method
+            args,  # args
+            kwargs,  # kwargs
+        ),
+        (col_index_lhs,),
+        (col_index_rhs,),
+    )
+    # Select Index columns explicitly for output
+    tuple(make_col_ref_exprs(index_cols_lhs, source_data_lhs))
+
+    return wrap_plan(
+        plan=LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            source_data_lhs,
+            (expr,),
+        ),
+    )
 
 
 def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
