@@ -308,6 +308,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # https://github.com/bodo-ai/Bodo/blob/142678b2fe7217d80e233d201061debae2d47c13/bodo/io/iceberg/stream_iceberg_write.py#L535
         import pyiceberg.catalog
 
+        from bodo.pandas.base import _empty_like
+
         # TODO: add `partition_spec`, `sort_order` and `properties` arguments
 
         # TODO: handle snapshot_properties
@@ -340,6 +342,29 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             None,
             location,
         )
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, False)
+        max_pq_chunksize = properties.get(
+            "write.target-file-size-bytes",
+            bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
+        )
+        # TODO: support Theta sketches
+
+        write_plan = LazyPlan(
+            "LogicalIcebergWrite",
+            _empty_like(self),
+            self._plan,
+            table_loc,
+            bucket_region,
+            max_pq_chunksize,
+            partition_tuples,
+            sort_tuples,
+            iceberg_schema_str,
+            output_pa_schema,
+            fs,
+            properties,
+        )
+        execute_plan(write_plan)
+        # TODO: get list of files and commit
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
