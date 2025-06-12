@@ -13,6 +13,12 @@ from libc.stdint cimport int64_t
 import pandas as pd
 import pyarrow.parquet as pq
 
+from bodo.io.fs_io import (
+    expand_path_globs,
+    getfs,
+    parse_fpath,
+)
+
 from bodo.io.parquet_pio import get_parquet_dataset
 
 from cpython.ref cimport PyObject
@@ -713,7 +719,11 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
-        return get_parquet_dataset(self.path, get_row_counts=True, storage_options=self.storage_options)._bodo_total_rows
+        fpath, _, protocol = parse_fpath(self.path)
+        fs = getfs(fpath, protocol, self.storage_options, parallel=False)
+        expanded_paths = expand_path_globs(fpath, protocol, fs)
+
+        return pq.read_table(expanded_paths, filesystem=fs, columns=[]).num_rows
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
