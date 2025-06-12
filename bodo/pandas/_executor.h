@@ -23,11 +23,14 @@ class Executor {
         PhysicalPlanBuilder builder;
         builder.Visit(*plan);
         pipelines = std::move(builder.finished_pipelines);
-        assert(builder.active_pipeline != nullptr);
-        std::shared_ptr<bodo::Schema> in_schema =
-            builder.active_pipeline->getPrevOpOutputSchema();
-        pipelines.push_back(builder.active_pipeline->BuildEnd(
-            in_schema, bodo::Schema::FromArrowSchema(out_schema)));
+
+        // Write finalizes the active pipeline but others need result collection
+        if (builder.active_pipeline != nullptr) {
+            std::shared_ptr<bodo::Schema> in_schema =
+                builder.active_pipeline->getPrevOpOutputSchema();
+            pipelines.push_back(builder.active_pipeline->BuildEnd(
+                in_schema, bodo::Schema::FromArrowSchema(out_schema)));
+        }
     }
 
     /**

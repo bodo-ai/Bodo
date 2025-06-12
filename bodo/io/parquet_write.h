@@ -76,6 +76,7 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
  * @param _path_name directory path
  */
 void pq_write_create_dir_py_entry(const char *_path_name);
+void pq_write_create_dir(const char *_path_name);
 
 /**
  * Write the Bodo table (this process' chunk) to a partitioned directory of
