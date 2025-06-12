@@ -347,6 +347,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             "write.target-file-size-bytes",
             bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
         )
+        compression = properties.get("write.parquet.compression-codec", "snappy")
         # TODO: support Theta sketches
 
         write_plan = LazyPlan(
@@ -356,12 +357,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             table_loc,
             bucket_region,
             max_pq_chunksize,
+            compression,
             partition_tuples,
             sort_tuples,
             iceberg_schema_str,
             output_pa_schema,
             fs,
-            properties,
         )
         execute_plan(write_plan)
         # TODO: get list of files and commit

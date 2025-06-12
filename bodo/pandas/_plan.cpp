@@ -649,6 +649,33 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
     return copy_node;
 }
 
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string table_loc, std::string bucket_region, int64_t max_pq_chunksize,
+    std::string compression, PyObject *partition_tuples, PyObject *sort_tuples,
+    std::string iceberg_schema_str, PyObject *output_pa_schema, PyObject *fs) {
+    auto source_duck = to_duckdb(source);
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+
+    duckdb::CopyFunction copy_function =
+        duckdb::CopyFunction("bodo_iceberg_write");
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data =
+        duckdb::make_uniq<IcebergWriteFunctionData>(
+            table_loc, bucket_region, max_pq_chunksize, compression,
+            partition_tuples, sort_tuples, iceberg_schema_str, output_pa_schema,
+            fs);
+
+    duckdb::unique_ptr<duckdb::LogicalCopyToFile> copy_node =
+        duckdb::make_uniq<duckdb::LogicalCopyToFile>(
+            copy_function, std::move(bind_data),
+            duckdb::make_uniq<duckdb::CopyInfo>());
+
+    copy_node->return_type = duckdb::CopyFunctionReturnType::CHANGED_ROWS;
+    copy_node->AddChild(std::move(source_duck));
+
+    return copy_node;
+}
+
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
     PyObject *df, PyObject *pyarrow_schema) {
     // See DuckDB Pandas scan code:

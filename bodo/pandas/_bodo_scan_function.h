@@ -255,3 +255,70 @@ struct ParquetWriteFunctionData : public duckdb::FunctionData {
     std::string bucket_region;
     int64_t row_group_size;
 };
+
+/**
+ * @brief Data for writing Iceberg datasets
+ *
+ */
+struct IcebergWriteFunctionData : public duckdb::FunctionData {
+    IcebergWriteFunctionData(std::string table_loc, std::string bucket_region,
+                             int64_t max_pq_chunksize, std::string compression,
+                             PyObject *partition_tuples, PyObject *sort_tuples,
+                             std::string iceberg_schema_str,
+                             PyObject *output_pa_schema, PyObject *fs)
+        : table_loc(std::move(table_loc)),
+          bucket_region(std::move(bucket_region)),
+          max_pq_chunksize(max_pq_chunksize),
+          compression(std::move(compression)),
+          partition_tuples(partition_tuples),
+          sort_tuples(sort_tuples),
+          iceberg_schema_str(std::move(iceberg_schema_str)),
+          output_pa_schema(output_pa_schema),
+          fs(fs) {
+        Py_INCREF(partition_tuples);
+        Py_INCREF(sort_tuples);
+        Py_INCREF(output_pa_schema);
+        Py_INCREF(fs);
+    }
+
+    ~IcebergWriteFunctionData() override {
+        Py_DECREF(partition_tuples);
+        Py_DECREF(sort_tuples);
+        Py_DECREF(output_pa_schema);
+        Py_DECREF(fs);
+    }
+
+    bool Equals(const FunctionData &other_p) const override {
+        const IcebergWriteFunctionData &other =
+            other_p.Cast<IcebergWriteFunctionData>();
+        return (other.table_loc == this->table_loc &&
+                other.bucket_region == this->bucket_region &&
+                other.max_pq_chunksize == this->max_pq_chunksize &&
+                other.compression == this->compression &&
+                PyObject_RichCompareBool(other.partition_tuples,
+                                         this->partition_tuples, Py_EQ) &&
+                PyObject_RichCompareBool(other.sort_tuples, this->sort_tuples,
+                                         Py_EQ) &&
+                other.iceberg_schema_str == this->iceberg_schema_str &&
+                PyObject_RichCompareBool(other.output_pa_schema,
+                                         this->output_pa_schema, Py_EQ) &&
+                PyObject_RichCompareBool(other.fs, this->fs, Py_EQ));
+    }
+
+    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
+        return duckdb::make_uniq<IcebergWriteFunctionData>(
+            this->table_loc, this->bucket_region, this->max_pq_chunksize,
+            this->compression, this->partition_tuples, this->sort_tuples,
+            this->iceberg_schema_str, this->output_pa_schema, this->fs);
+    }
+
+    std::string table_loc;
+    std::string bucket_region;
+    int64_t max_pq_chunksize;
+    std::string compression;
+    PyObject *partition_tuples;
+    PyObject *sort_tuples;
+    std::string iceberg_schema_str;
+    PyObject *output_pa_schema;
+    PyObject *fs;
+};
