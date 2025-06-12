@@ -559,15 +559,7 @@ class BodoStringMethods:
 
     def __init__(self, series):
         # Validate input series
-        allowed_types = [
-            pd.ArrowDtype(pa.large_string()),
-            pd.ArrowDtype(pa.string()),
-            pd.ArrowDtype(pa.large_list(pa.large_string())),
-            pd.ArrowDtype(pa.list_(pa.large_string())),
-            pd.ArrowDtype(pa.list_(pa.string())),
-            pd.ArrowDtype(pa.large_binary()),
-            pd.ArrowDtype(pa.binary()),
-        ]
+        allowed_types = allowed_types_map["default"]
         if not (
             isinstance(series, BodoSeries)
             and isinstance(series.dtype, pd.ArrowDtype)
@@ -1113,6 +1105,15 @@ allowed_types_map = {
         pd.ArrowDtype(pa.list_(pa.large_string())),
         pd.ArrowDtype(pa.large_list(pa.string())),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
+    ],
+    "default": [
+        pd.ArrowDtype(pa.large_string()),
+        pd.ArrowDtype(pa.string()),
+        pd.ArrowDtype(pa.large_list(pa.large_string())),
+        pd.ArrowDtype(pa.list_(pa.large_string())),
+        pd.ArrowDtype(pa.list_(pa.string())),
+        pd.ArrowDtype(pa.large_binary()),
+        pd.ArrowDtype(pa.binary()),
     ],
 }
 
