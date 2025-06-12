@@ -341,13 +341,13 @@ Write a DataFrame as a Parquet dataset.
 
 <p class="api-header">Parameters</p>
 
-: __path: *str*:__ Output path to write. It can be a local path (e.g. `output.parquet`), or AWS S3 (`s3://...`) or Azure ALDS (`abfs://...`, `abfss://...`) or GCP GCS (`gcs://...`, `gs://`).
+: __path: *str*:__ Output path to write. It can be a local path (e.g. `output.parquet`), AWS S3 (`s3://...`), Azure ALDS (`abfs://...`, `abfss://...`), or GCP GCS (`gcs://...`, `gs://`).
 
 : __compression : *str, default 'snappy'*:__ File compression to use. Can be None, 'snappy', 'gzip', or 'brotli'.
 
 : __row_group_size : *int*:__ Row group size in output Parquet files. -1 allows the backend to choose.
 
-: All other parameters will trigger a fallback to pandas.DataFrame.to_parquet.
+: All other parameters will trigger a fallback to [`pandas.DataFrame.to_parquet`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_parquet.html).
 
 
 <p class="api-header">Example</p>
