@@ -335,7 +335,27 @@ if pandas_version >= (3, 0):
             decorator: Callable | None,
             skip_na: bool,
         ):
-            raise NotImplementedError("BodoExecutionEngine: map not implemented yet.")
+            if not isinstance(data, pd.Series):
+                raise ValueError(
+                    f"BodoExecutionEngine: map() expected input data to be Series, got: {type(data)}"
+                )
+
+            if skip_na:
+                raise ValueError(
+                    "BodoExecutionEngine: na_action not supported other than the default None for map()."
+                )
+
+            if args or kwargs:
+                raise ValueError(
+                    "BodoExecutionEngine: passing additional arguments to UDF not supported for map()."
+                )
+
+            def map_func(data):
+                return data.map(func)
+
+            map_func_jit = decorator(map_func)
+
+            return map_func_jit(data)
 
         @staticmethod
         def apply(
