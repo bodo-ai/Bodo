@@ -558,29 +558,26 @@ class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
     def __init__(self, series):
-        self._series = series
-        self._inferred_dtype = self._validate(series)
-        self._is_string = self._inferred_dtype is str
-
-    @staticmethod
-    def _validate(series):
-        """
-        Analogous to _validate in Pandas, except Bodo supports fewer dtypes than Pandas.
-        Currently, only string and list are valid dtypes for BodoStringMethods.
-        Among them, most methods reject list dtypes, with join being one exception case.
-        """
-        if not isinstance(series, BodoSeries):
-            raise AttributeError("Series should be a valid BodoSeries!")
-
-        series_dtype = series.dtype
-        if not isinstance(series_dtype, pd.ArrowDtype):
-            raise AttributeError("Series.dtype should be a valid ArrowDtype!")
-
-        inferred_dtype = series_dtype.type
-        if inferred_dtype not in (str, list, bytes):
+        # Validate input series
+        allowed_types = [
+            pd.ArrowDtype(pa.large_string()),
+            pd.ArrowDtype(pa.string()),
+            pd.ArrowDtype(pa.large_list(pa.large_string())),
+            pd.ArrowDtype(pa.list_(pa.large_string())),
+            pd.ArrowDtype(pa.list_(pa.string())),
+            pd.ArrowDtype(pa.large_binary()),
+            pd.ArrowDtype(pa.binary()),
+        ]
+        if not (
+            isinstance(series, BodoSeries)
+            and isinstance(series.dtype, pd.ArrowDtype)
+            and series.dtype in allowed_types
+        ):
             raise AttributeError("Can only use .str accessor with string values!")
 
-        return inferred_dtype
+        self._series = series
+        self._dtype = series.dtype
+        self._is_string = series.dtype == pd.ArrowDtype(pa.string())
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
@@ -608,7 +605,7 @@ class BodoStringMethods:
             try:
                 return sep.join(l)
             except Exception:
-                return None
+                return pd.NA
 
         validate_dtype("str.join", self)
         series = self._series
@@ -645,7 +642,7 @@ class BodoDatetimeProperties:
             pd.ArrowDtype(pa.time64("ns")),
         ):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
-        self._inferred_dtype = series.dtype
+        self._dtype = series.dtype
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
@@ -860,11 +857,13 @@ def validate_dtype(name, obj):
     if "." not in name:
         return
 
-    dtype = obj._inferred_dtype
+    dtype = obj._dtype
     parts = name.split(".")
     accessor, method = parts[0], parts[1]
     if accessor == "str.":
-        if dtype not in allowed_types_map.get(method, [str]):
+        if dtype not in allowed_types_map.get(
+            method, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
+        ):
             raise AttributeError(
                 "Can only use .str accessor with string values!. Did you mean: 'std'?"
             )
@@ -1101,8 +1100,20 @@ dir_methods = [
 ]
 
 allowed_types_map = {
-    "decode": [str, bytes],
-    "join": [str, list],
+    "decode": [
+        pd.ArrowDtype(pa.string()),
+        pd.ArrowDtype(pa.large_string()),
+        pd.ArrowDtype(pa.binary()),
+        pd.ArrowDtype(pa.large_binary()),
+    ],
+    "join": [
+        pd.ArrowDtype(pa.string()),
+        pd.ArrowDtype(pa.large_string()),
+        pd.ArrowDtype(pa.list_(pa.string())),
+        pd.ArrowDtype(pa.list_(pa.large_string())),
+        pd.ArrowDtype(pa.large_list(pa.string())),
+        pd.ArrowDtype(pa.large_list(pa.large_string())),
+    ],
 }
 
 
