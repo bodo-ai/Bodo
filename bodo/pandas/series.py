@@ -32,6 +32,7 @@ from bodo.pandas.utils import (
     get_proj_expr_single,
     get_scalar_udf_result_type,
     is_single_colref_projection,
+    is_single_projection,
     make_col_ref_exprs,
     wrap_plan,
 )
@@ -571,6 +572,31 @@ def _str_cat_helper(df, sep):
     return series
 
 
+def get_base_plan(plan):
+    if is_single_projection(plan):
+        inner_plan = get_base_plan(plan.args[0])
+        if inner_plan is not None:
+            return inner_plan
+        return None
+    return plan
+
+
+def validate_str_cat(lhs, rhs):
+    if (
+        lhs._plan.args[1][0].plan_class != "ColRefExpression"
+        or rhs._plan.args[1][0].plan_class != "ColRefExpression"
+    ):
+        raise BodoLibNotImplementedException(
+            "Plans other than ColRefExpression are not supported yet: falling back to Pandas"
+        )
+    lhs_base_plan = get_base_plan(lhs._plan)
+    rhs_base_plan = get_base_plan(rhs._plan)
+    if lhs_base_plan != rhs_base_plan:
+        raise BodoLibNotImplementedException(
+            "self and others are from distinct DataFrames: falling back to Pandas"
+        )
+
+
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
@@ -608,17 +634,17 @@ class BodoStringMethods:
         element-wise and returns a Series. If others is not passed, then falls back to
         Pandas, and all values in the Series are concatenated into a single string with a given sep.
         """
-        # Validates input series and others series
-        # From the same df
-        # Same length
-
-        if others is None:
+        # Validates others is a lazy BodoSeries, falls back to Pandas otherwise
+        if not isinstance(others, BodoSeries) or not others.is_lazy_plan():
             raise BodoLibNotImplementedException(
                 "str.cat(others=None): fallback to Pandas"
             )
 
         lhs, rhs = self._series, others
         dtype = pd.ArrowDtype(pa.large_string())
+
+        # Validates input series and others series are from same df, falls back to Pandas otherwise
+        validate_str_cat(lhs, rhs)
 
         index = lhs.head(0).index
         new_metadata = pd.Series(
