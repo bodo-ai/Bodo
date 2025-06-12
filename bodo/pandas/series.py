@@ -859,9 +859,7 @@ def validate_dtype(name, obj):
         if dtype not in allowed_types_map.get(
             method, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
         ):
-            raise AttributeError(
-                "Can only use .str accessor with string values!. Did you mean: 'std'?"
-            )
+            raise AttributeError("Can only use .str accessor with string values!")
     # Implement accessor == "dt." case if necessary.
 
 
