@@ -19,8 +19,6 @@ from bodo.io.fs_io import (
     parse_fpath,
 )
 
-from bodo.io.parquet_pio import get_parquet_dataset
-
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
 ctypedef unsigned long long idx_t
