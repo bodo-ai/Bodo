@@ -151,7 +151,7 @@ def polaris_package():
         except subprocess.CalledProcessError:
             raise ValueError(
                 "Polaris client is not installed. Please install it manually."
-                "You can install it by running: pip install git+https://github.com/apache/polaris.git#subdirectory=client/python",
+                "You can install it by running: pip install git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python",
             )
 
     ensure_polaris_client()
