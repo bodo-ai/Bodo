@@ -569,7 +569,10 @@ class BodoStringMethods:
 
         self._series = series
         self._dtype = series.dtype
-        self._is_string = series.dtype == pd.ArrowDtype(pa.string())
+        self._is_string = series.dtype in (
+            pd.ArrowDtype(pa.string()),
+            pd.ArrowDtype(pa.large_string()),
+        )
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
