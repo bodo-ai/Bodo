@@ -215,6 +215,25 @@ def test_write_parquet(index_val):
             sort_output=True,
         )
 
+        # Already distributed DataFrame case
+        path = os.path.join(tmp, "test_write_dist.parquet")
+        bodo_df = bd.from_pandas(df)
+
+        @bodo.jit(spawn=True)
+        def f(df):
+            return df
+
+        f(bodo_df)
+        bodo_df.to_parquet(path)
+        # Read back to check
+        py_out = pd.read_parquet(path)
+        _test_equal(
+            py_out,
+            df,
+            check_pandas_types=False,
+            sort_output=True,
+        )
+
 
 def test_projection(datapath):
     """Very simple test for projection for sanity checking."""
