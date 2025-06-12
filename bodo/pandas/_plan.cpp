@@ -6,6 +6,7 @@
 
 #include "../io/arrow_compat.h"
 #include "_bodo_scan_function.h"
+#include "_bodo_write_function.h"
 #include "_executor.h"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/types.hpp"

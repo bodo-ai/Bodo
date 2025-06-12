@@ -5,7 +5,7 @@
 #include "../../io/parquet_write.h"
 #include "../../libs/_bodo_to_arrow.h"
 #include "../../libs/streaming/_shuffle.h"
-#include "_bodo_scan_function.h"
+#include "_bodo_write_function.h"
 #include "physical/operator.h"
 
 class PhysicalWriteParquet : public PhysicalSink {
