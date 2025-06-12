@@ -58,10 +58,7 @@ struct ParquetWriteFunctionData : public BodoWriteFunctionData {
     }
 
     std::shared_ptr<PhysicalSink> CreatePhysicalOperator(
-        std::shared_ptr<bodo::Schema> in_table_schema) override {
-        return nullptr;  // std::make_shared<PhysicalWriteParquet>(in_table_schema,
-                         // *this);
-    }
+        std::shared_ptr<bodo::Schema> in_table_schema) override;
 
     std::string path;
     std::shared_ptr<arrow::Schema> arrow_schema;
@@ -127,10 +124,7 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
     }
 
     std::shared_ptr<PhysicalSink> CreatePhysicalOperator(
-        std::shared_ptr<bodo::Schema> in_table_schema) override {
-        return nullptr;  // std::make_shared<PhysicalWriteIceberg>(in_table_schema,
-                         // *this);
-    }
+        std::shared_ptr<bodo::Schema> in_table_schema) override;
 
     std::string table_loc;
     std::string bucket_region;
