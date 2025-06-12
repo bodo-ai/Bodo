@@ -493,7 +493,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
-    @check_args_fallback(supported=["ascending", "na_position"])
+    @check_args_fallback(supported=["ascending", "na_position", "kind"])
     def sort_values(
         self,
         *,
@@ -520,6 +520,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if na_position not in ["first", "last"]:
             raise BodoError(
                 "Series.sort_values(): argument na_position does not contain only 'first' or 'last'"
+            )
+
+        # We will treat these 3 sort identically as we don't currently have a
+        # way to pass the sort type through LogicalOrder.
+        if kind not in ["quicksort", "mergesort", "heapsort"]:
+            raise BodoError(
+                "Series.sort_values(): unsupported argument value for kind " + str(kind)
             )
 
         ascending = [ascending]
