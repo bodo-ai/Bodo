@@ -635,12 +635,13 @@ def _replace_schema(txn: Transaction, schema: Schema):
 
 
 def start_write_rank_0(
-    conn: str,
+    conn: str | Catalog,
     table_id: str,
     df_schema: pa.Schema,
     if_exists: pt.Literal["fail", "append", "replace"],
     allow_downcasting: bool,
     create_table_info_arg: CreateTableMetaType | None = None,
+    location: str | None = None,
 ) -> tuple[
     Transaction,
     FileSystem,
@@ -660,6 +661,7 @@ def start_write_rank_0(
         df_schema (pyarrow.Schema): PyArrow schema of the DataFrame being written
         if_exists (str): What write operation we are doing. This must be one of
             ['fail', 'append', 'replace']
+        location (str | None): path of the table files created
     """
     from pyiceberg.io import load_file_io
     from pyiceberg.io.pyarrow import _pyarrow_to_schema_without_ids
@@ -673,7 +675,7 @@ def start_write_rank_0(
         "bodo.io.iceberg.write.start_write_rank_0:: This function must only run on rank 0"
     )
 
-    catalog = conn_str_to_catalog(conn)
+    catalog = conn_str_to_catalog(conn) if isinstance(conn, str) else conn
     # Determine what action to perform based on if_exists and table status
     table_exists = catalog.table_exists(table_id)
     if table_exists and if_exists == "fail":
@@ -709,6 +711,7 @@ def start_write_rank_0(
             txn = catalog.create_table_transaction(
                 table_id,
                 output_schema,
+                location=location,
                 properties=properties,
             )
         except NotImplementedError:
@@ -717,6 +720,7 @@ def start_write_rank_0(
             txn = catalog.create_table(
                 table_id,
                 output_schema,
+                location=location,
                 properties=properties,
             ).transaction()
 

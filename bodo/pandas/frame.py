@@ -290,6 +290,57 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         execute_plan(write_plan)
 
+    @check_args_fallback("none")
+    def to_iceberg(
+        self,
+        table_identifier: str,
+        catalog_name: str | None = None,
+        *,
+        catalog_properties: dict[str, pt.Any] | None = None,
+        location: str | None = None,
+        append: bool = False,
+        snapshot_properties: dict[str, str] | None = None,
+    ) -> None:
+        # See Pandas implementation of to_iceberg:
+        # https://github.com/pandas-dev/pandas/blob/c5457f61d92b9428a56c619a6c420b122a41a347/pandas/core/frame.py#L3550
+        # https://github.com/pandas-dev/pandas/blob/c5457f61d92b9428a56c619a6c420b122a41a347/pandas/io/iceberg.py#L98
+        # See Bodo JIT implementation of streaming writes to Iceberg:
+        # https://github.com/bodo-ai/Bodo/blob/142678b2fe7217d80e233d201061debae2d47c13/bodo/io/iceberg/stream_iceberg_write.py#L535
+        import pyiceberg.catalog
+
+        # TODO: add `partition_spec`, `sort_order` and `properties` arguments
+
+        # TODO: handle snapshot_properties
+        if snapshot_properties is None:
+            snapshot_properties = {}
+
+        if catalog_properties is None:
+            catalog_properties = {}
+        catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
+
+        if_exists = "append" if append else "replace"
+        df_schema = self._plan.pa_schema
+        (
+            txn,
+            fs,
+            table_loc,
+            output_pa_schema,
+            iceberg_schema_str,
+            partition_spec,
+            partition_tuples,
+            sort_order_id,
+            sort_tuples,
+            properties,
+        ) = bodo.io.iceberg.write.start_write_rank_0(
+            catalog,
+            table_identifier,
+            df_schema,
+            if_exists,
+            False,
+            None,
+            location,
+        )
+
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
             return self._mgr._md_result_id
