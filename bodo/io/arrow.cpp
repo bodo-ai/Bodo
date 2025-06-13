@@ -103,8 +103,9 @@ PyObject* iceberg_pq_write_py_entry(
     const char* table_data_loc, table_info* in_table,
     array_info* in_col_names_arr, PyObject* partition_spec,
     PyObject* sort_order, const char* compression, bool is_parallel,
-    const char* bucket_region, int64_t row_group_size, char* iceberg_metadata,
-    PyObject* iceberg_arrow_schema_py, PyObject* arrow_fs, void* sketches);
+    const char* bucket_region, int64_t row_group_size,
+    const char* iceberg_metadata, PyObject* iceberg_arrow_schema_py,
+    PyObject* arrow_fs, void* sketches);
 
 PyMethodDef fetch_frags_method_def = {"fetch_parquet_frags_metadata",
                                       (PyCFunction)fetch_parquet_frags_metadata,
