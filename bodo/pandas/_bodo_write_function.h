@@ -4,6 +4,8 @@
 #include <utility>
 #include "_util.h"
 
+#include <arrow/filesystem/filesystem.h>
+#include <arrow/python/api.h>
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
@@ -72,37 +74,37 @@ struct ParquetWriteFunctionData : public BodoWriteFunctionData {
  *
  */
 struct IcebergWriteFunctionData : public BodoWriteFunctionData {
-    IcebergWriteFunctionData(std::string table_loc, std::string bucket_region,
+    IcebergWriteFunctionData(std::shared_ptr<arrow::Schema> arrow_schema,
+                             std::string table_loc, std::string bucket_region,
                              int64_t max_pq_chunksize, std::string compression,
                              PyObject *partition_tuples, PyObject *sort_tuples,
                              std::string iceberg_schema_str,
-                             PyObject *output_pa_schema, PyObject *fs)
-        : table_loc(std::move(table_loc)),
+                             std::shared_ptr<arrow::Schema> iceberg_schema,
+                             std::shared_ptr<arrow::fs::FileSystem> fs)
+        : in_schema(arrow_schema),
+          table_loc(std::move(table_loc)),
           bucket_region(std::move(bucket_region)),
           max_pq_chunksize(max_pq_chunksize),
           compression(std::move(compression)),
           partition_tuples(partition_tuples),
           sort_tuples(sort_tuples),
           iceberg_schema_str(std::move(iceberg_schema_str)),
-          output_pa_schema(output_pa_schema),
+          iceberg_schema(iceberg_schema),
           fs(fs) {
         Py_INCREF(partition_tuples);
         Py_INCREF(sort_tuples);
-        Py_INCREF(output_pa_schema);
-        Py_INCREF(fs);
     }
 
     ~IcebergWriteFunctionData() override {
         Py_DECREF(partition_tuples);
         Py_DECREF(sort_tuples);
-        Py_DECREF(output_pa_schema);
-        Py_DECREF(fs);
     }
 
     bool Equals(const FunctionData &other_p) const override {
         const IcebergWriteFunctionData &other =
             other_p.Cast<IcebergWriteFunctionData>();
-        return (other.table_loc == this->table_loc &&
+        return (other.in_schema->Equals(this->in_schema) &&
+                other.table_loc == this->table_loc &&
                 other.bucket_region == this->bucket_region &&
                 other.max_pq_chunksize == this->max_pq_chunksize &&
                 other.compression == this->compression &&
@@ -111,21 +113,22 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
                 PyObject_RichCompareBool(other.sort_tuples, this->sort_tuples,
                                          Py_EQ) &&
                 other.iceberg_schema_str == this->iceberg_schema_str &&
-                PyObject_RichCompareBool(other.output_pa_schema,
-                                         this->output_pa_schema, Py_EQ) &&
-                PyObject_RichCompareBool(other.fs, this->fs, Py_EQ));
+                other.iceberg_schema->Equals(this->iceberg_schema) &&
+                other.fs->Equals(this->fs));
     }
 
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
         return duckdb::make_uniq<IcebergWriteFunctionData>(
-            this->table_loc, this->bucket_region, this->max_pq_chunksize,
-            this->compression, this->partition_tuples, this->sort_tuples,
-            this->iceberg_schema_str, this->output_pa_schema, this->fs);
+            this->in_schema, this->table_loc, this->bucket_region,
+            this->max_pq_chunksize, this->compression, this->partition_tuples,
+            this->sort_tuples, this->iceberg_schema_str, this->iceberg_schema,
+            this->fs);
     }
 
     std::shared_ptr<PhysicalSink> CreatePhysicalOperator(
         std::shared_ptr<bodo::Schema> in_table_schema) override;
 
+    std::shared_ptr<arrow::Schema> in_schema;
     std::string table_loc;
     std::string bucket_region;
     int64_t max_pq_chunksize;
@@ -133,6 +136,6 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
     PyObject *partition_tuples;
     PyObject *sort_tuples;
     std::string iceberg_schema_str;
-    PyObject *output_pa_schema;
-    PyObject *fs;
+    std::shared_ptr<arrow::Schema> iceberg_schema;
+    std::shared_ptr<arrow::fs::FileSystem> fs;
 };
