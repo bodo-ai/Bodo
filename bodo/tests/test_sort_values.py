@@ -497,8 +497,16 @@ def test_sort_values_1col_long_int_list(memory_leak_check):
         return pd.DataFrame({"A": eListA})
 
     n = 10
-    check_func(test_impl1, (get_quasi_random(n),), reset_index=bodo.test_dataframe_library_enabled)
-    check_func(test_impl2, (get_quasi_random(n),), reset_index=bodo.test_dataframe_library_enabled)
+    check_func(
+        test_impl1,
+        (get_quasi_random(n),),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        test_impl2,
+        (get_quasi_random(n),),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.df_lib
@@ -527,8 +535,16 @@ def test_sort_values_2col_long_np(memory_leak_check):
         return pd.DataFrame({"A": eListA, "B": eListB})
 
     n = 100
-    check_func(test_impl1, (get_quasi_random(n),), reset_index=bodo.test_dataframe_library_enabled)
-    check_func(test_impl2, (get_quasi_random(n),), reset_index=bodo.test_dataframe_library_enabled)
+    check_func(
+        test_impl1,
+        (get_quasi_random(n),),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        test_impl2,
+        (get_quasi_random(n),),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.df_lib
@@ -997,11 +1013,38 @@ def test_sort_with_nan_entries(memory_leak_check):
     df3 = pd.DataFrame({"A": pd.array([1, 2, None, 3], dtype="UInt16")})
     df4 = pd.DataFrame({"A": pd.Series([1, 8, 4, np.nan, 3], dtype="Int32")})
     df5 = pd.DataFrame({"A": pd.Series(["AA", None, "", "D", "GG"])})
-    check_func(impl1, (df1,), sort_output=False, check_typing_issues=False, reset_index=bodo.test_dataframe_library_enabled)
-    check_func(impl1, (df2,), sort_output=False, reset_index=bodo.test_dataframe_library_enabled)
-    check_func(impl1, (df3,), sort_output=False, reset_index=bodo.test_dataframe_library_enabled)
-    check_func(impl1, (df4,), sort_output=False, reset_index=bodo.test_dataframe_library_enabled)
-    check_func(impl1, (df5,), sort_output=False, check_typing_issues=False, reset_index=bodo.test_dataframe_library_enabled)
+    check_func(
+        impl1,
+        (df1,),
+        sort_output=False,
+        check_typing_issues=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        impl1,
+        (df2,),
+        sort_output=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        impl1,
+        (df3,),
+        sort_output=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        impl1,
+        (df4,),
+        sort_output=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        impl1,
+        (df5,),
+        sort_output=False,
+        check_typing_issues=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.df_lib
@@ -1198,9 +1241,17 @@ def test_sort_values_force_literal(memory_leak_check):
             "C": np.arange(6),
         }
     )
-    check_func(impl, (df, ["B"], "first"), reset_index=bodo.test_dataframe_library_enabled)
-    check_func(impl, (df, "B", "first"), reset_index=bodo.test_dataframe_library_enabled)
-    check_func(impl2, (df, ["B", "C"], [False, True], "first"), reset_index=bodo.test_dataframe_library_enabled)
+    check_func(
+        impl, (df, ["B"], "first"), reset_index=bodo.test_dataframe_library_enabled
+    )
+    check_func(
+        impl, (df, "B", "first"), reset_index=bodo.test_dataframe_library_enabled
+    )
+    check_func(
+        impl2,
+        (df, ["B", "C"], [False, True], "first"),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.slow
@@ -2068,7 +2119,12 @@ def test_list_string_missing(memory_leak_check):
     random.seed(5)
     n = 10
     df1 = pd.DataFrame({"A": gen_random_list_string_array(3, n)})
-    check_func(f, (df1,), convert_columns_to_pandas=True, reset_index=bodo.test_dataframe_library_enabled)
+    check_func(
+        f,
+        (df1,),
+        convert_columns_to_pandas=True,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.slow

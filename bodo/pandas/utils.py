@@ -513,7 +513,12 @@ def _empty_pd_array(pa_type):
     if isinstance(pa_type, pa.DictionaryType):
         assert pa_type.index_type == pa.int32() and (
             pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
-        ), "Invalid dictionary type " + str(pa_type.index_type) + " " + str(pa_type.value_type)
+        ), (
+            "Invalid dictionary type "
+            + str(pa_type.index_type)
+            + " "
+            + str(pa_type.value_type)
+        )
         return pd.array(
             ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
         )[:0]

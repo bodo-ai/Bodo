@@ -933,7 +933,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # way to pass the sort type through LogicalOrder.
         if kind not in ["quicksort", "mergesort", "heapsort"]:
             raise BodoError(
-                "DataFrame.sort_values(): unsupported argument value for kind " + str(kind)
+                "DataFrame.sort_values(): unsupported argument value for kind "
+                + str(kind)
             )
 
         # Apply singular ascending param to all columns.
