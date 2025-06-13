@@ -98,3 +98,6 @@ class PhysicalSourceSink : public PhysicalOperator {
  * @return int batch size to be used in streaming operators
  */
 int get_streaming_batch_size();
+
+// Maximum Parquet file size for streaming Parquet write
+int64_t get_parquet_chunk_size();

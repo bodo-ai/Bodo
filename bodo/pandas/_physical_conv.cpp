@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include "_bodo_scan_function.h"
 
+#include "_bodo_scan_function.h"
 #include "_util.h"
 #include "physical/aggregate.h"
 #include "physical/filter.h"
@@ -10,6 +11,7 @@
 #include "physical/project.h"
 #include "physical/sample.h"
 #include "physical/sort.h"
+#include "physical/write_parquet.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -205,4 +207,18 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
     // previous pipeline and the source of the next one.
     // We record the pipeline dependency between these two pipelines.
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    ParquetWriteFunctionData& pq_data =
+        op.bind_data->Cast<ParquetWriteFunctionData>();
+    auto physical_op =
+        std::make_shared<PhysicalWriteParquet>(in_table_schema, pq_data);
+
+    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
+    this->active_pipeline = nullptr;
 }

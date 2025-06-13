@@ -25,6 +25,7 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalComparisonJoin& op);
     void Visit(duckdb::LogicalLimit& op);
     void Visit(duckdb::LogicalSample& op);
+    void Visit(duckdb::LogicalCopyToFile& op);
 
     void Visit(duckdb::LogicalOperator& op) {
         if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
@@ -45,6 +46,9 @@ class PhysicalPlanBuilder {
             Visit(op.Cast<duckdb::LogicalLimit>());
         } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_SAMPLE) {
             Visit(op.Cast<duckdb::LogicalSample>());
+        } else if (op.type ==
+                   duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE) {
+            Visit(op.Cast<duckdb::LogicalCopyToFile>());
         } else {
             throw std::runtime_error(
                 "PhysicalPlanBuilder::Visit unsupported logical operator "

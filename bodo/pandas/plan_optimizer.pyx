@@ -13,6 +13,12 @@ from libc.stdint cimport int64_t
 import pandas as pd
 import pyarrow.parquet as pq
 
+from bodo.io.fs_io import (
+    expand_path_globs,
+    getfs,
+    parse_fpath,
+)
+
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
 ctypedef unsigned long long idx_t
@@ -282,6 +288,10 @@ cdef extern from "duckdb/planner/operator/logical_get.hpp" namespace "duckdb" no
     cdef cppclass CLogicalGet" duckdb::LogicalGet"(CLogicalOperator):
         pass
 
+cdef extern from "duckdb/planner/operator/logical_copy_to_file.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalCopyToFile" duckdb::LogicalCopyToFile"(CLogicalOperator):
+        pass
+
 
 cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options) except +
@@ -307,6 +317,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
     cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object field, c_string function_name, vector[int] input_column_indices) except +
+    cdef unique_ptr[CLogicalCopyToFile] make_parquet_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string path, c_string compression, c_string bucket_region, int64_t row_group_size) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
     cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
@@ -707,18 +718,24 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     """Wrapper around DuckDB's LogicalGet for reading Parquet datasets.
     """
     cdef readonly object path
+    cdef readonly object storage_options
 
     def __cinit__(self, object out_schema, object parquet_path, object storage_options):
         self.out_schema = out_schema
         cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
         self.path = parquet_path
+        self.storage_options = storage_options
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
-        return pq.read_table(self.path, columns=[]).num_rows
+        fpath, _, protocol = parse_fpath(self.path)
+        fs = getfs(fpath, protocol, self.storage_options, parallel=False)
+        expanded_paths = expand_path_globs(fpath, protocol, fs)
+
+        return pq.read_table(expanded_paths, filesystem=fs, columns=[]).num_rows
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
@@ -776,6 +793,23 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     def __str__(self):
         return f"LogicalGetIcebergRead({self.table_identifier})"
 
+
+cdef class LogicalParquetWrite(LogicalOperator):
+    """
+    Wrapper around DuckDB's LogicalCopyToFile for writing Parquet datasets.
+    """
+
+    def __cinit__(self, object out_schema, LogicalOperator source, str path, str compression, str bucket_region, int64_t row_group_size):
+        self.out_schema = out_schema
+        self.sources = [source]
+
+        cdef unique_ptr[CLogicalCopyToFile] c_logical_copy_to_file = make_parquet_write_node(source.c_logical_operator, out_schema, path.encode(), compression.encode(), bucket_region.encode(), row_group_size)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_copy_to_file.release())
+
+    def __str__(self):
+        return f"LogicalParquetWrite()"
+
+
 cpdef count_nodes(object root):
     cdef LogicalOperator wrapped_operator
 
@@ -829,6 +863,11 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
 
     exec_output = execute_plan(move(wrapped_operator.c_logical_operator), out_schema)
     cpp_table = exec_output.first
+
+    # Write doesn't return output data
+    if cpp_table == 0:
+        return None
+
     arrow_schema = <object>exec_output.second
     if output_func is None:
         raise ValueError("output_func is None.")
