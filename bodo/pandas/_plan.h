@@ -145,6 +145,14 @@ duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
     const std::string &val);
 
 /**
+ * @brief Create an expression from a constant bool.
+ *
+ * @param val - the constant bool for the expression
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const bool expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_bool_expr(bool val);
+
+/**
  * @brief Create an expression from a constant timestamp with ns resolution.
  *
  * @param val - the constant timestamp for the expression in ns since epoch
