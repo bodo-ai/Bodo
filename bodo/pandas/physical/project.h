@@ -76,9 +76,29 @@ class PhysicalProjection : public PhysicalSourceSink {
                         ->copy();
                 this->output_schema->append_column(std::move(col_type));
                 col_names.emplace_back(const_expr.value.ToString());
+            } else if (expr->type == duckdb::ExpressionType::COMPARE_EQUAL ||
+                       expr->type == duckdb::ExpressionType::COMPARE_NOTEQUAL ||
+                       expr->type == duckdb::ExpressionType::COMPARE_LESSTHAN ||
+                       expr->type ==
+                           duckdb::ExpressionType::COMPARE_GREATERTHAN ||
+                       expr->type ==
+                           duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO ||
+                       expr->type == duckdb::ExpressionType::
+                                         COMPARE_GREATERTHANOREQUALTO) {
+                std::unique_ptr<bodo::DataType> col_type =
+                    std::make_unique<bodo::DataType>(
+                        bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::CTypeEnum::_BOOL);
+                this->output_schema->append_column(std::move(col_type));
+                if (input_schema->column_names.size() > 0) {
+                    col_names.emplace_back(input_schema->column_names[0]);
+                } else {
+                    col_names.emplace_back("comp");
+                }
             } else {
                 throw std::runtime_error(
                     "Unsupported expression type in projection " +
+                    std::to_string(static_cast<int>(expr->type)) + " " +
                     expr->ToString());
             }
         }
