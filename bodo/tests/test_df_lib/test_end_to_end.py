@@ -1096,10 +1096,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-@pytest.mark.parametrize(
-    "mode", [0, 1]
-)
-def test_series_filter_distributed(datapath, file_path, op, mode):
+def test_series_filter_distributed(datapath, file_path, op):
     """Very simple test for series filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath(file_path))
     py_df1 = pd.read_parquet(datapath(file_path))
@@ -1109,14 +1106,59 @@ def test_series_filter_distributed(datapath, file_path, op, mode):
         return df
 
     # Force plan to execute but keep distributed.
-    if mode == 1:
-        f(bodo_df1)
-    else:
-        bodo_df1._mgr._collect()
-
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
     bodo_series_a = bodo_df1["A"]
+    bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+
+    # Make sure bodo_filter_a is unevaluated at this point.
+    assert bodo_filter_a.is_lazy_plan()
+
+    py_series_a = py_df1["A"]
+    py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+
+    _test_equal(
+        bodo_filter_a,
+        py_filter_a,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest_mark_spawn_mode
+@pytest.mark.parametrize(
+    "file_path",
+    [
+        "dataframe_library/df1.parquet",
+        "dataframe_library/df1_index.parquet",
+        "dataframe_library/df1_multi_index.parquet",
+    ],
+)
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+@pytest.mark.parametrize(
+    "mode", [0, 1, 2]
+)
+def test_series_filter_series(datapath, file_path, op, mode):
+    """Very simple test for series filter for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath(file_path))
+    py_df1 = pd.read_parquet(datapath(file_path))
+
+    @bodo.jit(spawn=True)
+    def f(df):
+        return df
+
+    # Force plan to execute but keep distributed.
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    bodo_series_a = bodo_df1["A"]
+    if mode == 1:
+        f(bodo_series_a)
+    elif mode == 2:
+        bodo_series_a._mgr._collect()
+
     bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
 
     # Make sure bodo_filter_a is unevaluated at this point.
