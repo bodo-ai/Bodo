@@ -11,8 +11,8 @@ model_len = 2048
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 prompts = pd.read_parquet(
-    "hf://datasets/LLMDH/English-PD-bad-OCR/english_pd_105.parquet"
-).head(10)
+    "hf://datasets/LLMDH/English-PD-bad-OCR/**/*.parquet"
+)
 
 
 def tokenize(row):
