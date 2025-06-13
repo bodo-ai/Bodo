@@ -1045,6 +1045,9 @@ class GroupbyState {
     bool parallel;
     const int64_t output_batch_size;
 
+    // drop_na flag in DataFrame library
+    const bool pandas_drop_na;
+
     std::vector<std::shared_ptr<BasicColSet>> col_sets;
 
     // Shuffle state
@@ -1163,7 +1166,7 @@ class GroupbyState {
         int64_t op_pool_size_bytes_, bool allow_any_work_stealing = true,
         std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
             key_dict_builders_ = std::nullopt,
-        bool use_sql_rules = true);
+        bool use_sql_rules = true, bool pandas_drop_na_ = false);
 
     ~GroupbyState() { MPI_Comm_free(&this->shuffle_comm); }
 

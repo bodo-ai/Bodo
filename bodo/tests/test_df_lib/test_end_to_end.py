@@ -971,7 +971,7 @@ def test_basic_groupby():
         {
             "B": ["a1", "b11", "c111"] * 2,
             "E": [1.1, 2.2, 13.3] * 2,
-            "A": pd.array([2, 2, 3] * 2, "Int64"),
+            "A": pd.array([pd.NA, 2, 3] * 2, "Int64"),
         },
         index=[0, 41, 2] * 2,
     )
