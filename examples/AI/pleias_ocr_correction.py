@@ -31,7 +31,7 @@ def ocr_correction(prompts):
         dtype="auto",
         # Bodo workers have issues with async runtime
         disable_async_output_proc=True,
-        max_model_len=model_len//2,
+        max_model_len=model_len,
     )
     sampling_params = SamplingParams(
         repetition_penalty=1,
