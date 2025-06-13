@@ -13,11 +13,13 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 prompts = pd.read_parquet(
     "hf://datasets/LLMDH/English-PD-bad-OCR/**/*.parquet"
 )
-
+tokenizer = None
 
 def tokenize(row):
     # Tokenizer needs to be re-instantiated per worker in distributed execution
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    global tokenizer
+    if tokenizer is None:
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # Special token sequences marking different sections of the input
     text_start = [2, 65522]
@@ -41,8 +43,8 @@ def tokenize(row):
 
     # Add section markers around each chunk (drop the stop token from the tokenizer output since it's in the text_start)
     split_row_encoded = [
-        text_start + split_chunk[1:] + text_end + ocr_correction_start
-        for split_chunk in split_row_encoded
+        text_start + (split_row_encoded_chunk[1:] if split_row_encoded_chunk[0] == 2 else split_row_encoded_chunk) + text_end + ocr_correction_start
+        for split_row_encoded_chunk in split_row_encoded
     ]
     return split_row_encoded
 
