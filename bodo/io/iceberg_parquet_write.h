@@ -40,4 +40,4 @@ void iceberg_pq_write(
     bool is_parallel, const char *bucket_region, int64_t row_group_size,
     const char *iceberg_metadata, PyObject *iceberg_files_info_py,
     std::shared_ptr<arrow::Schema> iceberg_schema,
-    std::shared_ptr<arrow::fs::FileSystem> arrow_fs, void *sketches);
+    std::shared_ptr<arrow::fs::FileSystem> arrow_fs, void *sketches_ptr);

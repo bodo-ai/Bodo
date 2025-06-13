@@ -700,7 +700,7 @@ void iceberg_pq_write(
     bool is_parallel, const char *bucket_region, int64_t row_group_size,
     const char *iceberg_metadata, PyObject *iceberg_files_info_py,
     std::shared_ptr<arrow::Schema> iceberg_schema,
-    std::shared_ptr<arrow::fs::FileSystem> arrow_fs, void *sketches) {
+    std::shared_ptr<arrow::fs::FileSystem> arrow_fs, void *sketches_ptr) {
     tracing::Event ev("iceberg_pq_write", is_parallel);
     ev.add_attribute("table_data_loc", table_data_loc);
     ev.add_attribute("iceberg_metadata", iceberg_metadata);
@@ -714,6 +714,13 @@ void iceberg_pq_write(
         throw std::runtime_error(
             "IcebergParquetWrite: partition_spec is not a list");
     }
+
+    // Create dummy sketches if not provided.
+    UpdateSketchCollection *sketches =
+        (sketches_ptr == nullptr)
+            ? new UpdateSketchCollection(
+                  std::vector<bool>(table->ncols(), false))
+            : static_cast<UpdateSketchCollection *>(sketches_ptr);
 
     std::shared_ptr<table_info> working_table = table;
 
@@ -1046,7 +1053,7 @@ void iceberg_pq_write(
             std::vector<PyObject *> iceberg_py_objs = iceberg_pq_write_helper(
                 p.fpath.c_str(), part_table, col_names_arr, compression, false,
                 bucket_region, row_group_size, iceberg_metadata, iceberg_schema,
-                arrow_fs, reinterpret_cast<UpdateSketchCollection *>(sketches));
+                arrow_fs, sketches);
 
             for (int i = 0; i < NUM_ICEBERG_DATA_FILE_STATS; i++) {
                 PyObject *obj = iceberg_py_objs[i];
@@ -1081,7 +1088,7 @@ void iceberg_pq_write(
         std::vector<PyObject *> iceberg_py_objs = iceberg_pq_write_helper(
             fpath.c_str(), working_table, col_names_arr, compression, false,
             bucket_region, row_group_size, iceberg_metadata, iceberg_schema,
-            arrow_fs, reinterpret_cast<UpdateSketchCollection *>(sketches));
+            arrow_fs, sketches);
 
         if (iceberg_py_objs.size() > 0) {
             PyObject *file_name_py = PyUnicode_FromString(fname.c_str());
@@ -1098,6 +1105,11 @@ void iceberg_pq_write(
         }
         ev_general.finalize();
     }
+
+    // Clean up the dummy sketches if we created them
+    if (sketches_ptr == nullptr) {
+        delete sketches;
+    }
 }
 
 /**
@@ -1111,7 +1123,7 @@ PyObject *iceberg_pq_write_py_entry(
     PyObject *sort_order, const char *compression, bool is_parallel,
     const char *bucket_region, int64_t row_group_size,
     const char *iceberg_metadata, PyObject *iceberg_arrow_schema_py,
-    PyObject *arrow_fs, void *sketches) {
+    PyObject *arrow_fs, void *sketches_ptr) {
     try {
         std::shared_ptr<table_info> table =
             std::shared_ptr<table_info>(in_table);
@@ -1141,7 +1153,8 @@ PyObject *iceberg_pq_write_py_entry(
         iceberg_pq_write(table_data_loc, table, col_names_arr, partition_spec,
                          sort_order, compression, is_parallel, bucket_region,
                          row_group_size, iceberg_metadata,
-                         iceberg_files_info_py, iceberg_schema, fs, sketches);
+                         iceberg_files_info_py, iceberg_schema, fs,
+                         sketches_ptr);
 
         return iceberg_files_info_py;
     } catch (const std::exception &e) {
