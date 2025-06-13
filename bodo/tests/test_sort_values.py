@@ -2358,7 +2358,6 @@ def test_inplace_sort_values_series(memory_leak_check):
         bodo.jit(impl1)(s)
 
 
-@pytest.mark.df_lib
 def test_random_decimal(memory_leak_check):
     """Sorting a random decimal"""
 
@@ -2373,7 +2372,6 @@ def test_random_decimal(memory_leak_check):
         (df1,),
         convert_columns_to_pandas=True,
         convert_to_nullable_float=False,
-        reset_index=bodo.test_dataframe_library_enabled,
     )
 
 
