@@ -556,15 +556,17 @@ def _str_partition_helper(s, col):
 
 
 def _str_cat_helper(df, sep, idx_pair):
-    """Concatenates col0 and col1 of each row in df, separated by sep."""
+    """Concatenates df[idx] for idx in idx_pair, separated by sep."""
     res = []
     columns = df.columns
+    print(df)
     idx0, idx1 = columns[idx_pair[0]], columns[idx_pair[1]]
     bitmap_lhs = df[idx0].isnull()
     bitmap_rhs = df[idx1].isnull()
     for i in df.index:
         lhs = df.loc[i, idx0]
         rhs = df.loc[i, idx1]
+        print(lhs, rhs)
         if bitmap_lhs[i] or bitmap_rhs[i]:
             res.append(pd.NA)
         else:
@@ -574,6 +576,7 @@ def _str_cat_helper(df, sep, idx_pair):
 
 
 def get_base_plan(plan):
+    """TODO: add docstring"""
     if is_single_projection(plan):
         inner_plan = get_base_plan(plan.args[0])
         if inner_plan is not None:
@@ -582,58 +585,46 @@ def get_base_plan(plan):
     return plan
 
 
+# def validate_str_cat(lhs, rhs):
+#     """TODO: add docstring"""
+#     if not(
+#         is_single_colref_projection(lhs._plan) and
+#         is_single_colref_projection(rhs._plan)
+#     ):
+#         raise BodoLibNotImplementedException(
+#             "Plans other than ColRefExpression are not supported yet: falling back to Pandas"
+#         )
+#     lhs_base_plan = get_base_plan(lhs._plan)
+#     rhs_base_plan = get_base_plan(rhs._plan)
+#     if lhs_base_plan != rhs_base_plan:
+#         raise BodoLibNotImplementedException(
+#             "self and others are from distinct DataFrames: falling back to Pandas"
+#         )
+#     return lhs_base_plan, lhs._plan.args[1][0].args[1], rhs._plan.args[1][0].args[1]
+
+
 def validate_str_cat(lhs, rhs):
-    if (
-        lhs._plan.args[1][0].plan_class != "ColRefExpression"
-        or rhs._plan.args[1][0].plan_class != "ColRefExpression"
-    ):
-        raise BodoLibNotImplementedException(
-            "Plans other than ColRefExpression are not supported yet: falling back to Pandas"
-        )
+    """TODO: add docstring"""
+    # if not(
+    #     is_single_colref_projection(lhs._plan) and
+    #     is_single_colref_projection(rhs._plan)
+    # ):
+    #     raise BodoLibNotImplementedException(
+    #         "Plans other than ColRefExpression are not supported yet: falling back to Pandas"
+    #     )
+
     lhs_base_plan = get_base_plan(lhs._plan)
     rhs_base_plan = get_base_plan(rhs._plan)
+
     if lhs_base_plan != rhs_base_plan:
         raise BodoLibNotImplementedException(
             "self and others are from distinct DataFrames: falling back to Pandas"
         )
-    return lhs_base_plan, lhs._plan.args[1][0].args[1], rhs._plan.args[1][0].args[1]
+    if not (is_single_colref_projection(rhs._plan)):
+        new_plan = _add_proj_expr_to_plan(lhs_base_plan, rhs._plan, "Z")
+        lhs_base_plan = get_base_plan(new_plan)
 
-
-def _get_df_plan_python_func_plan(
-    df_plan, df_len, empty_data, func, args, kwargs, is_method=True
-):
-    """Create plan for calling some function or method on a DataFrame. Creates a
-    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
-    """
-    udf_arg = LazyPlan(
-        "PythonScalarFuncExpression",
-        empty_data,
-        df_plan,
-        (
-            func,
-            False,  # is_series
-            is_method,
-            args,
-            kwargs,
-        ),
-        tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
-    )
-    # Select Index columns explicitly for output
-    n_cols = df_len
-    index_col_refs = tuple(
-        make_col_ref_exprs(
-            range(n_cols, n_cols + get_n_index_arrays(df_plan.empty_data.index)),
-            df_plan,
-        )
-    )
-    # Select Index columns explicitly for output
-    plan = LazyPlan(
-        "LogicalProjection",
-        empty_data,
-        df_plan,
-        (udf_arg,) + index_col_refs,
-    )
-    return wrap_plan(plan=plan)
+    return new_plan, lhs._plan.args[1][0].args[1], -1
 
 
 class BodoStringMethods:
@@ -680,13 +671,15 @@ class BodoStringMethods:
         Pandas, and all values in the Series are concatenated into a single string with a given sep.
         """
         # Validates others is a lazy BodoSeries, falls back to Pandas otherwise
-        if not isinstance(others, BodoSeries) or not others.is_lazy_plan():
+        if not isinstance(others, BodoSeries):
             raise BodoLibNotImplementedException(
                 "str.cat(others=None): fallback to Pandas"
             )
 
         # Validates input series and others series are from same df, falls back to Pandas otherwise
         base_plan, lhs_idx, rhs_idx = validate_str_cat(self._series, others)
+
+        print(base_plan, lhs_idx, rhs_idx)
 
         index = base_plan.empty_data.index
         new_metadata = pd.Series(
@@ -695,7 +688,7 @@ class BodoStringMethods:
         )
         return _get_df_plan_python_func_plan(
             base_plan,
-            2,
+            2,  # Specify that base_df has 2 columns
             new_metadata,
             "bodo.pandas.series._str_cat_helper",
             (sep, [lhs_idx, rhs_idx]),
@@ -863,6 +856,146 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
             (expr,) + index_col_refs,
         ),
     )
+
+
+def _get_df_plan_python_func_plan(
+    df_plan, df_len, empty_data, func, args, kwargs, is_method=True
+):
+    """Create plan for calling some function or method on a DataFrame. Creates a
+    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
+    """
+    udf_arg = LazyPlan(
+        "PythonScalarFuncExpression",
+        empty_data,
+        df_plan,
+        (
+            func,
+            False,  # is_series
+            is_method,
+            args,
+            kwargs,
+        ),
+        tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
+    )
+    # Select Index columns explicitly for output
+    n_cols = df_len
+    index_col_refs = tuple(
+        make_col_ref_exprs(
+            range(n_cols, n_cols + get_n_index_arrays(df_plan.empty_data.index)),
+            df_plan,
+        )
+    )
+    # Select Index columns explicitly for output
+    plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df_plan,
+        (udf_arg,) + index_col_refs,
+    )
+    return wrap_plan(plan=plan)
+
+
+def _update_func_expr_source(
+    func_expr: LazyPlan, new_source_plan: LazyPlan, col_index_offset: int
+):
+    """Update source plan of PythonScalarFuncExpression and add an offset to its
+    input data column index.
+    """
+    # Previous input data column index
+    in_col_ind = func_expr.args[2][0]
+    n_source_cols = len(new_source_plan.empty_data.columns)
+    # Add Index columns of the new source plan as input
+    index_cols = tuple(
+        range(
+            n_source_cols,
+            n_source_cols + get_n_index_arrays(new_source_plan.empty_data.index),
+        )
+    )
+    expr = LazyPlan(
+        "PythonScalarFuncExpression",
+        func_expr.empty_data,
+        new_source_plan,
+        func_expr.args[1],
+        (in_col_ind + col_index_offset,) + index_cols,
+    )
+    return expr
+
+
+def _add_proj_expr_to_plan(
+    df_plan: LazyPlan, value_plan: LazyPlan, key: str, replace_func_source=False
+):
+    """Add a projection on top of dataframe plan that adds or replaces a column
+    with output expression of value_plan (which is a single expression projection).
+    """
+    # Create column reference expressions for each column in the dataframe.
+    in_empty_df = df_plan.empty_data
+
+    # Check if the column already exists in the dataframe
+    if key in in_empty_df.columns:
+        ikey = in_empty_df.columns.get_loc(key)
+        is_replace = True
+    else:
+        ikey = None
+        is_replace = False
+
+    # Get the function expression from the value plan to be added
+    func_expr = value_plan.args[1][0]
+
+    # Handle trivial cases like df["C"] = df["B"]
+    if func_expr.plan_class == "ColRefExpression":
+        # Copy since empty_data is changed below
+        func_expr = LazyPlan(
+            "ColRefExpression",
+            func_expr.empty_data,
+            *func_expr.args,
+            **func_expr.kwargs,
+        )
+    elif func_expr.plan_class == "PythonScalarFuncExpression":
+        func_expr = (
+            _update_func_expr_source(func_expr, df_plan, ikey)
+            if replace_func_source
+            # Copy the function expression to avoid modifying the original one below
+            else LazyPlan(
+                "PythonScalarFuncExpression",
+                func_expr.empty_data,
+                *func_expr.args,
+                **func_expr.kwargs,
+            )
+        )
+    else:
+        return None
+
+    # Update output column name
+    func_expr.empty_data = func_expr.empty_data.set_axis([key], axis=1)
+
+    proj_exprs = _get_setitem_proj_exprs(
+        in_empty_df, df_plan, ikey, is_replace, func_expr
+    )
+    empty_data = df_plan.empty_data.copy()
+    empty_data[key] = value_plan.empty_data.copy()
+    new_plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df_plan,
+        proj_exprs,
+    )
+    return new_plan
+
+
+def _get_setitem_proj_exprs(in_empty_df, df_plan, ikey, is_replace, func_expr):
+    """Create projection expressions for setting a column in a dataframe."""
+    n_cols = len(in_empty_df.columns)
+    key_indices = [k for k in range(n_cols) if (not is_replace or k != ikey)]
+    data_cols = make_col_ref_exprs(key_indices, df_plan)
+    if is_replace:
+        data_cols.insert(ikey, func_expr)
+    else:
+        # New column should be at the end of data columns to match Pandas
+        data_cols.append(func_expr)
+    index_cols = make_col_ref_exprs(
+        range(n_cols, n_cols + get_n_index_arrays(in_empty_df.index)), df_plan
+    )
+    return tuple(data_cols + index_cols)
 
 
 def gen_partition(name):
