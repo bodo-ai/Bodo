@@ -30,6 +30,7 @@ from bodo.pandas.utils import (
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
+    get_proj_expr_keys,
     get_scalar_udf_result_type,
     is_single_colref_projection,
     make_col_ref_exprs,
@@ -127,7 +128,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_proj_expr_keys(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -180,7 +182,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_proj_expr_keys(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -227,7 +230,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_proj_expr_keys(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -277,7 +281,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         expr = LazyPlan("ArithOpExpression", empty_data, lhs, rhs, op)
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_proj_expr_keys(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",

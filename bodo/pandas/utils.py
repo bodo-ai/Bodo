@@ -671,10 +671,18 @@ def wrap_plan(plan, res_id=None, nrows=None):
 
 def get_proj_expr_single(proj: LazyPlan):
     """Get the single expression from a LogicalProjection node."""
-    assert is_single_projection(proj), (
-        "get_proj_expr_single: LogicalProjection with a single expr expected"
-    )
-    return proj.args[1][0]
+    if is_single_projection(proj):
+        return proj.args[1][0]
+    else:
+        return make_col_ref_exprs([0], proj)[0]
+
+
+def get_proj_expr_keys(proj: LazyPlan):
+    """Get the single expression from a LogicalProjection node."""
+    if is_single_projection(proj):
+        return proj.args[0]
+    else:
+        return proj
 
 
 def is_single_projection(proj: LazyPlan):
