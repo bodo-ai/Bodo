@@ -555,15 +555,16 @@ def _str_partition_helper(s, col):
     return series
 
 
-def _str_cat_helper(df, sep):
+def _str_cat_helper(df, sep, idx_pair):
     """Concatenates col0 and col1 of each row in df, separated by sep."""
-    columns = df.columns
     res = []
-    bitmap_lhs = df[columns[0]].isnull()
-    bitmap_rhs = df[columns[1]].isnull()
+    columns = df.columns
+    idx0, idx1 = columns[idx_pair[0]], columns[idx_pair[1]]
+    bitmap_lhs = df[idx0].isnull()
+    bitmap_rhs = df[idx1].isnull()
     for i in df.index:
-        lhs = df.loc[i, columns[0]]
-        rhs = df.loc[i, columns[1]]
+        lhs = df.loc[i, idx0]
+        rhs = df.loc[i, idx1]
         if bitmap_lhs[i] or bitmap_rhs[i]:
             res.append(pd.NA)
         else:
@@ -595,6 +596,44 @@ def validate_str_cat(lhs, rhs):
         raise BodoLibNotImplementedException(
             "self and others are from distinct DataFrames: falling back to Pandas"
         )
+    return lhs_base_plan, lhs._plan.args[1][0].args[1], rhs._plan.args[1][0].args[1]
+
+
+def _get_df_plan_python_func_plan(
+    df_plan, df_len, empty_data, func, args, kwargs, is_method=True
+):
+    """Create plan for calling some function or method on a DataFrame. Creates a
+    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
+    """
+    udf_arg = LazyPlan(
+        "PythonScalarFuncExpression",
+        empty_data,
+        df_plan,
+        (
+            func,
+            False,  # is_series
+            is_method,
+            args,
+            kwargs,
+        ),
+        tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
+    )
+    # Select Index columns explicitly for output
+    n_cols = df_len
+    index_col_refs = tuple(
+        make_col_ref_exprs(
+            range(n_cols, n_cols + get_n_index_arrays(df_plan.empty_data.index)),
+            df_plan,
+        )
+    )
+    # Select Index columns explicitly for output
+    plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df_plan,
+        (udf_arg,) + index_col_refs,
+    )
+    return wrap_plan(plan=plan)
 
 
 class BodoStringMethods:
@@ -640,26 +679,22 @@ class BodoStringMethods:
                 "str.cat(others=None): fallback to Pandas"
             )
 
-        lhs, rhs = self._series, others
-        dtype = pd.ArrowDtype(pa.large_string())
-
         # Validates input series and others series are from same df, falls back to Pandas otherwise
-        validate_str_cat(lhs, rhs)
+        base_plan, lhs_idx, rhs_idx = validate_str_cat(self._series, others)
 
-        index = lhs.head(0).index
+        index = base_plan.empty_data.index
         new_metadata = pd.Series(
-            dtype=dtype,
-            name=lhs.name,
+            dtype=pd.ArrowDtype(pa.large_string()),
             index=index,
         )
-
-        return _get_series_python_binary_func_plan(
-            lhs._plan,
-            rhs._plan,
+        return _get_df_plan_python_func_plan(
+            base_plan,
+            2,
             new_metadata,
             "bodo.pandas.series._str_cat_helper",
-            (sep,),
+            (sep, [lhs_idx, rhs_idx]),
             {},
+            is_method=False,
         )
 
 
