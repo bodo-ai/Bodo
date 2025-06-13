@@ -365,7 +365,16 @@ def generate_data_file_info(
     file_infos = (
         [item for sub in combined_data for item in sub] if combined_data else None
     )
+    return generate_data_file_info_seq(file_infos)
 
+
+def generate_data_file_info_seq(
+    file_infos: list[list[tuple[pt.Any, pt.Any, pt.Any]]],
+) -> tuple[
+    list[str] | None,
+    list[dict[str, pt.Any]] | None,
+    list[tuple] | None,
+]:
     fnames, file_records, partition_infos = None, None, None
     if file_infos:
         fnames, file_records, partition_infos = [], [], []
@@ -387,8 +396,7 @@ def generate_data_file_info(
     return fnames, file_records, partition_infos
 
 
-@run_rank0
-def register_table_write(
+def register_table_write_seq(
     transaction: Transaction,
     fnames: list[str] | None,
     file_records: list[dict[str, pt.Any]] | None,
@@ -445,6 +453,9 @@ def register_table_write(
         return False
     finally:
         ev.finalize()
+
+
+register_table_write = run_rank0(register_table_write_seq)
 
 
 @numba.njit

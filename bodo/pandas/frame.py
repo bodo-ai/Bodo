@@ -364,8 +364,30 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             output_pa_schema,
             fs,
         )
-        execute_plan(write_plan)
-        # TODO: get list of files and commit
+        all_iceberg_files_infos = execute_plan(write_plan)
+        # Flatten the list of lists
+        all_iceberg_files_infos = (
+            [item for sub in all_iceberg_files_infos for item in sub]
+            if all_iceberg_files_infos
+            else None
+        )
+        (
+            fnames,
+            file_records,
+            partition_infos,
+        ) = bodo.io.iceberg.write.generate_data_file_info_seq(all_iceberg_files_infos)
+
+        # Register file names, metrics and schema in transaction
+        success = bodo.io.iceberg.write.register_table_write_seq(
+            txn,
+            fnames,
+            file_records,
+            partition_infos,
+            partition_spec,
+            sort_order_id,
+        )
+        if not success:
+            raise BodoError("Iceberg write failed.")
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
