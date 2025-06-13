@@ -986,7 +986,7 @@ def test_series_sort(datapath):
     "dropna",
     [pytest.param(True, id="dropna-True"), pytest.param(True, id="dropna-False")],
 )
-def test_basic_groupby(dropna, key_col):
+def test_basic_groupby(dropna):
     """
     Test a simple groupby operation.
     """
