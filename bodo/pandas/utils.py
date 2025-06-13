@@ -959,6 +959,7 @@ def count_plan(self):
                 # Adding column 0 as input to avoid deleting all input by the optimizer
                 # TODO: avoid materializing the input column
                 [0],
+                False,  # dropna
             )
         ],
     )
