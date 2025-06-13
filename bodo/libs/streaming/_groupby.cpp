@@ -23,7 +23,6 @@
 #include "../groupby/_groupby_common.h"
 #include "../groupby/_groupby_ftypes.h"
 #include "../groupby/_groupby_groups.h"
-#include "_join.h"
 #include "_shuffle.h"
 #include "arrow/util/bit_util.h"
 
@@ -4231,7 +4230,9 @@ uint64_t GroupbyState::op_pool_bytes_allocated() const {
 /* ------------------------------------------------------------------------ */
 
 /**
- * @brief Filter out NA keys in groupby to match pandas drop_na=True case.
+ * @brief Filter out NA keys in groupby to match pandas drop_na=True.
+ * Reference:
+ * https://github.com/bodo-ai/Bodo/blob/bed3fb5908472ebc80a24ccc514e241fedbada37/bodo/libs/streaming/_join.cpp#L2537
  *
  * @param in_table input batch to groupby.
  * @param n_keys number of key columns in input
