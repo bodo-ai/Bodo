@@ -290,7 +290,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         execute_plan(write_plan)
 
-    @check_args_fallback("none")
+    @check_args_fallback(unsupported="snapshot_properties")
     def to_iceberg(
         self,
         table_identifier: str,
@@ -311,10 +311,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         from bodo.pandas.base import _empty_like
 
         # TODO: add `partition_spec`, `sort_order` and `properties` arguments
-
-        # TODO: handle snapshot_properties
-        if snapshot_properties is None:
-            snapshot_properties = {}
 
         if catalog_properties is None:
             catalog_properties = {}
