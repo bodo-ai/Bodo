@@ -1138,9 +1138,7 @@ def test_series_filter_distributed(datapath, file_path, op):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-@pytest.mark.parametrize(
-    "mode", [0, 1, 2]
-)
+@pytest.mark.parametrize("mode", [0, 1, 2])
 def test_series_filter_series(datapath, file_path, op, mode):
     """Very simple test for series filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath(file_path))
