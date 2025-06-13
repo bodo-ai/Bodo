@@ -36,7 +36,7 @@ class Executor {
     /**
      * @brief Execute the plan and return the result.
      */
-    std::shared_ptr<table_info> ExecutePipelines() {
+    std::variant<std::shared_ptr<table_info>, PyObject*> ExecutePipelines() {
         // Pipelines generation ensures that pipelines are in the right
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).

@@ -869,6 +869,9 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
 
     # Write doesn't return output data
     if cpp_table == 0:
+        # Iceberg write returns file information for later commit
+        if exec_output.second != NULL:
+            return <object>exec_output.second
         return None
 
     arrow_schema = <object>exec_output.second

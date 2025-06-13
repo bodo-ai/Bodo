@@ -88,7 +88,9 @@ class PhysicalWriteParquet : public PhysicalSink {
 
     void Finalize() override {}
 
-    std::shared_ptr<table_info> GetResult() override { return nullptr; }
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+        return std::shared_ptr<table_info>(nullptr);
+    }
 
    private:
     // State similar to streaming parquet write in Bodo JIT

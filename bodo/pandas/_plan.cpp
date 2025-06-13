@@ -582,9 +582,18 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
-    std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
+    std::variant<std::shared_ptr<table_info>, PyObject *> output =
+        executor.ExecutePipelines();
 
-    // Write doesn't return data
+    // Iceberg write returns a PyObject* with file information
+    if (std::holds_alternative<PyObject *>(output)) {
+        PyObject *file_infos = std::get<PyObject *>(output);
+        return {0, file_infos};
+    }
+
+    std::shared_ptr<table_info> output_table = std::get<0>(output);
+
+    // Parquet write doesn't return data
     if (output_table == nullptr) {
         return {0, nullptr};
     }

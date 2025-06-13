@@ -125,7 +125,7 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
-    std::shared_ptr<table_info> GetResult() override {
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         // Limit should be between pipelines and act alternatively as a sink
         // then source but there should never be the need to ask for the result
         // all in one go.

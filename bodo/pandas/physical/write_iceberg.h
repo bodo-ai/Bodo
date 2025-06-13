@@ -128,7 +128,9 @@ class PhysicalWriteIceberg : public PhysicalSink {
         iceberg_files_info_py = all_infos;
     }
 
-    std::shared_ptr<table_info> GetResult() override { return nullptr; }
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+        return iceberg_files_info_py;
+    }
 
    private:
     // State similar to streaming parquet write in Bodo JIT
