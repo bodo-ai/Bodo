@@ -963,7 +963,8 @@ def test_series_sort(datapath):
     )
 
 
-def test_basic_groupby():
+@pytest.mark.parametrize("dropna", [True, False])
+def test_basic_groupby(dropna):
     """
     Test a simple groupby operation.
     """
@@ -977,7 +978,7 @@ def test_basic_groupby():
     )
 
     bdf1 = bd.from_pandas(df1)
-    bdf2 = bdf1.groupby("A")["E"].sum()
+    bdf2 = bdf1.groupby("A", dropna=dropna)["E"].sum()
     assert bdf2.is_lazy_plan()
 
     df2 = df1.groupby("A")["E"].sum()

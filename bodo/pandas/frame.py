@@ -653,7 +653,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return wrap_plan(proj_plan)
 
-    @check_args_fallback(supported=["by"])
+    @check_args_fallback(supported=["by", "dropna"])
     def groupby(
         self,
         by=None,

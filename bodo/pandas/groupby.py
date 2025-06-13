@@ -26,18 +26,23 @@ class DataFrameGroupBy:
     """
 
     def __init__(
-        self, obj: pd.DataFrame, keys: list[str], selection: list[str] | None = None
+        self,
+        obj: pd.DataFrame,
+        keys: list[str],
+        selection: list[str] | None = None,
+        dropna: bool = True,
     ):
         self._obj = obj
         self._keys = keys
         self._selection = selection
+        self._dropna = dropna
 
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
         """
         Return a DataFrameGroupBy or SeriesGroupBy for the selected data columns.
         """
         if isinstance(key, str):
-            return SeriesGroupBy(self._obj, self._keys, [key])
+            return SeriesGroupBy(self._obj, self._keys, [key], self._dropna)
         else:
             raise BodoLibNotImplementedException(
                 f"DataFrameGroupBy: Invalid key type: {type(key)}"
@@ -65,10 +70,13 @@ class SeriesGroupBy:
     Similar to pandas SeriesGroupBy.
     """
 
-    def __init__(self, obj: pd.DataFrame, keys: list[str], selection: list[str]):
+    def __init__(
+        self, obj: pd.DataFrame, keys: list[str], selection: list[str], dropna: bool
+    ):
         self._obj = obj
         self._keys = keys
         self._selection = selection
+        self._dropna = dropna
 
     @check_args_fallback(supported="none")
     def sum(
@@ -99,6 +107,7 @@ class SeriesGroupBy:
                 self._obj._plan,
                 "sum",
                 [self._obj.columns.get_loc(c)],
+                self._dropna,
             )
             for c in self._selection
         ]

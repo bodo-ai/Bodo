@@ -54,6 +54,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::vector<int32_t> ftypes;
         // Create input data column indices (only single data column for now)
         std::vector<int32_t> f_in_cols;
+        std::optional<bool> dropna = std::nullopt;
         for (const auto& expr : op.expressions) {
             if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
                 throw std::runtime_error(
@@ -98,6 +99,18 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             this->output_schema->append_column(std::make_unique<bodo::DataType>(
                 std::get<0>(out_arr_type), std::get<1>(out_arr_type)));
             this->output_schema->column_names.push_back(agg_expr.function.name);
+
+            // Extract bind_info
+            BodoAggFunctionData& bind_info =
+                agg_expr.bind_info->Cast<BodoAggFunctionData>();
+
+            // NOTE: drop_na must be consistent accross all expressions
+            // This is a little awkward but AFAICT there is no bind_info for
+            // the LogicalAggregate.
+            if (!dropna.has_value()) {
+                dropna = bind_info.dropna;
+            }
+            assert(dropna.value() == bind_info.dropna);
         }
 
         // Offsets for the input data columns, which are trivial since we have a
@@ -110,7 +123,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
             get_streaming_batch_size(), true, -1, -1, -1, false, std::nullopt,
-            /*use_sql_rules*/ false, /* pandas_drop_na_*/ true);
+            /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value());
     }
 
     virtual ~PhysicalAggregate() = default;
