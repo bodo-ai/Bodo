@@ -678,7 +678,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "groupby: only string keys are supported"
             )
 
-        return DataFrameGroupBy(self, by)
+        return DataFrameGroupBy(self, by, dropna=dropna)
 
     @check_args_fallback("all")
     def __getitem__(self, key):

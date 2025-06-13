@@ -984,7 +984,7 @@ def test_series_sort(datapath):
 
 @pytest.mark.parametrize(
     "dropna",
-    [pytest.param(True, id="dropna-True"), pytest.param(True, id="dropna-False")],
+    [pytest.param(True, id="dropna-True"), pytest.param(False, id="dropna-False")],
 )
 def test_basic_groupby(dropna):
     """
@@ -1003,7 +1003,7 @@ def test_basic_groupby(dropna):
     bdf2 = bdf1.groupby("A", dropna=dropna)["E"].sum()
     assert bdf2.is_lazy_plan()
 
-    df2 = df1.groupby("A")["E"].sum()
+    df2 = df1.groupby("A", dropna=dropna)["E"].sum()
 
     _test_equal(
         bdf2,
