@@ -197,6 +197,7 @@ def test_df_int_no_null(request):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_nullable_int(memory_leak_check):
     def impl(df):
         A = df.groupby("A").sum()
@@ -253,6 +254,7 @@ def test_nullable_int(memory_leak_check):
     check_func(impl_select_colH, (df,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.df_lib
 def test_groupby_sum_integer_upcast(memory_leak_check):
     """
     Test that we upcast output of groupby sum on integers to their
@@ -355,6 +357,7 @@ def test_groupby_sum_integer_upcast(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.df_lib
 def test_groupby_nullable_float(memory_leak_check):
     def impl(df):
         A = df.groupby("A").sum()
@@ -444,6 +447,7 @@ def test_groupby_df_numpy_bool(memory_leak_check):
     check_func(impl, (), sort_output=True, reset_index=True)
 
 
+@pytest.mark.df_lib  # TODO: count not implemented yet for DF Library
 @pytest_mark_pandas
 def test_all_null_keys(memory_leak_check):
     """

@@ -127,6 +127,25 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
 };
 
 /**
+ * @brief Aggregate node data to pass around in DuckDB plans in
+ * BoundAggregateExpression.
+ *
+ */
+struct BodoAggFunctionData : public duckdb::FunctionData {
+    BodoAggFunctionData(bool dropna) : dropna(dropna) {}
+
+    bool Equals(const FunctionData &other_p) const override {
+        const BodoAggFunctionData &other = other_p.Cast<BodoAggFunctionData>();
+        return (other.dropna == this->dropna);
+    }
+    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
+        return duckdb::make_uniq<BodoAggFunctionData>(this->dropna);
+    }
+
+    bool dropna;
+};
+
+/**
  * @brief Run Python scalar function on the input batch and return the
  * output table (single data column plus Index columns).
  *

@@ -2561,7 +2561,8 @@ GroupbyState::GroupbyState(
     bool parallel_, int64_t sync_iter_, int64_t op_id_,
     int64_t op_pool_size_bytes_, bool allow_any_work_stealing,
     std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
-        key_dict_builders_)
+        key_dict_builders_,
+    bool use_sql_rules, bool pandas_drop_na_)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -2585,6 +2586,7 @@ GroupbyState::GroupbyState(
       n_keys(n_keys_),
       parallel(parallel_),
       output_batch_size(output_batch_size_),
+      pandas_drop_na(pandas_drop_na_),
       f_in_offsets(std::move(f_in_offsets_)),
       f_in_cols(std::move(f_in_cols_)),
       sort_asc(std::move(sort_asc_vec_)),
@@ -2712,9 +2714,7 @@ GroupbyState::GroupbyState(
     // safely set skip_na_data to true for all SQL aggregations. There is an
     // issue to fix this behavior so that use_sql_rules trumps the value of
     // skip_na_data: https://bodo.atlassian.net/browse/BSE-841
-    bool skip_na_data = true;
-    bool use_sql_rules = true;
-
+    bool skip_na_data = use_sql_rules;
     if (!ftypes.empty() && ftypes[0] == Bodo_FTypes::window) {
         // Handle a collection of window functions.
         this->accumulate_before_update = true;
@@ -4230,6 +4230,52 @@ uint64_t GroupbyState::op_pool_bytes_allocated() const {
 /* ------------------------------------------------------------------------ */
 
 /**
+ * @brief Filter out NA keys in groupby to match pandas drop_na=True.
+ * Reference:
+ * https://github.com/bodo-ai/Bodo/blob/bed3fb5908472ebc80a24ccc514e241fedbada37/bodo/libs/streaming/_join.cpp#L2537
+ *
+ * @param in_table input batch to groupby.
+ * @param n_keys number of key columns in input
+ * @return std::shared_ptr<table_info> input table with NAs filtered out
+ */
+std::shared_ptr<table_info> filter_na_values(
+    std::shared_ptr<table_info> in_table, uint64_t n_keys) {
+    bodo::vector<bool> not_na(in_table->nrows(), true);
+    bool can_have_na = false;
+    for (uint64_t i = 0; i < n_keys; i++) {
+        // Determine which columns can contain NA/contain NA
+        const std::shared_ptr<array_info>& col = in_table->columns[i];
+        if (col->can_contain_na()) {
+            can_have_na = true;
+            bodo::vector<bool> col_not_na = col->get_notna_vector();
+            // Do an elementwise logical and to update not_na
+            std::transform(not_na.begin(), not_na.end(),  // NOLINT
+                           col_not_na.begin(), not_na.begin(),
+                           std::logical_and<>());
+        }
+    }
+    if (!can_have_na) {
+        // No NA values, just return.
+        return in_table;
+    }
+
+    // Retrieve table takes a list of columns. Convert the boolean array.
+    bodo::vector<int64_t> idx_list;
+
+    for (size_t i = 0; i < in_table->nrows(); i++) {
+        if (not_na[i]) {
+            idx_list.emplace_back(i);
+        }
+    }
+    if (idx_list.size() == in_table->nrows()) {
+        // No NA values, skip the copy.
+        return in_table;
+    } else {
+        return RetrieveTable(std::move(in_table), std::move(idx_list));
+    }
+}
+
+/**
  * @brief consume build table batch in streaming groupby (insert into hash
  * table and update running values)
  *
@@ -4266,6 +4312,11 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    // Filter NA keys in Pandas case.
+    if (groupby_state->pandas_drop_na) {
+        in_table = filter_na_values(std::move(in_table), groupby_state->n_keys);
+    }
 
     // Unify dictionaries keys to allow consistent hashing and fast key
     // comparison using indices
