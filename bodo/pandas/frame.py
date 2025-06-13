@@ -14,9 +14,12 @@ if pt.TYPE_CHECKING:
         AnyArrayLike,
         Axis,
         FilePath,
+        IgnoreRaise,
         IndexLabel,
+        Level,
         MergeHow,
         MergeValidate,
+        Renamer,
         SortKind,
         StorageOptions,
         Suffixes,
@@ -239,6 +242,29 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 return (self._mgr._md_nrows, len(self._head_df.columns))
             case ExecState.COLLECTED:
                 return super().shape
+
+    @check_args_fallback(supported=["columns", "copy"])
+    def rename(
+        self,
+        mapper: Renamer | None = None,
+        *,
+        index: Renamer | None = None,
+        columns: Renamer | None = None,
+        axis: Axis | None = None,
+        copy: bool | None = None,
+        inplace: bool = False,
+        level: Level | None = None,
+        errors: IgnoreRaise = "ignore",
+    ) -> DataFrame | None:
+        orig_plan = self._plan
+        breakpoint()
+        renamed_plan = LazyPlan(
+            orig_plan.plan_class,
+            orig_plan.empty_data.rename(columns=columns),
+            *orig_plan.args,
+            **orig_plan.kwargs
+        )
+        return wrap_plan(renamed_plan)
 
     @check_args_fallback(supported=["path", "engine", "compression", "row_group_size"])
     def to_parquet(
