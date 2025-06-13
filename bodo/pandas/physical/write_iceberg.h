@@ -14,7 +14,7 @@
 class PhysicalWriteIceberg : public PhysicalSink {
    public:
     explicit PhysicalWriteIceberg(std::shared_ptr<bodo::Schema> in_bodo_schema,
-                                  IcebergWriteFunctionData &bind_data)
+                                  IcebergWriteFunctionData& bind_data)
         : in_schema(std::move(bind_data.in_schema)),
           table_loc(std::move(bind_data.table_loc)),
           bucket_region(std::move(bind_data.bucket_region)),
@@ -33,7 +33,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
         Py_INCREF(sort_tuples);
 
         // Initialize the buffer and dictionary builders
-        for (auto &col : in_bodo_schema->column_types) {
+        for (auto& col : in_bodo_schema->column_types) {
             dict_builders.emplace_back(
                 create_dict_builder_for_array(col->copy(), false));
         }
@@ -87,7 +87,46 @@ class PhysicalWriteIceberg : public PhysicalSink {
                        : OperatorResult::NEED_MORE_INPUT;
     }
 
-    void Finalize() override {}
+    void Finalize() override {
+        // Gather iceberg_files_info from all ranks using MPI
+        // Equivalent to all_infos = comm.gather(iceberg_files_info_py)
+
+        PyObject* mpi_module = PyImport_ImportModule("bodo.mpi4py.MPI");
+        if (!mpi_module) {
+            throw std::runtime_error("Failed to import bodo.mpi4py.MPI");
+        }
+
+        PyObject* comm_world = PyObject_GetAttrString(mpi_module, "COMM_WORLD");
+        if (!comm_world) {
+            Py_DECREF(mpi_module);
+            throw std::runtime_error("Failed to get COMM_WORLD");
+        }
+
+        PyObject* gather_method = PyObject_GetAttrString(comm_world, "gather");
+        if (!gather_method) {
+            Py_DECREF(comm_world);
+            Py_DECREF(mpi_module);
+            throw std::runtime_error("Failed to get gather method");
+        }
+
+        PyObject* args = PyTuple_New(1);
+        PyTuple_SetItem(args, 0, iceberg_files_info_py);
+
+        PyObject* all_infos = PyObject_CallObject(gather_method, args);
+
+        Py_DECREF(args);
+        Py_DECREF(gather_method);
+        Py_DECREF(comm_world);
+        Py_DECREF(mpi_module);
+
+        if (!all_infos) {
+            throw std::runtime_error(
+                "Iceberg write: MPI gather operation failed");
+        }
+
+        // NOTE: PyTuple_SetItem stole the reference to iceberg_files_info_py
+        iceberg_files_info_py = all_infos;
+    }
 
     std::shared_ptr<table_info> GetResult() override { return nullptr; }
 
@@ -99,13 +138,13 @@ class PhysicalWriteIceberg : public PhysicalSink {
     const std::string bucket_region;
     const int64_t max_pq_chunksize;
     const std::string compression;
-    PyObject *partition_tuples;
-    PyObject *sort_tuples;
+    PyObject* partition_tuples;
+    PyObject* sort_tuples;
     const std::string iceberg_schema_str;
     const std::shared_ptr<arrow::Schema> iceberg_schema;
     std::shared_ptr<arrow::fs::FileSystem> fs;
 
-    PyObject *iceberg_files_info_py = PyList_New(0);
+    PyObject* iceberg_files_info_py = PyList_New(0);
 
     std::shared_ptr<TableBuildBuffer> buffer;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
