@@ -24,7 +24,9 @@ class PhysicalWriteIceberg : public PhysicalSink {
           sort_tuples(bind_data.sort_tuples),
           iceberg_schema_str(std::move(bind_data.iceberg_schema_str)),
           iceberg_schema(std::move(bind_data.iceberg_schema)),
-          fs(std::move(bind_data.fs)) {
+          fs(std::move(bind_data.fs)),
+          is_last_state(std::make_shared<IsLastState>()),
+          finished(false) {
         // Similar to streaming Iceberg write in Bodo JIT
         // https://github.com/bodo-ai/Bodo/blob/71cbb2db57a9f9c67e13eb3e49222b3ca90ede83/bodo/io/iceberg/stream_iceberg_write.py#L558
         Py_INCREF(partition_tuples);
