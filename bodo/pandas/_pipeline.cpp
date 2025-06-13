@@ -85,7 +85,9 @@ void Pipeline::Execute() {
     executed = true;
 }
 
-std::shared_ptr<table_info> Pipeline::GetResult() { return sink->GetResult(); }
+std::variant<std::shared_ptr<table_info>, PyObject*> Pipeline::GetResult() {
+    return sink->GetResult();
+}
 
 std::shared_ptr<Pipeline> PipelineBuilder::Build(
     std::shared_ptr<PhysicalSink> sink) {
