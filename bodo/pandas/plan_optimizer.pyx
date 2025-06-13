@@ -13,6 +13,12 @@ from libc.stdint cimport int64_t
 import pandas as pd
 import pyarrow.parquet as pq
 
+from bodo.io.fs_io import (
+    expand_path_globs,
+    getfs,
+    parse_fpath,
+)
+
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
 ctypedef unsigned long long idx_t
@@ -698,18 +704,24 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     """Wrapper around DuckDB's LogicalGet for reading Parquet datasets.
     """
     cdef readonly object path
+    cdef readonly object storage_options
 
     def __cinit__(self, object out_schema, object parquet_path, object storage_options):
         self.out_schema = out_schema
         cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
         self.path = parquet_path
+        self.storage_options = storage_options
 
     def __str__(self):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
-        return pq.read_table(self.path, columns=[]).num_rows
+        fpath, _, protocol = parse_fpath(self.path)
+        fs = getfs(fpath, protocol, self.storage_options, parallel=False)
+        expanded_paths = expand_path_globs(fpath, protocol, fs)
+
+        return pq.read_table(expanded_paths, filesystem=fs, columns=[]).num_rows
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
