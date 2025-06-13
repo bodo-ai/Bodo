@@ -1096,7 +1096,10 @@ def test_series_filter_pushdown(datapath, file_path, op):
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
-def test_series_filter_distributed(datapath, file_path, op):
+@pytest.mark.parametrize(
+    "mode", [0, 1]
+)
+def test_series_filter_distributed(datapath, file_path, op, mode):
     """Very simple test for series filter for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath(file_path))
     py_df1 = pd.read_parquet(datapath(file_path))
@@ -1106,7 +1109,11 @@ def test_series_filter_distributed(datapath, file_path, op):
         return df
 
     # Force plan to execute but keep distributed.
-    f(bodo_df1)
+    if mode == 1:
+        f(bodo_df1)
+    else:
+        bodo_df1._mgr._collect()
+
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
     bodo_series_a = bodo_df1["A"]

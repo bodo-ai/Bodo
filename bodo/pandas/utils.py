@@ -373,6 +373,8 @@ class LazyPlan:
             cache = {}
         # If previously converted then use the last result.
         # Don't cache expression nodes.
+        # TODO - Try to eliminate caching altogether since it seems to cause
+        # more problems than lack of caching.
         if "Expression" not in self.plan_class and id(self) in cache:
             return cache[id(self)]
 
