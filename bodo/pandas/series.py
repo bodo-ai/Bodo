@@ -32,6 +32,7 @@ from bodo.pandas.utils import (
     get_proj_expr_single,
     get_scalar_udf_result_type,
     is_single_colref_projection,
+    is_single_projection,
     make_col_ref_exprs,
     wrap_plan,
 )
@@ -554,6 +555,135 @@ def _str_partition_helper(s, col):
     return series
 
 
+def _str_cat_helper(df, sep, idx_pair):
+    """Concatenates df[idx] for idx in idx_pair, separated by sep."""
+    res = []
+    columns = df.columns
+    idx0, idx1 = columns[idx_pair[0]], columns[idx_pair[1]]
+    bitmap_lhs = df[idx0].isnull()
+    bitmap_rhs = df[idx1].isnull()
+    for i in df.index:
+        lhs = df.loc[i, idx0]
+        rhs = df.loc[i, idx1]
+        print(lhs, rhs)
+        if bitmap_lhs[i] or bitmap_rhs[i]:
+            res.append(pd.NA)
+        else:
+            res.append(f"{lhs}{sep}{rhs}")
+    series = pd.Series(res)
+    return series
+
+
+def get_base_plan(plan):
+    """TODO: add docstring"""
+    if is_single_projection(plan):
+        inner_plan = get_base_plan(plan.args[0])
+        if inner_plan is not None:
+            return inner_plan
+        return None
+    return plan
+
+
+def validate_str_cat(lhs, rhs):
+    """
+    Checks if lhs and rhs are from the same DataFrame.
+    Combines plans of two series and returns a dataframe plan.
+    """
+    lhs_base_plan = get_base_plan(lhs._plan)
+    rhs_base_plan = get_base_plan(rhs._plan)
+    if lhs_base_plan != rhs_base_plan:
+        raise BodoLibNotImplementedException(
+            "self and others are from distinct DataFrames: falling back to Pandas"
+        )
+    res = zip_series_plan(lhs, rhs)
+    return res
+
+
+def get_list_projections(plan):
+    if is_single_projection(plan):
+        return get_list_projections(plan.args[0]) + [plan]
+    else:
+        return [plan]
+
+
+def print_plan_list(l):
+    for plan in l:
+        print(plan)
+        print("\n\n")
+
+
+def is_col_ref(expr):
+    return expr.plan_class == "ColRefExpression"
+
+
+def is_scalar_func(expr):
+    return expr.plan_class == "PythonScalarFuncExpression"
+
+
+def get_new_idx(idx, first, side):
+    if first:
+        return idx
+    elif side == "right":
+        return 1
+    else:
+        return 0
+
+
+def make_expr(expr, plan, first, side="right"):
+    if is_col_ref(expr):
+        idx = expr.args[1]
+        idx = get_new_idx(idx, first, side)
+        empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
+        return LazyPlan("ColRefExpression", empty_data, plan, idx)
+    elif is_scalar_func(expr):
+        idx = expr.args[2][0]
+        idx = get_new_idx(idx, first, side)
+        empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
+        return LazyPlan(
+            "PythonScalarFuncExpression", empty_data, plan, expr.args[1], (idx,)
+        )
+    else:
+        raise NotImplementedError("Unsupported expr type:", expr.plan_class)
+
+
+# TODO: index columns
+def zip_series_plan(lhs: BodoSeries, rhs: BodoSeries) -> BodoSeries:
+    """Takes in two series plan from the same dataframe, zips into single plan."""
+    lhs_list = get_list_projections(lhs._plan)
+    rhs_list = get_list_projections(rhs._plan)
+
+    assert lhs_list[0] == rhs_list[0]
+
+    result = lhs_list[0]
+
+    first = True
+    for i, (lhs_part, rhs_part) in enumerate(zip(lhs_list[1:], rhs_list[1:])):
+        # Create the plan for the shared part
+        left_expr = lhs_part.args[1][0]
+        right_expr = rhs_part.args[1][0]
+        left_expr = make_expr(left_expr, result, first, "left")
+        right_expr = make_expr(right_expr, result, first)
+
+        print("left", i, left_expr)
+        print("right", i, right_expr)
+        empty_data = pd.concat([lhs_part.empty_data, rhs_part.empty_data])
+
+        result = LazyPlan(
+            "LogicalProjection", empty_data, result, [left_expr, right_expr]
+        )
+
+        if first:
+            first = False
+
+    lhs_list[i:]
+    rhs_list[i:]
+
+    # TODO: Pad the shorter plan with column ref exprs and continue projecting
+    # longer side
+
+    return result
+
+
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
@@ -584,8 +714,42 @@ class BodoStringMethods:
                 "implemented in Bodo dataframe library for the specified arguments yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
+            # Prevents internal fallbacks causing a flood of warnings.
+            if not name.startswith("_"):
+                warnings.warn(BodoLibFallbackWarning(msg))
+
             return object.__getattribute__(pd.Series(self._series).str, name)
+
+    @check_args_fallback("none")
+    def cat(self, others=None, sep=None, na_rep=None, join="left"):
+        """
+        If others is specified, concatenates the Series and elements of others
+        element-wise and returns a Series. If others is not passed, then falls back to
+        Pandas, and all values in the Series are concatenated into a single string with a given sep.
+        """
+        # Validates others is a lazy BodoSeries, falls back to Pandas otherwise
+        if not isinstance(others, BodoSeries):
+            raise BodoLibNotImplementedException(
+                "str.cat(others=None): fallback to Pandas"
+            )
+
+        # Validates input series and others series are from same df, falls back to Pandas otherwise
+        base_plan = validate_str_cat(self._series, others)
+        index = base_plan.empty_data.index
+
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.large_string()),
+            index=index,
+        )
+        return _get_df_plan_python_func_plan(
+            base_plan,
+            2,  # Specify that base_df has 2 columns
+            new_metadata,
+            "bodo.pandas.series._str_cat_helper",
+            (sep, [0, 1]),
+            {},
+            is_method=False,
+        )
 
     @check_args_fallback(unsupported="none")
     def join(self, sep):
@@ -653,6 +817,60 @@ class BodoDatetimeProperties:
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
+def _get_series_python_binary_func_plan(lhs, rhs, empty_data, func_name, args, kwargs):
+    """Create a plan for calling a Series method in Python. Creates a proper
+    PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
+    """
+    # Optimize out trivial df["col"] projections to simplify plans
+    if is_single_colref_projection(lhs):
+        source_data_lhs = lhs.args[0]
+        input_expr = lhs.args[1][0]
+        col_index_lhs = input_expr.args[1]
+    else:
+        source_data_lhs = lhs
+        col_index_rhs = 0
+    if is_single_colref_projection(rhs):
+        source_data_rhs = lhs.args[0]
+        input_expr = rhs.args[1][0]
+        col_index_rhs = input_expr.args[1]
+    else:
+        source_data_rhs = rhs
+        col_index_rhs = 0
+
+    n_cols = len(source_data_lhs.empty_data.columns)
+    index_cols_lhs = range(
+        n_cols, n_cols + get_n_index_arrays(source_data_lhs.empty_data.index)
+    )
+    range(n_cols, n_cols + get_n_index_arrays(source_data_rhs.empty_data.index))
+
+    expr = LazyPlan(
+        "PythonBinaryScalarFuncExpression",
+        empty_data,
+        source_data_lhs,
+        source_data_rhs,
+        (
+            func_name,
+            False,  # is_series
+            False,  # is_method
+            args,  # args
+            kwargs,  # kwargs
+        ),
+        (col_index_lhs,),
+        (col_index_rhs,),
+    )
+    # Select Index columns explicitly for output
+    tuple(make_col_ref_exprs(index_cols_lhs, source_data_lhs))
+
+    return wrap_plan(
+        plan=LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            source_data_lhs,
+            (expr,),
+        ),
+    )
+
+
 def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
@@ -693,6 +911,43 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
             (expr,) + index_col_refs,
         ),
     )
+
+
+def _get_df_plan_python_func_plan(
+    df_plan, df_len, empty_data, func, args, kwargs, is_method=True
+):
+    """Create plan for calling some function or method on a DataFrame. Creates a
+    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
+    """
+    udf_arg = LazyPlan(
+        "PythonScalarFuncExpression",
+        empty_data,
+        df_plan,
+        (
+            func,
+            False,  # is_series
+            is_method,
+            args,
+            kwargs,
+        ),
+        tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
+    )
+    # Select Index columns explicitly for output
+    n_cols = df_len
+    index_col_refs = tuple(
+        make_col_ref_exprs(
+            range(n_cols, n_cols + get_n_index_arrays(df_plan.empty_data.index)),
+            df_plan,
+        )
+    )
+    # Select Index columns explicitly for output
+    plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df_plan,
+        (udf_arg,) + index_col_refs,
+    )
+    return wrap_plan(plan=plan)
 
 
 def gen_partition(name):
@@ -890,6 +1145,7 @@ def gen_method(
             series._plan, new_metadata, accessor_type + name, args, kwargs
         )
 
+    method.__name__ = name
     return method
 
 
