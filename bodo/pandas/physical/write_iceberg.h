@@ -93,20 +93,24 @@ class PhysicalWriteIceberg : public PhysicalSink {
 
         PyObject* mpi_module = PyImport_ImportModule("bodo.mpi4py.MPI");
         if (!mpi_module) {
-            throw std::runtime_error("Failed to import bodo.mpi4py.MPI");
+            throw std::runtime_error(
+                "PhysicalWriteIceberg::Finalize: Failed to import "
+                "bodo.mpi4py.MPI");
         }
 
         PyObject* comm_world = PyObject_GetAttrString(mpi_module, "COMM_WORLD");
         if (!comm_world) {
             Py_DECREF(mpi_module);
-            throw std::runtime_error("Failed to get COMM_WORLD");
+            throw std::runtime_error(
+                "PhysicalWriteIceberg::Finalize: Failed to get COMM_WORLD");
         }
 
         PyObject* gather_method = PyObject_GetAttrString(comm_world, "gather");
         if (!gather_method) {
             Py_DECREF(comm_world);
             Py_DECREF(mpi_module);
-            throw std::runtime_error("Failed to get gather method");
+            throw std::runtime_error(
+                "PhysicalWriteIceberg::Finalize: Failed to get gather method");
         }
 
         PyObject* args = PyTuple_New(1);
@@ -121,7 +125,8 @@ class PhysicalWriteIceberg : public PhysicalSink {
 
         if (!all_infos) {
             throw std::runtime_error(
-                "Iceberg write: MPI gather operation failed");
+                "PhysicalWriteIceberg::Finalize: Iceberg write: MPI gather "
+                "operation failed");
         }
 
         // NOTE: PyTuple_SetItem stole the reference to iceberg_files_info_py
