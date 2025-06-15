@@ -1,7 +1,4 @@
 #include "duckdb/common/render_tree.hpp"
-#include "duckdb/execution/operator/aggregate/physical_hash_aggregate.hpp"
-#include "duckdb/execution/operator/join/physical_delim_join.hpp"
-#include "duckdb/execution/operator/scan/physical_positional_scan.hpp"
 
 namespace duckdb {
 
@@ -18,10 +15,8 @@ struct PipelineRenderNode {
 namespace {
 
 using duckdb::MaxValue;
-using duckdb::PhysicalDelimJoin;
 using duckdb::PhysicalOperator;
 using duckdb::PhysicalOperatorType;
-using duckdb::PhysicalPositionalScan;
 using duckdb::PipelineRenderNode;
 using duckdb::RenderTreeNode;
 
