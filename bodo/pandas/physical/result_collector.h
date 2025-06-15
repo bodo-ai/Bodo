@@ -45,7 +45,7 @@ class PhysicalResultCollector : public PhysicalSink {
 
     void Finalize() override {}
 
-    std::shared_ptr<table_info> GetResult() override {
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         return buffer->data_table;
     }
 

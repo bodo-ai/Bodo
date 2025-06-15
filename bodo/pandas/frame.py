@@ -290,6 +290,101 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         execute_plan(write_plan)
 
+    @check_args_fallback(unsupported="snapshot_properties")
+    def to_iceberg(
+        self,
+        table_identifier: str,
+        catalog_name: str | None = None,
+        *,
+        catalog_properties: dict[str, pt.Any] | None = None,
+        location: str | None = None,
+        append: bool = False,
+        snapshot_properties: dict[str, str] | None = None,
+    ) -> None:
+        # See Pandas implementation of to_iceberg:
+        # https://github.com/pandas-dev/pandas/blob/c5457f61d92b9428a56c619a6c420b122a41a347/pandas/core/frame.py#L3550
+        # https://github.com/pandas-dev/pandas/blob/c5457f61d92b9428a56c619a6c420b122a41a347/pandas/io/iceberg.py#L98
+        # See Bodo JIT implementation of streaming writes to Iceberg:
+        # https://github.com/bodo-ai/Bodo/blob/142678b2fe7217d80e233d201061debae2d47c13/bodo/io/iceberg/stream_iceberg_write.py#L535
+        import pyiceberg.catalog
+
+        from bodo.pandas.base import _empty_like
+
+        # TODO: add `partition_spec`, `sort_order` and `properties` arguments
+
+        if catalog_properties is None:
+            catalog_properties = {}
+        catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
+
+        if_exists = "append" if append else "replace"
+        df_schema = self._plan.pa_schema
+        (
+            txn,
+            fs,
+            table_loc,
+            output_pa_schema,
+            iceberg_schema_str,
+            partition_spec,
+            partition_tuples,
+            sort_order_id,
+            sort_tuples,
+            properties,
+        ) = bodo.io.iceberg.write.start_write_rank_0(
+            catalog,
+            table_identifier,
+            df_schema,
+            if_exists,
+            False,
+            None,
+            location,
+        )
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, False)
+        max_pq_chunksize = properties.get(
+            "write.target-file-size-bytes",
+            bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
+        )
+        compression = properties.get("write.parquet.compression-codec", "snappy")
+        # TODO: support Theta sketches
+
+        write_plan = LazyPlan(
+            "LogicalIcebergWrite",
+            _empty_like(self),
+            self._plan,
+            table_loc,
+            bucket_region,
+            max_pq_chunksize,
+            compression,
+            partition_tuples,
+            sort_tuples,
+            iceberg_schema_str,
+            output_pa_schema,
+            fs,
+        )
+        all_iceberg_files_infos = execute_plan(write_plan)
+        # Flatten the list of lists
+        all_iceberg_files_infos = (
+            [item for sub in all_iceberg_files_infos for item in sub]
+            if all_iceberg_files_infos
+            else None
+        )
+        (
+            fnames,
+            file_records,
+            partition_infos,
+        ) = bodo.io.iceberg.write.generate_data_file_info_seq(all_iceberg_files_infos)
+
+        # Register file names, metrics and schema in transaction
+        success = bodo.io.iceberg.write.register_table_write_seq(
+            txn,
+            fnames,
+            file_records,
+            partition_infos,
+            partition_spec,
+            sort_order_id,
+        )
+        if not success:
+            raise BodoError("Iceberg write failed.")
+
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
             return self._mgr._md_result_id

@@ -5,7 +5,7 @@
 #include "../../io/parquet_write.h"
 #include "../../libs/_bodo_to_arrow.h"
 #include "../../libs/streaming/_shuffle.h"
-#include "_bodo_scan_function.h"
+#include "_bodo_write_function.h"
 #include "physical/operator.h"
 
 class PhysicalWriteParquet : public PhysicalSink {
@@ -88,7 +88,9 @@ class PhysicalWriteParquet : public PhysicalSink {
 
     void Finalize() override {}
 
-    std::shared_ptr<table_info> GetResult() override { return nullptr; }
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+        return std::shared_ptr<table_info>(nullptr);
+    }
 
    private:
     // State similar to streaming parquet write in Bodo JIT

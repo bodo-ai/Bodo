@@ -69,7 +69,8 @@ class PhysicalSink : public PhysicalOperator {
 
     virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                         OperatorResult prev_op_result) = 0;
-    virtual std::shared_ptr<table_info> GetResult() = 0;
+    virtual std::variant<std::shared_ptr<table_info>, PyObject*>
+    GetResult() = 0;
 };
 
 class PhysicalSourceSink : public PhysicalOperator {
