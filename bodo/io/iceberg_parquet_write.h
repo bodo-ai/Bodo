@@ -34,10 +34,9 @@ in which case the filesystem is inferred from the path.
  */
 void iceberg_pq_write(
     const char *table_data_loc, std::shared_ptr<table_info> table,
-    const std::variant<std::shared_ptr<array_info>, std::vector<std::string>>
-        col_names_arr,
-    PyObject *partition_spec, PyObject *sort_order, const char *compression,
-    bool is_parallel, const char *bucket_region, int64_t row_group_size,
+    const std::vector<std::string> col_names_arr, PyObject *partition_spec,
+    PyObject *sort_order, const char *compression, bool is_parallel,
+    const char *bucket_region, int64_t row_group_size,
     const char *iceberg_metadata, PyObject *iceberg_files_info_py,
     std::shared_ptr<arrow::Schema> iceberg_schema,
     std::shared_ptr<arrow::fs::FileSystem> arrow_fs, void *sketches_ptr);
