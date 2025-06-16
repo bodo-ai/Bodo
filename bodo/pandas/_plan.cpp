@@ -125,7 +125,7 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
 duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
     std::string function_name, std::vector<int> input_column_indices,
-    bool dropna) {
+    bool as_index, bool dropna) {
     // Get DuckDB output type
     auto field_res = arrow::py::unwrap_field(field_py);
     std::shared_ptr<arrow::Field> field;
