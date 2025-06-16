@@ -369,7 +369,7 @@ def generate_data_file_info(
 
 
 def generate_data_file_info_seq(
-    file_infos: list[list[tuple[pt.Any, pt.Any, pt.Any]]],
+    file_infos: list[tuple[pt.Any, pt.Any, pt.Any]],
 ) -> tuple[
     list[str] | None,
     list[dict[str, pt.Any]] | None,

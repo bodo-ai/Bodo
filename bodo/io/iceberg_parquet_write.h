@@ -31,6 +31,8 @@
 in which case the filesystem is inferred from the path.
  * @param sketches collection of theta sketches accumulating ndv for the table
  * as it is being written.
+ * NOTE: passing sketches_ptr as void* since including the header for
+ * UpdateSketchCollection causes compilation issues (TODO: fix).
  */
 void iceberg_pq_write(
     const char *table_data_loc, std::shared_ptr<table_info> table,
