@@ -10,9 +10,6 @@ model_name = "LLMDH/pleias_350m_ocr"
 model_len = 2048
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-prompts = pd.read_parquet(
-    "hf://datasets/LLMDH/English-PD-bad-OCR/**/*.parquet"
-)
 tokenizer = None
 
 def tokenize(row):
@@ -74,7 +71,7 @@ def ocr_correction(prompts):
     # Maps batch index and batch entry index to the original prompt indices
     batch_to_prompt_idx = [[]]
     while prompt_idx < len(prompts):
-        split_encoded_prompts = prompts["split_encoded_prompts"][prompt_idx]
+        split_encoded_prompts = prompts["split_encoded_prompts"].iloc[prompt_idx]
 
         split_prompt_idx = 0
         while split_prompt_idx < len(split_encoded_prompts):
@@ -101,7 +98,10 @@ def ocr_correction(prompts):
         print(f"Finished batch {i + 1} of {len(batches)}")
     return text_results
 
-
-prompts["split_encoded_prompts"] = prompts.apply(tokenize, axis=1)
-prompts["corrected_text"] = prompts.map_partitions(ocr_correction)
-prompts.to_parquet("corrected_text.parquet")
+if __name__ == "__main__":
+    prompts = pd.read_parquet(
+        "hf://datasets/LLMDH/English-PD-bad-OCR/**/*.parquet"
+    )
+    prompts["split_encoded_prompts"] = prompts.apply(tokenize, axis=1)
+    prompts["corrected_text"] = prompts.map_partitions(ocr_correction)
+    prompts.to_parquet("corrected_text.parquet")
