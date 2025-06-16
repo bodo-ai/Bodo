@@ -2714,7 +2714,9 @@ GroupbyState::GroupbyState(
     // safely set skip_na_data to true for all SQL aggregations. There is an
     // issue to fix this behavior so that use_sql_rules trumps the value of
     // skip_na_data: https://bodo.atlassian.net/browse/BSE-841
-    bool skip_na_data = use_sql_rules;
+    // For Pandas aggregations, skip_na_data is set to true to match JIT:
+    // https://github.com/bodo-ai/Bodo/blob/302e4f06f4f6ff3746f1f113fcae83ab2dc6e6dc/bodo/ir/aggregate.py#L522
+    bool skip_na_data = true;
     if (!ftypes.empty() && ftypes[0] == Bodo_FTypes::window) {
         // Handle a collection of window functions.
         this->accumulate_before_update = true;
@@ -4238,39 +4240,35 @@ uint64_t GroupbyState::op_pool_bytes_allocated() const {
  * @param n_keys number of key columns in input
  * @return std::shared_ptr<table_info> input table with NAs filtered out
  */
-std::shared_ptr<table_info> filter_na_values(
-    std::shared_ptr<table_info> in_table, uint64_t n_keys) {
+std::shared_ptr<table_info> filter_na_keys(std::shared_ptr<table_info> in_table,
+                                           uint64_t n_keys) {
     bodo::vector<bool> not_na(in_table->nrows(), true);
-    bool can_have_na = false;
+    bool contains_na_keys = false;
     for (uint64_t i = 0; i < n_keys; i++) {
         // Determine which columns can contain NA/contain NA
         const std::shared_ptr<array_info>& col = in_table->columns[i];
         if (col->can_contain_na()) {
-            can_have_na = true;
             bodo::vector<bool> col_not_na = col->get_notna_vector();
             // Do an elementwise logical and to update not_na
-            std::transform(not_na.begin(), not_na.end(),  // NOLINT
-                           col_not_na.begin(), not_na.begin(),
-                           std::logical_and<>());
+            for (size_t i = 0; i < in_table->nrows(); i++) {
+                not_na[i] = not_na[i] && col_not_na[i];
+                contains_na_keys = contains_na_keys || !not_na[i];
+            }
         }
     }
-    if (!can_have_na) {
-        // No NA values, just return.
-        return in_table;
-    }
 
-    // Retrieve table takes a list of columns. Convert the boolean array.
-    bodo::vector<int64_t> idx_list;
-
-    for (size_t i = 0; i < in_table->nrows(); i++) {
-        if (not_na[i]) {
-            idx_list.emplace_back(i);
-        }
-    }
-    if (idx_list.size() == in_table->nrows()) {
+    if (!contains_na_keys) {
         // No NA values, skip the copy.
         return in_table;
     } else {
+        // Retrieve table takes a list of columns. Convert the boolean array.
+        bodo::vector<int64_t> idx_list;
+
+        for (size_t i = 0; i < in_table->nrows(); i++) {
+            if (not_na[i]) {
+                idx_list.emplace_back(i);
+            }
+        }
         return RetrieveTable(std::move(in_table), std::move(idx_list));
     }
 }
@@ -4315,7 +4313,7 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
 
     // Filter NA keys in Pandas case.
     if (groupby_state->pandas_drop_na) {
-        in_table = filter_na_values(std::move(in_table), groupby_state->n_keys);
+        in_table = filter_na_keys(std::move(in_table), groupby_state->n_keys);
     }
 
     // Unify dictionaries keys to allow consistent hashing and fast key

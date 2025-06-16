@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include "../_util.h"
 #include "../io/arrow_reader.h"
@@ -110,7 +111,12 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             if (!dropna.has_value()) {
                 dropna = bind_info.dropna;
             }
-            assert(dropna.value() == bind_info.dropna);
+            if (dropna.value() != bind_info.dropna) {
+                throw std::runtime_error(
+                    "PhysicalAggregate: All aggregate expressions must have "
+                    "the same "
+                    "value for the dropna parameter.");
+            }
         }
 
         // Offsets for the input data columns, which are trivial since we have a
