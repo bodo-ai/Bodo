@@ -314,6 +314,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_double_expr(double val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
+    cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
     cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object field, c_string function_name, vector[int] input_column_indices, c_bool dropna) except +
     cdef unique_ptr[CLogicalCopyToFile] make_parquet_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string path, c_string compression, c_string bucket_region, int64_t row_group_size) except +
@@ -563,6 +564,8 @@ cdef unique_ptr[CExpression] make_const_expr(val):
     elif isinstance(val, str):
         val_cstr = val.encode()
         return move(make_const_string_expr(val_cstr))
+    elif isinstance(val, bool):
+        return move(make_const_bool_expr(val))
     elif isinstance(val, pd.Timestamp):
         # NOTE: Timestamp.value always converts to nanoseconds
         # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/_libs/tslibs/timestamps.pyx#L242

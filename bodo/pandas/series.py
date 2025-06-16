@@ -31,6 +31,7 @@ from bodo.pandas.utils import (
     get_n_index_arrays,
     get_proj_expr_single,
     get_scalar_udf_result_type,
+    get_single_proj_source_if_present,
     is_single_colref_projection,
     make_col_ref_exprs,
     wrap_plan,
@@ -127,7 +128,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -180,7 +182,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -227,7 +230,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -277,7 +281,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         expr = LazyPlan("ArithOpExpression", empty_data, lhs, rhs, op)
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -327,6 +332,38 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback("all")
     def __rfloordiv__(self, other):
         return self._arith_binop(other, "__rfloordiv__", True)
+
+    @check_args_fallback("all")
+    def __getitem__(self, key):
+        """Called when df[key] is used."""
+
+        from bodo.pandas.base import _empty_like
+
+        # Only selecting columns or filtering with BodoSeries is supported
+        if not isinstance(key, BodoSeries):
+            raise BodoLibNotImplementedException("only BodoSeries keys are supported")
+
+        zero_size_self = _empty_like(self)
+
+        key_plan = (
+            # TODO: error checking for key to be a projection on the same dataframe
+            # with a binary operator
+            get_proj_expr_single(key._plan)
+            if key._plan is not None
+            else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
+        )
+        zero_size_key = _empty_like(key)
+        zero_size_index = zero_size_key.index
+        empty_data = zero_size_self.__getitem__(zero_size_key)
+        empty_data_index = empty_data.index
+        if isinstance(zero_size_index, pd.RangeIndex) and not isinstance(
+            empty_data_index, pd.RangeIndex
+        ):
+            # Drop the explicit integer Index generated from filtering RangeIndex (TODO: support RangeIndex properly).
+            empty_data.reset_index(drop=True, inplace=True)
+        return wrap_plan(
+            plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
+        )
 
     @staticmethod
     def from_lazy_mgr(

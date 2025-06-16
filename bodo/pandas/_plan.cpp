@@ -87,6 +87,11 @@ duckdb::unique_ptr<duckdb::Expression> make_const_double_expr(double val) {
         duckdb::Value(val));
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_const_bool_expr(bool val) {
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value(val));
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
     int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
