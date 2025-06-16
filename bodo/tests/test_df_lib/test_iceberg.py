@@ -39,14 +39,7 @@ def test_simple_table_read(
 ):
     db_schema, warehouse_loc = iceberg_database(table_name)
     py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
-    bodo_out = bpd.read_iceberg(
-        f"{db_schema}.{table_name}",
-        None,
-        {
-            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
-            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
-        },
-    )
+    bodo_out = bpd.read_iceberg(f"{db_schema}.{table_name}", location=warehouse_loc)
     _test_equal(
         bodo_out,
         py_out,
@@ -544,11 +537,7 @@ def test_write():
     )
 
     bdf = bpd.from_pandas(df)
-    catalog_properties = {
-        pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
-        pyiceberg.catalog.WAREHOUSE_LOCATION: "iceberg_warehouse",
-    }
-    bdf.to_iceberg("test_table", None, catalog_properties=catalog_properties)
+    bdf.to_iceberg("test_table", location="iceberg_warehouse")
     assert bdf.is_lazy_plan()
 
     # Read using PyIceberg to verify the write
