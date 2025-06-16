@@ -11,6 +11,7 @@
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "operator.h"
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
