@@ -317,6 +317,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         import pyiceberg.table.sorting
 
         from bodo.pandas.base import _empty_like
+        from bodo.utils.typing import CreateTableMetaType
 
         # Support simple directory only calls like:
         # df.to_iceberg("table", location="/path/to/table")
@@ -337,7 +338,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             sort_order = pyiceberg.table.sorting.UNSORTED_SORT_ORDER
 
         if properties is None:
-            properties = {}
+            properties = ()
+        else:
+            if not isinstance(properties, dict):
+                raise BodoError(
+                    "Iceberg write properties must be a dictionary, got: "
+                    f"{type(properties)}"
+                )
+            # Convert properties to a tuple of items to match expected type in
+            # CreateTableMetaType
+            properties = tuple(properties.items())
 
         if snapshot_properties is None:
             snapshot_properties = {}
@@ -363,7 +373,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             df_schema,
             if_exists,
             False,
-            None,
+            CreateTableMetaType(None, None, properties),
             location,
             partition_spec,
             sort_order,

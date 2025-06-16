@@ -555,6 +555,7 @@ def test_write():
             location=path,
             partition_spec=part_spec,
             sort_order=sort_order,
+            properties={"p_a1": "pvalue_a1"},
             snapshot_properties={"p_key": "p_value"},
         )
         assert bdf.is_lazy_plan()
@@ -579,5 +580,6 @@ def test_write():
             },
         )
         table = catalog.load_table("test_table")
+        assert table.properties.get("p_a1") == "pvalue_a1"
         snapshot = table.current_snapshot()
         assert snapshot.summary.get("p_key") == "p_value"
