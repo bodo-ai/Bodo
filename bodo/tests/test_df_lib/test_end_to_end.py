@@ -982,24 +982,28 @@ def test_series_sort(datapath):
     )
 
 
-def test_basic_groupby():
+@pytest.mark.parametrize(
+    "dropna",
+    [pytest.param(True, id="dropna-True"), pytest.param(False, id="dropna-False")],
+)
+def test_basic_groupby(dropna):
     """
     Test a simple groupby operation.
     """
     df1 = pd.DataFrame(
         {
             "B": ["a1", "b11", "c111"] * 2,
-            "E": [1.1, 2.2, 13.3] * 2,
-            "A": pd.array([2, 2, 3] * 2, "Int64"),
+            "E": pd.array([1.1, pd.NA, 13.3, pd.NA, pd.NA, 13.3], "Float64"),
+            "A": pd.array([pd.NA, 2, 3] * 2, "Int64"),
         },
         index=[0, 41, 2] * 2,
     )
 
     bdf1 = bd.from_pandas(df1)
-    bdf2 = bdf1.groupby("A")["E"].sum()
+    bdf2 = bdf1.groupby("A", dropna=dropna)["E"].sum()
     assert bdf2.is_lazy_plan()
 
-    df2 = df1.groupby("A")["E"].sum()
+    df2 = df1.groupby("A", dropna=dropna)["E"].sum()
 
     _test_equal(
         bdf2,
@@ -1091,3 +1095,133 @@ def test_map_partitions():
 
     py_out = df + 2 + 3
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
+
+
+@pytest.mark.parametrize(
+    "file_path",
+    [
+        "dataframe_library/df1.parquet",
+        "dataframe_library/df1_index.parquet",
+        "dataframe_library/df1_multi_index.parquet",
+    ],
+)
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_series_filter_pushdown(datapath, file_path, op):
+    """Test for series filter with filter pushdown into read parquet."""
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    bodo_df1 = bd.read_parquet(datapath(file_path))
+    bodo_series_a = bodo_df1["A"]
+    bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+
+    # Make sure bodo_filter_a is unevaluated at this point.
+    assert bodo_filter_a.is_lazy_plan()
+
+    pre, post = bd.utils.getPlanStatistics(bodo_filter_a._mgr._plan)
+    _test_equal(pre, 3)
+    _test_equal(post, 2)
+
+    py_df1 = pd.read_parquet(datapath(file_path))
+    py_series_a = py_df1["A"]
+    py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+
+    _test_equal(
+        bodo_filter_a,
+        py_filter_a,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest_mark_spawn_mode
+@pytest.mark.parametrize(
+    "file_path",
+    [
+        "dataframe_library/df1.parquet",
+        "dataframe_library/df1_index.parquet",
+        "dataframe_library/df1_multi_index.parquet",
+    ],
+)
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+def test_series_filter_distributed(datapath, file_path, op):
+    """Very simple test for series filter for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath(file_path))
+    py_df1 = pd.read_parquet(datapath(file_path))
+
+    @bodo.jit(spawn=True)
+    def f(df):
+        return df
+
+    # Force plan to execute but keep distributed.
+    f(bodo_df1)
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    bodo_series_a = bodo_df1["A"]
+    bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+
+    # Make sure bodo_filter_a is unevaluated at this point.
+    assert bodo_filter_a.is_lazy_plan()
+
+    py_series_a = py_df1["A"]
+    py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+
+    _test_equal(
+        bodo_filter_a,
+        py_filter_a,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest_mark_spawn_mode
+@pytest.mark.parametrize(
+    "file_path",
+    [
+        "dataframe_library/df1.parquet",
+        "dataframe_library/df1_index.parquet",
+        "dataframe_library/df1_multi_index.parquet",
+    ],
+)
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
+)
+@pytest.mark.parametrize("mode", [0, 1, 2])
+def test_series_filter_series(datapath, file_path, op, mode):
+    """Very simple test for series filter for sanity checking."""
+    bodo_df1 = bd.read_parquet(datapath(file_path))
+    py_df1 = pd.read_parquet(datapath(file_path))
+
+    @bodo.jit(spawn=True)
+    def f(df):
+        return df
+
+    # Force plan to execute but keep distributed.
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+
+    bodo_series_a = bodo_df1["A"]
+    if mode == 1:
+        f(bodo_series_a)
+    elif mode == 2:
+        bodo_series_a._mgr._collect()
+
+    bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+
+    # Make sure bodo_filter_a is unevaluated at this point.
+    assert bodo_filter_a.is_lazy_plan()
+
+    py_series_a = py_df1["A"]
+    py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+
+    _test_equal(
+        bodo_filter_a,
+        py_filter_a,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )

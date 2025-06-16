@@ -372,7 +372,10 @@ class LazyPlan:
         if cache is None:
             cache = {}
         # If previously converted then use the last result.
-        if id(self) in cache:
+        # Don't cache expression nodes.
+        # TODO - Try to eliminate caching altogether since it seems to cause
+        # more problems than lack of caching.
+        if "Expression" not in self.plan_class and id(self) in cache:
             return cache[id(self)]
 
         def recursive_check(x):
@@ -385,8 +388,16 @@ class LazyPlan:
                 return x
 
         # Convert any LazyPlan in the args or kwargs.
-        args = [recursive_check(x) for x in self.args]
+        # We do this in reverse order because we expect the first arg to be
+        # the source of the plan and for the node being created to take
+        # ownership of that source.  If other args or kwargs reference that
+        # plan then if we process them after we have taken ownership then
+        # we will get nullptr exceptions.  So, process the args that don't
+        # claim ownership first (in the reverse direction) and finally
+        # process the first arg which we expect will take ownership.
         kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
+        args = [recursive_check(x) for x in reversed(self.args)]
+        args.reverse()
 
         # Create real duckdb class.
         ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args, **kwargs)
@@ -416,6 +427,7 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
+            print("")  # Print on new line during tests.
             print(duckdb_plan.toString())
 
         # Print the plan before optimization
@@ -659,10 +671,22 @@ def wrap_plan(plan, res_id=None, nrows=None):
 
 def get_proj_expr_single(proj: LazyPlan):
     """Get the single expression from a LogicalProjection node."""
-    assert is_single_projection(proj), (
-        "get_proj_expr_single: LogicalProjection with a single expr expected"
-    )
-    return proj.args[1][0]
+    if is_single_projection(proj):
+        return proj.args[1][0]
+    else:
+        if not proj.is_series:
+            raise Exception("Got a non-Series in get_proj_expr_single")
+        return make_col_ref_exprs([0], proj)[0]
+
+
+def get_single_proj_source_if_present(proj: LazyPlan):
+    """Get the single expression from a LogicalProjection node."""
+    if is_single_projection(proj):
+        return proj.args[0]
+    else:
+        if not proj.is_series:
+            raise Exception("Got a non-Series in get_single_proj_source_if_present")
+        return proj
 
 
 def is_single_projection(proj: LazyPlan):
@@ -959,6 +983,7 @@ def count_plan(self):
                 # Adding column 0 as input to avoid deleting all input by the optimizer
                 # TODO: avoid materializing the input column
                 [0],
+                False,  # dropna
             )
         ],
     )
