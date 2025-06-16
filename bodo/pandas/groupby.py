@@ -119,7 +119,6 @@ class SeriesGroupBy:
                 self._obj._plan,
                 "sum",
                 [self._obj.columns.get_loc(c)],
-                self._as_index,
                 self._dropna,
             )
             for c in self._selection
