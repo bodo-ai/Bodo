@@ -41,7 +41,10 @@ class PhysicalWriteIceberg : public PhysicalSink {
             std::make_shared<TableBuildBuffer>(in_bodo_schema, dict_builders);
     }
 
-    virtual ~PhysicalWriteIceberg() = default;
+    virtual ~PhysicalWriteIceberg() {
+        Py_DECREF(partition_tuples);
+        Py_DECREF(sort_tuples);
+    };
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
