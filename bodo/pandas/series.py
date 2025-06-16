@@ -599,12 +599,12 @@ class BodoStringMethods:
 
         new_metadata = pd.Series(
             dtype=pd.ArrowDtype(pa.large_string()),
+            name=self._series.name,
             index=index,
         )
 
         return _get_df_plan_python_func_plan(
             base_plan,
-            2,  # Specify that base_df has 2 columns
             new_metadata,
             "bodo.pandas.series._str_cat_helper",
             (sep, (0, 1)),
@@ -834,7 +834,6 @@ def zip_series_plan(lhs: BodoSeries, rhs: BodoSeries) -> BodoSeries:
         # Extracts schema and empty_data from first layer of expressions.
         if first:
             schema = [left_expr.pa_schema[0], right_expr.pa_schema[0]]
-            empty_data = pd.concat([lhs_part.empty_data, rhs_part.empty_data])
 
         # Create index metadata.
         index_cols = tuple(range(n_cols, n_cols + n_index_arrays))
@@ -842,6 +841,12 @@ def zip_series_plan(lhs: BodoSeries, rhs: BodoSeries) -> BodoSeries:
 
         left_expr = make_expr(left_expr, result, first, schema, index_cols, "left")
         right_expr = make_expr(right_expr, result, first, schema, index_cols)
+
+        left_expr.empty_data.columns = ["lhs"]
+        right_expr.empty_data.columns = ["rhs"]
+
+        if lhs_part is not None and rhs_part is not None:
+            empty_data = pd.concat([left_expr.empty_data, right_expr.empty_data])
 
         result = LazyPlan(
             "LogicalProjection",
@@ -905,11 +910,12 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
 
 
 def _get_df_plan_python_func_plan(
-    df_plan, df_len, empty_data, func, args, kwargs, is_method=True
+    df_plan, empty_data, func, args, kwargs, is_method=True
 ):
     """Create plan for calling some function or method on a DataFrame. Creates a
     PythonScalarFuncExpression with provided arguments and a LogicalProjection.
     """
+    df_len = len(df_plan.empty_data.columns)
     udf_arg = LazyPlan(
         "PythonScalarFuncExpression",
         empty_data,
@@ -924,13 +930,13 @@ def _get_df_plan_python_func_plan(
         tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
     )
 
-    df_len = len(df_plan.empty_data.columns)
     index_col_refs = tuple(
         make_col_ref_exprs(
             range(df_len, df_len + get_n_index_arrays(df_plan.empty_data.index)),
             df_plan,
         )
     )
+
     # Select Index columns explicitly for output
     plan = LazyPlan(
         "LogicalProjection",
