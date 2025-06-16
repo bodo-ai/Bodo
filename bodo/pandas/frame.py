@@ -365,6 +365,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             False,
             None,
             location,
+            partition_spec,
+            sort_order,
             snapshot_properties,
         )
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, False)
