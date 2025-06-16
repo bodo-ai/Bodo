@@ -982,24 +982,28 @@ def test_series_sort(datapath):
     )
 
 
-def test_basic_groupby():
+@pytest.mark.parametrize(
+    "dropna",
+    [pytest.param(True, id="dropna-True"), pytest.param(False, id="dropna-False")],
+)
+def test_basic_groupby(dropna):
     """
     Test a simple groupby operation.
     """
     df1 = pd.DataFrame(
         {
             "B": ["a1", "b11", "c111"] * 2,
-            "E": [1.1, 2.2, 13.3] * 2,
-            "A": pd.array([2, 2, 3] * 2, "Int64"),
+            "E": pd.array([1.1, pd.NA, 13.3, pd.NA, pd.NA, 13.3], "Float64"),
+            "A": pd.array([pd.NA, 2, 3] * 2, "Int64"),
         },
         index=[0, 41, 2] * 2,
     )
 
     bdf1 = bd.from_pandas(df1)
-    bdf2 = bdf1.groupby("A")["E"].sum()
+    bdf2 = bdf1.groupby("A", dropna=dropna)["E"].sum()
     assert bdf2.is_lazy_plan()
 
-    df2 = df1.groupby("A")["E"].sum()
+    df2 = df1.groupby("A", dropna=dropna)["E"].sum()
 
     _test_equal(
         bdf2,

@@ -315,7 +315,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
-    cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object field, c_string function_name, vector[int] input_column_indices) except +
+    cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object field, c_string function_name, vector[int] input_column_indices, c_bool dropna) except +
     cdef unique_ptr[CLogicalCopyToFile] make_parquet_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string path, c_string compression, c_string bucket_region, int64_t row_group_size) except +
     cdef unique_ptr[CLogicalCopyToFile] make_iceberg_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string table_loc,
         c_string bucket_region, int64_t max_pq_chunksize, c_string compression, object partition_tuples, object sort_tuples, c_string iceberg_schema_str,
@@ -526,10 +526,10 @@ cdef class AggregateExpression(Expression):
     """
     cdef readonly str function_name
 
-    def __cinit__(self, object out_schema, LogicalOperator source, str function_name, vector[int] input_column_indices):
+    def __cinit__(self, object out_schema, LogicalOperator source, str function_name, vector[int] input_column_indices, c_bool dropna):
         self.out_schema = out_schema
         self.function_name = function_name
-        self.c_expression = make_agg_expr(source.c_logical_operator, out_schema[0], function_name.encode(), input_column_indices)
+        self.c_expression = make_agg_expr(source.c_logical_operator, out_schema[0], function_name.encode(), input_column_indices, dropna)
 
     def __str__(self):
         return f"AggregateExpression({self.function_name})"
