@@ -290,7 +290,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         execute_plan(write_plan)
 
-    @check_args_fallback(unsupported="snapshot_properties")
+    @check_args_fallback(unsupported="none")
     def to_iceberg(
         self,
         table_identifier: str,
@@ -324,6 +324,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         elif catalog_properties is None:
             catalog_properties = {}
 
+        if snapshot_properties is None:
+            snapshot_properties = {}
+
         catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
 
         if_exists = "append" if append else "replace"
@@ -347,6 +350,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             False,
             None,
             location,
+            snapshot_properties,
         )
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, False)
         max_pq_chunksize = properties.get(
@@ -391,6 +395,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             partition_infos,
             partition_spec,
             sort_order_id,
+            snapshot_properties,
         )
         if not success:
             raise BodoError("Iceberg write failed.")

@@ -403,6 +403,7 @@ def register_table_write_seq(
     partition_infos: list[tuple] | None,
     partition_spec: PartitionSpec,
     sort_order_id: int | None,
+    snapshot_properties: dict[str, str] | None = None,
 ):
     """
     Commit the transaction with the given file information
@@ -418,7 +419,12 @@ def register_table_write_seq(
     if partition_infos is None:
         partition_infos = []
 
-    with transaction.update_snapshot().fast_append() as add:
+    if snapshot_properties is None:
+        snapshot_properties = {}
+
+    with transaction.update_snapshot(
+        snapshot_properties=snapshot_properties
+    ).fast_append() as add:
         for file_name, file_record, partition_info in zip(
             fnames, file_records, partition_infos
         ):
@@ -653,6 +659,7 @@ def start_write_rank_0(
     allow_downcasting: bool,
     create_table_info_arg: CreateTableMetaType | None = None,
     location: str | None = None,
+    snapshot_properties: dict[str, str] | None = None,
 ) -> tuple[
     Transaction,
     FileSystem,
@@ -673,6 +680,8 @@ def start_write_rank_0(
         if_exists (str): What write operation we are doing. This must be one of
             ['fail', 'append', 'replace']
         location (str | None): path of the table files created
+        snapshot_properties (dict[str, str] | None): properties to set on the snapshot
+        created for deleting existing table
     """
     from pyiceberg.io import load_file_io
     from pyiceberg.io.pyarrow import _pyarrow_to_schema_without_ids
@@ -685,6 +694,9 @@ def start_write_rank_0(
     assert bodo.get_rank() == 0, (
         "bodo.io.iceberg.write.start_write_rank_0:: This function must only run on rank 0"
     )
+
+    if snapshot_properties is None:
+        snapshot_properties = {}
 
     catalog = conn_str_to_catalog(conn) if isinstance(conn, str) else conn
     # Determine what action to perform based on if_exists and table status
@@ -765,7 +777,7 @@ def start_write_rank_0(
 
         table = catalog.load_table(table_id)
         txn = table.transaction()
-        txn.delete(ALWAYS_TRUE)
+        txn.delete(ALWAYS_TRUE, snapshot_properties=snapshot_properties)
         txn.set_properties(properties)
         if assign_fresh_schema_ids(output_schema) != assign_fresh_schema_ids(
             table.schema()

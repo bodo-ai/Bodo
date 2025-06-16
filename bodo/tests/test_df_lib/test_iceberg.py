@@ -537,7 +537,11 @@ def test_write():
     )
 
     bdf = bpd.from_pandas(df)
-    bdf.to_iceberg("test_table", location="iceberg_warehouse")
+    bdf.to_iceberg(
+        "test_table",
+        location="iceberg_warehouse",
+        snapshot_properties={"p_key": "p_value"},
+    )
     assert bdf.is_lazy_plan()
 
     # Read using PyIceberg to verify the write
@@ -550,3 +554,15 @@ def test_write():
         sort_output=True,
         reset_index=True,
     )
+
+    # Check that the snapshot properties are set correctly
+    catalog = pyiceberg.catalog.load_catalog(
+        None,
+        **{
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: "iceberg_warehouse",
+        },
+    )
+    table = catalog.load_table("test_table")
+    snapshot = table.current_snapshot()
+    assert snapshot.summary.get("p_key") == "p_value"
