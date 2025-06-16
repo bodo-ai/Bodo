@@ -659,6 +659,8 @@ def start_write_rank_0(
     allow_downcasting: bool,
     create_table_info_arg: CreateTableMetaType | None = None,
     location: str | None = None,
+    partition_spec: PartitionSpec = None,
+    sort_order: SortOrder = None,
     snapshot_properties: dict[str, str] | None = None,
 ) -> tuple[
     Transaction,
@@ -680,6 +682,8 @@ def start_write_rank_0(
         if_exists (str): What write operation we are doing. This must be one of
             ['fail', 'append', 'replace']
         location (str | None): path of the table files created
+        partition_spec (PartitionSpec | None): Partition spec to use for the table
+        sort_order (SortOrder | None): Sort order to use for the table
         snapshot_properties (dict[str, str] | None): properties to set on the snapshot
         created for deleting existing table
     """
@@ -694,6 +698,12 @@ def start_write_rank_0(
     assert bodo.get_rank() == 0, (
         "bodo.io.iceberg.write.start_write_rank_0:: This function must only run on rank 0"
     )
+
+    if partition_spec is None:
+        partition_spec = UNPARTITIONED_PARTITION_SPEC
+
+    if sort_order is None:
+        sort_order = UNSORTED_SORT_ORDER
 
     if snapshot_properties is None:
         snapshot_properties = {}
@@ -735,6 +745,8 @@ def start_write_rank_0(
                 table_id,
                 output_schema,
                 location=location,
+                partition_spec=partition_spec,
+                sort_order=sort_order,
                 properties=properties,
             )
         except NotImplementedError:
@@ -744,6 +756,8 @@ def start_write_rank_0(
                 table_id,
                 output_schema,
                 location=location,
+                partition_spec=partition_spec,
+                sort_order=sort_order,
                 properties=properties,
             ).transaction()
 
@@ -757,9 +771,6 @@ def start_write_rank_0(
         # The default created transaction io doesn't do correct file path resolution
         # for table create transactions because metadata_location is None
         txn._table.io = io
-        # Empty Partition Spec and Sort Order
-        partition_spec = UNPARTITIONED_PARTITION_SPEC
-        sort_order = UNSORTED_SORT_ORDER
         properties = txn.table_metadata.properties
 
     elif mode == "replace":
@@ -787,9 +798,6 @@ def start_write_rank_0(
 
         io = table.io
         data_loc = _get_write_data_path(properties, table.location())
-        # Empty Partition Spec and Sort Order
-        partition_spec = UNPARTITIONED_PARTITION_SPEC
-        sort_order = UNSORTED_SORT_ORDER
 
     else:
         assert mode == "append"

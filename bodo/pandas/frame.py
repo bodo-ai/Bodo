@@ -23,6 +23,9 @@ if pt.TYPE_CHECKING:
         ValueKeyFunc,
         WriteBuffer,
     )
+    from pyiceberg.partitioning import PartitionSpec
+    from pyiceberg.table.sorting import SortOrder
+
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -299,6 +302,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         catalog_properties: dict[str, pt.Any] | None = None,
         location: str | None = None,
         append: bool = False,
+        partition_spec: PartitionSpec | None = None,
+        sort_order: SortOrder | None = None,
+        properties: dict[str, pt.Any] | None = None,
         snapshot_properties: dict[str, str] | None = None,
     ) -> None:
         # See Pandas implementation of to_iceberg:
@@ -307,10 +313,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # See Bodo JIT implementation of streaming writes to Iceberg:
         # https://github.com/bodo-ai/Bodo/blob/142678b2fe7217d80e233d201061debae2d47c13/bodo/io/iceberg/stream_iceberg_write.py#L535
         import pyiceberg.catalog
+        import pyiceberg.partitioning
+        import pyiceberg.table.sorting
 
         from bodo.pandas.base import _empty_like
-
-        # TODO: add `partition_spec`, `sort_order` and `properties` arguments
 
         # Support simple directory only calls like:
         # df.to_iceberg("table", location="/path/to/table")
@@ -323,6 +329,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             location = None
         elif catalog_properties is None:
             catalog_properties = {}
+
+        if partition_spec is None:
+            partition_spec = pyiceberg.partitioning.UNPARTITIONED_PARTITION_SPEC
+
+        if sort_order is None:
+            sort_order = pyiceberg.table.sorting.UNSORTED_SORT_ORDER
+
+        if properties is None:
+            properties = {}
 
         if snapshot_properties is None:
             snapshot_properties = {}
