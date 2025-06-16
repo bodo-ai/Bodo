@@ -29,9 +29,9 @@ from bodo.pandas.utils import (
     check_args_fallback,
     get_lazy_single_manager_class,
     get_n_index_arrays,
-    get_proj_expr_keys,
     get_proj_expr_single,
     get_scalar_udf_result_type,
+    get_single_proj_source_if_present,
     is_single_colref_projection,
     make_col_ref_exprs,
     wrap_plan,
@@ -128,7 +128,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        plan_keys = get_proj_expr_keys(self._plan)
+        plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
@@ -182,7 +182,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        plan_keys = get_proj_expr_keys(self._plan)
+        plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
@@ -230,7 +230,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        plan_keys = get_proj_expr_keys(self._plan)
+        plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
@@ -281,7 +281,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         expr = LazyPlan("ArithOpExpression", empty_data, lhs, rhs, op)
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        plan_keys = get_proj_expr_keys(self._plan)
+        plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(

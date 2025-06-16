@@ -674,14 +674,18 @@ def get_proj_expr_single(proj: LazyPlan):
     if is_single_projection(proj):
         return proj.args[1][0]
     else:
+        if not proj.is_series:
+            raise Exception("Got a non-Series in get_proj_expr_single")
         return make_col_ref_exprs([0], proj)[0]
 
 
-def get_proj_expr_keys(proj: LazyPlan):
+def get_single_proj_source_if_present(proj: LazyPlan):
     """Get the single expression from a LogicalProjection node."""
     if is_single_projection(proj):
         return proj.args[0]
     else:
+        if not proj.is_series:
+            raise Exception("Got a non-Series in get_single_proj_source_if_present")
         return proj
 
 

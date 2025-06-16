@@ -1106,6 +1106,7 @@ def test_series_filter_distributed(datapath, file_path, op):
         return df
 
     # Force plan to execute but keep distributed.
+    f(bodo_df1)
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
     bodo_series_a = bodo_df1["A"]
