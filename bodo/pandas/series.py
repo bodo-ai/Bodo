@@ -618,16 +618,22 @@ class BodoStringMethods:
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
-    def cat(self, others=None, sep="", na_rep=None, join="left"):
+    def cat(self, others=None, sep=None, na_rep=None, join="left"):
         """
         If others is specified, concatenates the Series and elements of others
         element-wise and returns a Series. If others is not passed, then falls back to
         Pandas, and all values in the Series are concatenated into a single string with a given sep.
         """
         # Validates others is a lazy BodoSeries, falls back to Pandas otherwise
+        if others is None:
+            raise BodoLibNotImplementedException(
+                "others is not provided: falling back to Pandas"
+            )
+
+        # Validates others is a lazy BodoSeries, falls back to Pandas otherwise
         if not isinstance(others, BodoSeries):
             raise BodoLibNotImplementedException(
-                "str.cat(others=None): fallback to Pandas"
+                "others is not a BodoSeries instance: falling back to Pandas"
             )
 
         # Validates input series and others series are from same df, falls back to Pandas otherwise
@@ -644,7 +650,7 @@ class BodoStringMethods:
             base_plan,
             new_metadata,
             "bodo.pandas.series._str_cat_helper",
-            (sep, (0, 1)),
+            (sep, (0, 1), na_rep),
             {},
             is_method=False,
         )
@@ -726,9 +732,11 @@ def _str_partition_helper(s, col):
     return series
 
 
-def _str_cat_helper(df, sep, col_idx):
+def _str_cat_helper(df, sep, col_idx, na_rep):
     """Concatenates df[idx] for idx in idx_pair, separated by sep."""
     res = []
+    if sep is None:
+        sep = ""
     lhs_idx, rhs_idx = col_idx
 
     lhs_col = df.iloc[:, lhs_idx]
@@ -738,9 +746,9 @@ def _str_cat_helper(df, sep, col_idx):
     bitmap_rhs = rhs_col.isnull()
 
     for i in df.index:
-        lhs = lhs_col[i]
-        rhs = rhs_col[i]
-        if bitmap_lhs[i] or bitmap_rhs[i]:
+        lhs = lhs_col[i] if not bitmap_lhs[i] else na_rep
+        rhs = rhs_col[i] if not bitmap_rhs[i] else na_rep
+        if (bitmap_lhs[i] or bitmap_rhs[i]) and na_rep is None:
             res.append(pd.NA)
         else:
             res.append(f"{lhs}{sep}{rhs}")
