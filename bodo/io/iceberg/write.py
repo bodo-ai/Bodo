@@ -798,6 +798,8 @@ def start_write_rank_0(
 
         io = table.io
         data_loc = _get_write_data_path(properties, table.location())
+        partition_spec = table.spec()
+        sort_order = table.sort_order()
 
     else:
         assert mode == "append"
