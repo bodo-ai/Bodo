@@ -1,5 +1,6 @@
 
 // Functions to write Bodo arrays to parquet
+#pragma once
 
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #if _MSC_VER >= 1900
