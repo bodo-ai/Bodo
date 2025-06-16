@@ -546,56 +546,6 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     return scalar_expr;
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_python_binary_scalar_func_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &lhs,
-    std::unique_ptr<duckdb::LogicalOperator> &rhs, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns_lhs,
-    const std::vector<int> &selected_columns_rhs) {
-    // Get output data type (UDF output is a single column)
-    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
-    auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
-    // Maybe not be exactly 1 due to index column.
-    assert(out_types.size() > 0);
-    duckdb::LogicalType out_type = out_types[0];
-
-    // Necessary before accessing source->types attribute
-    lhs->ResolveOperatorTypes();
-    rhs->ResolveOperatorTypes();
-
-    // Create ScalarFunction for UDF
-    duckdb::ScalarFunction scalar_function =
-        duckdb::ScalarFunction("bodo_udf", lhs->types, out_type, RunFunction);
-    duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoPythonScalarFunctionData>(args, out_schema);
-
-    std::vector<duckdb::ColumnBinding> source_cols_lhs =
-        lhs->GetColumnBindings();
-    std::vector<duckdb::ColumnBinding> source_cols_rhs =
-        rhs->GetColumnBindings();
-
-    // Add UDF input expressions for selected columns
-    std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
-    for (int col_idx : selected_columns_lhs) {
-        auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            lhs->types[col_idx], source_cols_lhs[col_idx]);
-        udf_in_exprs.emplace_back(std::move(expr));
-    }
-
-    for (int col_idx : selected_columns_rhs) {
-        auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            rhs->types[col_idx], source_cols_rhs[col_idx]);
-        udf_in_exprs.emplace_back(std::move(expr));
-    }
-
-    // Create UDF expression
-    duckdb::unique_ptr<duckdb::BoundFunctionExpression> scalar_expr =
-        make_uniq<duckdb::BoundFunctionExpression>(out_type, scalar_function,
-                                                   std::move(udf_in_exprs),
-                                                   std::move(bind_data1));
-
-    return scalar_expr;
-}
-
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,

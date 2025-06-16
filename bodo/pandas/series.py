@@ -712,7 +712,7 @@ def _str_cat_helper(df, sep, col_idx):
 
 
 def get_base_plan(plan):
-    """TODO: add docstring"""
+    """Returns base df_plan of given plan."""
     if is_single_projection(plan):
         inner_plan = get_base_plan(plan.args[0])
         if inner_plan is not None:
