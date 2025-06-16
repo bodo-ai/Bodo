@@ -2,6 +2,7 @@ import datetime
 import operator
 
 import numba.core.utils
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyiceberg.catalog
@@ -523,6 +524,39 @@ def test_table_read_partitioned_file_pruning(
     _test_equal(
         bodo_out2,
         py_out2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_write():
+    """Simple test for writing a DataFrame to Iceberg."""
+    # TODO[BSE-4883]: verify and improve this test when Iceberg CI is enabled
+    df = pd.DataFrame(
+        {
+            "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+            "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
+            "three": [True, False, True, True, True, False, False],
+            "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
+            "five": ["foo", "bar", "baz", None, "bar", "baz", "foo"],
+        }
+    )
+
+    bdf = bpd.from_pandas(df)
+    catalog_properties = {
+        pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+        pyiceberg.catalog.WAREHOUSE_LOCATION: "iceberg_warehouse",
+    }
+    bdf.to_iceberg("test_table", None, catalog_properties=catalog_properties)
+    assert bdf.is_lazy_plan()
+
+    # Read using PyIceberg to verify the write
+    out_df = pyiceberg_reader.read_iceberg_table("test_table", "iceberg_warehouse")
+
+    _test_equal(
+        out_df,
+        df,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,

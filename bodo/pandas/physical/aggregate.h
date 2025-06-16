@@ -152,7 +152,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
-    std::shared_ptr<table_info> GetResult() override {
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         throw std::runtime_error("GetResult called on an aggregate node.");
     }
 
@@ -239,7 +239,7 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
                    : OperatorResult::NEED_MORE_INPUT;
     }
 
-    std::shared_ptr<table_info> GetResult() override {
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         throw std::runtime_error(
             "GetResult called on a PhysicalCountStar node.");
     }

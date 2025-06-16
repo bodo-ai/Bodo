@@ -317,6 +317,9 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
     cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object field, c_string function_name, vector[int] input_column_indices) except +
     cdef unique_ptr[CLogicalCopyToFile] make_parquet_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string path, c_string compression, c_string bucket_region, int64_t row_group_size) except +
+    cdef unique_ptr[CLogicalCopyToFile] make_iceberg_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string table_loc,
+        c_string bucket_region, int64_t max_pq_chunksize, c_string compression, object partition_tuples, object sort_tuples, c_string iceberg_schema_str,
+        object output_pa_schema, object fs) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
     cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
@@ -796,6 +799,32 @@ cdef class LogicalParquetWrite(LogicalOperator):
         return f"LogicalParquetWrite()"
 
 
+cdef class LogicalIcebergWrite(LogicalOperator):
+    """
+    Wrapper around DuckDB's LogicalCopyToFile for writing Iceberg datasets.
+    """
+
+    def __cinit__(self, object out_schema, LogicalOperator source,
+            str table_loc,
+            str bucket_region,
+            int max_pq_chunksize,
+            str compression,
+            object partition_tuples,
+            object sort_tuples,
+            str iceberg_schema_str,
+            object output_pa_schema,
+            object fs):
+        self.out_schema = out_schema
+        self.sources = [source]
+
+        cdef unique_ptr[CLogicalCopyToFile] c_logical_copy_to_file = make_iceberg_write_node(source.c_logical_operator, out_schema, table_loc.encode(),
+                bucket_region.encode(), max_pq_chunksize, compression.encode(), partition_tuples, sort_tuples, iceberg_schema_str.encode(), output_pa_schema, fs)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_copy_to_file.release())
+
+    def __str__(self):
+        return f"LogicalIcebergWrite()"
+
+
 cpdef count_nodes(object root):
     cdef LogicalOperator wrapped_operator
 
@@ -852,6 +881,9 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
 
     # Write doesn't return output data
     if cpp_table == 0:
+        # Iceberg write returns file information for later commit
+        if exec_output.second != NULL:
+            return <object>exec_output.second
         return None
 
     arrow_schema = <object>exec_output.second

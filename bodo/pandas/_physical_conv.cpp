@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include "_bodo_scan_function.h"
 
-#include "_bodo_scan_function.h"
+#include "_bodo_write_function.h"
 #include "_util.h"
 #include "physical/aggregate.h"
 #include "physical/filter.h"
@@ -214,10 +214,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    ParquetWriteFunctionData& pq_data =
-        op.bind_data->Cast<ParquetWriteFunctionData>();
-    auto physical_op =
-        std::make_shared<PhysicalWriteParquet>(in_table_schema, pq_data);
+    BodoWriteFunctionData& write_data =
+        op.bind_data->Cast<BodoWriteFunctionData>();
+    auto physical_op = write_data.CreatePhysicalOperator(in_table_schema);
 
     finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
     this->active_pipeline = nullptr;
