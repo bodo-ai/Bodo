@@ -76,12 +76,23 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                sources.  We sometimes use a pandas manager which doesn't have
                _source_plan so we have to do getattr check.
             """
-            if getattr(self, "_source_plan", None) is not None:
-                return self._source_plan
-
             from bodo.pandas.base import _empty_like
 
             empty_data = _empty_like(self)
+
+            """This caching also creates issues because you can materialize a
+               dataframe then ask for a plan and then add a column through
+               some pandas method we don't support and then you ask for the
+               _plan and you may get a source plan from before the column was
+               added.  To prevent problems, store the schema of the saved
+               source plan and only use it if the current schema is the same.
+            """
+            if getattr(self, "_source_plan", None) is not None:
+                # If the schema hasn't changed since the last time the source
+                # plan was generated then use the old source plan.
+                if empty_data.equals(self._source_plan[0]):
+                    return self._source_plan[1]
+
             if bodo.dataframe_library_run_parallel:
                 if getattr(self._mgr, "_md_result_id", None) is not None:
                     # If the plan has been executed but the results are still
@@ -95,20 +106,20 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     nrows = len(self)
                     res_id = bodo.spawn.utils.scatter_data(self)
                     mgr = None
-                self._source_plan = LazyPlan(
+                self._source_plan = (empty_data, LazyPlan(
                     "LogicalGetPandasReadParallel",
                     empty_data,
                     nrows,
                     LazyPlanDistributedArg(mgr, res_id),
-                )
+                ))
             else:
-                self._source_plan = LazyPlan(
+                self._source_plan = (empty_data, LazyPlan(
                     "LogicalGetPandasReadSeq",
                     empty_data,
                     self,
-                )
+                ))
 
-            return self._source_plan
+            return self._source_plan[1]
 
     @staticmethod
     def from_lazy_mgr(
@@ -257,7 +268,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         errors: IgnoreRaise = "ignore",
     ) -> DataFrame | None:
         orig_plan = self._plan
-        breakpoint()
         renamed_plan = LazyPlan(
             orig_plan.plan_class,
             orig_plan.empty_data.rename(columns=columns),
