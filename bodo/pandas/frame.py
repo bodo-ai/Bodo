@@ -312,8 +312,18 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         # TODO: add `partition_spec`, `sort_order` and `properties` arguments
 
-        if catalog_properties is None:
+        # Support simple directory only calls like:
+        # df.to_iceberg("table", location="/path/to/table")
+        if catalog_name is None and catalog_properties is None and location is not None:
+            catalog_properties = {
+                pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+                pyiceberg.catalog.WAREHOUSE_LOCATION: location,
+            }
+            # DirCatalog does not support extra location argument in create_table
+            location = None
+        elif catalog_properties is None:
             catalog_properties = {}
+
         catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
 
         if_exists = "append" if append else "replace"
