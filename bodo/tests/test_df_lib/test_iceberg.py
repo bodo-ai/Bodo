@@ -10,6 +10,9 @@ import pyarrow as pa
 import pyiceberg.catalog
 import pyiceberg.expressions
 import pytest
+from pyiceberg.partitioning import PartitionField, PartitionSpec
+from pyiceberg.table.sorting import SortField, SortOrder
+from pyiceberg.transforms import IdentityTransform
 
 import bodo.pandas as bpd
 from bodo.io.iceberg.catalog.dir import DirCatalog
@@ -543,9 +546,15 @@ def test_write():
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "iceberg_warehouse")
 
+        part_spec = PartitionSpec(
+            PartitionField(2, 1001, IdentityTransform(), "id_part")
+        )
+        sort_order = SortOrder(SortField(source_id=4, transform=IdentityTransform()))
         bdf.to_iceberg(
             "test_table",
             location=path,
+            partition_spec=part_spec,
+            sort_order=sort_order,
             snapshot_properties={"p_key": "p_value"},
         )
         assert bdf.is_lazy_plan()
