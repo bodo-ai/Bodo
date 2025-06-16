@@ -509,7 +509,6 @@ def test_sort_values_1col_long_int_list(memory_leak_check):
     )
 
 
-@pytest.mark.df_lib
 @pytest.mark.slow
 def test_sort_values_2col_long_np(memory_leak_check):
     """
@@ -588,7 +587,6 @@ def test_sort_values_1col_np_array(dtype, memory_leak_check):
     )
 
 
-@pytest.mark.df_lib
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "dtype1, dtype2",
