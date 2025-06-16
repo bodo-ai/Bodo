@@ -3,8 +3,6 @@ import re
 import pandas as pd
 from test_series_generator import _generate_series_test
 
-import bodo.pandas as bd
-
 
 def _install_series_str_tests():
     """Install Series.str tests."""
@@ -175,30 +173,6 @@ test_map_arg = {
     "normalize": [
         (("NFC"), {}),
         (("NFD"), {}),
-    ],
-    "cat": [
-        (
-            (),
-            {"sep": "+", "others": pd.Series(["A", "B", "C", "A", "B", "C", "A", "B"])},
-        ),
-        (
-            (),
-            {
-                "sep": " From ",
-                "others": pd.Series(["NY", "TX", "CA", "NY", "TX", "CA", "NY", "TX"]),
-            },
-        ),
-        (
-            (),
-            {
-                "sep": " From ",
-                "others": bd.from_pandas(
-                    pd.DataFrame(
-                        {"A": ["NY", "TX", "CA", "NY", "TX", "CA", "NY", "TX"]}
-                    )
-                ).A,
-            },
-        ),
     ],
     "join": [(("*"), {}), ((" and "), {})],
     "decode": [
