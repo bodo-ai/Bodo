@@ -137,16 +137,16 @@ class SeriesGroupBy:
         if self._as_index:
             col_indices = [len(self._keys)]
             col_indices += list(range(len(self._keys)))
-        else:
-            col_indices = list(range(len(self._keys) + 1))
 
-        exprs = make_col_ref_exprs(col_indices, agg_plan)
-        proj_plan = LazyPlan(
-            "LogicalProjection",
-            empty_data,
-            agg_plan,
-            exprs,
-        )
+            exprs = make_col_ref_exprs(col_indices, agg_plan)
+            proj_plan = LazyPlan(
+                "LogicalProjection",
+                empty_data,
+                agg_plan,
+                exprs,
+            )
+        else:
+            proj_plan = agg_plan
 
         return wrap_plan(proj_plan)
 
