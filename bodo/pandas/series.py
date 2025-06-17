@@ -690,7 +690,9 @@ class BodoDatetimeProperties:
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
-def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
+def _get_series_python_func_plan(
+    series_proj, empty_data, func_name, args, kwargs, is_method=True
+):
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
@@ -714,7 +716,7 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
         (
             func_name,
             True,  # is_series
-            True,  # is_method
+            is_method,  # is_method
             args,  # args
             kwargs,  # kwargs
         ),

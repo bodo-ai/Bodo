@@ -5,7 +5,7 @@ import pyarrow as pa
 from pandas._libs import lib
 
 from bodo.pandas.frame import BodoDataFrame
-from bodo.pandas.series import BodoSeries
+from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
     LazyPlan,
@@ -193,3 +193,47 @@ def read_iceberg(
         )
 
     return wrap_plan(plan=plan)
+
+
+def to_datetime(
+    arg,
+    errors="raise",
+    dayfirst=False,
+    yearfirst=False,
+    utc=False,
+    format=None,
+    exact=lib.no_default,
+    unit=None,
+    infer_datetime_format=lib.no_default,
+    origin="unix",
+    cache=True,
+):
+    series = arg
+    dtype = pd.ArrowDtype(pa.timestamp("ns"))
+
+    index = series.head(0).index
+    new_metadata = pd.Series(
+        dtype=dtype,
+        name=series.name,
+        index=index,
+    )
+
+    return _get_series_python_func_plan(
+        series._plan,
+        new_metadata,
+        "pandas.to_datetime",
+        (),
+        {
+            "errors": "raise",
+            "dayfirst": False,
+            "yearfirst": False,
+            "utc": False,
+            "format": None,
+            "exact": lib.no_default,
+            "unit": None,
+            "infer_datetime_format": lib.no_default,
+            "origin": "unix",
+            "cache": True,
+        },
+        is_method=False,
+    )
