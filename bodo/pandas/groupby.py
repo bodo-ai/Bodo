@@ -107,9 +107,11 @@ class SeriesGroupBy:
             "SeriesGroupBy.sum() should only be called on a single column selection."
         )
 
-        empty_data = zero_size_df.groupby(self._keys, as_index=self._as_index)[
+        empty_data_pandas = zero_size_df.groupby(self._keys, as_index=self._as_index)[
             self._selection[0]
         ].sum()
+
+        empty_data = _cast_value_col("sum", empty_data_pandas, self._selection[0])
 
         key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
         exprs = [
@@ -124,7 +126,7 @@ class SeriesGroupBy:
             for c in self._selection
         ]
 
-        agg_plan = LazyPlan(
+        plan = LazyPlan(
             "LogicalAggregate",
             empty_data,
             self._obj._plan,
@@ -138,17 +140,15 @@ class SeriesGroupBy:
             col_indices = [len(self._keys)]
             col_indices += list(range(len(self._keys)))
 
-            exprs = make_col_ref_exprs(col_indices, agg_plan)
-            proj_plan = LazyPlan(
+            exprs = make_col_ref_exprs(col_indices, plan)
+            plan = LazyPlan(
                 "LogicalProjection",
                 empty_data,
-                agg_plan,
+                plan,
                 exprs,
             )
-        else:
-            proj_plan = agg_plan
 
-        return wrap_plan(proj_plan)
+        return wrap_plan(plan)
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
@@ -163,3 +163,39 @@ class SeriesGroupBy:
             warnings.warn(BodoLibFallbackWarning(msg))
             gb = pd.DataFrame(self._obj).groupby(self._keys)[self._selection[0]]
             return object.__getattribute__(gb, name)
+
+
+def _cast_value_col(
+    func: str, data: pd.Series | pd.DataFrame, value_col: str
+) -> pd.Series | pd.DataFrame:
+    """Upcast value columns for aggregation functions.
+    Equivalent to get_groupby_output_dtype in C++.
+    """
+    import pyarrow as pa
+
+    from bodo.pandas.utils import _empty_pd_array
+
+    # TODO: multiple value columns
+    if isinstance(data, pd.Series):
+        type_ = data.dtype.pyarrow_dtype
+    else:
+        type_ = data[value_col].dtype.pyarrow_dtype
+
+    new_type = None
+
+    if func == "sum":
+        if pa.types.is_signed_integer(type_):
+            new_type = pa.int64()
+        elif pa.types.is_unsigned_integer(type_):
+            new_type = pa.uint64()
+    # TODO: Other aggregates
+
+    if new_type is None:
+        return data
+
+    casted_col = _empty_pd_array(new_type)
+    if isinstance(data, pd.Series):
+        return pd.Series(casted_col, index=data.index, name=data.name)
+    else:
+        data[value_col] = casted_col
+        return data
