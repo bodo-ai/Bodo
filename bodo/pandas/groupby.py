@@ -30,12 +30,14 @@ class DataFrameGroupBy:
         obj: pd.DataFrame,
         keys: list[str],
         as_index: bool = True,
+        sort: bool = True,
         dropna: bool = True,
         selection: list[str] | None = None,
     ):
         self._obj = obj
         self._keys = keys
         self._as_index = as_index
+        self._sort = sort
         self._dropna = dropna
         self._selection = selection
 
@@ -45,7 +47,7 @@ class DataFrameGroupBy:
         """
         if isinstance(key, str):
             return SeriesGroupBy(
-                self._obj, self._keys, [key], self._as_index, self._dropna
+                self._obj, self._keys, [key], self._as_index, self._sort, self._dropna
             )
         else:
             raise BodoLibNotImplementedException(
@@ -80,12 +82,14 @@ class SeriesGroupBy:
         keys: list[str],
         selection: list[str],
         as_index: bool,
+        sort: bool,
         dropna: bool,
     ):
         self._obj = obj
         self._keys = keys
         self._selection = selection
         self._as_index = as_index
+        self._sort = sort
         self._dropna = dropna
 
     @check_args_fallback(supported="none")
@@ -124,7 +128,7 @@ class SeriesGroupBy:
             for c in self._selection
         ]
 
-        agg_plan = LazyPlan(
+        plan = LazyPlan(
             "LogicalAggregate",
             empty_data,
             self._obj._plan,
@@ -132,23 +136,34 @@ class SeriesGroupBy:
             exprs,
         )
 
+        if self._sort:
+            ascending = [True] * len(key_indices)
+            na_last = [True] * len(key_indices)
+            plan = LazyPlan(
+                "LogicalOrder",
+                empty_data,
+                plan,
+                ascending,
+                na_last,
+                key_indices,
+                plan.pa_schema,
+            )
+
         # Add the data column then the keys since they become Index columns in output.
         # DuckDB generates keys first in output so we need to reverse the order.
         if self._as_index:
             col_indices = [len(self._keys)]
             col_indices += list(range(len(self._keys)))
 
-            exprs = make_col_ref_exprs(col_indices, agg_plan)
-            proj_plan = LazyPlan(
+            exprs = make_col_ref_exprs(col_indices, plan)
+            plan = LazyPlan(
                 "LogicalProjection",
                 empty_data,
-                agg_plan,
+                plan,
                 exprs,
             )
-        else:
-            proj_plan = agg_plan
 
-        return wrap_plan(proj_plan)
+        return wrap_plan(plan)
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:

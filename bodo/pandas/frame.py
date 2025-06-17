@@ -748,7 +748,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return wrap_plan(proj_plan)
 
-    @check_args_fallback(supported=["by", "as_index", "dropna"])
+    @check_args_fallback(supported=["by", "as_index", "sort", "dropna"])
     def groupby(
         self,
         by=None,
@@ -773,7 +773,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "groupby: only string keys are supported"
             )
 
-        return DataFrameGroupBy(self, by, as_index, dropna)
+        return DataFrameGroupBy(self, by, as_index, sort, dropna)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
