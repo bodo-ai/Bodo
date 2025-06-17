@@ -8,6 +8,7 @@ from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
+    BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
     arrow_to_empty_df,
@@ -195,6 +196,7 @@ def read_iceberg(
     return wrap_plan(plan=plan)
 
 
+@check_args_fallback("all")
 def to_datetime(
     arg,
     errors="raise",
@@ -208,6 +210,10 @@ def to_datetime(
     origin="unix",
     cache=True,
 ):
+    if not isinstance(arg, BodoSeries):
+        raise BodoLibNotImplementedException(
+            "to_datetime() is not supported for arg that is not an instance of BodoSeries. Falling back to Pandas."
+        )
     series = arg
     dtype = pd.ArrowDtype(pa.timestamp("ns"))
 
