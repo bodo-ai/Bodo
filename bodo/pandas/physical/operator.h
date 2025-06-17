@@ -69,7 +69,8 @@ class PhysicalSink : public PhysicalOperator {
 
     virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                         OperatorResult prev_op_result) = 0;
-    virtual std::shared_ptr<table_info> GetResult() = 0;
+    virtual std::variant<std::shared_ptr<table_info>, PyObject*>
+    GetResult() = 0;
 };
 
 class PhysicalSourceSink : public PhysicalOperator {
@@ -98,3 +99,6 @@ class PhysicalSourceSink : public PhysicalOperator {
  * @return int batch size to be used in streaming operators
  */
 int get_streaming_batch_size();
+
+// Maximum Parquet file size for streaming Parquet write
+int64_t get_parquet_chunk_size();

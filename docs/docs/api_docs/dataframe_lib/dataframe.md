@@ -1,6 +1,6 @@
 # DataFrame API
 
-## bodo.pandas.BodoDataFrame.apply
+## BodoDataFrame.apply
 ``` py
 BodoDataFrame.apply(
         func,
@@ -82,7 +82,7 @@ dtype: int64[pyarrow]
 
 ---
 
-## bodo.pandas.BodoDataFrame.head
+## BodoDataFrame.head
 ``` py
 BodoDataFrame.head(n=5) -> BodoDataFrame
 ```
@@ -130,7 +130,7 @@ Output:
 
 ---
 
-## bodo.pandas.BodoDataFrame.map_partitions
+## BodoDataFrame.map_partitions
 ``` py
 BodoDataFrame.map_partitions(func, *args, **kwargs) -> BodoSeries | BodoDataFrame
 ```
@@ -275,20 +275,9 @@ Name: D, dtype: int64[pyarrow]
 
 ---
 
-## bodo.pandas.BodoDataFrame.sort\_values
+## BodoDataFrame.sort\_values
 ``` py
-BodoDataFrame.sort_values(
-        self,
-        by: IndexLabel,
-        *,
-        axis: Axis = 0,
-        ascending: bool | list[bool] | tuple[bool, ...] = True,
-        inplace: bool = False,
-        kind: SortKind = "quicksort",
-        na_position: str | list[str] | tuple[str, ...] = "last",
-        ignore_index: bool = False,
-        key: ValueKeyFunc | None = None,
-    ) -> BodoDataFrame
+BodoDataFrame.sort_values(by, *, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last", ignore_index=False, key=None)
 ```
 Sorts the elements of the BodoDataFrame and returns a new sorted BodoDataFrame.
 
@@ -340,6 +329,136 @@ Output:
 9   1   A1  4
 10  1   A1  5
 11  1   A1  6
+```
+
+---
+
+## BodoDataFrame.to\_parquet
+``` py
+BodoDataFrame.to_parquet(path=None, engine="auto", compression="snappy", index=None, partition_cols=None, storage_options=None, row_group_size=-1, **kwargs)
+```
+Write a DataFrame as a Parquet dataset.
+
+<p class="api-header">Parameters</p>
+
+: __path: *str*:__ Output path to write. It can be a local path (e.g. `output.parquet`), AWS S3 (`s3://...`), Azure ALDS (`abfs://...`, `abfss://...`), or GCP GCS (`gcs://...`, `gs://`).
+
+: __compression : *str, default 'snappy'*:__ File compression to use. Can be None, 'snappy', 'gzip', or 'brotli'.
+
+: __row_group_size : *int*:__ Row group size in output Parquet files. -1 allows the backend to choose.
+
+: All other parameters will trigger a fallback to [`pandas.DataFrame.to_parquet`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_parquet.html).
+
+
+<p class="api-header">Example</p>
+
+``` py
+import bodo.pandas as bodo_pd
+import pandas as pd
+
+df = pd.DataFrame(
+    {
+        "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+        "B": ["A1", "B1", "C1", "Abc"] * 3,
+        "C": pd.array([6, 5, 4] * 4, "Int64"),
+    }
+)
+
+bdf = bodo_pd.from_pandas(df)
+bdf.to_parquet("output.parquet")
+print(pd.read_parquet("output.parquet"))
+```
+
+Output:
+```
+    A    B  C
+0   1   A1  6
+1   2   B1  5
+2   3   C1  4
+3   7  Abc  6
+4   1   A1  5
+5   2   B1  4
+6   3   C1  6
+7   7  Abc  5
+8   1   A1  4
+9   2   B1  6
+10  3   C1  5
+11  7  Abc  4
+```
+
+---
+
+## BodoDataFrame.to\_iceberg
+``` py
+BodoDataFrame.to_iceberg(
+        table_identifier,
+        catalog_name=None,
+        *,
+        catalog_properties=None,
+        location=None,
+        append=False,
+        partition_spec=None,
+        sort_order=None,
+        properties=None,
+        snapshot_properties=None
+)
+```
+Write a DataFrame as an Iceberg dataset.
+
+Refer to [`pandas.DataFrame.to_iceberg`](https://pandas.pydata.org/docs/dev/reference/api/pandas.DataFrame.to_iceberg.html) for more details.
+
+!!! warning
+    This function is experimental in Pandas and may change in future releases.
+
+<p class="api-header">Parameters</p>
+
+: __table_identifier: *str*:__ Table identifier to write
+: __catalog_name: *str, optional*:__ Name of the catalog to use. If not provided, the default catalog will be used. See [PyIceberg's documentation](https://py.iceberg.apache.org/#connecting-to-a-catalog) for more details.
+: __catalog_properties: *dict[str, Any], optional*:__ Properties for the catalog connection.
+: __location: *str, optional*:__ Location of the table (if supported by the catalog)
+: __append: *bool*:__ Append or overwrite if the table exists
+: __partition_spec: *PartitionSpec, optional*:__ PyIceberg partition spec for the table (only used if creating a new table). See [PyIceberg's documentation](https://py.iceberg.apache.org/api/#partitions) for more details.
+: __sort_order: *SortOrder, optional*:__ PyIceberg sort order for the table (only used if creating a new table). See [PyIceberg's documentation](https://py.iceberg.apache.org/reference/pyiceberg/table/sorting/#pyiceberg.table.sorting.SortOrder) for more details.
+: __properties: *dict[str, Any], optional*:__ Properties to add to the new table.
+: __snapshot_properties: *dict[str, Any], optional*:__ Properties to add to the new table snapshot.
+
+<p class="api-header">Example</p>
+
+
+Simple write of a table on the filesystem without a catalog:
+``` py
+import bodo.pandas as bodo_pd
+import pandas as pd
+from pyiceberg.transforms import IdentityTransform
+from pyiceberg.partitioning import PartitionField, PartitionSpec
+from pyiceberg.table.sorting import SortField, SortOrder
+
+df = pd.DataFrame(
+        {
+            "one": [-1.0, 1.3, 2.5, 3.0, 4.0, 6.0, 10.0],
+            "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
+            "three": [True, False, True, True, True, False, False],
+            "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
+            "five": ["foo", "bar", "baz", None, "bar", "baz", "foo"],
+        }
+    )
+
+bdf = bodo_pd.from_pandas(df)
+part_spec = PartitionSpec(PartitionField(2, 1001, IdentityTransform(), "id_part"))
+sort_order = SortOrder(SortField(source_id=4, transform=IdentityTransform()))
+bdf.to_iceberg("test_table", location="./iceberg_warehouse", partition_spec=part_spec, sort_order=sort_order)
+
+out_df = bodo_pd.read_iceberg("test_table", location="./iceberg_warehouse")
+# Only reads Parquet files of partition "foo" from storage
+print(out_df[out_df["two"] == "foo"])
+```
+
+Output:
+```
+    one  two  three  four  five
+0  -1.0  foo   True  -1.0   foo
+1   3.0  foo   True   3.0  <NA>
+2  10.0  foo  False  11.0   foo
 ```
 
 ---

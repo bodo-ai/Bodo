@@ -8,16 +8,24 @@ from copy import deepcopy
 
 import pandas as pd
 from pandas._libs import lib
-from pandas._typing import (
-    AnyArrayLike,
-    Axis,
-    IndexLabel,
-    MergeHow,
-    MergeValidate,
-    SortKind,
-    Suffixes,
-    ValueKeyFunc,
-)
+
+if pt.TYPE_CHECKING:
+    from pandas._typing import (
+        AnyArrayLike,
+        Axis,
+        FilePath,
+        IndexLabel,
+        MergeHow,
+        MergeValidate,
+        SortKind,
+        StorageOptions,
+        Suffixes,
+        ValueKeyFunc,
+        WriteBuffer,
+    )
+    from pyiceberg.partitioning import PartitionSpec
+    from pyiceberg.table.sorting import SortOrder
+
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -33,6 +41,7 @@ from bodo.pandas.utils import (
     LazyPlan,
     LazyPlanDistributedArg,
     check_args_fallback,
+    execute_plan,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
@@ -44,8 +53,6 @@ from bodo.pandas.utils import (
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
-    get_overload_const_str,
-    is_overload_none,
 )
 
 
@@ -236,64 +243,189 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             case ExecState.COLLECTED:
                 return super().shape
 
+    @check_args_fallback(supported=["path", "engine", "compression", "row_group_size"])
     def to_parquet(
         self,
-        path,
-        engine="auto",
-        compression="snappy",
-        index=None,
-        partition_cols=None,
-        storage_options=None,
-        row_group_size=-1,
-    ):
-        # argument defaults should match that of to_parquet_overload in pd_dataframe_ext.py
+        path: FilePath | WriteBuffer[bytes] | None = None,
+        engine: pt.Literal["auto", "pyarrow", "fastparquet"] = "auto",
+        compression: str | None = "snappy",
+        index: bool | None = None,
+        partition_cols: list[str] | None = None,
+        storage_options: StorageOptions | None = None,
+        row_group_size: int = -1,
+        **kwargs,
+    ) -> bytes | None:
+        from bodo.pandas.base import _empty_like
 
-        @bodo.jit(spawn=True)
-        def to_parquet_wrapper(
-            df: pd.DataFrame,
-            path,
-            engine,
-            compression,
-            index,
-            partition_cols,
-            storage_options,
-            row_group_size,
-        ):
-            return df.to_parquet(
-                path,
-                engine,
-                compression,
-                index,
-                partition_cols,
-                storage_options,
-                row_group_size,
+        if not isinstance(path, str):
+            raise BodoLibNotImplementedException(
+                "DataFrame.to_parquet(): path must be a string"
             )
 
-        # checks string arguments before jit performs conversion to unicode
-        if not is_overload_none(engine) and get_overload_const_str(engine) not in (
-            "auto",
-            "pyarrow",
-        ):  # pragma: no cover
-            raise BodoError("DataFrame.to_parquet(): only pyarrow engine supported")
-
-        if not is_overload_none(compression) and get_overload_const_str(
-            compression
-        ) not in {"snappy", "gzip", "brotli"}:
-            raise BodoError(
-                "to_parquet(): Unsupported compression: "
-                + get_overload_const_str(compression)
+        if engine not in ("auto", "pyarrow"):
+            raise BodoLibNotImplementedException(
+                "DataFrame.to_parquet(): only 'auto' and 'pyarrow' engines are supported"
             )
 
-        return to_parquet_wrapper(
-            self,
+        if compression not in (None, "snappy", "gzip", "brotli"):
+            raise BodoLibNotImplementedException(
+                "DataFrame.to_parquet(): only None, 'snappy', 'gzip' and 'brotli' compressions are supported"
+            )
+
+        # Convert None to "none" as expected by the backend.
+        # https://github.com/bodo-ai/Bodo/blob/ff39453f07d8691751d95668ab06a72a5f742dff/bodo/hiframes/pd_dataframe_ext.py#L3795
+        if compression is None:
+            compression = "none"
+
+        if not isinstance(row_group_size, int):
+            raise BodoError("DataFrame.to_parquet(): row_group_size must be an integer")
+
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, False)
+
+        write_plan = LazyPlan(
+            "LogicalParquetWrite",
+            _empty_like(self),
+            self._plan,
             path,
-            engine,
             compression,
-            index,
-            partition_cols,
-            storage_options,
+            bucket_region,
             row_group_size,
         )
+        execute_plan(write_plan)
+
+    @check_args_fallback(unsupported="none")
+    def to_iceberg(
+        self,
+        table_identifier: str,
+        catalog_name: str | None = None,
+        *,
+        catalog_properties: dict[str, pt.Any] | None = None,
+        location: str | None = None,
+        append: bool = False,
+        partition_spec: PartitionSpec | None = None,
+        sort_order: SortOrder | None = None,
+        properties: dict[str, pt.Any] | None = None,
+        snapshot_properties: dict[str, str] | None = None,
+    ) -> None:
+        # See Pandas implementation of to_iceberg:
+        # https://github.com/pandas-dev/pandas/blob/c5457f61d92b9428a56c619a6c420b122a41a347/pandas/core/frame.py#L3550
+        # https://github.com/pandas-dev/pandas/blob/c5457f61d92b9428a56c619a6c420b122a41a347/pandas/io/iceberg.py#L98
+        # See Bodo JIT implementation of streaming writes to Iceberg:
+        # https://github.com/bodo-ai/Bodo/blob/142678b2fe7217d80e233d201061debae2d47c13/bodo/io/iceberg/stream_iceberg_write.py#L535
+        import pyiceberg.catalog
+        import pyiceberg.partitioning
+        import pyiceberg.table.sorting
+
+        from bodo.pandas.base import _empty_like
+        from bodo.utils.typing import CreateTableMetaType
+
+        # Support simple directory only calls like:
+        # df.to_iceberg("table", location="/path/to/table")
+        if catalog_name is None and catalog_properties is None and location is not None:
+            catalog_properties = {
+                pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+                pyiceberg.catalog.WAREHOUSE_LOCATION: location,
+            }
+            # DirCatalog does not support extra location argument in create_table
+            location = None
+        elif catalog_properties is None:
+            catalog_properties = {}
+
+        if partition_spec is None:
+            partition_spec = pyiceberg.partitioning.UNPARTITIONED_PARTITION_SPEC
+
+        if sort_order is None:
+            sort_order = pyiceberg.table.sorting.UNSORTED_SORT_ORDER
+
+        if properties is None:
+            properties = ()
+        else:
+            if not isinstance(properties, dict):
+                raise BodoError(
+                    "Iceberg write properties must be a dictionary, got: "
+                    f"{type(properties)}"
+                )
+            # Convert properties to a tuple of items to match expected type in
+            # CreateTableMetaType
+            properties = tuple(properties.items())
+
+        if snapshot_properties is None:
+            snapshot_properties = {}
+
+        catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
+
+        if_exists = "append" if append else "replace"
+        df_schema = self._plan.pa_schema
+        (
+            txn,
+            fs,
+            table_loc,
+            output_pa_schema,
+            iceberg_schema_str,
+            partition_spec,
+            partition_tuples,
+            sort_order_id,
+            sort_tuples,
+            properties,
+        ) = bodo.io.iceberg.write.start_write_rank_0(
+            catalog,
+            table_identifier,
+            df_schema,
+            if_exists,
+            False,
+            CreateTableMetaType(None, None, properties),
+            location,
+            partition_spec,
+            sort_order,
+            snapshot_properties,
+        )
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, False)
+        max_pq_chunksize = properties.get(
+            "write.target-file-size-bytes",
+            bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
+        )
+        compression = properties.get("write.parquet.compression-codec", "snappy")
+        # TODO: support Theta sketches
+
+        write_plan = LazyPlan(
+            "LogicalIcebergWrite",
+            _empty_like(self),
+            self._plan,
+            table_loc,
+            bucket_region,
+            max_pq_chunksize,
+            compression,
+            partition_tuples,
+            sort_tuples,
+            iceberg_schema_str,
+            output_pa_schema,
+            fs,
+        )
+        all_iceberg_files_infos = execute_plan(write_plan)
+        # Flatten the list of lists
+        all_iceberg_files_infos = (
+            [item for sub in all_iceberg_files_infos for item in sub]
+            if all_iceberg_files_infos
+            else None
+        )
+        (
+            fnames,
+            file_records,
+            partition_infos,
+        ) = bodo.io.iceberg.write.generate_data_file_info_seq(all_iceberg_files_infos)
+
+        # Register file names, metrics and schema in transaction
+        success = bodo.io.iceberg.write.register_table_write_seq(
+            txn,
+            fnames,
+            file_records,
+            partition_infos,
+            partition_spec,
+            sort_order_id,
+            snapshot_properties,
+        )
+        if not success:
+            raise BodoError("Iceberg write failed.")
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
@@ -658,7 +790,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return wrap_plan(proj_plan)
 
-    @check_args_fallback(supported=["by"])
+    @check_args_fallback(supported=["by", "as_index", "dropna"])
     def groupby(
         self,
         by=None,
@@ -683,7 +815,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "groupby: only string keys are supported"
             )
 
-        return DataFrameGroupBy(self, by)
+        return DataFrameGroupBy(self, by, as_index, dropna)
 
     @check_args_fallback("all")
     def __getitem__(self, key):

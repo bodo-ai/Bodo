@@ -77,6 +77,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.center`][bodoseriesstrcenter]
 - [`bodo.pandas.BodoSeries.str.contains`][bodoseriesstrcontains]
 - [`bodo.pandas.BodoSeries.str.count`][bodoseriesstrcount]
+- [`bodo.pandas.BodoSeries.str.decode`][bodoseriesstrdecode]
+- [`bodo.pandas.BodoSeries.str.encode`][bodoseriesstrencode]
 - [`bodo.pandas.BodoSeries.str.endswith`][bodoseriesstrendswith]
 - [`bodo.pandas.BodoSeries.str.find`][bodoseriesstrfind]
 - [`bodo.pandas.BodoSeries.str.findall`][bodoseriesstrfindall]
@@ -92,6 +94,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.isspace`][bodoseriesstrisspace]
 - [`bodo.pandas.BodoSeries.str.istitle`][bodoseriesstristitle]
 - [`bodo.pandas.BodoSeries.str.isupper`][bodoseriesstrisupper]
+- [`bodo.pandas.BodoSeries.str.join`][bodoseriesstrjoin]
 - [`bodo.pandas.BodoSeries.str.len`][bodoseriesstrlen]
 - [`bodo.pandas.BodoSeries.str.ljust`][bodoseriesstrljust]
 - [`bodo.pandas.BodoSeries.str.lower`][bodoseriesstrlower]
@@ -220,3 +223,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesstrrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rpartition.html
 [bodoseriesdtquarter]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.quarter.html
 [bodoseriesstrnormalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.normalize.html
+
+
+[bodoseriesstrjoin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.join.html
+[bodoseriesstrencode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.encode.html
+[bodoseriesstrdecode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.decode.html
