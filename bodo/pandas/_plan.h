@@ -145,6 +145,14 @@ duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
     const std::string &val);
 
 /**
+ * @brief Create an expression from a constant bool.
+ *
+ * @param val - the constant bool for the expression
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const bool expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_bool_expr(bool val);
+
+/**
  * @brief Create an expression from a constant timestamp with ns resolution.
  *
  * @param val - the constant timestamp for the expression in ns since epoch
@@ -173,12 +181,14 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
  * @param field_py output field type for the aggregate function
  * @param function_name function name for matching in backend
  * @param input_column_indices argument column indices for the input source
+ * @param dropna argument column indices for the input source
  * @return duckdb::unique_ptr<duckdb::Expression> new BoundAggregateExpression
  * object
  */
 duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
-    std::string function_name, std::vector<int> input_column_indices);
+    std::string function_name, std::vector<int> input_column_indices,
+    bool dropna);
 
 /**
  * @brief Create an expression from two sources and an operator.
@@ -278,6 +288,28 @@ duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema,
     PyObject *storage_options);
+
+/**
+ * @brief Create a LogicalCopyToFile node for writing a Parquet dataset.
+ *
+ * @param source input data to write
+ * @param pyarrow_schema schema of the data to write
+ * @param path path to write
+ * @param compression compression type to use (e.g., "snappy")
+ * @param bucket_region region for the S3 bucket (if applicable)
+ * @param row_group_size row group size for Parquet files
+ * @return duckdb::unique_ptr<duckdb::LogicalCopyToFile> created node
+ */
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string path, std::string compression, std::string bucket_region,
+    int64_t row_group_size);
+
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string table_loc, std::string bucket_region, int64_t max_pq_chunksize,
+    std::string compression, PyObject *partition_tuples, PyObject *sort_tuples,
+    std::string iceberg_schema_str, PyObject *output_pa_schema, PyObject *pyfs);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe sequentially

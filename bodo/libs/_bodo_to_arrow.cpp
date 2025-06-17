@@ -722,7 +722,7 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
 
 std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     std::shared_ptr<table_info> table, std::vector<std::string> field_names,
-    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata,
+    const std::shared_ptr<const arrow::KeyValueMetadata> schema_metadata,
     bool convert_timedelta_to_int64, std::string tz,
     arrow::TimeUnit::type time_unit, bool downcast_time_ns_to_us,
     bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {

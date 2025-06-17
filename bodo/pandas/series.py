@@ -31,6 +31,7 @@ from bodo.pandas.utils import (
     get_n_index_arrays,
     get_proj_expr_single,
     get_scalar_udf_result_type,
+    get_single_proj_source_if_present,
     is_single_colref_projection,
     make_col_ref_exprs,
     wrap_plan,
@@ -127,7 +128,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -180,7 +182,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -227,7 +230,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -277,7 +281,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         expr = LazyPlan("ArithOpExpression", empty_data, lhs, rhs, op)
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
-        key_exprs = tuple(make_col_ref_exprs(key_indices, self._plan.args[0]))
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
         plan = LazyPlan(
             "LogicalProjection",
@@ -327,6 +332,38 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback("all")
     def __rfloordiv__(self, other):
         return self._arith_binop(other, "__rfloordiv__", True)
+
+    @check_args_fallback("all")
+    def __getitem__(self, key):
+        """Called when df[key] is used."""
+
+        from bodo.pandas.base import _empty_like
+
+        # Only selecting columns or filtering with BodoSeries is supported
+        if not isinstance(key, BodoSeries):
+            raise BodoLibNotImplementedException("only BodoSeries keys are supported")
+
+        zero_size_self = _empty_like(self)
+
+        key_plan = (
+            # TODO: error checking for key to be a projection on the same dataframe
+            # with a binary operator
+            get_proj_expr_single(key._plan)
+            if key._plan is not None
+            else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
+        )
+        zero_size_key = _empty_like(key)
+        zero_size_index = zero_size_key.index
+        empty_data = zero_size_self.__getitem__(zero_size_key)
+        empty_data_index = empty_data.index
+        if isinstance(zero_size_index, pd.RangeIndex) and not isinstance(
+            empty_data_index, pd.RangeIndex
+        ):
+            # Drop the explicit integer Index generated from filtering RangeIndex (TODO: support RangeIndex properly).
+            empty_data.reset_index(drop=True, inplace=True)
+        return wrap_plan(
+            plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
+        )
 
     @staticmethod
     def from_lazy_mgr(
@@ -558,15 +595,21 @@ class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
     def __init__(self, series):
-        self._series = series
-
-        # Validates series type
+        # Validate input series
+        allowed_types = allowed_types_map["default"]
         if not (
             isinstance(series, BodoSeries)
             and isinstance(series.dtype, pd.ArrowDtype)
-            and series.dtype.type is str
+            and series.dtype in allowed_types
         ):
             raise AttributeError("Can only use .str accessor with string values!")
+
+        self._series = series
+        self._dtype = series.dtype
+        self._is_string = series.dtype in (
+            pd.ArrowDtype(pa.string()),
+            pd.ArrowDtype(pa.large_string()),
+        )
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
@@ -581,11 +624,45 @@ class BodoStringMethods:
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
 
+    @check_args_fallback(unsupported="none")
+    def join(self, sep):
+        """
+        Join lists contained as elements in the Series/Index with passed delimiter.
+        If the elements of a Series are lists themselves, join the content of these lists using
+        the delimiter passed to the function.
+        """
+
+        def join_list(l):
+            """Performs String join with sep=sep if list.dtype == String, returns None otherwise."""
+            try:
+                return sep.join(l)
+            except Exception:
+                return pd.NA
+
+        validate_dtype("str.join", self)
+        series = self._series
+        dtype = pd.ArrowDtype(pa.large_string())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        # If input Series is a series of lists, creates plan that maps 'join_list'.
+        if not self._is_string:
+            return _get_series_python_func_plan(
+                series._plan, new_metadata, "map", (join_list, None), {}
+            )
+
+        return _get_series_python_func_plan(
+            series._plan, new_metadata, "str.join", (sep,), {}
+        )
+
 
 class BodoDatetimeProperties:
     """Support Series.dt datetime accessors same as Pandas."""
-
-    # TODO [BSE-4854]: support datetime methods
 
     def __init__(self, series):
         self._series = series
@@ -601,6 +678,7 @@ class BodoDatetimeProperties:
             ),
         ):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
+        self._dtype = series.dtype
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> pt.Any:
@@ -666,6 +744,8 @@ def gen_partition(name):
         Splits string into 3 elements-before the separator, the separator itself,
         and the part after the separator.
         """
+        validate_dtype(f"str.{name}", self)
+
         series = self._series
         dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
 
@@ -809,11 +889,32 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
 }
 
 
-def gen_method(name, return_type, is_method=True, accessor_type=""):
+def validate_dtype(name, obj):
+    """Validates dtype of input series for Series.<name> methods."""
+    if "." not in name:
+        return
+
+    dtype = obj._dtype
+    parts = name.split(".")
+    accessor, method = parts[0], parts[1]
+    if accessor == "str.":
+        if dtype not in allowed_types_map.get(
+            method, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
+        ):
+            raise AttributeError("Can only use .str accessor with string values!")
+    # Implement accessor == "dt." case if necessary.
+
+
+def gen_method(
+    name, return_type, is_method=True, accessor_type="", allowed_types=[str]
+):
     """Generates Series methods, supports optional/positional args."""
 
     def method(self, *args, **kwargs):
         """Generalized template for Series methods and argument validation using signature"""
+
+        validate_dtype(accessor_type + name, self)
+
         if is_method:
             sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
 
@@ -865,6 +966,7 @@ series_str_methods = [
             "replace",
             "wrap",
             "normalize",
+            "decode",
         ],
         pd.ArrowDtype(pa.large_string()),
     ),
@@ -909,6 +1011,12 @@ series_str_methods = [
         ],
         pd.ArrowDtype(pa.large_list(pa.large_string())),
     ),
+    (
+        [
+            "encode",
+        ],
+        pd.ArrowDtype(pa.binary()),
+    ),
 ]
 
 
@@ -930,8 +1038,6 @@ dt_accessors = [
             "weekday",
             "dayofyear",
             "day_of_year",
-            "days_in_month",
-            "quarter",
             "daysinmonth",
             "days_in_month",
             "quarter",
@@ -967,34 +1073,6 @@ dt_accessors = [
     ),
 ]
 
-# Maps direct Series methods to return types
-dir_methods = [
-    # idx = 0: Series(Boolean)
-    (
-        [
-            "isin",
-            "notnull",
-            "isnull",
-        ],
-        pd.ArrowDtype(pa.bool_()),
-    ),
-    (  # idx = 1: Series(Float)
-        [
-            # TODO: implement ffill, bfill,
-        ],
-        pd.ArrowDtype(pa.float64()),
-    ),
-    (
-        # idx = 2: None(outputdtype == inputdtype)
-        [
-            "replace",
-            "round",
-            "clip",
-            "abs",
-        ],
-        None,
-    ),
-]
 
 # Maps Series.dt methods to return types
 dt_methods = [
@@ -1026,6 +1104,61 @@ dt_methods = [
         pd.ArrowDtype(pa.large_string()),
     ),
 ]
+
+# Maps direct Series methods to return types
+dir_methods = [
+    # idx = 0: Series(Boolean)
+    (
+        [
+            "isin",
+            "notnull",
+            "isnull",
+        ],
+        pd.ArrowDtype(pa.bool_()),
+    ),
+    (  # idx = 1: Series(Float)
+        [
+            # TODO: implement ffill, bfill,
+        ],
+        pd.ArrowDtype(pa.float64()),
+    ),
+    (
+        # idx = 2: None(outputdtype == inputdtype)
+        [
+            "replace",
+            "round",
+            "clip",
+            "abs",
+        ],
+        None,
+    ),
+]
+
+allowed_types_map = {
+    "decode": [
+        pd.ArrowDtype(pa.string()),
+        pd.ArrowDtype(pa.large_string()),
+        pd.ArrowDtype(pa.binary()),
+        pd.ArrowDtype(pa.large_binary()),
+    ],
+    "join": [
+        pd.ArrowDtype(pa.string()),
+        pd.ArrowDtype(pa.large_string()),
+        pd.ArrowDtype(pa.list_(pa.string())),
+        pd.ArrowDtype(pa.list_(pa.large_string())),
+        pd.ArrowDtype(pa.large_list(pa.string())),
+        pd.ArrowDtype(pa.large_list(pa.large_string())),
+    ],
+    "default": [
+        pd.ArrowDtype(pa.large_string()),
+        pd.ArrowDtype(pa.string()),
+        pd.ArrowDtype(pa.large_list(pa.large_string())),
+        pd.ArrowDtype(pa.list_(pa.large_string())),
+        pd.ArrowDtype(pa.list_(pa.string())),
+        pd.ArrowDtype(pa.large_binary()),
+        pd.ArrowDtype(pa.binary()),
+    ],
+}
 
 
 def _install_series_str_methods():

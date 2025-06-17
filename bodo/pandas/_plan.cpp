@@ -4,8 +4,11 @@
 #include <cstddef>
 #include <utility>
 
+#include <arrow/filesystem/filesystem.h>
+#include <arrow/python/api.h>
 #include "../io/arrow_compat.h"
 #include "_bodo_scan_function.h"
+#include "_bodo_write_function.h"
 #include "_executor.h"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/types.hpp"
@@ -26,6 +29,7 @@
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
+#include "duckdb/planner/operator/logical_copy_to_file.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_limit.hpp"
@@ -83,6 +87,11 @@ duckdb::unique_ptr<duckdb::Expression> make_const_double_expr(double val) {
         duckdb::Value(val));
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_const_bool_expr(bool val) {
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value(val));
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
     int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
@@ -120,7 +129,8 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
 
 duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
-    std::string function_name, std::vector<int> input_column_indices) {
+    std::string function_name, std::vector<int> input_column_indices,
+    bool dropna) {
     // Get DuckDB output type
     auto field_res = arrow::py::unwrap_field(field_py);
     std::shared_ptr<arrow::Field> field;
@@ -152,8 +162,10 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
         function_name, arg_types, out_type, nullptr, nullptr, nullptr, nullptr,
         nullptr, duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
 
+    auto bind_info = duckdb::make_uniq<BodoAggFunctionData>(dropna);
+
     return duckdb::make_uniq<duckdb::BoundAggregateExpression>(
-        function, std::move(children), nullptr, nullptr,
+        function, std::move(children), nullptr, std::move(bind_info),
         duckdb::AggregateType::NON_DISTINCT);
 }
 
@@ -578,7 +590,21 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     Executor executor(std::move(plan), out_schema);
-    std::shared_ptr<table_info> output_table = executor.ExecutePipelines();
+    std::variant<std::shared_ptr<table_info>, PyObject *> output =
+        executor.ExecutePipelines();
+
+    // Iceberg write returns a PyObject* with file information
+    if (std::holds_alternative<PyObject *>(output)) {
+        PyObject *file_infos = std::get<PyObject *>(output);
+        return {0, file_infos};
+    }
+
+    std::shared_ptr<table_info> output_table = std::get<0>(output);
+
+    // Parquet write doesn't return data
+    if (output_table == nullptr) {
+        return {0, nullptr};
+    }
 
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
@@ -617,6 +643,72 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     }
 
     return out_get;
+}
+
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string path, std::string compression, std::string bucket_region,
+    int64_t row_group_size) {
+    auto source_duck = to_duckdb(source);
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+
+    duckdb::CopyFunction copy_function =
+        duckdb::CopyFunction("bodo_parquet_write");
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data =
+        duckdb::make_uniq<ParquetWriteFunctionData>(
+            path, arrow_schema, compression, bucket_region, row_group_size);
+
+    duckdb::unique_ptr<duckdb::LogicalCopyToFile> copy_node =
+        duckdb::make_uniq<duckdb::LogicalCopyToFile>(
+            copy_function, std::move(bind_data),
+            duckdb::make_uniq<duckdb::CopyInfo>());
+
+    copy_node->return_type = duckdb::CopyFunctionReturnType::CHANGED_ROWS;
+    copy_node->AddChild(std::move(source_duck));
+
+    return copy_node;
+}
+
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string table_loc, std::string bucket_region, int64_t max_pq_chunksize,
+    std::string compression, PyObject *partition_tuples, PyObject *sort_tuples,
+    std::string iceberg_schema_str, PyObject *output_pa_schema,
+    PyObject *pyfs) {
+    auto source_duck = to_duckdb(source);
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
+
+    if (arrow::py::import_pyarrow_wrappers()) {
+        throw std::runtime_error("Importing pyarrow_wrappers failed!");
+    }
+
+    std::shared_ptr<arrow::Schema> iceberg_schema;
+    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_schema(output_pa_schema),
+                           "Iceberg Schema Couldn't Unwrap from Python",
+                           iceberg_schema);
+
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+    CHECK_ARROW_AND_ASSIGN(
+        arrow::py::unwrap_filesystem(pyfs),
+        "Error during Iceberg write: Failed to unwrap Arrow filesystem", fs);
+
+    duckdb::CopyFunction copy_function =
+        duckdb::CopyFunction("bodo_iceberg_write");
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data =
+        duckdb::make_uniq<IcebergWriteFunctionData>(
+            arrow_schema, table_loc, bucket_region, max_pq_chunksize,
+            compression, partition_tuples, sort_tuples, iceberg_schema_str,
+            iceberg_schema, fs);
+
+    duckdb::unique_ptr<duckdb::LogicalCopyToFile> copy_node =
+        duckdb::make_uniq<duckdb::LogicalCopyToFile>(
+            copy_function, std::move(bind_data),
+            duckdb::make_uniq<duckdb::CopyInfo>());
+
+    copy_node->return_type = duckdb::CopyFunctionReturnType::CHANGED_ROWS;
+    copy_node->AddChild(std::move(source_duck));
+
+    return copy_node;
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(

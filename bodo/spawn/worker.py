@@ -453,8 +453,7 @@ def exec_func_handler(
     # not be replicated in the non-JIT cases like map_partitions, so we have to define
     # the semantics (e.g. gather all values across ranks in a list?).
     if not is_dispatcher:
-        assert is_distributable_typ(bodo.typeof(res)) or res is None
-        is_distributed = True
+        is_distributed = is_distributable_typ(bodo.typeof(res))
 
     debug_worker_msg(logger, f"Function result {is_distributed=}")
 

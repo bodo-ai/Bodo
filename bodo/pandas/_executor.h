@@ -23,17 +23,20 @@ class Executor {
         PhysicalPlanBuilder builder;
         builder.Visit(*plan);
         pipelines = std::move(builder.finished_pipelines);
-        assert(builder.active_pipeline != nullptr);
-        std::shared_ptr<bodo::Schema> in_schema =
-            builder.active_pipeline->getPrevOpOutputSchema();
-        pipelines.push_back(builder.active_pipeline->BuildEnd(
-            in_schema, bodo::Schema::FromArrowSchema(out_schema)));
+
+        // Write finalizes the active pipeline but others need result collection
+        if (builder.active_pipeline != nullptr) {
+            std::shared_ptr<bodo::Schema> in_schema =
+                builder.active_pipeline->getPrevOpOutputSchema();
+            pipelines.push_back(builder.active_pipeline->BuildEnd(
+                in_schema, bodo::Schema::FromArrowSchema(out_schema)));
+        }
     }
 
     /**
      * @brief Execute the plan and return the result.
      */
-    std::shared_ptr<table_info> ExecutePipelines() {
+    std::variant<std::shared_ptr<table_info>, PyObject*> ExecutePipelines() {
         // Pipelines generation ensures that pipelines are in the right
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).
