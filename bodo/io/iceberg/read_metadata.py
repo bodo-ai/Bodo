@@ -6,7 +6,6 @@ and processing their metadata for later steps.
 
 from __future__ import annotations
 
-import io
 import itertools
 import json
 import os
@@ -46,9 +45,16 @@ def _construct_parquet_infos(
     from the Iceberg table scanner. This includes performing additional
     operations to get the schema ID and sanitized path for each file.
     """
-
-    from avro.datafile import DataFileReader
-    from avro.io import DatumReader
+    from pyiceberg.manifest import (
+        DEFAULT_READ_VERSION,
+        MANIFEST_ENTRY_SCHEMAS,
+        AvroFile,
+        DataFile,
+        DataFileContent,
+        FileFormat,
+        ManifestEntry,
+        ManifestEntryStatus,
+    )
 
     file_path_to_schema_id = {}
 
@@ -58,16 +64,20 @@ def _construct_parquet_infos(
     assert snap is not None
 
     for manifest_file in snap.manifests(table.io):
-        # Open Avro file
-        with table.io.new_input(manifest_file.manifest_path).open(seekable=True) as f:
-            # gcs doesn't support seeking to the end of a file which the avro reader depends on.
-            reader = DataFileReader(io.BytesIO(f.read()), DatumReader())
-            schema_serialized = reader.get_meta("schema")
-            assert schema_serialized is not None
-            schema_id = int(json.loads(schema_serialized)["schema-id"])
+        # Similar to PyIceberg's fetch_manifest_entry here:
+        # https://github.com/apache/iceberg-python/blob/38ebb19a39407f52fe439289af8be81268932b0b/pyiceberg/manifest.py#L696
+        input_file = table.io.new_input(manifest_file.manifest_path)
+        with AvroFile[ManifestEntry](
+            input_file,
+            MANIFEST_ENTRY_SCHEMAS[DEFAULT_READ_VERSION],
+            read_types={-1: ManifestEntry, 2: DataFile},
+            read_enums={0: ManifestEntryStatus, 101: FileFormat, 134: DataFileContent},
+        ) as reader:
+            schema_id = int(json.loads(reader.header.meta["schema"])["schema-id"])
+            for entry in reader:
+                file_path = entry.data_file.file_path
+                file_path_to_schema_id[file_path] = schema_id
 
-            for line in reader:
-                file_path_to_schema_id[line["data_file"]["file_path"]] = schema_id
     get_file_to_schema_us = time.monotonic_ns() - s
 
     # Construct the list of Parquet file info
