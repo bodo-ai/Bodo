@@ -1007,7 +1007,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self, empty_series, "apply", (func,), apply_kwargs
         )
 
-    @check_args_fallback(supported=["by", "ascending", "na_position"])
+    @check_args_fallback(supported=["by", "ascending", "na_position", "kind"])
     def sort_values(
         self,
         by: IndexLabel,
@@ -1015,7 +1015,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         axis: Axis = 0,
         ascending: bool | list[bool] | tuple[bool, ...] = True,
         inplace: bool = False,
-        kind: SortKind = "quicksort",
+        kind: SortKind | None = None,
         na_position: str | list[str] | tuple[str, ...] = "last",
         ignore_index: bool = False,
         key: ValueKeyFunc | None = None,
@@ -1060,6 +1060,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError(
                 "DataFrame.sort_values(): argument na_position iterable does not contain only 'first' or 'last'"
             )
+
+        if kind is not None:
+            warnings.warn("sort_values() kind argument ignored")
 
         # Apply singular ascending param to all columns.
         if len(by) != len(ascending):

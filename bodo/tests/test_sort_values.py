@@ -1,4 +1,4 @@
-"""Test sort_values opration as called as df.sort_values()
+"""Test sort_values operation as called as df.sort_values()
 The C++ implementation uses the timsort which is a stable sort algorithm.
 Therefore, in the test we use mergesort, which guarantees that the equality
 tests can be made sensibly.
@@ -185,6 +185,7 @@ def df_value(request):
     return request.param
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_sort_datetime_missing(is_slow_run, memory_leak_check):
     """Test the datetime for missing entries"""
@@ -229,20 +230,24 @@ def test_sort_datetime_missing(is_slow_run, memory_leak_check):
     check_func(
         test_impl1,
         (df1,),
+        reset_index=bodo.test_dataframe_library_enabled,
     )
     if not is_slow_run:
         return
     check_func(
         test_impl2,
         (df1,),
+        reset_index=bodo.test_dataframe_library_enabled,
     )
     check_func(
         test_impl3,
         (df1,),
+        reset_index=bodo.test_dataframe_library_enabled,
     )
     check_func(
         test_impl4,
         (df1,),
+        reset_index=bodo.test_dataframe_library_enabled,
     )
 
 
@@ -313,7 +318,7 @@ def test_sort_values_1col(df_value, memory_leak_check):
         check_func(impl, (df_value,), check_dtype=False)
         return
 
-    check_func(impl, (df_value,))
+    check_func(impl, (df_value,), reset_index=bodo.test_dataframe_library_enabled)
 
 
 @pytest.mark.slow
@@ -392,6 +397,7 @@ def test_sort_values_2col_inplace(df_value, memory_leak_check):
     check_func(impl, (df_value,), use_dict_encoded_strings=False)
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_sort_values_str(memory_leak_check):
     """
@@ -430,9 +436,10 @@ def test_sort_values_str(memory_leak_check):
     # seeds should be the same on different processors for consistent input
     n = 17  # 1211
     df = _gen_df_str(n)
-    check_func(test_impl, (df,))
+    check_func(test_impl, (df,), reset_index=bodo.test_dataframe_library_enabled)
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_sort_values_binary(memory_leak_check):
     """
@@ -463,9 +470,10 @@ def test_sort_values_binary(memory_leak_check):
     # seeds should be the same on different processors for consistent input
     n = 17
     df = _gen_df_binary(n)
-    check_func(test_impl, (df,))
+    check_func(test_impl, (df,), reset_index=bodo.test_dataframe_library_enabled)
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_sort_values_1col_long_int_list(memory_leak_check):
     """
@@ -488,8 +496,16 @@ def test_sort_values_1col_long_int_list(memory_leak_check):
         return pd.DataFrame({"A": eListA})
 
     n = 10
-    check_func(test_impl1, (get_quasi_random(n),))
-    check_func(test_impl2, (get_quasi_random(n),))
+    check_func(
+        test_impl1,
+        (get_quasi_random(n),),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        test_impl2,
+        (get_quasi_random(n),),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.slow
@@ -517,10 +533,19 @@ def test_sort_values_2col_long_np(memory_leak_check):
         return pd.DataFrame({"A": eListA, "B": eListB})
 
     n = 100
-    check_func(test_impl1, (get_quasi_random(n),))
-    check_func(test_impl2, (get_quasi_random(n),))
+    check_func(
+        test_impl1,
+        (get_quasi_random(n),),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        test_impl2,
+        (get_quasi_random(n),),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "dtype",
@@ -557,6 +582,7 @@ def test_sort_values_1col_np_array(dtype, memory_leak_check):
     check_func(
         test_impl,
         (get_quasi_random_dtype(n, dtype),),
+        reset_index=bodo.test_dataframe_library_enabled,
     )
 
 
@@ -595,9 +621,11 @@ def test_sort_values_2col_pd_array(dtype1, dtype2, memory_leak_check):
     check_func(
         test_impl,
         (get_quasi_random_dtype(n, dtype1, dtype2),),
+        reset_index=bodo.test_dataframe_library_enabled,
     )
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize(
     "n, len_str", [pytest.param(1000, 2, marks=pytest.mark.slow), (100, 1), (300, 2)]
 )
@@ -622,9 +650,11 @@ def test_sort_values_strings_constant_length(n, len_str, memory_leak_check):
     check_func(
         test_impl,
         (get_random_strings_array(n, len_str),),
+        reset_index=bodo.test_dataframe_library_enabled,
     )
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize(
     "n, len_str", [(100, 30), pytest.param(1000, 10, marks=pytest.mark.slow), (10, 30)]
 )
@@ -648,9 +678,10 @@ def test_sort_values_strings_variable_length(n, len_str, memory_leak_check):
 
     random.seed(5)
     df1 = get_random_var_length_strings_array(n, len_str)
-    check_func(test_impl, (df1,))
+    check_func(test_impl, (df1,), reset_index=bodo.test_dataframe_library_enabled)
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize(
     "n, len_str",
     [(100, 30), pytest.param(1000, 10, marks=pytest.mark.slow), (100, 30)],
@@ -683,9 +714,10 @@ def test_sort_values_strings(n, len_str, memory_leak_check):
 
     random.seed(5)
     df1 = get_random_strings_array(n, len_str)
-    check_func(test_impl, (df1,))
+    check_func(test_impl, (df1,), reset_index=bodo.test_dataframe_library_enabled)
 
 
+@pytest.mark.df_lib
 def test_sort_random_values_binary():
     """
     Test sort_values(): with 1 column of random binary values with
@@ -711,7 +743,7 @@ def test_sort_random_values_binary():
 
     np.random.seed(5)
     df1 = get_random_bin_df(100)
-    check_func(test_impl, (df1,))
+    check_func(test_impl, (df1,), reset_index=bodo.test_dataframe_library_enabled)
 
 
 @pytest.mark.parametrize(
@@ -965,6 +997,7 @@ def test_sort_values_nullable_int_array(memory_leak_check):
     check_func(test_impl, (df1,))
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_sort_with_nan_entries(memory_leak_check):
     """Test of the dataframe with nan entries"""
@@ -977,13 +1010,41 @@ def test_sort_with_nan_entries(memory_leak_check):
     df3 = pd.DataFrame({"A": pd.array([1, 2, None, 3], dtype="UInt16")})
     df4 = pd.DataFrame({"A": pd.Series([1, 8, 4, np.nan, 3], dtype="Int32")})
     df5 = pd.DataFrame({"A": pd.Series(["AA", None, "", "D", "GG"])})
-    check_func(impl1, (df1,), sort_output=False, check_typing_issues=False)
-    check_func(impl1, (df2,), sort_output=False)
-    check_func(impl1, (df3,), sort_output=False)
-    check_func(impl1, (df4,), sort_output=False)
-    check_func(impl1, (df5,), sort_output=False, check_typing_issues=False)
+    check_func(
+        impl1,
+        (df1,),
+        sort_output=False,
+        check_typing_issues=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        impl1,
+        (df2,),
+        sort_output=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        impl1,
+        (df3,),
+        sort_output=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        impl1,
+        (df4,),
+        sort_output=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        impl1,
+        (df5,),
+        sort_output=False,
+        check_typing_issues=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
+@pytest.mark.df_lib
 def test_sort_values_list_inference(memory_leak_check):
     """
     Test constant list inference in sort_values()
@@ -999,7 +1060,7 @@ def test_sort_values_list_inference(memory_leak_check):
             "C": np.arange(6),
         }
     )
-    check_func(impl, (df,))
+    check_func(impl, (df,), reset_index=bodo.test_dataframe_library_enabled)
 
 
 def test_sort_values_key_rm_dead(memory_leak_check):
@@ -1029,8 +1090,8 @@ def test_sort_values_key_rm_dead(memory_leak_check):
             "E": np.arange(6, dtype=np.int32) * np.int32(10),
         }
     )
-    check_func(impl, (df,))
-    check_func(impl2, (df,))
+    check_func(impl, (df,), reset_index=bodo.test_dataframe_library_enabled)
+    check_func(impl2, (df,), reset_index=bodo.test_dataframe_library_enabled)
 
     # make sure dead keys are detected properly
     sort_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)
@@ -1104,6 +1165,7 @@ def test_sort_values_empty_df_key_rm_dead(memory_leak_check):
                 assert stmt.dead_key_var_inds == {0}
 
 
+@pytest.mark.df_lib
 def test_sort_values_len_only(memory_leak_check):
     """
     Make sure len() works when all columns are dead
@@ -1114,7 +1176,7 @@ def test_sort_values_len_only(memory_leak_check):
         return len(df2)
 
     df = pd.DataFrame({"A": [1, 3, 2, 0, -1, 4], "B": [1.2, 3.4, 0.1, 2.2, 3.1, -1.2]})
-    check_func(impl, (df,))
+    check_func(impl, (df,), reset_index=bodo.test_dataframe_library_enabled)
 
 
 def test_sort_values_index_only(memory_leak_check):
@@ -1151,9 +1213,10 @@ def test_sort_values_unknown_cats(memory_leak_check):
         },
         index=["a1", "a2", "a3", "a4", "a5", "a6"],
     )
-    check_func(impl, (df,))
+    check_func(impl, (df,), reset_index=bodo.test_dataframe_library_enabled)
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_sort_values_force_literal(memory_leak_check):
     """
@@ -1175,9 +1238,17 @@ def test_sort_values_force_literal(memory_leak_check):
             "C": np.arange(6),
         }
     )
-    check_func(impl, (df, ["B"], "first"))
-    check_func(impl, (df, "B", "first"))
-    check_func(impl2, (df, ["B", "C"], [False, True], "first"))
+    check_func(
+        impl, (df, ["B"], "first"), reset_index=bodo.test_dataframe_library_enabled
+    )
+    check_func(
+        impl, (df, "B", "first"), reset_index=bodo.test_dataframe_library_enabled
+    )
+    check_func(
+        impl2,
+        (df, ["B", "C"], [False, True], "first"),
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.slow
@@ -2018,6 +2089,7 @@ def test_sort_for_interval_join_err_checking():
         impl5(_get_dist_arg(df), ["A", "B"], bounds)
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_list_string(memory_leak_check):
     """Sorting values by list of strings"""
@@ -2029,9 +2101,10 @@ def test_list_string(memory_leak_check):
     random.seed(5)
     n = 100
     df1 = pd.DataFrame({"A": gen_random_list_string_array(2, n)})
-    check_func(test_impl, (df1,))
+    check_func(test_impl, (df1,), reset_index=bodo.test_dataframe_library_enabled)
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_list_string_missing(memory_leak_check):
     """Sorting values by list of strings"""
@@ -2043,7 +2116,12 @@ def test_list_string_missing(memory_leak_check):
     random.seed(5)
     n = 10
     df1 = pd.DataFrame({"A": gen_random_list_string_array(3, n)})
-    check_func(f, (df1,), convert_columns_to_pandas=True)
+    check_func(
+        f,
+        (df1,),
+        convert_columns_to_pandas=True,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.slow
@@ -2079,6 +2157,7 @@ def test_list_string_arrow():
     check_func(f, (df1,))
 
 
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_sort_values_bytes_null(memory_leak_check):
     """
@@ -2105,7 +2184,7 @@ def test_sort_values_bytes_null(memory_leak_check):
             "B": np.arange(9),
         }
     )
-    check_func(impl, (df,))
+    check_func(impl, (df,), reset_index=bodo.test_dataframe_library_enabled)
 
 
 # ------------------------------ error checking ------------------------------ #
@@ -2228,6 +2307,7 @@ def test_sort_values_ascending_bool(memory_leak_check):
         bodo.jit(impl5)(df)
 
 
+@pytest.mark.df_lib
 def test_sort_force_reshuffling(memory_leak_check):
     """By having only one key we guarantee that all rows will be put into just one bin.
     This gets us a very skewed partition and therefore triggers the reshuffling after sort
@@ -2241,7 +2321,7 @@ def test_sort_force_reshuffling(memory_leak_check):
     list_A = [1] * n
     list_B = [random.randint(0, 10) for _ in range(n)]
     df = pd.DataFrame({"A": list_A, "B": list_B})
-    check_func(f, (df,))
+    check_func(f, (df,), reset_index=bodo.test_dataframe_library_enabled)
 
 
 def test_sort_values_inplace_bool(memory_leak_check):
@@ -2341,7 +2421,10 @@ def test_random_decimal(memory_leak_check):
     n = 50
     df1 = pd.DataFrame({"A": gen_random_decimal_array(2, n)})
     check_func(
-        f, (df1,), convert_columns_to_pandas=True, convert_to_nullable_float=False
+        f,
+        (df1,),
+        convert_columns_to_pandas=True,
+        convert_to_nullable_float=False,
     )
 
 
