@@ -329,6 +329,42 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     buildPhysicalExprTree(bce.child, col_ref_map, no_scalars),
                     bce.return_type));
         } break;  // suppress wrong fallthrough error
+        case duckdb::ExpressionClass::BOUND_BETWEEN: {
+            // Convert the base duckdb::Expression node to its actual derived
+            // type.
+            auto& bbe = expr->Cast<duckdb::BoundBetweenExpression>();
+            // Convert to conjunction and comparison nodes.
+            std::shared_ptr<PhysicalExpression> input_expr =
+                buildPhysicalExprTree(bbe.input, col_ref_map, no_scalars);
+            std::shared_ptr<PhysicalExpression> lower_expr =
+                buildPhysicalExprTree(bbe.lower, col_ref_map, no_scalars);
+            std::shared_ptr<PhysicalExpression> upper_expr =
+                buildPhysicalExprTree(bbe.upper, col_ref_map, no_scalars);
+
+            std::shared_ptr<PhysicalExpression> left =
+                std::static_pointer_cast<PhysicalExpression>(
+                    std::make_shared<PhysicalComparisonExpression>(
+                        input_expr,
+                        lower_expr,
+                        bbe.lower_inclusive ?
+                            duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO :
+                            duckdb::ExpressionType::COMPARE_GREATERTHAN));
+
+            std::shared_ptr<PhysicalExpression> right =
+                std::static_pointer_cast<PhysicalExpression>(
+                    std::make_shared<PhysicalComparisonExpression>(
+                        upper_expr,
+                        input_expr,
+                        bbe.upper_inclusive ?
+                            duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO :
+                            duckdb::ExpressionType::COMPARE_GREATERTHAN));
+
+            return std::static_pointer_cast<PhysicalExpression>(
+                std::make_shared<PhysicalConjunctionExpression>(
+                    left,
+                    right,
+                    duckdb::ExpressionType::CONJUNCTION_AND));
+        } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
                 "Unsupported duckdb expression class " +
