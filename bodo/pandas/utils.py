@@ -1037,3 +1037,38 @@ def ensure_datetime64ns(df):
         df.index = df.index.astype("datetime64[ns]")
 
     return df
+
+
+def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=True):
+    """Create plan for calling some function or method on a DataFrame. Creates a
+    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
+    """
+    df_len = len(df_plan.empty_data.columns)
+    udf_arg = LazyPlan(
+        "PythonScalarFuncExpression",
+        empty_data,
+        df_plan,
+        (
+            func,
+            False,  # is_series
+            is_method,
+            args,
+            kwargs,
+        ),
+        tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
+    )
+
+    # Select Index columns explicitly for output
+    index_col_refs = tuple(
+        make_col_ref_exprs(
+            range(df_len, df_len + get_n_index_arrays(df_plan.empty_data.index)),
+            df_plan,
+        )
+    )
+    plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df_plan,
+        (udf_arg,) + index_col_refs,
+    )
+    return wrap_plan(plan=plan)

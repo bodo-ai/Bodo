@@ -14,7 +14,8 @@ def base_df():
             "A": [None, 1, 1, 2, 2, 3],
             "E": [None, "  a", "b  ", "c", "d", "e"],
             "C": [None, " 1", "     1     ", "h", "2", "3"],
-        }
+        },
+        index=["a", "b", "c", "d", "e", "f"],
     )
     return df
 
@@ -92,6 +93,7 @@ def test_str_cat_exprs(base_df, lhs_expr, rhs_expr, kwargs):
     out_bd = out_bd.execute_plan()
 
     _test_equal(out_bd, out_pd, check_pandas_types=False, check_names=False)
+    print(out_bd)
 
 
 @pytest.mark.skip(
