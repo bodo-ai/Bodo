@@ -109,18 +109,24 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     nrows = len(self)
                     res_id = bodo.spawn.utils.scatter_data(self)
                     mgr = None
-                self._source_plan = (empty_data, LazyPlan(
-                    "LogicalGetPandasReadParallel",
+                self._source_plan = (
                     empty_data,
-                    nrows,
-                    LazyPlanDistributedArg(mgr, res_id),
-                ))
+                    LazyPlan(
+                        "LogicalGetPandasReadParallel",
+                        empty_data,
+                        nrows,
+                        LazyPlanDistributedArg(mgr, res_id),
+                    ),
+                )
             else:
-                self._source_plan = (empty_data, LazyPlan(
-                    "LogicalGetPandasReadSeq",
+                self._source_plan = (
                     empty_data,
-                    self,
-                ))
+                    LazyPlan(
+                        "LogicalGetPandasReadSeq",
+                        empty_data,
+                        self,
+                    ),
+                )
 
             return self._source_plan[1]
 
@@ -275,7 +281,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             orig_plan.plan_class,
             orig_plan.empty_data.rename(columns=columns),
             *orig_plan.args,
-            **orig_plan.kwargs
+            **orig_plan.kwargs,
         )
         return wrap_plan(renamed_plan)
 
