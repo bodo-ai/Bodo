@@ -253,6 +253,7 @@ def gen_redirect(name):
     """Returns top-level bodo.pandas redirect method of given name."""
 
     def method(obj, *args, **kwargs):
+        """Redirects top-level method <name> to Series.<name>"""
         if not isinstance(obj, BodoSeries):
             raise BodoLibNotImplementedException(
                 "Only supports BodoSeries obj: falling back to Pandas"
