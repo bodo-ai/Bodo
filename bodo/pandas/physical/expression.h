@@ -496,7 +496,7 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         if (opstr == "+") {
             comparator = "add";
         } else if (opstr == "-") {
-            comparator = "substract";
+            comparator = "subtract";
         } else if (opstr == "*") {
             comparator = "multiply";
         } else if (opstr == "/") {

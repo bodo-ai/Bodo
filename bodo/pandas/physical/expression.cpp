@@ -103,7 +103,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1, src2});
     if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error("do_array_compute: Error in Arrow compute: " +
+        throw std::runtime_error("do_array_compute_binary: Error in Arrow compute: " +
                                  cmp_res.status().message());
     }
 
@@ -135,7 +135,7 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1});
     if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error("do_array_compute: Error in Arrow compute: " +
+        throw std::runtime_error("do_array_compute_unary: Error in Arrow compute: " +
                                  cmp_res.status().message());
     }
 
@@ -170,7 +170,7 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::Cast(src1, arrow_ret_type);
     if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error("do_array_compute: Error in Arrow compute: " +
+        throw std::runtime_error("do_array_compute_cast: Error in Arrow compute: " +
                                  cmp_res.status().message());
     }
 
