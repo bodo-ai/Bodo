@@ -102,7 +102,6 @@ def test_str_cat_exprs(base_df, lhs_expr, rhs_expr, kwargs):
         out_bd = out_bd.execute_plan()
 
         _test_equal(out_bd, out_pd, check_pandas_types=False, check_names=False)
-        print(out_bd)
 
 
 @pytest.mark.skip(
