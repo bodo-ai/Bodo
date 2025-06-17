@@ -625,7 +625,7 @@ class BodoStringMethods:
         element-wise and returns a Series. If others is not passed, then falls back to
         Pandas, and all values in the Series are concatenated into a single string with a given sep.
         """
-        # Validates others is a lazy BodoSeries, falls back to Pandas otherwise
+        # Validates others is provided, falls back to Pandas otherwise
         if others is None:
             raise BodoLibNotImplementedException(
                 "others is not provided: falling back to Pandas"
