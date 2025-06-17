@@ -418,7 +418,7 @@ Refer to [`pandas.DataFrame.to_iceberg`](https://pandas.pydata.org/docs/dev/refe
 : __location: *str, optional*:__ Location of the table (if supported by the catalog)
 : __append: *bool*:__ Append or overwrite if the table exists
 : __partition_spec: *PartitionSpec, optional*:__ PyIceberg partition spec for the table (only used if creating a new table). See [PyIceberg's documentation](https://py.iceberg.apache.org/api/#partitions) for more details.
-: __sort_order: *SortOrder, optional*:__ PyIceberg sort order for the table (only used if creating a new table). See [PyIceberg's documentation](https://py.iceberg.apache.org/api/#partitions) for more details.
+: __sort_order: *SortOrder, optional*:__ PyIceberg sort order for the table (only used if creating a new table). See [PyIceberg's documentation](https://py.iceberg.apache.org/reference/pyiceberg/table/sorting/#pyiceberg.table.sorting.SortOrder) for more details.
 : __properties: *dict[str, Any], optional*:__ Properties to add to the new table.
 : __snapshot_properties: *dict[str, Any], optional*:__ Properties to add to the new table snapshot.
 
