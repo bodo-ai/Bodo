@@ -762,6 +762,51 @@ def test_set_df_column_const(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+def test_set_df_column_arith(datapath, index_val):
+    """Test setting a dataframe column with a Series function of the same dataframe."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+
+    # Test addition
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["A"] + 13
+    pdf = df.copy()
+    pdf["D"] = pdf["A"] + 13
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Test subtraction
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["A"] - 13
+    pdf = df.copy()
+    pdf["D"] = pdf["A"] - 13
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Test multiply
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["A"] * 13
+    pdf = df.copy()
+    pdf["D"] = pdf["A"] * 13
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Test division
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["A"] / 2
+    pdf = df.copy()
+    pdf["D"] = pdf["A"] / 2
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+
 def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")

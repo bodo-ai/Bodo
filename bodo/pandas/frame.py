@@ -1199,18 +1199,9 @@ def _add_proj_expr_to_plan(
         is_replace = False
 
     # Get the function expression from the value plan to be added
-    func_expr = value_plan.args[1][0]
+    func_expr = get_proj_expr_single(value_plan)
 
-    # Handle trivial cases like df["C"] = df["B"]
-    if func_expr.plan_class == "ColRefExpression":
-        # Copy since empty_data is changed below
-        func_expr = LazyPlan(
-            "ColRefExpression",
-            func_expr.empty_data,
-            *func_expr.args,
-            **func_expr.kwargs,
-        )
-    elif func_expr.plan_class == "PythonScalarFuncExpression":
+    if func_expr.plan_class == "PythonScalarFuncExpression":
         func_expr = (
             _update_func_expr_source(func_expr, df_plan, ikey)
             if replace_func_source
@@ -1223,7 +1214,13 @@ def _add_proj_expr_to_plan(
             )
         )
     else:
-        return None
+        # Copy since empty_data is changed below
+        func_expr = LazyPlan(
+            func_expr.plan_class,
+            func_expr.empty_data,
+            *func_expr.args,
+            **func_expr.kwargs,
+        )
 
     # Update output column name
     func_expr.empty_data = func_expr.empty_data.set_axis([key], axis=1)
