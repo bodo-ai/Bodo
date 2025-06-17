@@ -275,7 +275,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         inplace: bool = False,
         level: Level | None = None,
         errors: IgnoreRaise = "ignore",
-    ) -> DataFrame | None:
+    ) -> BodoDataFrame | None:
         orig_plan = self._plan
         renamed_plan = LazyPlan(
             orig_plan.plan_class,
