@@ -302,8 +302,20 @@ def test_sort_values_tuple_keys(memory_leak_check):
 
     n = 10
     df = pd.DataFrame({"A": np.arange(n) + 1.0, "B": np.arange(n) + 1})
-    check_func(impl1, (df,), check_dtype=False, dist_test=False)
-    check_func(impl2, (df,), check_dtype=False, dist_test=False)
+    check_func(
+        impl1,
+        (df,),
+        check_dtype=False,
+        dist_test=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
+    check_func(
+        impl2,
+        (df,),
+        check_dtype=False,
+        dist_test=False,
+        reset_index=bodo.test_dataframe_library_enabled,
+    )
 
 
 @pytest.mark.slow
