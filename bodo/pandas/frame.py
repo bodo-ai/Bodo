@@ -883,7 +883,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         axis: Axis = 0,
         ascending: bool | list[bool] | tuple[bool, ...] = True,
         inplace: bool = False,
-        kind: SortKind = "quicksort",
+        kind: SortKind | None = None,
         na_position: str | list[str] | tuple[str, ...] = "last",
         ignore_index: bool = False,
         key: ValueKeyFunc | None = None,
@@ -929,13 +929,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.sort_values(): argument na_position iterable does not contain only 'first' or 'last'"
             )
 
-        # We will treat these 3 sort identically as we don't currently have a
-        # way to pass the sort type through LogicalOrder.
-        if kind not in ["quicksort", "mergesort", "heapsort"]:
-            raise BodoError(
-                "DataFrame.sort_values(): unsupported argument value for kind "
-                + str(kind)
-            )
+        if kind is not None:
+            warnings.warn("sort_values() kind argument ignored")
 
         # Apply singular ascending param to all columns.
         if len(by) != len(ascending):
