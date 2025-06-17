@@ -212,6 +212,7 @@ def check_args_fallback(
                 }
 
             if toplevel:
+                print("Top-level func\n")
                 py_pkg = importlib.import_module(package_name)
 
                 @functools.wraps(func)
@@ -249,6 +250,7 @@ def check_args_fallback(
                     warnings.warn(BodoLibFallbackWarning(msg))
                     return getattr(py_pkg, func.__name__)(*args, **kwargs)
             else:
+                print("not Top-level func\n")
 
                 @functools.wraps(func)
                 def wrapper(self, *args, **kwargs):

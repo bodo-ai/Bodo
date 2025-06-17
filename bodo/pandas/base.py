@@ -252,26 +252,27 @@ def to_datetime(
 def gen_redirect(name):
     """Returns top-level bodo.pandas redirect method of given name."""
 
-    def method(obj, *args, **kwargs):
-        """Redirects top-level method <name> to Series.<name>"""
+    def _redirect(obj, *args, **kwargs):
         if not isinstance(obj, BodoSeries):
             raise BodoLibNotImplementedException(
-                "Only supports BodoSeries obj: falling back to Pandas"
+                f"Only supports BodoSeries obj: falling back to Pandas in {name}()"
             )
         func = getattr(BodoSeries, name)
         return func(obj, *args, **kwargs)
 
-    return method
+    return _redirect
 
 
 def _install_top_level_redirect():
     """Install bodo.pandas.<method> with redirect."""
     import sys
 
-    # List of top-level methods to redirect to BodoSeries class.
     for name in ["isna", "isnull", "notna", "notnull"]:
         method = gen_redirect(name)
-        setattr(sys.modules[__name__], name, method)
+        method.__name__ = name
+        method.__qualname__ = name
+        decorated = check_args_fallback("none")(method)
+        setattr(sys.modules[__name__], name, decorated)
 
 
 _install_top_level_redirect()
