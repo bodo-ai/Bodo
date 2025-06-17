@@ -37,7 +37,9 @@ class DataFrameGroupBy:
         self._keys = keys
         self._as_index = as_index
         self._dropna = dropna
-        self._selection = selection
+        self._selection = (
+            obj.columns.difference(keys) if selection is None else selection
+        )
 
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
         """
@@ -46,6 +48,10 @@ class DataFrameGroupBy:
         if isinstance(key, str):
             return SeriesGroupBy(
                 self._obj, self._keys, [key], self._as_index, self._dropna
+            )
+        elif isinstance(key, list) and all(isinstance(key_, str) for key_ in key):
+            return DataFrameGroupBy(
+                self._obj, self._keys, self._as_index, self._dropna, selection=key
             )
         else:
             raise BodoLibNotImplementedException(
@@ -63,10 +69,68 @@ class DataFrameGroupBy:
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            gb = pd.DataFrame(self._obj).groupby(self._keys)
+            gb = pd.DataFrame(self._obj).groupby(
+                self._keys, as_index=self._as_index, dropna=self._dropna
+            )
             if self._selection is not None:
                 gb = gb[self._selection]
             return object.__getattribute__(gb, name)
+
+    @check_args_fallback(supported="none")
+    def sum(
+        self,
+        numeric_only: bool = False,
+        min_count: int = 0,
+        engine: Literal["cython", "numba"] | None = None,
+        engine_kwargs: dict[str, bool] | None = None,
+    ):
+        from bodo.pandas.base import _empty_like
+
+        zero_size_df = _empty_like(self._obj)
+        empty_data_pandas = zero_size_df.groupby(self._keys, as_index=self._as_index)[
+            self._selection
+        ].sum()
+        empty_data = _cast_value_col("sum", empty_data_pandas, self._selection)
+
+        key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
+
+        exprs = [
+            LazyPlan(
+                "AggregateExpression",
+                zero_size_df[c],
+                self._obj._plan,
+                "sum",
+                [self._obj.columns.get_loc(c)],
+                self._dropna,
+            )
+            for c in self._selection
+        ]
+
+        plan = LazyPlan(
+            "LogicalAggregate",
+            empty_data,
+            self._obj._plan,
+            key_indices,
+            exprs,
+        )
+
+        # Add the data column then the keys since they become Index columns in output.
+        # DuckDB generates keys first in output so we need to reverse the order.
+        if self._as_index:
+            col_indices = list(
+                range(len(self._keys), len(self._keys) + len(self._selection))
+            )
+            col_indices += list(range(len(self._keys)))
+
+            exprs = make_col_ref_exprs(col_indices, plan)
+            plan = LazyPlan(
+                "LogicalProjection",
+                empty_data,
+                plan,
+                exprs,
+            )
+
+        return wrap_plan(plan)
 
 
 class SeriesGroupBy:
@@ -111,7 +175,7 @@ class SeriesGroupBy:
             self._selection[0]
         ].sum()
 
-        empty_data = _cast_value_col("sum", empty_data_pandas, self._selection[0])
+        empty_data = _cast_value_col("sum", empty_data_pandas, self._selection)
 
         key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
         exprs = [
@@ -137,7 +201,9 @@ class SeriesGroupBy:
         # Add the data column then the keys since they become Index columns in output.
         # DuckDB generates keys first in output so we need to reverse the order.
         if self._as_index:
-            col_indices = [len(self._keys)]
+            col_indices = list(
+                range(len(self._keys), len(self._keys) + len(self._selection))
+            )
             col_indices += list(range(len(self._keys)))
 
             exprs = make_col_ref_exprs(col_indices, plan)
@@ -166,7 +232,7 @@ class SeriesGroupBy:
 
 
 def _cast_value_col(
-    func: str, data: pd.Series | pd.DataFrame, value_col: str
+    func: str, data: pd.Series | pd.DataFrame, value_cols: list[str] | pd.Index
 ) -> pd.Series | pd.DataFrame:
     """Upcast value columns for aggregation functions.
     Equivalent to get_groupby_output_dtype in C++.
@@ -175,27 +241,30 @@ def _cast_value_col(
 
     from bodo.pandas.utils import _empty_pd_array
 
-    # TODO: multiple value columns
     if isinstance(data, pd.Series):
-        type_ = data.dtype.pyarrow_dtype
+        types = [data.dtype.pyarrow_dtype]
     else:
-        type_ = data[value_col].dtype.pyarrow_dtype
+        types = [data[col].dtype.pyarrow_dtype for col in value_cols]
 
-    new_type = None
+    new_types: dict[str, pa.DataType] = {}
 
-    if func == "sum":
-        if pa.types.is_signed_integer(type_):
-            new_type = pa.int64()
-        elif pa.types.is_unsigned_integer(type_):
-            new_type = pa.uint64()
-    # TODO: Other aggregates
+    for col, type_ in zip(value_cols, types):
+        if func == "sum":
+            if pa.types.is_signed_integer(type_):
+                new_types[col] = pa.int64()
+            elif pa.types.is_unsigned_integer(type_):
+                new_types[col] = pa.uint64()
+            elif pa.types.is_floating(type_):
+                new_types[col] = pa.float64()
+        # TODO: Other aggregates
 
-    if new_type is None:
+    if not new_types:
         return data
 
-    casted_col = _empty_pd_array(new_type)
     if isinstance(data, pd.Series):
+        casted_col = _empty_pd_array(new_types[value_cols[0]])
         return pd.Series(casted_col, index=data.index, name=data.name)
     else:
-        data[value_col] = casted_col
+        for col, new_type in new_types.items():
+            data[col] = _empty_pd_array(new_type)
         return data
