@@ -841,7 +841,6 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
-        print(expr.args)
         return expr
     else:
         raise BodoLibNotImplementedException("Unsupported expr type:", expr.plan_class)
