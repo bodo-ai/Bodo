@@ -210,6 +210,10 @@ def to_datetime(
     origin="unix",
     cache=True,
 ):
+    """
+    Converts elements of a BodoSeries to timestamp[ns] type.
+    Currently, Bodo only supports arg=BodoSeries, falling back to Pandas otherwise.
+    """
     if not isinstance(arg, BodoSeries):
         raise BodoLibNotImplementedException(
             "to_datetime() is not supported for arg that is not an instance of BodoSeries. Falling back to Pandas."
@@ -230,16 +234,43 @@ def to_datetime(
         "pandas.to_datetime",
         (),
         {
-            "errors": "raise",
-            "dayfirst": False,
-            "yearfirst": False,
-            "utc": False,
-            "format": None,
-            "exact": lib.no_default,
-            "unit": None,
-            "infer_datetime_format": lib.no_default,
-            "origin": "unix",
-            "cache": True,
+            "errors": errors,
+            "dayfirst": dayfirst,
+            "yearfirst": yearfirst,
+            "utc": utc,
+            "format": format,
+            "exact": exact,
+            "unit": unit,
+            "infer_datetime_format": infer_datetime_format,
+            "origin": origin,
+            "cache": cache,
         },
         is_method=False,
     )
+
+
+def gen_redirect(name):
+    """Returns top-level bodo.pandas redirect method of given name."""
+
+    def method(obj, *args, **kwargs):
+        if not isinstance(obj, BodoSeries):
+            raise BodoLibNotImplementedException(
+                "Only supports BodoSeries obj: falling back to Pandas"
+            )
+        func = getattr(BodoSeries, name)
+        return func(obj, *args, **kwargs)
+
+    return method
+
+
+def _install_top_level_redirect():
+    """Install bodo.pandas.<method> with redirect."""
+    import sys
+
+    # List of top-level methods to redirect to BodoSeries class.
+    for name in ["isna", "isnull", "notna", "notnull"]:
+        method = gen_redirect(name)
+        setattr(sys.modules[__name__], name, method)
+
+
+_install_top_level_redirect()
