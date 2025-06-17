@@ -1,5 +1,7 @@
 import datetime
 import operator
+import os
+import tempfile
 
 import numba.core.utils
 import numpy as np
@@ -8,6 +10,9 @@ import pyarrow as pa
 import pyiceberg.catalog
 import pyiceberg.expressions
 import pytest
+from pyiceberg.partitioning import PartitionField, PartitionSpec
+from pyiceberg.table.sorting import SortField, SortOrder
+from pyiceberg.transforms import IdentityTransform
 
 import bodo.pandas as bpd
 from bodo.io.iceberg.catalog.dir import DirCatalog
@@ -39,14 +44,7 @@ def test_simple_table_read(
 ):
     db_schema, warehouse_loc = iceberg_database(table_name)
     py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
-    bodo_out = bpd.read_iceberg(
-        f"{db_schema}.{table_name}",
-        None,
-        {
-            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
-            pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
-        },
-    )
+    bodo_out = bpd.read_iceberg(f"{db_schema}.{table_name}", location=warehouse_loc)
     _test_equal(
         bodo_out,
         py_out,
@@ -544,20 +542,44 @@ def test_write():
     )
 
     bdf = bpd.from_pandas(df)
-    catalog_properties = {
-        pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
-        pyiceberg.catalog.WAREHOUSE_LOCATION: "iceberg_warehouse",
-    }
-    bdf.to_iceberg("test_table", None, catalog_properties=catalog_properties)
-    assert bdf.is_lazy_plan()
 
-    # Read using PyIceberg to verify the write
-    out_df = pyiceberg_reader.read_iceberg_table("test_table", "iceberg_warehouse")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "iceberg_warehouse")
 
-    _test_equal(
-        out_df,
-        df,
-        check_pandas_types=False,
-        sort_output=True,
-        reset_index=True,
-    )
+        part_spec = PartitionSpec(
+            PartitionField(2, 1001, IdentityTransform(), "id_part")
+        )
+        sort_order = SortOrder(SortField(source_id=4, transform=IdentityTransform()))
+        bdf.to_iceberg(
+            "test_table",
+            location=path,
+            partition_spec=part_spec,
+            sort_order=sort_order,
+            properties={"p_a1": "pvalue_a1"},
+            snapshot_properties={"p_key": "p_value"},
+        )
+        assert bdf.is_lazy_plan()
+
+        # Read using PyIceberg to verify the write
+        out_df = pyiceberg_reader.read_iceberg_table("test_table", path)
+
+        _test_equal(
+            out_df,
+            df,
+            check_pandas_types=False,
+            sort_output=True,
+            reset_index=True,
+        )
+
+        # Check that the snapshot properties are set correctly
+        catalog = pyiceberg.catalog.load_catalog(
+            None,
+            **{
+                pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+                pyiceberg.catalog.WAREHOUSE_LOCATION: path,
+            },
+        )
+        table = catalog.load_table("test_table")
+        assert table.properties.get("p_a1") == "pvalue_a1"
+        snapshot = table.current_snapshot()
+        assert snapshot.summary.get("p_key") == "p_value"

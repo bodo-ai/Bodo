@@ -76,6 +76,7 @@ bodo.pandas.read_iceberg(
     snapshot_id: int | None = None,
     limit: int | None = None,
     scan_properties: dict[str, Any] | None = None,
+    location: str | None = None,
 ) -> BodoDataFrame
 ```
 
@@ -95,6 +96,7 @@ Refer to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/ap
 : __selected_fields: *tuple[str], optional*:__ Fields to select from the table, if not provided, all fields will be selected.
 : __snapshot_id: *int, optional*:__ ID of the snapshot to read from. If not provided, the latest snapshot will be used.
 : __limit: *int, optional*:__ Maximum number of rows to read. If not provided, all rows will be read.
+: __location: *str, optional*:__ Location for the table.
 
 : Non-default values for case_sensitive and scan_properties will trigger a fallback to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/api/pandas.read_iceberg.html).
 
@@ -102,7 +104,15 @@ Refer to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/ap
 <p class="api-header">Returns</p>
 : __BodoDataFrame__
 
-<p class="api-header">Example</p>
+<p class="api-header">Examples</p>
+
+Simple read of a table stored without a catalog on the filesystem:
+``` py
+import bodo
+import bodo.pandas as bodo_pd
+df = bodo_pd.read_iceberg("my_table", location="s3://path/to/iceberg/warehouse")
+```
+
 
 Read a table using a predefined PyIceberg catalog.
 ``` py
