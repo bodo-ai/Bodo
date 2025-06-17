@@ -7,7 +7,16 @@ from bodo.tests.utils import _test_equal
 
 @pytest.fixture
 def base_df():
-    df = pd.DataFrame(
+    df_noidx = pd.DataFrame(
+        {
+            "B": [None, "A    ", "B ", "  C", "D", "E"],
+            "D": [None, "1", "1", "2", "2", "3"],
+            "A": [None, 1, 1, 2, 2, 3],
+            "E": [None, "  a", "b  ", "c", "d", "e"],
+            "C": [None, " 1", "     1     ", "h", "2", "3"],
+        },
+    )
+    df_idx = pd.DataFrame(
         {
             "B": [None, "A    ", "B ", "  C", "D", "E"],
             "D": [None, "1", "1", "2", "2", "3"],
@@ -17,7 +26,7 @@ def base_df():
         },
         index=["a", "b", "c", "d", "e", "f"],
     )
-    return df
+    return [df_noidx, df_idx]
 
 
 @pytest.mark.parametrize(
@@ -80,19 +89,20 @@ def base_df():
     ],
 )
 def test_str_cat_exprs(base_df, lhs_expr, rhs_expr, kwargs):
-    pdf = base_df
-    bdf = bd.from_pandas(pdf)
+    for pdf in base_df:
+        bdf = bd.from_pandas(pdf)
 
-    lhs_pd = lhs_expr(pdf)
-    rhs_pd = rhs_expr(pdf)
-    lhs_bd = lhs_expr(bdf)
-    rhs_bd = rhs_expr(bdf)
+        lhs_pd = lhs_expr(pdf)
+        rhs_pd = rhs_expr(pdf)
+        lhs_bd = lhs_expr(bdf)
+        rhs_bd = rhs_expr(bdf)
 
-    out_pd = lhs_pd.str.cat(others=rhs_pd, sep="-", **kwargs)
-    out_bd = lhs_bd.str.cat(others=rhs_bd, sep="-", **kwargs)
-    out_bd = out_bd.execute_plan()
+        out_pd = lhs_pd.str.cat(others=rhs_pd, sep="-", **kwargs)
+        out_bd = lhs_bd.str.cat(others=rhs_bd, sep="-", **kwargs)
+        out_bd = out_bd.execute_plan()
 
-    _test_equal(out_bd, out_pd, check_pandas_types=False, check_names=False)
+        _test_equal(out_bd, out_pd, check_pandas_types=False, check_names=False)
+        print(out_bd)
 
 
 @pytest.mark.skip(
