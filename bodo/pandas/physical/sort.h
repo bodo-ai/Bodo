@@ -18,12 +18,12 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
                           std::vector<duckdb::ColumnBinding>& source_cols)
         : output_schema(input_schema) {
         std::vector<int64_t> ascending;
-        std::vector<int64_t> na_first;
+        std::vector<int64_t> na_last;
         std::vector<uint64_t> keys;
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map;
         col_ref_map = getColRefMap(source_cols);
 
-        // Convert BoundOrderByNode's to keys, asc, and na_first.
+        // Convert BoundOrderByNode's to keys, asc, and na_last.
         for (const auto& order : logical_order.orders) {
             switch (order.type) {
                 case duckdb::OrderType::ASCENDING:
@@ -38,10 +38,10 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
             }
             switch (order.null_order) {
                 case duckdb::OrderByNullType::NULLS_FIRST:
-                    na_first.push_back(1);
+                    na_last.push_back(0);
                     break;
                 case duckdb::OrderByNullType::NULLS_LAST:
-                    na_first.push_back(0);
+                    na_last.push_back(1);
                     break;
                 default:
                     throw std::runtime_error(
@@ -67,7 +67,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
             output_schema->Project(col_inds);
 
         stream_sorter = std::make_unique<StreamSortState>(
-            -1, keys.size(), std::move(ascending), std::move(na_first),
+            -1, keys.size(), std::move(ascending), std::move(na_last),
             build_table_schema_reordered, /*parallel*/ true);
     }
 
