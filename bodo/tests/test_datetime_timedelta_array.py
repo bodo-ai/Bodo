@@ -133,10 +133,8 @@ def test_nbytes(timedelta_arr_value, memory_leak_check):
         return arr.nbytes
 
     n_pes = get_num_test_workers()
-    py_out = (
-        264 + n_pes
-    )  # 88*3 = 264 for data (days, seconds, microseconds), one byte for null_bitmap per rank
-    check_func(impl, (timedelta_arr_value,), py_output=266, only_seq=True)
+    py_out = 88 + n_pes  # 88 for data , one byte for null_bitmap per rank
+    check_func(impl, (timedelta_arr_value,), py_output=90, only_seq=True)
     if n_pes == 1:  # np=1 has 2 bytes for null_bitmap
         py_out += 1
     check_func(impl, (timedelta_arr_value,), py_output=py_out, only_1DVar=True)
