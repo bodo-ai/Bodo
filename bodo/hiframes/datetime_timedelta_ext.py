@@ -1216,7 +1216,7 @@ def init_datetime_timedelta_array(typingctx, data, nulls=None):
 
         # increase refcount of stored values
         context.nrt.incref(builder, signature.args[0], data_val)
-        context.nrt.incref(builder, signature.args[3], bitmap_val)
+        context.nrt.incref(builder, signature.args[1], bitmap_val)
         return dt_date_arr._getvalue()
 
     sig = datetime_timedelta_array_type(data, nulls)
