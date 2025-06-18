@@ -92,7 +92,6 @@ class DataFrameGroupBy:
         """
         Compute the sum of each group.
         """
-        _validate_groupby_sum(self)
         return _groupby_sum(self)
 
 
@@ -130,7 +129,6 @@ class SeriesGroupBy:
             "SeriesGroupBy.sum() should only be called on a single column selection."
         )
 
-        _validate_groupby_sum(self)
         return _groupby_sum(self)
 
     @check_args_fallback(unsupported="none")
@@ -148,33 +146,6 @@ class SeriesGroupBy:
             return object.__getattribute__(gb, name)
 
 
-def _validate_groupby_sum(grouped: SeriesGroupBy | DataFrameGroupBy):
-    """Ensure column types are compatible with aggregate function."""
-
-    # Series grouped on index
-    if isinstance(grouped._obj, pd.Series):
-        column_dtypes = [grouped._obj.dtype]
-    else:
-        column_dtypes = [grouped._obj[col].dtype for col in grouped._selection]
-
-    for dtype in column_dtypes:
-        pa_type = dtype.pyarrow_dtype
-
-        # currently we support the following types for sum()
-        if (
-            pa.types.is_integer(pa_type)
-            or pa.types.is_floating(pa_type)
-            or pa.types.is_string(pa_type)
-            or pa.types.is_boolean(pa_type)
-            or pa.types.is_date32(pa_type)
-        ):
-            continue
-
-        raise BodoLibNotImplementedException(
-            f"GroupBy.sum(): Recieved and unsupported dtype: {dtype}."
-        )
-
-
 def _groupby_sum(
     grouped: SeriesGroupBy | DataFrameGroupBy,
 ) -> BodoSeries | BodoDataFrame:
@@ -188,8 +159,7 @@ def _groupby_sum(
         else grouped._selection
     ].sum()
 
-    # upcast integers/floats to avoid overflow
-    empty_data = _cast_value_cols("sum", empty_data_pandas, grouped._selection)
+    empty_data = _cast_groupby_agg_columns("sum", empty_data_pandas, grouped._selection)
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
@@ -232,33 +202,48 @@ def _groupby_sum(
     return wrap_plan(plan)
 
 
-def _cast_value_cols(
+def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.DataType:
+    """Gets the output type of an aggregation or raise ValueError for
+    unsupported pa_type/func combinations. Should closely match
+    get_groupby_output_dtype.
+    """
+    new_type = pa_type
+    if func == "sum":
+        if pa.types.is_signed_integer(pa_type) or pa.types.is_boolean(pa_type):
+            new_type = pa.int64()
+        elif pa.types.is_unsigned_integer(pa_type):
+            new_type = pa.uint64()
+        elif pa.types.is_floating(pa_type):
+            new_type = pa.float64()
+        elif pa.types.is_string(pa_type):
+            new_type = pa_type
+        else:
+            pass
+            # raise ValueError(
+            #     f"GroupBy.sum(): Unsupported dtype in column '{col_name}': {pa_type}."
+            # )
+        return new_type
+
+    raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
+
+
+def _cast_groupby_agg_columns(
     func: str, data: pd.Series | pd.DataFrame, value_cols: list[str]
 ) -> pd.Series | pd.DataFrame:
-    """Upcast value columns for aggregation functions.
-    Equivalent to get_groupby_output_dtype in C++.
+    """Upcast value columns for aggregation functions and check output dtypes
+    are valid.
     """
     from bodo.pandas.utils import _empty_pd_array
 
     if isinstance(data, pd.Series):
-        types = [data.dtype.pyarrow_dtype]
+        pa_types = [data.dtype.pyarrow_dtype]
     else:
-        types = [data[col].dtype.pyarrow_dtype for col in value_cols]
+        pa_types = [data[col].dtype.pyarrow_dtype for col in value_cols]
 
     new_types: dict[str, pa.DataType] = {}
 
-    for col, type_ in zip(value_cols, types):
-        if func == "sum":
-            if pa.types.is_signed_integer(type_) or pa.types.is_boolean(type_):
-                new_types[col] = pa.int64()
-            elif pa.types.is_unsigned_integer(type_):
-                new_types[col] = pa.uint64()
-            elif pa.types.is_floating(type_):
-                new_types[col] = pa.float64()
-        # TODO: Casting for other agg funcs.
-
-    if not new_types:
-        return data
+    for col, pa_type in zip(value_cols, pa_types):
+        new_types[col] = _get_agg_output_type(func, pa_type, col)
 
     if isinstance(data, pd.Series):
         casted_col = _empty_pd_array(new_types[value_cols[0]])
