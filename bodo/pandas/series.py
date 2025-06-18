@@ -720,6 +720,10 @@ class BodoStringMethods:
         if is_series_output:
             return series_out
 
+        n_index_arrays = get_n_index_arrays(series_out.index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
         # Create schema for output DataFrame with n_cols columns
         if not group_names:
             field_list = [
@@ -732,10 +736,11 @@ class BodoStringMethods:
 
         arrow_schema = pa.schema(field_list)
         empty_data = arrow_to_empty_df(arrow_schema)
-        empty_series = pd.Series([], dtype=pd.ArrowDtype(pa.large_string()))
+        empty_data.index = series_out._plan.empty_data.index
 
         expr = tuple(
-            create_expr(idx, empty_series, series_out) for idx in range(n_cols)
+            create_expr(idx, empty_data, series_out, index_cols)
+            for idx in range(n_cols)
         )
 
         # Creates DataFrame with n_cols columns
@@ -743,7 +748,7 @@ class BodoStringMethods:
             "LogicalProjection",
             empty_data,
             series_out._plan,
-            expr,
+            expr + index_col_refs,
         )
 
         return wrap_plan(plan=df_plan)
@@ -778,14 +783,14 @@ class BodoDatetimeProperties:
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
-def create_expr(idx, empty_series, series_out):
+def create_expr(idx, empty_data, series_out, index_cols):
     """
     Extracts indexed column values from list series and
     returns resulting scalar expression.
     """
     return LazyPlan(
         "PythonScalarFuncExpression",
-        empty_series,
+        empty_data,
         series_out._plan,
         (
             "bodo.pandas.series._get_col_as_series",
@@ -794,7 +799,7 @@ def create_expr(idx, empty_series, series_out):
             (idx,),  # args
             {},  # kwargs
         ),
-        (0,),
+        (0,) + index_cols,
     )
 
 
