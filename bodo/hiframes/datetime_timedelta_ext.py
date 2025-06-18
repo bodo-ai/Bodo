@@ -1359,12 +1359,27 @@ def dt_timedelta_arr_setitem(A, ind, val):
             # TODO: Confirm the coverage and if its missing add it to the test cases
             return impl
 
+        elif types.unliteral(val) == pd_timedelta_type:
+
+            def impl(A, ind, val):  # pragma: no cover
+                td64_val = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                    val.value
+                )
+                A._data[ind] = td64_val
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    A._null_bitmap, ind, 0 if np.isnat(td64_val) else 1
+                )
+
+            return impl
         else:
             raise BodoError(typ_err_msg)
 
     if not (
-        (is_iterable_type(val) and val.dtype == bodo.datetime_timedelta_type)
-        or types.unliteral(val) == datetime_timedelta_type
+        (
+            is_iterable_type(val)
+            and val.dtype in (datetime_timedelta_type, pd_timedelta_type)
+        )
+        or types.unliteral(val) in (datetime_timedelta_type, pd_timedelta_type)
     ):
         raise BodoError(typ_err_msg)
 
@@ -1382,6 +1397,17 @@ def dt_timedelta_arr_setitem(A, ind, val):
                     bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
 
             # TODO: Confirm the coverage and if its missing add it to the test cases
+            return impl_arr_ind_scalar
+
+        elif types.unliteral(val) == pd_timedelta_type:
+
+            def impl_arr_ind_scalar(A, ind, val):  # pragma: no cover
+                n = len(A)
+                td64 = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val.value)
+                for i in range(n):
+                    A._data[ind[i]] = td64
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
+
             return impl_arr_ind_scalar
 
         else:
@@ -1419,6 +1445,17 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
             return impl_bool_ind_mask_scalar
 
+        elif types.unliteral(val) == pd_timedelta_type:
+
+            def impl_bool_ind_mask_scalar(A, ind, val):  # pragma: no cover
+                td64 = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val.value)
+                n = len(ind)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                        A._data[i] = td64
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_bool_ind_mask_scalar
         else:
 
             def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
@@ -1455,6 +1492,16 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
             return impl_slice_scalar
 
+        elif types.unliteral(val) == pd_timedelta_type:
+
+            def impl_slice_scalar(A, ind, val):  # pragma: no cover
+                td64 = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val.value)
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A._data[i] = td64
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_slice_scalar
         else:
 
             def impl_slice_mask(A, ind, val):  # pragma: no cover
