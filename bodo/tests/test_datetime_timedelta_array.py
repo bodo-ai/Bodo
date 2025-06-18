@@ -127,7 +127,7 @@ def test_setitem_arr(timedelta_arr_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_nbytes(timedelta_arr_value, memory_leak_check):
-    """test DatetimeTimeDeltaArrayType nbytes"""
+    """test TimeDeltaArrayType nbytes"""
 
     def impl(arr):
         return arr.nbytes

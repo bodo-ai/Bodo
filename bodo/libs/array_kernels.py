@@ -116,7 +116,7 @@ BODO_ARRAY_TYPE_CLASSES = (
     bodo.libs.dict_arr_ext.DictionaryArrayType,
     bodo.hiframes.split_impl.StringArraySplitViewType,
     bodo.hiframes.datetime_date_ext.DatetimeDateArrayType,
-    bodo.hiframes.datetime_timedelta_ext.DatetimeTimeDeltaArrayType,
+    bodo.hiframes.datetime_timedelta_ext.TimeDeltaArrayType,
     BooleanArrayType,
     bodo.libs.str_ext.RandomAccessStringArrayType,
     bodo.libs.null_arr_ext.NullArrayType,

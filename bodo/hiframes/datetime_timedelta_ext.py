@@ -1130,9 +1130,9 @@ def timedelta_to_bool(timedelta):
 ##################### Array of datetime.timedelta objects ##########################
 
 
-class DatetimeTimeDeltaArrayType(types.ArrayCompatible):
+class TimeDeltaArrayType(types.ArrayCompatible):
     def __init__(self):
-        super().__init__(name="DatetimeTimeDeltaArrayType()")
+        super().__init__(name="TimeDeltaArrayType()")
 
     @property
     def as_array(self):
@@ -1143,10 +1143,10 @@ class DatetimeTimeDeltaArrayType(types.ArrayCompatible):
         return datetime_timedelta_type
 
     def copy(self):
-        return DatetimeTimeDeltaArrayType()
+        return TimeDeltaArrayType()
 
 
-timedelta_array_type = DatetimeTimeDeltaArrayType()
+timedelta_array_type = TimeDeltaArrayType()
 types.timedelta_array_type = timedelta_array_type
 
 data_array_type = types.Array(types.NPTimedelta("ns"), 1, "C")
@@ -1154,7 +1154,7 @@ nulls_type = types.Array(types.uint8, 1, "C")
 
 
 # datetime.timedelta has three arrays of integers to store data
-@register_model(DatetimeTimeDeltaArrayType)
+@register_model(TimeDeltaArrayType)
 class DatetimeTimeDeltaArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
@@ -1164,11 +1164,11 @@ class DatetimeTimeDeltaArrayModel(models.StructModel):
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-make_attribute_wrapper(DatetimeTimeDeltaArrayType, "data", "_data")
-make_attribute_wrapper(DatetimeTimeDeltaArrayType, "null_bitmap", "_null_bitmap")
+make_attribute_wrapper(TimeDeltaArrayType, "data", "_data")
+make_attribute_wrapper(TimeDeltaArrayType, "null_bitmap", "_null_bitmap")
 
 
-@overload_method(DatetimeTimeDeltaArrayType, "copy", no_unliteral=True)
+@overload_method(TimeDeltaArrayType, "copy", no_unliteral=True)
 def overload_datetime_timedelta_arr_copy(A):
     return lambda A: bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
         A._data.copy(),
@@ -1183,7 +1183,7 @@ def typeof_pd_timedelta_array(val, c):
     return timedelta_array_type
 
 
-@unbox(DatetimeTimeDeltaArrayType)
+@unbox(TimeDeltaArrayType)
 def unbox_pd_timedelta_array(typ, val, c):
     """
     Unbox a timedelta array using Arrow.
@@ -1191,7 +1191,7 @@ def unbox_pd_timedelta_array(typ, val, c):
     return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
-@box(DatetimeTimeDeltaArrayType)
+@box(TimeDeltaArrayType)
 def box_pd_timedelta_array(typ, val, c):
     """
     Box a timedelta into an Arrow array.
@@ -1201,7 +1201,7 @@ def box_pd_timedelta_array(typ, val, c):
 
 @intrinsic
 def init_datetime_timedelta_array(typingctx, data, nulls=None):
-    """Create a DatetimeTimeDeltaArrayType with provided data values."""
+    """Create a TimeDeltaArrayType with provided data values."""
     assert data == data_array_type
     assert nulls == nulls_type
 
@@ -1223,7 +1223,7 @@ def init_datetime_timedelta_array(typingctx, data, nulls=None):
     return sig, codegen
 
 
-@lower_constant(DatetimeTimeDeltaArrayType)
+@lower_constant(TimeDeltaArrayType)
 def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
     n = len(pyval)
     data_arr = np.empty(n, np.dtype("timedelta64[ns]"))
@@ -1535,12 +1535,12 @@ def overload_len_datetime_timedelta_arr(A):
         return lambda A: len(A._data)
 
 
-@overload_attribute(DatetimeTimeDeltaArrayType, "shape")
+@overload_attribute(TimeDeltaArrayType, "shape")
 def overload_datetime_timedelta_arr_shape(A):
     return lambda A: (len(A._data),)  # pragma: no cover
 
 
-@overload_attribute(DatetimeTimeDeltaArrayType, "nbytes")
+@overload_attribute(TimeDeltaArrayType, "nbytes")
 def timedelta_arr_nbytes_overload(A):
     return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
 
