@@ -4,10 +4,12 @@ Provides a Bodo implementation of the pandas groupby API.
 
 from __future__ import annotations
 
+import typing as pt
 import warnings
 from typing import Any, Literal
 
 import pandas as pd
+import pyarrow as pa
 
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
@@ -17,6 +19,9 @@ from bodo.pandas.utils import (
     make_col_ref_exprs,
     wrap_plan,
 )
+
+if pt.TYPE_CHECKING:
+    from bodo.pandas import BodoDataFrame, BodoSeries
 
 
 class DataFrameGroupBy:
@@ -38,7 +43,7 @@ class DataFrameGroupBy:
         self._as_index = as_index
         self._dropna = dropna
         self._selection = (
-            obj.columns.difference(keys) if selection is None else selection
+            list(obj.columns.difference(keys)) if selection is None else selection
         )
 
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
@@ -84,53 +89,11 @@ class DataFrameGroupBy:
         engine: Literal["cython", "numba"] | None = None,
         engine_kwargs: dict[str, bool] | None = None,
     ):
-        from bodo.pandas.base import _empty_like
-
-        zero_size_df = _empty_like(self._obj)
-        empty_data_pandas = zero_size_df.groupby(self._keys, as_index=self._as_index)[
-            self._selection
-        ].sum()
-        empty_data = _cast_value_col("sum", empty_data_pandas, self._selection)
-
-        key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
-
-        exprs = [
-            LazyPlan(
-                "AggregateExpression",
-                zero_size_df[c],
-                self._obj._plan,
-                "sum",
-                [self._obj.columns.get_loc(c)],
-                self._dropna,
-            )
-            for c in self._selection
-        ]
-
-        plan = LazyPlan(
-            "LogicalAggregate",
-            empty_data,
-            self._obj._plan,
-            key_indices,
-            exprs,
-        )
-
-        # Add the data column then the keys since they become Index columns in output.
-        # DuckDB generates keys first in output so we need to reverse the order.
-        if self._as_index:
-            col_indices = list(
-                range(len(self._keys), len(self._keys) + len(self._selection))
-            )
-            col_indices += list(range(len(self._keys)))
-
-            exprs = make_col_ref_exprs(col_indices, plan)
-            plan = LazyPlan(
-                "LogicalProjection",
-                empty_data,
-                plan,
-                exprs,
-            )
-
-        return wrap_plan(plan)
+        """
+        Compute the sum of each group.
+        """
+        _validate_groupby_sum(self)
+        return _groupby_sum(self)
 
 
 class SeriesGroupBy:
@@ -163,58 +126,12 @@ class SeriesGroupBy:
         """
         Compute the sum of each group.
         """
-        from bodo.pandas.base import _empty_like
-
-        zero_size_df = _empty_like(self._obj)
-
         assert len(self._selection) == 1, (
             "SeriesGroupBy.sum() should only be called on a single column selection."
         )
 
-        empty_data_pandas = zero_size_df.groupby(self._keys, as_index=self._as_index)[
-            self._selection[0]
-        ].sum()
-
-        empty_data = _cast_value_col("sum", empty_data_pandas, self._selection)
-
-        key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
-        exprs = [
-            LazyPlan(
-                "AggregateExpression",
-                zero_size_df[c],
-                self._obj._plan,
-                "sum",
-                [self._obj.columns.get_loc(c)],
-                self._dropna,
-            )
-            for c in self._selection
-        ]
-
-        plan = LazyPlan(
-            "LogicalAggregate",
-            empty_data,
-            self._obj._plan,
-            key_indices,
-            exprs,
-        )
-
-        # Add the data column then the keys since they become Index columns in output.
-        # DuckDB generates keys first in output so we need to reverse the order.
-        if self._as_index:
-            col_indices = list(
-                range(len(self._keys), len(self._keys) + len(self._selection))
-            )
-            col_indices += list(range(len(self._keys)))
-
-            exprs = make_col_ref_exprs(col_indices, plan)
-            plan = LazyPlan(
-                "LogicalProjection",
-                empty_data,
-                plan,
-                exprs,
-            )
-
-        return wrap_plan(plan)
+        _validate_groupby_sum(self)
+        return _groupby_sum(self)
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
@@ -231,14 +148,96 @@ class SeriesGroupBy:
             return object.__getattribute__(gb, name)
 
 
-def _cast_value_col(
-    func: str, data: pd.Series | pd.DataFrame, value_cols: list[str] | pd.Index
+def _validate_groupby_sum(grouped: SeriesGroupBy | DataFrameGroupBy):
+    """Ensure column types are compatible with aggregate function."""
+
+    # Series grouped on index
+    if isinstance(grouped._obj, pd.Series):
+        column_dtypes = [grouped._obj.dtype]
+    else:
+        column_dtypes = [grouped._obj[col].dtype for col in grouped._selection]
+
+    for dtype in column_dtypes:
+        pa_type = dtype.pyarrow_dtype
+
+        # currently we support the following types for sum()
+        if (
+            pa.types.is_integer(pa_type)
+            or pa.types.is_floating(pa_type)
+            or pa.types.is_string(pa_type)
+            or pa.types.is_boolean(pa_type)
+            or pa.types.is_date32(pa_type)
+        ):
+            continue
+
+        raise BodoLibNotImplementedException(
+            f"GroupBy.sum(): Recieved and unsupported dtype: {dtype}."
+        )
+
+
+def _groupby_sum(
+    grouped: SeriesGroupBy | DataFrameGroupBy,
+) -> BodoSeries | BodoDataFrame:
+    """Compute groupby.sum() on the Series or DataFrame GroupBy object."""
+    from bodo.pandas.base import _empty_like
+
+    zero_size_df = _empty_like(grouped._obj)
+    empty_data_pandas = zero_size_df.groupby(grouped._keys, as_index=grouped._as_index)[
+        grouped._selection[0]
+        if isinstance(grouped, SeriesGroupBy)
+        else grouped._selection
+    ].sum()
+
+    # upcast integers/floats to avoid overflow
+    empty_data = _cast_value_cols("sum", empty_data_pandas, grouped._selection)
+
+    key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
+
+    exprs = [
+        LazyPlan(
+            "AggregateExpression",
+            zero_size_df[c],
+            grouped._obj._plan,
+            "sum",
+            [grouped._obj.columns.get_loc(c)],
+            grouped._dropna,
+        )
+        for c in grouped._selection
+    ]
+
+    plan = LazyPlan(
+        "LogicalAggregate",
+        empty_data,
+        grouped._obj._plan,
+        key_indices,
+        exprs,
+    )
+
+    # Add the data column then the keys since they become Index columns in output.
+    # DuckDB generates keys first in output so we need to reverse the order.
+    if grouped._as_index:
+        col_indices = list(
+            range(len(grouped._keys), len(grouped._keys) + len(grouped._selection))
+        )
+        col_indices += list(range(len(grouped._keys)))
+
+        exprs = make_col_ref_exprs(col_indices, plan)
+        plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            plan,
+            exprs,
+        )
+
+    return wrap_plan(plan)
+
+
+def _cast_value_cols(
+    func: str, data: pd.Series | pd.DataFrame, value_cols: list[str]
 ) -> pd.Series | pd.DataFrame:
     """Upcast value columns for aggregation functions.
     Equivalent to get_groupby_output_dtype in C++.
     """
-    import pyarrow as pa
-
     from bodo.pandas.utils import _empty_pd_array
 
     if isinstance(data, pd.Series):
@@ -250,13 +249,13 @@ def _cast_value_col(
 
     for col, type_ in zip(value_cols, types):
         if func == "sum":
-            if pa.types.is_signed_integer(type_):
+            if pa.types.is_signed_integer(type_) or pa.types.is_boolean(type_):
                 new_types[col] = pa.int64()
             elif pa.types.is_unsigned_integer(type_):
                 new_types[col] = pa.uint64()
             elif pa.types.is_floating(type_):
                 new_types[col] = pa.float64()
-        # TODO: Other aggregates
+        # TODO: Casting for other agg funcs.
 
     if not new_types:
         return data

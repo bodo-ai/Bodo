@@ -1062,6 +1062,35 @@ def test_dataframe_groupby(dropna, as_index, selection):
     _test_equal(bdf2, df2, sort_output=True, reset_index=True)
 
 
+def test_groupby_fallback():
+    """Checks that fallback is properly supported for DataFrame and Series groupby
+    when unsupported arguments are provided.
+    """
+
+    df = pd.DataFrame({"A": pd.array([pd.NA, 2, 1, 2], "Int32"), "B": [1, 2, 3, 4]})
+    bdf = bd.from_pandas(df)
+
+    # Series groupby
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False)["B"].sum(
+            engine="cython"
+        )
+
+    pandas_out = df.groupby("A", dropna=False, as_index=False)["B"].sum(engine="cython")
+    _test_equal(pandas_out, fallback_out)
+
+    bdf2 = bd.from_pandas(df)
+
+    # DataFrame groupby
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf2.groupby("A", dropna=False, as_index=False).sum(
+            engine="cython"
+        )
+
+    pandas_out = df.groupby("A", dropna=False, as_index=False).sum(engine="cython")
+    _test_equal(pandas_out, fallback_out)
+
+
 def test_compound_projection_expression(datapath):
     """Very simple test for projection expressions."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
