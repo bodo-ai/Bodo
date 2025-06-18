@@ -4311,11 +4311,6 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-    // Filter NA keys in Pandas case.
-    if (groupby_state->pandas_drop_na) {
-        in_table = filter_na_keys(std::move(in_table), groupby_state->n_keys);
-    }
-
     // Unify dictionaries keys to allow consistent hashing and fast key
     // comparison using indices
     in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, true);
@@ -4453,11 +4448,6 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
             in_table, groupby_state->parallel, groupby_state->shuffle_comm);
     }
 
-    // Filter NA keys in Pandas case.
-    if (groupby_state->pandas_drop_na) {
-        in_table = filter_na_keys(std::move(in_table), groupby_state->n_keys);
-    }
-
     // We require that all dictionary keys/values are unified before update
     in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, false);
     // Dictionary hashes for the key columns which will be used for
@@ -4585,6 +4575,13 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
         return true;
     }
     groupby_state->metrics.build_input_row_count += input_table->nrows();
+
+    // Filter NA keys in Pandas case.
+    if (groupby_state->pandas_drop_na) {
+        input_table =
+            filter_na_keys(std::move(input_table), groupby_state->n_keys);
+    }
+
     if (groupby_state->accumulate_before_update) {
         is_last = groupby_acc_build_consume_batch(
             groupby_state, std::move(input_table), is_last, is_final_pipeline);

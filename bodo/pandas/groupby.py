@@ -173,6 +173,7 @@ def _groupby_sum(
             grouped._dropna,
         )
         for c in grouped._selection
+        if c not in grouped._keys
     ]
 
     plan = LazyPlan(
@@ -218,10 +219,9 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
         elif pa.types.is_string(pa_type):
             new_type = pa_type
         else:
-            pass
-            # raise ValueError(
-            #     f"GroupBy.sum(): Unsupported dtype in column '{col_name}': {pa_type}."
-            # )
+            raise ValueError(
+                f"GroupBy.sum(): Unsupported dtype in column '{col_name}': {pa_type}."
+            )
         return new_type
 
     raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
@@ -238,7 +238,11 @@ def _cast_groupby_agg_columns(
     if isinstance(data, pd.Series):
         pa_types = [data.dtype.pyarrow_dtype]
     else:
-        pa_types = [data[col].dtype.pyarrow_dtype for col in value_cols]
+        pa_types = [
+            data.iloc[:, i].dtype.pyarrow_dtype
+            for i, col in enumerate(data.columns)
+            if col in value_cols
+        ]
 
     new_types: dict[str, pa.DataType] = {}
 

@@ -94,7 +94,7 @@ def get_series_overloads():
 
 @functools.lru_cache
 def get_groupby_overloads():
-    """Return a list of the functions supported on DataFrameGroupby objects
+    """Return a list of the functions supported on DataFrameGroupby/DataFrameSeries objects
     to some degree by bodo.jit.
     """
     from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
