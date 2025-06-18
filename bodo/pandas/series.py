@@ -612,6 +612,22 @@ def _str_extract_helper(s, pattern, flags=0, series=False):
     return pd.Series(res)
 
 
+def _str_extractall_helper(s, pat, flags=0):
+    res = []
+    import re
+
+    for i in range(len(s)):
+        expr = s.iloc[i]
+        # Case 2: expand=True or n_cols>1
+        match_list = []
+        if expr is not pd.NA and (pattern := re.findall(pat, expr)):
+            # print(re.findall(pat, expr))
+            match_list = pattern
+        # match_list.extend([pd.NA] * (pattern.groups - len(match_list)))
+        res.extend(match_list)
+    return pd.Series(res)
+
+
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
@@ -758,6 +774,97 @@ class BodoStringMethods:
         )
 
         return wrap_plan(plan=df_plan)
+
+    def extractall(self, pat, flags=0):
+        import re
+
+        pattern = re.compile(pat, flags=flags)
+        n_cols = pattern.groups
+
+        # Like Pandas' implementation, raises ValueError when there are no capture groups.
+        if n_cols == 0:
+            raise ValueError("pattern contains no capture groups")
+
+        group_names = pattern.groupindex
+
+        series = self._series
+
+        dtype = pd.ArrowDtype(pa.large_list(pa.large_string()))
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.series._str_extractall_helper",
+            (pattern,),
+            {
+                "flags": flags,
+            },
+            is_method=False,
+        )
+
+        # expand=False and n_cols=1: returns series
+        return series_out
+
+        n_index_arrays = get_n_index_arrays(series_out.index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
+        # Create schema for output DataFrame with n_cols columns
+        if not group_names:
+            field_list = [
+                pa.field(f"{idx}", pa.large_string()) for idx in range(n_cols)
+            ]
+        else:
+            field_list = [
+                pa.field(f"{name}", pa.large_string()) for name in group_names.keys()
+            ]
+
+        arrow_schema = pa.schema(field_list)
+        empty_data = arrow_to_empty_df(arrow_schema)
+        empty_data.index = series_out._plan.empty_data.index
+
+        expr = tuple(
+            create_expr(idx, empty_data, series_out, index_cols)
+            for idx in range(n_cols)
+        )
+
+        # Creates DataFrame with n_cols columns
+        df_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            series_out._plan,
+            expr + index_col_refs,
+        )
+
+        return wrap_plan(plan=df_plan)
+
+    def max(self):
+        series = self._series
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.int64()),
+            name=series.name,
+            index=index,
+        )
+
+        return LazyPlan(
+            "AggregateExpression",
+            new_metadata,
+            self._plan,
+            "count_star",
+            # Adding column 0 as input to avoid deleting all input by the optimizer
+            # TODO: avoid materializing the input column
+            [0],
+            False,  # dropna
+        )
 
 
 class BodoDatetimeProperties:
