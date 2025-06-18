@@ -19,7 +19,7 @@ def ocr_correction(prompts):
     if bodo.get_rank() == 0:
         print(gpu_ranks)
     n_gpu_ranks = len(gpu_ranks)
-    gpu_rank = gpu_ranks[bodo.get_rank() % n_gpu_ranks] if bodo.get_rank() not in gpu_ranks else bodo.get_rank
+    gpu_rank = gpu_ranks[bodo.get_rank() % n_gpu_ranks] if bodo.get_rank() not in gpu_ranks else bodo.get_rank()
     
     received_prompts = None
     for root_rank in gpu_ranks:
