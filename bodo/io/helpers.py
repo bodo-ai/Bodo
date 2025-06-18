@@ -465,7 +465,9 @@ def _numba_to_pyarrow_type(
         dtype = pa.timestamp("us", "UTC") if is_iceberg else pa.timestamp("ns", tz)
 
     # TODO: Figure out how to raise an error here for Iceberg (is_iceberg is set to True).
-    elif isinstance(numba_type, types.Array) and numba_type.dtype == bodo.timedelta64ns:
+    elif numba_type == bodo.datetime_timedelta_array_type or (
+        isinstance(numba_type, types.Array) and numba_type.dtype == bodo.timedelta64ns
+    ):
         dtype = pa.duration("ns")
     elif (
         isinstance(

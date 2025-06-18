@@ -4,7 +4,6 @@ import datetime
 import operator
 from collections import namedtuple
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -30,7 +29,6 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 import bodo.pandas_compat
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.libs import hdatetime_ext
 from bodo.utils.indexing import (
     get_new_null_mask_bool_index,
     get_new_null_mask_int_index,
@@ -43,13 +41,6 @@ from bodo.utils.typing import (
     is_iterable_type,
     is_list_like_index_type,
     is_overload_constant_str,
-)
-
-ll.add_symbol(
-    "box_datetime_timedelta_array", hdatetime_ext.box_datetime_timedelta_array
-)
-ll.add_symbol(
-    "unbox_datetime_timedelta_array", hdatetime_ext.unbox_datetime_timedelta_array
 )
 
 
@@ -1187,106 +1178,28 @@ def overload_datetime_timedelta_arr_copy(A):
     )  # pragma: no cover
 
 
+@typeof_impl.register(pd.arrays.TimedeltaArray)
+def typeof_pd_timedelta_array(val, c):
+    if val.unit != "ns":
+        raise BodoError("Timedelta array data requires 'ns' unit")
+
+    return datetime_timedelta_array_type
+
+
 @unbox(DatetimeTimeDeltaArrayType)
-def unbox_datetime_timedelta_array(typ, val, c):
-    n = bodo.utils.utils.object_length(c, val)
-    arr_type = types.Array(types.intp, 1, "C")
-    days_data_arr = bodo.utils.utils._empty_nd_impl(c.context, c.builder, arr_type, [n])
-    seconds_data_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, arr_type, [n]
-    )
-    microseconds_data_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, arr_type, [n]
-    )
-    n_bitmask_bytes = c.builder.udiv(
-        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-        lir.Constant(lir.IntType(64), 8),
-    )
-    bitmap_arr = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
-    )
-
-    # function signature of unbox_datetime_timedelta_array
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="unbox_datetime_timedelta_array"
-    )
-    c.builder.call(
-        fn,
-        [
-            val,
-            n,
-            days_data_arr.data,
-            seconds_data_arr.data,
-            microseconds_data_arr.data,
-            bitmap_arr.data,
-        ],
-    )
-    out_dt_date_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-    out_dt_date_arr.days_data = days_data_arr._getvalue()
-    out_dt_date_arr.seconds_data = seconds_data_arr._getvalue()
-    out_dt_date_arr.microseconds_data = microseconds_data_arr._getvalue()
-    out_dt_date_arr.null_bitmap = bitmap_arr._getvalue()
-
-    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(out_dt_date_arr._getvalue(), is_error=is_error)
+def unbox_pd_timedelta_array(typ, val, c):
+    """
+    Unbox a timedelta array using Arrow.
+    """
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 @box(DatetimeTimeDeltaArrayType)
-def box_datetime_timedelta_array(typ, val, c):
-    in_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-
-    days_data_arr = c.context.make_array(types.Array(types.int64, 1, "C"))(
-        c.context, c.builder, in_arr.days_data
-    )
-    seconds_data_arr = c.context.make_array(types.Array(types.int64, 1, "C"))(
-        c.context, c.builder, in_arr.seconds_data
-    ).data
-    microseconds_data_arr = c.context.make_array(types.Array(types.int64, 1, "C"))(
-        c.context, c.builder, in_arr.microseconds_data
-    ).data
-    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, in_arr.null_bitmap
-    ).data
-
-    n = c.builder.extract_value(days_data_arr.shape, 0)
-
-    fnty = lir.FunctionType(
-        c.pyapi.pyobj,
-        [
-            lir.IntType(64),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn_get = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="box_datetime_timedelta_array"
-    )
-    obj_arr = c.builder.call(
-        fn_get,
-        [
-            n,
-            days_data_arr.data,
-            seconds_data_arr,
-            microseconds_data_arr,
-            bitmap_arr_data,
-        ],
-    )
-
-    c.context.nrt.decref(c.builder, typ, val)
-    return obj_arr
+def box_pd_timedelta_array(typ, val, c):
+    """
+    Box a timedelta into an Arrow array.
+    """
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @intrinsic
