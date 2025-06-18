@@ -1396,9 +1396,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 )
                 n = len(val._days_data)
                 for i in range(n):
-                    A._days_data[ind[i]] = val._days_data[i]
-                    A._seconds_data[ind[i]] = val._seconds_data[i]
-                    A._microseconds_data[ind[i]] = val._microseconds_data[i]
+                    A._data[ind[i]] = val._data[i]
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
                     bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], bit)
 
@@ -1434,9 +1432,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 val_ind = 0
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
-                        A._days_data[i] = val._days_data[val_ind]
-                        A._seconds_data[i] = val._seconds_data[val_ind]
-                        A._microseconds_data[i] = val._microseconds_data[val_ind]
+                        A._data[i] = val._data[val_ind]
                         bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
                             val._null_bitmap, val_ind
                         )
@@ -1471,9 +1467,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 n = len(A._days_data)
                 # using setitem directly instead of copying in loop since
                 # Array setitem checks for memory overlap and copies source
-                A._days_data[ind] = val._days_data
-                A._seconds_data[ind] = val._seconds_data
-                A._microseconds_data[ind] = val._microseconds_data
+                A._data[ind] = val._data
                 # XXX: conservative copy of bitmap in case there is overlap
                 # TODO: check for overlap and copy only if necessary
                 src_bitmap = val._null_bitmap.copy()
