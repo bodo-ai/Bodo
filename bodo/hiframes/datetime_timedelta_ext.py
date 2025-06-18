@@ -1171,10 +1171,7 @@ make_attribute_wrapper(DatetimeTimeDeltaArrayType, "null_bitmap", "_null_bitmap"
 @overload_method(DatetimeTimeDeltaArrayType, "copy", no_unliteral=True)
 def overload_datetime_timedelta_arr_copy(A):
     return lambda A: bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
-        A._days_data.copy(),
-        A._seconds_data.copy(),
-        A._microseconds_data.copy(),
-        A._null_bitmap.copy(),
+        A._data.copy(),
     )  # pragma: no cover
 
 
@@ -1203,73 +1200,47 @@ def box_pd_timedelta_array(typ, val, c):
 
 
 @intrinsic
-def init_datetime_timedelta_array(
-    typingctx, days_data, seconds_data, microseconds_data, nulls=None
-):
+def init_datetime_timedelta_array(typingctx, data, nulls=None):
     """Create a DatetimeTimeDeltaArrayType with provided data values."""
-    assert days_data == types.Array(types.int64, 1, "C")
-    assert seconds_data == types.Array(types.int64, 1, "C")
-    assert microseconds_data == types.Array(types.int64, 1, "C")
-    assert nulls == types.Array(types.uint8, 1, "C")
+    assert data == data_array_type
+    assert nulls == nulls_type
 
     def codegen(context, builder, signature, args):
-        (days_data_val, seconds_data_val, microseconds_data_val, bitmap_val) = args
+        (data_val, bitmap_val) = args
         # create arr struct and store values
         dt_date_arr = cgutils.create_struct_proxy(signature.return_type)(
             context, builder
         )
-        dt_date_arr.days_data = days_data_val
-        dt_date_arr.seconds_data = seconds_data_val
-        dt_date_arr.microseconds_data = microseconds_data_val
+        dt_date_arr.data = data_val
         dt_date_arr.null_bitmap = bitmap_val
 
         # increase refcount of stored values
-        context.nrt.incref(builder, signature.args[0], days_data_val)
-        context.nrt.incref(builder, signature.args[1], seconds_data_val)
-        context.nrt.incref(builder, signature.args[2], microseconds_data_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
         context.nrt.incref(builder, signature.args[3], bitmap_val)
-
         return dt_date_arr._getvalue()
 
-    sig = datetime_timedelta_array_type(
-        days_data, seconds_data, microseconds_data, nulls
-    )
+    sig = datetime_timedelta_array_type(data, nulls)
     return sig, codegen
 
 
 @lower_constant(DatetimeTimeDeltaArrayType)
 def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
     n = len(pyval)
-    days_data_arr = np.empty(n, np.int64)
-    seconds_data_arr = np.empty(n, np.int64)
-    microseconds_data_arr = np.empty(n, np.int64)
-
+    data_arr = np.empty(n, bodo.timedelta64ns)
     nulls_arr = np.empty((n + 7) >> 3, np.uint8)
 
     for i, s in enumerate(pyval):
         is_na = pd.isna(s)
         bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
         if not is_na:
-            days_data_arr[i] = s.days
-            seconds_data_arr[i] = s.seconds
-            microseconds_data_arr[i] = s.microseconds
+            data_arr[i] = s
 
-    days_data_const_arr = context.get_constant_generic(
-        builder, days_data_type, days_data_arr
-    )
-    seconds_data_const_arr = context.get_constant_generic(
-        builder, seconds_data_type, seconds_data_arr
-    )
-    microseconds_data_const_arr = context.get_constant_generic(
-        builder, microseconds_data_type, microseconds_data_arr
-    )
+    data_const_arr = context.get_constant_generic(builder, data_array_type, data_arr)
     nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
 
     return lir.Constant.literal_struct(
         [
-            days_data_const_arr,
-            seconds_data_const_arr,
-            microseconds_data_const_arr,
+            data_const_arr,
             nulls_const_arr,
         ]
     )
@@ -1277,16 +1248,12 @@ def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
 
 @numba.njit(no_cpython_wrapper=True)
 def alloc_datetime_timedelta_array(n):  # pragma: no cover
-    days_data_arr = np.empty(n, dtype=np.int64)
-    seconds_data_arr = np.empty(n, dtype=np.int64)
-    microseconds_data_arr = np.empty(n, dtype=np.int64)
+    data_arr = np.empty(n, dtype=bodo.timedelta64ns)
     # XXX: set all bits to not null since datetime.timedelta array operations do not support
     # NA yet. TODO: use 'empty' when all operations support NA
     # nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
     nulls = np.full((n + 7) >> 3, 255, np.uint8)
-    return init_datetime_timedelta_array(
-        days_data_arr, seconds_data_arr, microseconds_data_arr, nulls
-    )
+    return init_datetime_timedelta_array(data_arr, nulls)
 
 
 def alloc_datetime_timedelta_array_equiv(self, scope, equiv_set, loc, args, kws):
@@ -1328,14 +1295,10 @@ def dt_timedelta_arr_getitem(A, ind):
             # Just replaces calls for new data with all 3 arrays
             ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
-            new_days_data = A._days_data[ind_t]
-            new_seconds_data = A._seconds_data[ind_t]
-            new_microseconds_data = A._microseconds_data[ind_t]
-            n = len(new_days_data)
+            new_data = A._data[ind_t]
+            n = len(new_data)
             new_mask = get_new_null_mask_bool_index(old_mask, ind_t, n)
-            return init_datetime_timedelta_array(
-                new_days_data, new_seconds_data, new_microseconds_data, new_mask
-            )
+            return init_datetime_timedelta_array(new_data, new_mask)
 
         return impl_bool
 
@@ -1347,14 +1310,10 @@ def dt_timedelta_arr_getitem(A, ind):
             # Just replaces calls for new data with all 3 arrays
             ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
-            new_days_data = A._days_data[ind_t]
-            new_seconds_data = A._seconds_data[ind_t]
-            new_microseconds_data = A._microseconds_data[ind_t]
-            n = len(new_days_data)
+            new_data = A._data[ind_t]
+            n = len(new_data)
             new_mask = get_new_null_mask_int_index(old_mask, ind_t, n)
-            return init_datetime_timedelta_array(
-                new_days_data, new_seconds_data, new_microseconds_data, new_mask
-            )
+            return init_datetime_timedelta_array(new_data, new_mask)
 
         return impl
 
@@ -1364,15 +1323,11 @@ def dt_timedelta_arr_getitem(A, ind):
         def impl_slice(A, ind):  # pragma: no cover
             # Heavily influenced by array_getitem_slice_index.
             # Just replaces calls for new data with all 3 arrays
-            n = len(A._days_data)
+            n = len(A._data)
             old_mask = A._null_bitmap
-            new_days_data = np.ascontiguousarray(A._days_data[ind])
-            new_seconds_data = np.ascontiguousarray(A._seconds_data[ind])
-            new_microseconds_data = np.ascontiguousarray(A._microseconds_data[ind])
+            new_data = np.ascontiguousarray(A._data[ind])
             new_mask = get_new_null_mask_slice_index(old_mask, ind, n)
-            return init_datetime_timedelta_array(
-                new_days_data, new_seconds_data, new_microseconds_data, new_mask
-            )
+            return init_datetime_timedelta_array(new_data, new_mask)
 
         return impl_slice
 
