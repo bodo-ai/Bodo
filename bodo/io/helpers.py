@@ -600,6 +600,14 @@ def pyarrow_type_to_numba(arrow_type):
         precision = 3 if arrow_type.unit == "ms" else 0
         return bodo.TimeArrayType(precision)
 
+    if pa.types.is_duration(arrow_type):
+        if arrow_type.unit == "ns":
+            return bodo.datetime_timedelta_array_type
+        else:
+            raise BodoError(
+                f"Unsupported Arrow duration type {arrow_type}, only nanoseconds supported"
+            )
+
     raise BodoError(
         f"Conversion from PyArrow type {arrow_type} to Bodo array type not supported yet"
     )
