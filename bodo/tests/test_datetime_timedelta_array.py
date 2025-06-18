@@ -16,12 +16,10 @@ from bodo.tests.utils import check_func, get_num_test_workers
 
 @pytest.fixture(
     params=[
-        pd.Series(
-            np.append(
-                datetime.timedelta(days=5, seconds=4, weeks=4),
-                [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
-            )
-        ).array
+        np.append(
+            datetime.timedelta(days=5, seconds=4, weeks=4),
+            [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
+        )
     ]
 )
 def timedelta_arr_value(request):

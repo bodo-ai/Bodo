@@ -1906,7 +1906,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
 
     # timedelta array
     if dtype == datetime_timedelta_array_type:
-        return pd.array([datetime.timedelta(33)])
+        return np.array([datetime.timedelta(33)])
 
     # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(dtype):

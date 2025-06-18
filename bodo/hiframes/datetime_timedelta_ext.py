@@ -1158,7 +1158,9 @@ class DatetimeTimeDeltaArrayType(types.ArrayCompatible):
 datetime_timedelta_array_type = DatetimeTimeDeltaArrayType()
 types.datetime_timedelta_array_type = datetime_timedelta_array_type
 
-data_array_type = types.Array(types.NPTimedelta("ns"), 1, "C")
+days_data_type = types.Array(types.int64, 1, "C")
+seconds_data_type = types.Array(types.int64, 1, "C")
+microseconds_data_type = types.Array(types.int64, 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
 
 
@@ -1167,13 +1169,19 @@ nulls_type = types.Array(types.uint8, 1, "C")
 class DatetimeTimeDeltaArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("data", data_array_type),
+            ("days_data", days_data_type),
+            ("seconds_data", seconds_data_type),
+            ("microseconds_data", microseconds_data_type),
             ("null_bitmap", nulls_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-make_attribute_wrapper(DatetimeTimeDeltaArrayType, "data", "_data")
+make_attribute_wrapper(DatetimeTimeDeltaArrayType, "days_data", "_days_data")
+make_attribute_wrapper(DatetimeTimeDeltaArrayType, "seconds_data", "_seconds_data")
+make_attribute_wrapper(
+    DatetimeTimeDeltaArrayType, "microseconds_data", "_microseconds_data"
+)
 make_attribute_wrapper(DatetimeTimeDeltaArrayType, "null_bitmap", "_null_bitmap")
 
 
