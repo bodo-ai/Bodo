@@ -164,10 +164,10 @@ get_data_type_from_bodo_fixed_width_array(
             }
             break;
         case Bodo_CTypes::TIMEDELTA:
+            in_num_bytes = sizeof(int64_t) * array->length;
             // Convert timedelta to ns frequency in case of
             // snowflake write
             if (convert_timedelta_to_int64) {
-                in_num_bytes = sizeof(int64_t) * array->length;
                 type = arrow::int64();
             } else {
                 type = arrow::duration(arrow::TimeUnit::NANO);
