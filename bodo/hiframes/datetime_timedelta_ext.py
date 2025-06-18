@@ -1226,7 +1226,7 @@ def init_datetime_timedelta_array(typingctx, data, nulls=None):
 @lower_constant(DatetimeTimeDeltaArrayType)
 def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
     n = len(pyval)
-    data_arr = np.empty(n, bodo.timedelta64ns)
+    data_arr = np.empty(n, np.dtype("timedelta64[ns]"))
     nulls_arr = np.empty((n + 7) >> 3, np.uint8)
 
     for i, s in enumerate(pyval):
