@@ -15,10 +15,19 @@ assert corrected_path is not None, "Please set the corrected_path variable to a 
 
 def ocr_correction(prompts):
     # Get the data from ranks not assigned to gpus on the gpu ranks
-    n_gpu_ranks = len(bodo.libs.distributed_api.get_gpu_ranks())
-    gpu_rank = int((bodo.get_rank() // n_gpu_ranks) * n_gpu_ranks)
-    prompts = bodo.gatherv(prompts, root=gpu_rank)
-    if prompts is None:
+    gpu_ranks = bodo.libs.distributed_api.get_gpu_ranks()
+    n_gpu_ranks = len(gpu_ranks)
+    gpu_rank = (bodo.get_rank() % n_gpu_ranks)
+    assert gpu_rank in gpu_ranks
+    
+    received_prompts = None
+    for root_rank in gpu_ranks:
+        if root_rank == gpu_rank:
+            received_prompts = bodo.gatherv(prompts, root=root_rank)
+        else:
+            bodo.gatherv(prompts.head(0), root=root_rank)
+
+    if received_prompts is None or len(received_prompts) == 0:
         # Just return an empty series from non-gpu ranks
         return pd.Series([], dtype=ArrowDtype(pa.large_string()))
 
