@@ -1464,7 +1464,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
                     val,
                     use_nullable_array=True,
                 )
-                n = len(A._days_data)
+                n = len(A._data)
                 # using setitem directly instead of copying in loop since
                 # Array setitem checks for memory overlap and copies source
                 A._data[ind] = val._data
@@ -1485,22 +1485,17 @@ def dt_timedelta_arr_setitem(A, ind, val):
 @overload(len, no_unliteral=True)
 def overload_len_datetime_timedelta_arr(A):
     if A == datetime_timedelta_array_type:
-        return lambda A: len(A._days_data)
+        return lambda A: len(A._data)
 
 
 @overload_attribute(DatetimeTimeDeltaArrayType, "shape")
 def overload_datetime_timedelta_arr_shape(A):
-    return lambda A: (len(A._days_data),)  # pragma: no cover
+    return lambda A: (len(A._data),)  # pragma: no cover
 
 
 @overload_attribute(DatetimeTimeDeltaArrayType, "nbytes")
 def timedelta_arr_nbytes_overload(A):
-    return (
-        lambda A: A._days_data.nbytes
-        + A._seconds_data.nbytes
-        + A._microseconds_data.nbytes
-        + A._null_bitmap.nbytes
-    )  # pragma: no cover
+    return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
 
 
 def overload_datetime_timedelta_arr_sub(arg1, arg2):
