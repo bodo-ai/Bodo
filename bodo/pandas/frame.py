@@ -40,6 +40,7 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
+    _get_df_python_func_plan,
     check_args_fallback,
     execute_plan,
     get_lazy_manager_class,
@@ -698,7 +699,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 df_arg = self.execute_plan()
 
             if not required_fallback:
-                return _get_df_python_func_plan(self, empty_series, func, args, kwargs)
+                return _get_df_python_func_plan(
+                    self._plan, empty_series, func, args, kwargs
+                )
         else:
             df_arg = self
 
@@ -1004,7 +1007,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         apply_kwargs = {"axis": 1, "args": args} | kwargs
 
         return _get_df_python_func_plan(
-            self, empty_series, "apply", (func,), apply_kwargs
+            self._plan, empty_series, "apply", (func,), apply_kwargs
         )
 
     @check_args_fallback(supported=["by", "ascending", "na_position", "kind"])
@@ -1348,38 +1351,3 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_keys(right_on, right)
 
     return left_on, right_on
-
-
-def _get_df_python_func_plan(df, empty_data, func, args, kwargs, is_method=True):
-    """Create plan for calling some function or method on a DataFrame. Creates a
-    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
-    """
-    udf_arg = LazyPlan(
-        "PythonScalarFuncExpression",
-        empty_data,
-        df._plan,
-        (
-            func,
-            False,  # is_series
-            is_method,
-            args,
-            kwargs,
-        ),
-        tuple(range(len(df.columns) + get_n_index_arrays(df.head(0).index))),
-    )
-
-    # Select Index columns explicitly for output
-    n_cols = len(df.columns)
-    index_col_refs = tuple(
-        make_col_ref_exprs(
-            range(n_cols, n_cols + get_n_index_arrays(df.head(0).index)),
-            df._plan,
-        )
-    )
-    plan = LazyPlan(
-        "LogicalProjection",
-        empty_data,
-        df._plan,
-        (udf_arg,) + index_col_refs,
-    )
-    return wrap_plan(plan=plan)
