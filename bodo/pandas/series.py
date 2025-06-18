@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import itertools
 import numbers
 import typing as pt
 import warnings
@@ -628,13 +629,13 @@ class BodoStringMethods:
         # Validates others is provided, falls back to Pandas otherwise
         if others is None:
             raise BodoLibNotImplementedException(
-                "others is not provided: falling back to Pandas"
+                "str.cat(): others is not provided: falling back to Pandas"
             )
 
         # Validates others is a lazy BodoSeries, falls back to Pandas otherwise
         if not isinstance(others, BodoSeries):
             raise BodoLibNotImplementedException(
-                "others is not a BodoSeries instance: falling back to Pandas"
+                "str.cat(): others is not a BodoSeries instance: falling back to Pandas"
             )
 
         # Validates input series and others series are from same df, falls back to Pandas otherwise
@@ -817,7 +818,7 @@ def get_new_idx(idx, first, side):
 
 
 def make_expr(expr, plan, first, schema, index_cols, side="right"):
-    """TODO: add docstring"""
+    """Creates expression lazyplan with new index depending on lhs/rhs."""
     # if expr=None, expr is a dummy padded onto shorter plan. Create a simple ColRefExpression.
     if expr is None:
         idx = 1 if side == "right" else 0
@@ -841,7 +842,9 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
-        return expr
+        raise BodoLibNotImplementedException(
+            "Arithmetic expression unsupported yet, falling back to pandas."
+        )
     else:
         raise BodoLibNotImplementedException("Unsupported expr type:", expr.plan_class)
 
@@ -858,8 +861,6 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
     columns = lhs_list[0].empty_data.columns
     n_index_arrays = get_n_index_arrays(lhs.index)
     n_cols = len(columns)
-
-    import itertools
 
     # Pads shorter list with None values.
     for i, (lhs_part, rhs_part) in enumerate(

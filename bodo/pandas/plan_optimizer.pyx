@@ -549,7 +549,6 @@ cdef class PythonScalarFuncExpression(Expression):
         return f"PythonScalarFuncExpression({self.out_schema})"
 
 
-
 cdef unique_ptr[CExpression] make_const_expr(val):
     """Convert a filter expression tree from Cython wrappers
        to duckdb.
