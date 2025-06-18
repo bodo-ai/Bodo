@@ -14,13 +14,17 @@ assert split_encoded_path is not None, "Please set the split_encoded_path variab
 assert corrected_path is not None, "Please set the corrected_path variable to a valid path for saving the corrected output."
 
 def ocr_correction(prompts):
+    # Get the data from ranks not assigned to gpus on the gpu ranks
+    n_gpu_ranks = len(bodo.libs.distributed_api.get_gpu_ranks())
+    gpu_rank = int((bodo.get_rank() // n_gpu_ranks) * n_gpu_ranks)
+    prompts = bodo.gatherv(prompts, root=gpu_rank)
+    if prompts is None:
+        # Just return an empty series from non-gpu ranks
+        return pd.Series([], dtype=ArrowDtype(pa.large_string()))
+
     from vllm import LLM, SamplingParams, TokensPrompt
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-    gpu_ranks = bodo.libs.distributed_api.get_gpu_ranks()
-    assert bodo.get_rank() in gpu_ranks, (
-        "Only use 1 bodo worker per GPU in the cluster, set workers with BODO_NUM_WORKERS environment variable"
-    )
     llm = LLM(
         model=model_name,
         dtype="auto",
