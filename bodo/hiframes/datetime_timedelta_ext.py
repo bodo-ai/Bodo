@@ -1394,7 +1394,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
                 val = bodo.utils.conversion.coerce_to_array(
                     val, use_nullable_array=True
                 )
-                n = len(val._days_data)
+                n = len(val._data)
                 for i in range(n):
                     A._data[ind[i]] = val._data[i]
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
