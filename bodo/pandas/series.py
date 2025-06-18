@@ -696,6 +696,26 @@ class BodoStringMethods:
             series._plan, new_metadata, "str.join", (sep,), {}
         )
 
+    def split(self, pat=None, *, n=-1, expand=False, regex=None):
+        series = self._series
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.list_(pa.large_string())),
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "str.split",
+            (),
+            {"pat": pat, "n": n, "expand": expand, "regex": regex},
+        )
+
+        # if not expand:
+        return series_out
+
 
 class BodoDatetimeProperties:
     """Support Series.dt datetime accessors same as Pandas."""
