@@ -23,6 +23,9 @@ if pt.TYPE_CHECKING:
         ValueKeyFunc,
         WriteBuffer,
     )
+    from pyiceberg.partitioning import PartitionSpec
+    from pyiceberg.table.sorting import SortOrder
+
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -290,7 +293,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         execute_plan(write_plan)
 
-    @check_args_fallback(unsupported="snapshot_properties")
+    @check_args_fallback(unsupported="none")
     def to_iceberg(
         self,
         table_identifier: str,
@@ -299,6 +302,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         catalog_properties: dict[str, pt.Any] | None = None,
         location: str | None = None,
         append: bool = False,
+        partition_spec: PartitionSpec | None = None,
+        sort_order: SortOrder | None = None,
+        properties: dict[str, pt.Any] | None = None,
         snapshot_properties: dict[str, str] | None = None,
     ) -> None:
         # See Pandas implementation of to_iceberg:
@@ -307,13 +313,45 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # See Bodo JIT implementation of streaming writes to Iceberg:
         # https://github.com/bodo-ai/Bodo/blob/142678b2fe7217d80e233d201061debae2d47c13/bodo/io/iceberg/stream_iceberg_write.py#L535
         import pyiceberg.catalog
+        import pyiceberg.partitioning
+        import pyiceberg.table.sorting
 
         from bodo.pandas.base import _empty_like
+        from bodo.utils.typing import CreateTableMetaType
 
-        # TODO: add `partition_spec`, `sort_order` and `properties` arguments
-
-        if catalog_properties is None:
+        # Support simple directory only calls like:
+        # df.to_iceberg("table", location="/path/to/table")
+        if catalog_name is None and catalog_properties is None and location is not None:
+            catalog_properties = {
+                pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+                pyiceberg.catalog.WAREHOUSE_LOCATION: location,
+            }
+            # DirCatalog does not support extra location argument in create_table
+            location = None
+        elif catalog_properties is None:
             catalog_properties = {}
+
+        if partition_spec is None:
+            partition_spec = pyiceberg.partitioning.UNPARTITIONED_PARTITION_SPEC
+
+        if sort_order is None:
+            sort_order = pyiceberg.table.sorting.UNSORTED_SORT_ORDER
+
+        if properties is None:
+            properties = ()
+        else:
+            if not isinstance(properties, dict):
+                raise BodoError(
+                    "Iceberg write properties must be a dictionary, got: "
+                    f"{type(properties)}"
+                )
+            # Convert properties to a tuple of items to match expected type in
+            # CreateTableMetaType
+            properties = tuple(properties.items())
+
+        if snapshot_properties is None:
+            snapshot_properties = {}
+
         catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
 
         if_exists = "append" if append else "replace"
@@ -335,8 +373,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             df_schema,
             if_exists,
             False,
-            None,
+            CreateTableMetaType(None, None, properties),
             location,
+            partition_spec,
+            sort_order,
+            snapshot_properties,
         )
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, False)
         max_pq_chunksize = properties.get(
@@ -381,6 +422,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             partition_infos,
             partition_spec,
             sort_order_id,
+            snapshot_properties,
         )
         if not success:
             raise BodoError("Iceberg write failed.")
@@ -965,7 +1007,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self, empty_series, "apply", (func,), apply_kwargs
         )
 
-    @check_args_fallback(supported=["by", "ascending", "na_position"])
+    @check_args_fallback(supported=["by", "ascending", "na_position", "kind"])
     def sort_values(
         self,
         by: IndexLabel,
@@ -973,7 +1015,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         axis: Axis = 0,
         ascending: bool | list[bool] | tuple[bool, ...] = True,
         inplace: bool = False,
-        kind: SortKind = "quicksort",
+        kind: SortKind | None = None,
         na_position: str | list[str] | tuple[str, ...] = "last",
         ignore_index: bool = False,
         key: ValueKeyFunc | None = None,
@@ -1018,6 +1060,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise BodoError(
                 "DataFrame.sort_values(): argument na_position iterable does not contain only 'first' or 'last'"
             )
+
+        if kind is not None:
+            warnings.warn("sort_values() kind argument ignored")
 
         # Apply singular ascending param to all columns.
         if len(by) != len(ascending):

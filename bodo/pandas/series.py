@@ -530,14 +530,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
-    @check_args_fallback(supported=["ascending", "na_position"])
+    @check_args_fallback(supported=["ascending", "na_position", "kind"])
     def sort_values(
         self,
         *,
         axis: Axis = 0,
         ascending: bool = True,
         inplace: bool = False,
-        kind: SortKind = "quicksort",
+        kind: SortKind | None = None,
         na_position: str = "last",
         ignore_index: bool = False,
         key: ValueKeyFunc | None = None,
@@ -558,6 +558,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             raise BodoError(
                 "Series.sort_values(): argument na_position does not contain only 'first' or 'last'"
             )
+
+        if kind is not None:
+            warnings.warn("sort_values() kind argument ignored")
 
         ascending = [ascending]
         na_position = [True if na_position == "first" else False]
