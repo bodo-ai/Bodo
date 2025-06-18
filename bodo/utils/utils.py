@@ -671,7 +671,7 @@ def empty_like_type_overload(n, arr):
 
         return empty_like_type_time_arr
 
-    if arr == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type:
+    if arr == bodo.hiframes.datetime_timedelta_ext.timedelta_array_type:
 
         def empty_like_type_datetime_timedelta_arr(n, arr):  # pragma: no cover
             return bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(

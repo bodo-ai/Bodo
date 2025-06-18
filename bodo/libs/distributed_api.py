@@ -28,7 +28,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
+from bodo.hiframes.datetime_timedelta_ext import timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import hdist
@@ -1846,7 +1846,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return np.array([datetime.date(2011, 8, 9)])
 
     # timedelta array
-    if dtype == datetime_timedelta_array_type:
+    if dtype == timedelta_array_type:
         return pd.array([datetime.timedelta(33)])
 
     # Index types
@@ -2402,7 +2402,7 @@ def scatterv_impl_jit(
             DatetimeArrayType,
             TimeArrayType,
         ),
-    ) or data in (datetime_date_array_type, datetime_timedelta_array_type):
+    ) or data in (datetime_date_array_type, timedelta_array_type):
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         # these array need a data array and a null bitmap array to be initialized by
@@ -2426,7 +2426,7 @@ def scatterv_impl_jit(
             )  # pragma: no cover
         if data == datetime_date_array_type:
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
-        if data == datetime_timedelta_array_type:
+        if data == timedelta_array_type:
             init_func = (
                 bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array
             )

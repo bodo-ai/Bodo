@@ -593,7 +593,7 @@ def overload_sub_operator_datetime_timedelta(lhs, rhs):
         return impl
 
     # datetime_timedelta_array - timedelta
-    if lhs == datetime_timedelta_array_type and rhs == datetime_timedelta_type:
+    if lhs == timedelta_array_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             in_arr = lhs
@@ -1146,8 +1146,8 @@ class DatetimeTimeDeltaArrayType(types.ArrayCompatible):
         return DatetimeTimeDeltaArrayType()
 
 
-datetime_timedelta_array_type = DatetimeTimeDeltaArrayType()
-types.datetime_timedelta_array_type = datetime_timedelta_array_type
+timedelta_array_type = DatetimeTimeDeltaArrayType()
+types.timedelta_array_type = timedelta_array_type
 
 data_array_type = types.Array(types.NPTimedelta("ns"), 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
@@ -1180,7 +1180,7 @@ def typeof_pd_timedelta_array(val, c):
     if val.unit != "ns":
         raise BodoError("Timedelta array data requires 'ns' unit")
 
-    return datetime_timedelta_array_type
+    return timedelta_array_type
 
 
 @unbox(DatetimeTimeDeltaArrayType)
@@ -1219,7 +1219,7 @@ def init_datetime_timedelta_array(typingctx, data, nulls=None):
         context.nrt.incref(builder, signature.args[1], bitmap_val)
         return dt_date_arr._getvalue()
 
-    sig = datetime_timedelta_array_type(data, nulls)
+    sig = timedelta_array_type(data, nulls)
     return sig, codegen
 
 
@@ -1270,7 +1270,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_timedelta_ext_alloc_dateti
 
 @overload(operator.getitem, no_unliteral=True)
 def dt_timedelta_arr_getitem(A, ind):
-    if A != datetime_timedelta_array_type:
+    if A != timedelta_array_type:
         return
 
     if isinstance(ind, types.Integer):
@@ -1336,7 +1336,7 @@ def dt_timedelta_arr_getitem(A, ind):
 
 @overload(operator.setitem, no_unliteral=True)
 def dt_timedelta_arr_setitem(A, ind, val):
-    if A != datetime_timedelta_array_type:
+    if A != timedelta_array_type:
         return
 
     if val == types.none or isinstance(val, types.optional):  # pragma: no cover
@@ -1531,7 +1531,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
 @overload(len, no_unliteral=True)
 def overload_len_datetime_timedelta_arr(A):
-    if A == datetime_timedelta_array_type:
+    if A == timedelta_array_type:
         return lambda A: len(A._data)
 
 
@@ -1547,7 +1547,7 @@ def timedelta_arr_nbytes_overload(A):
 
 def overload_datetime_timedelta_arr_sub(arg1, arg2):
     # datetime_timedelta_array - timedelta
-    if arg1 == datetime_timedelta_array_type and arg2 == datetime_timedelta_type:
+    if arg1 == timedelta_array_type and arg2 == datetime_timedelta_type:
 
         def impl(arg1, arg2):  # pragma: no cover
             in_arr = arg1
@@ -1569,11 +1569,8 @@ def create_cmp_op_overload_arr(op):
             default_value = True
         else:
             default_value = False
-        # both datetime_timedelta_array_type
-        if (
-            lhs == datetime_timedelta_array_type
-            and rhs == datetime_timedelta_array_type
-        ):
+        # both timedelta_array_type
+        if lhs == timedelta_array_type and rhs == timedelta_array_type:
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -1591,7 +1588,7 @@ def create_cmp_op_overload_arr(op):
 
             return impl
         # 1st arg is array
-        elif lhs == datetime_timedelta_array_type:
+        elif lhs == timedelta_array_type:
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -1608,7 +1605,7 @@ def create_cmp_op_overload_arr(op):
 
             return impl
         # 2nd arg is array
-        elif rhs == datetime_timedelta_array_type:
+        elif rhs == timedelta_array_type:
 
             def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
