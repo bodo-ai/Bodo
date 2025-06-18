@@ -1279,11 +1279,7 @@ def dt_timedelta_arr_getitem(A, ind):
             # TODO: Eventually support handle case where value is marked as
             # NA/None. But for now we will mark this as a github issue and fix
             # implementation later.
-            return datetime.timedelta(
-                days=A._days_data[ind],
-                seconds=A._seconds_data[ind],
-                microseconds=A._microseconds_data[ind],
-            )
+            return init_pd_timedelta(A._data[ind])
 
         return impl_int
 
@@ -1354,9 +1350,10 @@ def dt_timedelta_arr_setitem(A, ind, val):
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl(A, ind, val):  # pragma: no cover
-                A._days_data[ind] = val._days
-                A._seconds_data[ind] = val._seconds
-                A._microseconds_data[ind] = val._microseconds
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    val
+                )
+                A._data[ind] = td64
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind, 1)
 
             # TODO: Confirm the coverage and if its missing add it to the test cases
@@ -1377,10 +1374,11 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
             def impl_arr_ind_scalar(A, ind, val):  # pragma: no cover
                 n = len(A)
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    val
+                )
                 for i in range(n):
-                    A._days_data[ind[i]] = val._days
-                    A._seconds_data[ind[i]] = val._seconds
-                    A._microseconds_data[ind[i]] = val._microseconds
+                    A._data[ind[i]] = td64
                     bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
 
             # TODO: Confirm the coverage and if its missing add it to the test cases
@@ -1410,12 +1408,13 @@ def dt_timedelta_arr_setitem(A, ind, val):
             def impl_bool_ind_mask_scalar(A, ind, val):  # pragma: no cover
                 # Heavily influenced by array_setitem_bool_index.
                 # Just replaces calls for new data with all 3 arrays
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    val
+                )
                 n = len(ind)
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
-                        A._days_data[i] = val._days
-                        A._seconds_data[i] = val._seconds
-                        A._microseconds_data[i] = val._microseconds
+                        A._data[i] = td64
                         bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
 
             return impl_bool_ind_mask_scalar
@@ -1446,11 +1445,12 @@ def dt_timedelta_arr_setitem(A, ind, val):
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl_slice_scalar(A, ind, val):  # pragma: no cover
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    val
+                )
                 slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
                 for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                    A._days_data[i] = val._days
-                    A._seconds_data[i] = val._seconds
-                    A._microseconds_data[i] = val._microseconds
+                    A._data[i] = td64
                     bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
 
             return impl_slice_scalar
