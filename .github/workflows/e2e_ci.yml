@@ -163,6 +163,10 @@ jobs:
           # Run each python file (also cd's into the directory of the file)
           current_wd=$(pwd)
           for file in $PYTHON_FILES; do
+              # Skip the pleias examples since they require GPUs
+              if [[ $file == *"pleias*" ]]; then
+                continue
+              fi
               echo "running $file... "
               cd "$(dirname "$file")"
               python "$(basename "$file")"
