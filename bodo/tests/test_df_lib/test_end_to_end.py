@@ -368,6 +368,46 @@ def test_filter(datapath, op):
     )
 
 
+@pytest.mark.parametrize(
+    "file_path",
+    [
+        "dataframe_library/df1.parquet",
+        "dataframe_library/df1_index.parquet",
+        "dataframe_library/df1_multi_index.parquet",
+    ],
+)
+@pytest.mark.parametrize("mode", [0, 1, 2])
+def test_filter_bound_between(datapath, file_path, mode):
+    """Test for filter with filter pushdown into read parquet."""
+    bodo_df1 = bd.read_parquet(datapath(file_path))
+
+    @bodo.jit(spawn=True)
+    def f(df):
+        return df
+
+    if mode == 1:
+        f(bodo_df1)
+    elif mode == 2:
+        bodo_df1._mgr._collect()
+
+    bodo_df2 = bodo_df1[(bodo_df1.A > 20) & (bodo_df1.A < 40)]
+
+    # Make sure bodo_df2 is unevaluated at this point.
+    assert bodo_df2.is_lazy_plan()
+
+    py_df1 = pd.read_parquet(datapath(file_path))
+    py_df2 = py_df1[(py_df1.A > 20) & (py_df1.A < 40)]
+
+    # TODO: remove copy when df.apply(axis=0) is implemented
+    _test_equal(
+        bodo_df2.copy(),
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_filter_multiple1_pushdown(datapath):
     """Test for multiple filter expression."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
