@@ -437,9 +437,7 @@ def setna_overload(arr, ind, int_nan_const=0):
     if arr == datetime_timedelta_array_type:
 
         def setna_datetime_timedelta(arr, ind, int_nan_const=0):  # pragma: no cover
-            bodo.libs.array_kernels.setna(arr._days_data, ind)
-            bodo.libs.array_kernels.setna(arr._seconds_data, ind)
-            bodo.libs.array_kernels.setna(arr._microseconds_data, ind)
+            bodo.libs.array_kernels.setna(arr._data, ind)
             bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
 
         return setna_datetime_timedelta
@@ -1835,9 +1833,7 @@ def concat_overload(arr_list):
             curr_pos = 0
             for A in arr_list:
                 for i in range(len(A)):
-                    Aret._days_data[i + curr_pos] = A._days_data[i]
-                    Aret._seconds_data[i + curr_pos] = A._seconds_data[i]
-                    Aret._microseconds_data[i + curr_pos] = A._microseconds_data[i]
+                    Aret._data[i + curr_pos] = A._data[i]
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
                     bodo.libs.int_arr_ext.set_bit_to_arr(
                         Aret._null_bitmap, i + curr_pos, bit
