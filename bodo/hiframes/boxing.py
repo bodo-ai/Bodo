@@ -1756,6 +1756,8 @@ def _infer_ndarray_obj_dtype(val):
         return bodo.DatetimeArrayType(first_val.tz)
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
+    if isinstance(first_val, datetime.timedelta):
+        return bodo.timedelta_array_type
     if isinstance(first_val, bodo.Time):
         return TimeArrayType(first_val.precision)
     if isinstance(first_val, decimal.Decimal):
