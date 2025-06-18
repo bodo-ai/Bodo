@@ -1072,3 +1072,15 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
         (udf_arg,) + index_col_refs,
     )
     return wrap_plan(plan=plan)
+
+
+def is_col_ref(expr):
+    return expr.plan_class == "ColRefExpression"
+
+
+def is_scalar_func(expr):
+    return expr.plan_class == "PythonScalarFuncExpression"
+
+
+def is_arith_expr(expr):
+    return expr.plan_class == "ArithOpExpression"

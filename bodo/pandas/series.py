@@ -34,6 +34,9 @@ from bodo.pandas.utils import (
     get_proj_expr_single,
     get_scalar_udf_result_type,
     get_single_proj_source_if_present,
+    is_arith_expr,
+    is_col_ref,
+    is_scalar_func,
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
@@ -613,10 +616,7 @@ class BodoStringMethods:
                 "implemented in Bodo dataframe library for the specified arguments yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            # Prevents internal fallbacks causing a flood of warnings.
-            if not name.startswith("_"):
-                warnings.warn(BodoLibFallbackWarning(msg))
-
+            warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
@@ -736,26 +736,14 @@ def _str_partition_helper(s, col):
 
 def _str_cat_helper(df, sep, na_rep):
     """Concatenates df[idx] for idx in idx_pair, separated by sep."""
-    res = []
     if sep is None:
         sep = ""
-    lhs_idx, rhs_idx = 0, 1
 
-    lhs_col = df.iloc[:, lhs_idx]
-    rhs_col = df.iloc[:, rhs_idx]
+    # df is a two-column DataFrame created in zip_series_plan().
+    lhs_col = df.iloc[:, 0]
+    rhs_col = df.iloc[:, 1]
 
-    bitmap_lhs = lhs_col.isnull()
-    bitmap_rhs = rhs_col.isnull()
-
-    for i in df.index:
-        lhs = lhs_col[i] if not bitmap_lhs[i] else na_rep
-        rhs = rhs_col[i] if not bitmap_rhs[i] else na_rep
-        if (bitmap_lhs[i] or bitmap_rhs[i]) and na_rep is None:
-            res.append(pd.NA)
-        else:
-            res.append(f"{lhs}{sep}{rhs}")
-    series = pd.Series(res)
-    return series
+    return lhs_col.str.cat(rhs_col, sep, na_rep)
 
 
 def get_base_plan(plan):
@@ -779,10 +767,14 @@ def validate_str_cat(lhs, rhs):
 
     if lhs_list[0] != rhs_list[0]:
         raise BodoLibNotImplementedException(
-            "self and others are from distinct DataFrames: falling back to Pandas"
+            "str.cat(): self and others are from distinct DataFrames: falling back to Pandas"
         )
+
     # Ensures that at least 1 additional layer is present: single ColRefExpression at the least.
-    assert len(lhs_list) > 1 and len(rhs_list) > 1
+    if not (len(lhs_list) > 1 and len(rhs_list) > 1):
+        raise BodoLibNotImplementedException(
+            "str.cat(): plans should be longer than length 1: falling back to Pandas"
+        )
 
     return lhs_list, rhs_list
 
@@ -793,18 +785,6 @@ def get_list_projections(plan):
         return get_list_projections(plan.args[0]) + [plan]
     else:
         return [plan]
-
-
-def is_col_ref(expr):
-    return expr.plan_class == "ColRefExpression"
-
-
-def is_scalar_func(expr):
-    return expr.plan_class == "PythonScalarFuncExpression"
-
-
-def is_arith_expr(expr):
-    return expr.plan_class == "ArithOpExpression"
 
 
 def get_new_idx(idx, first, side):
@@ -862,6 +842,11 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
     n_index_arrays = get_n_index_arrays(lhs.index)
     n_cols = len(columns)
 
+    default_schema = pa.field("default", pa.large_string())
+    left_schema, right_schema = default_schema, default_schema
+    left_empty_data, right_empty_data = None, None
+    index = lhs_list[0].empty_data.index
+
     # Pads shorter list with None values.
     for i, (lhs_part, rhs_part) in enumerate(
         itertools.zip_longest(lhs_list[1:], rhs_list[1:], fillvalue=None)
@@ -872,12 +857,13 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
 
         # Extracts schema and empty_data from first layer of expressions.
         default_schema = pa.field("default", pa.large_string())
-        left_schema = (
-            left_expr.pa_schema[0] if left_expr is not None else default_schema
-        )
-        right_schema = (
-            right_expr.pa_schema[0] if right_expr is not None else default_schema
-        )
+
+        if left_expr is not None:
+            left_schema = left_expr.pa_schema[0]
+
+        if right_expr is not None:
+            right_schema = right_expr.pa_schema[0]
+
         schema = [left_schema, right_schema]
 
         # Create index metadata.
@@ -890,9 +876,16 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
         left_expr.empty_data.columns = ["lhs"]
         right_expr.empty_data.columns = ["rhs"]
 
-        if lhs_part is not None and rhs_part is not None:
-            empty_data = pd.concat([left_expr.empty_data, right_expr.empty_data])
-            empty_data.index = lhs_part.empty_data.index
+        if left_expr is not None:
+            left_empty_data = left_expr.empty_data
+
+        if right_expr is not None:
+            right_empty_data = right_expr.empty_data
+
+        assert left_empty_data is not None and right_empty_data is not None
+
+        empty_data = pd.concat([left_empty_data, right_empty_data])
+        empty_data.index = index
 
         result = LazyPlan(
             "LogicalProjection",
