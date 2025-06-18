@@ -171,15 +171,26 @@ test_map_arg = {
         ((), {"sep": "-"}),
     ],
     "normalize": [
-        (("NFC"), {}),
-        (("NFD"), {}),
+        (("NFC",), {}),
+        (("NFD",), {}),
     ],
-    "join": [(("*"), {}), ((" and "), {})],
+    "join": [(("*",), {}), ((" and ",), {})],
     "decode": [
-        (("ascii"), {}),
+        (("ascii",), {}),
     ],
     "encode": [
-        (("ascii"), {}),
+        (("ascii",), {}),
+    ],
+    "extract": [
+        ((r"[ab](\d)",), {}),
+        ((r"([ab])(\d)",), {}),
+        ((r"(?P<letter>[ab])(?P<digit>\d)",), {}),
+        (
+            (r"[ab](\d)",),
+            {
+                "expand": False,
+            },
+        ),
     ],
 }
 
@@ -246,6 +257,8 @@ df_join_flat = pd.DataFrame(
 
 df_decode = pd.DataFrame({"A": [b"hi", b"()", b"hello my name is chris.", None]})
 
+df_extract = pd.DataFrame({"A": ["a1", "b2", "c3"]}, index=["X", "Y", "Z"])
+
 # Stores customized DataFrames for some methods. Could enable testing with closer customization to each method.
 exception_dfmap = {
     "normalize": (df_normalize,),
@@ -254,6 +267,7 @@ exception_dfmap = {
         df_join_flat,
     ),
     "decode": (df_decode,),
+    "extract": (df_extract,),
 }
 
 empty_arg = [((), {})]

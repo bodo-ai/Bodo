@@ -691,6 +691,11 @@ class BodoStringMethods:
 
         pattern = re.compile(pat, flags=flags)
         n_cols = pattern.groups
+
+        # Like Pandas' implementation, raises ValueError when there are no capture groups.
+        if n_cols == 0:
+            raise ValueError("pattern contains no capture groups")
+
         group_names = pattern.groupindex
         is_series_output = not expand and n_cols == 1  # In this case, returns a series.
 
@@ -717,6 +722,7 @@ class BodoStringMethods:
             is_method=False,
         )
 
+        # expand=False and n_cols=1: returns series
         if is_series_output:
             return series_out
 
@@ -878,21 +884,27 @@ def gen_partition(name):
         if not expand:
             return series_out
 
+        n_index_arrays = get_n_index_arrays(series_out.index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
         # Create schema for output DataFrame with 3 columns
         arrow_schema = pa.schema(
             [pa.field(f"{idx}", pa.large_string()) for idx in range(3)]
         )
         empty_data = arrow_to_empty_df(arrow_schema)
-        empty_series = pd.Series([], dtype=pd.ArrowDtype(pa.large_string()))
+        empty_data.index = series_out._plan.empty_data.index
 
-        expr = tuple(create_expr(idx, empty_series, series_out) for idx in range(3))
+        expr = tuple(
+            create_expr(idx, empty_data, series_out, index_cols) for idx in range(3)
+        )
 
         # Creates DataFrame with 3 columns
         df_plan = LazyPlan(
             "LogicalProjection",
             empty_data,
             series_out._plan,
-            expr,
+            expr + index_col_refs,
         )
 
         return wrap_plan(plan=df_plan)

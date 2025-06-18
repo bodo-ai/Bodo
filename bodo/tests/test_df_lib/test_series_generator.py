@@ -128,6 +128,31 @@ rpartition_res = pd.DataFrame(
     }
 )
 
+extract_res_0 = pd.DataFrame(
+    {
+        "0": ["1", "2", pd.NA],
+    },
+    index=["X", "Y", "Z"],
+)
+
+extract_res_1 = pd.DataFrame(
+    {
+        "0": ["a", "b", pd.NA],
+        "1": ["1", "2", pd.NA],
+    },
+    index=["X", "Y", "Z"],
+)
+
+extract_res_2 = pd.DataFrame(
+    {
+        "letter": ["a", "b", pd.NA],
+        "digit": ["1", "2", pd.NA],
+    },
+    index=["X", "Y", "Z"],
+)
+
+extract_res_3 = pd.Series(["1", "2", pd.NA], index=["X", "Y", "Z"])
+
 month_name_res_fr_A = pd.Series(
     [
         "janvier",
@@ -250,6 +275,19 @@ expected_results = {
     ],
     "time": [
         ((), {}, "D", null_array),
+    ],
+    "extract": [
+        ((r"[ab](\d)",), {}, "A", extract_res_0),
+        ((r"([ab])(\d)",), {}, "A", extract_res_1),
+        ((r"(?P<letter>[ab])(?P<digit>\d)",), {}, "A", extract_res_2),
+        (
+            (r"[ab](\d)",),
+            {
+                "expand": False,
+            },
+            "A",
+            extract_res_3,
+        ),
     ],
 }
 
