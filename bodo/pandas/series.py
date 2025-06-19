@@ -589,39 +589,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
 
-def _get_col_as_series(s, col):
-    """Extracts column col from list series and returns as Pandas series."""
-    series = pd.Series(
-        [
-            None if not isinstance(s.iloc[i], list) else s.iloc[i][col]
-            for i in range(len(s))
-        ]
-    )
-    return series
-
-
-def _str_extract_helper(s, pattern, flags=0, is_series=False):
-    """Performs row-wise pattern matching, returns a series of match lists."""
-    res = []
-
-    for i in range(len(s)):
-        expr = s.iloc[i]
-        # Case 1: expand=False and n_cols=1
-        if is_series:
-            if expr is not pd.NA and (match := pattern.search(expr)):
-                res.append(match.groups()[0])
-            else:
-                res.append(pd.NA)
-            continue
-        # Case 2: expand=True or n_cols>1
-        match_list = []
-        if expr is not pd.NA and (match := pattern.search(expr)):
-            match_list = list(match.groups())
-        match_list.extend([pd.NA] * (pattern.groups - len(match_list)))
-        res.append(match_list)
-    return pd.Series(res)
-
-
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
 
@@ -860,6 +827,39 @@ def _str_cat_helper(df, sep, na_rep):
     rhs_col = df.iloc[:, 1]
 
     return lhs_col.str.cat(rhs_col, sep, na_rep)
+
+
+def _get_col_as_series(s, col):
+    """Extracts column col from list series and returns as Pandas series."""
+    series = pd.Series(
+        [
+            None if not isinstance(s.iloc[i], list) else s.iloc[i][col]
+            for i in range(len(s))
+        ]
+    )
+    return series
+
+
+def _str_extract_helper(s, pattern, flags=0, is_series=False):
+    """Performs row-wise pattern matching, returns a series of match lists."""
+    res = []
+
+    for i in range(len(s)):
+        expr = s.iloc[i]
+        # Case 1: expand=False and n_cols=1
+        if is_series:
+            if expr is not pd.NA and (match := pattern.search(expr)):
+                res.append(match.groups()[0])
+            else:
+                res.append(pd.NA)
+            continue
+        # Case 2: expand=True or n_cols>1
+        match_list = []
+        if expr is not pd.NA and (match := pattern.search(expr)):
+            match_list = list(match.groups())
+        match_list.extend([pd.NA] * (pattern.groups - len(match_list)))
+        res.append(match_list)
+    return pd.Series(res)
 
 
 def get_base_plan(plan):
