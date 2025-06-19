@@ -70,9 +70,10 @@ def ocr_correction(prompts):
             # Add to the corresponding original prompt index (supports multiple fragments per row)
             text_results[batch_to_prompt_idx[i][j]] += text
         print(f"Finished batch {i + 1} of {len(batches)}")
+    received_prompts["corrected_text"] = text_results
+    received_prompts.to_parquet(corrected_path + f"{bodo.get_rank}.pq")
     return text_results
 
 if __name__ == "__main__":
     prompts = pd.read_parquet(split_encoded_path)
     prompts["corrected_text"] = prompts.map_partitions(ocr_correction)
-    prompts.to_parquet(corrected_path)
