@@ -42,9 +42,7 @@ class DataFrameGroupBy:
         self._keys = keys
         self._as_index = as_index
         self._dropna = dropna
-        self._selection = (
-            list(obj.columns.difference(keys)) if selection is None else selection
-        )
+        self._selection = [col for col in obj.columns if col not in keys]
 
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
         """
