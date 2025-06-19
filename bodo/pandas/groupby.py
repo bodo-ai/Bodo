@@ -45,7 +45,7 @@ class DataFrameGroupBy:
         self._selection = (
             selection
             if selection is not None
-            else [col for col in obj.columns if col not in keys]
+            else list(filter(lambda col: col not in keys, obj.columns))
         )
 
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
@@ -208,7 +208,7 @@ def _groupby_sum(
 def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.DataType:
     """Gets the output type of an aggregation or raise ValueError for
     unsupported pa_type/func combinations. Should closely match
-    get_groupby_output_dtype.
+    https://github.com/bodo-ai/Bodo/blob/d1133e257662348cc7b9ef52cf445633036133d2/bodo/libs/groupby/_groupby_common.cpp#L562
     """
     new_type = pa_type
     if func == "sum":
