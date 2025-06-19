@@ -465,7 +465,9 @@ def _numba_to_pyarrow_type(
         dtype = pa.timestamp("us", "UTC") if is_iceberg else pa.timestamp("ns", tz)
 
     # TODO: Figure out how to raise an error here for Iceberg (is_iceberg is set to True).
-    elif isinstance(numba_type, types.Array) and numba_type.dtype == bodo.timedelta64ns:
+    elif numba_type == bodo.timedelta_array_type or (
+        isinstance(numba_type, types.Array) and numba_type.dtype == bodo.timedelta64ns
+    ):
         dtype = pa.duration("ns")
     elif (
         isinstance(
@@ -599,11 +601,12 @@ def pyarrow_type_to_numba(arrow_type):
         return bodo.TimeArrayType(precision)
 
     if pa.types.is_duration(arrow_type):
-        precision = 9 if arrow_type.unit == "ns" else 0
-        # TODO: Find the right type to return
-        raise NotImplementedError(
-            "pyarrow_type_to_numba() does not support timedelta yet"
-        )
+        if arrow_type.unit == "ns":
+            return bodo.timedelta_array_type
+        else:
+            raise BodoError(
+                f"Unsupported Arrow duration type {arrow_type}, only nanoseconds supported"
+            )
 
     raise BodoError(
         f"Conversion from PyArrow type {arrow_type} to Bodo array type not supported yet"
