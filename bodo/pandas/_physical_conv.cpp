@@ -218,27 +218,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalTopN& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    // We don't have an optimized implementation of order+limit so
-    // break this apart into separate order and limit.
-
     auto physical_sort =
-        std::make_shared<PhysicalSort>(op, in_table_schema, source_cols);
+        std::make_shared<PhysicalSort>(op,
+                                       in_table_schema,
+                                       source_cols,
+                                       op.limit,
+                                       op.offset);
     finished_pipelines.emplace_back(
         this->active_pipeline->Build(physical_sort));
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_sort);
-
-    if (op.offset != 0) {
-        throw std::runtime_error("LogicalTopN unsupported offset");
-    }
-
-    auto physical_op = std::make_shared<PhysicalLimit>(op.limit, in_table_schema);
-    // Finish the pipeline at this point so that Finalize can run
-    // to reduce the number of collected rows to the desired amount.
-    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
-    // The same operator will exist in both pipelines.  The sink of the
-    // previous pipeline and the source of the next one.
-    // We record the pipeline dependency between these two pipelines.
-    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
