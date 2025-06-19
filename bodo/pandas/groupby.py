@@ -29,20 +29,24 @@ class DataFrameGroupBy:
         self,
         obj: pd.DataFrame,
         keys: list[str],
-        selection: list[str] | None = None,
+        as_index: bool = True,
         dropna: bool = True,
+        selection: list[str] | None = None,
     ):
         self._obj = obj
         self._keys = keys
-        self._selection = selection
+        self._as_index = as_index
         self._dropna = dropna
+        self._selection = selection
 
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
         """
         Return a DataFrameGroupBy or SeriesGroupBy for the selected data columns.
         """
         if isinstance(key, str):
-            return SeriesGroupBy(self._obj, self._keys, [key], self._dropna)
+            return SeriesGroupBy(
+                self._obj, self._keys, [key], self._as_index, self._dropna
+            )
         else:
             raise BodoLibNotImplementedException(
                 f"DataFrameGroupBy: Invalid key type: {type(key)}"
@@ -71,11 +75,17 @@ class SeriesGroupBy:
     """
 
     def __init__(
-        self, obj: pd.DataFrame, keys: list[str], selection: list[str], dropna: bool
+        self,
+        obj: pd.DataFrame,
+        keys: list[str],
+        selection: list[str],
+        as_index: bool,
+        dropna: bool,
     ):
         self._obj = obj
         self._keys = keys
         self._selection = selection
+        self._as_index = as_index
         self._dropna = dropna
 
     @check_args_fallback(supported="none")
@@ -97,7 +107,9 @@ class SeriesGroupBy:
             "SeriesGroupBy.sum() should only be called on a single column selection."
         )
 
-        empty_data = zero_size_df.groupby(self._keys)[self._selection[0]].sum()
+        empty_data = zero_size_df.groupby(self._keys, as_index=self._as_index)[
+            self._selection[0]
+        ].sum()
 
         key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
         exprs = [
@@ -122,16 +134,19 @@ class SeriesGroupBy:
 
         # Add the data column then the keys since they become Index columns in output.
         # DuckDB generates keys first in output so we need to reverse the order.
-        col_indices = [len(self._keys)]
-        col_indices += list(range(len(self._keys)))
+        if self._as_index:
+            col_indices = [len(self._keys)]
+            col_indices += list(range(len(self._keys)))
 
-        exprs = make_col_ref_exprs(col_indices, agg_plan)
-        proj_plan = LazyPlan(
-            "LogicalProjection",
-            empty_data,
-            agg_plan,
-            exprs,
-        )
+            exprs = make_col_ref_exprs(col_indices, agg_plan)
+            proj_plan = LazyPlan(
+                "LogicalProjection",
+                empty_data,
+                agg_plan,
+                exprs,
+            )
+        else:
+            proj_plan = agg_plan
 
         return wrap_plan(proj_plan)
 
