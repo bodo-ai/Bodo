@@ -92,12 +92,13 @@ expressionTypeToArrowCompute(const duckdb::ExpressionType &expr_type) {
     }
 }
 
-arrow::compute::Expression tableFilterToArrowExpr(duckdb::idx_t col_idx, duckdb::unique_ptr<duckdb::TableFilter> &tf, PyObject *schema_fields) {
+arrow::compute::Expression tableFilterToArrowExpr(
+    duckdb::idx_t col_idx, duckdb::unique_ptr<duckdb::TableFilter> &tf,
+    PyObject *schema_fields) {
     switch (tf->filter_type) {
         case duckdb::TableFilterType::CONSTANT_COMPARISON: {
             duckdb::unique_ptr<duckdb::ConstantFilter> constantFilter =
-                dynamic_cast_unique_ptr<duckdb::ConstantFilter>(
-                    std::move(tf));
+                dynamic_cast_unique_ptr<duckdb::ConstantFilter>(std::move(tf));
             PyObject *py_selected_field =
                 PyList_GetItem(schema_fields, col_idx);
             if (!PyUnicode_Check(py_selected_field)) {
@@ -105,8 +106,8 @@ arrow::compute::Expression tableFilterToArrowExpr(duckdb::idx_t col_idx, duckdb:
                     "tableFilterSetToArrowCompute selected field is "
                     "not unicode object.");
             }
-            auto column_ref = arrow::compute::field_ref(
-                PyUnicode_AsUTF8(py_selected_field));
+            auto column_ref =
+                arrow::compute::field_ref(PyUnicode_AsUTF8(py_selected_field));
             auto scalar_val = std::visit(
                 [](const auto &value) {
                     return arrow::compute::literal(value);
@@ -117,32 +118,46 @@ arrow::compute::Expression tableFilterToArrowExpr(duckdb::idx_t col_idx, duckdb:
             return expr;
         } break;
         case duckdb::TableFilterType::CONJUNCTION_AND: {
-            duckdb::unique_ptr<duckdb::ConjunctionAndFilter> conjunctionAndFilter =
-                dynamic_cast_unique_ptr<duckdb::ConjunctionAndFilter>(
-                    std::move(tf));
+            duckdb::unique_ptr<duckdb::ConjunctionAndFilter>
+                conjunctionAndFilter =
+                    dynamic_cast_unique_ptr<duckdb::ConjunctionAndFilter>(
+                        std::move(tf));
             assert(conjunctionAndFilter->child_filters.size() >= 2);
             auto expr = arrow::compute::and_(
-                tableFilterToArrowExpr(col_idx, conjunctionAndFilter->child_filters[0], schema_fields),
-                tableFilterToArrowExpr(col_idx, conjunctionAndFilter->child_filters[1], schema_fields));
-            for (size_t i = 2; i < conjunctionAndFilter->child_filters.size(); ++i) {
+                tableFilterToArrowExpr(col_idx,
+                                       conjunctionAndFilter->child_filters[0],
+                                       schema_fields),
+                tableFilterToArrowExpr(col_idx,
+                                       conjunctionAndFilter->child_filters[1],
+                                       schema_fields));
+            for (size_t i = 2; i < conjunctionAndFilter->child_filters.size();
+                 ++i) {
                 expr = arrow::compute::and_(
-                    expr,
-                    tableFilterToArrowExpr(col_idx, conjunctionAndFilter->child_filters[i], schema_fields));
+                    expr, tableFilterToArrowExpr(
+                              col_idx, conjunctionAndFilter->child_filters[i],
+                              schema_fields));
             }
             return expr;
         } break;
         case duckdb::TableFilterType::CONJUNCTION_OR: {
-            duckdb::unique_ptr<duckdb::ConjunctionOrFilter> conjunctionOrFilter =
-                dynamic_cast_unique_ptr<duckdb::ConjunctionOrFilter>(
-                    std::move(tf));
+            duckdb::unique_ptr<duckdb::ConjunctionOrFilter>
+                conjunctionOrFilter =
+                    dynamic_cast_unique_ptr<duckdb::ConjunctionOrFilter>(
+                        std::move(tf));
             assert(conjunctionOrFilter->child_filters.size() >= 2);
             auto expr = arrow::compute::or_(
-                tableFilterToArrowExpr(col_idx, conjunctionOrFilter->child_filters[0], schema_fields),
-                tableFilterToArrowExpr(col_idx, conjunctionOrFilter->child_filters[1], schema_fields));
-            for (size_t i = 2; i < conjunctionOrFilter->child_filters.size(); ++i) {
+                tableFilterToArrowExpr(col_idx,
+                                       conjunctionOrFilter->child_filters[0],
+                                       schema_fields),
+                tableFilterToArrowExpr(col_idx,
+                                       conjunctionOrFilter->child_filters[1],
+                                       schema_fields));
+            for (size_t i = 2; i < conjunctionOrFilter->child_filters.size();
+                 ++i) {
                 expr = arrow::compute::or_(
-                    expr,
-                    tableFilterToArrowExpr(col_idx, conjunctionOrFilter->child_filters[i], schema_fields));
+                    expr, tableFilterToArrowExpr(
+                              col_idx, conjunctionOrFilter->child_filters[i],
+                              schema_fields));
             }
             return expr;
         } break;
