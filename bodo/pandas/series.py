@@ -733,7 +733,7 @@ class BodoStringMethods:
             new_metadata,
             "bodo.pandas.series._str_extract_helper",
             (pattern,),
-            {"flags": flags, "series": is_series_output},
+            {"flags": flags, "is_series": is_series_output},
             is_method=False,
         )
 
