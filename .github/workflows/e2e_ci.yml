@@ -97,6 +97,8 @@ jobs:
         preprocess_thepile_bodo.py
         bio_parallelizing_fasta_processing.py
         llm_inference_speedtest.py
+        pleias_ocr_correction_inference.py
+        pleias_ocr_correction_tokenization.py
         #Tutorials/*.py
     steps:
       - uses: actions/checkout@v4
@@ -163,10 +165,6 @@ jobs:
           # Run each python file (also cd's into the directory of the file)
           current_wd=$(pwd)
           for file in $PYTHON_FILES; do
-              # Skip the pleias examples since they require GPUs
-              if [[ $file == *"pleias*" ]]; then
-                continue
-              fi
               echo "running $file... "
               cd "$(dirname "$file")"
               python "$(basename "$file")"
