@@ -1014,10 +1014,19 @@ def _split_internal(self, name, pat, n, expand, regex=None):
     name=split splits the string in the Series/Index from the beginning,
     at the specified delimiter string, whereas name=rsplit splits from the end.
     """
+    if not isinstance(pat, str):
+        raise BodoLibNotImplementedException(
+            "BodoStringMethods.split() and rsplit() do not support non-string patterns, falling back to Pandas."
+        )
+
     series = self._series
     index = series.head(0).index
     dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
     is_split = name == "split"
+
+    # When pat is a string and regex=None, the given pat is compiled as a regex only if len(pat) != 1.
+    if regex is None and len(pat) != 1:
+        regex = True
 
     empty_series = pd.Series(
         dtype=dtype,
