@@ -113,6 +113,8 @@ def _generate_series_test(name, df, arg_sets, accessor=None):
 Below are expected results, which we compare our out_bodo results against
 for cases where out_bodo and out_pd have trivial differences. 
 """
+# TODO: add a flag in _test_equal to enable correct comparison between
+# Pandas integer index and Bodo string index ('0', '1', ...) of equivalent values
 partition_res = pd.DataFrame(
     {
         "0": ["Apple", "Banana", None, None, "App", "B", " E", "Do"],

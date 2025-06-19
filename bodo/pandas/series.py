@@ -806,17 +806,6 @@ class BodoDatetimeProperties:
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
-def _str_partition_helper(s, col):
-    """Extracts column col from list series and returns as Pandas series."""
-    series = pd.Series(
-        [
-            None if not isinstance(s.iloc[i], list) else s.iloc[i][col]
-            for i in range(len(s))
-        ]
-    )
-    return series
-
-
 def _str_cat_helper(df, sep, na_rep):
     """Concatenates df[idx] for idx in idx_pair, separated by sep."""
     if sep is None:
