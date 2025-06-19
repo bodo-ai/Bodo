@@ -1046,7 +1046,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             dict_ref_arr=None: bodo.hiframes.time_ext.alloc_time_array(n, precision)
         )  # pragma: no cover
 
-    if typ.dtype == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
+    if typ.dtype == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
         return (
             lambda n,
             t,
