@@ -38,6 +38,8 @@ from numba.np.arrayobj import get_itemsize, make_array, populate_array
 from numba.np.numpy_support import as_dtype
 
 import bodo
+import bodo.hiframes
+import bodo.hiframes.datetime_timedelta_ext
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.timestamptz_ext import timestamptz_array_type, timestamptz_type
 from bodo.libs.binary_arr_ext import bytes_type
@@ -232,6 +234,8 @@ def numba_to_c_type(t) -> int:  # pragma: no cover
         return CTypeEnum.Decimal.value
     elif isinstance(t, PandasDatetimeTZDtype):
         return CTypeEnum.Datetime.value
+    elif t == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
+        return CTypeEnum.Timedelta.value
     elif isinstance(t, PandasTimestampType):
         return CTypeEnum.Int64.value
     elif isinstance(t, bodo.hiframes.time_ext.TimeType):

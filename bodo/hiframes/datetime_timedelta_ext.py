@@ -1151,7 +1151,7 @@ class TimeDeltaArrayType(types.ArrayCompatible):
 
     @property
     def dtype(self):
-        return datetime_timedelta_type
+        return pd_timedelta_type
 
     def copy(self):
         return TimeDeltaArrayType()
@@ -1182,7 +1182,7 @@ make_attribute_wrapper(TimeDeltaArrayType, "null_bitmap", "_null_bitmap")
 @overload_method(TimeDeltaArrayType, "copy", no_unliteral=True)
 def overload_datetime_timedelta_arr_copy(A):
     return lambda A: bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
-        A._data.copy(),
+        A._data.copy(), A._null_bitmap.copy()
     )  # pragma: no cover
 
 
@@ -1211,7 +1211,7 @@ def box_pd_timedelta_array(typ, val, c):
 
 
 @intrinsic
-def init_datetime_timedelta_array(typingctx, data, nulls=None):
+def init_datetime_timedelta_array(typingctx, data, nulls):
     """Create a TimeDeltaArrayType with provided data values."""
     assert data == data_array_type
     assert nulls == nulls_type

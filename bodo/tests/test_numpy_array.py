@@ -590,7 +590,7 @@ def test_cbrt(num_arr):
                 Decimal("-1"),
             ]
         ),
-        np.array(
+        pd.array(
             [
                 datetime.timedelta(days=5, seconds=4, weeks=4),
                 datetime.timedelta(days=5, seconds=5, weeks=4),
