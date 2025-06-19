@@ -11,6 +11,7 @@
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "operator.h"
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
@@ -495,7 +496,7 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         if (opstr == "+") {
             comparator = "add";
         } else if (opstr == "-") {
-            comparator = "substract";
+            comparator = "subtract";
         } else if (opstr == "*") {
             comparator = "multiply";
         } else if (opstr == "/") {

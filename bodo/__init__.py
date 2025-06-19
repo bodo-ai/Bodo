@@ -362,7 +362,7 @@ from bodo.hiframes.timestamptz_ext import (
 )
 from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
-    datetime_timedelta_array_type,
+    timedelta_array_type,
     pd_timedelta_type,
 )
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type

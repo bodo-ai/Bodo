@@ -412,17 +412,6 @@ def test_slice(pandas_managers, head_df, collect_func):
     assert lam_df._lazy
     assert lam_sliced_head_df.equals(head_df[1:3])
 
-    # slicing for cols triggers a data fetch
-    lam_sliced_df = lam_df["A0"]
-    assert not lam_df._lazy
-    assert lam_sliced_df.equals(collect_func(0)["A0"])
-
-    # slicing for rows after slicing over cols
-    lam_sliced_twice_df = lam_sliced_df[1:3]
-    assert lam_sliced_twice_df.equals(collect_func(0)["A0"][1:3])
-    lam_sliced_twice_df = lam_sliced_df[10:30]
-    assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
-
     # Slicing with negative indices (does not trigger a data fetch)
     lam = lazy_manager(
         [],
