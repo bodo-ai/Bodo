@@ -282,7 +282,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # only one possible reference to the data so we can treat this case like copy=True since for us
         # we only materialize as needed and so copying isn't an overhead.
         if copy == False:
-            warnings.warn("BodoDataFrame::rename copy=False argument ignored assuming A=A.rename(copy=False) idiom.")
+            warnings.warn(
+                "BodoDataFrame::rename copy=False argument ignored assuming A=A.rename(copy=False) idiom."
+            )
         renamed_plan = LazyPlan(
             orig_plan.plan_class,
             orig_plan.empty_data.rename(columns=columns),
