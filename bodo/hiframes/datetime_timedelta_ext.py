@@ -1127,6 +1127,17 @@ def timedelta_to_bool(timedelta):
     return impl
 
 
+@overload(bool, no_unliteral=True)
+def pd_timedelta_to_bool(timedelta):
+    if timedelta != pd_timedelta_type:  # pragma: no cover
+        return
+
+    def impl(timedelta):  # pragma: no cover
+        return timedelta.value != 0
+
+    return impl
+
+
 ##################### Array of datetime.timedelta objects ##########################
 
 
