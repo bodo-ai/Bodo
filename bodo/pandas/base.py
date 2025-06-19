@@ -1,8 +1,10 @@
+import importlib
 import typing as pt
 
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
+from pandas.core.tools.datetimes import _unit_map
 
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
@@ -11,6 +13,7 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
+    _get_df_python_func_plan,
     arrow_to_empty_df,
     check_args_fallback,
     ensure_datetime64ns,
@@ -214,7 +217,7 @@ def read_iceberg(
     return wrap_plan(plan=plan)
 
 
-@check_args_fallback("all")
+@check_args_fallback("none")
 def to_datetime(
     arg,
     errors="raise",
@@ -230,41 +233,92 @@ def to_datetime(
 ):
     """
     Converts elements of a BodoSeries to timestamp[ns] type.
-    Currently, Bodo only supports arg=BodoSeries, falling back to Pandas otherwise.
+    Currently, Bodo only supports arg of either BodoSeries or BodoDataFrame instance, falling back to Pandas otherwise.
     """
-    if not isinstance(arg, BodoSeries):
+    if not isinstance(arg, (BodoSeries, BodoDataFrame)):
         raise BodoLibNotImplementedException(
             "to_datetime() is not supported for arg that is not an instance of BodoSeries. Falling back to Pandas."
         )
-    series = arg
-    dtype = pd.ArrowDtype(pa.timestamp("ns"))
 
-    index = series.head(0).index
+    # Initialize shared metadata
+    dtype = pd.ArrowDtype(pa.timestamp("ns"))
+    index = arg.head(0).index
     new_metadata = pd.Series(
         dtype=dtype,
-        name=series.name,
         index=index,
     )
+    in_kwargs = {
+        "errors": errors,
+        "dayfirst": dayfirst,
+        "yearfirst": yearfirst,
+        "utc": utc,
+        "format": format,
+        "exact": exact,
+        "unit": unit,
+        "infer_datetime_format": infer_datetime_format,
+        "origin": origin,
+        "cache": cache,
+    }
 
+    # 1. DataFrame Case
+    if isinstance(arg, BodoDataFrame):
+        _validate_df_to_datetime(arg)
+        return _get_df_python_func_plan(
+            arg._plan,
+            new_metadata,
+            "pandas.to_datetime",
+            (),
+            in_kwargs,
+            is_method=False,
+        )
+
+    # 2. Series Case
     return _get_series_python_func_plan(
-        series._plan,
+        arg._plan,
         new_metadata,
         "pandas.to_datetime",
         (),
-        {
-            "errors": errors,
-            "dayfirst": dayfirst,
-            "yearfirst": yearfirst,
-            "utc": utc,
-            "format": format,
-            "exact": exact,
-            "unit": unit,
-            "infer_datetime_format": infer_datetime_format,
-            "origin": origin,
-            "cache": cache,
-        },
+        in_kwargs,
         is_method=False,
     )
+
+
+def _validate_df_to_datetime(df):
+    """Validates input dataframe in to_datetime() has correct column names."""
+    columns = df._plan.empty_data.columns
+
+    if not columns.is_unique:
+        raise ValueError("cannot assemble with duplicate keys")
+
+    def f(value):
+        if value in _unit_map:
+            return _unit_map[value]
+
+        # m is case significant
+        if value.lower() in _unit_map:
+            return _unit_map[value.lower()]
+
+        return value
+
+    unit = {k: f(k) for k in df.keys()}
+    unit_rev = {v: k for k, v in unit.items()}
+
+    required = ["year", "month", "day"]
+    req = sorted(set(required) - set(unit_rev.keys()))
+    if len(req):
+        _required = ",".join(req)
+        raise ValueError(
+            "to assemble mappings requires at least that "
+            f"[year, month, day] be specified: [{_required}] is missing"
+        )
+
+    # keys we don't recognize
+    excess = sorted(set(unit_rev.keys()) - set(_unit_map.values()))
+    if len(excess):
+        _excess = ",".join(excess)
+        raise ValueError(
+            f"extra keys have been passed to the datetime assemblage: [{_excess}]"
+        )
 
 
 def gen_redirect(name):
@@ -272,6 +326,11 @@ def gen_redirect(name):
 
     def _redirect(obj, *args, **kwargs):
         if not isinstance(obj, BodoSeries):
+            # If obj is a scalar value, fallback without warning.
+            if pd.api.types.is_scalar(obj):
+                py_pkg = importlib.import_module("pandas")
+                return getattr(py_pkg, name)(obj, *args, **kwargs)
+            # TODO: Support isnull, etc. in BodoDataFrame
             raise BodoLibNotImplementedException(
                 f"Only supports BodoSeries obj: falling back to Pandas in {name}()"
             )

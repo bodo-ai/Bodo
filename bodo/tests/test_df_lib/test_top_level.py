@@ -32,39 +32,57 @@ def test_top_level_redirects(nulls_df, top_func, method_name):
         bodo_obj = bdf[col]
 
         pd_func = getattr(pd_obj, method_name)
-        bodo_func = lambda: top_func(bodo_obj)
 
-        pd_error = bodo_error = False
-        try:
-            out_pd = pd_func()
-        except Exception:
-            pd_error = True
+        def bodo_func():
+            return top_func(bodo_obj)
 
-        try:
-            out_bd = bodo_func()
-            assert out_bd.is_lazy_plan()
-            out_bd = out_bd.execute_plan()
-        except Exception:
-            bodo_error = True
-
-        assert pd_error == bodo_error
-        if pd_error:
-            continue
+        out_pd = pd_func()
+        out_bd = bodo_func()
+        assert out_bd.is_lazy_plan()
+        out_bd = out_bd.execute_plan()
 
         _test_equal(out_bd, out_pd, check_pandas_types=False, check_names=False)
 
 
 def test_top_level_to_datetime():
-    pdf = pd.DataFrame(
+    # Single column string case
+    pdf1 = pd.DataFrame({"dates": ["2021-01-01", "2022-02-15", None, "2023-03-30"]})
+    bdf1 = bd.from_pandas(pdf1)
+    pd_obj1 = pd.to_datetime(pdf1["dates"])
+    bd_obj1 = bd.to_datetime(bdf1["dates"])
+    assert bd_obj1.is_lazy_plan()
+    _test_equal(
+        bd_obj1.execute_plan(), pd_obj1, check_pandas_types=False, check_names=False
+    )
+
+    # Multi-column case: year, month, day
+    pdf2 = pd.DataFrame(
         {
-            "dates": ["2021-01-01", "2022-02-15", None, "2023-03-30"],
+            "year": [2015, 2016, 2017],
+            "month": [2, 3, 4],
+            "day": [4, 5, 6],
         }
     )
-    bdf = bd.from_pandas(pdf)
+    bdf2 = bd.from_pandas(pdf2)
+    pd_obj2 = pd.to_datetime(pdf2)
+    bd_obj2 = bd.to_datetime(bdf2)
+    assert bd_obj2.is_lazy_plan()
+    _test_equal(
+        bd_obj2.execute_plan(), pd_obj2, check_pandas_types=False, check_names=False
+    )
 
-    pd_obj = pd.to_datetime(pdf["dates"])
-    bd_obj = bd.to_datetime(bdf["dates"])
-    assert bd_obj.is_lazy_plan()
-    bd_obj = bd_obj.execute_plan()
-
-    _test_equal(bd_obj, pd_obj, check_pandas_types=False, check_names=False)
+    # With NaNs
+    pdf3 = pd.DataFrame(
+        {
+            "year": [2020, None, 2022],
+            "month": [1, 2, None],
+            "day": [10, 20, 30],
+        }
+    )
+    bdf3 = bd.from_pandas(pdf3)
+    pd_obj3 = pd.to_datetime(pdf3)
+    bd_obj3 = bd.to_datetime(bdf3)
+    assert bd_obj3.is_lazy_plan()
+    _test_equal(
+        bd_obj3.execute_plan(), pd_obj3, check_pandas_types=False, check_names=False
+    )
