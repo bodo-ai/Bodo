@@ -182,6 +182,15 @@ def typeof_pd_index(val, c):
             get_val_type_maybe_str_literal(val.name),
             boolean_array_type,
         )
+
+    if (
+        val.inferred_type == "timedelta64"
+        or pd._libs.lib.infer_dtype(val, True) == "timedelta64"
+    ):
+        return TimedeltaIndexType(
+            get_val_type_maybe_str_literal(val.name), bodo.typeof(val.values)
+        )
+
     # catch-all for all remaining Index types
     arr_typ = bodo.hiframes.boxing._infer_series_arr_type(val)
     if arr_typ == bodo.datetime_date_array_type or isinstance(
@@ -192,6 +201,7 @@ def typeof_pd_index(val, c):
             get_val_type_maybe_str_literal(val.name),
             arr_typ,
         )
+
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
     raise NotImplementedError(f"unsupported pd.Index type {val}")
