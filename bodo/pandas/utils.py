@@ -443,6 +443,7 @@ def execute_plan(plan: LazyPlan):
             and bodo.libs.distributed_api.get_rank() == 0
         ):
             print("")  # Print on new line during tests.
+            print("Unoptimized plan")
             print(duckdb_plan.toString())
 
         # Print the plan before optimization
@@ -457,6 +458,7 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
+            print("Optimized plan")
             print(optimized_plan.toString())
 
         # Print the plan after optimization
