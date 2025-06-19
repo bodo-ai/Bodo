@@ -93,6 +93,17 @@ def get_series_overloads():
 
 
 @functools.lru_cache
+def get_series_string_overloads():
+    """Return a list of the functions supported on BodoStringMethods objects
+    to some degree by bodo.jit.
+    """
+    from bodo.hiframes.series_str_impl import SeriesStrMethodType
+    from bodo.numba_compat import get_method_overloads
+
+    return get_method_overloads(SeriesStrMethodType)
+
+
+@functools.lru_cache
 def get_groupby_overloads():
     """Return a list of the functions supported on DataFrameGroupby/DataFrameSeries objects
     to some degree by bodo.jit.
@@ -112,6 +123,8 @@ def get_overloads(cls_name):
         return get_dataframe_overloads()
     elif cls_name == "BodoSeries":
         return get_series_overloads()
+    elif cls_name == "BodoStringMethods":
+        return get_series_string_overloads()
     elif cls_name in ("DataFrameGroupBy", "SeriesGroupBy"):
         return get_groupby_overloads()
     else:
@@ -306,9 +319,10 @@ def check_args_fallback(
                             dropna=self._dropna,
                         )[self._selection]
                         base_class = self.__class__
+                    elif self.__class__ == bodo.pandas.series.BodoStringMethods:
+                        base_class = self._series.__class__.__bases__[0].str
                     else:
                         base_class = self.__class__.__bases__[0]
-
                     msg = (
                         f"{base_class.__name__}.{func.__name__} is not "
                         "implemented in Bodo dataframe library for the specified arguments yet. "
@@ -452,6 +466,7 @@ def execute_plan(plan: LazyPlan):
             and bodo.libs.distributed_api.get_rank() == 0
         ):
             print("")  # Print on new line during tests.
+            print("Unoptimized plan")
             print(duckdb_plan.toString())
 
         # Print the plan before optimization
@@ -466,6 +481,7 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
+            print("Optimized plan")
             print(optimized_plan.toString())
 
         # Print the plan after optimization
@@ -1051,3 +1067,50 @@ def ensure_datetime64ns(df):
         df.index = df.index.astype("datetime64[ns]")
 
     return df
+
+
+def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=True):
+    """Create plan for calling some function or method on a DataFrame. Creates a
+    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
+    """
+    df_len = len(df_plan.empty_data.columns)
+    udf_arg = LazyPlan(
+        "PythonScalarFuncExpression",
+        empty_data,
+        df_plan,
+        (
+            func,
+            False,  # is_series
+            is_method,
+            args,
+            kwargs,
+        ),
+        tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
+    )
+
+    # Select Index columns explicitly for output
+    index_col_refs = tuple(
+        make_col_ref_exprs(
+            range(df_len, df_len + get_n_index_arrays(df_plan.empty_data.index)),
+            df_plan,
+        )
+    )
+    plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df_plan,
+        (udf_arg,) + index_col_refs,
+    )
+    return wrap_plan(plan=plan)
+
+
+def is_col_ref(expr):
+    return expr.plan_class == "ColRefExpression"
+
+
+def is_scalar_func(expr):
+    return expr.plan_class == "PythonScalarFuncExpression"
+
+
+def is_arith_expr(expr):
+    return expr.plan_class == "ArithOpExpression"

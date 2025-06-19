@@ -14,9 +14,12 @@ if pt.TYPE_CHECKING:
         AnyArrayLike,
         Axis,
         FilePath,
+        IgnoreRaise,
         IndexLabel,
+        Level,
         MergeHow,
         MergeValidate,
+        Renamer,
         SortKind,
         StorageOptions,
         Suffixes,
@@ -40,6 +43,7 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
+    _get_df_python_func_plan,
     check_args_fallback,
     execute_plan,
     get_lazy_manager_class,
@@ -76,12 +80,23 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                sources.  We sometimes use a pandas manager which doesn't have
                _source_plan so we have to do getattr check.
             """
-            if getattr(self, "_source_plan", None) is not None:
-                return self._source_plan
-
             from bodo.pandas.base import _empty_like
 
             empty_data = _empty_like(self)
+
+            """This caching also creates issues because you can materialize a
+               dataframe then ask for a plan and then add a column through
+               some pandas method we don't support and then you ask for the
+               _plan and you may get a source plan from before the column was
+               added.  To prevent problems, store the schema of the saved
+               source plan and only use it if the current schema is the same.
+            """
+            if getattr(self, "_source_plan", None) is not None:
+                # If the schema hasn't changed since the last time the source
+                # plan was generated then use the old source plan.
+                if empty_data.equals(self._source_plan[0]):
+                    return self._source_plan[1]
+
             if bodo.dataframe_library_run_parallel:
                 if getattr(self._mgr, "_md_result_id", None) is not None:
                     # If the plan has been executed but the results are still
@@ -95,20 +110,26 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     nrows = len(self)
                     res_id = bodo.spawn.utils.scatter_data(self)
                     mgr = None
-                self._source_plan = LazyPlan(
-                    "LogicalGetPandasReadParallel",
+                self._source_plan = (
                     empty_data,
-                    nrows,
-                    LazyPlanDistributedArg(mgr, res_id),
+                    LazyPlan(
+                        "LogicalGetPandasReadParallel",
+                        empty_data,
+                        nrows,
+                        LazyPlanDistributedArg(mgr, res_id),
+                    ),
                 )
             else:
-                self._source_plan = LazyPlan(
-                    "LogicalGetPandasReadSeq",
+                self._source_plan = (
                     empty_data,
-                    self,
+                    LazyPlan(
+                        "LogicalGetPandasReadSeq",
+                        empty_data,
+                        self,
+                    ),
                 )
 
-            return self._source_plan
+            return self._source_plan[1]
 
     @staticmethod
     def from_lazy_mgr(
@@ -242,6 +263,36 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 return (self._mgr._md_nrows, len(self._head_df.columns))
             case ExecState.COLLECTED:
                 return super().shape
+
+    @check_args_fallback(supported=["columns", "copy"])
+    def rename(
+        self,
+        mapper: Renamer | None = None,
+        *,
+        index: Renamer | None = None,
+        columns: Renamer | None = None,
+        axis: Axis | None = None,
+        copy: bool | None = None,
+        inplace: bool = False,
+        level: Level | None = None,
+        errors: IgnoreRaise = "ignore",
+    ) -> BodoDataFrame | None:
+        orig_plan = self._plan
+        # TODO: The value of copy here is ignored.
+        # Most cases of copy=False we have are the idiom A=A.rename(copy=False) where there is still
+        # only one possible reference to the data so we can treat this case like copy=True since for us
+        # we only materialize as needed and so copying isn't an overhead.
+        if copy == False:
+            warnings.warn(
+                "BodoDataFrame::rename copy=False argument ignored assuming A=A.rename(copy=False) idiom."
+            )
+        renamed_plan = LazyPlan(
+            orig_plan.plan_class,
+            orig_plan.empty_data.rename(columns=columns),
+            *orig_plan.args,
+            **orig_plan.kwargs,
+        )
+        return wrap_plan(renamed_plan)
 
     @check_args_fallback(supported=["path", "engine", "compression", "row_group_size"])
     def to_parquet(
@@ -698,7 +749,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 df_arg = self.execute_plan()
 
             if not required_fallback:
-                return _get_df_python_func_plan(self, empty_series, func, args, kwargs)
+                return _get_df_python_func_plan(
+                    self._plan, empty_series, func, args, kwargs
+                )
         else:
             df_arg = self
 
@@ -1004,7 +1057,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         apply_kwargs = {"axis": 1, "args": args} | kwargs
 
         return _get_df_python_func_plan(
-            self, empty_series, "apply", (func,), apply_kwargs
+            self._plan, empty_series, "apply", (func,), apply_kwargs
         )
 
     @check_args_fallback(supported=["by", "ascending", "na_position", "kind"])
@@ -1160,18 +1213,9 @@ def _add_proj_expr_to_plan(
         is_replace = False
 
     # Get the function expression from the value plan to be added
-    func_expr = value_plan.args[1][0]
+    func_expr = get_proj_expr_single(value_plan)
 
-    # Handle trivial cases like df["C"] = df["B"]
-    if func_expr.plan_class == "ColRefExpression":
-        # Copy since empty_data is changed below
-        func_expr = LazyPlan(
-            "ColRefExpression",
-            func_expr.empty_data,
-            *func_expr.args,
-            **func_expr.kwargs,
-        )
-    elif func_expr.plan_class == "PythonScalarFuncExpression":
+    if func_expr.plan_class == "PythonScalarFuncExpression":
         func_expr = (
             _update_func_expr_source(func_expr, df_plan, ikey)
             if replace_func_source
@@ -1184,7 +1228,13 @@ def _add_proj_expr_to_plan(
             )
         )
     else:
-        return None
+        # Copy since empty_data is changed below
+        func_expr = LazyPlan(
+            func_expr.plan_class,
+            func_expr.empty_data,
+            *func_expr.args,
+            **func_expr.kwargs,
+        )
 
     # Update output column name
     func_expr.empty_data = func_expr.empty_data.set_axis([key], axis=1)
@@ -1348,38 +1398,3 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_keys(right_on, right)
 
     return left_on, right_on
-
-
-def _get_df_python_func_plan(df, empty_data, func, args, kwargs, is_method=True):
-    """Create plan for calling some function or method on a DataFrame. Creates a
-    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
-    """
-    udf_arg = LazyPlan(
-        "PythonScalarFuncExpression",
-        empty_data,
-        df._plan,
-        (
-            func,
-            False,  # is_series
-            is_method,
-            args,
-            kwargs,
-        ),
-        tuple(range(len(df.columns) + get_n_index_arrays(df.head(0).index))),
-    )
-
-    # Select Index columns explicitly for output
-    n_cols = len(df.columns)
-    index_col_refs = tuple(
-        make_col_ref_exprs(
-            range(n_cols, n_cols + get_n_index_arrays(df.head(0).index)),
-            df._plan,
-        )
-    )
-    plan = LazyPlan(
-        "LogicalProjection",
-        empty_data,
-        df._plan,
-        (udf_arg,) + index_col_refs,
-    )
-    return wrap_plan(plan=plan)
