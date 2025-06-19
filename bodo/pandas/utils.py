@@ -1,6 +1,8 @@
 import functools
 import importlib
 import inspect
+import sys
+import traceback
 import warnings
 
 import pandas as pd
@@ -442,6 +444,7 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
+            traceback.print_stack(file=sys.stdout)
             print("")  # Print on new line during tests.
             print("Unoptimized plan")
             print(duckdb_plan.toString())

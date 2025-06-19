@@ -615,7 +615,8 @@ std::pair<int64_t, PyObject *> execute_plan(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema,
-    PyObject *storage_options) {
+    PyObject *storage_options,
+    int64_t num_rows) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -634,6 +635,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
         duckdb::make_uniq<duckdb::LogicalGet>(
             binder->GenerateTableIndex(), table_function, std::move(bind_data1),
             return_types, return_names, virtual_columns);
+    out_get->SetEstimatedCardinality(num_rows);
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:
@@ -712,7 +714,7 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
-    PyObject *df, PyObject *pyarrow_schema) {
+    PyObject *df, PyObject *pyarrow_schema, int64_t num_rows) {
     // See DuckDB Pandas scan code:
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_scan.hpp#L19
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_bind.hpp#L19
@@ -735,6 +737,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
     auto out_get = duckdb::make_uniq<duckdb::LogicalGet>(
         binder->GenerateTableIndex(), table_function, std::move(bind_data1),
         return_types, return_names, virtual_columns);
+    out_get->SetEstimatedCardinality(num_rows);
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:
@@ -747,7 +750,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
-    std::string result_id, PyObject *pyarrow_schema) {
+    std::string result_id, PyObject *pyarrow_schema, int64_t num_rows) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -763,6 +766,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
     auto out_get = duckdb::make_uniq<duckdb::LogicalGet>(
         binder->GenerateTableIndex(), table_function, std::move(bind_data1),
         return_types, return_names);
+    out_get->SetEstimatedCardinality(num_rows);
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:
