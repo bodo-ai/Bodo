@@ -697,8 +697,7 @@ class BodoStringMethods:
         )
 
     # TODO: check if regex arg and regex patterns are supported.
-    check_args_fallback(unsupported="none")
-
+    @check_args_fallback(unsupported="none")
     def split(self, pat=None, *, n=-1, expand=False, regex=None):
         """
         Split strings around given separator/delimiter.
@@ -706,8 +705,7 @@ class BodoStringMethods:
         """
         return _split_internal(self, "split", pat, n, expand, regex=regex)
 
-    check_args_fallback(unsupported="none")
-
+    @check_args_fallback(unsupported="none")
     def rsplit(self, pat=None, *, n=-1, expand=False):
         """
         Split strings around given separator/delimiter.
