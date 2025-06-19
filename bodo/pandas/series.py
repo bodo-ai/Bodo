@@ -696,72 +696,24 @@ class BodoStringMethods:
             series._plan, new_metadata, "str.join", (sep,), {}
         )
 
+    # TODO: check if regex arg and regex patterns are supported.
+    check_args_fallback(unsupported="none")
+
     def split(self, pat=None, *, n=-1, expand=False, regex=None):
-        series = self._series
-        index = series.head(0).index
-        dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
+        """
+        Split strings around given separator/delimiter.
+        Splits the string in the Series/Index from the beginning, at the specified delimiter string.
+        """
+        return _split_internal(self, "split", pat, n, expand, regex=regex)
 
-        empty_series = pd.Series(
-            dtype=dtype,
-            name=series.name,
-            index=index,
-        )
+    check_args_fallback(unsupported="none")
 
-        series_out = _get_series_python_func_plan(
-            series._plan,
-            empty_series,
-            "str.split",
-            (),
-            {"pat": pat, "n": n, "expand": False, "regex": regex},
-        )
-
-        if not expand:
-            return series_out
-
-        cnt_empty_series = pd.Series(
-            dtype=pd.ArrowDtype(pa.int32()),
-            name=series.name,
-            index=index,
-        )
-
-        length_series = _get_series_python_func_plan(
-            series._plan,
-            cnt_empty_series,
-            "bodo.pandas.series._str_split_counter",
-            (),
-            {"pat": pat, "n": n, "regex": regex},
-            is_method=False,
-        )
-
-        # TODO: Implement Series.max()
-        n_cols = length_series.max()
-
-        n_index_arrays = get_n_index_arrays(index)
-        index_cols = tuple(range(1, 1 + n_index_arrays))
-        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
-
-        # Create schema for output DataFrame with n_cols columns
-        arrow_schema = pa.schema(
-            [pa.field(f"{idx}", pa.large_string()) for idx in range(n_cols)]
-        )
-
-        empty_data = arrow_to_empty_df(arrow_schema)
-        empty_data.index = index
-
-        expr = tuple(
-            create_expr(idx, empty_data, series_out, index_cols)
-            for idx in range(n_cols)
-        )
-
-        # Creates DataFrame with n_cols columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
-            empty_data,
-            series_out._plan,
-            expr + index_col_refs,
-        )
-
-        return wrap_plan(plan=df_plan)
+    def rsplit(self, pat=None, *, n=-1, expand=False):
+        """
+        Split strings around given separator/delimiter.
+        Splits the string in the Series/Index from the end, at the specified delimiter string.
+        """
+        return _split_internal(self, "rsplit", pat, n, expand)
 
 
 class BodoDatetimeProperties:
@@ -823,7 +775,7 @@ def _str_split_counter(s, is_split=True, pat=None, n=-1, regex=None):
     if is_split:
         split_s = s.str.split(pat=pat, n=n, expand=False, regex=regex)
     else:
-        split_s = s.str.rsplit(pat=pat, n=n, expand=False, regex=regex)
+        split_s = s.str.rsplit(pat=pat, n=n, expand=False)
 
     series = pd.Series(
         [
@@ -1058,84 +1010,81 @@ def _get_series_python_func_plan(
     )
 
 
-def gen_split(name):
-    """Generates split and rsplit using generalized template."""
+def _split_internal(self, name, pat, n, expand, regex=None):
+    """
+    Internal template shared by split() and rsplit().
+    name=split splits the string in the Series/Index from the beginning,
+    at the specified delimiter string, whereas name=rsplit splits from the end.
+    """
+    series = self._series
+    index = series.head(0).index
+    dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
+    is_split = name == "split"
 
-    def split(self, pat=None, *, n=-1, expand=False, regex=None):
-        """
-        Split strings around given separator/delimiter.
-        split() splits the string in the Series/Index from the beginning,
-        at the specified delimiter string, whereas rsplit() splits from the end.
-        """
-        series = self._series
-        index = series.head(0).index
-        dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
+    empty_series = pd.Series(
+        dtype=dtype,
+        name=series.name,
+        index=index,
+    )
+    if is_split:
+        kwargs = {"pat": pat, "n": n, "expand": False, "regex": regex}
+    else:
+        kwargs = {"pat": pat, "n": n, "expand": False}
 
-        empty_series = pd.Series(
-            dtype=dtype,
-            name=series.name,
-            index=index,
-        )
+    series_out = _get_series_python_func_plan(
+        series._plan,
+        empty_series,
+        f"str.{name}",
+        (),
+        kwargs,
+    )
 
-        series_out = _get_series_python_func_plan(
-            series._plan,
-            empty_series,
-            f"str.{name}",
-            (),
-            {"pat": pat, "n": n, "expand": False, "regex": regex},
-        )
+    if not expand:
+        return series_out
 
-        if not expand:
-            return series_out
+    cnt_empty_series = pd.Series(
+        dtype=pd.ArrowDtype(pa.int32()),
+        name=series.name,
+        index=index,
+    )
 
-        cnt_empty_series = pd.Series(
-            dtype=pd.ArrowDtype(pa.int32()),
-            name=series.name,
-            index=index,
-        )
+    length_series = _get_series_python_func_plan(
+        series._plan,
+        cnt_empty_series,
+        "bodo.pandas.series._str_split_counter",
+        (),
+        {"is_split": is_split, "pat": pat, "n": n, "regex": regex},
+        is_method=False,
+    )
 
-        is_split = name == "split"
+    # TODO: Implement Series.max()
+    n_cols = length_series.max()
 
-        length_series = _get_series_python_func_plan(
-            series._plan,
-            cnt_empty_series,
-            "bodo.pandas.series._str_split_counter",
-            (),
-            {"is_split": is_split, "pat": pat, "n": n, "regex": regex},
-            is_method=False,
-        )
+    n_index_arrays = get_n_index_arrays(index)
+    index_cols = tuple(range(1, 1 + n_index_arrays))
+    index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
 
-        # TODO: Implement Series.max()
-        n_cols = length_series.max()
+    # Create schema for output DataFrame with n_cols columns
+    arrow_schema = pa.schema(
+        [pa.field(f"{idx}", pa.large_string()) for idx in range(n_cols)]
+    )
 
-        n_index_arrays = get_n_index_arrays(index)
-        index_cols = tuple(range(1, 1 + n_index_arrays))
-        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+    empty_data = arrow_to_empty_df(arrow_schema)
+    empty_data.index = index
 
-        # Create schema for output DataFrame with n_cols columns
-        arrow_schema = pa.schema(
-            [pa.field(f"{idx}", pa.large_string()) for idx in range(n_cols)]
-        )
+    expr = tuple(
+        create_expr(idx, empty_data, series_out, index_cols) for idx in range(n_cols)
+    )
 
-        empty_data = arrow_to_empty_df(arrow_schema)
-        empty_data.index = index
+    # Creates DataFrame with n_cols columns
+    df_plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        series_out._plan,
+        expr + index_col_refs,
+    )
 
-        expr = tuple(
-            create_expr(idx, empty_data, series_out, index_cols)
-            for idx in range(n_cols)
-        )
-
-        # Creates DataFrame with n_cols columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
-            empty_data,
-            series_out._plan,
-            expr + index_col_refs,
-        )
-
-        return wrap_plan(plan=df_plan)
-
-    return split
+    return wrap_plan(plan=df_plan)
 
 
 def gen_partition(name):
@@ -1594,16 +1543,8 @@ def _install_str_partitions():
         setattr(BodoStringMethods, name, method)
 
 
-def _install_str_splits():
-    """Install Series.str.split and Series.str.rsplit."""
-    for name in ["split", "rsplit"]:
-        method = gen_split(name)
-        setattr(BodoStringMethods, name, method)
-
-
 _install_series_direct_methods()
 _install_series_dt_accessors()
 _install_series_dt_methods()
 _install_series_str_methods()
 _install_str_partitions()
-_install_str_splits()
