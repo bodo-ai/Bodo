@@ -108,7 +108,6 @@ xlsxwriter = "*"
 openpyxl = "*"
 cx_oracle = "*"
 pyzmq = "*"
-ipykernel = ">=6.29.3,<7"
 
 [target.linux-64.dependencies]
 pyarrow = { version = "==19.0.0", channel = "bodo.ai" }
