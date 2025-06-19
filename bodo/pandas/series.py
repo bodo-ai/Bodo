@@ -600,13 +600,14 @@ def _get_col_as_series(s, col):
     return series
 
 
-def _str_extract_helper(s, pattern, flags=0, series=False):
+def _str_extract_helper(s, pattern, flags=0, is_series=False):
+    """Performs row-wise pattern matching, returns a series of match lists."""
     res = []
 
     for i in range(len(s)):
         expr = s.iloc[i]
         # Case 1: expand=False and n_cols=1
-        if series:
+        if is_series:
             if expr is not pd.NA and (match := pattern.search(expr)):
                 res.append(match.groups()[0])
             else:
