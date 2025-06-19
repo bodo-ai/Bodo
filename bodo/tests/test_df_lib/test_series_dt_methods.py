@@ -3,6 +3,8 @@ from test_series_generator import _generate_series_accessor_test, _generate_seri
 
 from bodo.pandas.series import dt_accessors, dt_methods
 
+timedelta_methods = ("total_seconds",)
+
 
 def _install_series_dt_tests():
     """Install Series.dt tests."""
@@ -16,7 +18,10 @@ def _install_series_dt_tests():
     for method_pair in dt_methods:
         for method_name in method_pair[0]:
             test = _generate_series_test(
-                method_name, df, test_map_arg[method_name], accessor="dt"
+                method_name,
+                timedelta_df if method_name in timedelta_methods else df,
+                test_map_arg[method_name],
+                accessor="dt",
             )
             globals()[f"test_{method_name}"] = test
 
@@ -66,6 +71,12 @@ date_y = pd.Series(pd.date_range("19990303 09:10:12", periods=10, freq="YE"))
 date_none = pd.Series([pd.NaT] * 10, dtype="datetime64[ns]")
 
 df = pd.DataFrame({"A": date_m, "B": date_s, "C": date_y, "D": date_none})
+timedelta_df = pd.DataFrame(
+    {
+        "A": pd.to_timedelta(range(10), unit="s"),
+        "B": pd.to_timedelta(range(10, 20), unit="s"),
+    }
+)
 
 
 _install_series_dt_tests()
