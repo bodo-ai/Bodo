@@ -13,7 +13,7 @@
  */
 class PhysicalSort : public PhysicalSource, public PhysicalSink {
    private:
-    explicit PhysicalSort(duckdb::vector<duckdb::BoundOrderByNode> &orders,
+    explicit PhysicalSort(duckdb::vector<duckdb::BoundOrderByNode>& orders,
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols,
                           int64_t limit=-1,

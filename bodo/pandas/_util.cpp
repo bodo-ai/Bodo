@@ -163,17 +163,14 @@ arrow::compute::Expression tableFilterToArrowExpr(
             return expr;
         } break;
         case duckdb::TableFilterType::OPTIONAL_FILTER: {
-            duckdb::unique_ptr<duckdb::OptionalFilter>
-                OptionalFilter =
-                    dynamic_cast_unique_ptr<duckdb::OptionalFilter>(
-                        std::move(tf));
+            duckdb::unique_ptr<duckdb::OptionalFilter> OptionalFilter =
+                dynamic_cast_unique_ptr<duckdb::OptionalFilter>(std::move(tf));
             // We'll try to execute the filter but if some part of it is
             // unsupported then the recursive call will generate an exception
             // and we'll convert this filter into a no-op by returning true.
             try {
-                return tableFilterToArrowExpr(col_idx,
-                                              OptionalFilter->child_filter,
-                                              schema_fields);
+                return tableFilterToArrowExpr(
+                    col_idx, OptionalFilter->child_filter, schema_fields);
             } catch (...) {
                 return arrow::compute::literal(true);
             }
