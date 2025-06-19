@@ -231,7 +231,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalTopN& op) {
         throw std::runtime_error("LogicalTopN unsupported offset");
     }
 
-    auto physical_op = std::make_shared<PhysicalLimit>(op.limit, in_table_schema);
+    auto physical_op =
+        std::make_shared<PhysicalLimit>(op.limit, in_table_schema);
     // Finish the pipeline at this point so that Finalize can run
     // to reduce the number of collected rows to the desired amount.
     finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
