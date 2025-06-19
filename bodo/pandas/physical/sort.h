@@ -12,8 +12,8 @@
  *
  */
 class PhysicalSort : public PhysicalSource, public PhysicalSink {
-   public:
-    explicit PhysicalSort(duckdb::LogicalOrder& logical_order,
+   private:
+    explicit PhysicalSort(duckdb::vector<duckdb::BoundOrderByNode> &orders,
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols)
         : output_schema(input_schema) {
@@ -24,7 +24,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
         col_ref_map = getColRefMap(source_cols);
 
         // Convert BoundOrderByNode's to keys, asc, and na_last.
-        for (const auto& order : logical_order.orders) {
+        for (const auto& order : orders) {
             switch (order.type) {
                 case duckdb::OrderType::ASCENDING:
                     ascending.push_back(1);
@@ -70,6 +70,17 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
             -1, keys.size(), std::move(ascending), std::move(na_last),
             build_table_schema_reordered, /*parallel*/ true);
     }
+
+   public:
+    explicit PhysicalSort(duckdb::LogicalOrder& logical_order,
+                          std::shared_ptr<bodo::Schema> input_schema,
+                          std::vector<duckdb::ColumnBinding>& source_cols)
+        : PhysicalSort(logical_order.orders, input_schema, source_cols) {}
+
+    explicit PhysicalSort(duckdb::LogicalTopN& logical_topn,
+                          std::shared_ptr<bodo::Schema> input_schema,
+                          std::vector<duckdb::ColumnBinding>& source_cols)
+        : PhysicalSort(logical_topn.orders, input_schema, source_cols) {}
 
     virtual ~PhysicalSort() = default;
 

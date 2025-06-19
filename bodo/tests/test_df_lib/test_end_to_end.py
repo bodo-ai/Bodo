@@ -1346,3 +1346,27 @@ def test_col_set_dtypes_bug():
         df2 = df[["A", "B"]]
         df["C"] = df2.apply(lambda x: x.A + x.B, axis=1)
         print(df)
+
+
+def test_topn(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bodo_df1.sort_values(
+        by=["D", "A"], ascending=[True, False], na_position="last"
+    )
+    bodo_df3 = bodo_df2.head(3)
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = py_df1.sort_values(
+        by=["D", "A"], ascending=[True, False], na_position="last"
+    )
+    py_df3 = py_df2.head(3)
+
+    assert bodo_df2.is_lazy_plan()
+
+    _test_equal(
+        bodo_df3,
+        py_df3,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )

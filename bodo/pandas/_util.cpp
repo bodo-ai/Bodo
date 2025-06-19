@@ -6,6 +6,7 @@
 #include "../libs/_utils.h"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/optional_filter.hpp"
 
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double,
@@ -160,6 +161,22 @@ arrow::compute::Expression tableFilterToArrowExpr(
                               schema_fields));
             }
             return expr;
+        } break;
+        case duckdb::TableFilterType::OPTIONAL_FILTER: {
+            duckdb::unique_ptr<duckdb::OptionalFilter>
+                OptionalFilter =
+                    dynamic_cast_unique_ptr<duckdb::OptionalFilter>(
+                        std::move(tf));
+            // We'll try to execute the filter but if some part of it is
+            // unsupported then the recursive call will generate an exception
+            // and we'll convert this filter into a no-op by returning true.
+            try {
+                return tableFilterToArrowExpr(col_idx,
+                                              OptionalFilter->child_filter,
+                                              schema_fields);
+            } catch (...) {
+                return arrow::compute::literal(true);
+            }
         } break;
         default:
             throw std::runtime_error(
