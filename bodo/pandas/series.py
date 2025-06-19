@@ -733,26 +733,27 @@ class BodoStringMethods:
             is_method=False,
         )
 
+        # TODO: Implement Series.max()
         n_cols = length_series.max()
 
-        n_index_arrays = get_n_index_arrays(series_out.head(0).index)
+        n_index_arrays = get_n_index_arrays(index)
         index_cols = tuple(range(1, 1 + n_index_arrays))
         index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
 
-        # Create schema for output DataFrame with 3 columns
+        # Create schema for output DataFrame with n_cols columns
         arrow_schema = pa.schema(
             [pa.field(f"{idx}", pa.large_string()) for idx in range(n_cols)]
         )
 
         empty_data = arrow_to_empty_df(arrow_schema)
-        empty_data.index = series_out._plan.empty_data.index
+        empty_data.index = index
 
         expr = tuple(
             create_expr(idx, empty_data, series_out, index_cols)
             for idx in range(n_cols)
         )
 
-        # Creates DataFrame with 3 columns
+        # Creates DataFrame with n_cols columns
         df_plan = LazyPlan(
             "LogicalProjection",
             empty_data,

@@ -181,6 +181,14 @@ test_map_arg = {
     "encode": [
         (("ascii"), {}),
     ],
+    "split": [
+        ((), {}),
+        ((), {"n": 2}),
+        ((), {"pat": "/"}),
+        ((), {"expand": True}),
+        ((), {"pat": "/", "expand": True}),
+        ((), {"n": 1, "pat": "/", "expand": True}),
+    ],
 }
 
 # List of methods that do not take in arguments
@@ -246,6 +254,17 @@ df_join_flat = pd.DataFrame(
 
 df_decode = pd.DataFrame({"A": [b"hi", b"()", b"hello my name is chris.", None]})
 
+df_split = pd.DataFrame(
+    {
+        "A": [
+            "this is a regular sentence",
+            "https://docs.python.org/3/tutorial/index.html",
+            None,
+        ]
+    },
+    index=["Apple", "Banana", "Cheese"],
+)
+
 # Stores customized DataFrames for some methods. Could enable testing with closer customization to each method.
 exception_dfmap = {
     "normalize": (df_normalize,),
@@ -254,6 +273,7 @@ exception_dfmap = {
         df_join_flat,
     ),
     "decode": (df_decode,),
+    "split": (df_split,),
 }
 
 empty_arg = [((), {})]
