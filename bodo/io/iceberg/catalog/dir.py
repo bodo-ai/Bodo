@@ -4,6 +4,10 @@ Only supports loading, creating/replacing/appending to tables
 from a directory structure.
 """
 
+from functools import cached_property
+from pathlib import Path
+from urllib.parse import urlparse
+
 import pyarrow as pa
 from pyiceberg.catalog import (
     WAREHOUSE_LOCATION,
@@ -38,9 +42,13 @@ class DirCatalog(Catalog):
         if WAREHOUSE_LOCATION not in self.properties:
             raise ValueError(f"Missing {WAREHOUSE_LOCATION} property")
 
-    @property
+    @cached_property
     def warehouse_path(self) -> str:
-        return self.properties[WAREHOUSE_LOCATION]
+        path = self.properties[WAREHOUSE_LOCATION]
+        # Convert relative paths to absolute paths if path is a local file path
+        if urlparse(path).scheme == "":
+            path = str(Path(path).resolve())
+        return path
 
     def _table_path(self, identifier: Identifier) -> str:
         wh_path = self.warehouse_path.removesuffix("/")

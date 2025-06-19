@@ -92,6 +92,83 @@ expressionTypeToArrowCompute(const duckdb::ExpressionType &expr_type) {
     }
 }
 
+arrow::compute::Expression tableFilterToArrowExpr(
+    duckdb::idx_t col_idx, duckdb::unique_ptr<duckdb::TableFilter> &tf,
+    PyObject *schema_fields) {
+    switch (tf->filter_type) {
+        case duckdb::TableFilterType::CONSTANT_COMPARISON: {
+            duckdb::unique_ptr<duckdb::ConstantFilter> constantFilter =
+                dynamic_cast_unique_ptr<duckdb::ConstantFilter>(std::move(tf));
+            PyObject *py_selected_field =
+                PyList_GetItem(schema_fields, col_idx);
+            if (!PyUnicode_Check(py_selected_field)) {
+                throw std::runtime_error(
+                    "tableFilterSetToArrowCompute selected field is "
+                    "not unicode object.");
+            }
+            auto column_ref =
+                arrow::compute::field_ref(PyUnicode_AsUTF8(py_selected_field));
+            auto scalar_val = std::visit(
+                [](const auto &value) {
+                    return arrow::compute::literal(value);
+                },
+                extractValue(constantFilter->constant));
+            auto expr = expressionTypeToArrowCompute(
+                constantFilter->comparison_type)(column_ref, scalar_val);
+            return expr;
+        } break;
+        case duckdb::TableFilterType::CONJUNCTION_AND: {
+            duckdb::unique_ptr<duckdb::ConjunctionAndFilter>
+                conjunctionAndFilter =
+                    dynamic_cast_unique_ptr<duckdb::ConjunctionAndFilter>(
+                        std::move(tf));
+            assert(conjunctionAndFilter->child_filters.size() >= 2);
+            auto expr = arrow::compute::and_(
+                tableFilterToArrowExpr(col_idx,
+                                       conjunctionAndFilter->child_filters[0],
+                                       schema_fields),
+                tableFilterToArrowExpr(col_idx,
+                                       conjunctionAndFilter->child_filters[1],
+                                       schema_fields));
+            for (size_t i = 2; i < conjunctionAndFilter->child_filters.size();
+                 ++i) {
+                expr = arrow::compute::and_(
+                    expr, tableFilterToArrowExpr(
+                              col_idx, conjunctionAndFilter->child_filters[i],
+                              schema_fields));
+            }
+            return expr;
+        } break;
+        case duckdb::TableFilterType::CONJUNCTION_OR: {
+            duckdb::unique_ptr<duckdb::ConjunctionOrFilter>
+                conjunctionOrFilter =
+                    dynamic_cast_unique_ptr<duckdb::ConjunctionOrFilter>(
+                        std::move(tf));
+            assert(conjunctionOrFilter->child_filters.size() >= 2);
+            auto expr = arrow::compute::or_(
+                tableFilterToArrowExpr(col_idx,
+                                       conjunctionOrFilter->child_filters[0],
+                                       schema_fields),
+                tableFilterToArrowExpr(col_idx,
+                                       conjunctionOrFilter->child_filters[1],
+                                       schema_fields));
+            for (size_t i = 2; i < conjunctionOrFilter->child_filters.size();
+                 ++i) {
+                expr = arrow::compute::or_(
+                    expr, tableFilterToArrowExpr(
+                              col_idx, conjunctionOrFilter->child_filters[i],
+                              schema_fields));
+            }
+            return expr;
+        } break;
+        default:
+            throw std::runtime_error(
+                "tableFilterToArrowExpr unsupported filter "
+                "type " +
+                std::to_string(static_cast<int>(tf->filter_type)));
+    }
+}
+
 PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
                                        PyObject *schema_fields) {
     PyObject *ret = Py_None;
@@ -102,35 +179,9 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
     std::vector<arrow::compute::Expression> parts;
 
     for (auto &tf : filters.filters) {
-        switch (tf.second->filter_type) {
-            case duckdb::TableFilterType::CONSTANT_COMPARISON: {
-                duckdb::unique_ptr<duckdb::ConstantFilter> constantFilter =
-                    dynamic_cast_unique_ptr<duckdb::ConstantFilter>(
-                        std::move(tf.second));
-                PyObject *py_selected_field =
-                    PyList_GetItem(schema_fields, tf.first);
-                if (!PyUnicode_Check(py_selected_field)) {
-                    throw std::runtime_error(
-                        "tableFilterSetToArrowCompute selected field is "
-                        "not unicode object.");
-                }
-                auto column_ref = arrow::compute::field_ref(
-                    PyUnicode_AsUTF8(py_selected_field));
-                auto scalar_val = std::visit(
-                    [](const auto &value) {
-                        return arrow::compute::literal(value);
-                    },
-                    extractValue(constantFilter->constant));
-                auto expr = expressionTypeToArrowCompute(
-                    constantFilter->comparison_type)(column_ref, scalar_val);
-                parts.push_back(expr);
-            } break;
-            default:
-                throw std::runtime_error(
-                    "tableFilterSetToArrowCompute unsupported filter "
-                    "type " +
-                    std::to_string(static_cast<int>(tf.second->filter_type)));
-        }
+        duckdb::idx_t col_idx = tf.first;
+        duckdb::unique_ptr<duckdb::TableFilter> filter = std::move(tf.second);
+        parts.push_back(tableFilterToArrowExpr(col_idx, filter, schema_fields));
     }
 
     arrow::compute::Expression whole = arrow::compute::and_(parts);
@@ -138,8 +189,9 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
 
     return ret;
 }
+
 void initInputColumnMapping(std::vector<int64_t> &col_inds,
-                            std::vector<uint64_t> &keys, uint64_t ncols) {
+                            const std::vector<uint64_t> &keys, uint64_t ncols) {
     for (uint64_t i : keys) {
         col_inds.push_back(i);
     }
@@ -207,15 +259,12 @@ std::shared_ptr<table_info> runPythonScalarFunction(
         throw std::runtime_error("Failed to import bodo.pandas.utils module");
     }
 
-    // Call the run_apply_udf() with the table_info pointer, Arrow schema
-    // and UDF function
-    PyObject *pyarrow_schema =
-        arrow::py::wrap_schema(input_batch->schema()->ToArrowSchema());
+    // Call the run_apply_udf() with the table_info pointer and UDF function
     PyObject *result_type_py(arrow::py::wrap_data_type(result_type));
     PyObject *result = PyObject_CallMethod(
-        bodo_module, "run_func_on_table", "LOOO",
-        reinterpret_cast<int64_t>(new table_info(*input_batch)), pyarrow_schema,
-        result_type_py, args);
+        bodo_module, "run_func_on_table", "LOO",
+        reinterpret_cast<int64_t>(new table_info(*input_batch)), result_type_py,
+        args);
     if (!result) {
         PyErr_Print();
         Py_DECREF(bodo_module);

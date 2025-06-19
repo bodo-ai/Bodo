@@ -12,6 +12,7 @@ from bodo.pandas.utils import (
     LazyPlanDistributedArg,
     arrow_to_empty_df,
     check_args_fallback,
+    ensure_datetime64ns,
     make_col_ref_exprs,
     wrap_plan,
 )
@@ -24,6 +25,9 @@ def from_pandas(df):
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame")
+
+    # Avoid datetime64[us] that is commonly used in Pandas but not supported in Bodo.
+    df = ensure_datetime64ns(df)
 
     # Make sure empty_df has proper dtypes since used in the plan output schema.
     # Using sampling to avoid large memory usage.
@@ -124,11 +128,13 @@ def _empty_like(val):
         "limit",
         "row_filter",
         "snapshot_id",
+        "location",
     ]
 )
 def read_iceberg(
     table_identifier: str,
     catalog_name: str | None = None,
+    *,
     catalog_properties: dict[str, pt.Any] | None = None,
     row_filter: str | None = None,
     selected_fields: tuple[str] | None = None,
@@ -136,13 +142,29 @@ def read_iceberg(
     snapshot_id: int | None = None,
     limit: int | None = None,
     scan_properties: dict[str, pt.Any] | None = None,
+    location: str | None = None,
 ) -> BodoDataFrame:
     import pyiceberg.catalog
     import pyiceberg.expressions
     import pyiceberg.table
 
-    if catalog_properties is None:
+    from bodo.pandas.utils import BodoLibNotImplementedException
+
+    # Support simple directory only calls like:
+    # pd.read_iceberg("table", location="/path/to/table")
+    if catalog_name is None and catalog_properties is None and location is not None:
+        catalog_properties = {
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: location,
+        }
+    elif location is not None:
+        raise BodoLibNotImplementedException(
+            "'location' is only supported for filesystem catalog and cannot be used "
+            "with catalog_name or catalog_properties."
+        )
+    elif catalog_properties is None:
         catalog_properties = {}
+
     catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
 
     # Get the output schema

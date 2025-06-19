@@ -21,6 +21,8 @@ from bodo.utils.utils import run_rank0
 
 comm = MPI.COMM_WORLD
 
+pytestmark = pytest.mark.iceberg
+
 
 @pytest.mark.parametrize(
     "allow_low_ndv_filter",

@@ -2,56 +2,83 @@
 The Bodo DataFrame Library supports Pandas Series methods and accessors that are listed below. They can be accessed through `BodoSeries` and follow the same behavior as their Pandas equivalents. For details on usage, we link to the corresponding Pandas documentation.
 
 !!! note
-	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info. 
+	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info.
 
+## Computations / descriptive stats
+- [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
+- [`bodo.pandas.BodoSeries.clip`][bodoseriesclip]
+- [`bodo.pandas.BodoSeries.round`][bodoseriesround]
 
-### Datetime Properties
+## Datetimelike properties
 
 !!! note
 	Input must be a Series of `datetime-like` data.
 
-- [`bodo.pandas.BodoSeries.dt.year`][bodoseriesdtyear] 
-- [`bodo.pandas.BodoSeries.dt.month`][bodoseriesdtmonth] 
-- [`bodo.pandas.BodoSeries.dt.day`][bodoseriesdtday] 
-- [`bodo.pandas.BodoSeries.dt.hour`][bodoseriesdthour] 
-- [`bodo.pandas.BodoSeries.dt.minute`][bodoseriesdtminute] 
-- [`bodo.pandas.BodoSeries.dt.second`][bodoseriesdtsecond] 
-- [`bodo.pandas.BodoSeries.dt.microsecond`][bodoseriesdtmicrosecond] 
-- [`bodo.pandas.BodoSeries.dt.nanosecond`][bodoseriesdtnanosecond] 
-- [`bodo.pandas.BodoSeries.dt.dayofweek`][bodoseriesdtdayofweek] 
-- [`bodo.pandas.BodoSeries.dt.day_of_week`][bodoseriesdtday_of_week] 
-- [`bodo.pandas.BodoSeries.dt.weekday`][bodoseriesdtweekday] 
-- [`bodo.pandas.BodoSeries.dt.dayofyear`][bodoseriesdtdayofyear] 
-- [`bodo.pandas.BodoSeries.dt.day_of_year`][bodoseriesdtday_of_year] 
-- [`bodo.pandas.BodoSeries.dt.days_in_month`][bodoseriesdtdays_in_month] 
+### Datetime properties
+!!! note
+	For missing datetime values (`NaT`), Bodo's datetime predicate accessors (e.g., `.is_month_end`, `.is_leap_year`) return `<NA>` to preserve nullability, whereas Pandas returns `False`.
+- [`bodo.pandas.BodoSeries.dt.year`][bodoseriesdtyear]
+- [`bodo.pandas.BodoSeries.dt.month`][bodoseriesdtmonth]
+- [`bodo.pandas.BodoSeries.dt.day`][bodoseriesdtday]
+- [`bodo.pandas.BodoSeries.dt.hour`][bodoseriesdthour]
+- [`bodo.pandas.BodoSeries.dt.minute`][bodoseriesdtminute]
+- [`bodo.pandas.BodoSeries.dt.second`][bodoseriesdtsecond]
+- [`bodo.pandas.BodoSeries.dt.microsecond`][bodoseriesdtmicrosecond]
+- [`bodo.pandas.BodoSeries.dt.nanosecond`][bodoseriesdtnanosecond]
+- [`bodo.pandas.BodoSeries.dt.dayofweek`][bodoseriesdtdayofweek]
+- [`bodo.pandas.BodoSeries.dt.day_of_week`][bodoseriesdtday_of_week]
+- [`bodo.pandas.BodoSeries.dt.weekday`][bodoseriesdtweekday]
+- [`bodo.pandas.BodoSeries.dt.dayofyear`][bodoseriesdtdayofyear]
+- [`bodo.pandas.BodoSeries.dt.day_of_year`][bodoseriesdtday_of_year]
+- [`bodo.pandas.BodoSeries.dt.daysinmonth`][bodoseriesdtdaysinmonth]
+- [`bodo.pandas.BodoSeries.dt.days_in_month`][bodoseriesdtdays_in_month]
+- [`bodo.pandas.BodoSeries.dt.date`][bodoseriesdtdate]
+- [`bodo.pandas.BodoSeries.dt.time`][bodoseriesdttime]
 - [`bodo.pandas.BodoSeries.dt.quarter`][bodoseriesdtquarter]
-- [`bodo.pandas.BodoSeries.dt.is_month_start`][bodoseriesdtis_month_start] 
-- [`bodo.pandas.BodoSeries.dt.is_month_end`][bodoseriesdtis_month_end] 
-- [`bodo.pandas.BodoSeries.dt.is_quarter_start`][bodoseriesdtis_quarter_start] 
-- [`bodo.pandas.BodoSeries.dt.is_quarter_end`][bodoseriesdtis_quarter_end] 
-- [`bodo.pandas.BodoSeries.dt.is_year_start`][bodoseriesdtis_year_start] 
-- [`bodo.pandas.BodoSeries.dt.is_year_end`][bodoseriesdtis_year_end] 
-- [`bodo.pandas.BodoSeries.dt.is_leap_year`][bodoseriesdtis_leap_year] 
-- [`bodo.pandas.BodoSeries.dt.daysinmonth`][bodoseriesdtdaysinmonth] 
-- [`bodo.pandas.BodoSeries.dt.days_in_month`][bodoseriesdtdays_in_month] 
-- [`bodo.pandas.BodoSeries.dt.date`][bodoseriesdtdate] 
-- [`bodo.pandas.BodoSeries.dt.time`][bodoseriesdttime] 
+- [`bodo.pandas.BodoSeries.dt.is_month_start`][bodoseriesdtis_month_start]
+- [`bodo.pandas.BodoSeries.dt.is_month_end`][bodoseriesdtis_month_end]
+- [`bodo.pandas.BodoSeries.dt.is_quarter_start`][bodoseriesdtis_quarter_start]
+- [`bodo.pandas.BodoSeries.dt.is_quarter_end`][bodoseriesdtis_quarter_end]
+- [`bodo.pandas.BodoSeries.dt.is_year_start`][bodoseriesdtis_year_start]
+- [`bodo.pandas.BodoSeries.dt.is_year_end`][bodoseriesdtis_year_end]
+- [`bodo.pandas.BodoSeries.dt.is_leap_year`][bodoseriesdtis_leap_year]
 
 
-### Function application
+### Datetime methods
+!!! warning
+	Locale format must be strict: The locale parameter in `month_name` and `day_name` must follow the exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8"). Variants like "pt_BR.utf8" may not be recognized and trigger an error.
+
+- [`bodo.pandas.BodoSeries.dt.normalize`][bodoseriesdtnormalize]
+- [`bodo.pandas.BodoSeries.dt.floor`][bodoseriesdtfloor]
+- [`bodo.pandas.BodoSeries.dt.ceil`][bodoseriesdtceil]
+- [`bodo.pandas.BodoSeries.dt.month_name`][bodoseriesdtmonth_name]
+- [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name]
+
+
+## Function application
 - [`bodo.pandas.BodoSeries.map`][bodoseriesmap]
 
-### Selection
+## Missing data handling
+- [`bodo.pandas.BodoSeries.isnull`][bodoseriesisnull]
+- [`bodo.pandas.BodoSeries.notnull`][bodoseriesnotnull]
+- [`bodo.pandas.BodoSeries.replace`][bodoseriesreplace]
 
+## Reindexing / Selection / Label manipulation
 - [`bodo.pandas.BodoSeries.head`][bodoserieshead]
+- [`bodo.pandas.BodoSeries.isin`][bodoseriesisin]
 
-### String handling
+## Reshaping, sorting
+- [`bodo.pandas.BodoSeries.sort_values`][bodoseriessortvalues]
+
+## String handling
 
 - [`bodo.pandas.BodoSeries.str.capitalize`][bodoseriesstrcapitalize]
 - [`bodo.pandas.BodoSeries.str.casefold`][bodoseriesstrcasefold]
 - [`bodo.pandas.BodoSeries.str.center`][bodoseriesstrcenter]
 - [`bodo.pandas.BodoSeries.str.contains`][bodoseriesstrcontains]
 - [`bodo.pandas.BodoSeries.str.count`][bodoseriesstrcount]
+- [`bodo.pandas.BodoSeries.str.decode`][bodoseriesstrdecode]
+- [`bodo.pandas.BodoSeries.str.encode`][bodoseriesstrencode]
 - [`bodo.pandas.BodoSeries.str.endswith`][bodoseriesstrendswith]
 - [`bodo.pandas.BodoSeries.str.find`][bodoseriesstrfind]
 - [`bodo.pandas.BodoSeries.str.findall`][bodoseriesstrfindall]
@@ -67,12 +94,15 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.isspace`][bodoseriesstrisspace]
 - [`bodo.pandas.BodoSeries.str.istitle`][bodoseriesstristitle]
 - [`bodo.pandas.BodoSeries.str.isupper`][bodoseriesstrisupper]
+- [`bodo.pandas.BodoSeries.str.join`][bodoseriesstrjoin]
 - [`bodo.pandas.BodoSeries.str.len`][bodoseriesstrlen]
 - [`bodo.pandas.BodoSeries.str.ljust`][bodoseriesstrljust]
 - [`bodo.pandas.BodoSeries.str.lower`][bodoseriesstrlower]
 - [`bodo.pandas.BodoSeries.str.lstrip`][bodoseriesstrlstrip]
 - [`bodo.pandas.BodoSeries.str.match`][bodoseriesstrmatch]
+- [`bodo.pandas.BodoSeries.str.normalize`][bodoseriesstrnormalize]
 - [`bodo.pandas.BodoSeries.str.pad`][bodoseriesstrpad]
+- [`bodo.pandas.BodoSeries.str.partition`][bodoseriesstrpartition]
 - [`bodo.pandas.BodoSeries.str.removeprefix`][bodoseriesstrremoveprefix]
 - [`bodo.pandas.BodoSeries.str.removesuffix`][bodoseriesstrremovesuffix]
 - [`bodo.pandas.BodoSeries.str.repeat`][bodoseriesstrrepeat]
@@ -80,6 +110,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.rfind`][bodoseriesstrrfind]
 - [`bodo.pandas.BodoSeries.str.rindex`][bodoseriesstrrindex]
 - [`bodo.pandas.BodoSeries.str.rjust`][bodoseriesstrrjust]
+- [`bodo.pandas.BodoSeries.str.rpartition`][bodoseriesstrrpartition]
 - [`bodo.pandas.BodoSeries.str.rstrip`][bodoseriesstrrstrip]
 - [`bodo.pandas.BodoSeries.str.slice`][bodoseriesstrslice]
 - [`bodo.pandas.BodoSeries.str.slice_replace`][bodoseriesstrslicereplace]
@@ -95,6 +126,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 [bodoserieshead]: ../series/head.md
 [bodoseriesmap]: ../series/map.md
+[bodoseriessortvalues]: ../series/sort_values.md
 
 [overview]: ../index.md/#lazy-evaluation-and-fallback-to-pandas
 
@@ -170,3 +202,29 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesdtdays_in_month]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.days_in_month.html
 [bodoseriesdtdate]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.date.html
 [bodoseriesdttime]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.time.html
+
+[bodoseriesisin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isin.html
+[bodoseriesnotnull]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notnull.html
+[bodoseriesisnull]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isnull.html
+[bodoseriesffill]: https://pandas.pydata.org/docs/reference/api/pandas.Series.ffill.html
+[bodoseriesbfill]: https://pandas.pydata.org/docs/reference/api/pandas.Series.bfill.html
+[bodoseriesreplace]: https://pandas.pydata.org/docs/reference/api/pandas.Series.replace.html
+[bodoseriesclip]: https://pandas.pydata.org/docs/reference/api/pandas.Series.clip.html
+[bodoseriesabs]: https://pandas.pydata.org/docs/reference/api/pandas.Series.abs.html
+[bodoseriesround]: https://pandas.pydata.org/docs/reference/api/pandas.Series.round.html
+
+[bodoseriesdtnormalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.normalize.html
+[bodoseriesdtfloor]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.floor.html
+[bodoseriesdtceil]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.ceil.html
+[bodoseriesdtmonth_name]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.month_name.html
+[bodoseriesdtday_name]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.day_name.html
+[bodoseriesdtstrftime]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.strftime.html
+[bodoseriesstrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.partition.html
+[bodoseriesstrrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rpartition.html
+[bodoseriesdtquarter]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.quarter.html
+[bodoseriesstrnormalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.normalize.html
+
+
+[bodoseriesstrjoin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.join.html
+[bodoseriesstrencode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.encode.html
+[bodoseriesstrdecode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.decode.html

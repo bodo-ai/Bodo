@@ -8,6 +8,8 @@ class PhysicalResultCollector : public PhysicalSink {
    private:
     std::shared_ptr<TableBuildBuffer> buffer;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    const std::shared_ptr<bodo::Schema> in_schema;
+    const std::shared_ptr<bodo::Schema> out_schema;
 
    public:
     explicit PhysicalResultCollector(std::shared_ptr<bodo::Schema> in_schema,
@@ -45,11 +47,7 @@ class PhysicalResultCollector : public PhysicalSink {
 
     void Finalize() override {}
 
-    std::shared_ptr<table_info> GetResult() override {
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         return buffer->data_table;
     }
-
-   private:
-    const std::shared_ptr<bodo::Schema> in_schema;
-    const std::shared_ptr<bodo::Schema> out_schema;
 };

@@ -73,7 +73,7 @@ PyObject *tableFilterSetToArrowCompute(duckdb::TableFilterSet &filters,
  * @param ncols number of columns in the table
  */
 void initInputColumnMapping(std::vector<int64_t> &col_inds,
-                            std::vector<uint64_t> &keys, uint64_t ncols);
+                            const std::vector<uint64_t> &keys, uint64_t ncols);
 
 /**
  * @brief Create a map of column bindings to column indices in physical input
@@ -124,6 +124,25 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
 
     PyObject *args;  // If present then a UDF.
     std::shared_ptr<arrow::Schema> out_schema;
+};
+
+/**
+ * @brief Aggregate node data to pass around in DuckDB plans in
+ * BoundAggregateExpression.
+ *
+ */
+struct BodoAggFunctionData : public duckdb::FunctionData {
+    BodoAggFunctionData(bool dropna) : dropna(dropna) {}
+
+    bool Equals(const FunctionData &other_p) const override {
+        const BodoAggFunctionData &other = other_p.Cast<BodoAggFunctionData>();
+        return (other.dropna == this->dropna);
+    }
+    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
+        return duckdb::make_uniq<BodoAggFunctionData>(this->dropna);
+    }
+
+    bool dropna;
 };
 
 /**

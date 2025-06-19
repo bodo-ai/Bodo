@@ -539,6 +539,7 @@ add_custom_command(
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
   "bodo/pandas/_bodo_scan_function.cpp"
+  "bodo/pandas/_bodo_write_function.cpp"
   "bodo/pandas/_plan.cpp"
   "bodo/pandas/_pipeline.cpp"
   "bodo/pandas/_physical_conv.cpp"

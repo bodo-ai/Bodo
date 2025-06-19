@@ -21,9 +21,11 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalProjection& op);
     void Visit(duckdb::LogicalFilter& op);
     void Visit(duckdb::LogicalAggregate& op);
+    void Visit(duckdb::LogicalOrder& op);
     void Visit(duckdb::LogicalComparisonJoin& op);
     void Visit(duckdb::LogicalLimit& op);
     void Visit(duckdb::LogicalSample& op);
+    void Visit(duckdb::LogicalCopyToFile& op);
 
     void Visit(duckdb::LogicalOperator& op) {
         if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
@@ -35,6 +37,8 @@ class PhysicalPlanBuilder {
         } else if (op.type == duckdb::LogicalOperatorType::
                                   LOGICAL_AGGREGATE_AND_GROUP_BY) {
             Visit(op.Cast<duckdb::LogicalAggregate>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_ORDER_BY) {
+            Visit(op.Cast<duckdb::LogicalOrder>());
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
             Visit(op.Cast<duckdb::LogicalComparisonJoin>());
@@ -42,6 +46,9 @@ class PhysicalPlanBuilder {
             Visit(op.Cast<duckdb::LogicalLimit>());
         } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_SAMPLE) {
             Visit(op.Cast<duckdb::LogicalSample>());
+        } else if (op.type ==
+                   duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE) {
+            Visit(op.Cast<duckdb::LogicalCopyToFile>());
         } else {
             throw std::runtime_error(
                 "PhysicalPlanBuilder::Visit unsupported logical operator "

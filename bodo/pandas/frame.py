@@ -1,18 +1,34 @@
+from __future__ import annotations
+
 import typing as pt
+import warnings
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 from copy import deepcopy
 
 import pandas as pd
 from pandas._libs import lib
-from pandas._typing import (
-    AnyArrayLike,
-    Axis,
-    IndexLabel,
-    MergeHow,
-    MergeValidate,
-    Suffixes,
-)
+
+if pt.TYPE_CHECKING:
+    from pandas._typing import (
+        AnyArrayLike,
+        Axis,
+        FilePath,
+        IgnoreRaise,
+        IndexLabel,
+        Level,
+        MergeHow,
+        MergeValidate,
+        Renamer,
+        SortKind,
+        StorageOptions,
+        Suffixes,
+        ValueKeyFunc,
+        WriteBuffer,
+    )
+    from pyiceberg.partitioning import PartitionSpec
+    from pyiceberg.table.sorting import SortOrder
+
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -23,10 +39,13 @@ from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     LazyPlan,
     LazyPlanDistributedArg,
+    _get_df_python_func_plan,
     check_args_fallback,
+    execute_plan,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
@@ -38,8 +57,6 @@ from bodo.pandas.utils import (
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
-    get_overload_const_str,
-    is_overload_none,
 )
 
 
@@ -63,12 +80,23 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                sources.  We sometimes use a pandas manager which doesn't have
                _source_plan so we have to do getattr check.
             """
-            if getattr(self, "_source_plan", None) is not None:
-                return self._source_plan
-
             from bodo.pandas.base import _empty_like
 
             empty_data = _empty_like(self)
+
+            """This caching also creates issues because you can materialize a
+               dataframe then ask for a plan and then add a column through
+               some pandas method we don't support and then you ask for the
+               _plan and you may get a source plan from before the column was
+               added.  To prevent problems, store the schema of the saved
+               source plan and only use it if the current schema is the same.
+            """
+            if getattr(self, "_source_plan", None) is not None:
+                # If the schema hasn't changed since the last time the source
+                # plan was generated then use the old source plan.
+                if empty_data.equals(self._source_plan[0]):
+                    return self._source_plan[1]
+
             if bodo.dataframe_library_run_parallel:
                 if getattr(self._mgr, "_md_result_id", None) is not None:
                     # If the plan has been executed but the results are still
@@ -82,20 +110,26 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     nrows = len(self)
                     res_id = bodo.spawn.utils.scatter_data(self)
                     mgr = None
-                self._source_plan = LazyPlan(
-                    "LogicalGetPandasReadParallel",
+                self._source_plan = (
                     empty_data,
-                    nrows,
-                    LazyPlanDistributedArg(mgr, res_id),
+                    LazyPlan(
+                        "LogicalGetPandasReadParallel",
+                        empty_data,
+                        nrows,
+                        LazyPlanDistributedArg(mgr, res_id),
+                    ),
                 )
             else:
-                self._source_plan = LazyPlan(
-                    "LogicalGetPandasReadSeq",
+                self._source_plan = (
                     empty_data,
-                    self,
+                    LazyPlan(
+                        "LogicalGetPandasReadSeq",
+                        empty_data,
+                        self,
+                    ),
                 )
 
-            return self._source_plan
+            return self._source_plan[1]
 
     @staticmethod
     def from_lazy_mgr(
@@ -117,7 +151,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
         plan: plan_optimizer.LogicalOperator | None = None,
-    ) -> "BodoDataFrame":
+    ) -> BodoDataFrame:
         """
         Create a BodoDataFrame from a lazy metadata object.
         """
@@ -230,64 +264,219 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             case ExecState.COLLECTED:
                 return super().shape
 
+    @check_args_fallback(supported=["columns", "copy"])
+    def rename(
+        self,
+        mapper: Renamer | None = None,
+        *,
+        index: Renamer | None = None,
+        columns: Renamer | None = None,
+        axis: Axis | None = None,
+        copy: bool | None = None,
+        inplace: bool = False,
+        level: Level | None = None,
+        errors: IgnoreRaise = "ignore",
+    ) -> BodoDataFrame | None:
+        orig_plan = self._plan
+        # TODO: The value of copy here is ignored.
+        # Most cases of copy=False we have are the idiom A=A.rename(copy=False) where there is still
+        # only one possible reference to the data so we can treat this case like copy=True since for us
+        # we only materialize as needed and so copying isn't an overhead.
+        if copy == False:
+            warnings.warn(
+                "BodoDataFrame::rename copy=False argument ignored assuming A=A.rename(copy=False) idiom."
+            )
+        renamed_plan = LazyPlan(
+            orig_plan.plan_class,
+            orig_plan.empty_data.rename(columns=columns),
+            *orig_plan.args,
+            **orig_plan.kwargs,
+        )
+        return wrap_plan(renamed_plan)
+
+    @check_args_fallback(supported=["path", "engine", "compression", "row_group_size"])
     def to_parquet(
         self,
-        path,
-        engine="auto",
-        compression="snappy",
-        index=None,
-        partition_cols=None,
-        storage_options=None,
-        row_group_size=-1,
-    ):
-        # argument defaults should match that of to_parquet_overload in pd_dataframe_ext.py
+        path: FilePath | WriteBuffer[bytes] | None = None,
+        engine: pt.Literal["auto", "pyarrow", "fastparquet"] = "auto",
+        compression: str | None = "snappy",
+        index: bool | None = None,
+        partition_cols: list[str] | None = None,
+        storage_options: StorageOptions | None = None,
+        row_group_size: int = -1,
+        **kwargs,
+    ) -> bytes | None:
+        from bodo.pandas.base import _empty_like
 
-        @bodo.jit(spawn=True)
-        def to_parquet_wrapper(
-            df: pd.DataFrame,
-            path,
-            engine,
-            compression,
-            index,
-            partition_cols,
-            storage_options,
-            row_group_size,
-        ):
-            return df.to_parquet(
-                path,
-                engine,
-                compression,
-                index,
-                partition_cols,
-                storage_options,
-                row_group_size,
+        if not isinstance(path, str):
+            raise BodoLibNotImplementedException(
+                "DataFrame.to_parquet(): path must be a string"
             )
 
-        # checks string arguments before jit performs conversion to unicode
-        if not is_overload_none(engine) and get_overload_const_str(engine) not in (
-            "auto",
-            "pyarrow",
-        ):  # pragma: no cover
-            raise BodoError("DataFrame.to_parquet(): only pyarrow engine supported")
-
-        if not is_overload_none(compression) and get_overload_const_str(
-            compression
-        ) not in {"snappy", "gzip", "brotli"}:
-            raise BodoError(
-                "to_parquet(): Unsupported compression: "
-                + get_overload_const_str(compression)
+        if engine not in ("auto", "pyarrow"):
+            raise BodoLibNotImplementedException(
+                "DataFrame.to_parquet(): only 'auto' and 'pyarrow' engines are supported"
             )
 
-        return to_parquet_wrapper(
-            self,
+        if compression not in (None, "snappy", "gzip", "brotli"):
+            raise BodoLibNotImplementedException(
+                "DataFrame.to_parquet(): only None, 'snappy', 'gzip' and 'brotli' compressions are supported"
+            )
+
+        # Convert None to "none" as expected by the backend.
+        # https://github.com/bodo-ai/Bodo/blob/ff39453f07d8691751d95668ab06a72a5f742dff/bodo/hiframes/pd_dataframe_ext.py#L3795
+        if compression is None:
+            compression = "none"
+
+        if not isinstance(row_group_size, int):
+            raise BodoError("DataFrame.to_parquet(): row_group_size must be an integer")
+
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, False)
+
+        write_plan = LazyPlan(
+            "LogicalParquetWrite",
+            _empty_like(self),
+            self._plan,
             path,
-            engine,
             compression,
-            index,
-            partition_cols,
-            storage_options,
+            bucket_region,
             row_group_size,
         )
+        execute_plan(write_plan)
+
+    @check_args_fallback(unsupported="none")
+    def to_iceberg(
+        self,
+        table_identifier: str,
+        catalog_name: str | None = None,
+        *,
+        catalog_properties: dict[str, pt.Any] | None = None,
+        location: str | None = None,
+        append: bool = False,
+        partition_spec: PartitionSpec | None = None,
+        sort_order: SortOrder | None = None,
+        properties: dict[str, pt.Any] | None = None,
+        snapshot_properties: dict[str, str] | None = None,
+    ) -> None:
+        # See Pandas implementation of to_iceberg:
+        # https://github.com/pandas-dev/pandas/blob/c5457f61d92b9428a56c619a6c420b122a41a347/pandas/core/frame.py#L3550
+        # https://github.com/pandas-dev/pandas/blob/c5457f61d92b9428a56c619a6c420b122a41a347/pandas/io/iceberg.py#L98
+        # See Bodo JIT implementation of streaming writes to Iceberg:
+        # https://github.com/bodo-ai/Bodo/blob/142678b2fe7217d80e233d201061debae2d47c13/bodo/io/iceberg/stream_iceberg_write.py#L535
+        import pyiceberg.catalog
+        import pyiceberg.partitioning
+        import pyiceberg.table.sorting
+
+        from bodo.pandas.base import _empty_like
+        from bodo.utils.typing import CreateTableMetaType
+
+        # Support simple directory only calls like:
+        # df.to_iceberg("table", location="/path/to/table")
+        if catalog_name is None and catalog_properties is None and location is not None:
+            catalog_properties = {
+                pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+                pyiceberg.catalog.WAREHOUSE_LOCATION: location,
+            }
+            # DirCatalog does not support extra location argument in create_table
+            location = None
+        elif catalog_properties is None:
+            catalog_properties = {}
+
+        if partition_spec is None:
+            partition_spec = pyiceberg.partitioning.UNPARTITIONED_PARTITION_SPEC
+
+        if sort_order is None:
+            sort_order = pyiceberg.table.sorting.UNSORTED_SORT_ORDER
+
+        if properties is None:
+            properties = ()
+        else:
+            if not isinstance(properties, dict):
+                raise BodoError(
+                    "Iceberg write properties must be a dictionary, got: "
+                    f"{type(properties)}"
+                )
+            # Convert properties to a tuple of items to match expected type in
+            # CreateTableMetaType
+            properties = tuple(properties.items())
+
+        if snapshot_properties is None:
+            snapshot_properties = {}
+
+        catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
+
+        if_exists = "append" if append else "replace"
+        df_schema = self._plan.pa_schema
+        (
+            txn,
+            fs,
+            table_loc,
+            output_pa_schema,
+            iceberg_schema_str,
+            partition_spec,
+            partition_tuples,
+            sort_order_id,
+            sort_tuples,
+            properties,
+        ) = bodo.io.iceberg.write.start_write_rank_0(
+            catalog,
+            table_identifier,
+            df_schema,
+            if_exists,
+            False,
+            CreateTableMetaType(None, None, properties),
+            location,
+            partition_spec,
+            sort_order,
+            snapshot_properties,
+        )
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, False)
+        max_pq_chunksize = properties.get(
+            "write.target-file-size-bytes",
+            bodo.io.iceberg.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
+        )
+        compression = properties.get("write.parquet.compression-codec", "snappy")
+        # TODO: support Theta sketches
+
+        write_plan = LazyPlan(
+            "LogicalIcebergWrite",
+            _empty_like(self),
+            self._plan,
+            table_loc,
+            bucket_region,
+            max_pq_chunksize,
+            compression,
+            partition_tuples,
+            sort_tuples,
+            iceberg_schema_str,
+            output_pa_schema,
+            fs,
+        )
+        all_iceberg_files_infos = execute_plan(write_plan)
+        # Flatten the list of lists
+        all_iceberg_files_infos = (
+            [item for sub in all_iceberg_files_infos for item in sub]
+            if all_iceberg_files_infos
+            else None
+        )
+        (
+            fnames,
+            file_records,
+            partition_infos,
+        ) = bodo.io.iceberg.write.generate_data_file_info_seq(all_iceberg_files_infos)
+
+        # Register file names, metrics and schema in transaction
+        success = bodo.io.iceberg.write.register_table_write_seq(
+            txn,
+            fnames,
+            file_records,
+            partition_infos,
+            partition_spec,
+            sort_order_id,
+            snapshot_properties,
+        )
+        if not success:
+            raise BodoError("Iceberg write failed.")
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
@@ -523,17 +712,57 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def map_partitions(self, func, *args, **kwargs):
         """
         Apply a function to each partition of the dataframe.
+
+        If self is a lazy plan, then the result will also be a lazy plan
+        (assuming result is Series and the dtype can be infered). Otherwise, the lazy
+        plan will be evaluated.
         NOTE: this pickles the function and sends it to the workers, so globals are
         pickled. The use of lazy data structures as globals causes issues.
+
+        Args:
+            func (Callable): A callable which takes in a DataFrame as its first
+                argument and returns a DataFrame or Series that has the same length
+                its input.
+            *args: Additional positional arguments to pass to func.
+            **kwargs: Additional key-word arguments to pass to func.
+
+        Returns:
+            DataFrame or Series: The result of applying the func.
         """
+        import bodo.spawn.spawner
+
+        if self._exec_state == ExecState.PLAN:
+            required_fallback = False
+            try:
+                empty_series = get_scalar_udf_result_type(
+                    self, "map_partitions", func, *args, **kwargs
+                )
+            except BodoLibNotImplementedException as e:
+                required_fallback = True
+                msg = (
+                    f"map_paritions(): encountered exception: {e}, while trying to "
+                    "build lazy plan. Executing plan and running map_paritions on "
+                    "workers (may be slow or run out of memory)."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+
+                df_arg = self.execute_plan()
+
+            if not required_fallback:
+                return _get_df_python_func_plan(
+                    self._plan, empty_series, func, args, kwargs
+                )
+        else:
+            df_arg = self
+
         return bodo.spawn.spawner.submit_func_to_workers(
-            func, [], self, *args, **kwargs
+            func, [], df_arg, *args, **kwargs
         )
 
     @check_args_fallback(supported=["on", "left_on", "right_on"])
     def merge(
         self,
-        right: "BodoDataFrame | BodoSeries",
+        right: BodoDataFrame | BodoSeries,
         how: MergeHow = "inner",
         on: IndexLabel | AnyArrayLike | None = None,
         left_on: IndexLabel | AnyArrayLike | None = None,
@@ -614,7 +843,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return wrap_plan(proj_plan)
 
-    @check_args_fallback(supported=["by"])
+    @check_args_fallback(supported=["by", "as_index", "dropna"])
     def groupby(
         self,
         by=None,
@@ -639,7 +868,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "groupby: only string keys are supported"
             )
 
-        return DataFrameGroupBy(self, by)
+        return DataFrameGroupBy(self, by, as_index, dropna)
 
     @check_args_fallback("all")
     def __getitem__(self, key):
@@ -825,35 +1054,107 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self, "apply", func, axis=axis, args=args, **kwargs
         )
 
-        udf_arg = LazyPlan(
-            "PythonScalarFuncExpression",
-            empty_series,
-            self._plan,
-            (
-                "apply",
-                False,  # is_series
-                True,  # is_method
-                (func,),  # args
-                {"axis": 1, "args": args} | kwargs,  # kwargs
-            ),
-            tuple(range(len(self.columns) + get_n_index_arrays(self.head(0).index))),
+        apply_kwargs = {"axis": 1, "args": args} | kwargs
+
+        return _get_df_python_func_plan(
+            self._plan, empty_series, "apply", (func,), apply_kwargs
         )
 
-        # Select Index columns explicitly for output
-        n_cols = len(self.columns)
-        index_col_refs = tuple(
-            make_col_ref_exprs(
-                range(n_cols, n_cols + get_n_index_arrays(self.head(0).index)),
-                self._plan,
+    @check_args_fallback(supported=["by", "ascending", "na_position", "kind"])
+    def sort_values(
+        self,
+        by: IndexLabel,
+        *,
+        axis: Axis = 0,
+        ascending: bool | list[bool] | tuple[bool, ...] = True,
+        inplace: bool = False,
+        kind: SortKind | None = None,
+        na_position: str | list[str] | tuple[str, ...] = "last",
+        ignore_index: bool = False,
+        key: ValueKeyFunc | None = None,
+    ) -> BodoDataFrame | None:
+        from bodo.pandas.base import _empty_like
+
+        # Validate by argument.
+        if isinstance(by, str):
+            by = [by]
+        elif not isinstance(by, (list, tuple)):
+            raise BodoError(
+                "DataFrame.sort_values(): argument by not a string, list or tuple"
             )
+
+        if not all(isinstance(item, str) for item in by):
+            raise BodoError(
+                "DataFrame.sort_values(): argument by iterable does not contain only strings"
+            )
+
+        # Validate ascending argument.
+        if isinstance(ascending, bool):
+            ascending = [ascending]
+        elif not isinstance(ascending, (list, tuple)):
+            raise BodoError(
+                "DataFrame.sort_values(): argument ascending not a bool, list or tuple"
+            )
+
+        if not all(isinstance(item, bool) for item in ascending):
+            raise BodoError(
+                "DataFrame.sort_values(): argument ascending iterable does not contain only boolean"
+            )
+
+        # Validate na_position argument.
+        if isinstance(na_position, str):
+            na_position = [na_position]
+        elif not isinstance(na_position, (list, tuple)):
+            raise BodoError(
+                "DataFrame.sort_values(): argument na_position not a string, list or tuple"
+            )
+
+        if not all(item in ["first", "last"] for item in na_position):
+            raise BodoError(
+                "DataFrame.sort_values(): argument na_position iterable does not contain only 'first' or 'last'"
+            )
+
+        if kind is not None:
+            warnings.warn("sort_values() kind argument ignored")
+
+        # Apply singular ascending param to all columns.
+        if len(by) != len(ascending):
+            if len(ascending) == 1:
+                ascending = ascending * len(by)
+            else:
+                raise BodoError(
+                    f"DataFrame.sort_values(): lengths of by {len(by)} and ascending {len(ascending)}"
+                )
+
+        # Apply singular na_position param to all columns.
+        if len(by) != len(na_position):
+            if len(na_position) == 1:
+                na_position = na_position * len(by)
+            else:
+                raise BodoError(
+                    f"DataFrame.sort_values(): lengths of by {len(by)} and na_position {len(na_position)}"
+                )
+        # Convert to True/False list instead of str.
+        na_position = [True if x == "first" else False for x in na_position]
+
+        # Convert column names to indices.
+        cols = [self.columns.get_loc(col) for col in by]
+
+        """ Create 0 length versions of the dataframe as sorted dataframe
+            has the same structure. """
+        zero_size_self = _empty_like(self)
+
+        return wrap_plan(
+            plan=LazyPlan(
+                "LogicalOrder",
+                zero_size_self,
+                self._plan,
+                ascending,
+                na_position,
+                cols,
+                self._plan.pa_schema,
+            ),
         )
-        plan = LazyPlan(
-            "LogicalProjection",
-            empty_series,
-            self._plan,
-            (udf_arg,) + index_col_refs,
-        )
-        return wrap_plan(plan=plan)
 
     @contextmanager
     def disable_collect(self):
@@ -912,18 +1213,9 @@ def _add_proj_expr_to_plan(
         is_replace = False
 
     # Get the function expression from the value plan to be added
-    func_expr = value_plan.args[1][0]
+    func_expr = get_proj_expr_single(value_plan)
 
-    # Handle trivial cases like df["C"] = df["B"]
-    if func_expr.plan_class == "ColRefExpression":
-        # Copy since empty_data is changed below
-        func_expr = LazyPlan(
-            "ColRefExpression",
-            func_expr.empty_data,
-            *func_expr.args,
-            **func_expr.kwargs,
-        )
-    elif func_expr.plan_class == "PythonScalarFuncExpression":
+    if func_expr.plan_class == "PythonScalarFuncExpression":
         func_expr = (
             _update_func_expr_source(func_expr, df_plan, ikey)
             if replace_func_source
@@ -936,7 +1228,13 @@ def _add_proj_expr_to_plan(
             )
         )
     else:
-        return None
+        # Copy since empty_data is changed below
+        func_expr = LazyPlan(
+            func_expr.plan_class,
+            func_expr.empty_data,
+            *func_expr.args,
+            **func_expr.kwargs,
+        )
 
     # Update output column name
     func_expr.empty_data = func_expr.empty_data.set_axis([key], axis=1)

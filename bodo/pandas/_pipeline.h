@@ -36,9 +36,10 @@ class Pipeline {
      */
     void Execute();
 
-    /// @brief Get the final result. Should be anything because of write, but
-    /// stick to table_info for now
-    std::shared_ptr<table_info> GetResult();
+    /// @brief Get the final result. Result collector returns table_info,
+    // Parquet write returns null table_info pointer, and Iceberg write
+    // returns a PyObject* of Iceberg files infos.
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult();
 };
 
 class PipelineBuilder {

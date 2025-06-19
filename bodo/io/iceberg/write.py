@@ -365,7 +365,16 @@ def generate_data_file_info(
     file_infos = (
         [item for sub in combined_data for item in sub] if combined_data else None
     )
+    return generate_data_file_info_seq(file_infos)
 
+
+def generate_data_file_info_seq(
+    file_infos: list[tuple[pt.Any, pt.Any, pt.Any]],
+) -> tuple[
+    list[str] | None,
+    list[dict[str, pt.Any]] | None,
+    list[tuple] | None,
+]:
     fnames, file_records, partition_infos = None, None, None
     if file_infos:
         fnames, file_records, partition_infos = [], [], []
@@ -387,14 +396,14 @@ def generate_data_file_info(
     return fnames, file_records, partition_infos
 
 
-@run_rank0
-def register_table_write(
+def register_table_write_seq(
     transaction: Transaction,
     fnames: list[str] | None,
     file_records: list[dict[str, pt.Any]] | None,
     partition_infos: list[tuple] | None,
     partition_spec: PartitionSpec,
     sort_order_id: int | None,
+    snapshot_properties: dict[str, str] | None = None,
 ):
     """
     Commit the transaction with the given file information
@@ -410,7 +419,12 @@ def register_table_write(
     if partition_infos is None:
         partition_infos = []
 
-    with transaction.update_snapshot().fast_append() as add:
+    if snapshot_properties is None:
+        snapshot_properties = {}
+
+    with transaction.update_snapshot(
+        snapshot_properties=snapshot_properties
+    ).fast_append() as add:
         for file_name, file_record, partition_info in zip(
             fnames, file_records, partition_infos
         ):
@@ -445,6 +459,9 @@ def register_table_write(
         return False
     finally:
         ev.finalize()
+
+
+register_table_write = run_rank0(register_table_write_seq)
 
 
 @numba.njit
@@ -635,12 +652,16 @@ def _replace_schema(txn: Transaction, schema: Schema):
 
 
 def start_write_rank_0(
-    conn: str,
+    conn: str | Catalog,
     table_id: str,
     df_schema: pa.Schema,
     if_exists: pt.Literal["fail", "append", "replace"],
     allow_downcasting: bool,
     create_table_info_arg: CreateTableMetaType | None = None,
+    location: str | None = None,
+    partition_spec: PartitionSpec = None,
+    sort_order: SortOrder = None,
+    snapshot_properties: dict[str, str] | None = None,
 ) -> tuple[
     Transaction,
     FileSystem,
@@ -660,6 +681,11 @@ def start_write_rank_0(
         df_schema (pyarrow.Schema): PyArrow schema of the DataFrame being written
         if_exists (str): What write operation we are doing. This must be one of
             ['fail', 'append', 'replace']
+        location (str | None): path of the table files created
+        partition_spec (PartitionSpec | None): Partition spec to use for the table
+        sort_order (SortOrder | None): Sort order to use for the table
+        snapshot_properties (dict[str, str] | None): properties to set on the snapshot
+        created for deleting existing table
     """
     from pyiceberg.io import load_file_io
     from pyiceberg.io.pyarrow import _pyarrow_to_schema_without_ids
@@ -673,7 +699,16 @@ def start_write_rank_0(
         "bodo.io.iceberg.write.start_write_rank_0:: This function must only run on rank 0"
     )
 
-    catalog = conn_str_to_catalog(conn)
+    if partition_spec is None:
+        partition_spec = UNPARTITIONED_PARTITION_SPEC
+
+    if sort_order is None:
+        sort_order = UNSORTED_SORT_ORDER
+
+    if snapshot_properties is None:
+        snapshot_properties = {}
+
+    catalog = conn_str_to_catalog(conn) if isinstance(conn, str) else conn
     # Determine what action to perform based on if_exists and table status
     table_exists = catalog.table_exists(table_id)
     if table_exists and if_exists == "fail":
@@ -709,6 +744,9 @@ def start_write_rank_0(
             txn = catalog.create_table_transaction(
                 table_id,
                 output_schema,
+                location=location,
+                partition_spec=partition_spec,
+                sort_order=sort_order,
                 properties=properties,
             )
         except NotImplementedError:
@@ -717,6 +755,9 @@ def start_write_rank_0(
             txn = catalog.create_table(
                 table_id,
                 output_schema,
+                location=location,
+                partition_spec=partition_spec,
+                sort_order=sort_order,
                 properties=properties,
             ).transaction()
 
@@ -730,9 +771,6 @@ def start_write_rank_0(
         # The default created transaction io doesn't do correct file path resolution
         # for table create transactions because metadata_location is None
         txn._table.io = io
-        # Empty Partition Spec and Sort Order
-        partition_spec = UNPARTITIONED_PARTITION_SPEC
-        sort_order = UNSORTED_SORT_ORDER
         properties = txn.table_metadata.properties
 
     elif mode == "replace":
@@ -750,7 +788,7 @@ def start_write_rank_0(
 
         table = catalog.load_table(table_id)
         txn = table.transaction()
-        txn.delete(ALWAYS_TRUE)
+        txn.delete(ALWAYS_TRUE, snapshot_properties=snapshot_properties)
         txn.set_properties(properties)
         if assign_fresh_schema_ids(output_schema) != assign_fresh_schema_ids(
             table.schema()
@@ -760,9 +798,8 @@ def start_write_rank_0(
 
         io = table.io
         data_loc = _get_write_data_path(properties, table.location())
-        # Empty Partition Spec and Sort Order
-        partition_spec = UNPARTITIONED_PARTITION_SPEC
-        sort_order = UNSORTED_SORT_ORDER
+        partition_spec = table.spec()
+        sort_order = table.sort_order()
 
     else:
         assert mode == "append"

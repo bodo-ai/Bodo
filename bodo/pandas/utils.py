@@ -3,14 +3,10 @@ import importlib
 import inspect
 import warnings
 
-import numba
 import pandas as pd
 import pyarrow as pa
-from llvmlite import ir as lir
-from numba.extending import intrinsic
 
 import bodo
-from bodo.libs.array import cpp_table_to_py_table, delete_table, table_type
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 from bodo.utils.typing import check_unsupported_args_fallback
@@ -59,46 +55,13 @@ def get_lazy_single_manager_class() -> type[
     )
 
 
-@intrinsic
-def cast_int64_to_table_ptr(typingctx, val):
-    """Cast int64 value to C++ table pointer"""
-
-    def codegen(context, builder, signature, args):
-        return builder.inttoptr(args[0], lir.IntType(8).as_pointer())
-
-    return table_type(numba.core.types.int64), codegen
-
-
-@numba.njit
-def cpp_table_to_py(in_table, out_cols_arr, out_table_type):
-    """Convert a C++ table pointer to a Python table.
-    Args:
-        in_table (int64): C++ table pointer
-        out_cols_arr (array(int64)): Array of column indices to be extracted
-        out_table_type (types.Type): Type of the output table
-    """
-    cpp_table = cast_int64_to_table_ptr(in_table)
-    out_table = cpp_table_to_py_table(cpp_table, out_cols_arr, out_table_type, 0)
-    delete_table(cpp_table)
-    return out_table
-
-
-def cpp_table_to_df(cpp_table, arrow_schema):
+def cpp_table_to_df(cpp_table, arrow_schema=None):
     """Convert a C++ table (table_info) to a pandas DataFrame."""
+    from bodo.ext import plan_optimizer
 
-    import numpy as np
-
-    from bodo.hiframes.table import TableType
-    from bodo.io.helpers import pyarrow_type_to_numba
-
-    out_cols_arr = np.array(range(len(arrow_schema)), dtype=np.int64)
-    table_type = TableType(
-        tuple([pyarrow_type_to_numba(field.type) for field in arrow_schema])
-    )
-
-    out_df = cpp_table_to_py(cpp_table, out_cols_arr, table_type).to_pandas()
-    out_df.columns = [f.name for f in arrow_schema]
-    return _reconstruct_pandas_index(out_df, arrow_schema)
+    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
+    df = arrow_table_to_pandas(arrow_table, arrow_schema)
+    return df
 
 
 def cpp_table_to_series(cpp_table, arrow_schema):
@@ -129,6 +92,17 @@ def get_series_overloads():
     return get_method_overloads(SeriesType)
 
 
+@functools.lru_cache
+def get_series_string_overloads():
+    """Return a list of the functions supported on BodoStringMethods objects
+    to some degree by bodo.jit.
+    """
+    from bodo.hiframes.series_str_impl import SeriesStrMethodType
+    from bodo.numba_compat import get_method_overloads
+
+    return get_method_overloads(SeriesStrMethodType)
+
+
 def get_overloads(cls_name):
     """Use the class name of the __class__ attr of self parameter
     to determine which of the above two functions to call to
@@ -138,6 +112,8 @@ def get_overloads(cls_name):
         return get_dataframe_overloads()
     elif cls_name == "BodoSeries":
         return get_series_overloads()
+    elif cls_name == "BodoStringMethods":
+        return get_series_string_overloads()
     else:
         assert False
 
@@ -234,6 +210,7 @@ def check_args_fallback(
                     flist = supported
                 else:
                     flist = unsupported
+                    inverted = False
                 unsupported_args = {
                     idx: param
                     for idx, (name, param) in enumerate(signature.parameters.items())
@@ -321,6 +298,8 @@ def check_args_fallback(
 
                     # Fallback to Python. Call the same method in the base class.
                     base_class = self.__class__.__bases__[0]
+                    if self.__class__ == bodo.pandas.series.BodoStringMethods:
+                        base_class = self._series.__class__.__bases__[0].str
                     msg = (
                         f"{base_class.__name__}.{func.__name__} is not "
                         "implemented in Bodo dataframe library for the specified arguments yet. "
@@ -408,7 +387,10 @@ class LazyPlan:
         if cache is None:
             cache = {}
         # If previously converted then use the last result.
-        if id(self) in cache:
+        # Don't cache expression nodes.
+        # TODO - Try to eliminate caching altogether since it seems to cause
+        # more problems than lack of caching.
+        if "Expression" not in self.plan_class and id(self) in cache:
             return cache[id(self)]
 
         def recursive_check(x):
@@ -421,8 +403,16 @@ class LazyPlan:
                 return x
 
         # Convert any LazyPlan in the args or kwargs.
-        args = [recursive_check(x) for x in self.args]
+        # We do this in reverse order because we expect the first arg to be
+        # the source of the plan and for the node being created to take
+        # ownership of that source.  If other args or kwargs reference that
+        # plan then if we process them after we have taken ownership then
+        # we will get nullptr exceptions.  So, process the args that don't
+        # claim ownership first (in the reverse direction) and finally
+        # process the first arg which we expect will take ownership.
         kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
+        args = [recursive_check(x) for x in reversed(self.args)]
+        args.reverse()
 
         # Create real duckdb class.
         ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args, **kwargs)
@@ -452,6 +442,8 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
+            print("")  # Print on new line during tests.
+            print("Unoptimized plan")
             print(duckdb_plan.toString())
 
         # Print the plan before optimization
@@ -466,6 +458,7 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
+            print("Optimized plan")
             print(optimized_plan.toString())
 
         # Print the plan after optimization
@@ -519,16 +512,6 @@ def getPlanStatistics(plan: LazyPlan):
     return preOptNum, postOptNum
 
 
-@intrinsic
-def cast_table_ptr_to_int64(typingctx, val):
-    """Cast C++ table pointer to int64 (to pass to C++ later)"""
-
-    def codegen(context, builder, signature, args):
-        return builder.ptrtoint(args[0], lir.IntType(64))
-
-    return numba.core.types.int64(table_type), codegen
-
-
 def get_n_index_arrays(index):
     """Get the number of arrays that can hold the Index data in a table."""
     if isinstance(index, pd.RangeIndex):
@@ -547,24 +530,9 @@ def df_to_cpp_table(df):
     """
     from bodo.ext import plan_optimizer
 
-    n_table_cols = len(df.columns)
-    n_index_arrs = get_n_index_arrays(df.index)
-    n_all_cols = n_table_cols + n_index_arrs
-    in_col_inds = bodo.utils.typing.MetaType(tuple(range(n_all_cols)))
-
-    @numba.jit
-    def impl_df_to_cpp_table(df):
-        table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
-        index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
-        index_arrs = bodo.utils.conversion.index_to_array_list(index, False)
-        cpp_table = bodo.libs.array.py_data_to_cpp_table(
-            table, index_arrs, in_col_inds, n_table_cols
-        )
-        return cast_table_ptr_to_int64(cpp_table)
-
-    cpp_table = impl_df_to_cpp_table(df)
-    plan_optimizer.set_cpp_table_meta(cpp_table, pa.Schema.from_pandas(df))
-    return cpp_table
+    # TODO: test nthreads, safe
+    arrow_table = pa.Table.from_pandas(df)
+    return plan_optimizer.arrow_to_cpp_table(arrow_table)
 
 
 def _empty_pd_array(pa_type):
@@ -574,7 +542,12 @@ def _empty_pd_array(pa_type):
     if isinstance(pa_type, pa.DictionaryType):
         assert pa_type.index_type == pa.int32() and (
             pa_type.value_type == pa.string() or pa_type.value_type == pa.large_string()
-        ), "Invalid dictionary type"
+        ), (
+            "Invalid dictionary type "
+            + str(pa_type.index_type)
+            + " "
+            + str(pa_type.value_type)
+        )
         return pd.array(
             ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
         )[:0]
@@ -604,18 +577,19 @@ def _get_function_from_path(path_str: str):
     return getattr(module, func_name)
 
 
-def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
+def run_func_on_table(cpp_table, result_type, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
-    input = cpp_table_to_df(cpp_table, arrow_schema)
-    func_path_str, is_series, is_attr, args, kwargs = in_args
+    input = cpp_table_to_df(cpp_table)
+    func, is_series, is_attr, args, kwargs = in_args
 
     if is_series:
         assert input.shape[1] == 1, "run_func_on_table: single column expected"
         input = input.iloc[:, 0]
 
-    if is_attr:
+    if isinstance(func, str) and is_attr:
+        func_path_str = func
         func = input
         for atr in func_path_str.split("."):
             func = getattr(func, atr)
@@ -624,9 +598,10 @@ def run_func_on_table(cpp_table, arrow_schema, result_type, in_args):
             out = func
         else:
             out = func(*args, **kwargs)
+    elif isinstance(func, str):
+        func = _get_function_from_path(func)
+        out = func(input, *args, **kwargs)
     else:
-        # TODO: test this path
-        func = _get_function_from_path(func_path_str)
         out = func(input, *args, **kwargs)
 
     # astype can fail in some cases when input is empty
@@ -718,12 +693,22 @@ def wrap_plan(plan, res_id=None, nrows=None):
 
 def get_proj_expr_single(proj: LazyPlan):
     """Get the single expression from a LogicalProjection node."""
-    assert (
-        isinstance(proj, LazyPlan)
-        and proj.plan_class == "LogicalProjection"
-        and len(proj.args[1]) == 1
-    ), "get_proj_expr_single: LogicalProjection with a single expr expected"
-    return proj.args[1][0]
+    if is_single_projection(proj):
+        return proj.args[1][0]
+    else:
+        if not proj.is_series:
+            raise Exception("Got a non-Series in get_proj_expr_single")
+        return make_col_ref_exprs([0], proj)[0]
+
+
+def get_single_proj_source_if_present(proj: LazyPlan):
+    """Get the single expression from a LogicalProjection node."""
+    if is_single_projection(proj):
+        return proj.args[0]
+    else:
+        if not proj.is_series:
+            raise Exception("Got a non-Series in get_single_proj_source_if_present")
+        return proj
 
 
 def is_single_projection(proj: LazyPlan):
@@ -824,6 +809,80 @@ def arrow_to_empty_df(arrow_schema):
     return _reconstruct_pandas_index(empty_df, arrow_schema)
 
 
+def _fix_struct_arr_names(arr, pa_type):
+    """Fix the names of the fields in a struct array to match the Arrow type.
+    This is necessary since our C++ code may not preserve the field names in
+    struct arrays.
+    """
+
+    if not pa.types.is_struct(arr.type):
+        return arr
+
+    if arr.type == pa_type:
+        return arr
+
+    if isinstance(arr, pa.ChunkedArray):
+        arr = arr.combine_chunks()
+
+    new_arrs = [
+        _fix_struct_arr_names(arr.field(i), pa_type.field(i).type)
+        for i in range(arr.type.num_fields)
+    ]
+    names = [pa_type.field(i).name for i in range(pa_type.num_fields)]
+    new_arr = pa.StructArray.from_arrays(new_arrs, names)
+    # Arrow's from_arrays ignores nulls (bug as of Arrow 19) so we add them back
+    # manually
+    return pa.Array.from_buffers(
+        new_arr.type, len(new_arr), arr.buffers()[:1], children=new_arrs
+    )
+
+
+def _arrow_to_pd_array(arrow_array, pa_type):
+    """Convert a PyArrow array to a pandas array with the specified Arrow type."""
+
+    # Our type inference may fail for some object columns so use the proper Arrow type
+    if pa_type == pa.null():
+        pa_type = arrow_array.type
+
+    # Our C++ code may not preserve the field names in struct arrays
+    # so we fix them here to match the Arrow schema.
+    if pa.types.is_struct(arrow_array.type):
+        arrow_array = _fix_struct_arr_names(arrow_array, pa_type)
+
+    # Cast to expected type to match Pandas (as determined by the frontend)
+    if pa_type != arrow_array.type:
+        arrow_array = arrow_array.cast(pa_type)
+
+    return pd.array(arrow_array, dtype=pd.ArrowDtype(pa_type))
+
+
+def arrow_table_to_pandas(arrow_table, arrow_schema=None):
+    """Convert a PyArrow Table to a pandas DataFrame. Not using Table.to_pandas()
+    since it doesn't use ArrowDtype and has issues (e.g. repeated column names fails).
+
+    Args:
+        arrow_table (pa.Table): The input Arrow table.
+        arrow_schema (pa.Schema, optional): The schema to use for the DataFrame.
+            If None, uses the schema from the Arrow table.
+
+    Returns:
+        pd.DataFrame: The converted pandas DataFrame.
+    """
+    if arrow_schema is None:
+        arrow_schema = arrow_table.schema
+
+    df = pd.DataFrame(
+        {
+            i: _arrow_to_pd_array(arrow_table.columns[i], field.type)
+            for i, field in enumerate(arrow_schema)
+        }
+    )
+    # Set column names separately to handle duplicate names ("field.name:" in a
+    # dictionary would replace duplicated values)
+    df.columns = [f.name for f in arrow_schema]
+    return _reconstruct_pandas_index(df, arrow_schema)
+
+
 def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
     """Create an empty Series like ser possibly converting some dtype to use
     pyarrow"""
@@ -833,13 +892,14 @@ def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
     return empty_series
 
 
-def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
+def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Series:
     """Infer the output type of a scalar UDF by running it on a
     sample of the data.
 
     Args:
         obj (BodoDataFrame | BodoSeries): The object the UDF is being applied over.
-        method_name ("apply" | "map"): The name of the method applying the UDF.
+        method_name ({"apply", "map", "map_parititons"}): The name of the method
+            applying the UDF.
         func (Any): The UDF argument to pass to apply/map.
         kwargs (dict): Optional keyword arguments to pass to apply/map.
 
@@ -850,12 +910,16 @@ def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
         Empty Series with the dtype matching the output of the UDF
         (or equivalent pyarrow dtype)
     """
-    assert method_name == "apply" or method_name == "map", (
-        "expected method to be one of {'apply', 'map'}"
+    assert method_name in {"map", "apply", "map_partitions"}, (
+        "expected method to be one of {'apply', 'map', 'map_partitions'}"
     )
 
     base_class = obj.__class__.__bases__[0]
-    apply_method = getattr(base_class, method_name)
+
+    # map_partitions is not a pandas.DataFrame method.
+    apply_method = None
+    if method_name != "map_partitions":
+        apply_method = getattr(base_class, method_name)
 
     # TODO: Tune sample sizes
     sample_sizes = (1, 4, 9, 25, 100)
@@ -863,8 +927,12 @@ def get_scalar_udf_result_type(obj, method_name, func, **kwargs) -> pd.Series:
     except_msg = ""
     for sample_size in sample_sizes:
         df_sample = obj.head(sample_size).execute_plan()
-        pd_sample = type(obj)(df_sample)
-        out_sample = apply_method(pd_sample, func, **kwargs)
+        pd_sample = base_class(df_sample)
+        out_sample = (
+            func(pd_sample, *args, **kwargs)
+            if apply_method is None
+            else apply_method(pd_sample, func, *args, **kwargs)
+        )
 
         if not isinstance(out_sample, pd.Series):
             raise BodoLibNotImplementedException(
@@ -915,8 +983,6 @@ class LazyPlanDistributedArg:
 
 
 def count_plan(self):
-    from bodo.pandas.utils import execute_plan, get_plan_cardinality
-
     # See if we can get the cardinality statically.
     static_cardinality = get_plan_cardinality(self._plan)
     if static_cardinality is not None:
@@ -939,6 +1005,7 @@ def count_plan(self):
                 # Adding column 0 as input to avoid deleting all input by the optimizer
                 # TODO: avoid materializing the input column
                 [0],
+                False,  # dropna
             )
         ],
     )
@@ -951,3 +1018,76 @@ def count_plan(self):
 
     data = execute_plan(projection_plan)
     return data[0]
+
+
+def ensure_datetime64ns(df):
+    """Convert datetime columns in a DataFrame to 'datetime64[ns]' dtype.
+    Avoids datetime64[us] that is commonly used in Pandas but not supported in Bodo.
+    """
+    import numpy as np
+
+    for c in df.columns:
+        dtype = df[c].dtype
+        if (
+            isinstance(dtype, np.dtype)
+            and dtype.kind == "M"
+            and dtype.name != "datetime64[ns]"
+        ):
+            df[c] = df[c].astype("datetime64[ns]")
+
+    if (
+        isinstance(df.index, pd.DatetimeIndex)
+        and isinstance(df.index.dtype, np.dtype)
+        and df.index.dtype.kind == "M"
+        and df.index.dtype.name != "datetime64[ns]"
+    ):
+        df.index = df.index.astype("datetime64[ns]")
+
+    return df
+
+
+def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=True):
+    """Create plan for calling some function or method on a DataFrame. Creates a
+    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
+    """
+    df_len = len(df_plan.empty_data.columns)
+    udf_arg = LazyPlan(
+        "PythonScalarFuncExpression",
+        empty_data,
+        df_plan,
+        (
+            func,
+            False,  # is_series
+            is_method,
+            args,
+            kwargs,
+        ),
+        tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
+    )
+
+    # Select Index columns explicitly for output
+    index_col_refs = tuple(
+        make_col_ref_exprs(
+            range(df_len, df_len + get_n_index_arrays(df_plan.empty_data.index)),
+            df_plan,
+        )
+    )
+    plan = LazyPlan(
+        "LogicalProjection",
+        empty_data,
+        df_plan,
+        (udf_arg,) + index_col_refs,
+    )
+    return wrap_plan(plan=plan)
+
+
+def is_col_ref(expr):
+    return expr.plan_class == "ColRefExpression"
+
+
+def is_scalar_func(expr):
+    return expr.plan_class == "PythonScalarFuncExpression"
+
+
+def is_arith_expr(expr):
+    return expr.plan_class == "ArithOpExpression"
