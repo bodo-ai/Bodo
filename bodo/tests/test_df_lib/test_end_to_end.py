@@ -1327,3 +1327,22 @@ def test_rename(datapath, index_val):
     bdf2 = bdf.rename(columns=rename_dict)
     df2 = df.rename(columns=rename_dict)
     _test_equal(bdf2, df2, check_pandas_types=False)
+
+
+def test_col_set_dtypes_bug():
+    """Make sure setting columns doesn't lead to failure due to inconsistent dtypes
+    inside the lazy manager in sequential mode.
+    """
+
+    with temp_config_override("dataframe_library_run_parallel", False):
+        df = pd.DataFrame(
+            {
+                "A": ["A", "B", "C"] * 2,
+                "B": ["NY", "TX", "CA"] * 2,
+            }
+        )
+
+        df = bd.from_pandas(df)
+        df2 = df[["A", "B"]]
+        df["C"] = df2.apply(lambda x: x.A + x.B, axis=1)
+        print(df)
