@@ -61,6 +61,7 @@ def ocr_correction(prompts):
             split_prompt_idx += 1
         prompt_idx += 1
 
+    # TODO: Rebalance batches instead of prompts
     text_results = pd.Series([""] * len(prompts), dtype=ArrowDtype(pa.large_string()))
     for i, batch in enumerate(batches):
         batch_result = llm.generate(prompts=batch, sampling_params=sampling_params)
