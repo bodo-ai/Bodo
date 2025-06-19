@@ -1827,9 +1827,7 @@ def concat_overload(arr_list):
             tot_len = 0
             for A in arr_list:
                 tot_len += len(A)
-            Aret = bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
-                tot_len
-            )
+            Aret = bodo.hiframes.datetime_timedelta_ext.alloc_timedelta_array(tot_len)
             curr_pos = 0
             for A in arr_list:
                 for i in range(len(A)):

@@ -599,7 +599,7 @@ def overload_sub_operator_datetime_timedelta(lhs, rhs):
             in_arr = lhs
             numba.parfors.parfor.init_prange()
             n = len(in_arr)
-            A = alloc_datetime_timedelta_array(n)
+            A = alloc_timedelta_array(n)
             for i in numba.parfors.parfor.internal_prange(n):
                 A[i] = in_arr[i] - rhs
             return A
@@ -1258,7 +1258,7 @@ def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def alloc_datetime_timedelta_array(n):  # pragma: no cover
+def alloc_timedelta_array(n):  # pragma: no cover
     data_arr = np.empty(n, dtype=bodo.timedelta64ns)
     # XXX: set all bits to not null since datetime.timedelta array operations do not support
     # NA yet. TODO: use 'empty' when all operations support NA
@@ -1267,8 +1267,8 @@ def alloc_datetime_timedelta_array(n):  # pragma: no cover
     return init_datetime_timedelta_array(data_arr, nulls)
 
 
-def alloc_datetime_timedelta_array_equiv(self, scope, equiv_set, loc, args, kws):
-    """Array analysis function for alloc_datetime_timedelta_array() passed to Numba's array
+def alloc_timedelta_array_equiv(self, scope, equiv_set, loc, args, kws):
+    """Array analysis function for alloc_timedelta_array() passed to Numba's array
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
     """
@@ -1276,7 +1276,7 @@ def alloc_datetime_timedelta_array_equiv(self, scope, equiv_set, loc, args, kws)
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_timedelta_ext_alloc_datetime_timedelta_array = alloc_datetime_timedelta_array_equiv
+ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_timedelta_ext_alloc_timedelta_array = alloc_timedelta_array_equiv
 
 
 @overload(operator.getitem, no_unliteral=True)
@@ -1564,7 +1564,7 @@ def overload_datetime_timedelta_arr_sub(arg1, arg2):
             in_arr = arg1
             numba.parfors.parfor.init_prange()
             n = len(in_arr)
-            A = alloc_datetime_timedelta_array(n)
+            A = alloc_timedelta_array(n)
             for i in numba.parfors.parfor.internal_prange(n):
                 A[i] = in_arr[i] - arg2
             return A

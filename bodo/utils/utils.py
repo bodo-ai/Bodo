@@ -184,7 +184,7 @@ alloc_calls = {
     ("alloc_int_array", "bodo.libs.int_arr_ext"),
     ("alloc_float_array", "bodo.libs.float_arr_ext"),
     ("alloc_datetime_date_array", "bodo.hiframes.datetime_date_ext"),
-    ("alloc_datetime_timedelta_array", "bodo.hiframes.datetime_timedelta_ext"),
+    ("alloc_timedelta_array", "bodo.hiframes.datetime_timedelta_ext"),
     ("alloc_decimal_array", "bodo.libs.decimal_arr_ext"),
     ("alloc_categorical_array", "bodo.hiframes.pd_categorical_ext"),
     ("gen_na_array", "bodo.libs.array_kernels"),
@@ -678,9 +678,7 @@ def empty_like_type_overload(n, arr):
     if arr == bodo.hiframes.datetime_timedelta_ext.timedelta_array_type:
 
         def empty_like_type_datetime_timedelta_arr(n, arr):  # pragma: no cover
-            return bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
-                n
-            )
+            return bodo.hiframes.datetime_timedelta_ext.alloc_timedelta_array(n)
 
         return empty_like_type_datetime_timedelta_arr
     if isinstance(arr, bodo.libs.decimal_arr_ext.DecimalArrayType):
@@ -1051,7 +1049,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             lambda n,
             t,
             s=None,
-            dict_ref_arr=None: bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
+            dict_ref_arr=None: bodo.hiframes.datetime_timedelta_ext.alloc_timedelta_array(
                 n
             )
         )  # pragma: no cover
