@@ -1,3 +1,4 @@
+import re
 import typing as pt
 
 import pandas as pd
@@ -153,10 +154,28 @@ def read_iceberg(
     # Support simple directory only calls like:
     # pd.read_iceberg("table", location="/path/to/table")
     if catalog_name is None and catalog_properties is None and location is not None:
-        catalog_properties = {
-            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
-            pyiceberg.catalog.WAREHOUSE_LOCATION: location,
-        }
+        if location.startswith("arn:aws:s3tables:"):
+            from bodo.io.iceberg.catalog.s3_tables import (
+                S3TABLES_REGION,
+                S3TABLES_TABLE_BUCKET_ARN,
+            )
+
+            parsed = re.match(
+                r"arn:aws:s3tables:([a-z0-9-]+):([0-9]+):bucket/([a-z0-9-]+)$", location
+            )
+            if not parsed:
+                raise ValueError(f"Invalid S3 Tables ARN: {location}")
+            region = parsed.group(1)
+            catalog_properties = {
+                pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.s3_tables.S3TablesCatalog",
+                S3TABLES_TABLE_BUCKET_ARN: location,
+                S3TABLES_REGION: region,
+            }
+        else:
+            catalog_properties = {
+                pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+                pyiceberg.catalog.WAREHOUSE_LOCATION: location,
+            }
     elif location is not None:
         raise BodoLibNotImplementedException(
             "'location' is only supported for filesystem catalog and cannot be used "

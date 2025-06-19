@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import typing as pt
 import warnings
 from collections.abc import Callable, Iterable
@@ -373,11 +374,30 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Support simple directory only calls like:
         # df.to_iceberg("table", location="/path/to/table")
         if catalog_name is None and catalog_properties is None and location is not None:
-            catalog_properties = {
-                pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
-                pyiceberg.catalog.WAREHOUSE_LOCATION: location,
-            }
-            # DirCatalog does not support extra location argument in create_table
+            if location.startswith("arn:aws:s3tables:"):
+                from bodo.io.iceberg.catalog.s3_tables import (
+                    S3TABLES_REGION,
+                    S3TABLES_TABLE_BUCKET_ARN,
+                )
+
+                parsed = re.match(
+                    r"arn:aws:s3tables:([a-z0-9-]+):([0-9]+):bucket/([a-z0-9-]+)$",
+                    location,
+                )
+                if not parsed:
+                    raise ValueError(f"Invalid S3 Tables ARN: {location}")
+                region = parsed.group(1)
+                catalog_properties = {
+                    pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.s3_tables.S3TablesCatalog",
+                    S3TABLES_TABLE_BUCKET_ARN: location,
+                    S3TABLES_REGION: region,
+                }
+            else:
+                catalog_properties = {
+                    pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+                    pyiceberg.catalog.WAREHOUSE_LOCATION: location,
+                }
+            # DirCatalog and S3TablesCatalog do not support extra location argument in create_table
             location = None
         elif catalog_properties is None:
             catalog_properties = {}
