@@ -257,7 +257,7 @@ df_join_flat = pd.DataFrame(
 
 df_decode = pd.DataFrame({"A": [b"hi", b"()", b"hello my name is chris.", None]})
 
-df_extract = pd.DataFrame({"A": ["a1", "b2", "c3"]}, index=["X", "Y", "Z"])
+df_extract = pd.DataFrame({"A": ["a1", "b2", "c3", None]}, index=["X", "Y", "Z", "W"])
 
 # Stores customized DataFrames for some methods. Could enable testing with closer customization to each method.
 exception_dfmap = {

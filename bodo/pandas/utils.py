@@ -766,7 +766,6 @@ def _reconstruct_pandas_index(df, arrow_schema):
     for descr in arrow_schema.pandas_metadata.get("index_columns", []):
         if isinstance(descr, str):
             index_name = None if _is_generated_index_name(descr) else descr
-            # print(df, descr)
             index_level = df[descr]
             df = df.drop(columns=[descr])
         elif descr["kind"] == "range":

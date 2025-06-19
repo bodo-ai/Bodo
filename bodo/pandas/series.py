@@ -773,9 +773,11 @@ class BodoStringMethods:
         if is_series_output:
             return series_out
 
-        n_index_arrays = get_n_index_arrays(series_out.index)
+        n_index_arrays = get_n_index_arrays(index)
         index_cols = tuple(range(1, 1 + n_index_arrays))
         index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
+        assert series_out.is_lazy_plan()
 
         # Create schema for output DataFrame with n_cols columns
         if not group_names:
@@ -789,10 +791,10 @@ class BodoStringMethods:
 
         arrow_schema = pa.schema(field_list)
         empty_data = arrow_to_empty_df(arrow_schema)
-        empty_data.index = series_out._plan.empty_data.index
+        empty_data.index = index
 
         expr = tuple(
-            create_expr(idx, empty_data, series_out, index_cols)
+            get_col_as_series_expr(idx, empty_data, series_out, index_cols)
             for idx in range(n_cols)
         )
 
@@ -1019,7 +1021,7 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
     return result
 
 
-def create_expr(idx, empty_data, series_out, index_cols):
+def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
     """
     Extracts indexed column values from list series and
     returns resulting scalar expression.
@@ -1114,7 +1116,7 @@ def gen_partition(name):
         if not expand:
             return series_out
 
-        n_index_arrays = get_n_index_arrays(series_out.index)
+        n_index_arrays = get_n_index_arrays(index)
         index_cols = tuple(range(1, 1 + n_index_arrays))
         index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
 
@@ -1123,11 +1125,14 @@ def gen_partition(name):
             [pa.field(f"{idx}", pa.large_string()) for idx in range(3)]
         )
         empty_data = arrow_to_empty_df(arrow_schema)
-        empty_data.index = series_out._plan.empty_data.index
+        empty_data.index = index
 
         expr = tuple(
-            create_expr(idx, empty_data, series_out, index_cols) for idx in range(3)
+            get_col_as_series_expr(idx, empty_data, series_out, index_cols)
+            for idx in range(3)
         )
+
+        assert series_out.is_lazy_plan()
 
         # Creates DataFrame with 3 columns
         df_plan = LazyPlan(

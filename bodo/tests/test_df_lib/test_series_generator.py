@@ -130,28 +130,28 @@ rpartition_res = pd.DataFrame(
 
 extract_res_0 = pd.DataFrame(
     {
-        "0": ["1", "2", pd.NA],
+        "0": ["1", "2", pd.NA, pd.NA],
     },
-    index=["X", "Y", "Z"],
+    index=["X", "Y", "Z", "W"],
 )
 
 extract_res_1 = pd.DataFrame(
     {
-        "0": ["a", "b", pd.NA],
-        "1": ["1", "2", pd.NA],
+        "0": ["a", "b", pd.NA, pd.NA],
+        "1": ["1", "2", pd.NA, pd.NA],
     },
-    index=["X", "Y", "Z"],
+    index=["X", "Y", "Z", "W"],
 )
 
 extract_res_2 = pd.DataFrame(
     {
-        "letter": ["a", "b", pd.NA],
-        "digit": ["1", "2", pd.NA],
+        "letter": ["a", "b", pd.NA, pd.NA],
+        "digit": ["1", "2", pd.NA, pd.NA],
     },
-    index=["X", "Y", "Z"],
+    index=["X", "Y", "Z", "W"],
 )
 
-extract_res_3 = pd.Series(["1", "2", pd.NA], index=["X", "Y", "Z"])
+extract_res_3 = pd.Series(["1", "2", pd.NA, pd.NA], index=["X", "Y", "Z", "W"])
 
 month_name_res_fr_A = pd.Series(
     [
