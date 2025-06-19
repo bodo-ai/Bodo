@@ -450,7 +450,8 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
         info->buffers.push_back(std::move(buffer_bitmask));
     }
 
-    if (info->dtype == Bodo_CTypes::DATETIME) {
+    if (info->dtype == Bodo_CTypes::DATETIME ||
+        info->dtype == Bodo_CTypes::TIMEDELTA) {
         // Temporary fix to set invalid entries to NaT
         std::uint8_t* bitmap =
             reinterpret_cast<std::uint8_t*>(info->null_bitmask());

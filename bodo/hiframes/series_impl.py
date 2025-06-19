@@ -4680,7 +4680,8 @@ def create_explicit_binary_op_overload(op):
         is_series_timedelta = S.dtype == bodo.timedelta64ns
         is_series_datetime = S.dtype == bodo.datetime64ns
         is_other_timedelta_iter = is_iterable_type(other) and (
-            other.dtype == datetime_timedelta_type or other.dtype == bodo.timedelta64ns
+            other.dtype
+            in (datetime_timedelta_type, bodo.timedelta64ns, bodo.pd_timedelta_type)
         )
         is_other_datetime_iter = is_iterable_type(other) and (
             other.dtype == datetime_datetime_type

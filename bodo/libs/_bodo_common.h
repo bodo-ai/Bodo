@@ -1277,9 +1277,6 @@ struct array_info {
             case bodo_array_type::MAP:
             case bodo_array_type::CATEGORICAL:
                 return true;
-            case bodo_array_type::NUMPY:
-                // TODO: Remove when TIMEDELTA moves to nullable arrays.
-                return dtype == Bodo_CTypes::TIMEDELTA;
             default:
                 return false;
         }

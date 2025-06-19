@@ -740,7 +740,7 @@ def check_cross_join_coltypes(
     column is used in the condition.
     """
     for col_type in chain(left_col_types, right_col_types):
-        if col_type == bodo.datetime_timedelta_array_type or (
+        if col_type == bodo.timedelta_array_type or (
             isinstance(col_type, types.Array) and col_type.dtype == bodo.timedelta64ns
         ):
             raise BodoError(

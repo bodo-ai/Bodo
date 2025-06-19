@@ -23,7 +23,6 @@ from numba.typed.typeddict import Dict
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
 from bodo.hiframes.pd_dataframe_ext import (
     DataFramePayloadType,
@@ -1758,7 +1757,7 @@ def _infer_ndarray_obj_dtype(val):
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
     if isinstance(first_val, datetime.timedelta):
-        return datetime_timedelta_array_type
+        return bodo.timedelta_array_type
     if isinstance(first_val, bodo.Time):
         return TimeArrayType(first_val.precision)
     if isinstance(first_val, decimal.Decimal):
