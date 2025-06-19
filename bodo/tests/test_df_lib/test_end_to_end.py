@@ -1310,3 +1310,20 @@ def test_series_filter_series(datapath, file_path, op, mode):
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_rename(datapath, index_val):
+    """Very simple test for df.apply() for sanity checking."""
+    df = pd.DataFrame(
+        {
+            "a": pd.array([1, 2, 3] * 10, "Int64"),
+            "b": pd.array([4, 5, 6] * 10, "Int64"),
+            "c": ["a", "b", "c"] * 10,
+        },
+        index=index_val[:30],
+    )
+    bdf = bd.from_pandas(df)
+    rename_dict = {"a": "alpha", "b": "bravo", "c": "charlie"}
+    bdf2 = bdf.rename(columns=rename_dict)
+    df2 = df.rename(columns=rename_dict)
+    _test_equal(bdf2, df2, check_pandas_types=False)
