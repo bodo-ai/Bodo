@@ -189,6 +189,14 @@ test_map_arg = {
         ((), {"pat": "/", "expand": True}),
         ((), {"n": 1, "pat": "/", "expand": True}),
     ],
+    "rsplit": [
+        ((), {}),
+        ((), {"n": 2}),
+        ((), {"pat": "/"}),
+        ((), {"expand": True}),
+        ((), {"pat": "/", "expand": True}),
+        ((), {"n": 1, "pat": "/", "expand": True}),
+    ],
 }
 
 # List of methods that do not take in arguments
@@ -274,6 +282,7 @@ exception_dfmap = {
     ),
     "decode": (df_decode,),
     "split": (df_split,),
+    "rsplit": (df_split,),
 }
 
 empty_arg = [((), {})]

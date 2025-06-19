@@ -233,6 +233,42 @@ split_res_n = pd.DataFrame(
 )
 
 
+rsplit_res_expand = pd.DataFrame(
+    {
+        "0": ["this", "https://docs.python.org/3/tutorial/index.html", pd.NA],
+        "1": ["is", pd.NA, pd.NA],
+        "2": ["a", pd.NA, pd.NA],
+        "3": ["regular", pd.NA, pd.NA],
+        "4": ["sentence", pd.NA, pd.NA],
+    },
+    index=["Apple", "Banana", "Cheese"],
+)
+
+rsplit_res_pat = pd.DataFrame(
+    {
+        "0": ["this is a regular sentence", "https:", pd.NA],
+        "1": [pd.NA, "", pd.NA],
+        "2": [pd.NA, "docs.python.org", pd.NA],
+        "3": [pd.NA, "3", pd.NA],
+        "4": [pd.NA, "tutorial", pd.NA],
+        "5": [pd.NA, "index.html", pd.NA],
+    },
+    index=["Apple", "Banana", "Cheese"],
+)
+
+rsplit_res_n = pd.DataFrame(
+    {
+        "0": [
+            "this is a regular sentence",
+            "https://docs.python.org/3/tutorial",
+            pd.NA,
+        ],
+        "1": [pd.NA, "index.html", pd.NA],
+    },
+    index=["Apple", "Banana", "Cheese"],
+)
+
+
 null_array = pd.Series(
     [pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA]
 )
@@ -288,6 +324,11 @@ expected_results = {
         ((), {"expand": True}, "A", split_res_expand),
         ((), {"pat": "/", "expand": True}, "A", split_res_pat),
         ((), {"n": 1, "pat": "/", "expand": True}, "A", split_res_n),
+    ],
+    "rsplit": [
+        ((), {"expand": True}, "A", rsplit_res_expand),
+        ((), {"pat": "/", "expand": True}, "A", rsplit_res_pat),
+        ((), {"n": 1, "pat": "/", "expand": True}, "A", rsplit_res_n),
     ],
 }
 
