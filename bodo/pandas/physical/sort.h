@@ -16,8 +16,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     explicit PhysicalSort(duckdb::vector<duckdb::BoundOrderByNode>& orders,
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols,
-                          int64_t limit=-1,
-                          int64_t offset=-1)
+                          int64_t limit = -1, int64_t offset = -1)
         : output_schema(input_schema), limit(limit), offset(offset) {
         std::vector<int64_t> ascending;
         std::vector<int64_t> na_last;
@@ -75,8 +74,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
         } else {
             stream_sorter = std::make_unique<StreamSortLimitOffsetState>(
                 -1, keys.size(), std::move(ascending), std::move(na_last),
-                build_table_schema_reordered, /*parallel*/ true,
-                limit, offset);
+                build_table_schema_reordered, /*parallel*/ true, limit, offset);
         }
     }
 
@@ -84,16 +82,16 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     explicit PhysicalSort(duckdb::LogicalOrder& logical_order,
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols,
-                          int64_t limit=-1,
-                          int64_t offset=-1)
-        : PhysicalSort(logical_order.orders, input_schema, source_cols, limit, offset) {}
+                          int64_t limit = -1, int64_t offset = -1)
+        : PhysicalSort(logical_order.orders, input_schema, source_cols, limit,
+                       offset) {}
 
     explicit PhysicalSort(duckdb::LogicalTopN& logical_topn,
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols,
-                          int64_t limit=-1,
-                          int64_t offset=-1)
-        : PhysicalSort(logical_topn.orders, input_schema, source_cols, limit, offset) {}
+                          int64_t limit = -1, int64_t offset = -1)
+        : PhysicalSort(logical_topn.orders, input_schema, source_cols, limit,
+                       offset) {}
 
     virtual ~PhysicalSort() = default;
 
