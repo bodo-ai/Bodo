@@ -141,3 +141,13 @@ df = bodo_pd.read_iceberg(
     }
 )
 ```
+
+Read a table from an S3 Tables Bucket using the location parameter.
+
+``` py
+import bodo.pandas as bodo_pd
+df = bodo_pd.read_iceberg(
+    table_identifier="my_table",
+    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
+)
+```
