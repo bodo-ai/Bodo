@@ -837,9 +837,8 @@ def _get_col_as_series(s, col):
 def _str_extract_helper(s, pat, expand, n_cols, flags):
     """Performs row-wise pattern matching, returns a series of match lists."""
     is_series_output = not expand and n_cols == 1
-    string_s = s.astype(
-        str
-    )  # Type conversion is necessary to prevent ArrowExtensionArray routing
+    # Type conversion is necessary to prevent ArrowExtensionArray routing
+    string_s = s.astype(str)
     extracted = string_s.str.extract(pat, flags=flags, expand=expand)
 
     if is_series_output:
