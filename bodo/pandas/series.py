@@ -791,8 +791,12 @@ class BodoDatetimeProperties:
         if not (
             isinstance(series, BodoSeries)
             and series.dtype
-            in (pd.ArrowDtype(pa.timestamp("ns")), pd.ArrowDtype(pa.date64())),
-            pd.ArrowDtype(pa.time64("ns")),
+            in (
+                pd.ArrowDtype(pa.timestamp("ns")),
+                pd.ArrowDtype(pa.date64()),
+                pd.ArrowDtype(pa.time64("ns")),
+                pd.ArrowDtype(pa.duration("ns")),
+            ),
         ):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
         self._dtype = series.dtype
@@ -1221,6 +1225,7 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
         ("freq", inspect.Parameter.POSITIONAL_OR_KEYWORD, (None,)),
         ("normalize", inspect.Parameter.KEYWORD_ONLY, (True,)),
     ],
+    "dt.total_seconds": [],
 }
 
 
@@ -1425,7 +1430,7 @@ dt_methods = [
     # idx = 1: Series(Float)
     (
         [
-            # TODO: implement total_seconds (+support timedelta)
+            "total_seconds",
         ],
         pd.ArrowDtype(pa.float64()),
     ),
