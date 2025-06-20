@@ -58,6 +58,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.ceil`][bodoseriesdtceil]
 - [`bodo.pandas.BodoSeries.dt.month_name`][bodoseriesdtmonth_name]
 - [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name]
+- [`bodo.pandas.BodoSeries.dt.total_seconds`][bodoseriesdttotal_seconds]
+
 
 ---
 
@@ -129,11 +131,11 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.rindex`][bodoseriesstrrindex]
 - [`bodo.pandas.BodoSeries.str.rjust`][bodoseriesstrrjust]
 - [`bodo.pandas.BodoSeries.str.rpartition`][bodoseriesstrrpartition]
-- [`bodo.pandas.BodoSeries.str.rsplit`][bodoseriesstrrsplit]
+<!-- - [`bodo.pandas.BodoSeries.str.rsplit`][bodoseriesstrrsplit] -->
 - [`bodo.pandas.BodoSeries.str.rstrip`][bodoseriesstrrstrip]
 - [`bodo.pandas.BodoSeries.str.slice`][bodoseriesstrslice]
 - [`bodo.pandas.BodoSeries.str.slice_replace`][bodoseriesstrslicereplace]
-- [`bodo.pandas.BodoSeries.str.split`][bodoseriesstrsplit]
+<!-- - [`bodo.pandas.BodoSeries.str.split`][bodoseriesstrsplit] -->
 - [`bodo.pandas.BodoSeries.str.startswith`][bodoseriesstrstartswith]
 - [`bodo.pandas.BodoSeries.str.strip`][bodoseriesstrstrip]
 - [`bodo.pandas.BodoSeries.str.swapcase`][bodoseriesstrswapcase]
@@ -255,3 +257,4 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesstrrsplit]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rsplit.html
 [bodoseriesisna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isna.html
 [bodoseriesnotna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notna.html
+[bodoseriesdttotal_seconds]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.total_seconds.html
