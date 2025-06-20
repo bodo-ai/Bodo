@@ -162,7 +162,8 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
         function_name, arg_types, out_type, nullptr, nullptr, nullptr, nullptr,
         nullptr, duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
 
-    auto bind_info = duckdb::make_uniq<BodoAggFunctionData>(dropna);
+    auto bind_info =
+        duckdb::make_uniq<BodoAggFunctionData>(dropna, function_name);
 
     return duckdb::make_uniq<duckdb::BoundAggregateExpression>(
         function, std::move(children), nullptr, std::move(bind_info),
