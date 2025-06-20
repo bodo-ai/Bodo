@@ -1157,22 +1157,22 @@ def test_groupby_fallback():
 
     # Series groupby
     with pytest.warns(BodoLibFallbackWarning):
-        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=False)["B"].sum(
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
             engine="cython"
         )
 
-    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=False)["B"].sum(engine="cython")
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(engine="cython")
     _test_equal(pandas_out, fallback_out)
 
     bdf2 = bd.from_pandas(df)
 
     # DataFrame groupby
     with pytest.warns(BodoLibFallbackWarning):
-        fallback_out = bdf2.groupby("A", dropna=False, as_index=False, sort=False).sum(
+        fallback_out = bdf2.groupby("A", dropna=False, as_index=False, sort=True).sum(
             engine="cython"
         )
 
-    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=False).sum(engine="cython")
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(engine="cython")
     _test_equal(pandas_out, fallback_out)
 
 
