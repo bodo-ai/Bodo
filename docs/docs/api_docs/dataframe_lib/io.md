@@ -96,7 +96,7 @@ Refer to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/ap
 : __selected_fields: *tuple[str], optional*:__ Fields to select from the table, if not provided, all fields will be selected.
 : __snapshot_id: *int, optional*:__ ID of the snapshot to read from. If not provided, the latest snapshot will be used.
 : __limit: *int, optional*:__ Maximum number of rows to read. If not provided, all rows will be read.
-: __location: *str, optional*:__ Location for the table.
+: __location: *str, optional*:__ Location of the table (if supported by the catalog). If this is passed a path and catalog_name and catalog_properties are None, it will use a filesystem catalog with the provided location. If the location is an S3 Tables ARN it will use the S3TablesCatalog.
 
 : Non-default values for case_sensitive and scan_properties will trigger a fallback to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/api/pandas.read_iceberg.html).
 
@@ -139,5 +139,15 @@ df = bodo_pd.read_iceberg(
         pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
         pyiceberg.catalog.WAREHOUSE_LOCATION: path_to_warehouse_dir,
     }
+)
+```
+
+Read a table from an S3 Tables Bucket using the location parameter.
+
+``` py
+import bodo.pandas as bodo_pd
+df = bodo_pd.read_iceberg(
+    table_identifier="my_table",
+    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
 )
 ```

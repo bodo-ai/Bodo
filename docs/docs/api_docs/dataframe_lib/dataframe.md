@@ -415,7 +415,7 @@ Refer to [`pandas.DataFrame.to_iceberg`](https://pandas.pydata.org/docs/dev/refe
 : __table_identifier: *str*:__ Table identifier to write
 : __catalog_name: *str, optional*:__ Name of the catalog to use. If not provided, the default catalog will be used. See [PyIceberg's documentation](https://py.iceberg.apache.org/#connecting-to-a-catalog) for more details.
 : __catalog_properties: *dict[str, Any], optional*:__ Properties for the catalog connection.
-: __location: *str, optional*:__ Location of the table (if supported by the catalog)
+: __location: *str, optional*:__ Location of the table (if supported by the catalog). If this is passed a path and catalog_name and catalog_properties are None, it will use a filesystem catalog with the provided location. If the location is an S3 Tables ARN it will use the S3TablesCatalog.
 : __append: *bool*:__ Append or overwrite if the table exists
 : __partition_spec: *PartitionSpec, optional*:__ PyIceberg partition spec for the table (only used if creating a new table). See [PyIceberg's documentation](https://py.iceberg.apache.org/api/#partitions) for more details.
 : __sort_order: *SortOrder, optional*:__ PyIceberg sort order for the table (only used if creating a new table). See [PyIceberg's documentation](https://py.iceberg.apache.org/reference/pyiceberg/table/sorting/#pyiceberg.table.sorting.SortOrder) for more details.
@@ -460,5 +460,14 @@ Output:
 1   3.0  foo   True   3.0  <NA>
 2  10.0  foo  False  11.0   foo
 ```
+
+Write a DataFrame to an Iceberg table in S3 Tables using the location parameter:
+
+``` py
+import bodo.pandas as bodo_pd
+df = bodo_pd.to_iceberg(
+    table_identifier="my_table",
+    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
+)
 
 ---

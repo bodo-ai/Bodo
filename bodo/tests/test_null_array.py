@@ -144,8 +144,8 @@ def test_nullarray_cast():
             A = np.array([b"A"] * n, dtype=object)
         elif t == bodo.hiframes.datetime_date_ext.DatetimeDateArrayType:
             A = np.array([datetime.date(2011, 8, 9)] * n, object)
-        elif t == bodo.hiframes.datetime_timedelta_ext.DatetimeTimeDeltaArrayType:
-            A = np.array([datetime.timedelta(33)] * n, object)
+        elif t == bodo.hiframes.datetime_timedelta_ext.TimeDeltaArrayType:
+            A = pd.array([pd.Timedelta(33)] * n)
         elif t == bodo.libs.bool_arr_ext.BooleanArrayType:
             A = pd.array([True] * n, "boolean")
         elif t == bodo.libs.int_arr_ext.IntegerArrayType:

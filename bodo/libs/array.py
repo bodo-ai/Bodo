@@ -599,6 +599,7 @@ def array_to_info_codegen(context, builder, sig, args):
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
+        bodo.timedelta_array_type,
     ):
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         dtype = arr_type.dtype
@@ -611,6 +612,8 @@ def array_to_info_codegen(context, builder, sig, args):
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             np_dtype = types.int8
+        elif arr_type == bodo.timedelta_array_type:
+            np_dtype = bodo.timedelta64ns
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
             context, builder, arr.data
         )
@@ -1340,6 +1343,7 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
+        bodo.timedelta_array_type,
     ):
         arr = cgutils.create_struct_proxy(arr_type)(context, builder)
         np_dtype = arr_type.dtype
@@ -1352,6 +1356,8 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         elif arr_type == boolean_array_type:
             # Boolean array stores bits so we can't use boolean.
             np_dtype = types.uint8
+        elif arr_type == bodo.timedelta_array_type:
+            np_dtype = bodo.timedelta64ns
         data_arr_type = types.Array(np_dtype, 1, "C")
         data_arr = context.make_array(data_arr_type)(context, builder)
         nulls_arr_type = types.Array(types.uint8, 1, "C")
