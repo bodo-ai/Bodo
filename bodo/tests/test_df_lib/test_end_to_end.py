@@ -1134,13 +1134,19 @@ def test_dataframe_groupby(dropna, as_index, selection):
     bdf1 = bd.from_pandas(df1)
 
     if selection is None:
-        bdf2 = bdf1.groupby(["D", "E"], as_index=as_index, dropna=dropna, sort=False).sum()
-        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna, sort=False).sum()
+        bdf2 = bdf1.groupby(
+            ["D", "E"], as_index=as_index, dropna=dropna, sort=False
+        ).sum()
+        df2 = df1.groupby(
+            ["D", "E"], as_index=as_index, dropna=dropna, sort=False
+        ).sum()
     else:
         bdf2 = bdf1.groupby(["D", "E"], as_index=as_index, dropna=dropna, sort=False)[
             selection
         ].sum()
-        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna, sort=False)[selection].sum()
+        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna, sort=False)[
+            selection
+        ].sum()
 
     assert bdf2.is_lazy_plan()
 
@@ -1157,11 +1163,13 @@ def test_groupby_fallback():
 
     # Series groupby
     with pytest.warns(BodoLibFallbackWarning):
-        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
-            engine="cython"
-        )
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)[
+            "B"
+        ].sum(engine="cython")
 
-    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(engine="cython")
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
     bdf2 = bd.from_pandas(df)
@@ -1172,7 +1180,9 @@ def test_groupby_fallback():
             engine="cython"
         )
 
-    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(engine="cython")
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
 
