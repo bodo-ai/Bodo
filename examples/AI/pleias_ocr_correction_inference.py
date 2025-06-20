@@ -1,57 +1,30 @@
-import bodo
-import bodo.pandas as pd
+
 from pandas import ArrowDtype
 import pyarrow as pa
+import bodo
+import bodo.pandas as pd
 import os
-from transformers import AutoTokenizer
 
 batch_size = 350
 model_name = "LLMDH/pleias_350m_ocr"
 model_len = 2048
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
-tokenizer = None
-
-def tokenize(row):
-    # Tokenizer needs to be re-instantiated per worker in distributed execution
-    global tokenizer
-    if tokenizer is None:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    # Special token sequences marking different sections of the input
-    text_start = [2, 65522]
-    text_end = [65523]
-    ocr_correction_start = [65528]
-
-    # Extra tokens used reduce available model context
-    extra_tokens = len(text_start) + len(text_end) + len(ocr_correction_start)
-
-    # Tokenize the input text from the current row
-    row_encoded = tokenizer.encode(row.text)
-
-    # Limit each chunk to half the model context minus reserved special tokens
-    num_row_tokens = (model_len // 2) - extra_tokens
-
-    # Split the tokenized row into multiple chunks
-    split_row_encoded = [
-        row_encoded[i : i + num_row_tokens]
-        for i in range(0, len(row_encoded), num_row_tokens)
-    ]
-
-    # Add section markers around each chunk (drop the stop token from the tokenizer output since it's in the text_start)
-    split_row_encoded = [
-        text_start + (split_row_encoded_chunk[1:] if split_row_encoded_chunk[0] == 2 else split_row_encoded_chunk) + text_end + ocr_correction_start
-        for split_row_encoded_chunk in split_row_encoded
-    ]
-    return split_row_encoded
+split_encoded_path = None  # Path to the tokenized input, must be a location all nodes can access
+corrected_path = None  # Path to save the corrected output, must be a location all nodes can access
+assert split_encoded_path is not None, "Please set the split_encoded_path variable to a valid path for the tokenized input."
+assert corrected_path is not None, "Please set the corrected_path variable to a valid path for saving the corrected output."
 
 def ocr_correction(prompts):
-    from vllm import LLM, SamplingParams, TokensPrompt
-
+    # Get the data from ranks not assigned to gpus on the gpu ranks
     gpu_ranks = bodo.libs.distributed_api.get_gpu_ranks()
-    assert bodo.get_rank() in gpu_ranks, (
-        "Only use 1 bodo worker per GPU in the cluster, set workers with BODO_NUM_WORKERS environment variable"
-    )
+    received_prompts = bodo.rebalance(prompts, dests=gpu_ranks, parallel=True)
+
+    if received_prompts is None or len(received_prompts) == 0:
+        # Just return an empty series from non-gpu ranks
+        return pd.Series([], dtype=ArrowDtype(pa.large_string()))
+
+    from vllm import LLM, SamplingParams, TokensPrompt
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
     llm = LLM(
         model=model_name,
         dtype="auto",
@@ -88,6 +61,7 @@ def ocr_correction(prompts):
             split_prompt_idx += 1
         prompt_idx += 1
 
+    # TODO: Rebalance batches instead of prompts
     text_results = pd.Series([""] * len(prompts), dtype=ArrowDtype(pa.large_string()))
     for i, batch in enumerate(batches):
         batch_result = llm.generate(prompts=batch, sampling_params=sampling_params)
@@ -96,12 +70,10 @@ def ocr_correction(prompts):
             # Add to the corresponding original prompt index (supports multiple fragments per row)
             text_results[batch_to_prompt_idx[i][j]] += text
         print(f"Finished batch {i + 1} of {len(batches)}")
+    received_prompts["corrected_text"] = text_results
+    received_prompts.to_parquet(corrected_path + f"{bodo.get_rank}.pq")
     return text_results
 
 if __name__ == "__main__":
-    prompts = pd.read_parquet(
-        "hf://datasets/LLMDH/English-PD-bad-OCR/**/*.parquet"
-    )
-    prompts["split_encoded_prompts"] = prompts.apply(tokenize, axis=1)
+    prompts = pd.read_parquet(split_encoded_path)
     prompts["corrected_text"] = prompts.map_partitions(ocr_correction)
-    prompts.to_parquet("corrected_text.parquet")

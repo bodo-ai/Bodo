@@ -262,6 +262,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             self.arrays = data._mgr.arrays
             self._axes = data._mgr._axes
             self._plan = None
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
             return data
 
     def _collect(self):
@@ -503,6 +506,9 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             self.arrays = data._mgr.arrays
             self._axes = data._mgr.axes
             self._plan = None
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
             return data
 
     def _collect(self):
