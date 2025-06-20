@@ -104,6 +104,25 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "Plan not available for this manager, recreate this series with from_pandas"
         )
 
+    @check_args_fallback(unsupported="none")
+    def __getattribute__(self, name: str):
+        attr = object.__getattribute__(self, name)
+
+        if callable(attr):
+            pd_attr = getattr(pd.Series, name, None)
+            self_attr = getattr(type(self), name, None)
+
+            # If the method is not overridden in BodoSeries
+            if self_attr == pd_attr:
+                warnings.warn(
+                    BodoLibFallbackWarning(
+                        f"Series.{name} is not implemented in Bodo dataframe library. "
+                        "Falling back to Pandas (may be slow or run out of memory)."
+                    )
+                )
+
+        return attr
+
     @check_args_fallback("all")
     def _cmp_method(self, other, op):
         """Called when a BodoSeries is compared with a different entity (other)
