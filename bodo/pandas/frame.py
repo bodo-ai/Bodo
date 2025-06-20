@@ -373,11 +373,18 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Support simple directory only calls like:
         # df.to_iceberg("table", location="/path/to/table")
         if catalog_name is None and catalog_properties is None and location is not None:
-            catalog_properties = {
-                pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
-                pyiceberg.catalog.WAREHOUSE_LOCATION: location,
-            }
-            # DirCatalog does not support extra location argument in create_table
+            if location.startswith("arn:aws:s3tables:"):
+                from bodo.io.iceberg.catalog.s3_tables import (
+                    construct_catalog_properties as construct_s3_tables_catalog_properties,
+                )
+
+                catalog_properties = construct_s3_tables_catalog_properties(location)
+            else:
+                catalog_properties = {
+                    pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+                    pyiceberg.catalog.WAREHOUSE_LOCATION: location,
+                }
+            # DirCatalog and S3TablesCatalog do not support extra location argument in create_table
             location = None
         elif catalog_properties is None:
             catalog_properties = {}
