@@ -85,18 +85,86 @@ class DataFrameGroupBy:
 
     @check_args_fallback(supported="func")
     def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
-        if not isinstance(func, str) or (
-            isinstance(func, dict)
-            and all(
-                isinstance(key, str) and isinstance(val, str)
-                for key, val in func.items()
-            )
-        ):
-            return _groupby_agg_plan(self, func)
+        from pandas.core.apply import reconstruct_func
+        from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
-        raise BodoLibNotImplementedException(
-            "GroupBy.agg(): unsupported type for func."
+        from bodo.pandas.base import _empty_like
+
+        zero_size_df = _empty_like(self._obj)
+        empty_data = zero_size_df.groupby(self._keys, as_index=self._as_index)[
+            self._selection
+        ].agg(func, *args, **kwargs)
+
+        # Reconstruct func from keyword args, if no keyword args, leaves
+        # func unchanged
+        _, func, _, order = reconstruct_func(func, **kwargs)
+
+        # assuming func is strings or dictlike of listlike with inner funcs that are strings
+        # list of (function, column)
+        normalized_func: list[tuple[str, str]] = []
+        if is_dict_like(func):
+            if order is not None:
+                func_flattened = [
+                    (col, func_) for (col, funcs) in func.items() for func_ in funcs
+                ]
+                for idx in order:
+                    col, func_ = func_flattened[idx]
+                    normalized_func.append((func_, col))
+            else:
+                normalized_func = [(func_, col) for (col, func_) in func.items()]
+        elif is_list_like(func):
+            normalized_func = [
+                (func_, col) for func_ in func for col in self._selection
+            ]
+        elif isinstance(func, str):
+            normalized_func = [(func, col) for col in self._selection]
+        else:
+            raise TypeError(
+                "DataFrameGroupby.agg(): Unsupported type for func:", {func}
+            )
+
+        key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
+
+        n_key_cols = 0 if self._as_index else len(self._keys)
+        empty_data = _cast_groupby_agg_columns2(normalized_func, empty_data, n_key_cols)
+
+        exprs = [
+            LazyPlan(
+                "AggregateExpression",
+                empty_data.iloc[:, i],  # needs to be the output type
+                self._obj._plan,
+                func_,
+                [self._obj.columns.get_loc(col)],
+                self._dropna,
+            )
+            for i, (func_, col) in enumerate(normalized_func)
+        ]
+
+        plan = LazyPlan(
+            "LogicalAggregate",
+            empty_data,
+            self._obj._plan,
+            key_indices,
+            exprs,
         )
+
+        # Add the data column then the keys since they become Index columns in output.
+        # DuckDB generates keys first in output so we need to reverse the order.
+        if self._as_index:
+            col_indices = list(
+                range(len(self._keys), len(self._keys) + len(normalized_func))
+            )
+            col_indices += list(range(len(self._keys)))
+
+            exprs = make_col_ref_exprs(col_indices, plan)
+            plan = LazyPlan(
+                "LogicalProjection",
+                empty_data,
+                plan,
+                exprs,
+            )
+
+        return wrap_plan(plan)
 
     agg = aggregate
 
@@ -211,14 +279,6 @@ class SeriesGroupBy:
             return object.__getattribute__(gb, name)
 
 
-def _check_agg_supported_types():
-    pass
-
-
-def _get_single_row_self():
-    pass
-
-
 def _groupby_agg_plan(
     grouped: SeriesGroupBy | DataFrameGroupBy, func: str | dict[str, str]
 ) -> BodoSeries | BodoDataFrame:
@@ -236,32 +296,18 @@ def _groupby_agg_plan(
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
-    if isinstance(func, str):
-        exprs = [
-            LazyPlan(
-                "AggregateExpression",
-                zero_size_df[c],
-                grouped._obj._plan,
-                func,
-                [grouped._obj.columns.get_loc(c)],
-                grouped._dropna,
-            )
-            for c in grouped._selection
-            if c not in grouped._keys
-        ]
-    elif isinstance(func, dict):
-        exprs = [
-            LazyPlan(
-                "AggregateExpression",
-                zero_size_df[c],
-                grouped._obj._plan,
-                func[c],
-                [grouped._obj.columns.get_loc(c)],
-                grouped._dropna,
-            )
-            for c in grouped._selection
-            if c not in grouped._keys and c in func
-        ]
+    exprs = [
+        LazyPlan(
+            "AggregateExpression",
+            zero_size_df[c],
+            grouped._obj._plan,
+            func,
+            [grouped._obj.columns.get_loc(c)],
+            grouped._dropna,
+        )
+        for c in grouped._selection
+        if c not in grouped._keys
+    ]
 
     plan = LazyPlan(
         "LogicalAggregate",
@@ -319,7 +365,7 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
             )
         return new_type
     elif func == "count":
-        return new_type
+        return pa.int64()
 
     raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
 
@@ -353,3 +399,31 @@ def _cast_groupby_agg_columns(
         for col, new_type in new_types.items():
             data[col] = _empty_pd_array(new_type)
         return data
+
+
+def _cast_groupby_agg_columns2(
+    func: tuple[str, str] | str, data: pd.Series | pd.DataFrame, n_key_cols: int
+) -> pd.Series | pd.DataFrame:
+    """
+
+    Args:
+        func (tuple[str, str]): _description_
+        data (pd.DataFrame): _description_
+
+    Returns:
+        pd.Series | pd.DataFrame: _description_
+    """
+
+    if isinstance(data, pd.Series):
+        # only one output column
+        assert isinstance(func, str)
+        new_type = _get_agg_output_type(func, data.dtype.pyarrow_dtype, data.name)
+        data.astype(pd.ArrowDtype(new_type))
+
+    for i, func_ in enumerate(func):
+        col = data.columns[i + n_key_cols]
+        out_type = data[col].dtype.pyarrow_dtype
+        new_type = _get_agg_output_type(func_[0], out_type, col)
+        data[col] = data[col].astype(pd.ArrowDtype(new_type))
+
+    return data
