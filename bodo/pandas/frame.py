@@ -850,7 +850,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return wrap_plan(proj_plan)
 
-    @check_args_fallback(supported=["by", "as_index", "dropna"])
+    @check_args_fallback(supported=["by", "as_index", "dropna", "sort"])
     def groupby(
         self,
         by=None,
@@ -866,6 +866,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         Provides support for groupby similar to Pandas:
         https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L9148
         """
+        if sort != False:
+            raise BodoLibNotImplementedException(
+                "groupby: only sort=False currently supported"
+            )
+
         if isinstance(by, str):
             by = [by]
 
@@ -1024,6 +1029,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         head_val: new head value for the column to be set (Series, array or scalar).
         """
         self._mgr._plan = new_plan
+        new_column = key not in self.columns
         # Copy and update head in case reused
         new_df_head = self._head_df.copy()
         new_df_head[key] = head_val
@@ -1033,7 +1039,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Update internal data manager (e.g. insert a new block or update an
             # existing one). See:
             # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
-            super().__setitem__(key, head_val)
+            if new_column:
+                self._mgr.insert(
+                    len(self._info_axis) - 1, key, *self._sanitize_column(head_val)
+                )
+            else:
+                super().__setitem__(key, head_val)
 
     @check_args_fallback(supported=["func", "axis", "args"])
     def apply(

@@ -568,6 +568,6 @@ class PhysicalUDFExpression : public PhysicalExpression {
         std::shared_ptr<table_info> input_batch);
 
    protected:
-    BodoPythonScalarFunctionData &scalar_func_data;
+    BodoPythonScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
 };
