@@ -180,7 +180,7 @@ no_side_effect_call_tuples = {
         bodo,
     ),
     (
-        "alloc_datetime_timedelta_array",
+        "alloc_timedelta_array",
         "datetime_timedelta_ext",
         "hiframes",
         bodo,

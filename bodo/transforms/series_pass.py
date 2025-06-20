@@ -36,8 +36,8 @@ from bodo.hiframes import series_kernels
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.datetime_timedelta_ext import (
-    datetime_timedelta_array_type,
     datetime_timedelta_type,
+    timedelta_array_type,
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -1176,7 +1176,7 @@ class SeriesPass:
                     )
                 )
                 return replace_func(self, impl, [arg1, arg2])
-            elif typ1 == datetime_timedelta_array_type:
+            elif typ1 == timedelta_array_type:
                 impl = bodo.hiframes.datetime_timedelta_ext.overload_sub_operator_datetime_timedelta(
                     typ1, typ2
                 )
@@ -1284,8 +1284,7 @@ class SeriesPass:
 
         # datetime_timedelta_array operations
         if rhs.fn in cmp_ops and (
-            typ1 == datetime_timedelta_array_type
-            or typ2 == datetime_timedelta_array_type
+            typ1 == timedelta_array_type or typ2 == timedelta_array_type
         ):
             impl = bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload_arr(
                 rhs.fn
