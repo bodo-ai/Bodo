@@ -768,7 +768,7 @@ def _str_cat_helper(df, sep, na_rep):
     return lhs_col.str.cat(rhs_col, sep, na_rep)
 
 
-def _str_split_counter(s, is_split=True, pat=None, n=-1, regex=None):
+def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
     """Extracts column col from list series and returns as Pandas series."""
     if is_split:
         split_s = s.str.split(pat=pat, n=n, expand=False, regex=regex)
@@ -1014,7 +1014,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
     name=split splits the string in the Series/Index from the beginning,
     at the specified delimiter string, whereas name=rsplit splits from the end.
     """
-    if not isinstance(pat, str):
+    if pat is not None and not isinstance(pat, str):
         raise BodoLibNotImplementedException(
             "BodoStringMethods.split() and rsplit() do not support non-string patterns, falling back to Pandas."
         )
@@ -1025,7 +1025,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
     is_split = name == "split"
 
     # When pat is a string and regex=None, the given pat is compiled as a regex only if len(pat) != 1.
-    if regex is None and len(pat) != 1:
+    if regex is None and pat is not None and len(pat) != 1:
         regex = True
 
     empty_series = pd.Series(
@@ -1058,7 +1058,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
     length_series = _get_series_python_func_plan(
         series._plan,
         cnt_empty_series,
-        "bodo.pandas.series._str_split_counter",
+        "bodo.pandas.series._get_split_len",
         (),
         {"is_split": is_split, "pat": pat, "n": n, "regex": regex},
         is_method=False,
