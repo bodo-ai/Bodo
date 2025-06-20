@@ -2061,7 +2061,7 @@ def overload_convert_to_dt64ns(data):
 
     if is_np_arr_typ(data, types.int64):
         return lambda data: data.view(
-            bodo.utils.conversion.NS_DTYPE
+            bodo.utils.conversion.TD_DTYPE
         )  # pragma: no cover
 
     if is_np_arr_typ(data, types.NPDatetime("ns")):
@@ -2091,7 +2091,10 @@ def overload_convert_to_td64ns(data):
             bodo.utils.conversion.TD_DTYPE
         )  # pragma: no cover
 
-    if is_np_arr_typ(data, types.NPTimedelta("ns")):
+    if (
+        is_np_arr_typ(data, types.NPTimedelta("ns"))
+        or data == bodo.timedelta_array_type
+    ):
         return lambda data: data  # pragma: no cover
 
     if is_str_arr_type(data):
@@ -2181,7 +2184,7 @@ def overload_index_from_array(data, name=None):
             data, name=name
         )  # pragma: no cover
 
-    if data.dtype == types.NPTimedelta("ns"):
+    if data.dtype in (types.NPTimedelta("ns"), bodo.pd_timedelta_type):
         return lambda data, name=None: pd.TimedeltaIndex(
             data, name=name
         )  # pragma: no cover

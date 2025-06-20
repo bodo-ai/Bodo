@@ -43,7 +43,7 @@ df_value_params = [
         ),
         marks=pytest.mark.skipif(
             bodo.test_dataframe_library_enabled,
-            reason="[BSE-4779/4764] Support conversion from duration[ns], categorical dtypes.",
+            reason="[BSE-4764] Support conversion from categorical dtypes.",
         ),
         id="categorical_df",
     ),
