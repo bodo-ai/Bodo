@@ -237,7 +237,7 @@ def to_datetime(
     """
     if not isinstance(arg, (BodoSeries, BodoDataFrame)):
         raise BodoLibNotImplementedException(
-            "to_datetime() is not supported for arg that is not an instance of BodoSeries. Falling back to Pandas."
+            "to_datetime() is not supported for arg that is not an instance of BodoSeries or BodoDataFrame. Falling back to Pandas."
         )
 
     # Initialize shared metadata

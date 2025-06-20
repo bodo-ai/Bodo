@@ -1168,9 +1168,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         finally:
             self._mgr._disable_collect = original_flag
 
-    def isnull(self):
-        pass
-
 
 def _update_func_expr_source(
     func_expr: LazyPlan, new_source_plan: LazyPlan, col_index_offset: int

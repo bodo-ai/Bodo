@@ -39,7 +39,7 @@ def test_top_level_redirects(nulls_df, top_func, method_name):
         out_pd = pd_func()
         out_bd = bodo_func()
         assert out_bd.is_lazy_plan()
-        out_bd = out_bd.execute_plan()
+        _ = out_bd.execute_plan()
 
         _test_equal(out_bd, out_pd, check_pandas_types=False, check_names=False)
 
@@ -51,9 +51,8 @@ def test_top_level_to_datetime():
     pd_obj1 = pd.to_datetime(pdf1["dates"])
     bd_obj1 = bd.to_datetime(bdf1["dates"])
     assert bd_obj1.is_lazy_plan()
-    _test_equal(
-        bd_obj1.execute_plan(), pd_obj1, check_pandas_types=False, check_names=False
-    )
+    _ = bd_obj1.execute_plan()
+    _test_equal(bd_obj1, pd_obj1, check_pandas_types=False, check_names=False)
 
     # Multi-column case: year, month, day
     pdf2 = pd.DataFrame(
@@ -67,9 +66,8 @@ def test_top_level_to_datetime():
     pd_obj2 = pd.to_datetime(pdf2)
     bd_obj2 = bd.to_datetime(bdf2)
     assert bd_obj2.is_lazy_plan()
-    _test_equal(
-        bd_obj2.execute_plan(), pd_obj2, check_pandas_types=False, check_names=False
-    )
+    _ = bd_obj2.execute_plan()
+    _test_equal(bd_obj2, pd_obj2, check_pandas_types=False, check_names=False)
 
     # With NaNs
     pdf3 = pd.DataFrame(
