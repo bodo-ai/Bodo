@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import typing as pt
 import warnings
 from collections.abc import Callable, Iterable
@@ -376,22 +375,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if catalog_name is None and catalog_properties is None and location is not None:
             if location.startswith("arn:aws:s3tables:"):
                 from bodo.io.iceberg.catalog.s3_tables import (
-                    S3TABLES_REGION,
-                    S3TABLES_TABLE_BUCKET_ARN,
+                    construct_catalog_properties as construct_s3_tables_catalog_properties,
                 )
 
-                parsed = re.match(
-                    r"arn:aws:s3tables:([a-z0-9-]+):([0-9]+):bucket/([a-z0-9-]+)$",
-                    location,
-                )
-                if not parsed:
-                    raise ValueError(f"Invalid S3 Tables ARN: {location}")
-                region = parsed.group(1)
-                catalog_properties = {
-                    pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.s3_tables.S3TablesCatalog",
-                    S3TABLES_TABLE_BUCKET_ARN: location,
-                    S3TABLES_REGION: region,
-                }
+                catalog_properties = construct_s3_tables_catalog_properties(location)
             else:
                 catalog_properties = {
                     pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",

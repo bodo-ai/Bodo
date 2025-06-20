@@ -489,3 +489,28 @@ class S3TablesCatalog(MetastoreCatalog):
 
     def view_exists(self, identifier: str | Identifier) -> bool:
         raise NotImplementedError
+
+
+def construct_catalog_properties(table_bucket_arn: str) -> dict[str, str]:
+    """
+    Constructs the catalog properties for the S3 Tables catalog.
+
+    Args:
+        table_bucket_arn (str): The ARN of the S3 Tables bucket.
+
+    Returns:
+        dict[str, str]: The catalog properties.
+    """
+    from pyiceberg.catalog import PY_CATALOG_IMPL
+
+    parsed = re.match(
+        r"arn:aws:s3tables:([a-z0-9-]+):([0-9]+):bucket/([a-z0-9-]+)$", table_bucket_arn
+    )
+    if not parsed:
+        raise ValueError(f"Invalid S3 Tables ARN: {table_bucket_arn}")
+    region = parsed.group(1)
+    return {
+        PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.s3_tables.S3TablesCatalog",
+        S3TABLES_TABLE_BUCKET_ARN: table_bucket_arn,
+        S3TABLES_REGION: region,
+    }
