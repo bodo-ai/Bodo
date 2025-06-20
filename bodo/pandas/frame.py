@@ -1040,7 +1040,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # existing one). See:
             # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
             if new_column:
-                self._mgr.insert(len(self._info_axis) - 1, key, *self._sanitize_column(head_val))
+                self._mgr.insert(
+                    len(self._info_axis) - 1, key, *self._sanitize_column(head_val)
+                )
             else:
                 super().__setitem__(key, head_val)
 
