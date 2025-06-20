@@ -732,8 +732,13 @@ class BodoStringMethods:
             series._plan,
             new_metadata,
             "bodo.pandas.series._str_extract_helper",
-            (pattern,),
-            {"flags": flags, "is_series": is_series_output},
+            (
+                pat,
+                expand,
+                n_cols,
+                flags,
+            ),
+            {},
             is_method=False,
         )
 
@@ -829,26 +834,26 @@ def _get_col_as_series(s, col):
     return series
 
 
-def _str_extract_helper(s, pattern, flags=0, is_series=False):
+def _str_extract_helper(s, pat, expand, n_cols, flags):
     """Performs row-wise pattern matching, returns a series of match lists."""
-    res = []
+    is_series_output = not expand and n_cols == 1
+    string_s = s.astype(
+        str
+    )  # Type conversion is necessary to prevent ArrowExtensionArray routing
+    extracted = string_s.str.extract(pat, flags=flags, expand=expand)
 
-    for i in range(len(s)):
-        expr = s.iloc[i]
-        # Case 1: expand=False and n_cols=1
-        if is_series:
-            if expr is not pd.NA and (match := pattern.search(expr)):
-                res.append(match.groups()[0])
-            else:
-                res.append(pd.NA)
-            continue
-        # Case 2: expand=True or n_cols>1
-        match_list = []
-        if expr is not pd.NA and (match := pattern.search(expr)):
-            match_list = list(match.groups())
-        match_list.extend([pd.NA] * (pattern.groups - len(match_list)))
-        res.append(match_list)
-    return pd.Series(res)
+    if is_series_output:
+        return extracted
+
+    def to_extended_list(s):
+        """Extends list in each row to match length to n_cols"""
+        list_s = s.tolist()
+        list_s.extend([pd.NA] * (n_cols - len(s)))
+        return list_s
+
+    # Map tolist() to convert DataFrame to Series of lists
+    extended_s = extracted.apply(to_extended_list, axis=1)
+    return extended_s
 
 
 def get_base_plan(plan):
