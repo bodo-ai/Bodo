@@ -2,17 +2,21 @@
 The Bodo DataFrame Library supports Pandas Series methods and accessors that are listed below. They can be accessed through `BodoSeries` and follow the same behavior as their Pandas equivalents. For details on usage, we link to the corresponding Pandas documentation.
 
 !!! note
-	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info.
+	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info.
 
 ## Computations / descriptive stats
 - [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
 - [`bodo.pandas.BodoSeries.clip`][bodoseriesclip]
 - [`bodo.pandas.BodoSeries.round`][bodoseriesround]
 
+---
+
 ## Datetimelike properties
 
 !!! note
 	Input must be a Series of `datetime-like` data.
+
+---
 
 ### Datetime properties
 !!! note
@@ -43,6 +47,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.is_year_end`][bodoseriesdtis_year_end]
 - [`bodo.pandas.BodoSeries.dt.is_leap_year`][bodoseriesdtis_leap_year]
 
+---
 
 ### Datetime methods
 !!! warning
@@ -53,33 +58,48 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.ceil`][bodoseriesdtceil]
 - [`bodo.pandas.BodoSeries.dt.month_name`][bodoseriesdtmonth_name]
 - [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name]
+- [`bodo.pandas.BodoSeries.dt.total_seconds`][bodoseriesdttotal_seconds]
 
+
+---
 
 ## Function application
 - [`bodo.pandas.BodoSeries.map`][bodoseriesmap]
 
+---
+
 ## Missing data handling
+- [`bodo.pandas.BodoSeries.isna`][bodoseriesisna]
 - [`bodo.pandas.BodoSeries.isnull`][bodoseriesisnull]
+- [`bodo.pandas.BodoSeries.notna`][bodoseriesnotna]
 - [`bodo.pandas.BodoSeries.notnull`][bodoseriesnotnull]
 - [`bodo.pandas.BodoSeries.replace`][bodoseriesreplace]
+
+---
 
 ## Reindexing / Selection / Label manipulation
 - [`bodo.pandas.BodoSeries.head`][bodoserieshead]
 - [`bodo.pandas.BodoSeries.isin`][bodoseriesisin]
 
+---
+
 ## Reshaping, sorting
 - [`bodo.pandas.BodoSeries.sort_values`][bodoseriessortvalues]
+
+---
 
 ## String handling
 
 - [`bodo.pandas.BodoSeries.str.capitalize`][bodoseriesstrcapitalize]
 - [`bodo.pandas.BodoSeries.str.casefold`][bodoseriesstrcasefold]
+- [`bodo.pandas.BodoSeries.str.cat`][bodoseriesstrcat]
 - [`bodo.pandas.BodoSeries.str.center`][bodoseriesstrcenter]
 - [`bodo.pandas.BodoSeries.str.contains`][bodoseriesstrcontains]
 - [`bodo.pandas.BodoSeries.str.count`][bodoseriesstrcount]
 - [`bodo.pandas.BodoSeries.str.decode`][bodoseriesstrdecode]
 - [`bodo.pandas.BodoSeries.str.encode`][bodoseriesstrencode]
 - [`bodo.pandas.BodoSeries.str.endswith`][bodoseriesstrendswith]
+- [`bodo.pandas.BodoSeries.str.extract`][bodoseriesstrextract]
 - [`bodo.pandas.BodoSeries.str.find`][bodoseriesstrfind]
 - [`bodo.pandas.BodoSeries.str.findall`][bodoseriesstrfindall]
 - [`bodo.pandas.BodoSeries.str.fullmatch`][bodoseriesstrfullmatch]
@@ -111,9 +131,11 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.rindex`][bodoseriesstrrindex]
 - [`bodo.pandas.BodoSeries.str.rjust`][bodoseriesstrrjust]
 - [`bodo.pandas.BodoSeries.str.rpartition`][bodoseriesstrrpartition]
+- [`bodo.pandas.BodoSeries.str.rsplit`][bodoseriesstrrsplit]
 - [`bodo.pandas.BodoSeries.str.rstrip`][bodoseriesstrrstrip]
 - [`bodo.pandas.BodoSeries.str.slice`][bodoseriesstrslice]
 - [`bodo.pandas.BodoSeries.str.slice_replace`][bodoseriesstrslicereplace]
+- [`bodo.pandas.BodoSeries.str.split`][bodoseriesstrsplit]
 - [`bodo.pandas.BodoSeries.str.startswith`][bodoseriesstrstartswith]
 - [`bodo.pandas.BodoSeries.str.strip`][bodoseriesstrstrip]
 - [`bodo.pandas.BodoSeries.str.swapcase`][bodoseriesstrswapcase]
@@ -228,3 +250,11 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesstrjoin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.join.html
 [bodoseriesstrencode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.encode.html
 [bodoseriesstrdecode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.decode.html
+
+[bodoseriesstrcat]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.cat.html
+[bodoseriesstrextract]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.extract.html
+[bodoseriesstrsplit]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.split.html
+[bodoseriesstrrsplit]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rsplit.html
+[bodoseriesisna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isna.html
+[bodoseriesnotna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notna.html
+[bodoseriesdttotal_seconds]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.total_seconds.html
