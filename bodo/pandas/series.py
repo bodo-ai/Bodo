@@ -1449,6 +1449,8 @@ dir_methods = [
             "isin",
             "notnull",
             "isnull",
+            "isna",
+            "notna",
         ],
         pd.ArrowDtype(pa.bool_()),
     ),
