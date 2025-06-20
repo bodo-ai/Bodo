@@ -1,6 +1,7 @@
 import datetime
 import operator
 import os
+import random
 import tempfile
 
 import numba.core.utils
@@ -16,6 +17,11 @@ from pyiceberg.transforms import IdentityTransform
 
 import bodo.pandas as bpd
 from bodo.io.iceberg.catalog.dir import DirCatalog
+from bodo.io.iceberg.catalog.s3_tables import (
+    S3TABLES_REGION,
+    S3TABLES_TABLE_BUCKET_ARN,
+    S3TablesCatalog,
+)
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.utils import _test_equal
 
@@ -583,3 +589,58 @@ def test_write():
         assert table.properties.get("p_a1") == "pvalue_a1"
         snapshot = table.current_snapshot()
         assert snapshot.summary.get("p_key") == "p_value"
+
+
+def test_read_s3_tables_location():
+    location = "arn:aws:s3tables:us-east-2:427443013497:bucket/tpch"
+    region = "us-east-2"
+    catalog_properties = {
+        S3TABLES_TABLE_BUCKET_ARN: location,
+        S3TABLES_REGION: region,
+    }
+    catalog = S3TablesCatalog(None, **catalog_properties)
+    pdf = catalog.load_table("sf1000.nation").scan().to_pandas()
+    bdf = bpd.read_iceberg("sf1000.nation", location=location)
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_write_s3_tables_location():
+    location = "arn:aws:s3tables:us-east-2:427443013497:bucket/unittest-bucket"
+    region = "us-east-2"
+    catalog_properties = {
+        S3TABLES_TABLE_BUCKET_ARN: location,
+        S3TABLES_REGION: region,
+    }
+    catalog = S3TablesCatalog(None, **catalog_properties)
+    df = pd.DataFrame(
+        {
+            "one": [-1.0, np.nan, 2.5, 3.0, 4.0, 6.0, 10.0],
+            "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
+            "three": [True, False, True, True, True, False, False],
+            "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
+            "five": ["foo", "bar", "baz", None, "bar", "baz", "foo"],
+        }
+    )
+    bdf = bpd.from_pandas(df)
+    rand_str = random.randint(100000, 999999)
+    table_id = f"write_namespace.bodoicebergwritetest{rand_str}"
+    bdf.to_iceberg(table_id, location=location)
+    try:
+        # Read using PyIceberg to verify the write
+        out_df = catalog.load_table(table_id).scan().to_pandas()
+        _test_equal(
+            out_df,
+            df,
+            check_pandas_types=False,
+            sort_output=True,
+            reset_index=True,
+        )
+    finally:
+        # Clean up the table after the test
+        catalog.purge_table(table_id)

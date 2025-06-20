@@ -105,6 +105,17 @@ def get_series_string_overloads():
     return get_method_overloads(SeriesStrMethodType)
 
 
+@functools.lru_cache
+def get_groupby_overloads():
+    """Return a list of the functions supported on DataFrameGroupby/DataFrameSeries objects
+    to some degree by bodo.jit.
+    """
+    from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
+    from bodo.numba_compat import get_method_overloads
+
+    return get_method_overloads(DataFrameGroupByType)
+
+
 def get_overloads(cls_name):
     """Use the class name of the __class__ attr of self parameter
     to determine which of the above two functions to call to
@@ -116,6 +127,8 @@ def get_overloads(cls_name):
         return get_series_overloads()
     elif cls_name == "BodoStringMethods":
         return get_series_string_overloads()
+    elif cls_name in ("DataFrameGroupBy", "SeriesGroupBy"):
+        return get_groupby_overloads()
     else:
         assert False
 
@@ -299,9 +312,19 @@ def check_args_fallback(
                         pass
 
                     # Fallback to Python. Call the same method in the base class.
-                    base_class = self.__class__.__bases__[0]
-                    if self.__class__ == bodo.pandas.series.BodoStringMethods:
+                    if self.__class__.__name__ in ("DataFrameGroupBy", "SeriesGroupBy"):
+                        obj_base_class = self._obj.__class__.__bases__[0]
+                        self = getattr(obj_base_class, "groupby")(
+                            self._obj,
+                            self._keys,
+                            as_index=self._as_index,
+                            dropna=self._dropna,
+                        )[self._selection]
+                        base_class = self.__class__
+                    elif self.__class__ == bodo.pandas.series.BodoStringMethods:
                         base_class = self._series.__class__.__bases__[0].str
+                    else:
+                        base_class = self.__class__.__bases__[0]
                     msg = (
                         f"{base_class.__name__}.{func.__name__} is not "
                         "implemented in Bodo dataframe library for the specified arguments yet. "

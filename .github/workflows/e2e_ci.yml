@@ -97,6 +97,8 @@ jobs:
         preprocess_thepile_bodo.py
         bio_parallelizing_fasta_processing.py
         llm_inference_speedtest.py
+        pleias_ocr_correction_inference.py
+        pleias_ocr_correction_tokenization.py
         #Tutorials/*.py
     steps:
       - uses: actions/checkout@v4

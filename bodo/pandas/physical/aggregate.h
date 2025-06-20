@@ -124,6 +124,10 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::vector<int32_t> f_in_offsets(f_in_cols.size() + 1);
         std::iota(f_in_offsets.begin(), f_in_offsets.end(), 0);
 
+        // TODO: propagate dropna value when agg columns are pruned out.
+        if (!dropna.has_value()) {
+            dropna = true;
+        }
         this->groupby_state = std::make_unique<GroupbyState>(
             std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),

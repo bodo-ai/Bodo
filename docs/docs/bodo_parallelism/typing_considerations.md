@@ -46,7 +46,7 @@ desired Python, Numpy, or Pandas type.
 | `bodo.datetime64ns[:]`| Array of Numpy datetime64 values|
 | `bodo.timedelta64ns[:]`|Array of Numpy timedelta64 values|
 | `bodo.datetime_date_array_type`|Array of datetime.date types|
-| `bodo.datetime_timedelta_array_type`|Array of datetime.timedelta types|
+| `bodo.timedelta_array_type`|Array of datetime.timedelta types|
 | `bodo.DecimalArrayType(precision, scale)`| Array of Apache Arrow Decimal128 values with the given precision and scale. <br> *e.g.*, `bodo.DecimalArrayType(38, 18)`|
 | `bodo.binary_array_type`|Array of nullable bytes values|
 | `bodo.StructArrayType(data_types, field_names)`| Array of a user defined struct with the given tuple of data types and field names. <br> *e.g.*, `bodo.StructArrayType((bodo.int32[:], bodo.datetime64ns[:]), ("a", "b"))`|
