@@ -900,7 +900,8 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
             duckdb_type = duckdb::LogicalType::VARCHAR;
             break;
         }
-        case arrow::Type::BINARY: {
+        case arrow::Type::BINARY:
+        case arrow::Type::LARGE_BINARY: {
             duckdb_type = duckdb::LogicalType::BLOB;
             break;
         }

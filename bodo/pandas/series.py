@@ -696,6 +696,91 @@ class BodoStringMethods:
             series._plan, new_metadata, "str.join", (sep,), {}
         )
 
+    def extract(self, pat, flags=0, expand=True):
+        """
+        Extract capture groups in the regex pat as columns in a DataFrame.
+        For each subject string in the Series, extract groups from the first
+        match of regular expression pat.
+        """
+        import re
+
+        pattern = re.compile(pat, flags=flags)
+        n_cols = pattern.groups
+
+        # Like Pandas' implementation, raises ValueError when there are no capture groups.
+        if n_cols == 0:
+            raise ValueError("pattern contains no capture groups")
+
+        group_names = pattern.groupindex
+        is_series_output = not expand and n_cols == 1  # In this case, returns a series.
+
+        series = self._series
+
+        if is_series_output:
+            dtype = pd.ArrowDtype(pa.large_string())
+        else:
+            dtype = pd.ArrowDtype(pa.large_list(pa.large_string()))
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.series._str_extract_helper",
+            (
+                pat,
+                expand,
+                n_cols,
+                flags,
+            ),
+            {},
+            is_method=False,
+        )
+
+        # expand=False and n_cols=1: returns series
+        if is_series_output:
+            return series_out
+
+        n_index_arrays = get_n_index_arrays(index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
+        assert series_out.is_lazy_plan()
+
+        # Create schema for output DataFrame with n_cols columns
+        if not group_names:
+            field_list = [
+                pa.field(f"{idx}", pa.large_string()) for idx in range(n_cols)
+            ]
+        else:
+            field_list = [
+                pa.field(f"{name}", pa.large_string()) for name in group_names.keys()
+            ]
+
+        arrow_schema = pa.schema(field_list)
+        empty_data = arrow_to_empty_df(arrow_schema)
+        empty_data.index = index
+
+        expr = tuple(
+            get_col_as_series_expr(idx, empty_data, series_out, index_cols)
+            for idx in range(n_cols)
+        )
+
+        # Creates DataFrame with n_cols columns
+        df_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            series_out._plan,
+            expr + index_col_refs,
+        )
+
+        return wrap_plan(plan=df_plan)
+
 
 class BodoDatetimeProperties:
     """Support Series.dt datetime accessors same as Pandas."""
@@ -730,17 +815,6 @@ class BodoDatetimeProperties:
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
-def _str_partition_helper(s, col):
-    """Extracts column col from list series and returns as Pandas series."""
-    series = pd.Series(
-        [
-            None if not isinstance(s.iloc[i], list) else s.iloc[i][col]
-            for i in range(len(s))
-        ]
-    )
-    return series
-
-
 def _str_cat_helper(df, sep, na_rep):
     """Concatenates df[idx] for idx in idx_pair, separated by sep."""
     if sep is None:
@@ -751,6 +825,38 @@ def _str_cat_helper(df, sep, na_rep):
     rhs_col = df.iloc[:, 1]
 
     return lhs_col.str.cat(rhs_col, sep, na_rep)
+
+
+def _get_col_as_series(s, col):
+    """Extracts column col from list series and returns as Pandas series."""
+    series = pd.Series(
+        [
+            None if not isinstance(s.iloc[i], list) else s.iloc[i][col]
+            for i in range(len(s))
+        ]
+    )
+    return series
+
+
+def _str_extract_helper(s, pat, expand, n_cols, flags):
+    """Performs row-wise pattern matching, returns a series of match lists."""
+    is_series_output = not expand and n_cols == 1
+    # Type conversion is necessary to prevent ArrowExtensionArray routing
+    string_s = s.astype(str)
+    extracted = string_s.str.extract(pat, flags=flags, expand=expand)
+
+    if is_series_output:
+        return extracted
+
+    def to_extended_list(s):
+        """Extends list in each row to match length to n_cols"""
+        list_s = s.tolist()
+        list_s.extend([pd.NA] * (n_cols - len(s)))
+        return list_s
+
+    # Map tolist() to convert DataFrame to Series of lists
+    extended_s = extracted.apply(to_extended_list, axis=1)
+    return extended_s
 
 
 def get_base_plan(plan):
@@ -913,7 +1019,29 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
     return result
 
 
-def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwargs):
+def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
+    """
+    Extracts indexed column values from list series and
+    returns resulting scalar expression.
+    """
+    return LazyPlan(
+        "PythonScalarFuncExpression",
+        empty_data,
+        series_out._plan,
+        (
+            "bodo.pandas.series._get_col_as_series",
+            True,  # is_series
+            False,  # is_method
+            (idx,),  # args
+            {},  # kwargs
+        ),
+        (0,) + index_cols,
+    )
+
+
+def _get_series_python_func_plan(
+    series_proj, empty_data, func_name, args, kwargs, is_method=True
+):
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
@@ -937,7 +1065,7 @@ def _get_series_python_func_plan(series_proj, empty_data, func_name, args, kwarg
         (
             func_name,
             True,  # is_series
-            True,  # is_method
+            is_method,  # is_method
             args,  # args
             kwargs,  # kwargs
         ),
@@ -986,37 +1114,30 @@ def gen_partition(name):
         if not expand:
             return series_out
 
+        n_index_arrays = get_n_index_arrays(index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
         # Create schema for output DataFrame with 3 columns
         arrow_schema = pa.schema(
             [pa.field(f"{idx}", pa.large_string()) for idx in range(3)]
         )
         empty_data = arrow_to_empty_df(arrow_schema)
-        empty_series = pd.Series([], dtype=pd.ArrowDtype(pa.large_string()))
+        empty_data.index = index
 
-        # Create scalar function expression for each column: extract value at index idx from each row
-        def create_expr(idx):
-            return LazyPlan(
-                "PythonScalarFuncExpression",
-                empty_series,
-                series_out._plan,
-                (
-                    "bodo.pandas.series._str_partition_helper",
-                    True,  # is_series
-                    False,  # is_method
-                    (idx,),  # args
-                    {},  # kwargs
-                ),
-                (0,),
-            )
+        expr = tuple(
+            get_col_as_series_expr(idx, empty_data, series_out, index_cols)
+            for idx in range(3)
+        )
 
-        expr = tuple(create_expr(idx) for idx in range(3))
+        assert series_out.is_lazy_plan()
 
         # Creates DataFrame with 3 columns
         df_plan = LazyPlan(
             "LogicalProjection",
             empty_data,
             series_out._plan,
-            expr,
+            expr + index_col_refs,
         )
 
         return wrap_plan(plan=df_plan)
@@ -1333,6 +1454,8 @@ dir_methods = [
             "isin",
             "notnull",
             "isnull",
+            "isna",
+            "notna",
         ],
         pd.ArrowDtype(pa.bool_()),
     ),
