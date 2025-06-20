@@ -1029,7 +1029,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         head_val: new head value for the column to be set (Series, array or scalar).
         """
         self._mgr._plan = new_plan
-        new_column = not key in self.columns
+        new_column = key not in self.columns
         # Copy and update head in case reused
         new_df_head = self._head_df.copy()
         new_df_head[key] = head_val

@@ -4,15 +4,13 @@ import functools
 import inspect
 import os
 import time
-from typing import Callable, List, Dict
+from collections.abc import Callable
 
 import bodo.pandas as pd
 
 
 @functools.lru_cache
-def load_lineitem(
-    data_folder: str
-) -> pd.DataFrame:
+def load_lineitem(data_folder: str) -> pd.DataFrame:
     print("Loading lineitem")
     data_path = data_folder + "/lineitem.parquet"
     df = pd.read_parquet(data_path)
@@ -24,9 +22,7 @@ def load_lineitem(
 
 
 @functools.lru_cache
-def load_part(
-    data_folder: str
-) -> pd.DataFrame:
+def load_part(data_folder: str) -> pd.DataFrame:
     print("Loading part")
     data_path = data_folder + "/part.parquet"
     df = pd.read_parquet(data_path)
@@ -35,9 +31,7 @@ def load_part(
 
 
 @functools.lru_cache
-def load_orders(
-    data_folder: str
-) -> pd.DataFrame:
+def load_orders(data_folder: str) -> pd.DataFrame:
     print("Loading orders")
     data_path = data_folder + "/orders.parquet"
     df = pd.read_parquet(data_path)
@@ -47,9 +41,7 @@ def load_orders(
 
 
 @functools.lru_cache
-def load_customer(
-    data_folder: str
-) -> pd.DataFrame:
+def load_customer(data_folder: str) -> pd.DataFrame:
     print("Loading customer")
     data_path = data_folder + "/customer.parquet"
     df = pd.read_parquet(data_path)
@@ -58,9 +50,7 @@ def load_customer(
 
 
 @functools.lru_cache
-def load_nation(
-    data_folder: str
-) -> pd.DataFrame:
+def load_nation(data_folder: str) -> pd.DataFrame:
     print("Loading nation")
     data_path = data_folder + "/nation.parquet"
     df = pd.read_parquet(data_path)
@@ -69,9 +59,7 @@ def load_nation(
 
 
 @functools.lru_cache
-def load_region(
-    data_folder: str
-) -> pd.DataFrame:
+def load_region(data_folder: str) -> pd.DataFrame:
     print("Loading region")
     data_path = data_folder + "/region.parquet"
     df = pd.read_parquet(data_path)
@@ -80,9 +68,7 @@ def load_region(
 
 
 @functools.lru_cache
-def load_supplier(
-    data_folder: str
-) -> pd.DataFrame:
+def load_supplier(data_folder: str) -> pd.DataFrame:
     print("Loading supplier")
     data_path = data_folder + "/supplier.parquet"
     df = pd.read_parquet(data_path)
@@ -91,9 +77,7 @@ def load_supplier(
 
 
 @functools.lru_cache
-def load_partsupp(
-    data_folder: str
-) -> pd.DataFrame:
+def load_partsupp(data_folder: str) -> pd.DataFrame:
     print("Loading partsupp")
     data_path = data_folder + "/partsupp.parquet"
     df = pd.read_parquet(data_path)
@@ -106,16 +90,18 @@ def timethis(q: Callable):
     def wrapped(*args, **kwargs):
         t = time.time()
         q(*args, **kwargs)
-        print("%s Execution time (s): %f" % (q.__name__.upper(), time.time() - t))
+        print(f"{q.__name__.upper()} Execution time (s): {time.time() - t:f}")
 
     return wrapped
 
 
-_query_to_datasets: Dict[int, List[str]] = dict()
+_query_to_datasets: dict[int, list[str]] = {}
 
 
 def collect_datasets(func: Callable):
-    _query_to_datasets[int(func.__name__[1:])] = list(inspect.signature(func).parameters)
+    _query_to_datasets[int(func.__name__[1:])] = list(
+        inspect.signature(func).parameters
+    )
     return func
 
 
@@ -1019,18 +1005,15 @@ def q22(customer, orders):
 
 def run_queries(
     root: str,
-    queries: List[int],
+    queries: list[int],
 ):
     total_start = time.time()
     print("Start data loading")
-    queries_to_args = dict()
-    datasets_to_load = set()
+    queries_to_args = {}
     for query in queries:
         args = []
         for dataset in _query_to_datasets[query]:
-            args.append(
-                globals()[f"load_{dataset}"](root)
-            )
+            args.append(globals()[f"load_{dataset}"](root))
         queries_to_args[query] = args
     print(f"Data loading time (s): {time.time() - total_start}")
 
@@ -1045,7 +1028,10 @@ def main():
     parser.add_argument(
         "--folder",
         type=str,
-        default=os.path.join(os.path.dirname(__file__), "../../BodoSQL/bodosql/tests/data/tpch-test-data/parquet"), 
+        default=os.path.join(
+            os.path.dirname(__file__),
+            "../../BodoSQL/bodosql/tests/data/tpch-test-data/parquet",
+        ),
         help="The folder containing TPCH data",
     )
     parser.add_argument(

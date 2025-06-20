@@ -288,8 +288,7 @@ duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    PyObject *parquet_path, PyObject *pyarrow_schema,
-    PyObject *storage_options,
+    PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
     int64_t num_rows);
 
 /**
