@@ -162,5 +162,5 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     std::vector<int64_t> inverse_col_inds;
     const std::shared_ptr<bodo::Schema> output_schema;
     std::unique_ptr<StreamSortState> stream_sorter;
-    int64_t limit, offset;
+    const int64_t limit, offset;
 };
