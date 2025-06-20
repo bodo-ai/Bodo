@@ -12,10 +12,14 @@ from bodo.ext import plan_optimizer
 def test_join_node(datapath):
     """Make sure Cython wrapper around the join node works. Just tests node creation."""
     P1 = plan_optimizer.LogicalGetParquetRead(
-        pa.schema([("A", pa.int64()), ("B", pa.string())]), datapath("example.parquet"), {}
+        pa.schema([("A", pa.int64()), ("B", pa.string())]),
+        datapath("example.parquet"),
+        {},
     )
     P2 = plan_optimizer.LogicalGetParquetRead(
-        pa.schema([("A", pa.int64()), ("B", pa.string())]), datapath("example2.parquet"), {}
+        pa.schema([("A", pa.int64()), ("B", pa.string())]),
+        datapath("example2.parquet"),
+        {},
     )
     A = plan_optimizer.LogicalComparisonJoin(
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
@@ -30,7 +34,9 @@ def test_join_node(datapath):
 def test_projection_node(datapath):
     """Make sure Cython wrapper around the projection node works. Just tests node creation."""
     P1 = plan_optimizer.LogicalGetParquetRead(
-        pa.schema([("A", pa.int64()), ("B", pa.string())]), datapath("example.parquet"), {}
+        pa.schema([("A", pa.int64()), ("B", pa.string())]),
+        datapath("example.parquet"),
+        {},
     )
     exprs = [
         plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), P1, 0),
@@ -47,7 +53,9 @@ def test_projection_node(datapath):
 def test_filter_node(datapath):
     """Make sure Cython wrapper around the filter node works. Just tests node creation."""
     P1 = plan_optimizer.LogicalGetParquetRead(
-        pa.schema([("A", pa.int64()), ("B", pa.string())]), datapath("example.parquet"), {}
+        pa.schema([("A", pa.int64()), ("B", pa.string())]),
+        datapath("example.parquet"),
+        {},
     )
     A = plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), P1, 0)
     B = plan_optimizer.ComparisonOpExpression(
@@ -60,16 +68,22 @@ def test_filter_node(datapath):
 def test_parquet_node(datapath):
     """Make sure Cython wrapper around the Parquet node works. Just tests node creation."""
     A = plan_optimizer.LogicalGetParquetRead(
-        pa.schema([("A", pa.int64()), ("B", pa.string())]), datapath("example.parquet"), {}
+        pa.schema([("A", pa.int64()), ("B", pa.string())]),
+        datapath("example.parquet"),
+        {},
     )
-    assert str(A).startswith("LogicalGetParquetRead(") and str(A).endswith("example.parquet)")
+    assert str(A).startswith("LogicalGetParquetRead(") and str(A).endswith(
+        "example.parquet)"
+    )
     assert A.path.endswith("example.parquet")
 
 
 def test_optimize_call(datapath):
     """Make sure Cython wrapper around optimize call works."""
     A = plan_optimizer.LogicalGetParquetRead(
-        pa.schema([("A", pa.int64()), ("B", pa.string())]), datapath("example.parquet"), {}
+        pa.schema([("A", pa.int64()), ("B", pa.string())]),
+        datapath("example.parquet"),
+        {},
     )
     B = plan_optimizer.py_optimize_plan(A)
     assert str(B) == "LogicalOperator()"
