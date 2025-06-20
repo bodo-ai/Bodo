@@ -3654,7 +3654,7 @@ def overload_init_engine(I, ban_unique=True):
                         I._dict[val] = i
 
         return impl
-    elif isinstance(I, TimedeltaIndexType):
+    elif isinstance(I, TimedeltaIndexType) and I.data == bodo.timedelta_array_type:
 
         def impl(I, ban_unique=True):  # pragma: no cover
             if len(I) > 0 and not I._dict:
