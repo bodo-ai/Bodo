@@ -83,6 +83,23 @@ class DataFrameGroupBy:
                 gb = gb[self._selection]
             return object.__getattribute__(gb, name)
 
+    @check_args_fallback(supported="func")
+    def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
+        if not isinstance(func, str) or (
+            isinstance(func, dict)
+            and all(
+                isinstance(key, str) and isinstance(val, str)
+                for key, val in func.items()
+            )
+        ):
+            return _groupby_agg_plan(self, func)
+
+        raise BodoLibNotImplementedException(
+            "GroupBy.agg(): unsupported type for func."
+        )
+
+    agg = aggregate
+
     @check_args_fallback(supported="none")
     def sum(
         self,
@@ -94,7 +111,26 @@ class DataFrameGroupBy:
         """
         Compute the sum of each group.
         """
-        return _groupby_sum(self)
+        return _groupby_agg_plan(self, "sum")
+
+    @check_args_fallback(supported="none")
+    def mean(
+        self,
+        numeric_only: bool = False,
+        engine: Literal["cython", "numba"] | None = None,
+        engine_kwargs: dict[str, bool] | None = None,
+    ):
+        """
+        Compute the sum of each group.
+        """
+        return _groupby_agg_plan(self, "mean")
+
+    @check_args_fallback(supported="none")
+    def count(self):
+        """
+        Compute the sum of each group.
+        """
+        return _groupby_agg_plan(self, "count")
 
 
 class SeriesGroupBy:
@@ -131,7 +167,34 @@ class SeriesGroupBy:
             "SeriesGroupBy.sum() should only be called on a single column selection."
         )
 
-        return _groupby_sum(self)
+        return _groupby_agg_plan(self, "sum")
+
+    @check_args_fallback(supported="none")
+    def mean(
+        self,
+        numeric_only: bool = False,
+        engine: Literal["cython", "numba"] | None = None,
+        engine_kwargs: dict[str, bool] | None = None,
+    ):
+        """
+        Compute the sum of each group.
+        """
+        assert len(self._selection) == 1, (
+            "SeriesGroupBy.sum() should only be called on a single column selection."
+        )
+
+        return _groupby_agg_plan(self, "mean")
+
+    @check_args_fallback(supported="none")
+    def count(self):
+        """
+        Compute the sum of each group.
+        """
+        assert len(self._selection) == 1, (
+            "SeriesGroupBy.sum() should only be called on a single column selection."
+        )
+
+        return _groupby_agg_plan(self, "count")
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
@@ -148,10 +211,18 @@ class SeriesGroupBy:
             return object.__getattribute__(gb, name)
 
 
-def _groupby_sum(
-    grouped: SeriesGroupBy | DataFrameGroupBy,
+def _check_agg_supported_types():
+    pass
+
+
+def _get_single_row_self():
+    pass
+
+
+def _groupby_agg_plan(
+    grouped: SeriesGroupBy | DataFrameGroupBy, func: str | dict[str, str]
 ) -> BodoSeries | BodoDataFrame:
-    """Compute groupby.sum() on the Series or DataFrame GroupBy object."""
+    """Compute groupby.func() on the Series or DataFrame GroupBy object."""
     from bodo.pandas.base import _empty_like
 
     zero_size_df = _empty_like(grouped._obj)
@@ -159,24 +230,38 @@ def _groupby_sum(
         grouped._selection[0]
         if isinstance(grouped, SeriesGroupBy)
         else grouped._selection
-    ].sum()
+    ].agg(func)
 
-    empty_data = _cast_groupby_agg_columns("sum", empty_data_pandas, grouped._selection)
+    empty_data = _cast_groupby_agg_columns(func, empty_data_pandas, grouped._selection)
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
-    exprs = [
-        LazyPlan(
-            "AggregateExpression",
-            zero_size_df[c],
-            grouped._obj._plan,
-            "sum",
-            [grouped._obj.columns.get_loc(c)],
-            grouped._dropna,
-        )
-        for c in grouped._selection
-        if c not in grouped._keys
-    ]
+    if isinstance(func, str):
+        exprs = [
+            LazyPlan(
+                "AggregateExpression",
+                zero_size_df[c],
+                grouped._obj._plan,
+                func,
+                [grouped._obj.columns.get_loc(c)],
+                grouped._dropna,
+            )
+            for c in grouped._selection
+            if c not in grouped._keys
+        ]
+    elif isinstance(func, dict):
+        exprs = [
+            LazyPlan(
+                "AggregateExpression",
+                zero_size_df[c],
+                grouped._obj._plan,
+                func[c],
+                [grouped._obj.columns.get_loc(c)],
+                grouped._dropna,
+            )
+            for c in grouped._selection
+            if c not in grouped._keys and c in func
+        ]
 
     plan = LazyPlan(
         "LogicalAggregate",
@@ -224,6 +309,16 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
             raise ValueError(
                 f"GroupBy.sum(): Unsupported dtype in column '{col_name}': {pa_type}."
             )
+        return new_type
+    elif func == "mean":
+        if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
+            new_type = pa.float64()
+        else:
+            raise ValueError(
+                f"GroupBy.mean(): Unsupported dtype in column '{col_name}': {pa_type}."
+            )
+        return new_type
+    elif func == "count":
         return new_type
 
     raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
