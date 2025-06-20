@@ -1067,15 +1067,29 @@ def test_series_sort(datapath):
     )
 
 
-@pytest.mark.parametrize(
-    "dropna",
-    [pytest.param(True, id="dropna-True"), pytest.param(False, id="dropna-False")],
+@pytest.fixture(
+    params=[
+        pytest.param(True, id="dropna-True"),
+        pytest.param(False, id="dropna-False"),
+    ],
+    scope="module",
 )
-@pytest.mark.parametrize(
-    "as_index",
-    [pytest.param(True, id="as_index-True"), pytest.param(False, id="as_index-False")],
+def dropna(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(True, id="as_index-True"),
+        pytest.param(False, id="as_index-False"),
+    ],
+    scope="module",
 )
-def test_basic_groupby(dropna, as_index):
+def as_index(request):
+    return request.param
+
+
+def test_series_groupby(dropna, as_index):
     """
     Test a simple groupby operation.
     """
@@ -1095,6 +1109,71 @@ def test_basic_groupby(dropna, as_index):
     df2 = df1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
 
     _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [pytest.param(None, id="select_all"), pytest.param(["C", "A"], id="select_subset")],
+)
+def test_dataframe_groupby(dropna, as_index, selection):
+    """
+    Test a simple groupby operation.
+    """
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
+            "B": ["A", "B"] * 6,
+            "E": [False, True] * 6,
+            "D": pd.array(
+                [i * 2 if (i**2) % 3 == 0 else pd.NA for i in range(12)], "Int32"
+            ),
+            "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
+        }
+    )
+
+    bdf1 = bd.from_pandas(df1)
+
+    if selection is None:
+        bdf2 = bdf1.groupby(["D", "E"], as_index=as_index, dropna=dropna).sum()
+        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna).sum()
+    else:
+        bdf2 = bdf1.groupby(["D", "E"], as_index=as_index, dropna=dropna)[
+            selection
+        ].sum()
+        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna)[selection].sum()
+
+    assert bdf2.is_lazy_plan()
+
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+
+
+def test_groupby_fallback():
+    """Checks that fallback is properly supported for DataFrame and Series groupby
+    when unsupported arguments are provided.
+    """
+
+    df = pd.DataFrame({"A": pd.array([pd.NA, 2, 1, 2], "Int32"), "B": [1, 2, 3, 4]})
+    bdf = bd.from_pandas(df)
+
+    # Series groupby
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False)["B"].sum(
+            engine="cython"
+        )
+
+    pandas_out = df.groupby("A", dropna=False, as_index=False)["B"].sum(engine="cython")
+    _test_equal(pandas_out, fallback_out)
+
+    bdf2 = bd.from_pandas(df)
+
+    # DataFrame groupby
+    with pytest.warns(BodoLibFallbackWarning):
+        fallback_out = bdf2.groupby("A", dropna=False, as_index=False).sum(
+            engine="cython"
+        )
+
+    pandas_out = df.groupby("A", dropna=False, as_index=False).sum(engine="cython")
+    _test_equal(pandas_out, fallback_out)
 
 
 def test_compound_projection_expression(datapath):
