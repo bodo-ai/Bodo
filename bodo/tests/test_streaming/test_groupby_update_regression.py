@@ -86,11 +86,11 @@ def impl(conn_str):  # Codegen change: add conn_str
     """
     # Codegen change: Add print and overall timer
     print("Started executing query...")
-    t0 = time.time()
+    t0 = time.perf_counter()
     __bodo_is_last_streaming_output_1 = False
     _iter_1 = 0
     _temp4 = 0.0
-    _temp5 = time.time()
+    _temp5 = time.perf_counter()
     state_1 = pd.read_sql(
         'SELECT "L_SUPPKEY", "L_QUANTITY", "L_EXTENDEDPRICE" FROM "LINEITEM"',
         conn_str,  # Codegen change: use conn_str
@@ -100,36 +100,36 @@ def impl(conn_str):  # Codegen change: add conn_str
     )
     # Codegen change: timer for build step
     build_time = 0.0
-    _temp7 = time.time()
+    _temp7 = time.perf_counter()
     _temp8 = _temp7 - _temp5
     _temp4 = _temp4 + _temp8
     _produce_output_1 = True
     _temp1 = 0.0
-    _temp2 = time.time()
+    _temp2 = time.perf_counter()
     state_2 = bodo.libs.streaming.groupby.init_groupby_state(
         -1, global_1, global_4, global_2, global_3
     )
-    _temp12 = time.time()
+    _temp12 = time.perf_counter()
     _temp13 = _temp12 - _temp2
     _temp1 = _temp1 + _temp13
     _temp14 = False
     while not (_temp14):
-        _temp6 = time.time()
+        _temp6 = time.perf_counter()
         (
             T1,
             __bodo_is_last_streaming_output_1,
         ) = bodo.io.arrow_reader.read_arrow_next(state_1, _produce_output_1)
-        _temp9 = time.time()
+        _temp9 = time.perf_counter()
         _temp10 = _temp9 - _temp6
         _temp4 = _temp4 + _temp10
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         # Codegen change: Track build time
-        t_build = time.time()
+        t_build = time.perf_counter()
         _temp14 = bodo.libs.streaming.groupby.groupby_build_consume_batch(
             state_2, T1, __bodo_is_last_streaming_output_1, True
         )
-        build_time += time.time() - t_build
-        _temp15 = time.time()
+        build_time += time.perf_counter() - t_build
+        _temp15 = time.perf_counter()
         _temp16 = _temp15 - _temp3
         _temp1 = _temp1 + _temp16
         _iter_1 = _iter_1 + 1
@@ -150,25 +150,25 @@ def impl(conn_str):  # Codegen change: add conn_str
         bodo.libs.table_builder.init_table_builder_state(2)
     )
     while not (_temp17):
-        _temp3 = time.time()
+        _temp3 = time.perf_counter()
         # Codegen change: track output production time
-        t_production = time.time()
+        t_production = time.perf_counter()
         (
             T2,
             _temp17,
         ) = bodo.libs.streaming.groupby.groupby_produce_output_batch(
             state_2, _produce_output_2
         )
-        production_time += time.time() - t_production
-        _temp18 = time.time()
+        production_time += time.perf_counter() - t_production
+        _temp18 = time.perf_counter()
         _temp19 = _temp18 - _temp3
         _temp1 = _temp1 + _temp19
         # Codegen change: track concat time
-        t_concat = time.time()
+        t_concat = time.perf_counter()
         bodo.libs.table_builder.table_builder_append(
             __bodo_streaming_batches_table_builder_1, T2
         )
-        concat_time += time.time() - t_concat
+        concat_time += time.perf_counter() - t_concat
         _iter_2 = _iter_2 + 1
     bodo.libs.streaming.groupby.delete_groupby_state(state_2)
     _temp20 = "PandasAggregate(group=[{0}], EXPR$1=[AVG($1)], EXPR$2=[SUM($2)])"
@@ -179,16 +179,16 @@ def impl(conn_str):  # Codegen change: add conn_str
     bodo.user_logging.log_message(
         "RELNODE_TIMING", f"Groupby output production took {production_time}s"
     )
-    t_concat = time.time()
+    t_concat = time.perf_counter()
     T3 = bodo.libs.table_builder.table_builder_finalize(
         __bodo_streaming_batches_table_builder_1
     )
     index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T3), 1, None)
     df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T3,), index_1, global_5)
-    concat_time += time.time() - t_concat
+    concat_time += time.perf_counter() - t_concat
     bodo.user_logging.log_message("RELNODE_TIMING", f"Concat Time: {concat_time}")
     # Codegen change: print overall execution time
-    print(f"Finished executing the query. It took {time.time() - t0} seconds.")
+    print(f"Finished executing the query. It took {time.perf_counter() - t0} seconds.")
     print("Output shape: ", df1.shape)
     return df1
 

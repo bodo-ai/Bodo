@@ -45,7 +45,7 @@ class SingleBatchRelNodeTimer(
     }
 
     /**
-     * Insert the starting time.time() call before a
+     * Insert the starting time.perf_counter() call before a
      * non-streaming operator. This must be called before
      * the code is generated for the operator.
      */
@@ -100,7 +100,7 @@ class SingleBatchRelNodeTimer(
     }
 
     /**
-     * Insert a terminating time.time() call and print the information
+     * Insert a terminating time.perf_counter() call and print the information
      * after a non-streaming operator. This requires insertStartTimer()
      * to have previously been called and the operator code to already
      * be generated.

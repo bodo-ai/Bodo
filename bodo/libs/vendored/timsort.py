@@ -1162,22 +1162,22 @@ def test():  # pragma: no cover
     import time
 
     # warm up
-    t1 = time.time()
+    t1 = time.perf_counter()
     T = np.ones(3)
     data = (np.arange(3), np.ones(3))
     sort((T,), 0, 3, data)
-    print("compile time", time.time() - t1)
+    print("compile time", time.perf_counter() - t1)
     n = 210000
     np.random.seed(2)
     data = (np.arange(n), np.random.ranf(n))
     A = np.random.ranf(n)
     df = pd.DataFrame({"A": A, "B": data[0], "C": data[1]})
-    t1 = time.time()
+    t1 = time.perf_counter()
     # B = np.sort(A)
     df2 = df.sort_values("A", inplace=False)
-    t2 = time.time()
+    t2 = time.perf_counter()
     sort((A,), 0, n, data)
-    print("Bodo", time.time() - t2, "Numpy", t2 - t1)
+    print("Bodo", time.perf_counter() - t2, "Numpy", t2 - t1)
     # print(df2.B)
     # print(data)
     np.testing.assert_almost_equal(data[0], df2.B.values)

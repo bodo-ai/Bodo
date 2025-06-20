@@ -69,15 +69,15 @@ def main(read_path, fdate, table_name, sf_conn):
     """
 
     # Read lineitem from S3
-    t0 = time.time()
+    t0 = time.perf_counter()
     print("Starting read...")
     lineitem = pd.read_parquet(read_path)
     bodo.barrier()
     print("Length of input dataframe: ", len(lineitem))
-    print("Read time: ", time.time() - t0)
+    print("Read time: ", time.perf_counter() - t0)
 
     # Perform some simple transformations
-    t0 = time.time()
+    t0 = time.perf_counter()
     print("Starting transform...")
     sel = lineitem.L_SHIPDATE <= fdate
     flineitem = lineitem[sel]
@@ -87,14 +87,14 @@ def main(read_path, fdate, table_name, sf_conn):
     )
     bodo.barrier()
     print("Length of output dataframe: ", len(flineitem))
-    print("Transform time: ", time.time() - t0)
+    print("Transform time: ", time.perf_counter() - t0)
 
     # Write the transformed dataframe to a Snowflake table
-    t0 = time.time()
+    t0 = time.perf_counter()
     print("Starting Snowflake write...")
     flineitem.to_sql(table_name, sf_conn, if_exists="replace", index=False)
     bodo.barrier()
-    print("Snowflake Write time: ", time.time() - t0)
+    print("Snowflake Write time: ", time.perf_counter() - t0)
 
     return len(flineitem)
 
@@ -122,7 +122,7 @@ if __name__ == "__main__":
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = True
 
     # Perform the e2e test
-    t0 = time.time()
+    t0 = time.perf_counter()
     len_out_df = main(
         "s3://tpch-data-parquet/SF1/lineitem.pq/",
         datetime.strptime("1998-09-02", "%Y-%m-%d").date(),
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         sf_conn,
     )
 
-    print("Total time: ", time.time() - t0, " s")
+    print("Total time: ", time.perf_counter() - t0, " s")
     if args.require_cache and isinstance(main, numba.core.dispatcher.Dispatcher):
         assert main._cache_hits[main.signatures[0]] == 1, (
             "ERROR: Bodo did not load from cache"

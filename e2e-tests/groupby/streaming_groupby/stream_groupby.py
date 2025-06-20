@@ -165,9 +165,9 @@ if __name__ == "__main__":
     print("output_table_name: ", output_table_name)
 
     ## Write output to Snowflake table
-    start_time = time.time()
+    start_time = time.perf_counter()
     out = run_query_func(bc, input_schema, output_table_name)
-    end_time = time.time()
+    end_time = time.perf_counter()
 
     print("Total time: ", end_time - start_time, " s")
 
