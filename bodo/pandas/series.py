@@ -29,6 +29,7 @@ from bodo.pandas.utils import (
     _get_df_python_func_plan,
     arrow_to_empty_df,
     check_args_fallback,
+    execute_plan,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
@@ -587,6 +588,35 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 self._plan.pa_schema,
             ),
         )
+
+    @check_args_fallback(unsupported="all")
+    def max(
+        self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
+    ):
+        from bodo.pandas.base import _empty_like
+
+        zero_size_self = _empty_like(self)
+        exprs = [
+            LazyPlan(
+                "AggregateExpression",
+                zero_size_self,
+                self._plan,
+                "max",
+                [0],
+                True,  # dropna
+            )
+        ]
+
+        plan = LazyPlan(
+            "LogicalAggregate",
+            zero_size_self,
+            self._plan,
+            [],
+            exprs,
+        )
+        out_rank_max = execute_plan(plan)
+        # TODO: use parallel reduction for slight improvement in very large scales
+        return out_rank_max.max()
 
 
 class BodoStringMethods:
