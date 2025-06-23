@@ -1451,7 +1451,9 @@ def test_topn(datapath):
     )
 
 
-def test_series_min_max(index_val):
+def test_series_min_max():
+    """Basic test for Series min and max."""
+    # Large number to ensure multiple batches
     n = 10000
     df = pd.DataFrame(
         {
@@ -1462,4 +1464,12 @@ def test_series_min_max(index_val):
         },
         index=np.flip(np.arange(n)),
     )
-    df.index = index_val[:n]
+    bdf = bd.from_pandas(df)
+    for c in df.columns:
+        bodo_min = bdf[c].min()
+        bodo_max = bdf[c].max()
+        py_min = df[c].min()
+        py_max = df[c].max()
+
+        assert bodo_min == py_min
+        assert bodo_max == py_max
