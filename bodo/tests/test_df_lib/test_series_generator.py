@@ -110,13 +110,6 @@ def _generate_series_test(name, df, arg_sets, accessor=None):
     return test_func
 
 
-def df_stringify_columns(df):
-    """Maps str() to df.columns to match types of column names with Bodo output."""
-    if not isinstance(df, pd.DataFrame):
-        return
-    df.columns = df.columns.map(lambda x: str(x))
-
-
 """
 Below are expected results, which we compare our out_bodo results against
 for cases where out_bodo and out_pd have trivial differences. 
@@ -249,3 +242,10 @@ def lookup_result(name, args, kwargs, col):
         if args == expected_args and kwargs == expected_kwargs and col == expected_col:
             return result
     return None
+
+
+def df_stringify_columns(df):
+    """Maps str() to df.columns to match types of column names with Bodo output."""
+    if not isinstance(df, pd.DataFrame):
+        return
+    df.columns = df.columns.map(lambda x: str(x))
