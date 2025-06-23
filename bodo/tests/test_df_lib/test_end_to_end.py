@@ -1214,7 +1214,7 @@ def test_groupby_agg(as_index, dropna, func, kwargs):
 
     df2 = df1.groupby("B", as_index=as_index, dropna=dropna).agg(func, **kwargs)
 
-    # TODO: support multi-Index column names
+    # TODO: support multi-Index column names properly
     if isinstance(df2.columns, pd.MultiIndex):
         bdf2.execute_plan()
         level1, level2 = zip(*[eval(val) for val in bdf2.columns])
