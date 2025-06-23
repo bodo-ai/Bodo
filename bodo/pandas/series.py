@@ -590,33 +590,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
     @check_args_fallback(unsupported="all")
+    def min(
+        self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
+    ):
+        return _compute_series_reduce(self, "min")
+
+    @check_args_fallback(unsupported="all")
     def max(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
     ):
-        from bodo.pandas.base import _empty_like
-
-        zero_size_self = _empty_like(self)
-        exprs = [
-            LazyPlan(
-                "AggregateExpression",
-                zero_size_self,
-                self._plan,
-                "max",
-                [0],
-                True,  # dropna
-            )
-        ]
-
-        plan = LazyPlan(
-            "LogicalAggregate",
-            zero_size_self,
-            self._plan,
-            [],
-            exprs,
-        )
-        out_rank_max = execute_plan(plan)
-        # TODO: use parallel reduction for slight improvement in very large scales
-        return out_rank_max.max()
+        return _compute_series_reduce(self, "max")
 
 
 class BodoStringMethods:
@@ -843,6 +826,40 @@ class BodoDatetimeProperties:
             )
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).dt, name)
+
+
+def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
+    """Compute a reduction function like min/max on a BodoSeries."""
+
+    from bodo.pandas.base import _empty_like
+
+    # TODO: support other functions like sum, mean, etc.
+    assert func_name in ("min", "max"), (
+        f"Unsupported function {func_name} for series reduction."
+    )
+
+    zero_size_self = _empty_like(bodo_series)
+    exprs = [
+        LazyPlan(
+            "AggregateExpression",
+            zero_size_self,
+            bodo_series._plan,
+            func_name,
+            [0],
+            True,  # dropna
+        )
+    ]
+
+    plan = LazyPlan(
+        "LogicalAggregate",
+        zero_size_self,
+        bodo_series._plan,
+        [],
+        exprs,
+    )
+    out_rank = execute_plan(plan)
+    # TODO: use parallel reduction for slight improvement in very large scales
+    return getattr(out_rank, func_name)()
 
 
 def _str_cat_helper(df, sep, na_rep):
