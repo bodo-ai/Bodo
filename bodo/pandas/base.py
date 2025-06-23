@@ -151,6 +151,7 @@ def read_iceberg(
     import pyiceberg.catalog
     import pyiceberg.expressions
     import pyiceberg.table
+    from pyiceberg.manifest import ManifestContent
 
     from bodo.pandas.utils import BodoLibNotImplementedException
 
@@ -183,6 +184,40 @@ def read_iceberg(
     pyiceberg_schema = table.schema()
     arrow_schema = pyiceberg_schema.as_arrow()
     empty_df = arrow_to_empty_df(arrow_schema)
+
+    table_len_estimate = -1
+    snapshot = (
+        table.current_snapshot()
+        if snapshot_id is None
+        else table.snapshot_by_id(snapshot_id)
+    )
+    assert snapshot is not None
+    if (
+        hasattr(snapshot, "summary")
+        and snapshot.summary is not None
+        and "total-records" in snapshot.summary
+    ):
+        table_len_estimate = int(snapshot.summary["total-records"])
+    elif all(
+        hasattr(manifest, "existing_rows_count")
+        and manifest.existing_rows_count is not None
+        and hasattr(manifest, "added_rows_count")
+        and manifest.added_rows_count is not None
+        for manifest in snapshot.manifests(table.io)
+    ):
+        table_len_estimate = sum(
+            [
+                manifest.existing_rows_count + manifest.added_rows_count
+                if manifest.content == ManifestContent.DATA
+                else 0
+                for manifest in snapshot.manifests(table.io)
+            ]
+        )
+
+    if row_filter is not None:
+        # TODO: do something smarter here like sampling
+        filter_selectivity_estimate = 0.1
+        table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
 
     plan = LazyPlan(
         "LogicalGetIcebergRead",
