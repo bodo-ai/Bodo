@@ -860,7 +860,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     )
     out_rank = execute_plan(plan)
     # TODO: use parallel reduction for slight improvement in very large scales
-    return getattr(out_rank, func_name)()
+    return getattr(pd.Series(out_rank), func_name)()
 
 
 def _str_cat_helper(df, sep, na_rep):
