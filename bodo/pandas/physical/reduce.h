@@ -25,7 +25,8 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalReduce(std::shared_ptr<bodo::Schema> in_table_schema,
                             std::string function_name)
-        : out_schema(in_table_schema),
+        // Drop Index columns since not necessary in output
+        : out_schema(in_table_schema->Project(1)),
           function_name(function_name),
           scalar_cmp_name(getScalarCmpName(function_name)) {
         // TODO: support reductions that out different output types from input

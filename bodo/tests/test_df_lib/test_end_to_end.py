@@ -1449,3 +1449,17 @@ def test_topn(datapath):
         sort_output=False,
         reset_index=True,
     )
+
+
+def test_series_min_max(index_val):
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+        },
+        index=np.flip(np.arange(n)),
+    )
+    df.index = index_val[:n]

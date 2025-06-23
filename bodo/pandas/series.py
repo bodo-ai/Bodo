@@ -838,7 +838,8 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
         f"Unsupported function {func_name} for series reduction."
     )
 
-    zero_size_self = _empty_like(bodo_series)
+    # Drop Index columns since not necessary for reduction output.
+    zero_size_self = _empty_like(bodo_series).reset_index(drop=True)
     exprs = [
         LazyPlan(
             "AggregateExpression",
