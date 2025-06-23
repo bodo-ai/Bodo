@@ -2061,7 +2061,7 @@ def overload_convert_to_dt64ns(data):
 
     if is_np_arr_typ(data, types.int64):
         return lambda data: data.view(
-            bodo.utils.conversion.TD_DTYPE
+            bodo.utils.conversion.NS_DTYPE
         )  # pragma: no cover
 
     if is_np_arr_typ(data, types.NPDatetime("ns")):
