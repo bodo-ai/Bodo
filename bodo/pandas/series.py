@@ -834,7 +834,8 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     from bodo.pandas.base import _empty_like
 
     # TODO: support other functions like sum, mean, etc.
-    assert func_name in ("min", "max"), (
+    # TODO: support count
+    assert func_name in ("min", "max", "sum", "product"), (
         f"Unsupported function {func_name} for series reduction."
     )
 

@@ -107,8 +107,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             return;
         }
 
-        auto physical_op = std::make_shared<PhysicalReduce>(
-            in_table_schema, agg_expr.function.name);
+        printf("agg_expr.function.name: %s\n", agg_expr.function.name.c_str());
+
+        auto physical_op =
+            std::make_shared<PhysicalReduce>(in_table_schema, "count");
         finished_pipelines.emplace_back(
             this->active_pipeline->Build(physical_op));
         this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);

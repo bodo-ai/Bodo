@@ -17,6 +17,11 @@
         throw std::runtime_error(err_msg);                                    \
     }
 
+enum class ReductionType {
+    COMPARISON,
+    AGGREGATION,
+};
+
 /**
  * @brief Physical node for reductions like max.
  *
@@ -55,6 +60,8 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         std::shared_ptr<arrow::Scalar> out_scalar_batch =
             cmp_res.ValueOrDie().scalar();
 
+        ReductionType reduction_type = getReductionType(function_name);
+
         // Update reduction result
         if (iter == 0) {
             output_scalar = out_scalar_batch;
@@ -66,8 +73,15 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
                         "Error in Arrow compute scalar comparison");
             const std::shared_ptr<arrow::Scalar> cmp_scalar =
                 cmp_res_scalar.ValueOrDie().scalar();
-            if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
-                output_scalar = out_scalar_batch;
+            if (reduction_type == ReductionType::COMPARISON) {
+                if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
+                    output_scalar = out_scalar_batch;
+                }
+            } else if (reduction_type == ReductionType::AGGREGATION) {
+                output_scalar = cmp_scalar;
+            } else {
+                throw std::runtime_error("Unsupported reduction function: " +
+                                         function_name);
             }
         }
 
@@ -113,6 +127,29 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
             return "greater";
         } else if (func_name == "min") {
             return "less";
+        } else if (func_name == "sum") {
+            return "add";
+        } else if (func_name == "product") {
+            return "multiply";
+        } else if (func_name == "count") {
+            return "add";
+        } else {
+            throw std::runtime_error("Unsupported reduction function: " +
+                                     func_name);
+        }
+    }
+
+    static ReductionType getReductionType(std::string func_name) {
+        if (func_name == "max") {
+            return ReductionType::COMPARISON;
+        } else if (func_name == "min") {
+            return ReductionType::COMPARISON;
+        } else if (func_name == "sum") {
+            return ReductionType::AGGREGATION;
+        } else if (func_name == "product") {
+            return ReductionType::AGGREGATION;
+        } else if (func_name == "count") {
+            return ReductionType::AGGREGATION;
         } else {
             throw std::runtime_error("Unsupported reduction function: " +
                                      func_name);
