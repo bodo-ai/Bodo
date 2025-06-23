@@ -467,6 +467,13 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
+            # Sometimes when an execution is triggered it isn't expected that
+            # an execution should happen at that point.  This traceback is
+            # useful to identify what is triggering the execution as it may be
+            # a bug or the usage of some Pandas API that calls a function that
+            # triggers execution.  This traceback can help fix the bug or
+            # select a different Pandas API or an internal Pandas function that
+            # bypasses the issue.
             traceback.print_stack(file=sys.stdout)
             print("")  # Print on new line during tests.
             print("Unoptimized plan")
