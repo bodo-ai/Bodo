@@ -28,7 +28,9 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalReduce(std::shared_ptr<bodo::Schema> in_table_schema,
                             std::string function_name)
-        : out_schema(in_table_schema), function_name(std::move(function_name)) {
+        : out_schema(in_table_schema),
+          function_name(function_name),
+          scalar_cmp_name(getScalarCmpName(function_name)) {
         // TODO: support reductions that out different output types from input
         // types (e.g. upcast in sum)
     }
@@ -63,7 +65,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
             output_scalar = out_scalar_batch;
         } else {
             arrow::Result<arrow::Datum> cmp_res_scalar =
-                arrow::compute::CallFunction("greater",
+                arrow::compute::CallFunction(scalar_cmp_name,
                                              {out_scalar_batch, output_scalar});
             if (!cmp_res_scalar.ok()) [[unlikely]] {
                 throw std::runtime_error(
@@ -104,8 +106,28 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     }
 
    private:
+    /**
+     * @brief Get comparison operator for comparing scalars for the reduction
+     * function
+     *
+     * @param func_name reduction function name (e.g., "max", "min")
+     * @return std::string scalar comparison operator name like "greater" or
+     * "less"
+     */
+    static std::string getScalarCmpName(std::string func_name) {
+        if (func_name == "max") {
+            return "greater";
+        } else if (func_name == "min") {
+            return "less";
+        } else {
+            throw std::runtime_error("Unsupported reduction function: " +
+                                     func_name);
+        }
+    }
+
     const std::shared_ptr<bodo::Schema> out_schema;
     const std::string function_name;
+    const std::string scalar_cmp_name;
     int64_t iter = 0;
     std::shared_ptr<arrow::Scalar> output_scalar;
 };
