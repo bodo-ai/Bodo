@@ -1176,6 +1176,20 @@ def test_groupby_fallback():
     _test_equal(pandas_out, fallback_out)
 
 
+@pytest.fixture(scope="module")
+def groupby_agg_df(request):
+    return pd.DataFrame(
+        {
+            "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
+            "D": pd.array(
+                [i * 2 if (i**2) % 3 == 0 else pd.NA for i in range(12)], "Int32"
+            ),
+            "B": pd.array(["A", "B", pd.NA] * 4),
+            "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
+        }
+    )
+
+
 @pytest.mark.parametrize(
     "func, kwargs",
     [
@@ -1194,17 +1208,8 @@ def test_groupby_fallback():
         ),
     ],
 )
-def test_groupby_agg(as_index, dropna, func, kwargs):
-    df1 = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
-            "D": pd.array(
-                [i * 2 if (i**2) % 3 == 0 else pd.NA for i in range(12)], "Int32"
-            ),
-            "B": pd.array(["A", "B", pd.NA] * 4),
-            "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
-        }
-    )
+def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
+    df1 = groupby_agg_df
 
     bdf1 = bd.from_pandas(df1)
 
@@ -1219,6 +1224,36 @@ def test_groupby_agg(as_index, dropna, func, kwargs):
         bdf2.execute_plan()
         level1, level2 = zip(*[eval(val) for val in bdf2.columns])
         bdf2.columns = pd.MultiIndex.from_arrays([level1, level2])
+
+    _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "func, kwargs",
+    [
+        pytest.param({"mean_A": "mean", "count_A": "count"}, {}, id="func_dict"),
+        pytest.param(["sum", "count"], {}, id="func_list"),
+        pytest.param("sum", {}, id="func_str"),
+        pytest.param(
+            None,
+            {"mean_A": "mean", "count_A": "count", "sum_A": "sum"},
+            id="func_kwargs",
+        ),
+    ],
+)
+def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
+    df1 = groupby_agg_df
+
+    bdf1 = bd.from_pandas(df1)
+
+    # Dict values plus as_index raises SpecificationError in Bodo/Pandas
+    if (isinstance(func, dict) or kwargs) and as_index:
+        return
+
+    bdf2 = bdf1.groupby("B", as_index=as_index, dropna=dropna)["A"].agg(func, **kwargs)
+    assert bdf2.is_lazy_plan()
+
+    df2 = df1.groupby("B", as_index=as_index, dropna=dropna)["A"].agg(func, **kwargs)
 
     _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
 
