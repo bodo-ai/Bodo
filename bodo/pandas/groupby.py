@@ -353,7 +353,7 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
         elif pa.types.is_decimal(pa_type):
             # TODO Support Decimal columns for sum()
             raise BodoLibNotImplementedException(
-                f"GroupBy.sum() on decimal column '{col_name}' not supported yet."
+                f"GroupBy.mean() on input column '{col_name}' with type: {pa_type} not supported yet."
             )
         else:
             raise TypeError(
@@ -363,15 +363,10 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
     elif func == "mean":
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
-        elif pa.types.is_boolean(pa_type):
-            # TODO Support bool columns for mean()
+        elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
+            # TODO Support bool/decimal columns for mean()
             raise BodoLibNotImplementedException(
-                f"GroupBy.mean() on boolean column '{col_name}' not supported yet."
-            )
-        elif pa.types.is_decimal(pa_type):
-            # TODO Support decimal columns for mean()
-            raise BodoLibNotImplementedException(
-                f"GroupBy.mean() on boolean column '{col_name}' not supported yet."
+                f"GroupBy.mean() on input column '{col_name}' with type: {pa_type} not supported yet."
             )
         else:
             raise TypeError(
