@@ -214,7 +214,7 @@ def read_iceberg(
             ]
         )
 
-    if row_filter is not None:
+    if row_filter is not None and table_len_estimate > 0:
         # TODO: do something smarter here like sampling
         filter_selectivity_estimate = 0.1
         table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
