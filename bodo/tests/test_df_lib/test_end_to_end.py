@@ -1103,10 +1103,10 @@ def test_series_groupby(dropna, as_index):
     )
 
     bdf1 = bd.from_pandas(df1)
-    bdf2 = bdf1.groupby("A", as_index=as_index, dropna=dropna, sort=False)["E"].sum()
+    bdf2 = bdf1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
     assert bdf2.is_lazy_plan()
 
-    df2 = df1.groupby("A", as_index=as_index, dropna=dropna, sort=False)["E"].sum()
+    df2 = df1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
 
     _test_equal(bdf2, df2, sort_output=True, reset_index=True)
 
@@ -1135,16 +1135,14 @@ def test_dataframe_groupby(dropna, as_index, selection):
 
     if selection is None:
         bdf2 = bdf1.groupby(
-            ["D", "E"], as_index=as_index, dropna=dropna, sort=False
-        ).sum()
+            ["D", "E"], as_index=as_index, dropna=dropna).sum()
         df2 = df1.groupby(
-            ["D", "E"], as_index=as_index, dropna=dropna, sort=False
-        ).sum()
+            ["D", "E"], as_index=as_index, dropna=dropna).sum()
     else:
-        bdf2 = bdf1.groupby(["D", "E"], as_index=as_index, dropna=dropna, sort=False)[
+        bdf2 = bdf1.groupby(["D", "E"], as_index=as_index, dropna=dropna)[
             selection
         ].sum()
-        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna, sort=False)[
+        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna)[
             selection
         ].sum()
 

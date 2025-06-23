@@ -850,14 +850,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return wrap_plan(proj_plan)
 
-    @check_args_fallback(supported=["by", "as_index", "dropna", "sort"])
+    @check_args_fallback(supported=["by", "as_index", "dropna"])
     def groupby(
         self,
         by=None,
         axis: Axis | lib.NoDefault = lib.no_default,
         level: IndexLabel | None = None,
         as_index: bool = True,
-        sort: bool = True,
+        sort: bool = False,
         group_keys: bool = True,
         observed: bool | lib.NoDefault = lib.no_default,
         dropna: bool = True,
@@ -866,11 +866,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         Provides support for groupby similar to Pandas:
         https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L9148
         """
-        if sort != False:
-            raise BodoLibNotImplementedException(
-                "groupby: only sort=False currently supported"
-            )
-
         if isinstance(by, str):
             by = [by]
 
