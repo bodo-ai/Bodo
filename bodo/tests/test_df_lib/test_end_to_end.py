@@ -1449,3 +1449,41 @@ def test_topn(datapath):
         sort_output=False,
         reset_index=True,
     )
+
+
+def test_series_min_max():
+    """Basic test for Series min and max."""
+    # Large number to ensure multiple batches
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "C2": np.append(np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": pd.date_range("1988-01-01", periods=n, freq="D").to_series(),
+            "F": pd.date_range("1988-01-01", periods=n, freq="D").to_series().dt.date,
+            "G": ["a", "abc", "bc3", "d4e5f"] * (n // 4),
+        },
+    )
+    bdf = bd.from_pandas(df)
+    for c in df.columns:
+        bodo_min = bdf[c].min()
+        bodo_max = bdf[c].max()
+        py_min = df[c].min()
+        py_max = df[c].max()
+
+        assert bodo_min == py_min
+        assert bodo_max == py_max
+
+
+def test_series_min_max_unsupported_types():
+    df = pd.DataFrame({"A": pd.timedelta_range("1 day", periods=10, freq="D")})
+    bdf = bd.from_pandas(df)
+
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf["A"].min()
+
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf["A"].max()
