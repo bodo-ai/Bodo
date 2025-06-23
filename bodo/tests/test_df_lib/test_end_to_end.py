@@ -1134,17 +1134,13 @@ def test_dataframe_groupby(dropna, as_index, selection):
     bdf1 = bd.from_pandas(df1)
 
     if selection is None:
-        bdf2 = bdf1.groupby(
-            ["D", "E"], as_index=as_index, dropna=dropna).sum()
-        df2 = df1.groupby(
-            ["D", "E"], as_index=as_index, dropna=dropna).sum()
+        bdf2 = bdf1.groupby(["D", "E"], as_index=as_index, dropna=dropna).sum()
+        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna).sum()
     else:
         bdf2 = bdf1.groupby(["D", "E"], as_index=as_index, dropna=dropna)[
             selection
         ].sum()
-        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna)[
-            selection
-        ].sum()
+        df2 = df1.groupby(["D", "E"], as_index=as_index, dropna=dropna)[selection].sum()
 
     assert bdf2.is_lazy_plan()
 
