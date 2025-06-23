@@ -1476,3 +1476,14 @@ def test_series_min_max():
 
         assert bodo_min == py_min
         assert bodo_max == py_max
+
+
+def test_series_min_max_unsupported_types():
+    df = pd.DataFrame({"A": pd.timedelta_range("1 day", periods=10, freq="D")})
+    bdf = bd.from_pandas(df)
+
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf["A"].min()
+
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf["A"].max()
