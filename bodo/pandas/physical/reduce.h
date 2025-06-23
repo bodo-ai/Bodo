@@ -20,6 +20,14 @@
 #include "expression.h"
 #include "operator.h"
 
+#undef CHECK_ARROW
+#define CHECK_ARROW(expr, msg)                                                \
+    if (!(expr.ok())) {                                                       \
+        std::string err_msg = std::string("PhysicalReduce::ConsumeBatch: ") + \
+                              msg + " " + expr.ToString();                    \
+        throw std::runtime_error(err_msg);                                    \
+    }
+
 /**
  * @brief Physical node for reductions like max.
  *
@@ -52,11 +60,8 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         // Reduce Arrow array using compute function
         arrow::Result<arrow::Datum> cmp_res =
             arrow::compute::CallFunction(function_name, {in_arrow_array});
-        if (!cmp_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "PhysicalReduce::ConsumeBatch: Error in Arrow compute: " +
-                cmp_res.status().message());
-        }
+        CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
+
         std::shared_ptr<arrow::Scalar> out_scalar_batch =
             cmp_res.ValueOrDie().scalar();
 
@@ -67,11 +72,8 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
             arrow::Result<arrow::Datum> cmp_res_scalar =
                 arrow::compute::CallFunction(scalar_cmp_name,
                                              {out_scalar_batch, output_scalar});
-            if (!cmp_res_scalar.ok()) [[unlikely]] {
-                throw std::runtime_error(
-                    "PhysicalReduce::ConsumeBatch: Error in Arrow compute: " +
-                    cmp_res.status().message());
-            }
+            CHECK_ARROW(cmp_res_scalar.status(),
+                        "Error in Arrow compute scalar comparison");
             const std::shared_ptr<arrow::Scalar> cmp_scalar =
                 cmp_res_scalar.ValueOrDie().scalar();
             if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
@@ -128,6 +130,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     const std::shared_ptr<bodo::Schema> out_schema;
     const std::string function_name;
     const std::string scalar_cmp_name;
+
     int64_t iter = 0;
     std::shared_ptr<arrow::Scalar> output_scalar;
 };
