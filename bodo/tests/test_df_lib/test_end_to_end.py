@@ -1458,11 +1458,13 @@ def test_series_min_max():
     df = pd.DataFrame(
         {
             "A": np.arange(n),
-            "B": np.flip(np.arange(n)),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
             "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "C2": np.append(np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2),
             "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": pd.date_range("1988-01-01", periods=n, freq="D").to_series(),
+            "F": pd.date_range("1988-01-01", periods=n, freq="D").to_series().dt.date,
         },
-        index=np.flip(np.arange(n)),
     )
     bdf = bd.from_pandas(df)
     for c in df.columns:
