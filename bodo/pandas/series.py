@@ -106,22 +106,29 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str):
-        attr = object.__getattribute__(self, name)
+        supported_methods = [
+            # Include other supported methods.
+            "dtype",
+            "name",
+            "to_string",
+        ]
 
-        if callable(attr):
-            pd_attr = getattr(pd.Series, name, None)
-            self_attr = getattr(type(self), name, None)
+        cls = object.__getattribute__(self, "__class__")
+        base = cls.__mro__[0]
+        if (
+            name not in base.__dict__
+            and name not in supported_methods
+            and not name.startswith("_")
+        ):
+            msg = (
+                f"{name} is not "
+                "implemented in Bodo dataframe library for the specified arguments yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            warnings.warn(BodoLibFallbackWarning(msg))
+            return super().__getattribute__(name)
 
-            # If the method is not overridden in BodoSeries
-            if self_attr == pd_attr:
-                warnings.warn(
-                    BodoLibFallbackWarning(
-                        f"Series.{name} is not implemented in Bodo dataframe library. "
-                        "Falling back to Pandas (may be slow or run out of memory)."
-                    )
-                )
-
-        return attr
+        return object.__getattribute__(self, name)
 
     @check_args_fallback("all")
     def _cmp_method(self, other, op):
@@ -638,7 +645,8 @@ class BodoStringMethods:
                 "implemented in Bodo dataframe library for the specified arguments yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
+            if not name.startswith("_"):
+                warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
@@ -830,7 +838,8 @@ class BodoDatetimeProperties:
                 "implemented in Bodo dataframe library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
+            if not name.startswith("_"):
+                warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
