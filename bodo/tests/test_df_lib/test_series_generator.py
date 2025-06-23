@@ -104,9 +104,17 @@ def _generate_series_test(name, df, arg_sets, accessor=None):
                         check_names=False,
                     )
                     continue
-            _test_equal(out_bodo, out_pd, check_pandas_types=False)
+            df_stringify_columns(out_pd)
+            _test_equal(out_bodo, out_pd, check_pandas_types=False, reset_index=True)
 
     return test_func
+
+
+def df_stringify_columns(df):
+    """Maps str() to df.columns to match types of column names with Bodo output."""
+    if not isinstance(df, pd.DataFrame):
+        return
+    df.columns = df.columns.map(lambda x: str(x))
 
 
 """
@@ -115,21 +123,6 @@ for cases where out_bodo and out_pd have trivial differences.
 """
 # TODO: add a flag in _test_equal to enable correct comparison between
 # Pandas integer index and Bodo string index ('0', '1', ...) of equivalent values
-partition_res = pd.DataFrame(
-    {
-        "0": ["Apple", "Banana", None, None, "App", "B", " E", "Do"],
-        "1": ["", "", None, None, "-", "-", "-", "-"],
-        "2": ["", "", None, None, "le", "anan-a", "xc i-ted ", "g"],
-    }
-)
-rpartition_res = pd.DataFrame(
-    {
-        "0": ["", "", None, None, "App", "B-anan", " E-xc i", "Do"],
-        "1": ["", "", None, None, "-", "-", "-", "-"],
-        "2": ["Apple", "Banana", None, None, "le", "a", "ted ", "g"],
-    }
-)
-
 month_name_res_fr_A = pd.Series(
     [
         "janvier",
@@ -202,89 +195,12 @@ day_name_res_pt_C = pd.Series(
     ]
 )
 
-
-split_res_expand = pd.DataFrame(
-    {
-        "0": ["this", "https://docs.python.org/3/tutorial/index.html", pd.NA],
-        "1": ["is", pd.NA, pd.NA],
-        "2": ["a", pd.NA, pd.NA],
-        "3": ["regular", pd.NA, pd.NA],
-        "4": ["sentence", pd.NA, pd.NA],
-    },
-    index=["Apple", "Banana", "Cheese"],
-)
-
-split_res_pat = pd.DataFrame(
-    {
-        "0": ["this is a regular sentence", "https:", pd.NA],
-        "1": [pd.NA, "", pd.NA],
-        "2": [pd.NA, "docs.python.org", pd.NA],
-        "3": [pd.NA, "3", pd.NA],
-        "4": [pd.NA, "tutorial", pd.NA],
-        "5": [pd.NA, "index.html", pd.NA],
-    },
-    index=["Apple", "Banana", "Cheese"],
-)
-
-split_res_n = pd.DataFrame(
-    {
-        "0": ["this is a regular sentence", "https:", pd.NA],
-        "1": [pd.NA, "/docs.python.org/3/tutorial/index.html", pd.NA],
-    },
-    index=["Apple", "Banana", "Cheese"],
-)
-
-
-rsplit_res_expand = pd.DataFrame(
-    {
-        "0": ["this", "https://docs.python.org/3/tutorial/index.html", pd.NA],
-        "1": ["is", pd.NA, pd.NA],
-        "2": ["a", pd.NA, pd.NA],
-        "3": ["regular", pd.NA, pd.NA],
-        "4": ["sentence", pd.NA, pd.NA],
-    },
-    index=["Apple", "Banana", "Cheese"],
-)
-
-rsplit_res_pat = pd.DataFrame(
-    {
-        "0": ["this is a regular sentence", "https:", pd.NA],
-        "1": [pd.NA, "", pd.NA],
-        "2": [pd.NA, "docs.python.org", pd.NA],
-        "3": [pd.NA, "3", pd.NA],
-        "4": [pd.NA, "tutorial", pd.NA],
-        "5": [pd.NA, "index.html", pd.NA],
-    },
-    index=["Apple", "Banana", "Cheese"],
-)
-
-rsplit_res_n = pd.DataFrame(
-    {
-        "0": [
-            "this is a regular sentence",
-            "https://docs.python.org/3/tutorial",
-            pd.NA,
-        ],
-        "1": [pd.NA, "index.html", pd.NA],
-    },
-    index=["Apple", "Banana", "Cheese"],
-)
-
-
 null_array = pd.Series(
     [pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, pd.NA]
 )
 
 
 expected_results = {
-    "partition": [
-        ((), {"sep": "-", "expand": True}, "A", partition_res),
-        ((), {"sep": "-"}, "A", partition_res),
-    ],
-    "rpartition": [
-        ((), {"sep": "-", "expand": True}, "A", rpartition_res),
-        ((), {"sep": "-"}, "A", rpartition_res),
-    ],
     "month_name": [
         ((), {"locale": "fr_FR.UTF-8"}, "A", month_name_res_fr_A),
         ((), {"locale": "fr_FR.UTF-8"}, "B", month_name_res_fr_BC),
@@ -321,16 +237,6 @@ expected_results = {
     ],
     "time": [
         ((), {}, "D", null_array),
-    ],
-    "split": [
-        ((), {"expand": True}, "A", split_res_expand),
-        ((), {"pat": "/", "expand": True}, "A", split_res_pat),
-        ((), {"n": 1, "pat": "/", "expand": True}, "A", split_res_n),
-    ],
-    "rsplit": [
-        ((), {"expand": True}, "A", rsplit_res_expand),
-        ((), {"pat": "/", "expand": True}, "A", rsplit_res_pat),
-        ((), {"n": 1, "pat": "/", "expand": True}, "A", rsplit_res_n),
     ],
 }
 

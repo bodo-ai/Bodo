@@ -875,7 +875,7 @@ def _str_extract_helper(s, pat, expand, n_cols, flags):
 
 
 def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
-    """Extracts column col from list series and returns as Pandas series."""
+    """Runs str.split per element in s and returns length of resulting match group for each index."""
     if is_split:
         split_s = s.str.split(pat=pat, n=n, expand=False, regex=regex)
     else:
@@ -883,23 +883,7 @@ def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
 
     series = pd.Series(
         [
-            0 if not isinstance(split_s.iloc[i], list) else len(split_s.iloc[i])
-            for i in range(len(split_s))
-        ]
-    )
-    return series
-
-
-def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
-    """Extracts column col from list series and returns as Pandas series."""
-    if is_split:
-        split_s = s.str.split(pat=pat, n=n, expand=False, regex=regex)
-    else:
-        split_s = s.str.rsplit(pat=pat, n=n, expand=False)
-
-    series = pd.Series(
-        [
-            0 if not isinstance(split_s.iloc[i], list) else len(split_s.iloc[i])
+            1 if not isinstance(split_s.iloc[i], list) else len(split_s.iloc[i])
             for i in range(len(split_s))
         ]
     )
