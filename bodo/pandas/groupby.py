@@ -90,7 +90,10 @@ class DataFrameGroupBy:
 
     agg = aggregate
 
-    def _normalize_agg_func(self, func, kwargs):
+    def _normalize_agg_func(self, func, kwargs: dict) -> list[tuple[str, str]]:
+        """
+        Convert func and kwargs into a list of (column, function) tuples.
+        """
         # list of (input column name, function) pairs
         normalized_func: list[tuple[str, str]] = []
 
@@ -231,6 +234,9 @@ class SeriesGroupBy:
     agg = aggregate
 
     def _normalize_agg_func(self, func, kwargs):
+        """
+        Convert func and kwargs into a list of (column, function) tuples.
+        """
         col = self._selection[0]
 
         # list of (input column name, function) pairs
@@ -252,7 +258,7 @@ class SeriesGroupBy:
 
 
 def _groupby_agg_plan(
-    grouped: SeriesGroupBy | DataFrameGroupBy, func: pt.Any, *args, **kwargs
+    grouped: SeriesGroupBy | DataFrameGroupBy, func, *args, **kwargs
 ) -> BodoSeries | BodoDataFrame:
     """Compute groupby.func() on the Series or DataFrame GroupBy object."""
     from bodo.pandas.base import _empty_like
@@ -278,7 +284,7 @@ def _groupby_agg_plan(
             "AggregateExpression",
             empty_data.iloc[:, i]
             if isinstance(empty_data, pd.DataFrame)
-            else empty_data,  # needs to be the output type
+            else empty_data,
             grouped._obj._plan,
             func_,
             [grouped._obj.columns.get_loc(col)],
@@ -390,7 +396,8 @@ def _cast_groupby_agg_columns(
     Args:
         func : A list of (col, func) pairs where col is the name of the column in the
             input DataFrame to which func is applied.
-        out_data : An empty DataFrame/Series with the same shape as the aggregate output
+        out_data : An empty DataFrame/Series with the same shape as the aggregate
+            output
         in_data : An empty DataFrame/Series with the same shape as the input to the
             aggregation.
         n_key_cols : Number of grouping keys in the output.
@@ -414,15 +421,13 @@ def _cast_groupby_agg_columns(
 
         if not isinstance(out_data[out_col_name], pd.Series):
             raise BodoLibNotImplementedException(
-                "GroupBy.agg(): detected duplicate output column name in output columns: ",
-                out_col_name,
+                f"GroupBy.agg(): detected duplicate output column name in output columns: '{out_col_name}'"
             )
 
         in_col = in_data[in_col_name]
         if not isinstance(out_data[out_col_name], pd.Series):
             raise BodoLibNotImplementedException(
-                "GroupBy.agg(): detected duplicate column name in input column: ",
-                in_col_name,
+                f"GroupBy.agg(): detected duplicate column name in input column: '{in_col_name}'"
             )
 
         new_type = _get_agg_output_type(func_, in_col.dtype.pyarrow_dtype, in_col_name)
