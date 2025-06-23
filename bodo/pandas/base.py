@@ -3,6 +3,7 @@ import typing as pt
 
 import pandas as pd
 import pyarrow as pa
+from collections.abc import Iterable, Mapping
 from pandas._libs import lib
 from pandas.core.tools.datetimes import _unit_map
 
@@ -21,6 +22,11 @@ from bodo.pandas.utils import (
     wrap_plan,
 )
 
+from pandas._typing import (
+    Axis,
+    Hashable,
+    HashableT,
+)
 
 def from_pandas(df):
     """Convert a Pandas DataFrame to a BodoDataFrame."""
@@ -288,6 +294,93 @@ def to_datetime(
         in_kwargs,
         is_method=False,
     )
+
+
+@check_args_fallback("none")
+def concat(
+    objs: Iterable[BodoSeries | BodoDataFrame] | Mapping[HashableT, BodoSeries | BodoDataFrame],
+    *,
+    axis: Axis = 0,
+    join: str = "outer",
+    ignore_index: bool = False,
+    keys: Iterable[Hashable] | None = None,
+    levels=None,
+    names: list[HashableT] | None = None,
+    verify_integrity: bool = False,
+    sort: bool = False,
+    copy: bool | None = None,
+) -> BodoDataFrame | BodoSeries:
+    if isinstance(objs, Mapping):
+        raise BodoLibNotImplementedException(
+            "concat does not current support objs of Mapping type"
+        )
+
+    if len(objs) == 0:
+        raise ValueError("No objects to concatenate")
+    elif len(objs) == 1:
+        return objs[0]
+
+    def concat_two(a, b):
+        gen_series = isinstance(a, BodoSeries) and isinstance(b, BodoSeries)
+        a_cols = a.columns.tolist() if isinstance(a, BodoDataFrame) else [a.name]
+        b_cols = b.columns.tolist() if isinstance(b, BodoDataFrame) else [b.name]
+        a_cols_set = set(a_cols)
+        b_cols_set = set(b_cols)
+        common_cols = a_cols_set & b_cols_set
+        only_in_a = list(a_cols_set - b_cols_set)
+        only_in_b = list(b_cols_set - a_cols_set)
+
+        zero_size_a = _empty_like(a)
+        zero_size_b = _empty_like(b)
+
+        empty_data = pd.concat(
+            [zero_size_a, zero_size_b],
+            axis=axis,
+            join=join,
+            ignore_index=ignore_index,
+            keys=keys,
+            levels=levels,
+            names=names,
+            sort=sort,
+            copy=copy
+        )
+
+        def get_mapping(new_schema, old_schema, plan):
+            return make_col_ref_exprs([old_schema.index(x) for x in new_schema], plan)
+
+        a_new_cols = BodoDataFrame(a)
+        b_new_cols = BodoDataFrame(b)
+        a_new_cols[only_in_b] = pd.NA
+        b_new_cols[only_in_a] = pd.NA
+
+        a_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            a_new_cols._plan,
+            get_mapping(empty_data.columns, a_new_cols.columns.tolist(), a_new_cols._plan),
+        )
+        b_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            b_new_cols._plan,
+            get_mapping(empty_data.columns, b_new_cols.columns.tolist(), b_new_cols._plan),
+        )
+
+        planUnion = LazyPlan(
+            "LogicalSetOperation",
+            empty_data,
+            a_plan,
+            b_plan,
+            "union"
+        )
+
+        return wrap_plan(projUnion)
+
+    cur_res = concat_two(objs[0], objs[1])
+    for i in range(2, len(objs)):
+        cur_res = concat_two(cur_res, objs[i])
+
+    return wrap_plan(cur_res)
 
 
 def _validate_df_to_datetime(df):
