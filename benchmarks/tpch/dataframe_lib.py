@@ -45,7 +45,7 @@ def load_customer(data_folder: str) -> pd.DataFrame:
     print("Loading customer")
     data_path = data_folder + "/customer.parquet"
     df = pd.read_parquet(data_path)
-    print("Done oading customer")
+    print("Done loading customer")
     return df
 
 
