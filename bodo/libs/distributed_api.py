@@ -1847,7 +1847,11 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
 
     # timedelta array
     if dtype == timedelta_array_type:
-        return pd.array([datetime.timedelta(33)])
+        # Use Arrow duration array to ensure pd.Index() below doesn't convert it to
+        # a non-nullable numpy timedelta64 array (leading to parallel errors).
+        return pd.array(
+            [datetime.timedelta(33)], dtype=pd.ArrowDtype(pa.duration("ns"))
+        )
 
     # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(dtype):
