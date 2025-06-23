@@ -143,8 +143,8 @@ struct BodoAggFunctionData : public duckdb::FunctionData {
         return duckdb::make_uniq<BodoAggFunctionData>(this->dropna, this->name);
     }
 
-    bool dropna;
-    std::string name;
+    const bool dropna;
+    const std::string name;
 };
 
 /**
