@@ -1464,6 +1464,7 @@ def test_series_min_max():
             "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
             "E": pd.date_range("1988-01-01", periods=n, freq="D").to_series(),
             "F": pd.date_range("1988-01-01", periods=n, freq="D").to_series().dt.date,
+            "G": ["a", "abc", "bc3", "d4e5f"] * (n // 4),
         },
     )
     bdf = bd.from_pandas(df)
