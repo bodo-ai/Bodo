@@ -309,7 +309,8 @@ def q04(lineitem, orders):
     forders = orders[osel]
     jn = forders[forders["O_ORDERKEY"].isin(flineitem["L_ORDERKEY"])]
     total = (
-        jn.groupby("O_ORDERPRIORITY", as_index=False)["O_ORDERKEY"].count()
+        jn.groupby("O_ORDERPRIORITY", as_index=False)["O_ORDERKEY"]
+        .count()
         .sort_values(["O_ORDERPRIORITY"])
     )
     print(total)
@@ -612,7 +613,7 @@ def q12(lineitem, orders):
         return ((x != "1-URGENT") & (x != "2-HIGH")).sum()
 
     total = jn.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
-    #total = total.reset_index()  # reset index to keep consistency with pandas
+    # total = total.reset_index()  # reset index to keep consistency with pandas
     total = total.sort_values("L_SHIPMODE")
     print(total)
 
