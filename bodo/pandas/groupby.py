@@ -114,7 +114,7 @@ class DataFrameGroupBy:
                 normalized_func = [(func_, col) for (col, func_) in func.items()]
         elif is_list_like(func):
             normalized_func = [
-                (func_, col) for func_ in func for col in self._selection
+                (func_, col) for col in self._selection for func_ in func
             ]
         elif isinstance(func, str):
             normalized_func = [(func, col) for col in self._selection]
@@ -405,7 +405,6 @@ def _cast_groupby_agg_columns2(
     func: tuple[str, str] | str, data: pd.Series | pd.DataFrame, n_key_cols: int
 ) -> pd.Series | pd.DataFrame:
     """
-
     Args:
         func (tuple[str, str]): _description_
         data (pd.DataFrame): _description_
