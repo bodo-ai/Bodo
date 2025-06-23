@@ -97,6 +97,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
+        // Return reduction result as a single-element table
         std::shared_ptr<arrow::Array> array = ScalarToArrowArray(output_scalar);
 
         std::shared_ptr<array_info> result =
@@ -104,6 +105,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         std::vector<std::shared_ptr<array_info>> cvec = {result};
         std::shared_ptr<table_info> next_batch =
             std::make_shared<table_info>(cvec);
+
         return {next_batch, OperatorResult::FINISHED};
     }
 
