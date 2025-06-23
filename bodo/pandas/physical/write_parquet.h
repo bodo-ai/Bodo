@@ -39,8 +39,6 @@ class PhysicalWriteParquet : public PhysicalSink {
         // Similar to streaming parquet write in Bodo JIT
         // https://github.com/bodo-ai/Bodo/blob/3741f4e05e4236b5c3cc35ef5ecccad921f17dc4/bodo/io/stream_parquet_write.py#L433
 
-        iter++;
-
         if (finished) {
             return OperatorResult::FINISHED;
         }
@@ -82,6 +80,7 @@ class PhysicalWriteParquet : public PhysicalSink {
             finished = true;
         }
 
+        iter++;
         return is_last ? OperatorResult::FINISHED
                        : OperatorResult::NEED_MORE_INPUT;
     }
