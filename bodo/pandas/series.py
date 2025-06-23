@@ -781,7 +781,6 @@ class BodoStringMethods:
 
         return wrap_plan(plan=df_plan)
 
-    # TODO: check if regex arg and regex patterns are supported.
     @check_args_fallback(unsupported="none")
     def split(self, pat=None, *, n=-1, expand=False, regex=None):
         """
@@ -877,17 +876,10 @@ def _str_extract_helper(s, pat, expand, n_cols, flags):
 def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
     """Runs str.split per element in s and returns length of resulting match group for each index."""
     if is_split:
-        split_s = s.str.split(pat=pat, n=n, expand=False, regex=regex)
+        split_s = s.str.split(pat=pat, n=n, expand=True, regex=regex)
     else:
-        split_s = s.str.rsplit(pat=pat, n=n, expand=False)
-
-    series = pd.Series(
-        [
-            1 if not isinstance(split_s.iloc[i], list) else len(split_s.iloc[i])
-            for i in range(len(split_s))
-        ]
-    )
-    return series
+        split_s = s.str.rsplit(pat=pat, n=n, expand=True)
+    return split_s.count(axis="columns")
 
 
 def get_base_plan(plan):
@@ -1127,7 +1119,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
 
     series = self._series
     index = series.head(0).index
-    dtype = pd.ArrowDtype(pa.list_(pa.large_string()))
+    dtype = pd.ArrowDtype(pa.large_list(pa.large_string()))
     is_split = name == "split"
 
     # When pat is a string and regex=None, the given pat is compiled as a regex only if len(pat) != 1.
