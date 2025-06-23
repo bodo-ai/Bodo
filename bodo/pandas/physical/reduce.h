@@ -3,21 +3,10 @@
 #include <arrow/compute/expression.h>
 #include <arrow/scalar.h>
 #include <arrow/type_fwd.h>
-#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <utility>
-#include "../_util.h"
-#include "../io/arrow_reader.h"
-#include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
-#include "../libs/_utils.h"
-#include "../libs/groupby/_groupby_ftypes.h"
-#include "../libs/streaming/_groupby.h"
-#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
-#include "duckdb/planner/expression/bound_columnref_expression.hpp"
-#include "duckdb/planner/operator/logical_aggregate.hpp"
-#include "expression.h"
 #include "operator.h"
 
 #undef CHECK_ARROW
