@@ -135,16 +135,14 @@ def q01(lineitem: pd.DataFrame):
         * (1 + lineitem_filtered.L_TAX)
     )
     gb = lineitem_filtered.groupby(["L_RETURNFLAG", "L_LINESTATUS"], as_index=False)[
-        [
-            "L_QUANTITY",
-            "L_EXTENDEDPRICE",
-            "DISC_PRICE",
-            "CHARGE",
-            "AVG_QTY",
-            "AVG_PRICE",
-            "L_DISCOUNT",
-            "L_ORDERKEY",
-        ]
+        "L_QUANTITY",
+        "L_EXTENDEDPRICE",
+        "DISC_PRICE",
+        "CHARGE",
+        "AVG_QTY",
+        "AVG_PRICE",
+        "L_DISCOUNT",
+        "L_ORDERKEY",
     ]
     total = gb.agg(
         {
@@ -158,8 +156,7 @@ def q01(lineitem: pd.DataFrame):
             "L_ORDERKEY": "count",
         }
     )
-    # skip sort, Mars groupby enables sort
-    # total = total.sort_values(["L_RETURNFLAG", "L_LINESTATUS"])
+    total = total.sort_values(["L_RETURNFLAG", "L_LINESTATUS"])
     print(total)
 
 
@@ -313,8 +310,7 @@ def q04(lineitem, orders):
     jn = forders[forders["O_ORDERKEY"].isin(flineitem["L_ORDERKEY"])]
     total = (
         jn.groupby("O_ORDERPRIORITY", as_index=False)["O_ORDERKEY"].count()
-        # skip sort when Mars enables sort in groupby
-        # .sort_values(["O_ORDERPRIORITY"])
+        .sort_values(["O_ORDERPRIORITY"])
     )
     print(total)
 
@@ -444,10 +440,9 @@ def q07(lineitem, supplier, orders, customer, nation):
     total = total.groupby(["SUPP_NATION", "CUST_NATION", "L_YEAR"], as_index=False).agg(
         REVENUE=pd.NamedAgg(column="VOLUME", aggfunc="sum")
     )
-    # skip sort when Mars groupby does sort already
-    # total = total.sort_values(
-    #     by=["SUPP_NATION", "CUST_NATION", "L_YEAR"], ascending=[True, True, True]
-    # )
+    total = total.sort_values(
+        by=["SUPP_NATION", "CUST_NATION", "L_YEAR"], ascending=[True, True, True]
+    )
     print(total)
 
 
@@ -617,9 +612,8 @@ def q12(lineitem, orders):
         return ((x != "1-URGENT") & (x != "2-HIGH")).sum()
 
     total = jn.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
-    total = total.reset_index()  # reset index to keep consistency with pandas
-    # skip sort when groupby does sort already
-    # total = total.sort_values("L_SHIPMODE")
+    #total = total.reset_index()  # reset index to keep consistency with pandas
+    total = total.sort_values("L_SHIPMODE")
     print(total)
 
 
@@ -805,68 +799,44 @@ def q19(lineitem, part):
         (
             (part.P_SIZE <= 5)
             & (part.P_BRAND == Brand31)
-            & (
-                (part.P_CONTAINER == SMBOX)
-                | (part.P_CONTAINER == SMCASE)
-                | (part.P_CONTAINER == SMPACK)
-                | (part.P_CONTAINER == SMPKG)
-            )
+            & (part.P_CONTAINER.isin([SMBOX, SMCASE, SMPACK, SMPKG]))
         )
         | (
             (part.P_SIZE <= 10)
             & (part.P_BRAND == Brand43)
-            & (
-                (part.P_CONTAINER == MEDBAG)
-                | (part.P_CONTAINER == MEDBOX)
-                | (part.P_CONTAINER == MEDPACK)
-                | (part.P_CONTAINER == MEDPKG)
-            )
+            & (part.P_CONTAINER.isin([MEDBAG, MEDBOX, MEDPACK, MEDPKG]))
         )
         | (
             (part.P_SIZE <= 15)
             & (part.P_BRAND == Brand43)
-            & (
-                (part.P_CONTAINER == LGBOX)
-                | (part.P_CONTAINER == LGCASE)
-                | (part.P_CONTAINER == LGPACK)
-                | (part.P_CONTAINER == LGPKG)
-            )
+            & (part.P_CONTAINER.isin([LGBOX, LGCASE, LGPACK, LGPKG]))
         )
     )
     flineitem = lineitem[lsel]
     fpart = part[psel]
     jn = flineitem.merge(fpart, left_on="L_PARTKEY", right_on="P_PARTKEY")
     jnsel = (
-        (jn.P_BRAND == Brand31)
-        & (
-            (jn.P_CONTAINER == SMBOX)
-            | (jn.P_CONTAINER == SMCASE)
-            | (jn.P_CONTAINER == SMPACK)
-            | (jn.P_CONTAINER == SMPKG)
+        (
+            (jn.P_BRAND == Brand31)
+            & (jn.P_CONTAINER.isin([SMBOX, SMCASE, SMPACK, SMPKG]))
+            & (jn.L_QUANTITY >= 4)
+            & (jn.L_QUANTITY <= 14)
+            & (jn.P_SIZE <= 5)
         )
-        & (jn.L_QUANTITY >= 4)
-        & (jn.L_QUANTITY <= 14)
-        & (jn.P_SIZE <= 5)
-        | (jn.P_BRAND == Brand43)
-        & (
-            (jn.P_CONTAINER == MEDBAG)
-            | (jn.P_CONTAINER == MEDBOX)
-            | (jn.P_CONTAINER == MEDPACK)
-            | (jn.P_CONTAINER == MEDPKG)
+        | (
+            (jn.P_BRAND == Brand43)
+            & (jn.P_CONTAINER.isin([MEDBAG, MEDBOX, MEDPACK, MEDPKG]))
+            & (jn.L_QUANTITY >= 15)
+            & (jn.L_QUANTITY <= 25)
+            & (jn.P_SIZE <= 10)
         )
-        & (jn.L_QUANTITY >= 15)
-        & (jn.L_QUANTITY <= 25)
-        & (jn.P_SIZE <= 10)
-        | (jn.P_BRAND == Brand43)
-        & (
-            (jn.P_CONTAINER == LGBOX)
-            | (jn.P_CONTAINER == LGCASE)
-            | (jn.P_CONTAINER == LGPACK)
-            | (jn.P_CONTAINER == LGPKG)
+        | (
+            (jn.P_BRAND == Brand43)
+            & (jn.P_CONTAINER.isin([LGBOX, LGCASE, LGPACK, LGPKG]))
+            & (jn.L_QUANTITY >= 26)
+            & (jn.L_QUANTITY <= 36)
+            & (jn.P_SIZE <= 15)
         )
-        & (jn.L_QUANTITY >= 26)
-        & (jn.L_QUANTITY <= 36)
-        & (jn.P_SIZE <= 15)
     )
     jn = jn[jnsel]
     total = (jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)).sum()
