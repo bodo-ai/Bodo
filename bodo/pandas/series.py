@@ -882,16 +882,6 @@ def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
     return split_s.count(axis="columns")
 
 
-def get_base_plan(plan):
-    """Returns base df_plan of given plan."""
-    if is_single_projection(plan):
-        inner_plan = get_base_plan(plan.args[0])
-        if inner_plan is not None:
-            return inner_plan
-        return None
-    return plan
-
-
 def validate_str_cat(lhs, rhs):
     """
     Checks if lhs and rhs are from the same DataFrame.
