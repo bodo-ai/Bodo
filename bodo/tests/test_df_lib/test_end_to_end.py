@@ -1560,6 +1560,15 @@ def test_DataFrame_constructor(index_val):
     _test_equal(df, bdf, check_pandas_types=False)
 
 
+def test_Series_constructor(index_val):
+    """Test creating a BodoSeries using regular constructor"""
+    pd_S = pd.Series(pd.array([1, 2, 3] * 10, "Int64"), index=index_val[:30])
+    bodo_S = bd.Series(pd.array([1, 2, 3] * 10, "Int64"), index=index_val[:30])
+    assert bodo_S.is_lazy_plan()
+
+    _test_equal(pd_S, bodo_S, check_pandas_types=False)
+
+
 def test_series_min_max():
     """Basic test for Series min and max."""
     # Large number to ensure multiple batches
