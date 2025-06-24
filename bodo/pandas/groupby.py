@@ -574,8 +574,6 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
             # TODO Support bool/decimal columns
             fallback = True
-        else:
-            new_type = pa_type
     elif func in ("count", "size", "nunique"):
         new_type = pa.int64()
     elif func in ("min", "max"):
