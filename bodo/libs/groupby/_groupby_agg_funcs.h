@@ -1,7 +1,6 @@
 #pragma once
 
 #include <concepts>
-#include <iostream>
 #include <span>
 #include "../_array_utils.h"
 #include "../_bodo_common.h"

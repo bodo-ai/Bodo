@@ -124,12 +124,11 @@ class DataFrameGroupBy:
             # depend on input column given.
             if func == "size":
                 # Getting the size of each groups without any input column.
-                # e.g. getting the size of each group in "B": df.groupby("B")[[]].size()
+                # e.g. df.groupby("B")[[]].size()
                 if len(self._selection) < 1:
                     raise BodoLibNotImplementedException(
                         "GroupBy.size(): Aggregating without selected columns not supported yet."
                     )
-
                 normalized_func = [(self._selection[0], "size")]
             else:
                 normalized_func = [(col, func) for col in self._selection]
@@ -534,11 +533,27 @@ def _get_aggfunc_str(func):
 
 
 def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.DataType:
-    """Gets the output type of an aggregation or raise either TypeError or BodoLibNotImplementedException
-    for unsupported pa_type/func combinations. Should closely match
-    https://github.com/bodo-ai/Bodo/blob/d1133e257662348cc7b9ef52cf445633036133d2/bodo/libs/groupby/_groupby_common.cpp#L562
+    """Cast the input type to the correct output type depending on func or raise if
+    the specific combination of func + input type is not supported.
+
+    Args:
+        func (str): The function to apply.
+        pa_type (pa.DataType): The input type of the function.
+        col_name (str): The name of the column in the input.
+
+    Raises:
+        BodoLibNotImplementedException: If the operation is not supported in Bodo
+            but is supported in Pandas.
+        TypeError: If the operation is not supported in Bodo or Pandas (due to gaps
+            in Pandas' handling of Arrow Types)
+
+    Returns:
+        pa.DataType: The output type from applying func to col_name.
     """
-    new_type = pa_type
+    new_type = None
+    fallback = False
+
+    # TODO: Enable more fallbacks where the operation is supported in Pandas and not in Bodo
     if func in ("sum"):
         if pa.types.is_signed_integer(pa_type) or pa.types.is_boolean(pa_type):
             new_type = pa.int64()
@@ -551,35 +566,58 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
         elif pa.types.is_string(pa_type):
             new_type = pa_type
         elif pa.types.is_decimal(pa_type):
-            # TODO Support Decimal columns for sum()
-            raise BodoLibNotImplementedException(
-                f"GroupBy.mean() on input column '{col_name}' with type: {pa_type} not supported yet."
-            )
-        else:
-            raise TypeError(
-                f"GroupBy.sum(): Unsupported dtype in column '{col_name}': {pa_type}."
-            )
-        return new_type
+            # TODO: Decimal sum
+            fallback = True
     elif func in ("mean", "std", "var", "skew"):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
-            # TODO Support bool/decimal columns for mean()
-            raise BodoLibNotImplementedException(
-                f"GroupBy.mean() on input column '{col_name}' with type: {pa_type} not supported yet."
-            )
+            # TODO Support bool/decimal columns
+            fallback = True
         else:
-            raise TypeError(
-                f"GroupBy.mean(): Unsupported dtype in column '{col_name}': {pa_type}."
-            )
-        return new_type
+            new_type = pa_type
     elif func in ("count", "size", "nunique"):
-        return pa.int64()
-    elif func in ("min", "max", "median"):
-        # TODO validation
-        return pa_type
+        new_type = pa.int64()
+    elif func in ("min", "max"):
+        if (
+            pa.types.is_integer(pa_type)
+            or pa.types.is_floating(pa_type)
+            or pa.types.is_boolean(pa_type)
+            or pa.types.is_string(pa_type)
+            or pa.types.is_duration(pa_type)
+            or pa.types.is_date(pa_type)
+            or pa.types.is_timestamp(pa_type)
+        ):
+            new_type = pa_type
+        elif pa.types.is_decimal(pa_type):
+            fallback = True
+    elif func == "median":
+        if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
+            new_type = pa_type
+        elif (
+            pa.types.is_boolean(pa_type)
+            or pa.types.is_decimal(pa_type)
+            or pa.types.is_timestamp(pa_type)
+            or pa.types.is_duration(pa_type)
+        ):
+            # TODO: bool/decimal median
+            fallback = True
+    else:
+        raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
 
-    raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
+    if new_type is not None:
+        return new_type
+    elif fallback:
+        # For cases where Pandas supports the func+type combo but Bodo does not.
+        raise BodoLibNotImplementedException(
+            f"GroupBy.{func}() on input column '{col_name}' with type: {pa_type} not supported yet."
+        )
+    else:
+        # For gaps in Pandas where a specific function is not implemented for arrow or was somehow
+        # falling back to Pandas would also fail, so failing earlier is better.
+        raise TypeError(
+            f"GroupBy.{func}(): Unsupported dtype in column '{col_name}': {pa_type}."
+        )
 
 
 def _cast_groupby_agg_columns(
