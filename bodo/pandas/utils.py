@@ -913,7 +913,15 @@ def arrow_table_to_pandas(arrow_table, arrow_schema=None):
     # Set column names separately to handle duplicate names ("field.name:" in a
     # dictionary would replace duplicated values)
     df.columns = [f.name for f in arrow_schema]
-    return _reconstruct_pandas_index(df, arrow_schema)
+
+    df_with_index = _reconstruct_pandas_index(df, arrow_schema)
+
+    # Handle multi-level column names e.g. ["('A', 'sum')", "('A', 'mean')"]
+    if len(arrow_schema.pandas_metadata.get("column_indexes", [])) > 1:
+        columns_zipped = zip(*[eval(col) for col in df_with_index.columns])
+        df_with_index.columns = pd.MultiIndex.from_arrays(columns_zipped)
+
+    return df_with_index
 
 
 def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
