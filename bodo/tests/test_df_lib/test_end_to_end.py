@@ -1191,6 +1191,7 @@ def groupby_agg_df(request):
             ),
             "B": pd.array(["A", "B", pd.NA] * 4),
             "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
+            "T": pd.timedelta_range("1 day", periods=12, freq="D"),
         }
     )
 
@@ -1255,6 +1256,76 @@ def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
     df2 = df1.groupby("B", as_index=as_index, dropna=dropna)["A"].agg(func, **kwargs)
 
     _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        "sum",
+        "mean",
+        "count",
+        "max",
+        "min",
+        "median",
+        "nunique",
+        "size",
+        "var",
+        "std",
+        "skew",
+    ],
+)
+def test_groupby_agg_numeric(groupby_agg_df, func):
+    """Tests supported aggfuncs on simple numeric (floats and ints)."""
+
+    bdf1 = bd.from_pandas(groupby_agg_df)
+
+    cols = ["D", "A", "C"]
+
+    bdf2 = getattr(bdf1.groupby("B")[cols], func)()
+    df2 = getattr(groupby_agg_df.groupby("B")[cols], func)()
+
+    assert bdf2.is_lazy_plan()
+
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        "count",
+        "max",
+        "min",
+        "nunique",
+        "size",
+    ],
+)
+def test_groupby_agg_ordered(func):
+    """Tests supported aggfuncs on other simple data types."""
+
+    # string, datetime, bool
+    df = pd.DataFrame(
+        {
+            "A": pd.array([True, pd.NA, False, True] * 3),
+            "B": pd.array([pd.NA, "pq", "rs", "abc", "efg", "hij"] * 2),
+            "D": pd.date_range(
+                "1988-01-01", periods=12, freq="D"
+            ).to_series(),  # timestamp[ns]
+            "F": pd.date_range("1988-01-01", periods=12, freq="D")
+            .to_series()
+            .dt.date,  # date32
+            "T": pd.timedelta_range("1 day", periods=12, freq="D"),  # duration
+            "K": ["A", "A", "B"] * 4,
+        }
+    )
+
+    bdf1 = bd.from_pandas(df)
+
+    bdf2 = getattr(bdf1.groupby("K"), func)()
+    df2 = getattr(df.groupby("K"), func)()
+
+    assert bdf2.is_lazy_plan()
+
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
 
 
 def test_compound_projection_expression(datapath):
