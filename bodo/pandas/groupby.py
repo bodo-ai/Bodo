@@ -276,7 +276,7 @@ def _groupby_agg_plan(
     # df1.groupby("C", as_index=False)[["C"]].agg("sum")
     if set(grouped._keys) & set(grouped._selection):
         raise BodoLibNotImplementedException(
-            "GroupBy.agg(): Attempting to aggregate on key columns not supported yet."
+            "GroupBy.agg(): Aggregation on key columns not supported yet."
         )
 
     n_key_cols = 0 if grouped._as_index else len(grouped._keys)
@@ -338,7 +338,7 @@ def _get_aggfunc_str(func):
         return get_callable_name(func)
 
     raise TypeError(
-        "GroupBy.agg(): expected func to be callable or string, got: ", type(func)
+        f"GroupBy.agg(): expected func to be callable or string, got: {type(func)}."
     )
 
 
@@ -421,15 +421,15 @@ def _cast_groupby_agg_columns(
     for i, (in_col_name, func_) in enumerate(func):
         out_col_name = out_data.columns[i + n_key_cols]
 
-        # Pandas should've already caught this case and raised a SpecificationError.
+        # Checks for cases like bdf.groupby("C")[["A", "A"]].agg(["sum"]).
         if not isinstance(out_data[out_col_name], pd.Series):
             raise BodoLibNotImplementedException(
                 f"GroupBy.agg(): detected duplicate output column name in output columns: '{out_col_name}'"
             )
 
         in_col = in_data[in_col_name]
-        # Check for cases like bdf.groupby("C")[["A", "A"]].agg(["sum"]).
-        if not isinstance(out_data[out_col_name], pd.Series):
+        # Should've been handled in the check above, but just to be safe.
+        if not isinstance(in_col, pd.Series):
             raise BodoLibNotImplementedException(
                 f"GroupBy.agg(): detected duplicate column name in input column: '{in_col_name}'"
             )
