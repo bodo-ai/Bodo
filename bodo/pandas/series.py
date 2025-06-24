@@ -55,6 +55,26 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     _head_s: pd.Series | None = None
     _name: Hashable = None
 
+    def __new__(cls, *args, **kwargs):
+        """Support bodo.pandas.Series() constructor by creating a pandas Series
+        and then converting it to a BodoSeries.
+        """
+        # Handle Pandas internal use which creates an empty object and then assigns the
+        # manager:
+        # https://github.com/pandas-dev/pandas/blob/1da0d022057862f4352113d884648606efd60099/pandas/core/generic.py#L309
+        if not args and not kwargs:
+            return super().__new__(cls, *args, **kwargs)
+
+        S = pd.Series(*args, **kwargs)
+        df = pd.DataFrame({"A": S})
+        bodo_S = bodo.pandas.base.from_pandas(df)["A"]
+        bodo_S._name = S.name
+        return bodo_S
+
+    def __init__(self, *args, **kwargs):
+        # No-op since already initialized by __new__
+        pass
+
     @property
     def _plan(self):
         if hasattr(self._mgr, "_plan"):
