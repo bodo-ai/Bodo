@@ -143,7 +143,10 @@ def test_assignment_str_cat_lazy_plan():
     )
     bdf = bd.from_pandas(pdf)
 
-    bdf["C"] = bdf.A.str.cat(others=bdf.B)
+    bdf = bdf.A.str.cat(others=bdf.B)
+    assert bdf.is_lazy_plan()
+
+    bdf["C"] = bdf
     pdf["C"] = pdf["A"].str.cat(others=pdf["B"])
 
     assert bdf.is_lazy_plan()

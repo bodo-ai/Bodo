@@ -1296,7 +1296,7 @@ def pd_timedelta_range_overload(
         if not right_closed and len(arr) and arr[-1] == end_t.value:
             arr = arr[:-1]
 
-        S = bodo.utils.conversion.convert_to_dt64ns(arr)
+        S = bodo.utils.conversion.convert_to_td64ns(arr)
         return bodo.hiframes.pd_index_ext.init_timedelta_index(S, name)
 
     return f
