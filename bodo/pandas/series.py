@@ -601,6 +601,28 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         return _compute_series_reduce(self, "max")
 
+    @check_args_fallback(unsupported="all")
+    def sum(
+        self,
+        axis: Axis | None = 0,
+        skipna: bool = True,
+        numeric_only: bool = False,
+        min_count=0,
+        **kwargs,
+    ):
+        return _compute_series_reduce(self, "sum")
+
+    @check_args_fallback(unsupported="all")
+    def product(
+        self,
+        axis: Axis | None = 0,
+        skipna: bool = True,
+        numeric_only: bool = False,
+        min_count=0,
+        **kwargs,
+    ):
+        return _compute_series_reduce(self, "product")
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -835,7 +857,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
 
     # TODO: support other functions like sum, mean, etc.
     # TODO: support count
-    assert func_name in ("min", "max", "sum", "product"), (
+    assert func_name in ("min", "max", "sum", "product", "count"), (
         f"Unsupported function {func_name} for series reduction."
     )
 
