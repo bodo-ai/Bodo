@@ -182,34 +182,6 @@ class DataFrameGroupBy:
         return _groupby_agg_plan(self, "max")
 
     @check_args_fallback(supported="none")
-    def first(self, numeric_only=False, min_count=-1, skipna=True):
-        """
-        Compute the first of each group.
-        """
-        return _groupby_agg_plan(self, "first")
-
-    @check_args_fallback(supported="none")
-    def last(self, numeric_only=False, min_count=-1, skipna=True):
-        """
-        Compute the last of each group.
-        """
-        return _groupby_agg_plan(self, "last")
-
-    @check_args_fallback(supported="none")
-    def idxmin(self, axis=lib.no_default, skipna=True, numeric_only=False):
-        """
-        Compute the idxmin of each group.
-        """
-        return _groupby_agg_plan(self, "idxmin")
-
-    @check_args_fallback(supported="none")
-    def idxmax(self, axis=lib.no_default, skipna=True, numeric_only=False):
-        """
-        Compute the idxmax of each group.
-        """
-        return _groupby_agg_plan(self, "idxmax")
-
-    @check_args_fallback(supported="none")
     def median(self, numeric_only=False):
         """
         Compute the median of each group.
@@ -222,13 +194,6 @@ class DataFrameGroupBy:
         Compute the nunique of each group.
         """
         return _groupby_agg_plan(self, "nunique")
-
-    @check_args_fallback(supported="none")
-    def prod(self, numeric_only=False, min_count=0):
-        """
-        Compute the prod of each group.
-        """
-        return _groupby_agg_plan(self, "prod")
 
     @check_args_fallback(supported="none")
     def size(self):
@@ -370,34 +335,6 @@ class SeriesGroupBy:
         return _groupby_agg_plan(self, "max")
 
     @check_args_fallback(supported="none")
-    def first(self, numeric_only=False, min_count=-1, skipna=True):
-        """
-        Compute the first of each group.
-        """
-        return _groupby_agg_plan(self, "first")
-
-    @check_args_fallback(supported="none")
-    def last(self, numeric_only=False, min_count=-1, skipna=True):
-        """
-        Compute the last of each group.
-        """
-        return _groupby_agg_plan(self, "last")
-
-    @check_args_fallback(supported="none")
-    def idxmin(self, axis=lib.no_default, skipna=True):
-        """
-        Compute the idxmin of each group.
-        """
-        return _groupby_agg_plan(self, "idxmin")
-
-    @check_args_fallback(supported="none")
-    def idxmax(self, axis=lib.no_default, skipna=True):
-        """
-        Compute the idxmax of each group.
-        """
-        return _groupby_agg_plan(self, "idxmax")
-
-    @check_args_fallback(supported="none")
     def median(self, numeric_only=False):
         """
         Compute the median of each group.
@@ -410,13 +347,6 @@ class SeriesGroupBy:
         Compute the nunique of each group.
         """
         return _groupby_agg_plan(self, "nunique")
-
-    @check_args_fallback(supported="none")
-    def prod(self, numeric_only=False, min_count=0):
-        """
-        Compute the prod of each group.
-        """
-        return _groupby_agg_plan(self, "prod")
 
     @check_args_fallback(supported="none")
     def size(self):
@@ -554,7 +484,7 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
     fallback = False
 
     # TODO: Enable more fallbacks where the operation is supported in Pandas and not in Bodo
-    if func in ("sum"):
+    if func in ("sum",):
         if pa.types.is_signed_integer(pa_type) or pa.types.is_boolean(pa_type):
             new_type = pa.int64()
         elif pa.types.is_unsigned_integer(pa_type):
