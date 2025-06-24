@@ -120,7 +120,19 @@ class DataFrameGroupBy:
             ]
         else:
             func = _get_aggfunc_str(func)
-            normalized_func = [(col, func) for col in self._selection]
+            # Size is a special case that only produces 1 column, since it doesn't
+            # depend on input column given.
+            if func == "size":
+                # Getting the size of each groups without any input column.
+                # e.g. getting the size of each group in "B": df.groupby("B")[[]].size()
+                if len(self._selection) < 1:
+                    raise BodoLibNotImplementedException(
+                        "GroupBy.size(): Aggregating without selected columns not supported yet."
+                    )
+
+                normalized_func = [(self._selection[0], "size")]
+            else:
+                normalized_func = [(col, func) for col in self._selection]
 
         return normalized_func
 
