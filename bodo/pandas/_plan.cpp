@@ -162,7 +162,12 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
         function_name, arg_types, out_type, nullptr, nullptr, nullptr, nullptr,
         nullptr, duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
 
-    auto bind_info = duckdb::make_uniq<BodoAggFunctionData>(dropna);
+    // The name parameter in AggregateFunction is ignored when determining
+    // whether two AggregateFunctions are equal, adding function_name to
+    // BodoAggFunctionData ensures two different functions applied to the same
+    // column are not optimized out.
+    auto bind_info =
+        duckdb::make_uniq<BodoAggFunctionData>(dropna, function_name);
 
     return duckdb::make_uniq<duckdb::BoundAggregateExpression>(
         function, std::move(children), nullptr, std::move(bind_info),
