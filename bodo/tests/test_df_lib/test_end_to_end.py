@@ -1258,6 +1258,38 @@ def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
     _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
 
 
+def test_groupby_aggfuncs(groupby_agg_df, as_index, dropna):
+    funcs = [
+        "max",
+        "min",
+        "median",
+        "first",
+        "last",
+        "idxmin",
+        "idxmax",
+        "nunique",
+        "size",
+        "prod",
+        "sem",
+        "var",
+        "std",
+        "skew",
+    ]
+
+    cols = ["D"]
+
+    bdf1 = bd.from_pandas(groupby_agg_df)
+
+    for func in funcs:
+        for col in cols:
+            bdf2 = getattr(bdf1.groupby("B")[col], func)()
+            df2 = getattr(groupby_agg_df.groupby("B")[col], func)()
+
+            assert bdf2.is_lazy_plan()
+
+            _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+
+
 def test_compound_projection_expression(datapath):
     """Very simple test for projection expressions."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))

@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 import pandas as pd
 import pyarrow as pa
+from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
 from bodo.pandas.utils import (
@@ -149,6 +150,97 @@ class DataFrameGroupBy:
         """
         return _groupby_agg_plan(self, "count")
 
+    @check_args_fallback(supported="none")
+    def min(self, numeric_only=False, min_count=-1, engine=None, engine_kwargs=None):
+        """
+        Compute the min of each group.
+        """
+        return _groupby_agg_plan(self, "min")
+
+    @check_args_fallback(supported="none")
+    def max(self, numeric_only=False, min_count=-1, engine=None, engine_kwargs=None):
+        """
+        Compute the max of each group.
+        """
+        return _groupby_agg_plan(self, "max")
+
+    @check_args_fallback(supported="none")
+    def first(self, numeric_only=False, min_count=-1, skipna=True):
+        """
+        Compute the first of each group.
+        """
+        return _groupby_agg_plan(self, "first")
+
+    @check_args_fallback(supported="none")
+    def last(self, numeric_only=False, min_count=-1, skipna=True):
+        """
+        Compute the last of each group.
+        """
+        return _groupby_agg_plan(self, "last")
+
+    @check_args_fallback(supported="none")
+    def idxmin(self, axis=lib.no_default, skipna=True, numeric_only=False):
+        """
+        Compute the idxmin of each group.
+        """
+        return _groupby_agg_plan(self, "idxmin")
+
+    @check_args_fallback(supported="none")
+    def idxmax(self, axis=lib.no_default, skipna=True, numeric_only=False):
+        """
+        Compute the idxmax of each group.
+        """
+        return _groupby_agg_plan(self, "idxmax")
+
+    @check_args_fallback(supported="none")
+    def median(self, numeric_only=False):
+        """
+        Compute the median of each group.
+        """
+        return _groupby_agg_plan(self, "median")
+
+    @check_args_fallback(supported="none")
+    def nunique(self, dropna=True):
+        """
+        Compute the nunique of each group.
+        """
+        return _groupby_agg_plan(self, "nunique")
+
+    @check_args_fallback(supported="none")
+    def prod(self, numeric_only=False, min_count=0):
+        """
+        Compute the prod of each group.
+        """
+        return _groupby_agg_plan(self, "prod")
+
+    @check_args_fallback(supported="none")
+    def size(self):
+        """
+        Compute the size of each group (including missing values).
+        """
+        return _groupby_agg_plan(self, "size")
+
+    @check_args_fallback(supported="none")
+    def skew(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
+        """
+        Compute the skew of each group.
+        """
+        return _groupby_agg_plan(self, "skew")
+
+    @check_args_fallback(supported="none")
+    def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
+        """
+        Compute the std of each group.
+        """
+        return _groupby_agg_plan(self, "std")
+
+    @check_args_fallback(supported="none")
+    def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
+        """
+        Compute the var of each group.
+        """
+        return _groupby_agg_plan(self, "var")
+
 
 class SeriesGroupBy:
     """
@@ -168,42 +260,6 @@ class SeriesGroupBy:
         self._selection = selection
         self._as_index = as_index
         self._dropna = dropna
-
-    @check_args_fallback(supported="none")
-    def sum(
-        self,
-        numeric_only: bool = False,
-        min_count: int = 0,
-        engine: Literal["cython", "numba"] | None = None,
-        engine_kwargs: dict[str, bool] | None = None,
-    ):
-        """
-        Compute the sum of each group.
-        """
-        assert len(self._selection) == 1, (
-            "SeriesGroupBy.sum() should only be called on a single column selection."
-        )
-
-        return _groupby_agg_plan(self, "sum")
-
-    @check_args_fallback(supported="none")
-    def mean(
-        self,
-        numeric_only: bool = False,
-        engine: Literal["cython", "numba"] | None = None,
-        engine_kwargs: dict[str, bool] | None = None,
-    ):
-        """
-        Compute the mean of each group.
-        """
-        return _groupby_agg_plan(self, "mean")
-
-    @check_args_fallback(supported="none")
-    def count(self):
-        """
-        Compute the count of each group.
-        """
-        return _groupby_agg_plan(self, "count")
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
@@ -247,6 +303,129 @@ class SeriesGroupBy:
             normalized_func = [(col, _get_aggfunc_str(func))]
 
         return normalized_func
+
+    @check_args_fallback(supported="none")
+    def sum(
+        self,
+        numeric_only: bool = False,
+        min_count: int = 0,
+        engine: Literal["cython", "numba"] | None = None,
+        engine_kwargs: dict[str, bool] | None = None,
+    ):
+        """
+        Compute the sum of each group.
+        """
+        return _groupby_agg_plan(self, "sum")
+
+    @check_args_fallback(supported="none")
+    def mean(
+        self,
+        numeric_only: bool = False,
+        engine: Literal["cython", "numba"] | None = None,
+        engine_kwargs: dict[str, bool] | None = None,
+    ):
+        """
+        Compute the mean of each group.
+        """
+        return _groupby_agg_plan(self, "mean")
+
+    @check_args_fallback(supported="none")
+    def count(self):
+        """
+        Compute the count of each group.
+        """
+        return _groupby_agg_plan(self, "count")
+
+    @check_args_fallback(supported="none")
+    def min(self, numeric_only=False, min_count=-1, engine=None, engine_kwargs=None):
+        """
+        Compute the min of each group.
+        """
+        return _groupby_agg_plan(self, "min")
+
+    @check_args_fallback(supported="none")
+    def max(self, numeric_only=False, min_count=-1, engine=None, engine_kwargs=None):
+        """
+        Compute the max of each group.
+        """
+        return _groupby_agg_plan(self, "max")
+
+    @check_args_fallback(supported="none")
+    def first(self, numeric_only=False, min_count=-1, skipna=True):
+        """
+        Compute the first of each group.
+        """
+        return _groupby_agg_plan(self, "first")
+
+    @check_args_fallback(supported="none")
+    def last(self, numeric_only=False, min_count=-1, skipna=True):
+        """
+        Compute the last of each group.
+        """
+        return _groupby_agg_plan(self, "last")
+
+    @check_args_fallback(supported="none")
+    def idxmin(self, axis=lib.no_default, skipna=True):
+        """
+        Compute the idxmin of each group.
+        """
+        return _groupby_agg_plan(self, "idxmin")
+
+    @check_args_fallback(supported="none")
+    def idxmax(self, axis=lib.no_default, skipna=True):
+        """
+        Compute the idxmax of each group.
+        """
+        return _groupby_agg_plan(self, "idxmax")
+
+    @check_args_fallback(supported="none")
+    def median(self, numeric_only=False):
+        """
+        Compute the median of each group.
+        """
+        return _groupby_agg_plan(self, "median")
+
+    @check_args_fallback(supported="none")
+    def nunique(self, dropna=True):
+        """
+        Compute the nunique of each group.
+        """
+        return _groupby_agg_plan(self, "nunique")
+
+    @check_args_fallback(supported="none")
+    def prod(self, numeric_only=False, min_count=0):
+        """
+        Compute the prod of each group.
+        """
+        return _groupby_agg_plan(self, "prod")
+
+    @check_args_fallback(supported="none")
+    def size(self):
+        """
+        Compute the size of each group (including missing values).
+        """
+        return _groupby_agg_plan(self, "size")
+
+    @check_args_fallback(supported="none")
+    def skew(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
+        """
+        Compute the skew of each group.
+        """
+        return _groupby_agg_plan(self, "skew")
+
+    @check_args_fallback(supported="none")
+    def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
+        """
+        Compute the std of each group.
+        """
+        return _groupby_agg_plan(self, "std")
+
+    @check_args_fallback(supported="none")
+    def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
+        """
+        Compute the var of each group.
+        """
+        return _groupby_agg_plan(self, "var")
 
 
 def _groupby_agg_plan(
@@ -333,11 +512,13 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
     https://github.com/bodo-ai/Bodo/blob/d1133e257662348cc7b9ef52cf445633036133d2/bodo/libs/groupby/_groupby_common.cpp#L562
     """
     new_type = pa_type
-    if func == "sum":
+    if func in ("sum", "prod"):
         if pa.types.is_signed_integer(pa_type) or pa.types.is_boolean(pa_type):
             new_type = pa.int64()
         elif pa.types.is_unsigned_integer(pa_type):
             new_type = pa.uint64()
+        elif pa.types.is_duration(pa_type):
+            new_type = pa_type
         elif pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_string(pa_type):
@@ -352,7 +533,7 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
                 f"GroupBy.sum(): Unsupported dtype in column '{col_name}': {pa_type}."
             )
         return new_type
-    elif func == "mean":
+    elif func in ("mean", "std", "var", "skew"):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
@@ -365,8 +546,14 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
                 f"GroupBy.mean(): Unsupported dtype in column '{col_name}': {pa_type}."
             )
         return new_type
-    elif func == "count":
+    elif func in ("count", "size", "nunique", "idxmax", "idxmin"):
+        # TODO: Validation
         return pa.int64()
+    elif func in ("first", "last"):
+        return pa_type
+    elif func in ("min", "max", "median"):
+        # TODO validation
+        return pa_type
 
     raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
 
