@@ -5,6 +5,7 @@ import tempfile
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -1157,22 +1158,26 @@ def test_groupby_fallback():
 
     # Series groupby
     with pytest.warns(BodoLibFallbackWarning):
-        fallback_out = bdf.groupby("A", dropna=False, as_index=False)["B"].sum(
-            engine="cython"
-        )
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)[
+            "B"
+        ].sum(engine="cython")
 
-    pandas_out = df.groupby("A", dropna=False, as_index=False)["B"].sum(engine="cython")
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
     bdf2 = bd.from_pandas(df)
 
     # DataFrame groupby
     with pytest.warns(BodoLibFallbackWarning):
-        fallback_out = bdf2.groupby("A", dropna=False, as_index=False).sum(
+        fallback_out = bdf2.groupby("A", dropna=False, as_index=False, sort=True).sum(
             engine="cython"
         )
 
-    pandas_out = df.groupby("A", dropna=False, as_index=False).sum(engine="cython")
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
 
@@ -1218,12 +1223,6 @@ def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
     assert bdf2.is_lazy_plan()
 
     df2 = df1.groupby("B", as_index=as_index, dropna=dropna).agg(func, **kwargs)
-
-    # TODO: support multi-Index column names properly
-    if isinstance(df2.columns, pd.MultiIndex):
-        bdf2.execute_plan()
-        level1, level2 = zip(*[eval(val) for val in bdf2.columns])
-        bdf2.columns = pd.MultiIndex.from_arrays([level1, level2])
 
     _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
 
@@ -1578,6 +1577,10 @@ def test_series_min_max():
             "E": pd.date_range("1988-01-01", periods=n, freq="D").to_series(),
             "F": pd.date_range("1988-01-01", periods=n, freq="D").to_series().dt.date,
             "G": ["a", "abc", "bc3", "d4e5f"] * (n // 4),
+            "H": pd.array(
+                [-1.1, 2.3, 3.4, 5.2] * (n // 4),
+                dtype=pd.ArrowDtype(pa.decimal128(10, 4)),
+            ),
         },
     )
     bdf = bd.from_pandas(df)
