@@ -138,14 +138,14 @@ class DataFrameGroupBy:
         engine_kwargs: dict[str, bool] | None = None,
     ):
         """
-        Compute the sum of each group.
+        Compute the mean of each group.
         """
         return _groupby_agg_plan(self, "mean")
 
     @check_args_fallback(supported="none")
     def count(self):
         """
-        Compute the sum of each group.
+        Compute the count of each group.
         """
         return _groupby_agg_plan(self, "count")
 
@@ -194,23 +194,15 @@ class SeriesGroupBy:
         engine_kwargs: dict[str, bool] | None = None,
     ):
         """
-        Compute the sum of each group.
+        Compute the mean of each group.
         """
-        assert len(self._selection) == 1, (
-            "SeriesGroupBy.sum() should only be called on a single column selection."
-        )
-
         return _groupby_agg_plan(self, "mean")
 
     @check_args_fallback(supported="none")
     def count(self):
         """
-        Compute the sum of each group.
+        Compute the count of each group.
         """
-        assert len(self._selection) == 1, (
-            "SeriesGroupBy.sum() should only be called on a single column selection."
-        )
-
         return _groupby_agg_plan(self, "count")
 
     @check_args_fallback(unsupported="none")
