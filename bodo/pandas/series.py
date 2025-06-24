@@ -7,6 +7,7 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
 
+import numpy
 import pandas as pd
 import pyarrow as pa
 from pandas._typing import (
@@ -939,10 +940,15 @@ def _str_extract_helper(s, pat, expand, n_cols, flags):
 def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
     """Runs str.split per element in s and returns length of resulting match group for each index."""
     if is_split:
-        split_s = s.str.split(pat=pat, n=n, expand=True, regex=regex)
+        split_s = s.str.split(pat=pat, n=n, expand=False, regex=regex)
     else:
-        split_s = s.str.rsplit(pat=pat, n=n, expand=True)
-    return split_s.count(axis="columns")
+        split_s = s.str.rsplit(pat=pat, n=n, expand=False)
+
+    def get_len(x):
+        """Get length if output of str.split() is numpy array, otherwise 1."""
+        return len(x) if isinstance(x, numpy.ndarray) else 1
+
+    return split_s.map(get_len)
 
 
 def validate_str_cat(lhs, rhs):
