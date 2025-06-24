@@ -1258,36 +1258,35 @@ def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
     _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
 
 
-def test_groupby_aggfuncs(groupby_agg_df, as_index, dropna):
-    funcs = [
+@pytest.mark.parametrize(
+    "func",
+    [
+        "sum",
+        "mean",
+        "count",
         "max",
         "min",
         "median",
-        "first",
-        "last",
-        "idxmin",
-        "idxmax",
         "nunique",
         "size",
-        "prod",
-        "sem",
         "var",
         "std",
         "skew",
-    ]
-
-    cols = ["D"]
+    ],
+)
+def test_groupby_aggfuncs_numeric(groupby_agg_df, func):
+    """Tests supported aggfuncs on simple numeric data including missing values."""
 
     bdf1 = bd.from_pandas(groupby_agg_df)
 
-    for func in funcs:
-        for col in cols:
-            bdf2 = getattr(bdf1.groupby("B")[col], func)()
-            df2 = getattr(groupby_agg_df.groupby("B")[col], func)()
+    cols = ["D", "A", "C"]
 
-            assert bdf2.is_lazy_plan()
+    bdf2 = getattr(bdf1.groupby("B")[cols], func)()
+    df2 = getattr(groupby_agg_df.groupby("B")[cols], func)()
 
-            _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+    assert bdf2.is_lazy_plan()
+
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
 
 
 def test_compound_projection_expression(datapath):

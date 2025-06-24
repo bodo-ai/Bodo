@@ -617,6 +617,10 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
                 }
             }
             break;
+        case Bodo_FTypes::prod:
+            out_array_type = bodo_array_type::NULLABLE_INT_BOOL;
+            out_dtype = out_dtype = Bodo_CTypes::INT64;
+            break;
         case Bodo_FTypes::boolor_agg:
         case Bodo_FTypes::booland_agg:
         case Bodo_FTypes::boolxor_agg:

@@ -223,13 +223,11 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
 // Definition of the static member
 const std::map<std::string, int32_t> PhysicalAggregate::function_to_ftype = {
-    {"count", Bodo_FTypes::count},   {"first", Bodo_FTypes::first},
-    {"idxmax", Bodo_FTypes::idxmax}, {"idxmin", Bodo_FTypes::idxmin},
-    {"last", Bodo_FTypes::last},     {"max", Bodo_FTypes::max},
-    {"mean", Bodo_FTypes::mean},     {"median", Bodo_FTypes::median},
-    {"min", Bodo_FTypes::min},       {"prod", Bodo_FTypes::prod},
-    {"size", Bodo_FTypes::size},     {"skew", Bodo_FTypes::skew},
-    {"std", Bodo_FTypes::std},       {"sum", Bodo_FTypes::sum},
+    {"count", Bodo_FTypes::count}, {"max", Bodo_FTypes::max},
+    {"mean", Bodo_FTypes::mean},   {"median", Bodo_FTypes::median},
+    {"min", Bodo_FTypes::min},     {"nunique", Bodo_FTypes::nunique},
+    {"size", Bodo_FTypes::size},   {"skew", Bodo_FTypes::skew},
+    {"std", Bodo_FTypes::std},     {"sum", Bodo_FTypes::sum},
     {"var", Bodo_FTypes::var}};
 
 /**

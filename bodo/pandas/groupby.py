@@ -527,7 +527,7 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
     https://github.com/bodo-ai/Bodo/blob/d1133e257662348cc7b9ef52cf445633036133d2/bodo/libs/groupby/_groupby_common.cpp#L562
     """
     new_type = pa_type
-    if func in ("sum", "prod"):
+    if func in ("sum"):
         if pa.types.is_signed_integer(pa_type) or pa.types.is_boolean(pa_type):
             new_type = pa.int64()
         elif pa.types.is_unsigned_integer(pa_type):
@@ -561,11 +561,8 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
                 f"GroupBy.mean(): Unsupported dtype in column '{col_name}': {pa_type}."
             )
         return new_type
-    elif func in ("count", "size", "nunique", "idxmax", "idxmin"):
-        # TODO: Validation
+    elif func in ("count", "size", "nunique"):
         return pa.int64()
-    elif func in ("first", "last"):
-        return pa_type
     elif func in ("min", "max", "median"):
         # TODO validation
         return pa_type
