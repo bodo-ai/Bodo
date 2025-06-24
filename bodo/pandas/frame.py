@@ -68,6 +68,23 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     _head_df: pd.DataFrame | None = None
     _source_plan: LazyPlan | None = None
 
+    def __new__(cls, *args, **kwargs):
+        """Support bodo.pandas.DataFrame() constructor by creating a pandas DataFrame
+        and then converting it to a BodoDataFrame.
+        """
+        # Handle Pandas internal use which creates an empty object and then assigns the
+        # manager:
+        # https://github.com/pandas-dev/pandas/blob/1da0d022057862f4352113d884648606efd60099/pandas/core/generic.py#L309
+        if not args and not kwargs:
+            return super().__new__(cls, *args, **kwargs)
+
+        df = pd.DataFrame(*args, **kwargs)
+        return bodo.pandas.base.from_pandas(df)
+
+    def __init__(self, *args, **kwargs):
+        # No-op since already initialized by __new__
+        pass
+
     @property
     def _plan(self):
         if self.is_lazy_plan():

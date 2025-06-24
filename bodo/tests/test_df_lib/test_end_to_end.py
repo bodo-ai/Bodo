@@ -1537,6 +1537,29 @@ def test_topn(datapath):
     )
 
 
+def test_DataFrame_constructor(index_val):
+    """Test creating a BodoDataFrame using regular constructor"""
+    df = pd.DataFrame(
+        {
+            "a": pd.array([1, 2, 3] * 10, "Int64"),
+            "b": pd.array([4, 5, 6] * 10, "Int64"),
+            "c": ["a", "b", "c"] * 10,
+        },
+        index=index_val[:30],
+    )
+    bdf = bd.DataFrame(
+        {
+            "a": pd.array([1, 2, 3] * 10, "Int64"),
+            "b": pd.array([4, 5, 6] * 10, "Int64"),
+            "c": ["a", "b", "c"] * 10,
+        },
+        index=index_val[:30],
+    )
+    assert bdf.is_lazy_plan()
+
+    _test_equal(df, bdf, check_pandas_types=False)
+
+
 def test_series_min_max():
     """Basic test for Series min and max."""
     # Large number to ensure multiple batches

@@ -30,7 +30,6 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
 
     logger = bodo.user_logging.get_current_bodo_verbose_logger()
 
-    @classmethod
     # BlockManager is implemented in Cython so we can't override __init__ directly
     def __new__(cls, *args, **kwargs):
         if "result_id" in kwargs or "plan" in kwargs:
