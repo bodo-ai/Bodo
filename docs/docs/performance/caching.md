@@ -34,10 +34,10 @@ def mean_power_speed():
     return df[["power", "speed"]].mean()
 
 
-t0 = time.time()
+t0 = time.perf_counter()
 result = mean_power_speed()
 print(result)
-print("Total execution time:", round(time.time() - t0, 3), "secs")
+print("Total execution time:", round(time.perf_counter() - t0, 3), "secs")
 ```
 
 The first time that the above code runs, Bodo compiles the function and

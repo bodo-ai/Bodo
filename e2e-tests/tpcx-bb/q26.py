@@ -44,16 +44,16 @@ import bodo
 def tpcx_bb_q26_etl():
     print("Start...")
     print("Reading tables...")
-    t0 = time.time()
+    t0 = time.perf_counter()
     ss_file = "s3://bodotest-customer-data/tpcx-bb/q26/store_sales.pq"
     i_file = "s3://bodotest-customer-data/tpcx-bb/q26/item.pq"
     store_sales = pd.read_parquet(ss_file)
     item = pd.read_parquet(i_file)
-    t1 = time.time()
+    t1 = time.perf_counter()
     print("Read time: ", t1 - t0)
 
     print("Starting computation...")
-    t0 = time.time()
+    t0 = time.perf_counter()
 
     item2 = item[item["i_category"] == "Books"]
     sale_items = pd.merge(
@@ -132,7 +132,7 @@ def tpcx_bb_q26_etl():
     customer_i_class = customer_i_class.sort_values("ss_customer_sk")
     res = customer_i_class.values.astype(np.float64).sum()
     print("checksum", res)
-    t1 = time.time()
+    t1 = time.perf_counter()
     print("Execution time: ", t1 - t0)
     return customer_i_class
 
@@ -140,7 +140,7 @@ def tpcx_bb_q26_etl():
 @bodo.jit(distributed=["training_df"], cache=True)
 def run_clustering(training_df):
     print("run_clustering: Start...")
-    t0 = time.time()
+    t0 = time.perf_counter()
     model = KMeans(
         n_clusters=8,
         max_iter=20,
@@ -151,7 +151,7 @@ def run_clustering(training_df):
     model.fit(training_df)
     with bodo.objmode(score="float64"):
         score = model.inertia_
-    t1 = time.time()
+    t1 = time.perf_counter()
     print("run_clustering: Execution time: ", t1 - t0)
     return model, score
 

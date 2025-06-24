@@ -16,7 +16,7 @@ from dask.distributed import Client
 
 
 def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=None):
-    start = time.time()
+    start = time.perf_counter()
     central_park_weather_observations = dd.read_csv(
         weather_dataset, parse_dates=["DATE"], storage_options=storage_options
     )
@@ -91,7 +91,7 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=
 
     monthly_trips_weather.to_parquet("s3://dask-results/result.pq", compute=True)
 
-    end = time.time()
+    end = time.perf_counter()
 
     return end - start
 

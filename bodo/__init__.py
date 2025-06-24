@@ -27,8 +27,8 @@ def _global_except_hook(exctype, value, traceback):
     HANG_TIMEOUT = 3.0
     is_hang = True
     req = comm.Ibarrier()
-    start = time.time()
-    while time.time() - start < HANG_TIMEOUT:
+    start = time.perf_counter()
+    while time.perf_counter() - start < HANG_TIMEOUT:
         time.sleep(0.1)
         if req.Test():
             # everyone reached the barrier before the timeout, so there is no hang

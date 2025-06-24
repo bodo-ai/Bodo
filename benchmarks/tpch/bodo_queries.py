@@ -17,7 +17,7 @@ import bodo
 @bodo.jit(cache=True)
 def run_queries(data_folder):
     # Load the data
-    t1 = time.time()
+    t1 = time.perf_counter()
     lineitem = load_lineitem(data_folder)
     orders = load_orders(data_folder)
     customer = load_customer(data_folder)
@@ -26,10 +26,10 @@ def run_queries(data_folder):
     supplier = load_supplier(data_folder)
     part = load_part(data_folder)
     partsupp = load_partsupp(data_folder)
-    print("Reading time (s): ", time.time() - t1)
+    print("Reading time (s): ", time.perf_counter() - t1)
 
     # Run the Queries:
-    t1 = time.time()
+    t1 = time.perf_counter()
     q01(lineitem)
     q02(part, partsupp, supplier, nation, region)
     q03(lineitem, orders, customer)
@@ -52,7 +52,7 @@ def run_queries(data_folder):
     q20(lineitem, part, nation, partsupp, supplier)
     q21(lineitem, orders, supplier, nation)
     q22(customer, orders)
-    print("Total Query time (s): ", time.time() - t1)
+    print("Total Query time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
@@ -131,7 +131,7 @@ def load_partsupp(data_folder):
 
 @bodo.jit
 def q01(lineitem):
-    t1 = time.time()
+    t1 = time.perf_counter()
     date = pd.Timestamp("1998-09-02")
     lineitem_filtered = lineitem.loc[
         :,
@@ -182,12 +182,12 @@ def q01(lineitem):
     )
     total = total.sort_values(["L_RETURNFLAG", "L_LINESTATUS"])
     print(total)
-    print("Q01 Execution time (s): ", time.time() - t1)
+    print("Q01 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q02(part, partsupp, supplier, nation, region):
-    t1 = time.time()
+    t1 = time.perf_counter()
     nation_filtered = nation.loc[:, ["N_NATIONKEY", "N_NAME", "N_REGIONKEY"]]
     region_filtered = region[(region["R_NAME"] == "EUROPE")]
     region_filtered = region_filtered.loc[:, ["R_REGIONKEY"]]
@@ -288,12 +288,12 @@ def q02(part, partsupp, supplier, nation, region):
         ascending=[False, True, True, True],
     )
     print(total)
-    print("Q02 Execution time (s): ", time.time() - t1)
+    print("Q02 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q03(lineitem, orders, customer):
-    t1 = time.time()
+    t1 = time.perf_counter()
     date = pd.Timestamp("1995-03-04")
     lineitem_filtered = lineitem.loc[
         :, ["L_ORDERKEY", "L_EXTENDEDPRICE", "L_DISCOUNT", "L_SHIPDATE"]
@@ -320,12 +320,12 @@ def q03(lineitem, orders, customer):
     )
     res = total.loc[:, ["L_ORDERKEY", "TMP", "O_ORDERDATE", "O_SHIPPRIORITY"]]
     print(res.head(10))
-    print("Q03 Execution time (s): ", time.time() - t1)
+    print("Q03 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q04(lineitem, orders):
-    t1 = time.time()
+    t1 = time.perf_counter()
     date1 = pd.Timestamp("1993-11-01")
     date2 = pd.Timestamp("1993-08-01")
     lsel = lineitem.L_COMMITDATE < lineitem.L_RECEIPTDATE
@@ -339,12 +339,12 @@ def q04(lineitem, orders):
         .sort_values(["O_ORDERPRIORITY"])
     )
     print(total)
-    print("Q04 Execution time (s): ", time.time() - t1)
+    print("Q04 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q05(lineitem, orders, customer, nation, region, supplier):
-    t1 = time.time()
+    t1 = time.perf_counter()
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     rsel = region.R_NAME == "ASIA"
@@ -362,12 +362,12 @@ def q05(lineitem, orders, customer, nation, region, supplier):
     gb = jn5.groupby("N_NAME", as_index=False)["TMP"].sum()
     total = gb.sort_values("TMP", ascending=False)
     bodo.parallel_print(total)
-    print("Q05 Execution time (s): ", time.time() - t1)
+    print("Q05 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q06(lineitem):
-    t1 = time.time()
+    t1 = time.perf_counter()
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     lineitem_filtered = lineitem.loc[
@@ -383,12 +383,12 @@ def q06(lineitem):
     flineitem = lineitem_filtered[sel]
     total = (flineitem.L_EXTENDEDPRICE * flineitem.L_DISCOUNT).sum()
     print(total)
-    print("Q06 Execution time (s): ", time.time() - t1)
+    print("Q06 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q07_old(lineitem, supplier, orders, customer, nation):
-    t1 = time.time()
+    t1 = time.perf_counter()
     supplier_filtered = supplier.loc[:, ["S_SUPPKEY", "S_NATIONKEY"]]
     lineitem_filtered = lineitem[
         (lineitem["L_SHIPDATE"] >= pd.Timestamp("1995-01-01"))
@@ -438,13 +438,13 @@ def q07_old(lineitem, supplier, orders, customer, nation):
         by=["SUPP_NATION", "CUST_NATION", "L_YEAR"], ascending=[True, True, True]
     )
     print(total)
-    print("Q07 Execution time (s): ", time.time() - t1)
+    print("Q07 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q07(lineitem, supplier, orders, customer, nation):
     """This version is faster than q07_old. Keeping the old one for reference"""
-    t1 = time.time()
+    t1 = time.perf_counter()
 
     lineitem_filtered = lineitem[
         (lineitem["L_SHIPDATE"] >= pd.Timestamp("1995-01-01"))
@@ -531,12 +531,12 @@ def q07(lineitem, supplier, orders, customer, nation):
         by=["SUPP_NATION", "CUST_NATION", "L_YEAR"], ascending=[True, True, True]
     )
     print(total)
-    print("Q07 Execution time (s): ", time.time() - t1)
+    print("Q07 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q08(part, lineitem, supplier, orders, customer, nation, region):
-    t1 = time.time()
+    t1 = time.perf_counter()
     part_filtered = part[(part["P_TYPE"] == "ECONOMY ANODIZED STEEL")]
     part_filtered = part_filtered.loc[:, ["P_PARTKEY"]]
     lineitem_filtered = lineitem.loc[:, ["L_PARTKEY", "L_SUPPKEY", "L_ORDERKEY"]]
@@ -596,12 +596,12 @@ def q08(part, lineitem, supplier, orders, customer, nation, region):
     total.columns = ["O_YEAR", "MKT_SHARE"]
     total = total.sort_values(by=["O_YEAR"], ascending=[True])
     print(total)
-    print("Q08 Execution time (s): ", time.time() - t1)
+    print("Q08 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q09(lineitem, orders, part, nation, partsupp, supplier):
-    t1 = time.time()
+    t1 = time.perf_counter()
     psel = part.P_NAME.str.contains("ghost")
     fpart = part[psel]
     jn1 = lineitem.merge(fpart, left_on="L_PARTKEY", right_on="P_PARTKEY")
@@ -618,12 +618,12 @@ def q09(lineitem, orders, part, nation, partsupp, supplier):
     gb = jn5.groupby(["N_NAME", "O_YEAR"], as_index=False)["TMP"].sum()
     total = gb.sort_values(["N_NAME", "O_YEAR"], ascending=[True, False])
     print(total)
-    print("Q09 Execution time (s): ", time.time() - t1)
+    print("Q09 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q10(lineitem, orders, customer, nation):
-    t1 = time.time()
+    t1 = time.perf_counter()
     date1 = pd.Timestamp("1994-11-01")
     date2 = pd.Timestamp("1995-02-01")
     osel = (orders.O_ORDERDATE >= date1) & (orders.O_ORDERDATE < date2)
@@ -648,12 +648,12 @@ def q10(lineitem, orders, customer, nation):
     )["TMP"].sum()
     total = gb.sort_values("TMP", ascending=False)
     print(total.head(20))
-    print("Q10 Execution time (s): ", time.time() - t1)
+    print("Q10 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q11(partsupp, supplier, nation):
-    t1 = time.time()
+    t1 = time.perf_counter()
     partsupp_filtered = partsupp.loc[:, ["PS_PARTKEY", "PS_SUPPKEY"]]
     partsupp_filtered["TOTAL_COST"] = (
         partsupp["PS_SUPPLYCOST"] * partsupp["PS_AVAILQTY"]
@@ -676,12 +676,12 @@ def q11(partsupp, supplier, nation):
     total = total[total["VALUE"] > sum_val]
     total = total.sort_values("VALUE", ascending=False)
     print(total)
-    print("Q11 Execution time (s): ", time.time() - t1)
+    print("Q11 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q12(lineitem, orders):
-    t1 = time.time()
+    t1 = time.perf_counter()
     date1 = pd.Timestamp("1994-01-01")
     date2 = pd.Timestamp("1995-01-01")
     sel = (
@@ -705,12 +705,12 @@ def q12(lineitem, orders):
     total = jn.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
     total = total.sort_values("L_SHIPMODE")
     print(total)
-    print("Q12 Execution time (s): ", time.time() - t1)
+    print("Q12 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q13(customer, orders):
-    t1 = time.time()
+    t1 = time.perf_counter()
     customer_filtered = customer.loc[:, ["C_CUSTKEY"]]
     orders_filtered = orders[
         ~orders["O_COMMENT"].str.contains("special(\S|\s)*requests")
@@ -727,12 +727,12 @@ def q13(customer, orders):
     total.columns = ["C_COUNT", "CUSTDIST"]
     total = total.sort_values(by=["CUSTDIST", "C_COUNT"], ascending=[False, False])
     print(total)
-    print("Q13 Execution time (s): ", time.time() - t1)
+    print("Q13 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q14(lineitem, part):
-    t1 = time.time()
+    t1 = time.perf_counter()
     startDate = pd.Timestamp("1994-03-01")
     endDate = pd.Timestamp("1994-04-01")
     p_type_like = "PROMO"
@@ -748,12 +748,12 @@ def q14(lineitem, part):
     jn["TMP"] = jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)
     total = jn[jn.P_TYPE.str.startswith(p_type_like)].TMP.sum() * 100 / jn.TMP.sum()
     print(total)
-    print("Q14 Execution time (s): ", time.time() - t1)
+    print("Q14 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q15(lineitem, supplier):
-    t1 = time.time()
+    t1 = time.perf_counter()
     lineitem_filtered = lineitem[
         (lineitem["L_SHIPDATE"] >= pd.Timestamp("1996-01-01"))
         & (
@@ -780,12 +780,12 @@ def q15(lineitem, supplier):
         :, ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE", "TOTAL_REVENUE"]
     ]
     print(total)
-    print("Q15 Execution time (s): ", time.time() - t1)
+    print("Q15 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q16(part, partsupp, supplier):
-    t1 = time.time()
+    t1 = time.perf_counter()
     part_filtered = part[
         (part["P_BRAND"] != "Brand#45")
         & (~part["P_TYPE"].str.contains("^MEDIUM POLISHED"))
@@ -816,12 +816,12 @@ def q16(part, partsupp, supplier):
         ascending=[False, True, True, True],
     )
     print(total)
-    print("Q16 Execution time (s): ", time.time() - t1)
+    print("Q16 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q17(lineitem, part):
-    t1 = time.time()
+    t1 = time.perf_counter()
     left = lineitem.loc[:, ["L_PARTKEY", "L_QUANTITY", "L_EXTENDEDPRICE"]]
     right = part[((part["P_BRAND"] == "Brand#23") & (part["P_CONTAINER"] == "MED BOX"))]
     right = right.loc[:, ["P_PARTKEY"]]
@@ -843,12 +843,12 @@ def q17(lineitem, part):
     total = total[total["L_QUANTITY"] < total["avg"]]
     total = pd.DataFrame({"avg_yearly": [total["L_EXTENDEDPRICE"].sum() / 7.0]})
     print(total)
-    print("Q17 Execution time (s): ", time.time() - t1)
+    print("Q17 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q18(lineitem, orders, customer):
-    t1 = time.time()
+    t1 = time.perf_counter()
     gb1 = lineitem.groupby("L_ORDERKEY", as_index=False)["L_QUANTITY"].sum()
     fgb1 = gb1[gb1.L_QUANTITY > 300]
     jn1 = fgb1.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
@@ -859,12 +859,12 @@ def q18(lineitem, orders, customer):
     )["L_QUANTITY"].sum()
     total = gb2.sort_values(["O_TOTALPRICE", "O_ORDERDATE"], ascending=[False, True])
     print(total.head(100))
-    print("Q18 Execution time (s): ", time.time() - t1)
+    print("Q18 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q19(lineitem, part):
-    t1 = time.time()
+    t1 = time.perf_counter()
     Brand31 = "Brand#31"
     Brand43 = "Brand#43"
     SMBOX = "SM BOX"
@@ -937,12 +937,12 @@ def q19(lineitem, part):
     jn = jn[jnsel]
     total = (jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)).sum()
     print(total)
-    print("Q19 Execution time (s): ", time.time() - t1)
+    print("Q19 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q20(lineitem, part, nation, partsupp, supplier):
-    t1 = time.time()
+    t1 = time.perf_counter()
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     psel = part.P_NAME.str.startswith("azure")
@@ -967,12 +967,12 @@ def q20(lineitem, part, nation, partsupp, supplier):
     jn4 = jn4.loc[:, ["S_NAME", "S_ADDRESS"]]
     total = jn4.sort_values("S_NAME").drop_duplicates()
     print(total)
-    print("Q20 Execution time (s): ", time.time() - t1)
+    print("Q20 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q21(lineitem, orders, supplier, nation):
-    t1 = time.time()
+    t1 = time.perf_counter()
     lineitem_filtered = lineitem.loc[
         :, ["L_ORDERKEY", "L_SUPPKEY", "L_RECEIPTDATE", "L_COMMITDATE"]
     ]
@@ -1034,12 +1034,12 @@ def q21(lineitem, orders, supplier, nation):
     total.columns = ["S_NAME", "NUMWAIT"]
     total = total.sort_values(by=["NUMWAIT", "S_NAME"], ascending=[False, True])
     print(total)
-    print("Q21 Execution time (s): ", time.time() - t1)
+    print("Q21 Execution time (s): ", time.perf_counter() - t1)
 
 
 @bodo.jit
 def q22(customer, orders):
-    t1 = time.time()
+    t1 = time.perf_counter()
     customer_filtered = customer.loc[:, ["C_ACCTBAL", "C_CUSTKEY"]]
     customer_filtered["CNTRYCODE"] = customer["C_PHONE"].str.slice(0, 2)
     customer_filtered = customer_filtered[
@@ -1070,7 +1070,7 @@ def q22(customer, orders):
     total = agg1.merge(agg2, on="CNTRYCODE", how="inner")
     total = total.sort_values(by=["CNTRYCODE"], ascending=[True])
     print(total)
-    print("Q22 Execution time (s): ", time.time() - t1)
+    print("Q22 Execution time (s): ", time.perf_counter() - t1)
 
 
 def main():

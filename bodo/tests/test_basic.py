@@ -973,7 +973,7 @@ def test_pure_func(datapath):
 
     # time
     def impl10():
-        return time.time()
+        return time.perf_counter()
 
     # csv read
     def impl11():

@@ -11,7 +11,7 @@ DATA_LOC = "s3://tpch-data-parquet/SF10/lineitem.pq/"
 
 @bodo.jit(spawn=True, cache=True)
 def q01():
-    t1 = time.time()
+    t1 = time.perf_counter()
     lineitem = pd.read_parquet(DATA_LOC)
     date = pd.Timestamp("1998-09-02")
     lineitem_filtered = lineitem.loc[
@@ -63,12 +63,12 @@ def q01():
     )
     total = total.sort_values(["L_RETURNFLAG", "L_LINESTATUS"])
     print(total)
-    print("Q01 Execution time (s): ", time.time() - t1)
+    print("Q01 Execution time (s): ", time.perf_counter() - t1)
 
 
 if __name__ == "__main__":
-    t0 = time.time()
+    t0 = time.perf_counter()
     q01()
-    print(f"E2E time taken to execute Q1: {time.time() - t0}")
+    print(f"E2E time taken to execute Q1: {time.perf_counter() - t0}")
     # TODO Compute and write the checksum to a file that the caller process
     # can read and verify the output from.

@@ -117,12 +117,12 @@ def gen_data():
 @bodo.jit
 def test():
     df = pd.read_parquet("example1.pq")
-    t0 = time.time()
+    t0 = time.perf_counter()
     df2 = df.groupby("A")["B"].agg(
         (lambda a: (a==1).sum(), lambda a: (a==2).sum(), lambda a: (a==3).sum())
     )
     m = df2.mean()
-    print("Result:", m, "\nCompute time:", time.time() - t0, "secs")
+    print("Result:", m, "\nCompute time:", time.perf_counter() - t0, "secs")
 
 gen_data()
 test()

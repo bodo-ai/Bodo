@@ -21,7 +21,7 @@ from bodo.utils.typing import BodoWarning
 cdef bint TRACING = 0  # 1 if started tracing, else 0
 cdef list traceEvents = []  # list of tracing events
 cdef str trace_filename = "bodo_trace.json" if BODO_DEV_BUILD else "bodo_trace.dat"
-cdef object time_start = time.time()  # time at which tracing starts
+cdef object time_start = time.perf_counter()  # time at which tracing starts
 
 TRACING_MEM_WARN = "Tracing is still experimental and has been known to have memory related issues. In our testing we have at times seen 1-2 GB be used per rank to support tracing. If you are running out of memory or you are attempted to document the memory footprint for a workload, please disable tracing."
 
@@ -59,7 +59,7 @@ def reset(trace_fname=None):
         if trace_fname is not None:
             trace_filename = trace_fname
         MPI_Barrier(MPI_COMM_WORLD)
-        time_start = time.time()
+        time_start = time.perf_counter()
         TRACING = 1
         MPI_Comm_rank(MPI_COMM_WORLD, &rank)
         if rank == 0:
@@ -159,7 +159,7 @@ def dump(fname=None, clear_traces=True):
 # from inside this module (from C)
 cdef inline object get_timestamp():
     """Get current timestamp (from time_start)"""
-    return (time.time() - time_start) * 1e6  # convert to us
+    return (time.perf_counter() - time_start) * 1e6  # convert to us
 
 
 # On exit, call dump if tracing is set
