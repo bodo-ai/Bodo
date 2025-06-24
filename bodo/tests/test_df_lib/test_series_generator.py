@@ -104,7 +104,8 @@ def _generate_series_test(name, df, arg_sets, accessor=None):
                         check_names=False,
                     )
                     continue
-            _test_equal(out_bodo, out_pd, check_pandas_types=False)
+            df_stringify_columns(out_pd)
+            _test_equal(out_bodo, out_pd, check_pandas_types=False, reset_index=True)
 
     return test_func
 
@@ -115,21 +116,6 @@ for cases where out_bodo and out_pd have trivial differences.
 """
 # TODO: add a flag in _test_equal to enable correct comparison between
 # Pandas integer index and Bodo string index ('0', '1', ...) of equivalent values
-partition_res = pd.DataFrame(
-    {
-        "0": ["Apple", "Banana", None, None, "App", "B", " E", "Do"],
-        "1": ["", "", None, None, "-", "-", "-", "-"],
-        "2": ["", "", None, None, "le", "anan-a", "xc i-ted ", "g"],
-    }
-)
-rpartition_res = pd.DataFrame(
-    {
-        "0": ["", "", None, None, "App", "B-anan", " E-xc i", "Do"],
-        "1": ["", "", None, None, "-", "-", "-", "-"],
-        "2": ["Apple", "Banana", None, None, "le", "a", "ted ", "g"],
-    }
-)
-
 month_name_res_fr_A = pd.Series(
     [
         "janvier",
@@ -208,14 +194,6 @@ null_array = pd.Series(
 
 
 expected_results = {
-    "partition": [
-        ((), {"sep": "-", "expand": True}, "A", partition_res),
-        ((), {"sep": "-"}, "A", partition_res),
-    ],
-    "rpartition": [
-        ((), {"sep": "-", "expand": True}, "A", rpartition_res),
-        ((), {"sep": "-"}, "A", rpartition_res),
-    ],
     "month_name": [
         ((), {"locale": "fr_FR.UTF-8"}, "A", month_name_res_fr_A),
         ((), {"locale": "fr_FR.UTF-8"}, "B", month_name_res_fr_BC),
@@ -264,3 +242,10 @@ def lookup_result(name, args, kwargs, col):
         if args == expected_args and kwargs == expected_kwargs and col == expected_col:
             return result
     return None
+
+
+def df_stringify_columns(df):
+    """Maps str() to df.columns to match types of column names with Bodo output."""
+    if not isinstance(df, pd.DataFrame):
+        return
+    df.columns = df.columns.map(lambda x: str(x))
