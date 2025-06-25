@@ -13,6 +13,7 @@
 #include "physical/sample.h"
 #include "physical/sort.h"
 #include "physical/write_parquet.h"
+#include "physical/union_all.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -169,6 +170,53 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     physical_join->InitializeJoinState(build_table_schema, probe_table_schema);
 
     this->active_pipeline->AddOperator(physical_join);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
+    if (op.type == duckdb::LogicalOperatorType::LOGICAL_UNION) {
+        // UNION ALL
+        if (op.setop_all) {
+            // Rightt-child will feed into a table.
+            PhysicalPlanBuilder rhs_builder;
+            rhs_builder.Visit(*op.children[0]);
+            std::shared_ptr<bodo::Schema> rhs_table_schema =
+                rhs_builder.active_pipeline->getPrevOpOutputSchema();
+            std::vector<std::shared_ptr<Pipeline>> build_pipelines =
+                std::move(rhs_builder.finished_pipelines);
+            ::arrow::Schema rhs_arrow = *(rhs_table_schema->ToArrowSchema());
+
+            auto physical_union_all = std::make_shared<PhysicalUnionAll>(rhs_table_schema);
+            build_pipelines.push_back(
+                rhs_builder.active_pipeline->Build(physical_union_all));
+            this->finished_pipelines.insert(this->finished_pipelines.begin(),
+                                            build_pipelines.begin(),
+                                            build_pipelines.end());
+
+            // Left-child will feed into the same table.
+            this->Visit(*op.children[1]);
+            std::shared_ptr<bodo::Schema> lhs_table_schema =
+                this->active_pipeline->getPrevOpOutputSchema();
+            ::arrow::Schema lhs_arrow = *(lhs_table_schema->ToArrowSchema());
+            if (!rhs_arrow.Equals(lhs_arrow)) {
+                std::cout << "lhs " << lhs_arrow.ToString() << std::endl;
+                std::cout << "rhs " << rhs_arrow.ToString() << std::endl;
+                throw std::runtime_error(
+                    "PhysicalPlanBuilder::Visit(LogicalSetOperation lhs and rhs schemas not identical");
+            }
+
+            finished_pipelines.emplace_back(this->active_pipeline->Build(physical_union_all));
+            // Downstream pipelines pull from the singular table.
+            this->active_pipeline = std::make_shared<PipelineBuilder>(physical_union_all);
+        } else {
+            throw std::runtime_error(
+                "PhysicalPlanBuilder::Visit(LogicalSetOperation non-all union unsupported");
+        }
+    } else {
+        throw std::runtime_error(
+            "PhysicalPlanBuilder::Visit(LogicalSetOperation unsupported "
+            "logical operator type " +
+            std::to_string(static_cast<int>(op.type)));
+    }
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalSample& op) {

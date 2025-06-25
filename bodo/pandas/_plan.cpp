@@ -591,6 +591,30 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     return comp_join;
 }
 
+duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
+    std::unique_ptr<duckdb::LogicalOperator> &lhs,
+    std::unique_ptr<duckdb::LogicalOperator> &rhs,
+    const std::string &setop,
+    int64_t num_cols) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto lhs_duck = to_duckdb(lhs);
+    auto rhs_duck = to_duckdb(rhs);
+    auto binder = get_duckdb_binder();
+    auto table_idx = binder.get()->GenerateTableIndex();
+    bool setop_all = false;
+
+    duckdb::LogicalOperatorType optype;
+    if (setop == "union" || setop == "union all") {
+        optype = duckdb::LogicalOperatorType::LOGICAL_UNION;
+        setop_all = (setop == "union all");
+    } else {
+        throw std::runtime_error("make_set_operation unsupported type " + setop);
+    }
+    auto set_operation =
+        duckdb::make_uniq<duckdb::LogicalSetOperation>(table_idx, num_cols, std::move(lhs_duck), std::move(rhs_duck), optype, setop_all);
+    return set_operation;
+}
+
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);

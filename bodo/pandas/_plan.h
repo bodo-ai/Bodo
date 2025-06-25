@@ -50,6 +50,20 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::vector<std::pair<int, int>> &cond_vec);
 
 /**
+ * @brief Creates a LogicalSetOperation node.
+ *
+ * @param lhs - left-side of the set operation
+ * @param rhs - right-side of the set operation
+ * @param setop - the type of set operation, e.g., "UNION"
+ * @return duckdb::unique_ptr<duckdb::LogicalSetOperation> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
+    std::unique_ptr<duckdb::LogicalOperator> &lhs,
+    std::unique_ptr<duckdb::LogicalOperator> &rhs,
+    const std::string &setop,
+    int64_t num_cols);
+
+/**
  * @brief Creates a LogicalProjection node.
  *
  * @param source - the data source to project from

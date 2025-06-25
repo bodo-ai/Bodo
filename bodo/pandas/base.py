@@ -335,6 +335,16 @@ def concat(
         zero_size_a = _empty_like(a)
         zero_size_b = _empty_like(b)
 
+        def get_cols(x):
+            if isinstance(x, pd.DataFrame):
+                return x.columns.tolist()
+            elif isinstance(x, pd.Series):
+                return [x.name]
+            else:
+                raise BodoError(
+                    "concat_two asked for columns of non DataFrame/Series"
+                )
+
         # Simulate operation in Pandas with empty entities.
         empty_data = pd.concat(
             [zero_size_a, zero_size_b],
@@ -364,13 +374,19 @@ def concat(
         # Add columns only in a to b with NA values.
         b_new_cols[only_in_a] = pd.NA
 
+        # Above pd.NA creates wrong column types so fix them here.
+        for new_col in only_in_b:
+            a_new_cols[new_col] = a_new_cols[new_col].astype(empty_data[new_col].dtype)
+        for new_col in only_in_a:
+            b_new_cols[new_col] = b_new_cols[new_col].astype(empty_data[new_col].dtype)
+
         # Create a reordering of the temp a_new_cols so that the columns are in
         # the same order as the Pandas simulation on empty data.
         a_plan = LazyPlan(
             "LogicalProjection",
             empty_data,
             a_new_cols._plan,
-            get_mapping(empty_data.columns, a_new_cols.columns.tolist(), a_new_cols._plan),
+            get_mapping(get_cols(empty_data), a_new_cols.columns.tolist(), a_new_cols._plan),
         )
         # Create a reordering of the temp b_new_cols so that the columns are in
         # the same order as the Pandas simulation on empty data.
@@ -378,7 +394,7 @@ def concat(
             "LogicalProjection",
             empty_data,
             b_new_cols._plan,
-            get_mapping(empty_data.columns, b_new_cols.columns.tolist(), b_new_cols._plan),
+            get_mapping(get_cols(empty_data), b_new_cols.columns.tolist(), b_new_cols._plan),
         )
 
         # DuckDB Union operator requires schema to already be matching.
@@ -387,7 +403,7 @@ def concat(
             empty_data,
             a_plan,
             b_plan,
-            "union"
+            "union all"
         )
 
         return wrap_plan(planUnion)
@@ -399,7 +415,7 @@ def concat(
     for i in range(2, len(objs)):
         cur_res = concat_two(cur_res, objs[i])
 
-    return wrap_plan(cur_res)
+    return cur_res
 
 
 def _validate_df_to_datetime(df):
