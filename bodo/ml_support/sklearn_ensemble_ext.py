@@ -288,7 +288,7 @@ def random_forest_model_fit(m, X, y):
         if m.random_state is None:
             m.random_state = np.random.RandomState()
 
-        from sklearn.utils import parallel_backend
+        from joblib import parallel_backend
 
         with parallel_backend("threading"):
             m.fit(X, y)
