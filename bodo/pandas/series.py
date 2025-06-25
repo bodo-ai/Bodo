@@ -623,6 +623,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         return _compute_series_reduce(self, "product")
 
+    @check_args_fallback(unsupported="all")
+    def count(self):
+        return _compute_series_reduce(self, "count")
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -863,6 +867,8 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
 
     # Drop Index columns since not necessary for reduction output.
     zero_size_self = _empty_like(bodo_series).reset_index(drop=True)
+    zero_size_self = zero_size_self.astype(pd.ArrowDtype(pa.int64()))
+    print(zero_size_self.dtype)
     exprs = [
         LazyPlan(
             "AggregateExpression",
@@ -882,6 +888,11 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
         exprs,
     )
     out_rank = execute_plan(plan)
+
+    # TODO: generalize if necessary
+    if func_name == "count":
+        func_name = "sum"
+
     # TODO: use parallel reduction for slight improvement in very large scales
     return getattr(pd.Series(out_rank), func_name)()
 
