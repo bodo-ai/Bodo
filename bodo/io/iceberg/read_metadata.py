@@ -327,7 +327,7 @@ def get_table_length(table, snapshot_id: int = -1) -> int:
     table_len = 0
     snapshot = (
         table.current_snapshot()
-        if snapshot_id is -1
+        if snapshot_id == -1
         else table.snapshot_by_id(snapshot_id)
     )
     assert snapshot is not None
