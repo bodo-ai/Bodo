@@ -651,8 +651,7 @@ def test_df_apply_name_datetime_index(memory_leak_check):
 
 
 @pytest.mark.slow
-# TODO [BSE-4779]: Dataframe Lib: unsupported dtype duration[ns]
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_name_timedelta_index(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -1142,8 +1141,7 @@ def test_df_apply_supported_types(df_value, memory_leak_check):
 
 
 @pytest.mark.slow
-# TODO [BSE-4779 DataFrame lib: support duration[ns] type
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_df_apply_datetime(memory_leak_check):
     def test_impl(df):
         return df.apply(lambda r: r.A, axis=1)

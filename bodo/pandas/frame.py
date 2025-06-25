@@ -68,6 +68,23 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     _head_df: pd.DataFrame | None = None
     _source_plan: LazyPlan | None = None
 
+    def __new__(cls, *args, **kwargs):
+        """Support bodo.pandas.DataFrame() constructor by creating a pandas DataFrame
+        and then converting it to a BodoDataFrame.
+        """
+        # Handle Pandas internal use which creates an empty object and then assigns the
+        # manager:
+        # https://github.com/pandas-dev/pandas/blob/1da0d022057862f4352113d884648606efd60099/pandas/core/generic.py#L309
+        if not args and not kwargs:
+            return super().__new__(cls, *args, **kwargs)
+
+        df = pd.DataFrame(*args, **kwargs)
+        return bodo.pandas.base.from_pandas(df)
+
+    def __init__(self, *args, **kwargs):
+        # No-op since already initialized by __new__
+        pass
+
     @property
     def _plan(self):
         if self.is_lazy_plan():
@@ -857,7 +874,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         axis: Axis | lib.NoDefault = lib.no_default,
         level: IndexLabel | None = None,
         as_index: bool = True,
-        sort: bool = True,
+        sort: bool = False,
         group_keys: bool = True,
         observed: bool | lib.NoDefault = lib.no_default,
         dropna: bool = True,
@@ -1024,6 +1041,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         head_val: new head value for the column to be set (Series, array or scalar).
         """
         self._mgr._plan = new_plan
+        new_column = key not in self.columns
         # Copy and update head in case reused
         new_df_head = self._head_df.copy()
         new_df_head[key] = head_val
@@ -1033,7 +1051,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Update internal data manager (e.g. insert a new block or update an
             # existing one). See:
             # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/core/frame.py#L4481
-            super().__setitem__(key, head_val)
+            if new_column:
+                self._mgr.insert(
+                    len(self._info_axis) - 1, key, *self._sanitize_column(head_val)
+                )
+            else:
+                super().__setitem__(key, head_val)
 
     @check_args_fallback(supported=["func", "axis", "args"])
     def apply(

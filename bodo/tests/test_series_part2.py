@@ -103,8 +103,7 @@ def test_series_map_none_timestamp(memory_leak_check):
     check_func(impl, (S,))
 
 
-# TODO [BSE-4779]: DataFrame Lib: Support for duration[ns] type.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_series_map_isna_check(memory_leak_check):
     """Test checking for NA input values in UDF"""
 

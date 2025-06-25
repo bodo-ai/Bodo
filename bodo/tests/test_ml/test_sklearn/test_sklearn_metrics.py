@@ -274,7 +274,7 @@ def test_log_loss_error():
     # Only one label is provided
     y_true = np.array([2, 2] * 2)
     y_pred = np.array([[0.2, 0.7], [0.6, 0.5]] * 2)
-    error_str = "The labels array needs to contain at least two labels for log_loss"
+    error_str = "The labels array needs to contain at least two labels"
     with pytest.raises(ValueError, match=error_str):
         dist_impl(y_true, y_pred)
 

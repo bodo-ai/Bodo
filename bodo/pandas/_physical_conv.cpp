@@ -9,6 +9,7 @@
 #include "physical/join.h"
 #include "physical/limit.h"
 #include "physical/project.h"
+#include "physical/reduce.h"
 #include "physical/sample.h"
 #include "physical/sort.h"
 #include "physical/write_parquet.h"
@@ -80,28 +81,47 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    if (op.expressions.size() == 1 &&
-        op.expressions[0]
-                ->Cast<duckdb::BoundAggregateExpression>()
-                .function.name == "count_star") {
-        auto physical_op = std::make_shared<PhysicalCountStar>();
-        // Finish the pipeline at this point so that Finalize can run
-        // to reduce the number of collected rows to the desired amount.
+    // Single column reduction like Series.max()
+    if (op.groups.empty()) {
+        if (op.expressions.size() != 1 ||
+            op.expressions[0]->type !=
+                duckdb::ExpressionType::BOUND_AGGREGATE) {
+            throw std::runtime_error(
+                "LogicalAggregate with no groups must have exactly one "
+                "aggregate expression for reduction.");
+        }
+        auto& agg_expr =
+            op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
+
+        if (agg_expr.function.name == "count_star") {
+            auto physical_op = std::make_shared<PhysicalCountStar>();
+            // Finish the pipeline at this point so that Finalize can run
+            // to reduce the number of collected rows to the desired amount.
+            finished_pipelines.emplace_back(
+                this->active_pipeline->Build(physical_op));
+            // The same operator will exist in both pipelines.  The sink of the
+            // previous pipeline and the source of the next one.
+            // We record the pipeline dependency between these two pipelines.
+            this->active_pipeline =
+                std::make_shared<PipelineBuilder>(physical_op);
+            return;
+        }
+
+        auto physical_op = std::make_shared<PhysicalReduce>(
+            in_table_schema, agg_expr.function.name);
         finished_pipelines.emplace_back(
             this->active_pipeline->Build(physical_op));
-        // The same operator will exist in both pipelines.  The sink of the
-        // previous pipeline and the source of the next one.
-        // We record the pipeline dependency between these two pipelines.
         this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
-    } else {
-        auto physical_agg =
-            std::make_shared<PhysicalAggregate>(in_table_schema, op);
-        // Finish the current pipeline with groupby build sink
-        finished_pipelines.emplace_back(
-            this->active_pipeline->Build(physical_agg));
-        // Create a new pipeline with groupby output as source
-        this->active_pipeline = std::make_shared<PipelineBuilder>(physical_agg);
+        return;
     }
+
+    // Regular groupby aggregation with groups and expressions.
+    auto physical_agg =
+        std::make_shared<PhysicalAggregate>(in_table_schema, op);
+    // Finish the current pipeline with groupby build sink
+    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_agg));
+    // Create a new pipeline with groupby output as source
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_agg);
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {

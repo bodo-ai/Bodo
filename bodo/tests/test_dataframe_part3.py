@@ -769,10 +769,6 @@ pd_supported_merge_cols = [
             for year in range(1999, 2004)
         ),
         id="DatetimeTimedeltaArrayType",
-        marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled,
-            reason="[BSE-4779] Timedelta support in DF lib.",
-        ),
     ),
     # TODO [BE-1804]: test once intervals are supported
     # pytest.param(

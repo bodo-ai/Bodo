@@ -3,6 +3,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 !!! note
 	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info.
+	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info.
 
 ## Computations / descriptive stats
 - [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
@@ -20,6 +21,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 !!! note
 	Input must be a Series of `datetime-like` data.
+
+---
 
 ### Datetime properties
 !!! note
@@ -134,9 +137,11 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.rindex`][bodoseriesstrrindex]
 - [`bodo.pandas.BodoSeries.str.rjust`][bodoseriesstrrjust]
 - [`bodo.pandas.BodoSeries.str.rpartition`][bodoseriesstrrpartition]
+- [`bodo.pandas.BodoSeries.str.rsplit`][bodoseriesstrrsplit]
 - [`bodo.pandas.BodoSeries.str.rstrip`][bodoseriesstrrstrip]
 - [`bodo.pandas.BodoSeries.str.slice`][bodoseriesstrslice]
 - [`bodo.pandas.BodoSeries.str.slice_replace`][bodoseriesstrslicereplace]
+- [`bodo.pandas.BodoSeries.str.split`][bodoseriesstrsplit]
 - [`bodo.pandas.BodoSeries.str.startswith`][bodoseriesstrstartswith]
 - [`bodo.pandas.BodoSeries.str.strip`][bodoseriesstrstrip]
 - [`bodo.pandas.BodoSeries.str.swapcase`][bodoseriesstrswapcase]
