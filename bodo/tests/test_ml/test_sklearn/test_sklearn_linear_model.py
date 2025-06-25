@@ -543,6 +543,7 @@ def test_ridge_regression(memory_leak_check):
 # --------------------Logistic Regression Tests-----------------#
 
 
+@pytest.mark.skip(reason="[BSE-4933] Fix for Scikit-Learn 1.7.0")
 def test_logistic_regression(memory_leak_check):
     """
     Shamelessly copied from the sklearn tests:
