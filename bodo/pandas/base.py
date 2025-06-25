@@ -186,7 +186,7 @@ def read_iceberg(
     empty_df = arrow_to_empty_df(arrow_schema)
 
     # Get the table length estimate, if there's not a filter it will be exact
-    table_len_estimate = -1
+    table_len_estimate = None
     snapshot = (
         table.current_snapshot()
         if snapshot_id is None
@@ -253,6 +253,7 @@ def read_iceberg(
         # during filter conversion. See bodo/io/iceberg/common.py::pyiceberg_filter_to_pyarrow_format_str_and_scalars
         pyiceberg_schema,
         snapshot_id if snapshot_id is not None else -1,
+        table_len_estimate,
         __pa_schema=arrow_schema,
     )
 

@@ -345,12 +345,13 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
  * @param iceberg_filter Iceberg filter expression
  * @param iceberg_schema Iceberg schema object
  * @param snapshot_id Snapshot ID to read from
+ * @param table_len_estimate Estimated number of rows in the Iceberg table
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_identifier,
     PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, int64_t snapshot_id);
+    PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate);
 
 /**
  * @brief Returns a statically created DuckDB database.
