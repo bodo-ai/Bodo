@@ -319,24 +319,8 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 endif()
 
-# Vendor MPICH
-if(DEFINED ENV{BODO_VENDOR_MPICH})
-  message(STATUS "Downloading MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
-  execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
-  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
-  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
-    FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
-  file(GLOB MPICH_WHEEL "mpich-*.whl")
-  file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
-  message(STATUS "Moved MPICH to ${SKBUILD_DATA_DIR}")
-
-  set(MPI_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
-  set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
-else()
-  set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
-  set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
-endif()
+set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
+set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
 
 # MPI implementation (Intel or MPICH)
 if (WIN32)
@@ -345,7 +329,6 @@ else()
  set(MPI_LIBRARIES "mpi")
 endif()
 
-cmake_print_variables(MPI_INCLUDE_DIR)
 
 # Vendor MPI4Py
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
