@@ -151,7 +151,7 @@ def read_iceberg(
     import pyiceberg.catalog
     import pyiceberg.expressions
     import pyiceberg.table
-    from pyiceberg.manifest import ManifestContent
+    from pyiceberg.manifest import ManifestContent, ManifestEntryStatus
 
     from bodo.pandas.utils import BodoLibNotImplementedException
 
@@ -185,6 +185,7 @@ def read_iceberg(
     arrow_schema = pyiceberg_schema.as_arrow()
     empty_df = arrow_to_empty_df(arrow_schema)
 
+    # Get the table length estimate, if there's not a filter it will be exact
     table_len_estimate = -1
     snapshot = (
         table.current_snapshot()
@@ -192,12 +193,15 @@ def read_iceberg(
         else table.snapshot_by_id(snapshot_id)
     )
     assert snapshot is not None
+    # If the snapshot has a summary with total-records, use that.
     if (
         hasattr(snapshot, "summary")
         and snapshot.summary is not None
         and "total-records" in snapshot.summary
     ):
         table_len_estimate = int(snapshot.summary["total-records"])
+    # If the snapshot has manifests with existing_rows_count and added_rows_count,
+    # use those to get the table length.
     elif all(
         hasattr(manifest, "existing_rows_count")
         and manifest.existing_rows_count is not None
@@ -213,9 +217,26 @@ def read_iceberg(
                 for manifest in snapshot.manifests(table.io)
             ]
         )
+    # Otherwise we need to go through the manifest entries to estimate the table length.
+    else:
+        table_len_estimate = 0
+        for manifest in snapshot.manifests(table.io):
+            manifest_entries = manifest.fetch_manifest_entry(table.io)
+            for entry in manifest_entries:
+                if (
+                    entry.status == ManifestEntryStatus.DELETED
+                    or entry.content != ManifestContent.DATA
+                ):
+                    continue
+                datafile = entry.data_file
+                if datafile is not None and datafile.record_count is not None:
+                    table_len_estimate += datafile.record_count
 
+    # If there's a row filter, we need to estimate the selectivity
+    # and adjust the table length estimate accordingly.
     if row_filter is not None and table_len_estimate > 0:
-        # TODO: do something smarter here like sampling
+        # TODO: do something smarter here like sampling or turn the filter into a
+        # separate node so the planner can handle it
         filter_selectivity_estimate = 0.1
         table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
 
