@@ -234,11 +234,12 @@ nav:
                 - Timestamp Functions: api_docs/sql/functions/timestamp
                 - Type Predicates: api_docs/sql/functions/type
       - Bodo Platform SDK Reference: api_docs/platform_sdk.md
-      - Bodo DataFrame Library API (Experimental): 
+      - Bodo DataFrame Library API:
           - api_docs/dataframe_lib/index.md
           - General Functions: api_docs/dataframe_lib/general_functions.md
           - DataFrame: api_docs/dataframe_lib/dataframe.md
           - Input/Output: api_docs/dataframe_lib/io.md
           - Series : api_docs/dataframe_lib/series
+          - Groupby : api_docs/dataframe_lib/groupby
   - Release Notes: release_notes
   - FAQ: faq.md

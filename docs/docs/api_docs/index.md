@@ -11,5 +11,5 @@ API Reference {#apireference}
 - [SQL Reference][bodosql]
 - [Bodo Compiler Python Support API Reference][pythonreference]
 - [Bodo Platform SDK Reference](platform_sdk.md)
-- [Bodo DataFrame Library API (Experimental)][dataframe-lib]
+- [Bodo DataFrame Library API] [dataframe-lib]
 </div>
