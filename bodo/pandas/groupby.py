@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 import pandas as pd
 import pyarrow as pa
+from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
@@ -83,6 +84,45 @@ class DataFrameGroupBy:
                 gb = gb[self._selection]
             return object.__getattribute__(gb, name)
 
+    @check_args_fallback(supported="func")
+    def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
+        return _groupby_agg_plan(self, func, *args, **kwargs)
+
+    agg = aggregate
+
+    def _normalize_agg_func(self, func, kwargs: dict) -> list[tuple[str, str]]:
+        """
+        Convert func and kwargs into a list of (column, function) tuples.
+        """
+        # list of (input column name, function) pairs
+        normalized_func: list[tuple[str, str]] = []
+
+        if func is None and kwargs:
+            # Handle cases like agg(my_sum=("A", "sum")) -> creates column my_sum
+            # that sums column A.
+            normalized_func = [
+                (col, _get_aggfunc_str(func_)) for col, func_ in kwargs.values()
+            ]
+        elif is_dict_like(func):
+            # Handle cases like {"A": "sum"} -> creates sum column over column A
+            normalized_func = [
+                (col, _get_aggfunc_str(func_)) for col, func_ in func.items()
+            ]
+        elif is_list_like(func):
+            # Handle cases like ["sum", "count"] -> creates a sum and count column
+            # for each input column (column names are a multi-index) i.e.:
+            # ("A", "sum"), ("A", "count"), ("B", "sum), ("B", "count")
+            normalized_func = [
+                (col, _get_aggfunc_str(func_))
+                for col in self._selection
+                for func_ in func
+            ]
+        else:
+            func = _get_aggfunc_str(func)
+            normalized_func = [(col, func) for col in self._selection]
+
+        return normalized_func
+
     @check_args_fallback(supported="none")
     def sum(
         self,
@@ -94,7 +134,26 @@ class DataFrameGroupBy:
         """
         Compute the sum of each group.
         """
-        return _groupby_sum(self)
+        return _groupby_agg_plan(self, "sum")
+
+    @check_args_fallback(supported="none")
+    def mean(
+        self,
+        numeric_only: bool = False,
+        engine: Literal["cython", "numba"] | None = None,
+        engine_kwargs: dict[str, bool] | None = None,
+    ):
+        """
+        Compute the mean of each group.
+        """
+        return _groupby_agg_plan(self, "mean")
+
+    @check_args_fallback(supported="none")
+    def count(self):
+        """
+        Compute the count of each group.
+        """
+        return _groupby_agg_plan(self, "count")
 
 
 class SeriesGroupBy:
@@ -131,7 +190,26 @@ class SeriesGroupBy:
             "SeriesGroupBy.sum() should only be called on a single column selection."
         )
 
-        return _groupby_sum(self)
+        return _groupby_agg_plan(self, "sum")
+
+    @check_args_fallback(supported="none")
+    def mean(
+        self,
+        numeric_only: bool = False,
+        engine: Literal["cython", "numba"] | None = None,
+        engine_kwargs: dict[str, bool] | None = None,
+    ):
+        """
+        Compute the mean of each group.
+        """
+        return _groupby_agg_plan(self, "mean")
+
+    @check_args_fallback(supported="none")
+    def count(self):
+        """
+        Compute the count of each group.
+        """
+        return _groupby_agg_plan(self, "count")
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
@@ -147,11 +225,42 @@ class SeriesGroupBy:
             gb = pd.DataFrame(self._obj).groupby(self._keys)[self._selection[0]]
             return object.__getattribute__(gb, name)
 
+    @check_args_fallback(supported="func")
+    def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
+        return _groupby_agg_plan(self, func, *args, **kwargs)
 
-def _groupby_sum(
-    grouped: SeriesGroupBy | DataFrameGroupBy,
+    agg = aggregate
+
+    def _normalize_agg_func(self, func, kwargs):
+        """
+        Convert func and kwargs into a list of (column, function) tuples.
+        """
+        col = self._selection[0]
+
+        # list of (input column name, function) pairs
+        normalized_func: list[tuple[str, str]] = []
+        if func is None and kwargs:
+            # Handle case agg(A="mean") -> create mean column "A"
+            normalized_func = [
+                (col, _get_aggfunc_str(func_)) for func_ in kwargs.values()
+            ]
+        elif is_dict_like(func):
+            # (Deprecated) handle cases like {"A": "mean"} -> create mean column "A"
+            normalized_func = [
+                (col, _get_aggfunc_str(func_)) for func_ in func.values()
+            ]
+        elif is_list_like(func):
+            normalized_func = [(col, _get_aggfunc_str(func_)) for func_ in func]
+        else:
+            normalized_func = [(col, _get_aggfunc_str(func))]
+
+        return normalized_func
+
+
+def _groupby_agg_plan(
+    grouped: SeriesGroupBy | DataFrameGroupBy, func, *args, **kwargs
 ) -> BodoSeries | BodoDataFrame:
-    """Compute groupby.sum() on the Series or DataFrame GroupBy object."""
+    """Compute groupby.func() on the Series or DataFrame GroupBy object."""
     from bodo.pandas.base import _empty_like
 
     zero_size_df = _empty_like(grouped._obj)
@@ -159,23 +268,39 @@ def _groupby_sum(
         grouped._selection[0]
         if isinstance(grouped, SeriesGroupBy)
         else grouped._selection
-    ].sum()
+    ].agg(func, *args, **kwargs)
 
-    empty_data = _cast_groupby_agg_columns("sum", empty_data_pandas, grouped._selection)
+    func = grouped._normalize_agg_func(func, kwargs)
+
+    # NOTE: assumes no key columns are being aggregated e.g:
+    # df1.groupby("C", as_index=False)[["C"]].agg("sum")
+    if set(grouped._keys) & set(grouped._selection):
+        raise BodoLibNotImplementedException(
+            "GroupBy.agg(): Aggregation on key columns not supported yet."
+        )
+
+    n_key_cols = 0 if grouped._as_index else len(grouped._keys)
+    empty_data = _cast_groupby_agg_columns(
+        func, zero_size_df, empty_data_pandas, n_key_cols
+    )
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
     exprs = [
         LazyPlan(
             "AggregateExpression",
-            zero_size_df[c],
+            empty_data.iloc[:, i]
+            if isinstance(empty_data, pd.DataFrame)
+            else empty_data,
             grouped._obj._plan,
-            "sum",
-            [grouped._obj.columns.get_loc(c)],
+            func_,
+            [grouped._obj.columns.get_loc(col)],
             grouped._dropna,
         )
-        for c in grouped._selection
-        if c not in grouped._keys
+        for i, (
+            col,
+            func_,
+        ) in enumerate(func)
     ]
 
     plan = LazyPlan(
@@ -189,9 +314,7 @@ def _groupby_sum(
     # Add the data column then the keys since they become Index columns in output.
     # DuckDB generates keys first in output so we need to reverse the order.
     if grouped._as_index:
-        col_indices = list(
-            range(len(grouped._keys), len(grouped._keys) + len(grouped._selection))
-        )
+        col_indices = list(range(len(grouped._keys), len(grouped._keys) + len(func)))
         col_indices += list(range(len(grouped._keys)))
 
         exprs = make_col_ref_exprs(col_indices, plan)
@@ -205,9 +328,23 @@ def _groupby_sum(
     return wrap_plan(plan)
 
 
+def _get_aggfunc_str(func):
+    """Gets the name of a callable func"""
+    from pandas.core.common import get_callable_name
+
+    if isinstance(func, str):
+        return func
+    elif callable(func):
+        return get_callable_name(func)
+
+    raise TypeError(
+        f"GroupBy.agg(): expected func to be callable or string, got: {type(func)}."
+    )
+
+
 def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.DataType:
-    """Gets the output type of an aggregation or raise ValueError for
-    unsupported pa_type/func combinations. Should closely match
+    """Gets the output type of an aggregation or raise either TypeError or BodoLibNotImplementedException
+    for unsupported pa_type/func combinations. Should closely match
     https://github.com/bodo-ai/Bodo/blob/d1133e257662348cc7b9ef52cf445633036133d2/bodo/libs/groupby/_groupby_common.cpp#L562
     """
     new_type = pa_type
@@ -220,41 +357,84 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
             new_type = pa.float64()
         elif pa.types.is_string(pa_type):
             new_type = pa_type
+        elif pa.types.is_decimal(pa_type):
+            # TODO Support Decimal columns for sum()
+            raise BodoLibNotImplementedException(
+                f"GroupBy.mean() on input column '{col_name}' with type: {pa_type} not supported yet."
+            )
         else:
-            raise ValueError(
+            raise TypeError(
                 f"GroupBy.sum(): Unsupported dtype in column '{col_name}': {pa_type}."
             )
         return new_type
+    elif func == "mean":
+        if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
+            new_type = pa.float64()
+        elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
+            # TODO Support bool/decimal columns for mean()
+            raise BodoLibNotImplementedException(
+                f"GroupBy.mean() on input column '{col_name}' with type: {pa_type} not supported yet."
+            )
+        else:
+            raise TypeError(
+                f"GroupBy.mean(): Unsupported dtype in column '{col_name}': {pa_type}."
+            )
+        return new_type
+    elif func == "count":
+        return pa.int64()
 
     raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
 
 
 def _cast_groupby_agg_columns(
-    func: str, data: pd.Series | pd.DataFrame, value_cols: list[str]
+    func: list[tuple[str, str]] | str,
+    in_data: pd.Series | pd.DataFrame,
+    out_data: pd.Series | pd.DataFrame,
+    n_key_cols: int,
 ) -> pd.Series | pd.DataFrame:
-    """Upcast value columns for aggregation functions and check output dtypes
-    are valid.
     """
-    from bodo.pandas.utils import _empty_pd_array
+    Casts dtypes in the output of GroupBy.agg() to the correct type for aggregation.
 
-    if isinstance(data, pd.Series):
-        pa_types = [data.dtype.pyarrow_dtype]
-    else:
-        pa_types = [
-            data.iloc[:, i].dtype.pyarrow_dtype
-            for i, col in enumerate(data.columns)
-            if col in value_cols
-        ]
+    Args:
+        func : A list of (col, func) pairs where col is the name of the column in the
+            input DataFrame to which func is applied.
+        out_data : An empty DataFrame/Series with the same shape as the aggregate
+            output
+        in_data : An empty DataFrame/Series with the same shape as the input to the
+            aggregation.
+        n_key_cols : Number of grouping keys in the output.
 
-    new_types: dict[str, pa.DataType] = {}
+    Returns:
+        pd.Series | pd.DataFrame: A DataFrame or Series with the dtypes casted depending
+            on the aggregate functions.
+    """
 
-    for col, pa_type in zip(value_cols, pa_types):
-        new_types[col] = _get_agg_output_type(func, pa_type, col)
+    if isinstance(out_data, pd.Series):
+        col, func = func[0]
+        in_data = in_data[col]
+        new_type = _get_agg_output_type(
+            func, in_data.dtype.pyarrow_dtype, out_data.name
+        )
+        out_data = out_data.astype(pd.ArrowDtype(new_type))
+        return out_data
 
-    if isinstance(data, pd.Series):
-        casted_col = _empty_pd_array(new_types[value_cols[0]])
-        return pd.Series(casted_col, index=data.index, name=data.name)
-    else:
-        for col, new_type in new_types.items():
-            data[col] = _empty_pd_array(new_type)
-        return data
+    for i, (in_col_name, func_) in enumerate(func):
+        out_col_name = out_data.columns[i + n_key_cols]
+
+        # Checks for cases like bdf.groupby("C")[["A", "A"]].agg(["sum"]).
+        if not isinstance(out_data[out_col_name], pd.Series):
+            raise BodoLibNotImplementedException(
+                f"GroupBy.agg(): detected duplicate output column name in output columns: '{out_col_name}'"
+            )
+
+        in_col = in_data[in_col_name]
+        # Should've been handled in the check above, but just to be safe.
+        if not isinstance(in_col, pd.Series):
+            raise BodoLibNotImplementedException(
+                f"GroupBy.agg(): detected duplicate column name in input column: '{in_col_name}'"
+            )
+
+        new_type = _get_agg_output_type(func_, in_col.dtype.pyarrow_dtype, in_col_name)
+        out_data[out_col_name] = out_data[out_col_name].astype(pd.ArrowDtype(new_type))
+
+    return out_data

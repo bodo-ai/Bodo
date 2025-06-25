@@ -51,8 +51,6 @@ class PhysicalWriteIceberg : public PhysicalSink {
         // Similar to streaming parquet write in Bodo JIT
         // https://github.com/bodo-ai/Bodo/blob/71cbb2db57a9f9c67e13eb3e49222b3ca90ede83/bodo/io/iceberg/stream_iceberg_write.py#L744
 
-        iter++;
-
         if (finished) {
             return OperatorResult::FINISHED;
         }
@@ -86,6 +84,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
             finished = true;
         }
 
+        iter++;
         return is_last ? OperatorResult::FINISHED
                        : OperatorResult::NEED_MORE_INPUT;
     }

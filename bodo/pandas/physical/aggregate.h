@@ -224,7 +224,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 // Definition of the static member
 const std::map<std::string, int32_t> PhysicalAggregate::function_to_ftype = {
     {"sum", Bodo_FTypes::sum},
-};
+    {"mean", Bodo_FTypes::mean},
+    {"count", Bodo_FTypes::count}};
 
 /**
  * @brief Physical node for count_star().
