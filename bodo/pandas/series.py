@@ -864,6 +864,118 @@ class BodoDatetimeProperties:
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
+    def isocalendar(self):
+        """Calculate year, week, and day according to the ISO 8601 standard, returns a BodoDataFrame"""
+        series = self._series
+        dtype = pd.ArrowDtype(
+            pa.list_(pa.uint32())
+        )  # Match output type of Pandas: UInt32
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.series._isocalendar_helper",
+            (),
+            {},
+            is_method=False,
+        )
+
+        n_index_arrays = get_n_index_arrays(index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
+        # Create schema for output DataFrame with 3 columns
+        arrow_schema = pa.schema(
+            [pa.field(f"{label}", pa.uint32()) for label in ["year", "week", "day"]]
+        )
+        empty_data = arrow_to_empty_df(arrow_schema)
+        empty_data.index = index
+
+        expr = tuple(
+            get_col_as_series_expr(idx, empty_data, series_out, index_cols)
+            for idx in range(3)
+        )
+
+        assert series_out.is_lazy_plan()
+
+        # Creates DataFrame with 3 columns
+        df_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            series_out._plan,
+            expr + index_col_refs,
+        )
+
+        return wrap_plan(plan=df_plan)
+
+    @property
+    def components(self):
+        """Calculate year, week, and day according to the ISO 8601 standard, returns a BodoDataFrame"""
+        series = self._series
+        dtype = pd.ArrowDtype(pa.list_(pa.int64()))
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.series._components_helper",
+            (),
+            {},
+            is_method=False,
+        )
+
+        n_index_arrays = get_n_index_arrays(index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
+        # Create schema for output DataFrame with 3 columns
+        arrow_schema = pa.schema(
+            [
+                pa.field(f"{label}", pa.int64())
+                for label in [
+                    "days",
+                    "hours",
+                    "minutes",
+                    "seconds",
+                    "milliseconds",
+                    "microseconds",
+                    "nanoseconds",
+                ]
+            ]
+        )
+        empty_data = arrow_to_empty_df(arrow_schema)
+        empty_data.index = index
+
+        expr = tuple(
+            get_col_as_series_expr(idx, empty_data, series_out, index_cols)
+            for idx in range(7)
+        )
+
+        assert series_out.is_lazy_plan()
+
+        # Creates DataFrame with 3 columns
+        df_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            series_out._plan,
+            expr + index_col_refs,
+        )
+
+        return wrap_plan(plan=df_plan)
+
 
 def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     """Compute a reduction function like min/max on a BodoSeries."""
@@ -909,6 +1021,23 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     out_rank = execute_plan(plan)
     # TODO: use parallel reduction for slight improvement in very large scales
     return getattr(pd.Series(out_rank), func_name)()
+
+
+def _isocalendar_helper(s):
+    """Maps pandas.Timestamp.isocalendar() to non-null elements, otherwise fills with None."""
+
+    def get_iso(ts):
+        if isinstance(ts, pd.Timestamp):
+            return list(ts.isocalendar())
+        return None
+
+    return s.map(get_iso)
+
+
+def _components_helper(s):
+    """Applies Series.dt.components to input series, maps tolist() to create series."""
+    df = s.dt.components
+    return pd.Series([df.iloc[i, :].tolist() for i in range(len(s))])
 
 
 def _str_cat_helper(df, sep, na_rep):
