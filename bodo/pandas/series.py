@@ -104,29 +104,28 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "Plan not available for this manager, recreate this series with from_pandas"
         )
 
-    @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str):
+        """Custom attribute access that triggers a fallback warning for unsupported attributes."""
+
         ignore_fallback_attrs = [
-            # Include other supported methods.
             "dtype",
             "name",
             "to_string",
         ]
-
         cls = object.__getattribute__(self, "__class__")
         base = cls.__mro__[0]
+
         if (
             name not in base.__dict__
             and name not in ignore_fallback_attrs
             and not name.startswith("_")
         ):
             msg = (
-                f"{name} is not "
-                "implemented in Bodo Dataframe Library yet. "
+                f"{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return super().__getattribute__(name)
+            return object.__getattribute__(self, name)
 
         return object.__getattribute__(self, name)
 
