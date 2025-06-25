@@ -334,16 +334,7 @@ def check_args_fallback(
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
                     py_res = getattr(base_class, func.__name__)(self, *args, **kwargs)
-                    if isinstance(py_res, pd.DataFrame):
-                        from bodo.pandas.frame import BodoDataFrame
-
-                        return BodoDataFrame(py_res)
-                    elif isinstance(py_res, pd.Series):
-                        from bodo.pandas.series import BodoSeries
-
-                        return BodoSeries(py_res)
-                    else:
-                        return py_res
+                    return py_res
 
         return wrapper
 
