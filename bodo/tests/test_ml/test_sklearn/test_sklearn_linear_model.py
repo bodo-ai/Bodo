@@ -99,6 +99,7 @@ def test_sgdc_svm(memory_leak_check):
         assert np.allclose(serial_bodo_accuracy, sk_accuracy, atol=0.1)
 
 
+@pytest.mark.skip(reason="[BSE-4933] Fix for Scikit-Learn 1.7.0")
 def test_sgdc_lr(memory_leak_check):
     """Check SGDClassifier Logistic Regression against sklearn with big data on multinode cluster"""
 
