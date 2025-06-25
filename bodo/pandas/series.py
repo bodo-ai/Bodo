@@ -106,7 +106,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str):
-        supported_methods = [
+        ignore_fallback_attrs = [
             # Include other supported methods.
             "dtype",
             "name",
@@ -117,12 +117,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         base = cls.__mro__[0]
         if (
             name not in base.__dict__
-            and name not in supported_methods
+            and name not in ignore_fallback_attrs
             and not name.startswith("_")
         ):
             msg = (
                 f"{name} is not "
-                "implemented in Bodo dataframe library for the specified arguments yet. "
+                "implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
