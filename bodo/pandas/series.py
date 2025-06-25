@@ -891,6 +891,39 @@ class BodoDatetimeProperties:
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
+def validate_reduce(func_name, pa_type):
+    """Validates input Series to _compute_series_reduce, returns upcast input type if necessary, otherwise None."""
+
+    if func_name in (
+        "max",
+        "min",
+    ):
+        if isinstance(
+            pa_type,
+            (pa.DurationType, pa.ListType, pa.LargeListType, pa.StructType, pa.MapType),
+        ):
+            raise BodoLibNotImplementedException(
+                f"{func_name}() not implemented for {pa_type} type."
+            )
+        return None
+
+    elif func_name in (
+        "sum",
+        "product",
+    ):
+        if pa.types.is_integer(pa_type):
+            return pd.ArrowDtype(pa.int64())
+        elif pa.types.is_floating(pa_type):
+            return pd.ArrowDtype(pa.float64())
+        else:
+            raise BodoLibNotImplementedException(
+                f"{func_name}() not implemented for {pa_type} type."
+            )
+
+    elif func_name in ("count",):
+        return pd.ArrowDtype(pa.int64())
+
+
 def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     """Compute a reduction function like min/max on a BodoSeries."""
 
@@ -904,8 +937,12 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
 
     # Drop Index columns since not necessary for reduction output.
     zero_size_self = _empty_like(bodo_series).reset_index(drop=True)
-    zero_size_self = zero_size_self.astype(pd.ArrowDtype(pa.int64()))
-    print(zero_size_self.dtype)
+
+    # Check for supported types
+    dtype = zero_size_self.dtype
+    if output_type := validate_reduce(func_name, dtype.pyarrow_dtype):
+        zero_size_self = zero_size_self.astype(output_type)
+
     exprs = [
         LazyPlan(
             "AggregateExpression",
