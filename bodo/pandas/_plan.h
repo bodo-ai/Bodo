@@ -186,7 +186,7 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
  * object
  */
 duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     std::string function_name, std::vector<int> input_column_indices,
     bool dropna);
 
