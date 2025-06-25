@@ -65,7 +65,6 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         // Update reduction result
         if (iter == 0) {
             output_scalar = out_scalar_batch;
-            printf("output_scalar: %s\n", output_scalar->ToString().c_str());
         } else {
             arrow::Result<arrow::Datum> cmp_res_scalar =
                 arrow::compute::CallFunction(scalar_cmp_name,
@@ -74,7 +73,6 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
                         "Error in Arrow compute scalar comparison");
             const std::shared_ptr<arrow::Scalar> cmp_scalar =
                 cmp_res_scalar.ValueOrDie().scalar();
-            printf("cmp_scalar: %s\n", cmp_scalar->ToString().c_str());
             if (reduction_type == ReductionType::COMPARISON) {
                 if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
                     output_scalar = out_scalar_batch;

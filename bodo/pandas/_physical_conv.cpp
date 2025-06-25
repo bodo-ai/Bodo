@@ -77,7 +77,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
     // Process the source of this aggregate.
-    printf("Children: %s\n", op.children[0]->ToString().c_str());
     this->Visit(*op.children[0]);
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
@@ -108,8 +107,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             return;
         }
 
+        // Extract bind_info
+        BodoAggFunctionData& bind_info =
+            agg_expr.bind_info->Cast<BodoAggFunctionData>();
+
+        auto out_schema = bind_info.out_schema;
+        auto bodo_schema = bodo::Schema::FromArrowSchema(out_schema);
+
         auto physical_op = std::make_shared<PhysicalReduce>(
-            in_table_schema, agg_expr.function.name);
+            bodo_schema, agg_expr.function.name);
         finished_pipelines.emplace_back(
             this->active_pipeline->Build(physical_op));
         this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);

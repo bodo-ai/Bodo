@@ -31,7 +31,6 @@ class PhysicalResultCollector : public PhysicalSink {
             dict_builders.emplace_back(
                 create_dict_builder_for_array(col->copy(), false));
         }
-        printf("in_schema: %s\n", in_schema->ToString().c_str());
         buffer = std::make_shared<TableBuildBuffer>(in_schema, dict_builders);
     }
 
