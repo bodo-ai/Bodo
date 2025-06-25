@@ -283,11 +283,13 @@ duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
  * Bodo metadata.
  *
  * @param parquet_path path to the Parquet dataset
+ * @param pyarrow_schema schema of the dataframe
+ * @param num_rows estimated number of rows for this source
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    PyObject *parquet_path, PyObject *pyarrow_schema,
-    PyObject *storage_options);
+    PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
+    int64_t num_rows);
 
 /**
  * @brief Create a LogicalCopyToFile node for writing a Parquet dataset.
@@ -316,20 +318,22 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
  *
  * @param df input dataframe to read
  * @param pyarrow_schema schema of the dataframe
+ * @param num_rows estimated number of rows for this source
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
-    PyObject *df, PyObject *pyarrow_schema);
+    PyObject *df, PyObject *pyarrow_schema, int64_t num_rows);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe in parallel
  *
  * @param result_id input dataframe id on workers to read
  * @param pyarrow_schema schema of the dataframe
+ * @param num_rows estimated number of rows for this source
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
-    std::string result_id, PyObject *pyarrow_schema);
+    std::string result_id, PyObject *pyarrow_schema, int64_t num_rows);
 
 /**
  * @brief Creates a LogicalGet node for reading an Iceberg dataset in DuckDB

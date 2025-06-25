@@ -91,10 +91,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                 "LogicalAggregate with no groups must have exactly one "
                 "aggregate expression for reduction.");
         }
-        printf("%s\n", op.expressions[0]->ToString().c_str());
         auto& agg_expr =
             op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
-        printf("Expression: %s\n", agg_expr.ToString().c_str());
 
         if (agg_expr.function.name == "count_star") {
             auto physical_op = std::make_shared<PhysicalCountStar>();
@@ -109,8 +107,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                 std::make_shared<PipelineBuilder>(physical_op);
             return;
         }
-
-        printf("Function_name: %s\n", agg_expr.function.name.c_str());
 
         auto physical_op = std::make_shared<PhysicalReduce>(
             in_table_schema, agg_expr.function.name);
