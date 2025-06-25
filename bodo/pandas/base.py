@@ -26,6 +26,7 @@ from bodo.pandas.utils import (
     make_col_ref_exprs,
     wrap_plan,
 )
+from bodo.utils.typing import BodoError
 
 
 def from_pandas(df):
