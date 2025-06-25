@@ -7,7 +7,12 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ## Computations / descriptive stats
 - [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
 - [`bodo.pandas.BodoSeries.clip`][bodoseriesclip]
+- [`bodo.pandas.BodoSeries.count`][bodoseriescount]
 - [`bodo.pandas.BodoSeries.round`][bodoseriesround]
+- [`bodo.pandas.BodoSeries.max`][bodoseriesmax]
+- [`bodo.pandas.BodoSeries.min`][bodoseriesmin]
+- [`bodo.pandas.BodoSeries.product`][bodoseriesproduct]
+- [`bodo.pandas.BodoSeries.sum`][bodoseriessum]
 
 ---
 
@@ -15,8 +20,6 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 !!! note
 	Input must be a Series of `datetime-like` data.
-
----
 
 ### Datetime properties
 !!! note
@@ -256,3 +259,9 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesisna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isna.html
 [bodoseriesnotna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notna.html
 [bodoseriesdttotal_seconds]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.total_seconds.html
+
+[bodoseriescount]: https://pandas.pydata.org/docs/reference/api/pandas.Series.count.html
+[bodoseriesmax]: https://pandas.pydata.org/docs/reference/api/pandas.Series.max.html
+[bodoseriesmin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.min.html
+[bodoseriesproduct]: https://pandas.pydata.org/docs/reference/api/pandas.Series.product.html
+[bodoseriessum]: https://pandas.pydata.org/docs/reference/api/pandas.Series.sum.html

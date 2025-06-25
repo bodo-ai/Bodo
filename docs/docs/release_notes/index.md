@@ -1,9 +1,9 @@
----
+<!-- ---
 hide:
   - navigation
   - toc
   - footer
----
+--- -->
 
 # Release Notes {#releases}
 
