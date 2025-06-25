@@ -1,10 +1,15 @@
 import importlib
 import typing as pt
+from collections.abc import Iterable, Mapping
 
 import pandas as pd
 import pyarrow as pa
-from collections.abc import Iterable, Mapping
 from pandas._libs import lib
+from pandas._typing import (
+    Axis,
+    Hashable,
+    HashableT,
+)
 from pandas.core.tools.datetimes import _unit_map
 
 from bodo.pandas.frame import BodoDataFrame
@@ -22,11 +27,6 @@ from bodo.pandas.utils import (
     wrap_plan,
 )
 
-from pandas._typing import (
-    Axis,
-    Hashable,
-    HashableT,
-)
 
 def from_pandas(df):
     """Convert a Pandas DataFrame to a BodoDataFrame."""
@@ -298,7 +298,8 @@ def to_datetime(
 
 @check_args_fallback("none")
 def concat(
-    objs: Iterable[BodoSeries | BodoDataFrame] | Mapping[HashableT, BodoSeries | BodoDataFrame],
+    objs: Iterable[BodoSeries | BodoDataFrame]
+    | Mapping[HashableT, BodoSeries | BodoDataFrame],
     *,
     axis: Axis = 0,
     join: str = "outer",
@@ -321,8 +322,7 @@ def concat(
         return objs[0]
 
     def concat_two(a, b):
-        """Process two dataframes or series to concat just two together.
-        """
+        """Process two dataframes or series to concat just two together."""
         a_cols = a.columns.tolist() if isinstance(a, BodoDataFrame) else [a.name]
         b_cols = b.columns.tolist() if isinstance(b, BodoDataFrame) else [b.name]
         a_cols_set = set(a_cols)
@@ -341,9 +341,7 @@ def concat(
             elif isinstance(x, pd.Series):
                 return [x.name]
             else:
-                raise BodoError(
-                    "concat_two asked for columns of non DataFrame/Series"
-                )
+                raise BodoError("concat_two asked for columns of non DataFrame/Series")
 
         # Simulate operation in Pandas with empty entities.
         empty_data = pd.concat(
@@ -355,12 +353,12 @@ def concat(
             levels=levels,
             names=names,
             sort=sort,
-            copy=copy
+            copy=copy,
         )
 
         def get_mapping(new_schema, old_schema, plan):
             """Create col ref expressions to do the reordering between
-               the old schema column order and the new one.
+            the old schema column order and the new one.
             """
             return make_col_ref_exprs([old_schema.index(x) for x in new_schema], plan)
 
@@ -386,7 +384,9 @@ def concat(
             "LogicalProjection",
             empty_data,
             a_new_cols._plan,
-            get_mapping(get_cols(empty_data), a_new_cols.columns.tolist(), a_new_cols._plan),
+            get_mapping(
+                get_cols(empty_data), a_new_cols.columns.tolist(), a_new_cols._plan
+            ),
         )
         # Create a reordering of the temp b_new_cols so that the columns are in
         # the same order as the Pandas simulation on empty data.
@@ -394,16 +394,14 @@ def concat(
             "LogicalProjection",
             empty_data,
             b_new_cols._plan,
-            get_mapping(get_cols(empty_data), b_new_cols.columns.tolist(), b_new_cols._plan),
+            get_mapping(
+                get_cols(empty_data), b_new_cols.columns.tolist(), b_new_cols._plan
+            ),
         )
 
         # DuckDB Union operator requires schema to already be matching.
         planUnion = LazyPlan(
-            "LogicalSetOperation",
-            empty_data,
-            a_plan,
-            b_plan,
-            "union all"
+            "LogicalSetOperation", empty_data, a_plan, b_plan, "union all"
         )
 
         return wrap_plan(planUnion)

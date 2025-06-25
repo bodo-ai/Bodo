@@ -12,8 +12,8 @@
 #include "physical/reduce.h"
 #include "physical/sample.h"
 #include "physical/sort.h"
-#include "physical/write_parquet.h"
 #include "physical/union_all.h"
+#include "physical/write_parquet.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -185,7 +185,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                 std::move(rhs_builder.finished_pipelines);
             ::arrow::Schema rhs_arrow = *(rhs_table_schema->ToArrowSchema());
 
-            auto physical_union_all = std::make_shared<PhysicalUnionAll>(rhs_table_schema);
+            auto physical_union_all =
+                std::make_shared<PhysicalUnionAll>(rhs_table_schema);
             build_pipelines.push_back(
                 rhs_builder.active_pipeline->Build(physical_union_all));
             this->finished_pipelines.insert(this->finished_pipelines.begin(),
@@ -201,15 +202,19 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                 std::cout << "lhs " << lhs_arrow.ToString() << std::endl;
                 std::cout << "rhs " << rhs_arrow.ToString() << std::endl;
                 throw std::runtime_error(
-                    "PhysicalPlanBuilder::Visit(LogicalSetOperation lhs and rhs schemas not identical");
+                    "PhysicalPlanBuilder::Visit(LogicalSetOperation lhs and "
+                    "rhs schemas not identical");
             }
 
-            finished_pipelines.emplace_back(this->active_pipeline->Build(physical_union_all));
+            finished_pipelines.emplace_back(
+                this->active_pipeline->Build(physical_union_all));
             // Downstream pipelines pull from the singular table.
-            this->active_pipeline = std::make_shared<PipelineBuilder>(physical_union_all);
+            this->active_pipeline =
+                std::make_shared<PipelineBuilder>(physical_union_all);
         } else {
             throw std::runtime_error(
-                "PhysicalPlanBuilder::Visit(LogicalSetOperation non-all union unsupported");
+                "PhysicalPlanBuilder::Visit(LogicalSetOperation non-all union "
+                "unsupported");
         }
     } else {
         throw std::runtime_error(

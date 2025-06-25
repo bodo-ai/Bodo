@@ -59,8 +59,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
  */
 duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
-    std::unique_ptr<duckdb::LogicalOperator> &rhs,
-    const std::string &setop,
+    std::unique_ptr<duckdb::LogicalOperator> &rhs, const std::string &setop,
     int64_t num_cols);
 
 /**

@@ -1014,7 +1014,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if (
             self.is_lazy_plan()
             and isinstance(key, Iterable)
-            and all([isinstance(x, str) for x in key])
+            and all(isinstance(x, str) for x in key)
             and pd.api.types.is_scalar(value)
         ):
             for new_col in key:

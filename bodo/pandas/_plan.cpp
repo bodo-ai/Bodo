@@ -593,8 +593,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
 
 duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
-    std::unique_ptr<duckdb::LogicalOperator> &rhs,
-    const std::string &setop,
+    std::unique_ptr<duckdb::LogicalOperator> &rhs, const std::string &setop,
     int64_t num_cols) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
@@ -608,10 +607,12 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
         optype = duckdb::LogicalOperatorType::LOGICAL_UNION;
         setop_all = (setop == "union all");
     } else {
-        throw std::runtime_error("make_set_operation unsupported type " + setop);
+        throw std::runtime_error("make_set_operation unsupported type " +
+                                 setop);
     }
-    auto set_operation =
-        duckdb::make_uniq<duckdb::LogicalSetOperation>(table_idx, num_cols, std::move(lhs_duck), std::move(rhs_duck), optype, setop_all);
+    auto set_operation = duckdb::make_uniq<duckdb::LogicalSetOperation>(
+        table_idx, num_cols, std::move(lhs_duck), std::move(rhs_duck), optype,
+        setop_all);
     return set_operation;
 }
 
