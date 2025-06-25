@@ -824,6 +824,13 @@ def log_loss_dist_helper(y_true, y_pred, normalize, sample_weight, labels):
     counts (i.e. sum(accuracy_bits))
     (or sample_weight.T @ accuracy_bits when sample_weight != None
     """
+    import pandas as pd
+
+    # Workaround np.all() issue with ArrowStringArray
+    # See test_sklearn_metrics.py::test_log_loss
+    if isinstance(labels, pd.arrays.ArrowStringArray):
+        labels = labels.to_numpy()
+
     loss = sklearn.metrics.log_loss(
         y_true,
         y_pred,

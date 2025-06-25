@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 import pandas as pd
 import pyarrow as pa
+from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
 from bodo.pandas.utils import (
@@ -119,7 +120,18 @@ class DataFrameGroupBy:
             ]
         else:
             func = _get_aggfunc_str(func)
-            normalized_func = [(col, func) for col in self._selection]
+            # Size is a special case that only produces 1 column, since it doesn't
+            # depend on input column given.
+            if func == "size":
+                # Getting the size of each groups without any input column.
+                # e.g. df.groupby("B")[[]].size()
+                if len(self._selection) < 1:
+                    raise BodoLibNotImplementedException(
+                        "GroupBy.size(): Aggregating without selected columns not supported yet."
+                    )
+                normalized_func = [(self._selection[0], "size")]
+            else:
+                normalized_func = [(col, func) for col in self._selection]
 
         return normalized_func
 
@@ -155,6 +167,62 @@ class DataFrameGroupBy:
         """
         return _groupby_agg_plan(self, "count")
 
+    @check_args_fallback(supported="none")
+    def min(self, numeric_only=False, min_count=-1, engine=None, engine_kwargs=None):
+        """
+        Compute the min of each group.
+        """
+        return _groupby_agg_plan(self, "min")
+
+    @check_args_fallback(supported="none")
+    def max(self, numeric_only=False, min_count=-1, engine=None, engine_kwargs=None):
+        """
+        Compute the max of each group.
+        """
+        return _groupby_agg_plan(self, "max")
+
+    @check_args_fallback(supported="none")
+    def median(self, numeric_only=False):
+        """
+        Compute the median of each group.
+        """
+        return _groupby_agg_plan(self, "median")
+
+    @check_args_fallback(supported="none")
+    def nunique(self, dropna=True):
+        """
+        Compute the nunique of each group.
+        """
+        return _groupby_agg_plan(self, "nunique")
+
+    @check_args_fallback(supported="none")
+    def size(self):
+        """
+        Compute the size of each group (including missing values).
+        """
+        return _groupby_agg_plan(self, "size")
+
+    @check_args_fallback(supported="none")
+    def skew(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
+        """
+        Compute the skew of each group.
+        """
+        return _groupby_agg_plan(self, "skew")
+
+    @check_args_fallback(supported="none")
+    def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
+        """
+        Compute the std of each group.
+        """
+        return _groupby_agg_plan(self, "std")
+
+    @check_args_fallback(supported="none")
+    def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
+        """
+        Compute the var of each group.
+        """
+        return _groupby_agg_plan(self, "var")
+
 
 class SeriesGroupBy:
     """
@@ -174,42 +242,6 @@ class SeriesGroupBy:
         self._selection = selection
         self._as_index = as_index
         self._dropna = dropna
-
-    @check_args_fallback(supported="none")
-    def sum(
-        self,
-        numeric_only: bool = False,
-        min_count: int = 0,
-        engine: Literal["cython", "numba"] | None = None,
-        engine_kwargs: dict[str, bool] | None = None,
-    ):
-        """
-        Compute the sum of each group.
-        """
-        assert len(self._selection) == 1, (
-            "SeriesGroupBy.sum() should only be called on a single column selection."
-        )
-
-        return _groupby_agg_plan(self, "sum")
-
-    @check_args_fallback(supported="none")
-    def mean(
-        self,
-        numeric_only: bool = False,
-        engine: Literal["cython", "numba"] | None = None,
-        engine_kwargs: dict[str, bool] | None = None,
-    ):
-        """
-        Compute the mean of each group.
-        """
-        return _groupby_agg_plan(self, "mean")
-
-    @check_args_fallback(supported="none")
-    def count(self):
-        """
-        Compute the count of each group.
-        """
-        return _groupby_agg_plan(self, "count")
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
@@ -255,6 +287,94 @@ class SeriesGroupBy:
             normalized_func = [(col, _get_aggfunc_str(func))]
 
         return normalized_func
+
+    @check_args_fallback(supported="none")
+    def sum(
+        self,
+        numeric_only: bool = False,
+        min_count: int = 0,
+        engine: Literal["cython", "numba"] | None = None,
+        engine_kwargs: dict[str, bool] | None = None,
+    ):
+        """
+        Compute the sum of each group.
+        """
+        return _groupby_agg_plan(self, "sum")
+
+    @check_args_fallback(supported="none")
+    def mean(
+        self,
+        numeric_only: bool = False,
+        engine: Literal["cython", "numba"] | None = None,
+        engine_kwargs: dict[str, bool] | None = None,
+    ):
+        """
+        Compute the mean of each group.
+        """
+        return _groupby_agg_plan(self, "mean")
+
+    @check_args_fallback(supported="none")
+    def count(self):
+        """
+        Compute the count of each group.
+        """
+        return _groupby_agg_plan(self, "count")
+
+    @check_args_fallback(supported="none")
+    def min(self, numeric_only=False, min_count=-1, engine=None, engine_kwargs=None):
+        """
+        Compute the min of each group.
+        """
+        return _groupby_agg_plan(self, "min")
+
+    @check_args_fallback(supported="none")
+    def max(self, numeric_only=False, min_count=-1, engine=None, engine_kwargs=None):
+        """
+        Compute the max of each group.
+        """
+        return _groupby_agg_plan(self, "max")
+
+    @check_args_fallback(supported="none")
+    def median(self, numeric_only=False):
+        """
+        Compute the median of each group.
+        """
+        return _groupby_agg_plan(self, "median")
+
+    @check_args_fallback(supported="none")
+    def nunique(self, dropna=True):
+        """
+        Compute the nunique of each group.
+        """
+        return _groupby_agg_plan(self, "nunique")
+
+    @check_args_fallback(supported="none")
+    def size(self):
+        """
+        Compute the size of each group (including missing values).
+        """
+        return _groupby_agg_plan(self, "size")
+
+    @check_args_fallback(supported="none")
+    def skew(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
+        """
+        Compute the skew of each group.
+        """
+        return _groupby_agg_plan(self, "skew")
+
+    @check_args_fallback(supported="none")
+    def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
+        """
+        Compute the std of each group.
+        """
+        return _groupby_agg_plan(self, "std")
+
+    @check_args_fallback(supported="none")
+    def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
+        """
+        Compute the var of each group.
+        """
+        return _groupby_agg_plan(self, "var")
 
 
 def _groupby_agg_plan(
@@ -343,47 +463,89 @@ def _get_aggfunc_str(func):
 
 
 def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.DataType:
-    """Gets the output type of an aggregation or raise either TypeError or BodoLibNotImplementedException
-    for unsupported pa_type/func combinations. Should closely match
-    https://github.com/bodo-ai/Bodo/blob/d1133e257662348cc7b9ef52cf445633036133d2/bodo/libs/groupby/_groupby_common.cpp#L562
+    """Cast the input type to the correct output type depending on func or raise if
+    the specific combination of func + input type is not supported.
+
+    Args:
+        func (str): The function to apply.
+        pa_type (pa.DataType): The input type of the function.
+        col_name (str): The name of the column in the input.
+
+    Raises:
+        BodoLibNotImplementedException: If the operation is not supported in Bodo
+            but is supported in Pandas.
+        TypeError: If the operation is not supported in Bodo or Pandas (due to gaps
+            in Pandas' handling of Arrow Types)
+
+    Returns:
+        pa.DataType: The output type from applying func to col_name.
     """
-    new_type = pa_type
-    if func == "sum":
+    new_type = None
+    fallback = False
+
+    # TODO: Enable more fallbacks where the operation is supported in Pandas and not in Bodo
+    if func in ("sum",):
         if pa.types.is_signed_integer(pa_type) or pa.types.is_boolean(pa_type):
             new_type = pa.int64()
         elif pa.types.is_unsigned_integer(pa_type):
             new_type = pa.uint64()
+        elif pa.types.is_duration(pa_type):
+            new_type = pa_type
         elif pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_string(pa_type):
             new_type = pa_type
         elif pa.types.is_decimal(pa_type):
-            # TODO Support Decimal columns for sum()
-            raise BodoLibNotImplementedException(
-                f"GroupBy.mean() on input column '{col_name}' with type: {pa_type} not supported yet."
-            )
-        else:
-            raise TypeError(
-                f"GroupBy.sum(): Unsupported dtype in column '{col_name}': {pa_type}."
-            )
-        return new_type
-    elif func == "mean":
+            # TODO: Decimal sum
+            fallback = True
+    elif func in ("mean", "std", "var", "skew"):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
-            # TODO Support bool/decimal columns for mean()
-            raise BodoLibNotImplementedException(
-                f"GroupBy.mean() on input column '{col_name}' with type: {pa_type} not supported yet."
-            )
-        else:
-            raise TypeError(
-                f"GroupBy.mean(): Unsupported dtype in column '{col_name}': {pa_type}."
-            )
-        return new_type
-    elif func == "count":
-        return pa.int64()
+            # TODO Support bool/decimal columns
+            fallback = True
+    elif func in ("count", "size", "nunique"):
+        new_type = pa.int64()
+    elif func in ("min", "max"):
+        if (
+            pa.types.is_integer(pa_type)
+            or pa.types.is_floating(pa_type)
+            or pa.types.is_boolean(pa_type)
+            or pa.types.is_string(pa_type)
+            or pa.types.is_duration(pa_type)
+            or pa.types.is_date(pa_type)
+            or pa.types.is_timestamp(pa_type)
+        ):
+            new_type = pa_type
+        elif pa.types.is_decimal(pa_type):
+            fallback = True
+    elif func == "median":
+        if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
+            new_type = pa_type
+        elif (
+            pa.types.is_boolean(pa_type)
+            or pa.types.is_decimal(pa_type)
+            or pa.types.is_timestamp(pa_type)
+            or pa.types.is_duration(pa_type)
+        ):
+            # TODO: bool/decimal median
+            fallback = True
+    else:
+        raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
 
-    raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
+    if new_type is not None:
+        return new_type
+    elif fallback:
+        # For cases where Pandas supports the func+type combo but Bodo does not.
+        raise BodoLibNotImplementedException(
+            f"GroupBy.{func}() on input column '{col_name}' with type: {pa_type} not supported yet."
+        )
+    else:
+        # For gaps in Pandas where a specific function is not implemented for arrow or was somehow
+        # falling back to Pandas would also fail, so failing earlier is better.
+        raise TypeError(
+            f"GroupBy.{func}(): Unsupported dtype in column '{col_name}': {pa_type}."
+        )
 
 
 def _cast_groupby_agg_columns(
