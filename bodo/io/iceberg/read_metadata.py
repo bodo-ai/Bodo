@@ -306,3 +306,67 @@ def group_file_frags_by_schema_group_identifier(
     metrics.nunique_sgs_seen += len(schema_group_id_to_frags)
 
     return schema_group_id_to_frags
+
+
+def get_table_length(table, snapshot_id: int = -1) -> int:
+    """
+    Get the total number of rows in the Iceberg table.
+    If a snapshot ID is provided, it will return the number of rows
+    in that snapshot. Otherwise, it will return the number of rows
+    in the current snapshot.
+
+    Args:
+        table (Table): The Iceberg table to get the length of.
+        snapshot_id (int, optional): The snapshot ID to get the length of. Defaults to -1.
+
+    Returns:
+        int: The total number of rows in the Iceberg table.
+    """
+    from pyiceberg.manifest import ManifestContent, ManifestEntryStatus
+
+    table_len = 0
+    snapshot = (
+        table.current_snapshot()
+        if snapshot_id == -1
+        else table.snapshot_by_id(snapshot_id)
+    )
+    assert snapshot is not None
+    # If the snapshot has a summary with total-records, use that.
+    if (
+        hasattr(snapshot, "summary")
+        and snapshot.summary is not None
+        and "total-records" in snapshot.summary
+    ):
+        table_len = int(snapshot.summary["total-records"])
+    # If the snapshot has manifests with existing_rows_count and added_rows_count,
+    # use those to get the table length.
+    elif all(
+        hasattr(manifest, "existing_rows_count")
+        and manifest.existing_rows_count is not None
+        and hasattr(manifest, "added_rows_count")
+        and manifest.added_rows_count is not None
+        for manifest in snapshot.manifests(table.io)
+    ):
+        table_len = sum(
+            [
+                manifest.existing_rows_count + manifest.added_rows_count
+                if manifest.content == ManifestContent.DATA
+                else 0
+                for manifest in snapshot.manifests(table.io)
+            ]
+        )
+    # Otherwise we need to go through the manifest entries to estimate the table length.
+    else:
+        for manifest in snapshot.manifests(table.io):
+            manifest_entries = manifest.fetch_manifest_entry(table.io)
+            for entry in manifest_entries:
+                if (
+                    entry.status == ManifestEntryStatus.DELETED
+                    or entry.content != ManifestContent.DATA
+                ):
+                    continue
+                datafile = entry.data_file
+                if datafile is not None and datafile.record_count is not None:
+                    table_len += datafile.record_count
+
+    return table_len

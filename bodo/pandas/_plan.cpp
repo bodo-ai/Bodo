@@ -785,7 +785,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_name,
     PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, int64_t snapshot_id) {
+    PyObject *iceberg_schema, int64_t snapshot_id,
+    uint64_t table_len_estimate) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Convert Arrow schema to DuckDB
@@ -805,6 +806,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
         duckdb::make_uniq<duckdb::LogicalGet>(
             binder->GenerateTableIndex(), table_function, std::move(bind_data1),
             return_types, return_names, virtual_columns);
+
+    out_get->SetEstimatedCardinality(table_len_estimate);
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:
