@@ -193,7 +193,9 @@ def read_iceberg(
     if row_filter is not None and table_len_estimate > 0:
         # TODO: do something smarter here like sampling or turn the filter into a
         # separate node so the planner can handle it
-        filter_selectivity_estimate = 0.1
+        #
+        # This matches duckdb's default selectivity estimate for filters
+        filter_selectivity_estimate = 0.2
         table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
 
     plan = LazyPlan(
