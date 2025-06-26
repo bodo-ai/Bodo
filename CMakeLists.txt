@@ -393,7 +393,7 @@ else()
 endif()
 
 execute_process(
-  COMMAND find "${EXTENDED_SEARCH_PATH}" -name "libmpi.*" -type f
+  COMMAND find "${EXTENDED_SEARCH_PATH}" -name "libmpi.so.*" -type f
   OUTPUT_VARIABLE FIND_MPI_RESULTS
   OUTPUT_STRIP_TRAILING_WHITESPACE
   ERROR_QUIET
