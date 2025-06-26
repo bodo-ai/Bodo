@@ -322,7 +322,7 @@ endif()
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
   message(STATUS "Downloading Bodo's previous version to vendor MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download bodo==2025.6 --default-timeout=100)
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download bodo==2025.6 --python-version=3.12 --no-deps --default-timeout=100)
   execute_process(COMMAND unzip "bodo-*.whl" "bodo*.data/*" -d mpich-tmp-extract-dir)
   file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/bodo-*.data/data/*")
   file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
