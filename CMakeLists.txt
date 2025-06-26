@@ -367,41 +367,10 @@ cmake_print_variables(PYARROW_LIB_DIR)
 # through `Python_NumPy_INCLUDE_DIR`
 cmake_print_variables(Python_NumPy_INCLUDE_DIR)
 
-# Search for mpi.h in directories above PYARROW_INCLUDE_DIR
-set(MPI_INCLUDE_DIR "")
-if(PYARROW_INCLUDE_DIR)
-  # Get the parent directory of PYARROW_INCLUDE_DIR
-  get_filename_component(PYARROW_PARENT_DIR "${PYARROW_INCLUDE_DIR}" DIRECTORY)
-  
-  # Search in several directories up from PYARROW_INCLUDE_DIR
-  set(MPI_SEARCH_PATHS
-    "${PYARROW_INCLUDE_DIR}"
-    "${PYARROW_PARENT_DIR}/include"
-    "${PYARROW_PARENT_DIR}"
-    "${PYARROW_PARENT_DIR}/../include"
-    "${PYARROW_PARENT_DIR}/../.."
-    "${PYARROW_PARENT_DIR}/../../include"
-  )
-  
-  foreach(SEARCH_PATH ${MPI_SEARCH_PATHS})
-    if(EXISTS "${SEARCH_PATH}/mpi.h")
-      set(MPI_INCLUDE_DIR "${SEARCH_PATH}")
-      message(STATUS "Found mpi.h in: ${MPI_INCLUDE_DIR}")
-      break()
-    endif()
-  endforeach()
-  
-  if(NOT MPI_INCLUDE_DIR)
-    message(WARNING "Could not find mpi.h in any directory above ${PYARROW_INCLUDE_DIR}")
-    # Fall back to conda include directory
-    set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
-  endif()
-else()
-  message(WARNING "PYARROW_INCLUDE_DIR is not set, using CONDA_INCLUDE_DIR for MPI")
-  set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
-endif()
 
-cmake_print_variables(MPI_INCLUDE_DIR)
+# Get the parent directory of PYARROW_INCLUDE_DIR
+get_filename_component(PYARROW_PARENT_DIR "${PYARROW_INCLUDE_DIR}" DIRECTORY)
+
 
 # Run find command to search for mpi.h in a broader directory structure
 set(EXTENDED_SEARCH_PATH "${PYARROW_PARENT_DIR}/../../../../../..")
