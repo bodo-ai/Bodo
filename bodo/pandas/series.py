@@ -628,7 +628,7 @@ class BodoStringMethods:
 
     def __init__(self, series):
         # Validate input series
-        allowed_types = allowed_types_map["default"]
+        allowed_types = allowed_types_map["str_default"]
         if not (
             isinstance(series, BodoSeries)
             and isinstance(series.dtype, pd.ArrowDtype)
@@ -836,19 +836,11 @@ class BodoDatetimeProperties:
     """Support Series.dt datetime accessors same as Pandas."""
 
     def __init__(self, series):
-        self._series = series
+        allowed_types = allowed_types_map["dt_default"]
         # Validates series type
-        if not (
-            isinstance(series, BodoSeries)
-            and series.dtype
-            in (
-                pd.ArrowDtype(pa.timestamp("ns")),
-                pd.ArrowDtype(pa.date64()),
-                pd.ArrowDtype(pa.time64("ns")),
-                pd.ArrowDtype(pa.duration("ns")),
-            ),
-        ):
+        if not (isinstance(series, BodoSeries) and series.dtype in allowed_types,):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
+        self._series = series
         self._dtype = series.dtype
 
     @check_args_fallback(unsupported="none")
@@ -976,6 +968,42 @@ class BodoDatetimeProperties:
 
         return wrap_plan(plan=df_plan)
 
+    @check_args_fallback(unsupported="none")
+    def tz_localize(self, tz=None, ambiguous="NaT", nonexistent="NaT"):
+        """Localize tz-naive Datetime Series to tz-aware Datetime Series."""
+
+        if (
+            ambiguous != "NaT"
+            or nonexistent not in ("shift_forward", "shift_backward", "NaT")
+            and not isinstance(nonexistent, pd.Timedelta)
+        ):
+            raise BodoLibNotImplementedException(
+                "BodoDatetimeProperties.tz_localize is unsupported for the given arguments, falling back to Pandas"
+            )
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.timestamp("ns", tz))
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        return _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.series._tz_localize_helper",
+            (
+                tz,
+                ambiguous,
+                nonexistent,
+            ),
+            {},
+            is_method=False,
+        )
+
 
 def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     """Compute a reduction function like min/max on a BodoSeries."""
@@ -1021,6 +1049,18 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     out_rank = execute_plan(plan)
     # TODO: use parallel reduction for slight improvement in very large scales
     return getattr(pd.Series(out_rank), func_name)()
+
+
+def _tz_localize_helper(s, tz, ambiguous, nonexistent):
+    """TODO: add docstring"""
+
+    def _tz_localize(d):
+        try:
+            return d.tz_localize(tz, ambiguous="raise", nonexistent=nonexistent)
+        except Exception:
+            return None
+
+    return s.map(_tz_localize)
 
 
 def _isocalendar_helper(s):
@@ -1553,14 +1593,17 @@ def validate_dtype(name, obj):
         return
 
     dtype = obj._dtype
-    parts = name.split(".")
-    accessor, method = parts[0], parts[1]
-    if accessor == "str.":
+    accessor = name.split(".")[0]
+    if accessor == "str":
         if dtype not in allowed_types_map.get(
-            method, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
+            name, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
         ):
             raise AttributeError("Can only use .str accessor with string values!")
-    # Implement accessor == "dt." case if necessary.
+    if accessor == "dt":
+        if dtype not in allowed_types_map.get(
+            name, [pd.ArrowDtype(pa.timestamp("ns")), pd.ArrowDtype(pa.duration("ns"))]
+        ):
+            raise AttributeError("Can only use .dt accessor with datetimelike values!")
 
 
 def gen_method(
@@ -1577,7 +1620,7 @@ def gen_method(
             sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
 
         series = self._series if accessor_type else self
-        dtype = self.dtype if not return_type else return_type
+        dtype = series.dtype if not return_type else return_type
 
         index = series.head(0).index
         new_metadata = pd.Series(
@@ -1745,6 +1788,7 @@ dt_methods = [
             "normalize",
             "floor",
             "ceil",
+            "round",
             # TODO: implement end_time
         ],
         pd.ArrowDtype(pa.timestamp("ns")),
@@ -1800,13 +1844,13 @@ dir_methods = [
 ]
 
 allowed_types_map = {
-    "decode": [
+    "str.decode": [
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.binary()),
         pd.ArrowDtype(pa.large_binary()),
     ],
-    "join": [
+    "str.join": [
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.list_(pa.string())),
@@ -1814,7 +1858,7 @@ allowed_types_map = {
         pd.ArrowDtype(pa.large_list(pa.string())),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
     ],
-    "default": [
+    "str_default": [
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
@@ -1822,6 +1866,15 @@ allowed_types_map = {
         pd.ArrowDtype(pa.list_(pa.string())),
         pd.ArrowDtype(pa.large_binary()),
         pd.ArrowDtype(pa.binary()),
+    ],
+    "dt.round": [
+        pd.ArrowDtype(pa.timestamp("ns")),
+    ],
+    "dt_default": [
+        pd.ArrowDtype(pa.timestamp("ns")),
+        pd.ArrowDtype(pa.date64()),
+        pd.ArrowDtype(pa.time64("ns")),
+        pd.ArrowDtype(pa.duration("ns")),
     ],
 }
 

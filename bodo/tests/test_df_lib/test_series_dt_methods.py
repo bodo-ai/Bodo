@@ -51,7 +51,7 @@ def _install_series_dt_tests():
 # Accessors that are not auto-generated
 untracked_accessors = ("components",)
 # Methods that are not auto-generated
-untracked_methods = ("isocalendar",)
+untracked_methods = ("isocalendar", "tz_localize")
 
 # Maps method name to test case for pytest param
 # More rigorous testing NEEDED
@@ -91,6 +91,8 @@ test_map_arg = {
     #     (("date is: %S",), {}),
     # ],
     "isocalendar": [((), {})],
+    "round": [(("h"), {})],
+    "tz_localize": [((), {"CET": "CET", "ambiguous": "NaT", "nonexistent": "NaT"})],
 }
 
 date_m = pd.Series(pd.date_range("20130101 09:10:12", periods=10, freq="MS"))
