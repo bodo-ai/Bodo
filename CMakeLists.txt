@@ -373,26 +373,44 @@ get_filename_component(PYARROW_PARENT_DIR "${PYARROW_INCLUDE_DIR}" DIRECTORY)
 
 # Run find command to search for mpi.h in a broader directory structure
 set(EXTENDED_SEARCH_PATH "${PYARROW_PARENT_DIR}/../../../../../..")
-if(EXISTS "${EXTENDED_SEARCH_PATH}")
-  execute_process(
-    COMMAND find "${EXTENDED_SEARCH_PATH}" -name "mpi.h" -type f
-    OUTPUT_VARIABLE FIND_MPI_RESULTS
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-  )
-  
-  if(FIND_MPI_RESULTS)
-    # Get the first result and extract its directory
-    string(REPLACE "\n" ";" FIND_MPI_LIST "${FIND_MPI_RESULTS}")
-    list(GET FIND_MPI_LIST 0 FIRST_MPI_PATH)
-    get_filename_component(FOUND_MPI_INCLUDE_DIR "${FIRST_MPI_PATH}" DIRECTORY)
-    message(STATUS "Found mpi.h via find command at: ${FIRST_MPI_PATH}")
-    message(STATUS "Using MPI include directory: ${FOUND_MPI_INCLUDE_DIR}")
-    set(MPI_INCLUDE_DIR "${FOUND_MPI_INCLUDE_DIR}")
-  else()
-    message(STATUS "find command did not locate mpi.h in ${EXTENDED_SEARCH_PATH}")
-  endif()
+execute_process(
+  COMMAND find "${EXTENDED_SEARCH_PATH}" -name "mpi.h" -type f
+  OUTPUT_VARIABLE FIND_MPI_RESULTS
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+
+if(FIND_MPI_RESULTS)
+  # Get the first result and extract its directory
+  string(REPLACE "\n" ";" FIND_MPI_LIST "${FIND_MPI_RESULTS}")
+  list(GET FIND_MPI_LIST 0 FIRST_MPI_PATH)
+  get_filename_component(FOUND_MPI_INCLUDE_DIR "${FIRST_MPI_PATH}" DIRECTORY)
+  message(STATUS "Found mpi.h via find command at: ${FIRST_MPI_PATH}")
+  message(STATUS "Using MPI include directory: ${FOUND_MPI_INCLUDE_DIR}")
+  set(MPI_INCLUDE_DIR "${FOUND_MPI_INCLUDE_DIR}")
+else()
+  message(STATUS "find command did not locate mpi.h in ${EXTENDED_SEARCH_PATH}")
 endif()
+
+execute_process(
+  COMMAND find "${EXTENDED_SEARCH_PATH}" -name "libmpi.*" -type f
+  OUTPUT_VARIABLE FIND_MPI_RESULTS
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+
+if(FIND_MPI_RESULTS)
+  # Get the first result and extract its directory
+  string(REPLACE "\n" ";" FIND_MPI_LIST "${FIND_MPI_RESULTS}")
+  list(GET FIND_MPI_LIST 0 FIRST_MPI_PATH)
+  get_filename_component(FOUND_MPI_LIB_DIR "${FIRST_MPI_PATH}" DIRECTORY)
+  message(STATUS "Found libmpi.so via find command at: ${FIRST_MPI_PATH}")
+  message(STATUS "Using MPI lib directory: ${FOUND_MPI_LIB_DIR}")
+  set(MPI_LIB_DIR "${FOUND_MPI_LIB_DIR}")
+else()
+  message(STATUS "find command did not locate libmpi.so in ${EXTENDED_SEARCH_PATH}")
+endif()
+
 
 # Combine All 2 Includes
 set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPI_INCLUDE_DIR})
