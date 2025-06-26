@@ -8,7 +8,8 @@ requires = [
     "numpy>=1.24",
     "pyarrow==19.0.0",
     "mpi4py~=4.0",
-    "pip"
+    "pip",
+    "mpich==4.1.3; sys_platform != 'win32'",
 ]
 build-backend = "scikit_build_core.build"
 
