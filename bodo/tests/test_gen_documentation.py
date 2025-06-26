@@ -9,7 +9,6 @@ from bodo.utils.generate_docs import generate_pandas_docs
 
 @pytest.mark.documentation
 @pytest_mark_one_rank
-@pytest.mark.skip(reason="TODO: update documentation")
 def test_gen_documentation(capfd):
     """
     Test to ensure that any changes in documentation have already been
