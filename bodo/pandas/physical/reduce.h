@@ -28,15 +28,12 @@ enum class ReductionType {
  */
 class PhysicalReduce : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalReduce(std::shared_ptr<bodo::Schema> in_table_schema,
+    explicit PhysicalReduce(std::shared_ptr<bodo::Schema> out_schema,
                             std::string function_name)
         // Drop Index columns since not necessary in output
-        : out_schema(in_table_schema->Project(1)),
+        : out_schema(out_schema->Project(1)),
           function_name(function_name),
-          scalar_cmp_name(getScalarOpName(function_name)) {
-        // TODO: support reductions that out different output types from input
-        // types (e.g. upcast in sum)
-    }
+          scalar_cmp_name(getScalarOpName(function_name)) {}
 
     virtual ~PhysicalReduce() = default;
 
