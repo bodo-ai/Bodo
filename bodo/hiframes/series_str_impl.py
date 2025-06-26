@@ -594,6 +594,7 @@ def is_regex_unsupported(pat):
     "contains",
     path="pd.Series.str.contains",
     unsupported_args={"na"},
+    changed_defaults={"na"},
     method_args_checker=OverloadArgumentsChecker(
         [
             StringSeriesArgumentChecker("S_str", is_self=True),

@@ -971,7 +971,7 @@ def test_merge():
     )
 
 
-def test_merge_swith_side():
+def test_merge_switch_side():
     """Test merge with left table smaller than right table so DuckDB reorders the input
     tables to use the smaller table as build.
     """
