@@ -911,9 +911,7 @@ def validate_reduce(func_name, pa_type):
         "sum",
         "product",
     ):
-        if pa.types.is_null(pa_type):
-            return pd.ArrowDtype(pa.int64())
-        elif pa.types.is_unsigned_integer(pa_type):
+        if pa.types.is_unsigned_integer(pa_type):
             return pd.ArrowDtype(pa.uint64())
         elif pa.types.is_integer(pa_type):
             return pd.ArrowDtype(pa.int64())
@@ -940,10 +938,17 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
 
     # Drop Index columns since not necessary for reduction output.
     zero_size_self = _empty_like(bodo_series).reset_index(drop=True)
+    pa_type = zero_size_self.dtype.pyarrow_dtype
+
+    # For null arrays, return default value
+    if pa.types.is_null(pa_type):
+        if func_name == "sum":
+            return 0
+        if func_name == "product":
+            return 1
 
     # Check for supported types
-    dtype = zero_size_self.dtype
-    if output_type := validate_reduce(func_name, dtype.pyarrow_dtype):
+    if output_type := validate_reduce(func_name, pa_type):
         zero_size_self = zero_size_self.astype(output_type)
 
     exprs = [

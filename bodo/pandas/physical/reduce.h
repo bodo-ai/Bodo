@@ -49,36 +49,12 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
             false, /*downcast_time_ns_to_us*/
             bodo::default_buffer_memory_manager());
 
-        arrow::Result<arrow::Datum> cmp_res;
-        std::shared_ptr<arrow::Scalar> out_scalar_batch;
-
-        try {
-            // Reduce Arrow array using compute function
-            cmp_res =
-                arrow::compute::CallFunction(function_name, {in_arrow_array});
-            CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
-            out_scalar_batch = cmp_res.ValueOrDie().scalar();
-        }
-        // If Arrow compute processes input incorrectly, route it to correct
-        // output, otherwise rethrow error
-        catch (const std::runtime_error& e) {
-            // Arrow cannot produce null array sum since it has
-            // dtype=large_string, set to default output 0
-            if (function_name == "sum") {
-                std::shared_ptr<arrow::Scalar> zero_scalar;
-                zero_scalar = std::make_shared<arrow::Int64Scalar>(0);
-                out_scalar_batch = zero_scalar;
-            }
-            // Arrow cannot produce null array product since it has
-            // dtype=large_string, set to default output 1
-            else if (function_name == "product") {
-                std::shared_ptr<arrow::Scalar> zero_scalar;
-                zero_scalar = std::make_shared<arrow::Int64Scalar>(1);
-                out_scalar_batch = zero_scalar;
-            } else {
-                throw;
-            }
-        }
+        // Reduce Arrow array using compute function
+        arrow::Result<arrow::Datum> cmp_res =
+            arrow::compute::CallFunction(function_name, {in_arrow_array});
+        CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
+        std::shared_ptr<arrow::Scalar> out_scalar_batch =
+            cmp_res.ValueOrDie().scalar();
 
         ReductionType reduction_type = getReductionType(function_name);
 
