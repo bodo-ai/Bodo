@@ -997,7 +997,6 @@ class BodoDatetimeProperties:
             "bodo.pandas.series._tz_localize_helper",
             (
                 tz,
-                ambiguous,
                 nonexistent,
             ),
             {},
@@ -1051,8 +1050,8 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     return getattr(pd.Series(out_rank), func_name)()
 
 
-def _tz_localize_helper(s, tz, ambiguous, nonexistent):
-    """TODO: add docstring"""
+def _tz_localize_helper(s, tz, nonexistent):
+    """Apply tz_localize on individual elements with ambiguous set to 'raise', fill with None."""
 
     def _tz_localize(d):
         try:
