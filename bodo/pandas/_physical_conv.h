@@ -26,6 +26,7 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalLimit& op);
     void Visit(duckdb::LogicalTopN& op);
     void Visit(duckdb::LogicalSample& op);
+    void Visit(duckdb::LogicalSetOperation& op);
     void Visit(duckdb::LogicalCopyToFile& op);
 
     void Visit(duckdb::LogicalOperator& op) {
@@ -49,6 +50,8 @@ class PhysicalPlanBuilder {
             Visit(op.Cast<duckdb::LogicalTopN>());
         } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_SAMPLE) {
             Visit(op.Cast<duckdb::LogicalSample>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_UNION) {
+            Visit(op.Cast<duckdb::LogicalSetOperation>());
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE) {
             Visit(op.Cast<duckdb::LogicalCopyToFile>());

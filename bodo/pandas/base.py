@@ -1,9 +1,15 @@
 import importlib
 import typing as pt
+from collections.abc import Iterable, Mapping
 
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
+from pandas._typing import (
+    Axis,
+    Hashable,
+    HashableT,
+)
 from pandas.core.tools.datetimes import _unit_map
 
 from bodo.pandas.frame import BodoDataFrame
@@ -20,6 +26,7 @@ from bodo.pandas.utils import (
     make_col_ref_exprs,
     wrap_plan,
 )
+from bodo.utils.typing import BodoError
 
 
 def from_pandas(df):
@@ -303,6 +310,126 @@ def to_datetime(
         in_kwargs,
         is_method=False,
     )
+
+
+@check_args_fallback("none")
+def concat(
+    objs: Iterable[BodoSeries | BodoDataFrame]
+    | Mapping[HashableT, BodoSeries | BodoDataFrame],
+    *,
+    axis: Axis = 0,
+    join: str = "outer",
+    ignore_index: bool = False,
+    keys: Iterable[Hashable] | None = None,
+    levels=None,
+    names: list[HashableT] | None = None,
+    verify_integrity: bool = False,
+    sort: bool = False,
+    copy: bool | None = None,
+) -> BodoDataFrame | BodoSeries:
+    if isinstance(objs, Mapping):
+        raise BodoLibNotImplementedException(
+            "concat does not current support objs of Mapping type"
+        )
+
+    if len(objs) == 0:
+        raise ValueError("No objects to concatenate")
+    elif len(objs) == 1:
+        return objs[0]
+
+    def concat_two(a, b):
+        """Process two dataframes or series to concat just two together."""
+        a_cols = a.columns.tolist() if isinstance(a, BodoDataFrame) else [a.name]
+        b_cols = b.columns.tolist() if isinstance(b, BodoDataFrame) else [b.name]
+        a_cols_set = set(a_cols)
+        b_cols_set = set(b_cols)
+        # Get columns only appearing in a.
+        only_in_a = list(a_cols_set - b_cols_set)
+        # Get columns only appearing in b.
+        only_in_b = list(b_cols_set - a_cols_set)
+
+        zero_size_a = _empty_like(a)
+        zero_size_b = _empty_like(b)
+
+        def get_cols(x):
+            if isinstance(x, pd.DataFrame):
+                return x.columns.tolist()
+            elif isinstance(x, pd.Series):
+                return [x.name]
+            else:
+                raise BodoError("concat_two asked for columns of non DataFrame/Series")
+
+        # Simulate operation in Pandas with empty entities.
+        empty_data = pd.concat(
+            [zero_size_a, zero_size_b],
+            axis=axis,
+            join=join,
+            ignore_index=ignore_index,
+            keys=keys,
+            levels=levels,
+            names=names,
+            sort=sort,
+            copy=copy,
+        )
+
+        def get_mapping(new_schema, old_schema, plan):
+            """Create col ref expressions to do the reordering between
+            the old schema column order and the new one.
+            """
+            return make_col_ref_exprs([old_schema.index(x) for x in new_schema], plan)
+
+        # We are going to add columns internally to a and b so that they each
+        # have the same set of columns but we can't do it to a or b directly as
+        # that would change their schemas so create a copy that we can change.
+        a_new_cols = BodoDataFrame(a)
+        b_new_cols = BodoDataFrame(b)
+        # Add columns only in b to a with NA values.
+        a_new_cols[only_in_b] = pd.NA
+        # Add columns only in a to b with NA values.
+        b_new_cols[only_in_a] = pd.NA
+
+        # Above pd.NA creates wrong column types so fix them here.
+        for new_col in only_in_b:
+            a_new_cols[new_col] = a_new_cols[new_col].astype(empty_data[new_col].dtype)
+        for new_col in only_in_a:
+            b_new_cols[new_col] = b_new_cols[new_col].astype(empty_data[new_col].dtype)
+
+        # Create a reordering of the temp a_new_cols so that the columns are in
+        # the same order as the Pandas simulation on empty data.
+        a_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            a_new_cols._plan,
+            get_mapping(
+                get_cols(empty_data), a_new_cols.columns.tolist(), a_new_cols._plan
+            ),
+        )
+        # Create a reordering of the temp b_new_cols so that the columns are in
+        # the same order as the Pandas simulation on empty data.
+        b_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            b_new_cols._plan,
+            get_mapping(
+                get_cols(empty_data), b_new_cols.columns.tolist(), b_new_cols._plan
+            ),
+        )
+
+        # DuckDB Union operator requires schema to already be matching.
+        planUnion = LazyPlan(
+            "LogicalSetOperation", empty_data, a_plan, b_plan, "union all"
+        )
+
+        return wrap_plan(planUnion)
+
+    # High-level approach is to process two dataframes or series at a time.  If
+    # the programmer gave more than 2 then combine the 3rd with the result of
+    # first two, the 4th with the result of that and so on.
+    cur_res = concat_two(objs[0], objs[1])
+    for i in range(2, len(objs)):
+        cur_res = concat_two(cur_res, objs[i])
+
+    return cur_res
 
 
 def _validate_df_to_datetime(df):
