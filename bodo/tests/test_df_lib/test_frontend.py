@@ -140,9 +140,6 @@ def test_merge_validation_checks():
     with pytest.raises(KeyError):
         bdf1.merge(bdf2, how="inner", left_on=["A", "C"], right_on=["C", "D"])
 
-    # TODO[BSE-4810]: support "on" argument, which requires removing extra copy of
-    # key columns with the same names from output
-
     # Check should pass since merging with self
     bdf1.merge(bdf1, how="inner")
 
@@ -156,3 +153,31 @@ def test_merge_validation_checks():
 
     # Check should pass since merging with self
     bdf1.merge(bdf1, how="inner", on=["A", "B", "E"])
+
+
+def test_fallback_warning_on_unknown_attribute():
+    """Test that accessing unsupported attributes raises a fallback warning."""
+    import warnings
+
+    import pandas as pds
+
+    df = pds.DataFrame({"A": [1, 2, 3]})
+    bdf = pd.from_pandas(df)
+
+    # Trigger __getattribute__ fallback by accessing an unsupported attribute
+    with pytest.warns(
+        BodoLibFallbackWarning, match="not implemented.*Falling back to Pandas"
+    ):
+        _ = bdf.A.pop(0)
+
+    # Internal attributes should not raise a warning
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        _ = bdf.A._get_axis_number(0)
+    assert not record, f"Shouldn't raise warnings for internal attributes: {record[0]}"
+
+    # Known attributes should not raise a warning
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        _ = bdf.A.dtype
+    assert not record, f"Shouldn't raise warnings for this attribute: {record[0]}"

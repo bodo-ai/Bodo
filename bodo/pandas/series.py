@@ -126,6 +126,31 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "Plan not available for this manager, recreate this series with from_pandas"
         )
 
+    def __getattribute__(self, name: str):
+        """Custom attribute access that triggers a fallback warning for unsupported attributes."""
+
+        ignore_fallback_attrs = [
+            "dtype",
+            "name",
+            "to_string",
+        ]
+        cls = object.__getattribute__(self, "__class__")
+        base = cls.__mro__[0]
+
+        if (
+            name not in base.__dict__
+            and name not in ignore_fallback_attrs
+            and not name.startswith("_")
+        ):
+            msg = (
+                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            warnings.warn(BodoLibFallbackWarning(msg))
+            return object.__getattribute__(self, name)
+
+        return object.__getattribute__(self, name)
+
     @check_args_fallback("all")
     def _cmp_method(self, other, op):
         """Called when a BodoSeries is compared with a different entity (other)
@@ -653,7 +678,8 @@ class BodoStringMethods:
                 "implemented in Bodo dataframe library for the specified arguments yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
+            if not name.startswith("_"):
+                warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
@@ -861,7 +887,8 @@ class BodoDatetimeProperties:
                 "implemented in Bodo dataframe library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
+            if not name.startswith("_"):
+                warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
 
