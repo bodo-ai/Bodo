@@ -64,15 +64,15 @@ if (BUILD_WITH_V8)
 endif()
 
 # Download and Build 'fmt' from Git Directly
-# set(FMT_TEST OFF CACHE INTERNAL "disabling fmt tests")
-# FetchContent_Declare(
-#   fmt
-#   GIT_REPOSITORY  https://github.com/fmtlib/fmt.git
-#   GIT_TAG         10.2.1
-#   EXCLUDE_FROM_ALL
-# )
-# FetchContent_MakeAvailable(fmt)
-# set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set(FMT_TEST OFF CACHE INTERNAL "disabling fmt tests")
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY  https://github.com/fmtlib/fmt.git
+  GIT_TAG         10.2.1
+  EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(fmt)
+set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 #Prevent symbol collisions
 add_compile_definitions(duckdb=bododuckdb)
@@ -84,57 +84,57 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(duckdb)
 
-# # If we're building dependencies (not getting them from conda), we need to build AWS SDK
-# if("$ENV{CONDA_PREFIX}" STREQUAL "")
-#   set(BUILD_ONLY "core" CACHE INTERNAL "only build core")
-#   set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
-#   FetchContent_Declare(
-#     AWSSDK
-#     GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
-#     GIT_TAG          1.11.472
-#     OVERRIDE_FIND_PACKAGE
-#   )
-#   FetchContent_MakeAvailable(AWSSDK)
-#   find_package(AWSSDK REQUIRED COMPONENTS core)
-#   install(TARGETS aws-cpp-sdk-core DESTINATION "${SKBUILD_PLATLIB_DIR}")
-#   unset(BUILD_ONLY)
-#   unset(ENABLE_TESTING)
-# elseif(WIN32)
-#   # On Windows we need to link with the import library (.lib) in order to resolve references into dynamically loaded libraries.
-#   # find_package locates the import library so we can make it availible to our extension.
-#   # https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-creation
-#   find_package(AWSSDK REQUIRED COMPONENTS core)
-# endif()
+# If we're building dependencies (not getting them from conda), we need to build AWS SDK
+if("$ENV{CONDA_PREFIX}" STREQUAL "")
+  set(BUILD_ONLY "core" CACHE INTERNAL "only build core")
+  set(ENABLE_TESTING OFF CACHE INTERNAL "disabling fmt tests")
+  FetchContent_Declare(
+    AWSSDK
+    GIT_REPOSITORY   https://github.com/aws/aws-sdk-cpp
+    GIT_TAG          1.11.472
+    OVERRIDE_FIND_PACKAGE
+  )
+  FetchContent_MakeAvailable(AWSSDK)
+  find_package(AWSSDK REQUIRED COMPONENTS core)
+  install(TARGETS aws-cpp-sdk-core DESTINATION "${SKBUILD_PLATLIB_DIR}")
+  unset(BUILD_ONLY)
+  unset(ENABLE_TESTING)
+elseif(WIN32)
+  # On Windows we need to link with the import library (.lib) in order to resolve references into dynamically loaded libraries.
+  # find_package locates the import library so we can make it availible to our extension.
+  # https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-creation
+  find_package(AWSSDK REQUIRED COMPONENTS core)
+endif()
 
-# # Find additional import libraries needed to compile on Windows
-# if(WIN32)
-#   find_package(OpenSSL REQUIRED)
-# endif()
+# Find additional import libraries needed to compile on Windows
+if(WIN32)
+  find_package(OpenSSL REQUIRED)
+endif()
 
 # ----------------------------- Download Apache Datasketches -------------------------
-# include(ExternalProject)
-# ExternalProject_Add(datasketches
-#   GIT_REPOSITORY https://github.com/apache/datasketches-cpp.git
-#   GIT_TAG 5.0.2
-#   GIT_SHALLOW true
-#   GIT_SUBMODULES ""
-#   INSTALL_DIR /tmp/datasketches-prefix
-#   CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/tmp/datasketches-prefix
-#   # Override the install command to add DESTDIR
-#   # This is necessary to work around an oddity in the RPM (but not other) package
-#   # generation, as CMake otherwise picks up the Datasketch files when building
-#   # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
-#   # those files referenced in an "install" rule in the cmake file)
-#   INSTALL_COMMAND "${CMAKE_COMMAND}" -E env DESTDIR= ${CMAKE_COMMAND} --build . --target install
-#   LOG_CONFIGURE ON
-#   LOG_BUILD ON
-#   LOG_INSTALL ON
-#   LOG_OUTPUT_ON_FAILURE ON
-# )
+include(ExternalProject)
+ExternalProject_Add(datasketches
+  GIT_REPOSITORY https://github.com/apache/datasketches-cpp.git
+  GIT_TAG 5.0.2
+  GIT_SHALLOW true
+  GIT_SUBMODULES ""
+  INSTALL_DIR /tmp/datasketches-prefix
+  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/tmp/datasketches-prefix
+  # Override the install command to add DESTDIR
+  # This is necessary to work around an oddity in the RPM (but not other) package
+  # generation, as CMake otherwise picks up the Datasketch files when building
+  # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
+  # those files referenced in an "install" rule in the cmake file)
+  INSTALL_COMMAND "${CMAKE_COMMAND}" -E env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+  LOG_CONFIGURE ON
+  LOG_BUILD ON
+  LOG_INSTALL ON
+  LOG_OUTPUT_ON_FAILURE ON
+)
 
-# ExternalProject_Get_property(datasketches INSTALL_DIR)
-# set(datasketches_INSTALL_DIR ${INSTALL_DIR})
-# message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
+ExternalProject_Get_property(datasketches INSTALL_DIR)
+set(datasketches_INSTALL_DIR ${INSTALL_DIR})
+message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
 
 # ---------------------------- Set CMake Options -----------------------------
 
@@ -319,8 +319,8 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 endif()
 
-# set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
-# set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
+set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
+set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
 
 # MPI implementation (Intel or MPICH)
 if (WIN32)
@@ -366,34 +366,6 @@ cmake_print_variables(PYARROW_LIB_DIR)
 # Numpy Include Directory is provided by scikit-build-core
 # through `Python_NumPy_INCLUDE_DIR`
 cmake_print_variables(Python_NumPy_INCLUDE_DIR)
-
-
-# Get the parent directory of PYARROW_INCLUDE_DIR
-get_filename_component(PYARROW_PARENT_DIR "${PYARROW_INCLUDE_DIR}" DIRECTORY)
-
-
-# Run find command to search for mpi.h in a broader directory structure
-set(EXTENDED_SEARCH_PATH "${PYARROW_PARENT_DIR}/../../../../../..")
-if(EXISTS "${EXTENDED_SEARCH_PATH}")
-  execute_process(
-    COMMAND find "${EXTENDED_SEARCH_PATH}" -name "mpi.h" -type f
-    OUTPUT_VARIABLE FIND_MPI_RESULTS
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-  )
-  
-  if(FIND_MPI_RESULTS)
-    # Get the first result and extract its directory
-    string(REPLACE "\n" ";" FIND_MPI_LIST "${FIND_MPI_RESULTS}")
-    list(GET FIND_MPI_LIST 0 FIRST_MPI_PATH)
-    get_filename_component(FOUND_MPI_INCLUDE_DIR "${FIRST_MPI_PATH}" DIRECTORY)
-    message(STATUS "Found mpi.h via find command at: ${FIRST_MPI_PATH}")
-    message(STATUS "Using MPI include directory: ${FOUND_MPI_INCLUDE_DIR}")
-    set(MPI_INCLUDE_DIR "${FOUND_MPI_INCLUDE_DIR}")
-  else()
-    message(STATUS "find command did not locate mpi.h in ${EXTENDED_SEARCH_PATH}")
-  endif()
-endif()
 
 # Combine All 2 Includes
 set(BASE_INCLUDE_DIRS ${PYARROW_INCLUDE_DIR} ${Python_NumPy_INCLUDE_DIR} ${MPI_INCLUDE_DIR})
