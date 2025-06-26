@@ -70,7 +70,7 @@ jobs:
             # Global Tools
             pixi global install sccache ninja
             # Install dependencies available on package manager
-            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel
+            dnf install -y libcurl-devel zlib-devel openssl-devel libzstd-devel libpsm2
             # Install boost
             if find /usr /lib /usr/local -name "libboost*" | grep -q .; then
               echo "Skipping boost, already installed"
@@ -154,7 +154,7 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             sccache --show-stats && 
             auditwheel -v repair
-            --exclude libmpi.so.12 --exclude libmpi.so.40 --exclude libpsm2.so.2
+            --exclude libmpi.so.12 --exclude libmpi.so.40
             --exclude libarrow.so.1900 --exclude libarrow_acero.so.1900 --exclude libarrow_dataset.so.1900
             --exclude libarrow_python.so.1900 --exclude libparquet.so.1900
             --exclude libaws-cpp-sdk-core.so --exclude libaws-crt-cpp.so --exclude libaws-c-mqtt.so.1.0.0
