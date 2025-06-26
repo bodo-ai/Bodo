@@ -33,7 +33,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         // Drop Index columns since not necessary in output
         : out_schema(in_table_schema->Project(1)),
           function_name(function_name),
-          scalar_cmp_name(getScalarCmpName(function_name)) {
+          scalar_cmp_name(getScalarOpName(function_name)) {
         // TODO: support reductions that out different output types from input
         // types (e.g. upcast in sum)
     }
@@ -52,13 +52,36 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
             false, /*downcast_time_ns_to_us*/
             bodo::default_buffer_memory_manager());
 
-        // Reduce Arrow array using compute function
-        arrow::Result<arrow::Datum> cmp_res =
-            arrow::compute::CallFunction(function_name, {in_arrow_array});
-        CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
+        arrow::Result<arrow::Datum> cmp_res;
+        std::shared_ptr<arrow::Scalar> out_scalar_batch;
 
-        std::shared_ptr<arrow::Scalar> out_scalar_batch =
-            cmp_res.ValueOrDie().scalar();
+        try {
+            // Reduce Arrow array using compute function
+            cmp_res =
+                arrow::compute::CallFunction(function_name, {in_arrow_array});
+            CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
+            out_scalar_batch = cmp_res.ValueOrDie().scalar();
+        }
+        // If Arrow compute processes input incorrectly, route it to correct
+        // output, otherwise rethrow error
+        catch (const std::runtime_error& e) {
+            // Arrow cannot produce null array sum since it has
+            // dtype=large_string, set to default output 0
+            if (function_name == "sum") {
+                std::shared_ptr<arrow::Scalar> zero_scalar;
+                zero_scalar = std::make_shared<arrow::Int64Scalar>(0);
+                out_scalar_batch = zero_scalar;
+            }
+            // Arrow cannot produce null array product since it has
+            // dtype=large_string, set to default output 1
+            else if (function_name == "product") {
+                std::shared_ptr<arrow::Scalar> zero_scalar;
+                zero_scalar = std::make_shared<arrow::Int64Scalar>(1);
+                out_scalar_batch = zero_scalar;
+            } else {
+                throw;
+            }
+        }
 
         ReductionType reduction_type = getReductionType(function_name);
 
@@ -122,7 +145,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
      * @return std::string scalar comparison operator name like "greater" or
      * "less"
      */
-    static std::string getScalarCmpName(std::string func_name) {
+    static std::string getScalarOpName(std::string func_name) {
         if (func_name == "max") {
             return "greater";
         } else if (func_name == "min") {
@@ -132,7 +155,6 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         } else if (func_name == "product") {
             return "multiply";
         } else if (func_name == "count") {
-            // TODO: implement count()
             return "add";
         } else {
             throw std::runtime_error("Unsupported reduction function: " +
@@ -150,7 +172,6 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         } else if (func_name == "product") {
             return ReductionType::AGGREGATION;
         } else if (func_name == "count") {
-            // TODO: implement count()
             return ReductionType::AGGREGATION;
         } else {
             throw std::runtime_error("Unsupported reduction function: " +

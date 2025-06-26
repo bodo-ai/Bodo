@@ -136,7 +136,6 @@ struct BodoAggFunctionData : public duckdb::FunctionData {
                         std::shared_ptr<arrow::Schema> out_schema)
         : out_schema(std::move(out_schema)), dropna(dropna), name(name) {}
 
-    // TODO: update Equals and Copy to have out_schema
     bool Equals(const FunctionData &other_p) const override {
         const BodoAggFunctionData &other = other_p.Cast<BodoAggFunctionData>();
         return (other.dropna == this->dropna && other.name == this->name &&

@@ -911,7 +911,11 @@ def validate_reduce(func_name, pa_type):
         "sum",
         "product",
     ):
-        if pa.types.is_integer(pa_type):
+        if pa.types.is_null(pa_type):
+            return pd.ArrowDtype(pa.int64())
+        elif pa.types.is_unsigned_integer(pa_type):
+            return pd.ArrowDtype(pa.uint64())
+        elif pa.types.is_integer(pa_type):
             return pd.ArrowDtype(pa.int64())
         elif pa.types.is_floating(pa_type):
             return pd.ArrowDtype(pa.float64())
@@ -929,8 +933,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
 
     from bodo.pandas.base import _empty_like
 
-    # TODO: support other functions like sum, mean, etc.
-    # TODO: support count
+    # TODO: support other functions like mean, etc.
     assert func_name in ("min", "max", "sum", "product", "count"), (
         f"Unsupported function {func_name} for series reduction."
     )

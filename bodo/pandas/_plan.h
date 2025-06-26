@@ -178,7 +178,7 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
  * source node
  *
  * @param source input source node to aggregate
- * @param out_schema_py output data type
+ * @param out_schema_py output data type, used only for reduction operators
  * @param function_name function name for matching in backend
  * @param input_column_indices argument column indices for the input source
  * @param dropna argument column indices for the input source

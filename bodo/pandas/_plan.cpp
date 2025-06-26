@@ -133,8 +133,8 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
     bool dropna) {
     auto out_schema_res = arrow::py::unwrap_schema(out_schema_py);
     std::shared_ptr<arrow::Schema> out_schema;
-    CHECK_ARROW_AND_ASSIGN(out_schema_res,
-                           "make_order: unable to unwrap schema", out_schema);
+    CHECK_ARROW_AND_ASSIGN(
+        out_schema_res, "make_agg_expr: unable to unwrap schema", out_schema);
 
     // Get DuckDB output type
     auto field = out_schema->field(0);

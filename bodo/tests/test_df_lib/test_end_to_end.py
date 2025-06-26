@@ -1687,6 +1687,8 @@ def test_series_sum_product_count():
             "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
             "C2": np.append(np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2),
             "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": [None] * n,
+            "F": np.append(np.arange(n - 1), [None]),
         }
     )
 
