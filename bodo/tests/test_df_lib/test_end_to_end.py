@@ -5,6 +5,7 @@ import tempfile
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -970,7 +971,7 @@ def test_merge():
     )
 
 
-def test_merge_swith_side():
+def test_merge_switch_side():
     """Test merge with left table smaller than right table so DuckDB reorders the input
     tables to use the smaller table as build.
     """
@@ -1157,23 +1158,174 @@ def test_groupby_fallback():
 
     # Series groupby
     with pytest.warns(BodoLibFallbackWarning):
-        fallback_out = bdf.groupby("A", dropna=False, as_index=False)["B"].sum(
-            engine="cython"
-        )
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True)[
+            "B"
+        ].sum(engine="cython")
 
-    pandas_out = df.groupby("A", dropna=False, as_index=False)["B"].sum(engine="cython")
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
 
     bdf2 = bd.from_pandas(df)
 
     # DataFrame groupby
     with pytest.warns(BodoLibFallbackWarning):
-        fallback_out = bdf2.groupby("A", dropna=False, as_index=False).sum(
+        fallback_out = bdf2.groupby("A", dropna=False, as_index=False, sort=True).sum(
             engine="cython"
         )
 
-    pandas_out = df.groupby("A", dropna=False, as_index=False).sum(engine="cython")
+    pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
+        engine="cython"
+    )
     _test_equal(pandas_out, fallback_out)
+
+
+@pytest.fixture(scope="module")
+def groupby_agg_df(request):
+    return pd.DataFrame(
+        {
+            "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
+            "D": pd.array(
+                [i * 2 if (i**2) % 3 == 0 else pd.NA for i in range(12)], "Int32"
+            ),
+            "B": pd.array(["A", "B", pd.NA] * 4),
+            "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
+            "T": pd.timedelta_range("1 day", periods=12, freq="D"),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "func, kwargs",
+    [
+        pytest.param({"A": "mean", "D": "count"}, {}, id="func_dict"),
+        pytest.param(["sum", "count"], {}, id="func_list"),
+        pytest.param("sum", {}, id="func_str"),
+        pytest.param(
+            None,
+            {
+                "mean_A": pd.NamedAgg("A", "mean"),
+                "count_D": pd.NamedAgg("D", "count"),
+                "count_A": pd.NamedAgg("A", "count"),
+                "sum_D": pd.NamedAgg("D", "sum"),
+            },
+            id="func_kwargs",
+        ),
+    ],
+)
+def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
+    df1 = groupby_agg_df
+
+    bdf1 = bd.from_pandas(df1)
+
+    bdf2 = bdf1.groupby("B", as_index=as_index, dropna=dropna).agg(func, **kwargs)
+
+    assert bdf2.is_lazy_plan()
+
+    df2 = df1.groupby("B", as_index=as_index, dropna=dropna).agg(func, **kwargs)
+
+    _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "func, kwargs",
+    [
+        pytest.param({"mean_A": "mean", "count_A": "count"}, {}, id="func_dict"),
+        pytest.param(["sum", "count"], {}, id="func_list"),
+        pytest.param("sum", {}, id="func_str"),
+        pytest.param(
+            None,
+            {"mean_A": "mean", "count_A": "count", "sum_A": "sum"},
+            id="func_kwargs",
+        ),
+    ],
+)
+def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
+    df1 = groupby_agg_df
+
+    bdf1 = bd.from_pandas(df1)
+
+    # Dict values plus as_index raises SpecificationError in Bodo/Pandas
+    if (isinstance(func, dict) or kwargs) and as_index:
+        return
+
+    bdf2 = bdf1.groupby("B", as_index=as_index, dropna=dropna)["A"].agg(func, **kwargs)
+    assert bdf2.is_lazy_plan()
+
+    df2 = df1.groupby("B", as_index=as_index, dropna=dropna)["A"].agg(func, **kwargs)
+
+    _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        "sum",
+        "mean",
+        "count",
+        "max",
+        "min",
+        "median",
+        "nunique",
+        "size",
+        "var",
+        "std",
+        "skew",
+    ],
+)
+def test_groupby_agg_numeric(groupby_agg_df, func):
+    """Tests supported aggfuncs on simple numeric (floats and ints)."""
+
+    bdf1 = bd.from_pandas(groupby_agg_df)
+
+    cols = ["D", "A", "C"]
+
+    bdf2 = getattr(bdf1.groupby("B")[cols], func)()
+    df2 = getattr(groupby_agg_df.groupby("B")[cols], func)()
+
+    assert bdf2.is_lazy_plan()
+
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        "count",
+        "max",
+        "min",
+        "nunique",
+        "size",
+    ],
+)
+def test_groupby_agg_ordered(func):
+    """Tests supported aggfuncs on other simple data types."""
+
+    # string, datetime, bool
+    df = pd.DataFrame(
+        {
+            "A": pd.array([True, pd.NA, False, True] * 3),
+            "B": pd.array([pd.NA, "pq", "rs", "abc", "efg", "hij"] * 2),
+            "D": pd.date_range(
+                "1988-01-01", periods=12, freq="D"
+            ).to_series(),  # timestamp[ns]
+            "F": pd.date_range("1988-01-01", periods=12, freq="D")
+            .to_series()
+            .dt.date,  # date32
+            "T": pd.timedelta_range("1 day", periods=12, freq="D"),  # duration
+            "K": ["A", "A", "B"] * 4,
+        }
+    )
+
+    bdf1 = bd.from_pandas(df)
+
+    bdf2 = getattr(bdf1.groupby("K"), func)()
+    df2 = getattr(df.groupby("K"), func)()
+
+    assert bdf2.is_lazy_plan()
+
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True)
 
 
 def test_compound_projection_expression(datapath):
@@ -1449,3 +1601,77 @@ def test_topn(datapath):
         sort_output=False,
         reset_index=True,
     )
+
+
+def test_DataFrame_constructor(index_val):
+    """Test creating a BodoDataFrame using regular constructor"""
+    df = pd.DataFrame(
+        {
+            "a": pd.array([1, 2, 3] * 10, "Int64"),
+            "b": pd.array([4, 5, 6] * 10, "Int64"),
+            "c": ["a", "b", "c"] * 10,
+        },
+        index=index_val[:30],
+    )
+    bdf = bd.DataFrame(
+        {
+            "a": pd.array([1, 2, 3] * 10, "Int64"),
+            "b": pd.array([4, 5, 6] * 10, "Int64"),
+            "c": ["a", "b", "c"] * 10,
+        },
+        index=index_val[:30],
+    )
+    assert bdf.is_lazy_plan()
+
+    _test_equal(df, bdf, check_pandas_types=False)
+
+
+def test_Series_constructor(index_val):
+    """Test creating a BodoSeries using regular constructor"""
+    pd_S = pd.Series(pd.array([1, 2, 3] * 10, "Int64"), index=index_val[:30])
+    bodo_S = bd.Series(pd.array([1, 2, 3] * 10, "Int64"), index=index_val[:30])
+    assert bodo_S.is_lazy_plan()
+
+    _test_equal(pd_S, bodo_S, check_pandas_types=False)
+
+
+def test_series_min_max():
+    """Basic test for Series min and max."""
+    # Large number to ensure multiple batches
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "C2": np.append(np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": pd.date_range("1988-01-01", periods=n, freq="D").to_series(),
+            "F": pd.date_range("1988-01-01", periods=n, freq="D").to_series().dt.date,
+            "G": ["a", "abc", "bc3", "d4e5f"] * (n // 4),
+            "H": pd.array(
+                [-1.1, 2.3, 3.4, 5.2] * (n // 4),
+                dtype=pd.ArrowDtype(pa.decimal128(10, 4)),
+            ),
+        },
+    )
+    bdf = bd.from_pandas(df)
+    for c in df.columns:
+        bodo_min = bdf[c].min()
+        bodo_max = bdf[c].max()
+        py_min = df[c].min()
+        py_max = df[c].max()
+
+        assert bodo_min == py_min
+        assert bodo_max == py_max
+
+
+def test_series_min_max_unsupported_types():
+    df = pd.DataFrame({"A": pd.timedelta_range("1 day", periods=10, freq="D")})
+    bdf = bd.from_pandas(df)
+
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf["A"].min()
+
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf["A"].max()

@@ -1457,12 +1457,12 @@ def overload_preprocessing_robust_scaler_inverse_transform(
 # ----------------------------------------------------------------------------------------
 
 
-def _pa_str_to_obj(a):
-    """Convert string[pyarrow] arrays to object arrays to workaround Scikit-learn issues
-    as of 1.4.0. See test_label_encoder.
+def _pa_arr_to_numpy(a):
+    """Convert Arrow arrays to Numpy arrays to workaround Scikit-learn issues
+    as of 1.7.0. See test_label_encoder.
     """
-    if isinstance(a, pd.arrays.ArrowStringArray):
-        return a.astype(object)
+    if isinstance(a, (pd.arrays.ArrowStringArray, pd.arrays.ArrowExtensionArray)):
+        return a.to_numpy()
     return a
 
 
@@ -1515,7 +1515,7 @@ def overload_preprocessing_label_encoder_fit(
                 y_classes, ascending=True, inplace=False
             )
             with bodo.objmode:
-                y_classes_obj = _pa_str_to_obj(y_classes)
+                y_classes_obj = _pa_arr_to_numpy(y_classes)
                 m.classes_ = y_classes_obj
 
             return m

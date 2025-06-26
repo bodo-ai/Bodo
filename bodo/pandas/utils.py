@@ -1,6 +1,8 @@
 import functools
 import importlib
 import inspect
+import sys
+import traceback
 import warnings
 
 import pandas as pd
@@ -465,6 +467,14 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
+            # Sometimes when an execution is triggered it isn't expected that
+            # an execution should happen at that point.  This traceback is
+            # useful to identify what is triggering the execution as it may be
+            # a bug or the usage of some Pandas API that calls a function that
+            # triggers execution.  This traceback can help fix the bug or
+            # select a different Pandas API or an internal Pandas function that
+            # bypasses the issue.
+            traceback.print_stack(file=sys.stdout)
             print("")  # Print on new line during tests.
             print("Unoptimized plan")
             print(duckdb_plan.toString())
@@ -903,7 +913,18 @@ def arrow_table_to_pandas(arrow_table, arrow_schema=None):
     # Set column names separately to handle duplicate names ("field.name:" in a
     # dictionary would replace duplicated values)
     df.columns = [f.name for f in arrow_schema]
-    return _reconstruct_pandas_index(df, arrow_schema)
+
+    df_with_index = _reconstruct_pandas_index(df, arrow_schema)
+
+    # Handle multi-level column names e.g. ["('A', 'sum')", "('A', 'mean')"]
+    if (
+        arrow_schema.pandas_metadata is not None
+        and len(arrow_schema.pandas_metadata.get("column_indexes", [])) > 1
+    ):
+        columns_zipped = zip(*[eval(col) for col in df_with_index.columns])
+        df_with_index.columns = pd.MultiIndex.from_arrays(columns_zipped)
+
+    return df_with_index
 
 
 def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:

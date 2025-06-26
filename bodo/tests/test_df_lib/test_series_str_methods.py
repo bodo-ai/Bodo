@@ -181,6 +181,32 @@ test_map_arg = {
     "encode": [
         (("ascii",), {}),
     ],
+    "split": [
+        ((), {}),
+        ((), {"n": 2}),
+        ((), {"pat": "/"}),
+        ((), {"expand": True}),
+        ((), {"pat": "/", "expand": True}),
+        ((), {"n": 1, "pat": "/", "expand": True}),
+    ],
+    "rsplit": [
+        ((), {}),
+        ((), {"n": 2}),
+        ((), {"pat": "/"}),
+        ((), {"expand": True}),
+        ((), {"pat": "/", "expand": True}),
+        ((), {"n": 1, "pat": "/", "expand": True}),
+    ],
+    "extract": [
+        ((r"[ab](\d)",), {"expand": False, "flags": 0}),
+        ((r"([ab])(\d)",), {"expand": False, "flags": 0}),
+        ((r"(?P<letter>[ab])(?P<digit>\d)",), {"expand": False, "flags": 0}),
+        ((r"([a-z]+)-(\d+)",), {"expand": True, "flags": 0}),
+        ((r"(?P<letters>[a-z]+)-(?P<numbers>\d+)",), {"expand": True, "flags": 0}),
+        ((r"([a-z]+)-(\d+)",), {"expand": True, "flags": re.IGNORECASE}),
+        ((r"([a-z]+).(\d+)",), {"expand": True, "flags": re.DOTALL}),
+        ((r"([a-z]+)-(\d+)",), {"expand": True, "flags": re.MULTILINE}),
+    ],
 }
 
 # List of methods that do not take in arguments
@@ -227,33 +253,61 @@ df_normalize = pd.DataFrame(
     }
 )
 
-df_join = pd.DataFrame(
-    {
-        "A": [["h"], ["None", "Play"], ["Bad", "News", "A"]],
-        "B": [["hoveroverrover"], None, None],
-        "C": [["A", "B", "C", "D", "E"], None, ["California", "Sports", "Cars"]],
-    }
-)
-
-df_join_flat = pd.DataFrame(
-    {
-        "A": ["hi", "my", "name", "0000"],
-        "B": ["None", None, None, None],
-        "C": ["A", "B", "C", "D"],
-        "D": ["hover", "over", "rover", None],
-    }
+df_join_tuple = (
+    pd.DataFrame(
+        {
+            "A": [["h"], ["None", "Play"], ["Bad", "News", "A"]],
+            "B": [["hoveroverrover"], None, None],
+            "C": [["A", "B", "C", "D", "E"], None, ["California", "Sports", "Cars"]],
+        }
+    ),
+    pd.DataFrame(
+        {
+            "A": ["hi", "my", "name", "0000"],
+            "B": ["None", None, None, None],
+            "C": ["A", "B", "C", "D"],
+            "D": ["hover", "over", "rover", None],
+        }
+    ),
 )
 
 df_decode = pd.DataFrame({"A": [b"hi", b"()", b"hello my name is chris.", None]})
 
-# Stores customized DataFrames for some methods. Could enable testing with closer customization to each method.
+df_split = pd.DataFrame(
+    {
+        "A": [
+            "this is a regular sentence",
+            "https://docs.python.org/3/tutorial/index.html",
+            None,
+        ]
+    },
+    index=["Apple", "Banana", "Cheese"],
+)
+
+# Extract-related DataFrames grouped together
+df_extract_tuple = (
+    pd.DataFrame({"A": ["a1", "b2", "c3"]}, index=["x", "y", "z"]),
+    pd.DataFrame({"A": ["abc-123", "def-456", "ghi-789"]}),
+    pd.DataFrame({"A": ["abc-123", "no-match", "ghi-789"]}),
+    pd.DataFrame({"A": ["nope", "still nope"]}),
+    pd.DataFrame({"A": ["abc-123", "def-456"]}),
+    pd.DataFrame({"A": ["foo123", None, "bar456", "789"]}, dtype="string"),
+    pd.DataFrame({"A": ["abc123", "def456"]}),
+    pd.DataFrame({"A": ["abc-123", "DEF-456", "Ghi-789"]}),
+    pd.DataFrame({"A": ["abc\n123", "def\n456"]}),
+    pd.DataFrame({"A": ["abc-123", "def-456"]}),
+)
+
+# Join-related DataFrames grouped together
+
+# Final exception mapping
 exception_dfmap = {
     "normalize": (df_normalize,),
-    "join": (
-        df_join,
-        df_join_flat,
-    ),
+    "join": df_join_tuple,
     "decode": (df_decode,),
+    "split": (df_split,),
+    "rsplit": (df_split,),
+    "extract": df_extract_tuple,
 }
 
 empty_arg = [((), {})]
