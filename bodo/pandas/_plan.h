@@ -178,7 +178,7 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
  * source node
  *
  * @param source input source node to aggregate
- * @param field_py output field type for the aggregate function
+ * @param out_schema_py output data type, used only for reduction operators
  * @param function_name function name for matching in backend
  * @param input_column_indices argument column indices for the input source
  * @param dropna argument column indices for the input source
@@ -186,7 +186,7 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
  * object
  */
 duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     std::string function_name, std::vector<int> input_column_indices,
     bool dropna);
 

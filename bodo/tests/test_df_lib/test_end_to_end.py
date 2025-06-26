@@ -1675,3 +1675,26 @@ def test_series_min_max_unsupported_types():
 
     with pytest.warns(BodoLibFallbackWarning):
         bdf["A"].max()
+
+
+def test_series_sum_product_count():
+    """Basic test for Series sum, product, and count."""
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "C2": np.append(np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": [None] * n,
+            "F": np.append(np.arange(n - 1), [None]),
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+
+    for c in df.columns:
+        assert np.isclose(bdf[c].sum(), df[c].sum(), rtol=1e-6)
+        assert np.isclose(bdf[c].product(), df[c].product(), rtol=1e-6)
+        assert bdf[c].count() == df[c].count()
