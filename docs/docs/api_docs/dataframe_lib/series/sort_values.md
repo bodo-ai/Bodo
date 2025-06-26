@@ -29,10 +29,9 @@ Sorts the elements of the BodoSeries and returns a new sorted BodoSeries.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
     {
         "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
         "B": ["A1", "B1", "C1", "Abc"] * 3,
@@ -40,7 +39,6 @@ df = pd.DataFrame(
     }
 )
 
-bdf = bodo_pd.from_pandas(df)
 sa = bdf["A"]
 print(sa)
 sa_sorted = sa.sort_values(ascending=False)

@@ -6,6 +6,33 @@ The DataFrame Library supports grouping BodoDataFrames on columns and aggregatin
 
 ## Function Application
 
-## `DataFrameGroupby` Computations / descriptive stats
+- [`DataFrameGroupBy.agg`][]
+- [`SeriesGroupBy.agg`][]
+
+## `DataFrameGroupBy` Computations / descriptive stats
+
+- [`DataFrameGroupBy.sum`][]
+- [`DataFrameGroupBy.count`][]
+- [`DataFrameGroupBy.min`][]
+- [`DataFrameGroupBy.max`][]
+- [`DataFrameGroupBy.median`][]
+- [`DataFrameGroupBy.mean`][]
+- [`DataFrameGroupBy.std`][]
+- [`DataFrameGroupBy.var`][]
+- [`DataFrameGroupBy.skew`][]
+- [`DataFrameGroupBy.nunique`][]
+- [`DataFrameGroupBy.size`][]
 
 ## `SeriesGroupby` Computations / descriptive stats
+
+- [`SeriesGroupBy.sum`][]
+- [`SeriesGroupBy.count`][]
+- [`SeriesGroupBy.min`][]
+- [`SeriesGroupBy.max`][]
+- [`SeriesGroupBy.median`][]
+- [`SeriesGroupBy.mean`][]
+- [`SeriesGroupBy.std`][]
+- [`SeriesGroupBy.var`][]
+- [`SeriesGroupBy.skew`][]
+- [`SeriesGroupBy.nunique`][]
+- [`SeriesGroupBy.size`][]

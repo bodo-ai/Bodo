@@ -22,10 +22,9 @@ Map values of a BodoSeries according to a mapping.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = pd.DataFrame(
     {
         "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
         "B": ["A1", "B1", "C1", "Abc"] * 3,
@@ -33,7 +32,6 @@ df = pd.DataFrame(
     }
 )
 
-bdf = bodo_pd.from_pandas(df)
 bodo_ser = bdf.A.map(lambda x: x ** 2)
 print(type(bodo_ser))
 print(bodo_ser)
