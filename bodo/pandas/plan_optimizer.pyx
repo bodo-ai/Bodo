@@ -315,6 +315,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
+    cdef unique_ptr[CExpression] make_const_null(object arrow_schema, int64_t field_idx) except +
     cdef unique_ptr[CExpression] make_const_int_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_double_expr(double val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
@@ -528,6 +529,17 @@ cdef class ColRefExpression(Expression):
 
     def __str__(self):
         return f"ColRefExpression({self.out_schema})"
+
+
+cdef class NullExpression(Expression):
+    """Wrapper around DuckDB's BoundConstantExpression to provide access in Python.
+    """
+
+    def __cinit__(self, object dummy_schema, int64_t field_idx):
+        self.c_expression = make_const_null(dummy_schema, field_idx)
+
+    def __str__(self):
+        return f"NullExpression()"
 
 
 cdef class ConstantExpression(Expression):

@@ -15,6 +15,8 @@
 #include "physical/union_all.h"
 #include "physical/write_parquet.h"
 
+extern std::map<duckdb::idx_t, std::shared_ptr<bodo::Schema>> g_idx_schema;
+
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
     // operators
@@ -172,6 +174,18 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     this->active_pipeline->AddOperator(physical_join);
 }
 
+bool arrowSchemaTypeEquals(const ::arrow::Schema& s1,
+                           const ::arrow::Schema& s2) {
+    if (s1.num_fields() != s2.num_fields()) return false;
+
+    for (int i = 0; i < s1.num_fields(); ++i) {
+        if (!s1.field(i)->type()->Equals(*s2.field(i)->type())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
     if (op.type == duckdb::LogicalOperatorType::LOGICAL_UNION) {
         // UNION ALL
@@ -198,7 +212,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
             std::shared_ptr<bodo::Schema> lhs_table_schema =
                 this->active_pipeline->getPrevOpOutputSchema();
             ::arrow::Schema lhs_arrow = *(lhs_table_schema->ToArrowSchema());
-            if (!rhs_arrow.Equals(lhs_arrow)) {
+            if (!arrowSchemaTypeEquals(rhs_arrow, lhs_arrow)) {
                 std::cout << "lhs " << lhs_arrow.ToString() << std::endl;
                 std::cout << "rhs " << rhs_arrow.ToString() << std::endl;
                 throw std::runtime_error(
