@@ -17,21 +17,23 @@
         throw std::runtime_error(err_msg);                                    \
     }
 
+enum class ReductionType {
+    COMPARISON,
+    AGGREGATION,
+};
+
 /**
  * @brief Physical node for reductions like max.
  *
  */
 class PhysicalReduce : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalReduce(std::shared_ptr<bodo::Schema> in_table_schema,
+    explicit PhysicalReduce(std::shared_ptr<bodo::Schema> out_schema,
                             std::string function_name)
         // Drop Index columns since not necessary in output
-        : out_schema(in_table_schema->Project(1)),
+        : out_schema(out_schema->Project(1)),
           function_name(function_name),
-          scalar_cmp_name(getScalarCmpName(function_name)) {
-        // TODO: support reductions that out different output types from input
-        // types (e.g. upcast in sum)
-    }
+          scalar_cmp_name(getScalarOpName(function_name)) {}
 
     virtual ~PhysicalReduce() = default;
 
@@ -51,9 +53,10 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         arrow::Result<arrow::Datum> cmp_res =
             arrow::compute::CallFunction(function_name, {in_arrow_array});
         CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
-
         std::shared_ptr<arrow::Scalar> out_scalar_batch =
             cmp_res.ValueOrDie().scalar();
+
+        ReductionType reduction_type = getReductionType(function_name);
 
         // Update reduction result
         if (iter == 0) {
@@ -66,8 +69,15 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
                         "Error in Arrow compute scalar comparison");
             const std::shared_ptr<arrow::Scalar> cmp_scalar =
                 cmp_res_scalar.ValueOrDie().scalar();
-            if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
-                output_scalar = out_scalar_batch;
+            if (reduction_type == ReductionType::COMPARISON) {
+                if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
+                    output_scalar = out_scalar_batch;
+                }
+            } else if (reduction_type == ReductionType::AGGREGATION) {
+                output_scalar = cmp_scalar;
+            } else {
+                throw std::runtime_error("Unsupported reduction function: " +
+                                         function_name);
             }
         }
 
@@ -108,11 +118,34 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
      * @return std::string scalar comparison operator name like "greater" or
      * "less"
      */
-    static std::string getScalarCmpName(std::string func_name) {
+    static std::string getScalarOpName(std::string func_name) {
         if (func_name == "max") {
             return "greater";
         } else if (func_name == "min") {
             return "less";
+        } else if (func_name == "sum") {
+            return "add";
+        } else if (func_name == "product") {
+            return "multiply";
+        } else if (func_name == "count") {
+            return "add";
+        } else {
+            throw std::runtime_error("Unsupported reduction function: " +
+                                     func_name);
+        }
+    }
+
+    static ReductionType getReductionType(std::string func_name) {
+        if (func_name == "max") {
+            return ReductionType::COMPARISON;
+        } else if (func_name == "min") {
+            return ReductionType::COMPARISON;
+        } else if (func_name == "sum") {
+            return ReductionType::AGGREGATION;
+        } else if (func_name == "product") {
+            return ReductionType::AGGREGATION;
+        } else if (func_name == "count") {
+            return ReductionType::AGGREGATION;
         } else {
             throw std::runtime_error("Unsupported reduction function: " +
                                      func_name);
