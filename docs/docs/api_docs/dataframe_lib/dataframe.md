@@ -96,7 +96,7 @@ BodoDataFrame.groupby(
 ) -> DataFrameGroupBy
 ```
 
-Gets a DataFrameGroupBy object representing the data in the input DataFrame grouped by a column or list of columns. The object can then be used to apply functions over groups.
+Creates a DataFrameGroupBy object representing the data in the input DataFrame grouped by a column or list of columns. The object can then be used to apply functions over groups.
 
 <p class="api-header">Parameters</p>
 
@@ -508,9 +508,7 @@ Output:
 Write a DataFrame to an Iceberg table in S3 Tables using the location parameter:
 
 ``` py
-import bodo.pandas as bd
-
-df = bd.to_iceberg(
+df.to_iceberg(
     table_identifier="my_table",
     location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
 )

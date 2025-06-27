@@ -152,6 +152,7 @@ def read_iceberg(
     import pyiceberg.expressions
     import pyiceberg.table
 
+    from bodo.io.iceberg.read_metadata import get_table_length
     from bodo.pandas.utils import BodoLibNotImplementedException
 
     # Support simple directory only calls like:
@@ -184,6 +185,19 @@ def read_iceberg(
     arrow_schema = pyiceberg_schema.as_arrow()
     empty_df = arrow_to_empty_df(arrow_schema)
 
+    # Get the table length estimate, if there's not a filter it will be exact
+    table_len_estimate = get_table_length(table, snapshot_id or -1)
+
+    # If there's a row filter, we need to estimate the selectivity
+    # and adjust the table length estimate accordingly.
+    if row_filter is not None and table_len_estimate > 0:
+        # TODO: do something smarter here like sampling or turn the filter into a
+        # separate node so the planner can handle it
+        #
+        # This matches duckdb's default selectivity estimate for filters
+        filter_selectivity_estimate = 0.2
+        table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
+
     plan = LazyPlan(
         "LogicalGetIcebergRead",
         empty_df,
@@ -197,6 +211,7 @@ def read_iceberg(
         # during filter conversion. See bodo/io/iceberg/common.py::pyiceberg_filter_to_pyarrow_format_str_and_scalars
         pyiceberg_schema,
         snapshot_id if snapshot_id is not None else -1,
+        table_len_estimate,
         __pa_schema=arrow_schema,
     )
 

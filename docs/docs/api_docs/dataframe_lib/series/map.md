@@ -24,7 +24,7 @@ Map values of a BodoSeries according to a mapping.
 ``` py
 import bodo.pandas as bd
 
-bdf = pd.DataFrame(
+bdf = bd.DataFrame(
     {
         "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
         "B": ["A1", "B1", "C1", "Abc"] * 3,

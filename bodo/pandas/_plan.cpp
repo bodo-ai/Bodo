@@ -128,14 +128,16 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *field_py,
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     std::string function_name, std::vector<int> input_column_indices,
     bool dropna) {
+    auto out_schema_res = arrow::py::unwrap_schema(out_schema_py);
+    std::shared_ptr<arrow::Schema> out_schema;
+    CHECK_ARROW_AND_ASSIGN(
+        out_schema_res, "make_agg_expr: unable to unwrap schema", out_schema);
+
     // Get DuckDB output type
-    auto field_res = arrow::py::unwrap_field(field_py);
-    std::shared_ptr<arrow::Field> field;
-    CHECK_ARROW_AND_ASSIGN(field_res, "make_agg_expr: unable to unwrap field",
-                           field);
+    auto field = out_schema->field(0);
     auto [_, out_type] = arrow_field_to_duckdb(field);
 
     // Get arguments and their types for the aggregate function.
@@ -166,8 +168,8 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
     // whether two AggregateFunctions are equal, adding function_name to
     // BodoAggFunctionData ensures two different functions applied to the same
     // column are not optimized out.
-    auto bind_info =
-        duckdb::make_uniq<BodoAggFunctionData>(dropna, function_name);
+    auto bind_info = duckdb::make_uniq<BodoAggFunctionData>(
+        dropna, function_name, out_schema);
 
     return duckdb::make_uniq<duckdb::BoundAggregateExpression>(
         function, std::move(children), nullptr, std::move(bind_info),
@@ -785,7 +787,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_name,
     PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, int64_t snapshot_id) {
+    PyObject *iceberg_schema, int64_t snapshot_id,
+    uint64_t table_len_estimate) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Convert Arrow schema to DuckDB
@@ -805,6 +808,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
         duckdb::make_uniq<duckdb::LogicalGet>(
             binder->GenerateTableIndex(), table_function, std::move(bind_data1),
             return_types, return_names, virtual_columns);
+
+    out_get->SetEstimatedCardinality(table_len_estimate);
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:

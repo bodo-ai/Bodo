@@ -2,12 +2,20 @@
 The Bodo DataFrame Library supports Pandas Series methods and accessors that are listed below. They can be accessed through `BodoSeries` and follow the same behavior as their Pandas equivalents. For details on usage, we link to the corresponding Pandas documentation.
 
 !!! note
-	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info.
+	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame Library gracefully falls 
+	back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info.
 
 ## Computations / descriptive stats
 - [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
 - [`bodo.pandas.BodoSeries.clip`][bodoseriesclip]
 - [`bodo.pandas.BodoSeries.round`][bodoseriesround]
+!!! note
+	For the following reduction methods, only default parameters are currently supported.
+- [`bodo.pandas.BodoSeries.count`][bodoseriescount]
+- [`bodo.pandas.BodoSeries.max`][bodoseriesmax]
+- [`bodo.pandas.BodoSeries.min`][bodoseriesmin]
+- [`bodo.pandas.BodoSeries.product`][bodoseriesproduct]
+- [`bodo.pandas.BodoSeries.sum`][bodoseriessum]
 
 ---
 
@@ -16,7 +24,6 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 !!! note
 	Input must be a Series of `datetime-like` data.
 
----
 
 ### Datetime properties
 !!! note
@@ -50,8 +57,10 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ---
 
 ### Datetime methods
-!!! warning
-	Locale format must be strict: The locale parameter in `month_name` and `day_name` must follow the exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8"). Variants like "pt_BR.utf8" may not be recognized and trigger an error.
+!!! note
+	Locale format must be strict: The locale parameter in `month_name` and `day_name` must follow the 
+	exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8"). Variants like 
+	"pt_BR.utf8" may not be recognized and trigger an error.
 
 - [`bodo.pandas.BodoSeries.dt.normalize`][bodoseriesdtnormalize]
 - [`bodo.pandas.BodoSeries.dt.floor`][bodoseriesdtfloor]
@@ -59,7 +68,6 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.month_name`][bodoseriesdtmonth_name]
 - [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name]
 - [`bodo.pandas.BodoSeries.dt.total_seconds`][bodoseriesdttotal_seconds]
-
 
 ---
 
@@ -92,6 +100,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 - [`bodo.pandas.BodoSeries.str.capitalize`][bodoseriesstrcapitalize]
 - [`bodo.pandas.BodoSeries.str.casefold`][bodoseriesstrcasefold]
+!!! note
+	`cat` falls back to Pandas when the others parameter is not specified (i.e., `others=None`).
 - [`bodo.pandas.BodoSeries.str.cat`][bodoseriesstrcat]
 - [`bodo.pandas.BodoSeries.str.center`][bodoseriesstrcenter]
 - [`bodo.pandas.BodoSeries.str.contains`][bodoseriesstrcontains]
@@ -244,17 +254,22 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesstrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.partition.html
 [bodoseriesstrrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rpartition.html
 [bodoseriesdtquarter]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.quarter.html
+
 [bodoseriesstrnormalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.normalize.html
-
-
 [bodoseriesstrjoin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.join.html
 [bodoseriesstrencode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.encode.html
 [bodoseriesstrdecode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.decode.html
-
 [bodoseriesstrcat]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.cat.html
 [bodoseriesstrextract]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.extract.html
 [bodoseriesstrsplit]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.split.html
 [bodoseriesstrrsplit]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rsplit.html
+
 [bodoseriesisna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isna.html
 [bodoseriesnotna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notna.html
 [bodoseriesdttotal_seconds]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.total_seconds.html
+
+[bodoseriescount]: https://pandas.pydata.org/docs/reference/api/pandas.Series.count.html
+[bodoseriesmax]: https://pandas.pydata.org/docs/reference/api/pandas.Series.max.html
+[bodoseriesmin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.min.html
+[bodoseriesproduct]: https://pandas.pydata.org/docs/reference/api/pandas.Series.product.html
+[bodoseriessum]: https://pandas.pydata.org/docs/reference/api/pandas.Series.sum.html
