@@ -29,51 +29,35 @@ Sorts the elements of the BodoSeries and returns a new sorted BodoSeries.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
     {
-        "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+        "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
         "B": ["A1", "B1", "C1", "Abc"] * 3,
-        "C": pd.array([4, 5, 6, -1] * 3, "Int64"),
+        "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
     }
 )
 
-bdf = bodo_pd.from_pandas(df)
 sa = bdf["A"]
-print(sa)
 sa_sorted = sa.sort_values(ascending=False)
 print(sa_sorted)
 ```
 
 Output:
 ```
-0     1
-1     2
-2     3
-3     7
-4     1
-5     2
-6     3
-7     7
-8     1
-9     2
-10    3
-11    7
-Name: A, dtype: int64[pyarrow]
-3     7
-7     7
-11    7
-2     3
-6     3
-10    3
-1     2
-5     2
-9     2
-0     1
-4     1
-8     1
+0     7
+1     7
+2     7
+3     3
+4     3
+5     3
+6     2
+7     2
+8     2
+9     1
+10    1
+11    1
 Name: A, dtype: int64[pyarrow]
 ```
 
