@@ -464,8 +464,7 @@ Output:
 Write a DataFrame to an Iceberg table in S3 Tables using the location parameter:
 
 ``` py
-import bodo.pandas as bodo_pd
-df = bodo_pd.to_iceberg(
+df.to_iceberg(
     table_identifier="my_table",
     location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
 )

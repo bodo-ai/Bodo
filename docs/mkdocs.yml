@@ -126,8 +126,8 @@ nav:
   - Getting Started:
     - quick_start/index.md
     - Python Quick Start: quick_start/quickstart_local_python.md
-    - SQL Quick Start: quick_start/quickstart_local_sql.md
     - Iceberg Quick Start: quick_start/quickstart_local_iceberg.md
+    - SQL Quick Start: quick_start/quickstart_local_sql.md
     - Platform Quick Start: quick_start/quickstart_platform.md
     - Platform SDK Quick Start: quick_start/quickstart_platform_sdk.md
 
