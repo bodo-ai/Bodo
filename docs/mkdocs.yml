@@ -142,7 +142,7 @@ nav:
           - Bodo Cloud Platform:
             - Bodo Platform on AWS: installation_and_setup/bodo_platform_aws.md
             - Bodo Platform on Azure: installation_and_setup/bodo_platform_azure.md
-      - Python Development: quick_start/dev_guide.md
+      - Python JIT Development: quick_start/dev_guide.md
       - Bodo Cloud Platform:
           - guides/using_bodo_platform/index.md
           - Organization Basics: guides/using_bodo_platform/organization.md
@@ -180,7 +180,7 @@ nav:
   - API Reference:
       - api_docs/index.md
       - Bodo Parallel API Reference: api_docs/bodo_parallel_apis
-      - Bodo Compiler Python Support API Reference:
+      - Bodo JIT Compiler Python Support API Reference:
         - api_docs/python/index.md
         - Pandas:
             - api_docs/pandas/index.md
@@ -234,7 +234,7 @@ nav:
                 - Timestamp Functions: api_docs/sql/functions/timestamp
                 - Type Predicates: api_docs/sql/functions/type
       - Bodo Platform SDK Reference: api_docs/platform_sdk.md
-      - Bodo DataFrame Library API (Experimental): 
+      - Bodo DataFrame Library API:
           - api_docs/dataframe_lib/index.md
           - General Functions: api_docs/dataframe_lib/general_functions.md
           - DataFrame: api_docs/dataframe_lib/dataframe.md

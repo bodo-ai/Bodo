@@ -9,7 +9,7 @@ hide:
 
 Bodo is a high-performance Python compute engine 
 designed specifically to accelerate and scale data-intensive workloads seamlessly.
-With its DataFrame library serving as a seamless, drop-in replacement for Pandas (just a single-line import change),
+With its DataFrame library serving as a drop-in replacement for Pandas (just a single-line import change),
 Bodo applies advanced High-Performance Computing (HPC) and database optimization
 techniques to significantly boost the performance of your existing Python code without code rewrites.
 Bodo also scales Python code from single laptops to large clusters and supercomputers automatically.
@@ -24,7 +24,7 @@ parallel binaries without requiring code rewrites.
 Unlike traditional distributed computing frameworks, Bodo:
 
 - Provides drop-in replacement for Python APIs like Pandas and NumPy.
-- Automatically optimizes queries at database-grade levels for maximum efficiency.
+- Automatically optimizes queries at database-grade levels and code at HPC compiler levels for maximum efficiency.
 - Eliminates overheads common in driver-executor models by leveraging Message Passing Interface (MPI) for true distributed execution.
 
 
