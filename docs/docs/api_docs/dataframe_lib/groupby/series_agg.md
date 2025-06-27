@@ -1,4 +1,4 @@
-# bodo.pandas.SeriesGroupBy.agg
+# SeriesGroupBy.agg {#series-agg}
 ```
 SeriesGroupBy.agg(func=None, engine=None, engine_kwargs=None, **kwargs) -> BodoDataFrame | BodoSeries
 ```
@@ -14,9 +14,12 @@ This method is the same as `SeriesGroupBy.aggregate`.
 * A list of functions, which will be applied to each selected column e.g. `["sum"`, `"count"]`
 * None along with key word arguments specifying the supported functions to apply.
 
-While providing a dictionary argument for *func* is supported, this use has been deprecated in Pandas and will raise an Error in newer versions.
-Refer to [our documentation]() for aggregate functions that are currently supported. Any other combination of arguments
-or user defined functions will either fallback to Pandas [`SeriesGroupBy.agg`]() or raise a descriptive error.
+While providing a dictionary argument for *func* is supported, this use has been deprecated in Pandas and will raise an error in newer versions.
+[Refer to our documentation][df-lib-groupby]
+for aggregate functions that are currently supported.
+Any other combination of arguments or user defined functions will either fallback to Pandas
+[`SeriesGroupBy.agg`](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.agg.html#pandas.core.groupby.SeriesGroupBy.agg)
+or raise a descriptive error.
 
 : __\*\*kwargs__ Key word arguments are used to create Named Aggregations and should be in the form `new_name="function"`.
 

@@ -1,38 +1,69 @@
-# GroupBy
-The DataFrame Library supports grouping BodoDataFrames on columns and aggregating the grouped data via the `bodo.pandas.DataFrameGroupBy` and `bodo.pandas.SeriesGroupBy` classes. An instance of one of these classes will be returned when calling the groupby method (`BodoDataFrame.groupby`).
+# GroupBy {#df-lib-groupby}
+
+The DataFrame Library supports grouping BodoDataFrames on columns
+and aggregating the grouped data via the `bodo.pandas.DataFrameGroupBy` and `bodo.pandas.SeriesGroupBy` classes.
+An instance of one of these classes will be returned when using the [`BodoDataFrame.groupby()`][frame-groupby] method.
 
 !!! note
-	Currently the DataFrame Library only supports a subset of aggregation functions with their default parameters (listed below). Future releases will add more functionality including transformation and filtering. For now, if an unsupported method or property of a `bodo.pandas.SeriesGroupBy` or `bodo.pandas.DataFrameGroupBy` is encountered, the user's code will gracefully fall back to Pandas.
+	Currently, the DataFrame Library supports a subset of aggregation functions with the default parameters (listed below).
+	Future releases will add more functionality including transformation and filtering.
+	For now, if an unsupported method or property of a `bodo.pandas.SeriesGroupBy` or `bodo.pandas.DataFrameGroupBy` is encountered,
+	the user's code [will gracefully fall back to Pandas][lazy-evaluation-and-fallback-to-pandas].
 
 ## Function Application
 
-- [`DataFrameGroupBy.agg`][]
-- [`SeriesGroupBy.agg`][]
+- [`DataFrameGroupBy.agg`][frame-agg]
+- [`SeriesGroupBy.agg`][series-agg]
 
-## `DataFrameGroupBy` Computations / descriptive stats
+## DataFrameGroupBy Computations / Descriptive Stats
 
-- [`DataFrameGroupBy.sum`][]
-- [`DataFrameGroupBy.count`][]
-- [`DataFrameGroupBy.min`][]
-- [`DataFrameGroupBy.max`][]
-- [`DataFrameGroupBy.median`][]
-- [`DataFrameGroupBy.mean`][]
-- [`DataFrameGroupBy.std`][]
-- [`DataFrameGroupBy.var`][]
-- [`DataFrameGroupBy.skew`][]
-- [`DataFrameGroupBy.nunique`][]
-- [`DataFrameGroupBy.size`][]
+- [`DataFrameGroupBy.sum`][frame-agg-sum]
+- [`DataFrameGroupBy.count`][frame-agg-count]
+- [`DataFrameGroupBy.min`][frame-agg-min]
+- [`DataFrameGroupBy.max`][frame-agg-max]
+- [`DataFrameGroupBy.median`][frame-agg-median]
+- [`DataFrameGroupBy.mean`][frame-agg-mean]
+- [`DataFrameGroupBy.std`][frame-agg-std]
+- [`DataFrameGroupBy.var`][frame-agg-var]
+- [`DataFrameGroupBy.skew`][frame-agg-skew]
+- [`DataFrameGroupBy.nunique`][frame-agg-nunique]
+- [`DataFrameGroupBy.size`][frame-agg-size]
 
-## `SeriesGroupby` Computations / descriptive stats
+## SeriesGroupby Computations / Descriptive Stats
 
-- [`SeriesGroupBy.sum`][]
-- [`SeriesGroupBy.count`][]
-- [`SeriesGroupBy.min`][]
-- [`SeriesGroupBy.max`][]
-- [`SeriesGroupBy.median`][]
-- [`SeriesGroupBy.mean`][]
-- [`SeriesGroupBy.std`][]
-- [`SeriesGroupBy.var`][]
-- [`SeriesGroupBy.skew`][]
-- [`SeriesGroupBy.nunique`][]
-- [`SeriesGroupBy.size`][]
+- [`SeriesGroupBy.sum`][series-agg-sum]
+- [`SeriesGroupBy.count`][series-agg-count]
+- [`SeriesGroupBy.min`][series-agg-min]
+- [`SeriesGroupBy.max`][series-agg-max]
+- [`SeriesGroupBy.median`][series-agg-median]
+- [`SeriesGroupBy.mean`][series-agg-mean]
+- [`SeriesGroupBy.std`][series-agg-std]
+- [`SeriesGroupBy.var`][series-agg-var]
+- [`SeriesGroupBy.skew`][series-agg-skew]
+- [`SeriesGroupBy.nunique`][series-agg-nunique]
+- [`SeriesGroupBy.size`][series-agg-size]
+
+
+[frame-agg-sum]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.sum.html
+[frame-agg-count]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.count.html
+[frame-agg-min]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.min.html
+[frame-agg-max]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.max.html
+[frame-agg-median]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.median.html
+[frame-agg-mean]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.mean.html
+[frame-agg-std]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.std.html
+[frame-agg-var]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.var.html
+[frame-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.skew.html
+[frame-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.nunique.html
+[frame-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.size.html
+
+[series-agg-sum]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.sum.html
+[series-agg-count]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.count.html
+[series-agg-min]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.min.html
+[series-agg-max]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.max.html
+[series-agg-median]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.median.html
+[series-agg-mean]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.mean.html
+[series-agg-std]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.std.html
+[series-agg-var]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.var.html
+[series-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.skew.html
+[series-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.nunique.html
+[series-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.size.html

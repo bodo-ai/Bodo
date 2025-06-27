@@ -1,4 +1,4 @@
-# bodo.pandas.DataFrameGroupBy.agg
+# DataFrameGroupBy.agg {#frame-agg}
 ```
 DataFrameGroupBy.agg(func=None, engine=None, engine_kwargs=None, **kwargs) -> BodoDataFrame
 ```
@@ -15,8 +15,11 @@ This method is the same as `DataFrameGroupBy.aggregate`.
 * A dictionary mapping column name to aggregate function e.g. `{"col_1": "sum", "col_2": "mean"}`
 * None along with key word arguments specifying Named Aggregates.
 
-Refer to [our documentation]() for aggregate functions that are currently supported. Any other combination of arguments
-or user defined functions will either fallback to Pandas [`DataFrameGroupBy.agg`]() or raise a descriptive error.
+[Refer to our documentation][df-lib-groupby]
+for aggregate functions that are currently supported.
+Any other combination of arguments or user defined functions will either fallback to Pandas
+[`DataFrameGroupBy.agg`](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.agg.html#pandas.core.groupby.DataFrameGroupBy.agg)
+or raise a descriptive error.
 
 : __\*\*kwargs__ Key word arguments are used to create Named Aggregations and should be in the form `new_name=pd.NamedAgg(column_name, function)` or simply `new_name=(column_name, function)`.
 

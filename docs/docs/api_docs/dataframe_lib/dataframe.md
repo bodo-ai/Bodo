@@ -81,19 +81,28 @@ dtype: int64[pyarrow]
 
 ---
 
-## BodoDataFrame.groupby
+## BodoDataFrame.groupby {#frame-groupby}
 
 ``` py
-BodoDataFrame.groupby(by=None, axis=lib.no_default, level=None, as_index=True, sort=False, group_keys=True observed=lib.no_default, dropna=True) -> DataFrameGroupBy
+BodoDataFrame.groupby(
+    by=None,
+    axis=lib.no_default,
+    level=None,
+    as_index=True,
+    sort=False,
+    group_keys=True,
+    observed=lib.no_default,
+    dropna=True
+) -> DataFrameGroupBy
 ```
 
 Gets a DataFrameGroupBy object representing the data in the input DataFrame grouped by a column or list of columns. The object can then be used to apply functions over groups.
 
 <p class="api-header">Parameters</p>
 
-: __by: *str | List[str]*__ The column or list of columns to use when creating groups.
+: __by : *str | List[str]*:__ The column or list of columns to use when creating groups.
 
-: __as_index: *bool, default True*__ Whether the grouped labels will appears as an index in the final output. If *as_index* is False, then the grouped labels will appear as regular columns.
+: __as\_index : *bool, default True*:__ Whether the grouped labels will appears as an index in the final output. If *as_index* is False, then the grouped labels will appear as regular columns.
 
 : __dropna: *bool, default True*__ If True, rows where the group label contains a missing value will be dropped from the final output.
 
@@ -103,18 +112,18 @@ Gets a DataFrameGroupBy object representing the data in the input DataFrame grou
 
 : __DataFrameGroupBy__
 
-<p class="api-header">Example</p>
+<p class="api-header">Examples</p>
 
 ``` py
 import bodo.pandas as bd
 
-bdf = bd.DataFrame({
+bdf1 = bd.DataFrame({
     "A": ["foo", "foo", "bar", "bar"],
     "B": [1, 1, 1, None],
     "C": [1, 2, 3, 4]
 })
 
-bdf2 = bdf.groupby(["A", "B"]).sum()
+bdf2 = bdf1.groupby(["A", "B"]).sum()
 print(bdf2)
 ```
 Output:
@@ -124,17 +133,9 @@ A   B
 bar 1.0  3
 foo 1.0  3
 ```
-
+---
 ``` py
-import bodo.pandas as bd
-
-bdf = bd.DataFrame({
-    "A": ["foo", "foo", "bar", "bar"],
-    "B": [1, 1, 1, None],
-    "C": [1, 2, 3, 4]
-})
-
-bdf2 = bdf.groupby(["A", "B"], as_index=False, dropna=False).sum()
+bdf3 = bdf1.groupby(["A", "B"], as_index=False, dropna=False).sum()
 print(bdf2)
 ```
 Output:
