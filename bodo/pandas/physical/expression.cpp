@@ -62,6 +62,59 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
     return array;
 }
 
+// String specialization
+std::shared_ptr<arrow::Array> NullArrowArray(const std::string& value,
+                                                 size_t num_elements) {
+    arrow::StringBuilder builder;
+    arrow::Status status;
+    for (size_t i = 0; i < num_elements; ++i) {
+        status = builder.AppendNull();
+        if (!status.ok()) {
+            throw std::runtime_error("builder.Append failed.");
+        }
+    }
+    std::shared_ptr<arrow::Array> array;
+    status = builder.Finish(&array);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.Finish failed.");
+    }
+    return array;
+}
+
+std::shared_ptr<arrow::Array> NullArrowArray(
+    const std::shared_ptr<arrow::Scalar>& value, size_t num_elements) {
+    arrow::Result<std::shared_ptr<arrow::Array>> array_result =
+        arrow::MakeArrayOfNull(value->type, num_elements);
+    if (!array_result.ok()) {
+        throw std::runtime_error("MakeArrayFromScalar failed: " +
+                                 array_result.status().message());
+    }
+    return array_result.ValueOrDie();
+}
+
+std::shared_ptr<arrow::Array> NullArrowArray(bool value,
+                                                 size_t num_elements) {
+    arrow::BooleanBuilder builder;
+    arrow::Status status;
+
+    for (size_t i = 0; i < num_elements; ++i) {
+        // Append boolean value
+        status = builder.AppendNull();
+        if (!status.ok()) {
+            throw std::runtime_error("builder.Append failed.");
+        }
+    }
+
+    // Finalize the Arrow array
+    std::shared_ptr<arrow::Array> array;
+    status = builder.Finish(&array);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.Finish failed.");
+    }
+
+    return array;
+}
+
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator) {

@@ -77,6 +77,14 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     return out_plan;
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py, int64_t field_idx) {
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
+    const std::shared_ptr<arrow::Field> &field = arrow_schema->field(field_idx);
+    auto [_, out_type] = arrow_field_to_duckdb(field);
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value(out_type));
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(val));
@@ -388,14 +396,21 @@ duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
     return logical_limit;
 }
 
+std::map<duckdb::idx_t, std::shared_ptr<bodo::Schema>> g_idx_schema;
+
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
     PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
+    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
+    std::shared_ptr<bodo::Schema> bodo_out_schema =
+            bodo::Schema::FromArrowSchema(out_schema);
+
     auto binder = get_duckdb_binder();
     auto table_idx = binder.get()->GenerateTableIndex();
+    g_idx_schema[table_idx] = bodo_out_schema;
 
     std::vector<duckdb::unique_ptr<duckdb::Expression>> projection_expressions;
     for (auto &expr : expr_vec) {
@@ -639,6 +654,8 @@ std::pair<int64_t, PyObject *> execute_plan(
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
+    // Clear out the table_index to schema mapping for the next plan.
+    g_idx_schema.clear();
     return {reinterpret_cast<int64_t>(new table_info(*output_table)),
             pyarrow_schema};
 }

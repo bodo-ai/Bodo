@@ -133,6 +133,14 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     PyObject *args, const std::vector<int> &selected_columns);
 
 /**
+ * @brief Create an expression for a NULL value of given type.
+ *
+ * @param val - the type to create the NULL value of
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const null expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py, int64_t field_idx);
+
+/**
  * @brief Create an expression from a constant integer.
  *
  * @param val - the constant int for the expression
