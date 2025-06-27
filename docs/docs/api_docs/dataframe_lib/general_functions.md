@@ -55,7 +55,7 @@ Output:
 ---
 
 ## Top-level dealing with datetimelike data
-!!! warning
+!!! note
     `to_datetime` currently supports only BodoSeries and BodoDataFrame inputs. Passing arguments of other types will trigger a fallback to Pandas.
 
 - [`bodo.pandas.to_datetime`][bodotodatetime]
@@ -63,7 +63,7 @@ Output:
 ---
 
 ## Top-level missing data
-!!! warning
+!!! note
     `isna`, `isnull`, `notna`, and `notnull` currently support only BodoSeries and scalar inputs (e.g., integers, strings). Passing other types will trigger a fallback to Pandas.
 
 - [`bodo.pandas.isna`][bodoisna]

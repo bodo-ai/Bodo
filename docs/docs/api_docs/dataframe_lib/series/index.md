@@ -59,8 +59,10 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ---
 
 ### Datetime methods
-!!! warning
-	Locale format must be strict: The locale parameter in `month_name` and `day_name` must follow the exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8"). Variants like "pt_BR.utf8" may not be recognized and trigger an error.
+!!! note
+	Locale format must be strict: The locale parameter in `month_name` and `day_name` must follow the 
+	exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8"). Variants like 
+	"pt_BR.utf8" may not be recognized and trigger an error.
 
 - [`bodo.pandas.BodoSeries.dt.normalize`][bodoseriesdtnormalize]
 - [`bodo.pandas.BodoSeries.dt.floor`][bodoseriesdtfloor]
@@ -71,8 +73,10 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.total_seconds`][bodoseriesdttotal_seconds]
 
 !!! note
-    Bodo currently only supports `'NaT'` for the ambiguous parameter in `tz_localize`. `'raise'`, `'infer'`, or boolean arrays are not supported and will trigger a fallback to Pandas. Similarly, for the nonexistent parameter, `'raise'` is not supported and will trigger a fallback.
-	Due to these limitations, the default behavior in Bodo is `ambiguous='NaT'` and `nonexistent='NaT'`.
+    Bodo currently only supports "NaT" for the ambiguous parameter in `tz_localize`. "raise", "infer", or boolean 
+	arrays are not supported and will trigger a fallback to Pandas. Similarly, for the nonexistent parameter, 
+	"raise" is not supported and will trigger a fallback. Due to these limitations, the default behavior in 
+	Bodo is `ambiguous="NaT"` and `nonexistent="NaT"`.
 
 
 - [`bodo.pandas.BodoSeries.dt.tz_localize`][bodoseriesdttz_localize]
