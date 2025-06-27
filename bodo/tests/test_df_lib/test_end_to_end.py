@@ -1675,3 +1675,16 @@ def test_series_min_max_unsupported_types():
 
     with pytest.warns(BodoLibFallbackWarning):
         bdf["A"].max()
+
+
+def test_read_csv(datapath):
+    """Very simple test to read a parquet file for sanity checking."""
+    path = datapath("example.csv")
+
+    bodo_out = bd.read_csv(path)[["one", "four"]]
+    py_out = pd.read_csv(path)[["one", "four"]]
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
