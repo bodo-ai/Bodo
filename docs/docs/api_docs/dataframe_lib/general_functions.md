@@ -71,8 +71,7 @@ Output:
 - [`bodo.pandas.notna`][bodonotna]
 - [`bodo.pandas.notnull`][bodonotnull]
 
----
-
+-- 
 [bodotodatetime]: https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
 [bodoisna]: https://pandas.pydata.org/docs/reference/api/pandas.isna.html
 [bodoisnull]: https://pandas.pydata.org/docs/reference/api/pandas.isnull.html
