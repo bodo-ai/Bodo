@@ -22,8 +22,9 @@ class PhysicalProjection : public PhysicalSourceSink {
     explicit PhysicalProjection(
         std::vector<duckdb::ColumnBinding>& source_cols,
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs,
-        std::shared_ptr<bodo::Schema> input_schema)
-        : exprs(std::move(exprs)) {
+        std::shared_ptr<bodo::Schema> input_schema,
+        std::shared_ptr<bodo::Schema> saved_bodo_schema)
+        : exprs(std::move(exprs)), saved_output_schema(saved_bodo_schema) {
         // Map of column bindings to column indices in physical input table
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(source_cols);
@@ -104,6 +105,8 @@ class PhysicalProjection : public PhysicalSourceSink {
         }
         this->output_schema->column_names = col_names;
         this->output_schema->metadata = input_schema->metadata;
+        //std::cout << "proj output " << this->output_schema->ToString() << std::endl;
+        //std::cout << "proj saved " << this->saved_output_schema->ToString() << std::endl;
     }
 
     virtual ~PhysicalProjection() = default;
@@ -159,6 +162,7 @@ class PhysicalProjection : public PhysicalSourceSink {
    private:
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> exprs;
     std::shared_ptr<bodo::Schema> output_schema;
+    std::shared_ptr<bodo::Schema> saved_output_schema;
     std::vector<std::string> col_names;
     std::vector<std::shared_ptr<PhysicalExpression>> physical_exprs;
 };
