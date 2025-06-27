@@ -71,6 +71,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name]
 - [`bodo.pandas.BodoSeries.dt.round`][bodoseriesdtround]
 - [`bodo.pandas.BodoSeries.dt.total_seconds`][bodoseriesdttotal_seconds]
+- [`bodo.pandas.BodoSeries.dt.isocalendar`][bodoseriesdtisocalendar]
+
 
 !!! note
     Bodo currently only supports "NaT" for the ambiguous parameter in `tz_localize`. "raise", "infer", or boolean 
