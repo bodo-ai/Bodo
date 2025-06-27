@@ -18,6 +18,7 @@ from bodo.io.fs_io import (
     getfs,
     parse_fpath,
 )
+from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
 
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
@@ -723,11 +724,18 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
-        fpath, _, protocol = parse_fpath(self.path)
+        fpath, parsed_url, protocol = parse_fpath(self.path)
         fs = getfs(fpath, protocol, self.storage_options, parallel=False)
-        expanded_paths = expand_path_globs(fpath, protocol, fs)
 
-        return pq.read_table(expanded_paths, filesystem=fs, columns=[]).num_rows
+        # Since we are supplying the filesystem to pq.read_table,
+        # Any prefixes e.g. s3:// should be removed.
+        fpath_noprefix, prefix = get_fpath_without_protocol_prefix(
+            fpath, protocol, parsed_url
+        )
+
+        fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
+
+        return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
