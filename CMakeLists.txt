@@ -321,6 +321,9 @@ endif()
 
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
+  # NOTE: The new mpich wheels have library dependencies that are not available during the build
+  #       process and cause errors for wheel repair.
+  # TODO [BSE-4934]: Use mpi4py 4.1 as dependency and avoid vendoring mpi4py and MPICH.
   message(STATUS "Downloading Bodo's previous version to vendor MPICH")
   execute_process(COMMAND ${Python_EXECUTABLE} -m pip download bodo==2025.6 --python-version=3.12 --no-deps --default-timeout=100)
   execute_process(COMMAND unzip "bodo-*.whl" "bodo*.data/*" -d mpich-tmp-extract-dir)
