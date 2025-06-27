@@ -106,6 +106,17 @@ def get_series_string_overloads():
 
 
 @functools.lru_cache
+def get_series_datetime_overloads():
+    """Return a list of the functions supported on SeriesDatetimePropertiesType objects
+    to some degree by bodo.jit.
+    """
+    from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
+    from bodo.numba_compat import get_method_overloads
+
+    return get_method_overloads(SeriesDatetimePropertiesType)
+
+
+@functools.lru_cache
 def get_groupby_overloads():
     """Return a list of the functions supported on DataFrameGroupby/DataFrameSeries objects
     to some degree by bodo.jit.
@@ -127,6 +138,8 @@ def get_overloads(cls_name):
         return get_series_overloads()
     elif cls_name == "BodoStringMethods":
         return get_series_string_overloads()
+    elif cls_name == "BodoDatetimeProperties":
+        return get_series_datetime_overloads()
     elif cls_name in ("DataFrameGroupBy", "SeriesGroupBy"):
         return get_groupby_overloads()
     else:
@@ -323,6 +336,8 @@ def check_args_fallback(
                         base_class = self.__class__
                     elif self.__class__ == bodo.pandas.series.BodoStringMethods:
                         base_class = self._series.__class__.__bases__[0].str
+                    elif self.__class__ == bodo.pandas.series.BodoDatetimeProperties:
+                        base_class = self._series.__class__.__bases__[0].dt
                     else:
                         base_class = self.__class__.__bases__[0]
                     msg = (
