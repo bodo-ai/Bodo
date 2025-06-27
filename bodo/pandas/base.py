@@ -1,10 +1,27 @@
+import csv
 import importlib
 import typing as pt
+from collections.abc import (
+    Hashable,
+    Iterable,
+    Mapping,
+    Sequence,
+)
 
-import csv
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
+from pandas._typing import (
+    CompressionOptions,
+    CSVEngine,
+    DtypeArg,
+    DtypeBackend,
+    FilePath,
+    IndexLabel,
+    ReadCsvBuffer,
+    StorageOptions,
+    UsecolsArgType,
+)
 from pandas.core.tools.datetimes import _unit_map
 from pandas.io.parsers.readers import _c_parser_defaults
 
@@ -24,24 +41,6 @@ from bodo.pandas.utils import (
     wrap_plan,
 )
 from bodo.utils.utils import bodo_spawn_exec
-
-from collections.abc import (
-    Hashable,
-    Iterable,
-    Mapping,
-    Sequence,
-)
-from pandas._typing import (
-    CompressionOptions,
-    CSVEngine,
-    DtypeArg,
-    DtypeBackend,
-    FilePath,
-    IndexLabel,
-    ReadCsvBuffer,
-    StorageOptions,
-    UsecolsArgType,
-)
 
 
 def from_pandas(df):
