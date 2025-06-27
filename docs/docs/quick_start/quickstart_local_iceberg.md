@@ -60,24 +60,47 @@ Make sure you have your environment ready:
 Now you are ready to use Bodo to read and write S3 Tables. Run this example code (replace bucket name, account ID, region, namespace):
 
 ```python
-import bodo.pandas as pd
+import pandas as pd
 import numpy as np
+import bodo
 
-n = 20_000_000
-df = pd.DataFrame({"A": np.arange(n) % 30, "B": np.arange(n)})
-df.to_iceberg(
-    table_identifier="my_table",
-    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
-)
-```
+BUCKET_NAME="my-test-bucket"
+ACCOUNT_ID="111122223333"
+REGION="us-east-2"
+NAMESPACE="my_namespace"
+CONN_STR=f"iceberg+arn:aws:s3tables:{REGION}:{ACCOUNT_ID}:bucket/{BUCKET_NAME}"
+
+NUM_GROUPS = 30
+NUM_ROWS = 20_000_000
 
 
-Now let's read the Iceberg table:
-```python
-print(bodo_pd.read_iceberg(
-    table_identifier="my_table",
-    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
-))
+@bodo.jit
+def example_write_iceberg_table():
+    df = pd.DataFrame({
+        "A": np.arange(NUM_ROWS) % NUM_GROUPS,
+        "B": np.arange(NUM_ROWS)
+    })
+    df.to_sql(
+        name="my_table_1",
+        con=CONN_STR,
+        schema=NAMESPACE,
+        if_exists="replace"
+    )
+
+example_write_iceberg_table()
+
+@bodo.jit
+def example_read_iceberg():
+    df = pd.read_sql_table(
+            table_name="my_table_1",
+            con=CONN_STR,
+            schema=NAMESPACE
+         )
+    print(df)
+    return df
+
+df_read = example_read_iceberg()
+print(df_read)
 ```
 
 You can use BodoSQL to work with S3 Tables as well. Here is a simple example:
