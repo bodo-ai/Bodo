@@ -13,7 +13,7 @@ techniques to significantly boost the performance of your existing Python code w
 Bodo also scales Python code from single laptops to large clusters and supercomputers automatically.
 
 In addition, Bodo's auto-parallelizing
-just-in-time (JIT) compiler, Bodo transforms custom Python code using Pandas and Numpy into highly optimized,
+just-in-time (JIT) compiler transforms custom Python code using Pandas and Numpy into highly optimized,
 parallel binaries without requiring code rewrites.
 
 
