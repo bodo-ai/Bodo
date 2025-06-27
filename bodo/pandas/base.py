@@ -2,6 +2,7 @@ import importlib
 import typing as pt
 from collections.abc import Iterable, Mapping
 
+import copy as py_copy
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
@@ -340,6 +341,8 @@ def concat(
             copy=copy,
         )
 
+        orig_a = py_copy.deepcopy(a._plan)
+        orig_b = py_copy.deepcopy(b._plan)
         if isinstance(empty_data, pd.DataFrame):
             def get_mapping(new_schema, old_schema, plan):
                 """Create col ref expressions to do the reordering between
@@ -358,9 +361,9 @@ def concat(
             a_plan = LazyPlan(
                 "LogicalProjection",
                 empty_data,
-                a._plan,
+                orig_a,
                 get_mapping(
-                    empty_data, a.columns.tolist(), a._plan
+                    empty_data, a.columns.tolist(), orig_a
                 ),
             )
             # Create a reordering of the temp b_new_cols so that the columns are in
@@ -368,14 +371,14 @@ def concat(
             b_plan = LazyPlan(
                 "LogicalProjection",
                 empty_data,
-                b._plan,
+                orig_b,
                 get_mapping(
-                    empty_data, b.columns.tolist(), b._plan
+                    empty_data, b.columns.tolist(), orig_b
                 ),
             )
         else:
-            a_plan = a._plan
-            b_plan = b._plan
+            a_plan = orig_a
+            b_plan = orig_b
 
         # DuckDB Union operator requires schema to already be matching.
         planUnion = LazyPlan(
