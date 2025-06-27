@@ -49,8 +49,8 @@ import bodo.pandas as bd
 
 bdf = bd.DataFrame(
         {
-            "a": pd.array([1, 2, 3] * 4, "Int64"),
-            "b": pd.array([4, 5, 6] * 4, "Int64"),
+            "a": bd.array([1, 2, 3] * 4, "Int64"),
+            "b": bd.array([4, 5, 6] * 4, "Int64"),
             "c": ["a", "b", "c"] * 4,
         },
     )
@@ -167,13 +167,13 @@ Returns the first *n* rows of the BodoDataFrame.
 ``` py
 import bodo.pandas as bd
 
-original_df = pd.DataFrame(
+original_df = bd.DataFrame(
     {"foo": range(15), "bar": range(15, 30)}
    )
 
 original_df.to_parquet("example.pq")
 
-restored_df = bodo_pd.read_parquet("example.pq")
+restored_df = bd.read_parquet("example.pq")
 restored_df_head = restored_df.head(2)
 print(type(restored_df_head))
 print(restored_df_head)
@@ -292,11 +292,11 @@ Name: D, dtype: string
 ``` py
 import bodo.pandas as bd
 
-bdf = pd.DataFrame(
+bdf = bd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+            "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
             "B": ["A1", "B1 ", "C1", "Abc"] * 3,
-            "C": pd.array([4, 5, 6, -1] * 3, "Int64"),
+            "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
         }
     )
 
@@ -350,11 +350,11 @@ Sorts the elements of the BodoDataFrame and returns a new sorted BodoDataFrame.
 ``` py
 import bodo.pandas as bd
 
-bdf = pd.DataFrame(
+bdf = bd.DataFrame(
     {
-        "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+        "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
         "B": ["A1", "B1", "C1", "Abc"] * 3,
-        "C": pd.array([6, 5, 4] * 4, "Int64"),
+        "C": bd.array([6, 5, 4] * 4, "Int64"),
     }
 )
 
@@ -403,16 +403,16 @@ Write a DataFrame as a Parquet dataset.
 ``` py
 import bodo.pandas as bd
 
-bdf = pd.DataFrame(
+bdf = bd.DataFrame(
     {
-        "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+        "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
         "B": ["A1", "B1", "C1", "Abc"] * 3,
-        "C": pd.array([6, 5, 4] * 4, "Int64"),
+        "C": bd.array([6, 5, 4] * 4, "Int64"),
     }
 )
 
 bdf.to_parquet("output.parquet")
-print(pd.read_parquet("output.parquet"))
+print(bd.read_parquet("output.parquet"))
 ```
 
 Output:
@@ -492,7 +492,7 @@ part_spec = PartitionSpec(PartitionField(2, 1001, IdentityTransform(), "id_part"
 sort_order = SortOrder(SortField(source_id=4, transform=IdentityTransform()))
 bdf.to_iceberg("test_table", location="./iceberg_warehouse", partition_spec=part_spec, sort_order=sort_order)
 
-out_df = bodo_pd.read_iceberg("test_table", location="./iceberg_warehouse")
+out_df = bd.read_iceberg("test_table", location="./iceberg_warehouse")
 # Only reads Parquet files of partition "foo" from storage
 print(out_df[out_df["two"] == "foo"])
 ```
@@ -509,6 +509,7 @@ Write a DataFrame to an Iceberg table in S3 Tables using the location parameter:
 
 ``` py
 import bodo.pandas as bd
+
 df = bd.to_iceberg(
     table_identifier="my_table",
     location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"

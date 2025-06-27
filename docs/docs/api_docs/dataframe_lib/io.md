@@ -112,7 +112,7 @@ Read a table using a predefined PyIceberg catalog.
 ``` py
 import bodo.pandas as bd
 
-df = bodo_pd.read_iceberg(
+df = bd.read_iceberg(
     table_identifier="my_schema.my_table",
     catalog_name="my_catalog",
     row_filter="col1 > 10",
@@ -141,7 +141,7 @@ Read a table from an S3 Tables Bucket using the location parameter.
 ``` py
 import bodo.pandas as bd
 
-df = bodo_pd.read_iceberg(
+df = bd.read_iceberg(
     table_identifier="my_table",
     location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
 )
