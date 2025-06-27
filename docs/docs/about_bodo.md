@@ -23,7 +23,7 @@ parallel binaries without requiring code rewrites.
 
 Unlike traditional distributed computing frameworks, Bodo:
 
-- Provides drop-in replacement for Python APIs like Pandas and NumPy.
+- Provides drop-in replacement for Pandas APIs.
 - Automatically optimizes queries at database-grade levels and code at HPC compiler levels for maximum efficiency.
 - Eliminates overheads common in driver-executor models by leveraging Message Passing Interface (MPI) for true distributed execution.
 
