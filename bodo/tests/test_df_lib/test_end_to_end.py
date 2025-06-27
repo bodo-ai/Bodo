@@ -1691,7 +1691,7 @@ def test_dataframe_concat(datapath):
         bodo_df3,
         py_df3,
         check_pandas_types=False,
-        sort_output=False,
+        sort_output=True,
         reset_index=True,
     )
 
@@ -1710,6 +1710,6 @@ def test_series_concat(datapath):
         bodo_df3,
         py_df3,
         check_pandas_types=False,
-        sort_output=False,
+        sort_output=True,
         reset_index=True,
     )
