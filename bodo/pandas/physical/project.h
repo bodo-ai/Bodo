@@ -105,8 +105,10 @@ class PhysicalProjection : public PhysicalSourceSink {
         }
         this->output_schema->column_names = col_names;
         this->output_schema->metadata = input_schema->metadata;
-        //std::cout << "proj output " << this->output_schema->ToString() << std::endl;
-        //std::cout << "proj saved " << this->saved_output_schema->ToString() << std::endl;
+        if (this->output_schema->ToString() != this->saved_output_schema->ToString()) {
+            std::cout << "proj output " << this->output_schema->ToString() << std::endl;
+            std::cout << "proj saved " << this->saved_output_schema->ToString() << std::endl;
+        }
     }
 
     virtual ~PhysicalProjection() = default;
