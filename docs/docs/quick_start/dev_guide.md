@@ -19,7 +19,7 @@ important concepts briefly.
 
 Installation
 ------------
-[Install Bodo](../installation_and_setup/install.md) to get started with Python development (e.g., `pip install bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
+[Install Bodo](../installation_and_setup/install.md) to get started with Python development (e.g., `pip install -U bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
 
 Data Transform Example with Bodo
 --------------------------------
@@ -563,7 +563,7 @@ Here are high level steps for integrating Bodo into Python workloads:
 
 1. Installation and Import
 
-    a. [Install Bodo](../installation_and_setup/install.md) (e.g. `pip install bodo`).
+    a. [Install Bodo](../installation_and_setup/install.md) (e.g. `pip install -U bodo`).
 
     b. In each file where parallelization is desired, add:
         ```python
