@@ -933,6 +933,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 just one element. """
             if isinstance(key, str):
                 key = [key]
+                output_series = True
+            else:
+                output_series = False
             assert isinstance(key, Iterable)
             key = list(key)
             # convert column name to index
@@ -948,7 +951,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Create column reference expressions for selected columns
             exprs = make_col_ref_exprs(key_indices, self._plan)
 
-            empty_data = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
+            empty_data = zero_size_self.__getitem__(key[0] if output_series else key)
             return wrap_plan(
                 plan=LazyPlan(
                     "LogicalProjection",
