@@ -275,19 +275,35 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             auto& bce = expr->Cast<duckdb::BoundConstantExpression>();
-            // Get the constant out of the duckdb node as a C++ variant.
-            // Using auto since variant set will be extended.
-            auto extracted_value = extractValue(bce.value);
-            // Return a PhysicalConstantExpression<T> where T is the actual
-            // type of the value contained within bce.value.
-            auto ret = std::visit(
-                [no_scalars](const auto& value) {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalConstantExpression<
-                            std::decay_t<decltype(value)>>>(value, no_scalars));
-                },
-                extracted_value);
-            return ret;
+            if (bce.value.IsNull()) {
+                // Get the constant out of the duckdb node as a C++ variant.
+                // Using auto since variant set will be extended.
+                auto extracted_value = getNullValue(bce.value);
+                // Return a PhysicalConstantExpression<T> where T is the actual
+                // type of the value contained within bce.value.
+                auto ret = std::visit(
+                    [no_scalars](const auto& value) {
+                        return std::static_pointer_cast<PhysicalExpression>(
+                            std::make_shared<PhysicalNullExpression<
+                                std::decay_t<decltype(value)>>>(value, no_scalars));
+                    },
+                    extracted_value);
+                return ret;
+            } else {
+                // Get the constant out of the duckdb node as a C++ variant.
+                // Using auto since variant set will be extended.
+                auto extracted_value = extractValue(bce.value);
+                // Return a PhysicalConstantExpression<T> where T is the actual
+                // type of the value contained within bce.value.
+                auto ret = std::visit(
+                    [no_scalars](const auto& value) {
+                        return std::static_pointer_cast<PhysicalExpression>(
+                            std::make_shared<PhysicalConstantExpression<
+                                std::decay_t<decltype(value)>>>(value, no_scalars));
+                    },
+                    extracted_value);
+                return ret;
+            }
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
             // Convert the base duckdb::Expression node to its actual derived
