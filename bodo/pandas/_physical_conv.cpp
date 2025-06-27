@@ -48,8 +48,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
+    auto saved_bodo_schema = g_idx_schema[op.table_index];
     auto physical_op = std::make_shared<PhysicalProjection>(
-        source_cols, std::move(op.expressions), in_table_schema);
+        source_cols, std::move(op.expressions), in_table_schema, saved_bodo_schema);
     this->active_pipeline->AddOperator(physical_op);
 }
 
