@@ -3,23 +3,18 @@
 SeriesGroupBy.agg(func=None, engine=None, engine_kwargs=None, **kwargs) -> BodoDataFrame | BodoSeries
 ```
 
-Apply one or more aggregate functions to groups of data in a single column from a BodoDataFrame.
-This method is the same as `SeriesGroupBy.aggregate`.
+Apply one or more aggregate functions to groups of data in a single column from a BodoDataFrame. This method is the same as `SeriesGroupBy.aggregate`.
 
 <p class="api-header">Parameters</p>
 
 : __func : *function, str, list, dict or None*:__ Function(s) to use for aggregating the data. Acceptable combinations are:
-* A supported function e.g. `sum`
-* The name of a supported aggregation function e.g. `"sum"`
-* A list of functions, which will be applied to each selected column e.g. `["sum"`, `"count"]`
-* None along with key word arguments specifying the supported functions to apply.
 
-While providing a dictionary argument for *func* is supported, this use has been deprecated in Pandas and will raise an error in newer versions.
-[Refer to our documentation][df-lib-groupby]
-for aggregate functions that are currently supported.
-Any other combination of arguments or user defined functions will either fallback to Pandas
-[`SeriesGroupBy.agg`](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.agg.html#pandas.core.groupby.SeriesGroupBy.agg)
-or raise a descriptive error.
+    * A supported function e.g. `sum`
+    * The name of a supported aggregation function e.g. `"sum"`
+    * A list of functions, which will be applied to each selected column e.g. `["sum"`, `"count"]`
+    * None along with key word arguments specifying the supported functions to apply.
+
+    While providing a dictionary argument for *func* is supported, this use has been deprecated in Pandas and will raise an error in newer versions. [Refer to our documentation][df-lib-groupby] for aggregate functions that are currently supported. Any other combination of arguments or user defined functions will either fallback to Pandas [`SeriesGroupBy.agg`](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.agg.html#pandas.core.groupby.SeriesGroupBy.agg) or raise a descriptive error.
 
 : __\*\*kwargs__ Key word arguments are used to create Named Aggregations and should be in the form `new_name="function"`.
 

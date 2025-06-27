@@ -33,13 +33,13 @@ The type of this argument differs from Pandas.
 ``` py
 import bodo.pandas as bd
 
-original_df = pd.DataFrame(
+original_df = bd.DataFrame(
     {"foo": range(15), "bar": range(15, 30)}
    )
 
 original_df.to_parquet("example.pq")
 
-restored_df = bodo_pd.read_parquet("example.pq")
+restored_df = bd.read_parquet("example.pq")
 print(type(restored_df))
 print(restored_df.head())
 ```

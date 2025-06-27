@@ -20,7 +20,7 @@ import bodo.pandas as bd
 
 bdf = bd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+            "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
         }
     )
 

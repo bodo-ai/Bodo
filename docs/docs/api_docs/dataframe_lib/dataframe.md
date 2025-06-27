@@ -222,7 +222,7 @@ bdf = bd.DataFrame(
     {"foo": range(15), "bar": range(15, 30)}
    )
 
-bdf.map_parititions(lambda df_: df_.foo + df_.bar)
+bdf.map_partitions(lambda df_: df_.foo + df_.bar)
 ```
 
 Output:
@@ -259,9 +259,9 @@ import bodo.pandas as bd
 
 bdf = bd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+            "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
             "B": ["A1", "B1 ", "C1", "Abc"] * 3,
-            "C": pd.array([4, 5, 6, -1] * 3, "Int64"),
+            "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
         }
     )
 
@@ -512,5 +512,6 @@ df.to_iceberg(
     table_identifier="my_table",
     location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
 )
+```
 
 ---

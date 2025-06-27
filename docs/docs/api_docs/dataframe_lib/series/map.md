@@ -26,9 +26,9 @@ import bodo.pandas as bd
 
 bdf = bd.DataFrame(
     {
-        "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+        "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
         "B": ["A1", "B1", "C1", "Abc"] * 3,
-        "C": pd.array([4, 5, 6, -1] * 3, "Int64"),
+        "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
     }
 )
 

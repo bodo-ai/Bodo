@@ -3,23 +3,19 @@
 DataFrameGroupBy.agg(func=None, engine=None, engine_kwargs=None, **kwargs) -> BodoDataFrame
 ```
 
-Apply one or more aggregate functions to groups of data in a BodoDataFrame.
-This method is the same as `DataFrameGroupBy.aggregate`.
+Apply one or more aggregate functions to groups of data in a BodoDataFrame. This method is the same as `DataFrameGroupBy.aggregate`.
 
 <p class="api-header">Parameters</p>
 
 : __func : *function, str, list, dict or None*:__ Function(s) to use for aggregating the data. Acceptable combinations are:
-* A supported function e.g. `sum`
-* The name of a supported aggregation function e.g. `"sum"`
-* A list of functions, which will be applied to each selected column e.g. `["sum"`, `"count"]`
-* A dictionary mapping column name to aggregate function e.g. `{"col_1": "sum", "col_2": "mean"}`
-* None along with key word arguments specifying Named Aggregates.
 
-[Refer to our documentation][df-lib-groupby]
-for aggregate functions that are currently supported.
-Any other combination of arguments or user defined functions will either fallback to Pandas
-[`DataFrameGroupBy.agg`](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.agg.html#pandas.core.groupby.DataFrameGroupBy.agg)
-or raise a descriptive error.
+    * A supported function e.g. `sum`
+    * The name of a supported aggregation function e.g. `"sum"`
+    * A list of functions, which will be applied to each selected column e.g. `["sum"`, `"count"]`
+    * A dictionary mapping column name to aggregate function e.g. `{"col_1": "sum", "col_2": "mean"}`
+    * None along with key word arguments specifying Named Aggregates.
+
+    [Refer to our documentation][df-lib-groupby] for aggregate functions that are currently supported. Any other combination of arguments or user defined functions will either fallback to Pandas [`DataFrameGroupBy.agg`](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.agg.html#pandas.core.groupby.DataFrameGroupBy.agg) or raise a descriptive error.
 
 : __\*\*kwargs__ Key word arguments are used to create Named Aggregations and should be in the form `new_name=pd.NamedAgg(column_name, function)` or simply `new_name=(column_name, function)`.
 
