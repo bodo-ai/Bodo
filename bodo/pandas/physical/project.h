@@ -31,7 +31,8 @@ class PhysicalProjection : public PhysicalSourceSink {
 
         // Create the output schema from expressions
         this->output_schema = std::make_shared<bodo::Schema>();
-        for (auto& expr : this->exprs) {
+        for (size_t i = 0; i < this->exprs.size(); ++i) {
+            auto& expr = this->exprs[i];
             physical_exprs.emplace_back(
                 buildPhysicalExprTree(expr, col_ref_map, true));
 
@@ -68,15 +69,8 @@ class PhysicalProjection : public PhysicalSourceSink {
                         expr->ToString());
                 }
             } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
-                auto& const_expr =
-                    expr->Cast<duckdb::BoundConstantExpression>();
-
-                std::unique_ptr<bodo::DataType> col_type =
-                    arrow_type_to_bodo_data_type(
-                        convertDuckdbValueToArrowScalar(const_expr.value)->type)
-                        ->copy();
-                this->output_schema->append_column(std::move(col_type));
-                col_names.emplace_back(const_expr.value.ToString());
+                this->output_schema->append_column(std::move(saved_output_schema->column_types[i]->copy()));
+                col_names.emplace_back(saved_output_schema->column_names[i]);
             } else if (expr->type == duckdb::ExpressionType::COMPARE_EQUAL ||
                        expr->type == duckdb::ExpressionType::COMPARE_NOTEQUAL ||
                        expr->type == duckdb::ExpressionType::COMPARE_LESSTHAN ||
@@ -105,10 +99,12 @@ class PhysicalProjection : public PhysicalSourceSink {
         }
         this->output_schema->column_names = col_names;
         this->output_schema->metadata = input_schema->metadata;
+        /*
         if (this->output_schema->ToString() != this->saved_output_schema->ToString()) {
             std::cout << "proj output " << this->output_schema->ToString() << std::endl;
             std::cout << "proj saved " << this->saved_output_schema->ToString() << std::endl;
         }
+        */
     }
 
     virtual ~PhysicalProjection() = default;
