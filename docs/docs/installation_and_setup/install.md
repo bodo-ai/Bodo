@@ -11,14 +11,14 @@ Bodo compute engine can be installed using either `pip` or `conda` (see how to i
 To install Bodo and its dependencies with `pip`, use the following command:
 
 ```console
-pip install bodo
+pip install -U bodo
 ```
 
 For production environments, we recommend creating a `conda` environment and installing
 Bodo and its dependencies in it as shown below:
 
 ```console
-conda create -n Bodo python=3.12 -c conda-forge
+conda create -n Bodo python=3.13 -c conda-forge
 conda activate Bodo
 conda install bodo -c bodo.ai -c conda-forge
 ```
@@ -52,7 +52,7 @@ sudo apt install python3-pip
 sudo apt install python3-venv
 python3 -m venv bodo-test
 source bodo-test/bin/activate
-pip install bodo
+pip install -U bodo
 ```
 
 ## Optional Dependencies {#optionaldep}
@@ -70,7 +70,7 @@ All optional dependencies except Hadoop can be
 installed through conda using the command:
 
 ```console
-conda install sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=11 deltalake -c conda-forge
+conda install sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk=17 deltalake -c conda-forge
 ```
 
 

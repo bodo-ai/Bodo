@@ -31,21 +31,15 @@ The type of this argument differs from Pandas.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-original_df = pd.DataFrame(
+original_df = bd.DataFrame(
     {"foo": range(15), "bar": range(15, 30)}
    )
 
-@bodo.jit
-def write_parquet(df):
-    df.to_parquet("example.pq")
+original_df.to_parquet("example.pq")
 
-write_parquet(original_df)
-
-restored_df = bodo_pd.read_parquet("example.pq")
+restored_df = bd.read_parquet("example.pq")
 print(type(restored_df))
 print(restored_df.head())
 ```
@@ -76,6 +70,7 @@ bodo.pandas.read_iceberg(
     snapshot_id: int | None = None,
     limit: int | None = None,
     scan_properties: dict[str, Any] | None = None,
+    location: str | None = None,
 ) -> BodoDataFrame
 ```
 
@@ -95,6 +90,7 @@ Refer to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/ap
 : __selected_fields: *tuple[str], optional*:__ Fields to select from the table, if not provided, all fields will be selected.
 : __snapshot_id: *int, optional*:__ ID of the snapshot to read from. If not provided, the latest snapshot will be used.
 : __limit: *int, optional*:__ Maximum number of rows to read. If not provided, all rows will be read.
+: __location: *str, optional*:__ Location of the table (if supported by the catalog). If this is passed a path and catalog_name and catalog_properties are None, it will use a filesystem catalog with the provided location. If the location is an S3 Tables ARN it will use the S3TablesCatalog.
 
 : Non-default values for case_sensitive and scan_properties will trigger a fallback to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/api/pandas.read_iceberg.html).
 
@@ -102,13 +98,21 @@ Refer to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/ap
 <p class="api-header">Returns</p>
 : __BodoDataFrame__
 
-<p class="api-header">Example</p>
+<p class="api-header">Examples</p>
+
+Simple read of a table stored without a catalog on the filesystem:
+``` py
+import bodo.pandas as bd
+
+df = bd.read_iceberg("my_table", location="s3://path/to/iceberg/warehouse")
+```
+
 
 Read a table using a predefined PyIceberg catalog.
 ``` py
-import bodo
-import bodo.pandas as bodo_pd
-df = bodo_pd.read_iceberg(
+import bodo.pandas as bd
+
+df = bd.read_iceberg(
     table_identifier="my_schema.my_table",
     catalog_name="my_catalog",
     row_filter="col1 > 10",
@@ -120,14 +124,25 @@ df = bodo_pd.read_iceberg(
 
 Read a table using a new PyIceberg catalog with custom properties.
 ``` py
-import bodo
-import bodo.pandas as bodo_pd
+import bodo.pandas as bd
 import pyiceberg.catalog
-df = bodo_pd.read_iceberg(
+
+df = bd.read_iceberg(
     table_identifier="my_schema.my_table",
     catalog_properties={
         pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
         pyiceberg.catalog.WAREHOUSE_LOCATION: path_to_warehouse_dir,
     }
+)
+```
+
+Read a table from an S3 Tables Bucket using the location parameter.
+
+``` py
+import bodo.pandas as bd
+
+df = bd.read_iceberg(
+    table_identifier="my_table",
+    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
 )
 ```

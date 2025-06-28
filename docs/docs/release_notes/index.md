@@ -1,12 +1,6 @@
----
-hide:
-  - navigation
-  - toc
-  - footer
----
-
 # Release Notes {#releases}
 
+-   [Bodo.ai 2025.7 Release][July_2025]
 -   [Bodo.ai 2025.6 Release][June_2025]
 -   [Bodo.ai 2025.5 Release][May_2025]
 -   [Bodo.ai 2025.4 Release][April_2025]
