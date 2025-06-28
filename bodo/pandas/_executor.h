@@ -41,7 +41,8 @@ class Executor {
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).
 #ifdef DEBUG_PIPELINE
-        std::cout << "ExecutePipelines with " << pipelines.size() << " pipelines." << std::endl;
+        std::cout << "ExecutePipelines with " << pipelines.size()
+                  << " pipelines." << std::endl;
 #endif
         for (size_t i = 0; i < pipelines.size(); ++i) {
 #ifdef DEBUG_PIPELINE
