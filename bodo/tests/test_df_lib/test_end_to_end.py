@@ -1698,3 +1698,16 @@ def test_series_sum_product_count():
         assert np.isclose(bdf[c].sum(), df[c].sum(), rtol=1e-6)
         assert np.isclose(bdf[c].product(), df[c].product(), rtol=1e-6)
         assert bdf[c].count() == df[c].count()
+
+
+def test_read_csv(datapath):
+    """Very simple test to read a parquet file for sanity checking."""
+    path = datapath("example.csv")
+
+    bodo_out = bd.read_csv(path)[["one", "four"]]
+    py_out = pd.read_csv(path)[["one", "four"]]
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )

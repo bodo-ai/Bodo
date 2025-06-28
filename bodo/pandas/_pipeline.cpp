@@ -15,18 +15,43 @@ bool Pipeline::midPipelineExecute(unsigned idx,
     // Terminate the recursion when we have processed all the operators
     // and only have the sink to go which cannot HAVE_MORE_OUTPUT.
     if (idx >= between_ops.size()) {
-        return sink->ConsumeBatch(batch, prev_op_result) ==
-               OperatorResult::FINISHED;
+#ifdef DEBUG_PIPELINE
+        for (unsigned i = 0; i < idx; ++i)
+            std::cout << " ";
+        std::cout << "midPipelineExecute before ConsumeBatch "
+                  << sink->ToString() << std::endl;
+#endif
+        auto ret = sink->ConsumeBatch(batch, prev_op_result) ==
+                   OperatorResult::FINISHED;
+#ifdef DEBUG_PIPELINE
+        for (unsigned i = 0; i < idx; ++i)
+            std::cout << " ";
+        std::cout << "midPipelineExecute after ConsumeBatch "
+                  << sink->ToString() << std::endl;
+#endif
+        return ret;
     } else {
         // Get the current operator.
         std::shared_ptr<PhysicalSourceSink>& op = between_ops[idx];
         while (true) {
+#ifdef DEBUG_PIPELINE
+            for (unsigned i = 0; i < idx; ++i)
+                std::cout << " ";
+            std::cout << "midPipelineExecute before ProcessBatch "
+                      << op->ToString() << std::endl;
+#endif
             // Process this batch with this operator.
             std::pair<std::shared_ptr<table_info>, OperatorResult> result =
                 op->ProcessBatch(batch, prev_op_result);
             prev_op_result = result.second;
 
-            // Execute subsequent operators and If any of them said that
+#ifdef DEBUG_PIPELINE
+            for (unsigned i = 0; i < idx; ++i)
+                std::cout << " ";
+            std::cout << "midPipelineExecute after ProcessBatch "
+                      << op->ToString() << std::endl;
+#endif
+            // Execute subsequent operators and if any of them said that
             // no more output is needed or the current operator knows no
             // more output is needed then return true to terminate the pipeline.
             if (midPipelineExecute(idx + 1, result.first, prev_op_result)) {
@@ -59,9 +84,17 @@ void Pipeline::Execute() {
     while (!finished) {
         std::shared_ptr<table_info> batch;
 
+#ifdef DEBUG_PIPELINE
+        std::cout << "Pipeline::Execute before ProduceBatch "
+                  << source->ToString() << std::endl;
+#endif
         // Execute the source to get the base batch
         std::pair<std::shared_ptr<table_info>, OperatorResult> result =
             source->ProduceBatch();
+#ifdef DEBUG_PIPELINE
+        std::cout << "Pipeline::Execute after ProduceBatch "
+                  << source->ToString() << std::endl;
+#endif
         batch = result.first;
         // Use NEED_MORE_INPUT for sources
         // just for compatibility with other operators' input expectations and

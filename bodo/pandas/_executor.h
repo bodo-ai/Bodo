@@ -40,8 +40,18 @@ class Executor {
         // Pipelines generation ensures that pipelines are in the right
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).
+#ifdef DEBUG_PIPELINE
+        std::cout << "ExecutePipelines with " << pipelines.size()
+                  << " pipelines." << std::endl;
+#endif
         for (size_t i = 0; i < pipelines.size(); ++i) {
+#ifdef DEBUG_PIPELINE
+            std::cout << "Before execute pipeline " << i << std::endl;
+#endif
             pipelines[i]->Execute();
+#ifdef DEBUG_PIPELINE
+            std::cout << "After execute pipeline " << i << std::endl;
+#endif
         }
         return pipelines.back()->GetResult();
     }

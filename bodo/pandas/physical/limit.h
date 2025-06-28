@@ -106,16 +106,18 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         if (!collected_rows) {
             collected_rows = std::make_unique<ChunkedTableBuilderState>(
-                input_batch->schema(), input_batch->nrows());
+                input_batch->schema(), get_streaming_batch_size());
         }
         // Every rank will collect n rows.  We remove extras in Finalize.
         uint64_t select_local = std::min(local_remaining, input_batch->nrows());
-        auto unified_table = unify_dictionary_arrays_helper(
-            input_batch, collected_rows->dict_builders, 0);
-        collected_rows->builder->AppendBatch(unified_table,
-                                             get_n_rows(select_local));
-        collected_rows->builder->FinalizeActiveChunk();
-        local_remaining -= select_local;
+        if (select_local > 0) {
+            auto unified_table = unify_dictionary_arrays_helper(
+                input_batch, collected_rows->dict_builders, 0);
+            collected_rows->builder->AppendBatch(unified_table,
+                                                 get_n_rows(select_local));
+            collected_rows->builder->FinalizeActiveChunk();
+            local_remaining -= select_local;
+        }
         return (local_remaining == 0 ||
                 prev_op_result == OperatorResult::FINISHED)
                    ? OperatorResult::FINISHED
@@ -139,7 +141,7 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
-        auto next_batch = collected_rows->builder->PopChunk();
+        auto next_batch = collected_rows->builder->PopChunk(true);
         return {std::get<0>(next_batch),
                 collected_rows->builder->empty()
                     ? OperatorResult::FINISHED
