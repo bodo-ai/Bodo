@@ -8,7 +8,7 @@ This quickstart guide will walk you through the process of running a simple SQL 
 
 ## Prerequisites
 
-[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
+[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
 Additionally, install bodosql with pip or conda:
 
 ```shell

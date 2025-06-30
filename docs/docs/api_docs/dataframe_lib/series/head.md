@@ -16,16 +16,14 @@ Returns the first *n* rows of the BodoSeries.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+            "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
         }
     )
 
-bdf = bodo_pd.from_pandas(df)
 bodo_ser_head = bdf.A.head(3)
 print(type(bodo_ser_head))
 print(bodo_ser_head)

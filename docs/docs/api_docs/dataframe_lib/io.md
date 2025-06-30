@@ -31,21 +31,15 @@ The type of this argument differs from Pandas.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-original_df = pd.DataFrame(
+original_df = bd.DataFrame(
     {"foo": range(15), "bar": range(15, 30)}
    )
 
-@bodo.jit
-def write_parquet(df):
-    df.to_parquet("example.pq")
+original_df.to_parquet("example.pq")
 
-write_parquet(original_df)
-
-restored_df = bodo_pd.read_parquet("example.pq")
+restored_df = bd.read_parquet("example.pq")
 print(type(restored_df))
 print(restored_df.head())
 ```
@@ -108,17 +102,17 @@ Refer to [`pandas.read_iceberg`](https://pandas.pydata.org/docs/dev/reference/ap
 
 Simple read of a table stored without a catalog on the filesystem:
 ``` py
-import bodo
-import bodo.pandas as bodo_pd
-df = bodo_pd.read_iceberg("my_table", location="s3://path/to/iceberg/warehouse")
+import bodo.pandas as bd
+
+df = bd.read_iceberg("my_table", location="s3://path/to/iceberg/warehouse")
 ```
 
 
 Read a table using a predefined PyIceberg catalog.
 ``` py
-import bodo
-import bodo.pandas as bodo_pd
-df = bodo_pd.read_iceberg(
+import bodo.pandas as bd
+
+df = bd.read_iceberg(
     table_identifier="my_schema.my_table",
     catalog_name="my_catalog",
     row_filter="col1 > 10",
@@ -130,10 +124,10 @@ df = bodo_pd.read_iceberg(
 
 Read a table using a new PyIceberg catalog with custom properties.
 ``` py
-import bodo
-import bodo.pandas as bodo_pd
+import bodo.pandas as bd
 import pyiceberg.catalog
-df = bodo_pd.read_iceberg(
+
+df = bd.read_iceberg(
     table_identifier="my_schema.my_table",
     catalog_properties={
         pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
@@ -145,8 +139,9 @@ df = bodo_pd.read_iceberg(
 Read a table from an S3 Tables Bucket using the location parameter.
 
 ``` py
-import bodo.pandas as bodo_pd
-df = bodo_pd.read_iceberg(
+import bodo.pandas as bd
+
+df = bd.read_iceberg(
     table_identifier="my_table",
     location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
 )

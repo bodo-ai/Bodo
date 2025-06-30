@@ -270,7 +270,7 @@ def check_args_fallback(
                     msg = (
                         f"{func.__name__} is not "
                         "implemented in Bodo dataframe library for the specified arguments yet. "
-                        "Falling back to Pandas (may be slow or run out of memory."
+                        "Falling back to Pandas (may be slow or run out of memory)."
                     )
                     if except_msg:
                         msg += f"\nException: {except_msg}"
