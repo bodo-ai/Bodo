@@ -222,7 +222,8 @@ bdf = bd.DataFrame(
     {"foo": range(15), "bar": range(15, 30)}
    )
 
-bdf.map_partitions(lambda df_: df_.foo + df_.bar)
+bdf_mapped = bdf.map_partitions(lambda df_: df_.foo + df_.bar)
+print(bdf_mapped)
 ```
 
 Output:
