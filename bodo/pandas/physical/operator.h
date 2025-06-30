@@ -49,7 +49,7 @@ class PhysicalOperator {
     virtual void Finalize() = 0;
 
     virtual std::string ToString() {
-        return typeid(*this).name();  // returns mangled nam
+        return typeid(*this).name();  // returns mangled name
     }
 };
 

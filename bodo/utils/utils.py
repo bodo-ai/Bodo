@@ -1930,18 +1930,23 @@ def bodo_exec(func_text, glbls, loc_vars, mod_name):
 
 
 def bodo_spawn_exec(func_text, glbls, loc_vars, mod_name):
+    """
+    Creates a new function from the given func_text on the main worker by
+    sending it to all the other workers and creating it locally as well.
+    See bodo_exec above for a description of the arguments.
+    """
     import bodo.spawn.spawner
 
     if bodo.spawn_mode:
         # In the spawn mode case we need to bodo_exec on the workers as well
         # so the code object is available to the caching infra.
-        def f(func_text, glbls, loc_vars, __name__):
-            bodo.utils.utils.bodo_exec(func_text, glbls, loc_vars, __name__)
+        def f(func_text, glbls, loc_vars, mod_name):
+            bodo.utils.utils.bodo_exec(func_text, glbls, loc_vars, mod_name)
 
         bodo.spawn.spawner.submit_func_to_workers(
-            f, [], func_text, glbls, loc_vars, __name__
+            f, [], func_text, glbls, loc_vars, mod_name
         )
-    return bodo_exec(func_text, glbls, loc_vars, __name__)
+    return bodo_exec(func_text, glbls, loc_vars, mod_name)
 
 
 def cached_call_internal(context, builder, impl, sig, args):
