@@ -856,6 +856,7 @@ class BodoDatetimeProperties:
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).dt, name)
 
+    @check_args_fallback(unsupported="none")
     def isocalendar(self):
         """Calculate year, week, and day according to the ISO 8601 standard, returns a BodoDataFrame"""
         series = self._series
