@@ -50,7 +50,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
 
     auto saved_bodo_schema = g_idx_schema[op.table_index];
     auto physical_op = std::make_shared<PhysicalProjection>(
-        source_cols, std::move(op.expressions), in_table_schema, saved_bodo_schema);
+        source_cols, std::move(op.expressions), in_table_schema,
+        saved_bodo_schema);
     this->active_pipeline->AddOperator(physical_op);
 }
 
@@ -184,7 +185,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
 
 bool arrowSchemaTypeEquals(const ::arrow::Schema& s1,
                            const ::arrow::Schema& s2) {
-    if (s1.num_fields() != s2.num_fields()) return false;
+    if (s1.num_fields() != s2.num_fields())
+        return false;
 
     for (int i = 0; i < s1.num_fields(); ++i) {
         if (!s1.field(i)->type()->Equals(*s2.field(i)->type())) {

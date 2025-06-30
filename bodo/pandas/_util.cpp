@@ -394,8 +394,9 @@ std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
         },
         getNullValue(value));
     if (!scalar_res.ok()) {
-        throw std::runtime_error("Failed to convert duckdb value to arrow type: " +
-                                 scalar_res.status().ToString());
+        throw std::runtime_error(
+            "Failed to convert duckdb value to arrow type: " +
+            scalar_res.status().ToString());
     }
     return scalar_res.ValueOrDie()->type;
 }

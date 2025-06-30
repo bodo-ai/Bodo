@@ -138,7 +138,8 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
  * @param val - the type to create the NULL value of
  * @return duckdb::unique_ptr<duckdb::Expression> - the const null expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py, int64_t field_idx);
+duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
+                                                       int64_t field_idx);
 
 /**
  * @brief Create an expression from a constant integer.

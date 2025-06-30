@@ -64,7 +64,7 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
 
 // String specialization
 std::shared_ptr<arrow::Array> NullArrowArray(const std::string& value,
-                                                 size_t num_elements) {
+                                             size_t num_elements) {
     arrow::StringBuilder builder;
     arrow::Status status;
     for (size_t i = 0; i < num_elements; ++i) {
@@ -92,8 +92,7 @@ std::shared_ptr<arrow::Array> NullArrowArray(
     return array_result.ValueOrDie();
 }
 
-std::shared_ptr<arrow::Array> NullArrowArray(bool value,
-                                                 size_t num_elements) {
+std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
     arrow::BooleanBuilder builder;
     arrow::Status status;
 
@@ -285,7 +284,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     [no_scalars](const auto& value) {
                         return std::static_pointer_cast<PhysicalExpression>(
                             std::make_shared<PhysicalNullExpression<
-                                std::decay_t<decltype(value)>>>(value, no_scalars));
+                                std::decay_t<decltype(value)>>>(value,
+                                                                no_scalars));
                     },
                     extracted_value);
                 return ret;
@@ -299,7 +299,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     [no_scalars](const auto& value) {
                         return std::static_pointer_cast<PhysicalExpression>(
                             std::make_shared<PhysicalConstantExpression<
-                                std::decay_t<decltype(value)>>>(value, no_scalars));
+                                std::decay_t<decltype(value)>>>(value,
+                                                                no_scalars));
                     },
                     extracted_value);
                 return ret;

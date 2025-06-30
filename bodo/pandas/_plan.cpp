@@ -77,7 +77,8 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     return out_plan;
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py, int64_t field_idx) {
+duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
+                                                       int64_t field_idx) {
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
     const std::shared_ptr<arrow::Field> &field = arrow_schema->field(field_idx);
     auto [_, out_type] = arrow_field_to_duckdb(field);
@@ -408,7 +409,7 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     auto source_duck = to_duckdb(source);
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     std::shared_ptr<bodo::Schema> bodo_out_schema =
-            bodo::Schema::FromArrowSchema(out_schema);
+        bodo::Schema::FromArrowSchema(out_schema);
 
     auto binder = get_duckdb_binder();
     auto table_idx = binder.get()->GenerateTableIndex();

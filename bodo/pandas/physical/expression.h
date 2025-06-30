@@ -235,7 +235,7 @@ template <typename T, typename std::enable_if<std::is_arithmetic<T>::value &&
                                                   !std::is_same<T, bool>::value,
                                               int>::type = 0>
 std::shared_ptr<arrow::Array> NullArrowArray(const T &value,
-                                                 size_t num_elements = 1) {
+                                             size_t num_elements = 1) {
     using ArrowType = typename arrow::CTypeTraits<T>::ArrowType;
     using BuilderType = arrow::NumericBuilder<ArrowType>;
 
@@ -257,7 +257,7 @@ std::shared_ptr<arrow::Array> NullArrowArray(const T &value,
 
 // String specialization
 std::shared_ptr<arrow::Array> NullArrowArray(const std::string &value,
-                                                 size_t num_elements = 1);
+                                             size_t num_elements = 1);
 
 // arrow::Scalar specialization
 std::shared_ptr<arrow::Array> NullArrowArray(
@@ -265,7 +265,7 @@ std::shared_ptr<arrow::Array> NullArrowArray(
 
 // bool specialization
 std::shared_ptr<arrow::Array> NullArrowArray(bool value,
-                                                 size_t num_elements = 1);
+                                             size_t num_elements = 1);
 
 /**
  * @brief Physical expression tree node type for scalar constants.
@@ -292,8 +292,7 @@ class PhysicalNullExpression : public PhysicalExpression {
 
             auto result =
                 arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
-            return std::make_shared<ArrayExprResult>(std::move(result),
-                                                     "Null");
+            return std::make_shared<ArrayExprResult>(std::move(result), "Null");
         } else {
             std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
 
@@ -310,7 +309,7 @@ class PhysicalNullExpression : public PhysicalExpression {
     }
 
    private:
-    const T constant; // holds no real value, only for type
+    const T constant;  // holds no real value, only for type
     const bool generate_array;
 };
 

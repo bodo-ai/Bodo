@@ -1740,7 +1740,7 @@ def test_read_csv(datapath):
         py_out,
     )
 
-    
+
 def test_dataframe_concat(datapath):
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))[["A", "D"]]
     bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))[["A", "E"]]

@@ -1,3 +1,4 @@
+import copy as py_copy
 import csv
 import importlib
 import typing as pt
@@ -8,7 +9,6 @@ from collections.abc import (
     Sequence,
 )
 
-import copy as py_copy
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
@@ -44,7 +44,6 @@ from bodo.pandas.utils import (
     make_col_ref_exprs,
     wrap_plan,
 )
-from bodo.utils.typing import BodoError
 from bodo.utils.utils import bodo_spawn_exec
 
 
@@ -472,6 +471,7 @@ def concat(
         orig_a = py_copy.deepcopy(a._plan)
         orig_b = py_copy.deepcopy(b._plan)
         if isinstance(empty_data, pd.DataFrame):
+
             def get_mapping(new_schema, old_schema, plan):
                 """Create col ref expressions to do the reordering between
                 the old schema column order and the new one.
@@ -490,9 +490,7 @@ def concat(
                 "LogicalProjection",
                 empty_data,
                 orig_a,
-                get_mapping(
-                    empty_data, a.columns.tolist(), orig_a
-                ),
+                get_mapping(empty_data, a.columns.tolist(), orig_a),
             )
             # Create a reordering of the temp b_new_cols so that the columns are in
             # the same order as the Pandas simulation on empty data.
@@ -500,9 +498,7 @@ def concat(
                 "LogicalProjection",
                 empty_data,
                 orig_b,
-                get_mapping(
-                    empty_data, b.columns.tolist(), orig_b
-                ),
+                get_mapping(empty_data, b.columns.tolist(), orig_b),
             )
         else:
             a_plan = orig_a

@@ -69,7 +69,8 @@ class PhysicalProjection : public PhysicalSourceSink {
                         expr->ToString());
                 }
             } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
-                this->output_schema->append_column(std::move(saved_output_schema->column_types[i]->copy()));
+                this->output_schema->append_column(
+                    std::move(saved_output_schema->column_types[i]->copy()));
                 col_names.emplace_back(saved_output_schema->column_names[i]);
             } else if (expr->type == duckdb::ExpressionType::COMPARE_EQUAL ||
                        expr->type == duckdb::ExpressionType::COMPARE_NOTEQUAL ||
@@ -100,9 +101,10 @@ class PhysicalProjection : public PhysicalSourceSink {
         this->output_schema->column_names = col_names;
         this->output_schema->metadata = input_schema->metadata;
         /*
-        if (this->output_schema->ToString() != this->saved_output_schema->ToString()) {
-            std::cout << "proj output " << this->output_schema->ToString() << std::endl;
-            std::cout << "proj saved " << this->saved_output_schema->ToString() << std::endl;
+        if (this->output_schema->ToString() !=
+        this->saved_output_schema->ToString()) { std::cout << "proj output " <<
+        this->output_schema->ToString() << std::endl; std::cout << "proj saved "
+        << this->saved_output_schema->ToString() << std::endl;
         }
         */
     }
