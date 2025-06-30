@@ -1698,3 +1698,44 @@ def test_series_sum_product_count():
         assert np.isclose(bdf[c].sum(), df[c].sum(), rtol=1e-6)
         assert np.isclose(bdf[c].product(), df[c].product(), rtol=1e-6)
         assert bdf[c].count() == df[c].count()
+
+
+def test_read_csv(datapath):
+    """Very simple test to read a parquet file for sanity checking."""
+    path = datapath("example.csv")
+    data1_path = datapath("csv_data1.csv")
+    date_path = datapath("csv_data_date1.csv")
+
+    bodo_out = bd.read_csv(path)[["one", "four"]]
+    py_out = pd.read_csv(path)[["one", "four"]]
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
+
+    bodo_out = bd.read_csv(path, usecols=[0, 3])
+    py_out = pd.read_csv(path, usecols=[0, 3])
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
+
+    col_names = ["int0", "float0", "float1", "int1"]
+    bodo_out = bd.read_csv(data1_path, names=col_names)
+    py_out = pd.read_csv(data1_path, names=col_names)
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
+
+    col_names = ["int0", "float0", "date0", "int1"]
+    bodo_out = bd.read_csv(date_path, names=col_names, parse_dates=[2])
+    py_out = pd.read_csv(date_path, names=col_names, parse_dates=[2])
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
