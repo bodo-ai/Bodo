@@ -143,17 +143,21 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
  *
  */
 struct BodoAggFunctionData : public duckdb::FunctionData {
-    BodoAggFunctionData(bool dropna, std::string name)
-        : dropna(dropna), name(name) {}
+    BodoAggFunctionData(bool dropna, std::string name,
+                        std::shared_ptr<arrow::Schema> out_schema)
+        : out_schema(std::move(out_schema)), dropna(dropna), name(name) {}
 
     bool Equals(const FunctionData &other_p) const override {
         const BodoAggFunctionData &other = other_p.Cast<BodoAggFunctionData>();
-        return (other.dropna == this->dropna && other.name == this->name);
+        return (other.dropna == this->dropna && other.name == this->name &&
+                other.out_schema == this->out_schema);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoAggFunctionData>(this->dropna, this->name);
+        return duckdb::make_uniq<BodoAggFunctionData>(this->dropna, this->name,
+                                                      this->out_schema);
     }
 
+    const std::shared_ptr<arrow::Schema> out_schema;
     const bool dropna;
     const std::string name;
 };

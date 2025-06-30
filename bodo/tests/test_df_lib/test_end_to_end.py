@@ -971,7 +971,7 @@ def test_merge():
     )
 
 
-def test_merge_swith_side():
+def test_merge_switch_side():
     """Test merge with left table smaller than right table so DuckDB reorders the input
     tables to use the smaller table as build.
     """
@@ -1677,6 +1677,70 @@ def test_series_min_max_unsupported_types():
         bdf["A"].max()
 
 
+def test_series_sum_product_count():
+    """Basic test for Series sum, product, and count."""
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "C2": np.append(np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": [None] * n,
+            "F": np.append(np.arange(n - 1), [None]),
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+
+    for c in df.columns:
+        assert np.isclose(bdf[c].sum(), df[c].sum(), rtol=1e-6)
+        assert np.isclose(bdf[c].product(), df[c].product(), rtol=1e-6)
+        assert bdf[c].count() == df[c].count()
+
+
+def test_read_csv(datapath):
+    """Very simple test to read a parquet file for sanity checking."""
+    path = datapath("example.csv")
+    data1_path = datapath("csv_data1.csv")
+    date_path = datapath("csv_data_date1.csv")
+
+    bodo_out = bd.read_csv(path)[["one", "four"]]
+    py_out = pd.read_csv(path)[["one", "four"]]
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
+
+    bodo_out = bd.read_csv(path, usecols=[0, 3])
+    py_out = pd.read_csv(path, usecols=[0, 3])
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
+
+    col_names = ["int0", "float0", "float1", "int1"]
+    bodo_out = bd.read_csv(data1_path, names=col_names)
+    py_out = pd.read_csv(data1_path, names=col_names)
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
+
+    col_names = ["int0", "float0", "date0", "int1"]
+    bodo_out = bd.read_csv(date_path, names=col_names, parse_dates=[2])
+    py_out = pd.read_csv(date_path, names=col_names, parse_dates=[2])
+
+    _test_equal(
+        bodo_out,
+        py_out,
+    )
+
+    
 def test_dataframe_concat(datapath):
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))[["A", "D"]]
     bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))[["A", "E"]]

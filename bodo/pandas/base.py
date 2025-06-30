@@ -1,6 +1,12 @@
+import csv
 import importlib
 import typing as pt
-from collections.abc import Iterable, Mapping
+from collections.abc import (
+    Hashable,
+    Iterable,
+    Mapping,
+    Sequence,
+)
 
 import copy as py_copy
 import pandas as pd
@@ -8,11 +14,22 @@ import pyarrow as pa
 from pandas._libs import lib
 from pandas._typing import (
     Axis,
+    CompressionOptions,
+    CSVEngine,
+    DtypeArg,
+    DtypeBackend,
+    FilePath,
     Hashable,
     HashableT,
+    IndexLabel,
+    ReadCsvBuffer,
+    StorageOptions,
+    UsecolsArgType,
 )
 from pandas.core.tools.datetimes import _unit_map
+from pandas.io.parsers.readers import _c_parser_defaults
 
+import bodo
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
 from bodo.pandas.utils import (
@@ -28,6 +45,7 @@ from bodo.pandas.utils import (
     wrap_plan,
 )
 from bodo.utils.typing import BodoError
+from bodo.utils.utils import bodo_spawn_exec
 
 
 def from_pandas(df):
@@ -160,6 +178,7 @@ def read_iceberg(
     import pyiceberg.expressions
     import pyiceberg.table
 
+    from bodo.io.iceberg.read_metadata import get_table_length
     from bodo.pandas.utils import BodoLibNotImplementedException
 
     # Support simple directory only calls like:
@@ -192,6 +211,19 @@ def read_iceberg(
     arrow_schema = pyiceberg_schema.as_arrow()
     empty_df = arrow_to_empty_df(arrow_schema)
 
+    # Get the table length estimate, if there's not a filter it will be exact
+    table_len_estimate = get_table_length(table, snapshot_id or -1)
+
+    # If there's a row filter, we need to estimate the selectivity
+    # and adjust the table length estimate accordingly.
+    if row_filter is not None and table_len_estimate > 0:
+        # TODO: do something smarter here like sampling or turn the filter into a
+        # separate node so the planner can handle it
+        #
+        # This matches duckdb's default selectivity estimate for filters
+        filter_selectivity_estimate = 0.2
+        table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
+
     plan = LazyPlan(
         "LogicalGetIcebergRead",
         empty_df,
@@ -205,6 +237,7 @@ def read_iceberg(
         # during filter conversion. See bodo/io/iceberg/common.py::pyiceberg_filter_to_pyarrow_format_str_and_scalars
         pyiceberg_schema,
         snapshot_id if snapshot_id is not None else -1,
+        table_len_estimate,
         __pa_schema=arrow_schema,
     )
 
@@ -230,6 +263,101 @@ def read_iceberg(
         )
 
     return wrap_plan(plan=plan)
+
+
+@check_args_fallback(
+    supported=[
+        "names",
+        "usecols",
+        "parse_dates",
+    ]
+)
+def read_csv(
+    filepath_or_buffer: FilePath | ReadCsvBuffer[bytes] | ReadCsvBuffer[str],
+    *,
+    sep: str | None | lib.NoDefault = lib.no_default,
+    delimiter: str | None | lib.NoDefault = None,
+    # Column and Index Locations and Names
+    header: int | Sequence[int] | None | pt.Literal["infer"] = "infer",
+    names: Sequence[Hashable] | None | lib.NoDefault = lib.no_default,
+    index_col: IndexLabel | pt.Literal[False] | None = None,
+    usecols: UsecolsArgType = None,
+    # General Parsing Configuration
+    dtype: DtypeArg | None = None,
+    engine: CSVEngine | None = None,
+    converters: Mapping[Hashable, pt.Callable] | None = None,
+    true_values: list | None = None,
+    false_values: list | None = None,
+    skipinitialspace: bool = False,
+    skiprows: list[int] | int | pt.Callable[[Hashable], bool] | None = None,
+    skipfooter: int = 0,
+    nrows: int | None = None,
+    # NA and Missing Data Handling
+    na_values: Hashable
+    | Iterable[Hashable]
+    | Mapping[Hashable, Iterable[Hashable]]
+    | None = None,
+    keep_default_na: bool = True,
+    na_filter: bool = True,
+    verbose: bool | lib.NoDefault = lib.no_default,
+    skip_blank_lines: bool = True,
+    # Datetime Handling
+    parse_dates: bool | Sequence[Hashable] | None = None,
+    infer_datetime_format: bool | lib.NoDefault = lib.no_default,
+    keep_date_col: bool | lib.NoDefault = lib.no_default,
+    date_parser: pt.Callable | lib.NoDefault = lib.no_default,
+    date_format: str | dict[Hashable, str] | None = None,
+    dayfirst: bool = False,
+    cache_dates: bool = True,
+    # Iteration
+    iterator: bool = False,
+    chunksize: int | None = None,
+    # Quoting, Compression, and File Format
+    compression: CompressionOptions = "infer",
+    thousands: str | None = None,
+    decimal: str = ".",
+    lineterminator: str | None = None,
+    quotechar: str = '"',
+    quoting: int = csv.QUOTE_MINIMAL,
+    doublequote: bool = True,
+    escapechar: str | None = None,
+    comment: str | None = None,
+    encoding: str | None = None,
+    encoding_errors: str | None = "strict",
+    dialect: str | csv.Dialect | None = None,
+    # Error Handling
+    on_bad_lines: str = "error",
+    # Internal
+    delim_whitespace: bool | lib.NoDefault = lib.no_default,
+    low_memory: bool = _c_parser_defaults["low_memory"],
+    memory_map: bool = False,
+    float_precision: pt.Literal["high", "legacy"] | None = None,
+    storage_options: StorageOptions | None = None,
+    dtype_backend: DtypeBackend | lib.NoDefault = lib.no_default,
+) -> BodoDataFrame:
+    func = "def bodo_read_csv(filepath"
+    if names != lib.no_default:
+        func += ", names"
+    if usecols != None:
+        func += ", usecols"
+    if parse_dates != None:
+        func += ", parse_dates"
+    func += "):\n"
+    func += "    return pd.read_csv(filepath"
+    func_args = []
+    if names != lib.no_default:
+        func += ", names=names"
+        func_args.append(names)
+    if usecols != None:
+        func += ", usecols=usecols"
+        func_args.append(usecols)
+    if parse_dates != None:
+        func += ", parse_dates=parse_dates"
+        func_args.append(parse_dates)
+    func += ")\n"
+    csv_func = bodo_spawn_exec(func, {"pd": pd}, {}, __name__)
+    jit_csv_func = bodo.jit(csv_func)
+    return jit_csv_func(filepath_or_buffer, *func_args)
 
 
 @check_args_fallback("none")

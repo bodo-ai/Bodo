@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <typeinfo>
 #include <utility>
 
 #include "../libs/_bodo_common.h"
@@ -46,6 +47,10 @@ class PhysicalOperator {
     // We should have a separate Finalize step that can throw an exception
     // as well as the destructor for cleanup
     virtual void Finalize() = 0;
+
+    virtual std::string ToString() {
+        return typeid(*this).name();  // returns mangled name
+    }
 };
 
 class PhysicalSource : public PhysicalOperator {

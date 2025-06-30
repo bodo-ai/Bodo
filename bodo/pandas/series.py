@@ -126,6 +126,31 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "Plan not available for this manager, recreate this series with from_pandas"
         )
 
+    def __getattribute__(self, name: str):
+        """Custom attribute access that triggers a fallback warning for unsupported attributes."""
+
+        ignore_fallback_attrs = [
+            "dtype",
+            "name",
+            "to_string",
+        ]
+        cls = object.__getattribute__(self, "__class__")
+        base = cls.__mro__[0]
+
+        if (
+            name not in base.__dict__
+            and name not in ignore_fallback_attrs
+            and not name.startswith("_")
+        ):
+            msg = (
+                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            warnings.warn(BodoLibFallbackWarning(msg))
+            return object.__getattribute__(self, name)
+
+        return object.__getattribute__(self, name)
+
     @check_args_fallback("all")
     def _cmp_method(self, other, op):
         """Called when a BodoSeries is compared with a different entity (other)
@@ -622,6 +647,32 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         return _compute_series_reduce(self, "max")
 
+    @check_args_fallback(unsupported="all")
+    def sum(
+        self,
+        axis: Axis | None = 0,
+        skipna: bool = True,
+        numeric_only: bool = False,
+        min_count=0,
+        **kwargs,
+    ):
+        return _compute_series_reduce(self, "sum")
+
+    @check_args_fallback(unsupported="all")
+    def product(
+        self,
+        axis: Axis | None = 0,
+        skipna: bool = True,
+        numeric_only: bool = False,
+        min_count=0,
+        **kwargs,
+    ):
+        return _compute_series_reduce(self, "product")
+
+    @check_args_fallback(unsupported="all")
+    def count(self):
+        return _compute_series_reduce(self, "count")
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -653,7 +704,8 @@ class BodoStringMethods:
                 "implemented in Bodo dataframe library for the specified arguments yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
+            if not name.startswith("_"):
+                warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).str, name)
 
     @check_args_fallback("none")
@@ -861,8 +913,44 @@ class BodoDatetimeProperties:
                 "implemented in Bodo dataframe library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
+            if not name.startswith("_"):
+                warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).dt, name)
+
+
+def validate_reduce(func_name, pa_type):
+    """Validates input Series to _compute_series_reduce, returns upcast input type if necessary, otherwise None."""
+
+    if func_name in (
+        "max",
+        "min",
+    ):
+        if isinstance(
+            pa_type,
+            (pa.DurationType, pa.ListType, pa.LargeListType, pa.StructType, pa.MapType),
+        ):
+            raise BodoLibNotImplementedException(
+                f"{func_name}() not implemented for {pa_type} type."
+            )
+        return None
+
+    elif func_name in (
+        "sum",
+        "product",
+    ):
+        if pa.types.is_unsigned_integer(pa_type):
+            return pd.ArrowDtype(pa.uint64())
+        elif pa.types.is_integer(pa_type):
+            return pd.ArrowDtype(pa.int64())
+        elif pa.types.is_floating(pa_type):
+            return pd.ArrowDtype(pa.float64())
+        else:
+            raise BodoLibNotImplementedException(
+                f"{func_name}() not implemented for {pa_type} type."
+            )
+
+    elif func_name in ("count",):
+        return pd.ArrowDtype(pa.int64())
 
 
 def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
@@ -870,23 +958,25 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
 
     from bodo.pandas.base import _empty_like
 
-    # TODO: support other functions like sum, mean, etc.
-    assert func_name in ("min", "max"), (
+    # TODO: support other functions like mean, etc.
+    assert func_name in ("min", "max", "sum", "product", "count"), (
         f"Unsupported function {func_name} for series reduction."
     )
 
     # Drop Index columns since not necessary for reduction output.
     zero_size_self = _empty_like(bodo_series).reset_index(drop=True)
+    pa_type = zero_size_self.dtype.pyarrow_dtype
+
+    # For null arrays, return default value
+    if pa.types.is_null(pa_type):
+        if func_name == "sum":
+            return 0
+        if func_name == "product":
+            return 1
 
     # Check for supported types
-    pa_type = zero_size_self.dtype.pyarrow_dtype
-    if isinstance(
-        pa_type,
-        (pa.DurationType, pa.ListType, pa.LargeListType, pa.StructType, pa.MapType),
-    ):
-        raise BodoLibNotImplementedException(
-            f"{func_name}() not implemented for {pa_type} type."
-        )
+    if output_type := validate_reduce(func_name, pa_type):
+        zero_size_self = zero_size_self.astype(output_type)
 
     exprs = [
         LazyPlan(
@@ -907,6 +997,11 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
         exprs,
     )
     out_rank = execute_plan(plan)
+
+    # TODO: generalize if necessary
+    if func_name == "count":
+        func_name = "sum"
+
     # TODO: use parallel reduction for slight improvement in very large scales
     return getattr(pd.Series(out_rank), func_name)()
 

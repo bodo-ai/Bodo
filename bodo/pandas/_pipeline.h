@@ -6,6 +6,12 @@
 
 #include "physical/operator.h"
 
+// #define DEBUG_PIPELINE  // enable and build to print debug info on the
+// pipeline
+#ifdef DEBUG_PIPELINE
+#include <iostream>
+#endif
+
 /// @brief Pipeline class for executing a sequence of physical operators.
 class Pipeline {
    private:

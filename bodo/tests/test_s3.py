@@ -849,6 +849,7 @@ def test_s3_json_write_records_lines_1D_var(
     )
 
 
+@pytest.mark.df_lib
 def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_parquet

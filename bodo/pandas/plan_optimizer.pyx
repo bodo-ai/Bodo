@@ -9,7 +9,7 @@ from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 from libcpp cimport bool as c_bool
 import operator
-from libc.stdint cimport int64_t
+from libc.stdint cimport int64_t, uint64_t
 import pandas as pd
 import pyarrow.parquet as pq
 
@@ -18,6 +18,7 @@ from bodo.io.fs_io import (
     getfs,
     parse_fpath,
 )
+from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
 
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
@@ -301,7 +302,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
-    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id) except +
+    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
@@ -322,7 +323,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
-    cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object field, c_string function_name, vector[int] input_column_indices, c_bool dropna) except +
+    cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object out_schema, c_string function_name, vector[int] input_column_indices, c_bool dropna) except +
     cdef unique_ptr[CLogicalCopyToFile] make_parquet_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string path, c_string compression, c_string bucket_region, int64_t row_group_size) except +
     cdef unique_ptr[CLogicalCopyToFile] make_iceberg_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string table_loc,
         c_string bucket_region, int64_t max_pq_chunksize, c_string compression, object partition_tuples, object sort_tuples, c_string iceberg_schema_str,
@@ -561,7 +562,7 @@ cdef class AggregateExpression(Expression):
     def __cinit__(self, object out_schema, LogicalOperator source, str function_name, vector[int] input_column_indices, c_bool dropna):
         self.out_schema = out_schema
         self.function_name = function_name
-        self.c_expression = make_agg_expr(source.c_logical_operator, out_schema[0], function_name.encode(), input_column_indices, dropna)
+        self.c_expression = make_agg_expr(source.c_logical_operator, out_schema, function_name.encode(), input_column_indices, dropna)
 
     def __str__(self):
         return f"AggregateExpression({self.function_name})"
@@ -754,11 +755,18 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
-        fpath, _, protocol = parse_fpath(self.path)
+        fpath, parsed_url, protocol = parse_fpath(self.path)
         fs = getfs(fpath, protocol, self.storage_options, parallel=False)
-        expanded_paths = expand_path_globs(fpath, protocol, fs)
 
-        return pq.read_table(expanded_paths, filesystem=fs, columns=[]).num_rows
+        # Since we are supplying the filesystem to pq.read_table,
+        # Any prefixes e.g. s3:// should be removed.
+        fpath_noprefix, prefix = get_fpath_without_protocol_prefix(
+            fpath, protocol, parsed_url
+        )
+
+        fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
+
+        return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):
@@ -805,12 +813,12 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     """
     cdef readonly str table_identifier
 
-    def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema, object snapshot_id):
+    def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema, object snapshot_id, uint64_t table_len_estimate):
         import pyiceberg.catalog
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
         self.out_schema = out_schema
         self.table_identifier = table_identifier
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id, table_len_estimate)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):

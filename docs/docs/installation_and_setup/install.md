@@ -11,7 +11,7 @@ Bodo compute engine can be installed using either `pip` or `conda` (see how to i
 To install Bodo and its dependencies with `pip`, use the following command:
 
 ```console
-pip install bodo
+pip install -U bodo
 ```
 
 For production environments, we recommend creating a `conda` environment and installing
@@ -52,7 +52,7 @@ sudo apt install python3-pip
 sudo apt install python3-venv
 python3 -m venv bodo-test
 source bodo-test/bin/activate
-pip install bodo
+pip install -U bodo
 ```
 
 ## Optional Dependencies {#optionaldep}

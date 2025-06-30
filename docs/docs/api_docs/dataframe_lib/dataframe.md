@@ -45,17 +45,16 @@ See [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pand
 <p class="api-header">Example</p>
 
 ``` py
-import pandas as pd
-import bodo.pandas as bodo_pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
         {
-            "a": pd.array([1, 2, 3] * 4, "Int64"),
-            "b": pd.array([4, 5, 6] * 4, "Int64"),
+            "a": bd.array([1, 2, 3] * 4, "Int64"),
+            "b": bd.array([4, 5, 6] * 4, "Int64"),
             "c": ["a", "b", "c"] * 4,
         },
     )
-bdf = bodo_pd.from_pandas(df)
+
 out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
 
 print(type(out_bodo))
@@ -82,6 +81,72 @@ dtype: int64[pyarrow]
 
 ---
 
+## BodoDataFrame.groupby {#frame-groupby}
+
+``` py
+BodoDataFrame.groupby(
+    by=None,
+    axis=lib.no_default,
+    level=None,
+    as_index=True,
+    sort=False,
+    group_keys=True,
+    observed=lib.no_default,
+    dropna=True
+) -> DataFrameGroupBy
+```
+
+Creates a DataFrameGroupBy object representing the data in the input DataFrame grouped by a column or list of columns. The object can then be used to apply functions over groups.
+
+<p class="api-header">Parameters</p>
+
+: __by : *str | List[str]*:__ The column or list of columns to use when creating groups.
+
+: __as\_index : *bool, default True*:__ Whether the grouped labels will appears as an index in the final output. If *as_index* is False, then the grouped labels will appear as regular columns.
+
+: __dropna: *bool, default True*__ If True, rows where the group label contains a missing value will be dropped from the final output.
+
+: All other parameters will trigger a fallback to [`pandas.DataFrame.groupby`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.groupby.html) if a non-default value is provided.
+
+<p class="api-header">Returns</p>
+
+: __DataFrameGroupBy__
+
+<p class="api-header">Examples</p>
+
+``` py
+import bodo.pandas as bd
+
+bdf1 = bd.DataFrame({
+    "A": ["foo", "foo", "bar", "bar"],
+    "B": [1, 1, 1, None],
+    "C": [1, 2, 3, 4]
+})
+
+bdf2 = bdf1.groupby(["A", "B"]).sum()
+print(bdf2)
+```
+Output:
+``` py
+         C
+A   B
+bar 1.0  3
+foo 1.0  3
+```
+---
+``` py
+bdf3 = bdf1.groupby(["A", "B"], as_index=False, dropna=False).sum()
+print(bdf2)
+```
+Output:
+```
+     A     B  C
+0  bar  <NA>  4
+1  foo   1.0  3
+2  bar   1.0  3
+```
+---
+
 ## BodoDataFrame.head
 ``` py
 BodoDataFrame.head(n=5) -> BodoDataFrame
@@ -100,21 +165,15 @@ Returns the first *n* rows of the BodoDataFrame.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-original_df = pd.DataFrame(
+original_df = bd.DataFrame(
     {"foo": range(15), "bar": range(15, 30)}
    )
 
-@bodo.jit
-def write_parquet(df):
-    df.to_parquet("example.pq")
+original_df.to_parquet("example.pq")
 
-write_parquet(original_df)
-
-restored_df = bodo_pd.read_parquet("example.pq")
+restored_df = bd.read_parquet("example.pq")
 restored_df_head = restored_df.head(2)
 print(type(restored_df_head))
 print(restored_df_head)
@@ -157,16 +216,14 @@ each worker will call *func* on their entire local chunk of the input DataFrame.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
     {"foo": range(15), "bar": range(15, 30)}
    )
 
-bdf = bodo_pd.from_pandas(df)
-
-bdf.map_parititions(lambda df_: df_.foo + df_.bar)
+bdf_mapped = bdf.map_partitions(lambda df_: df_.foo + df_.bar)
+print(bdf_mapped)
 ```
 
 Output:
@@ -199,18 +256,15 @@ Other cases will fallback to Pandas.
 <p class="api-header">Examples</p>
 
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+            "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
             "B": ["A1", "B1 ", "C1", "Abc"] * 3,
-            "C": pd.array([4, 5, 6, -1] * 3, "Int64"),
+            "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
         }
     )
-
-bdf = bodo_pd.from_pandas(df)
 
 bdf["D"] = bdf["B"].str.lower()
 print(type(bdf))
@@ -237,18 +291,15 @@ Name: D, dtype: string
 
 
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+            "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
             "B": ["A1", "B1 ", "C1", "Abc"] * 3,
-            "C": pd.array([4, 5, 6, -1] * 3, "Int64"),
+            "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
         }
     )
-
-bdf = bodo_pd.from_pandas(df)
 
 bdf["D"] = 11
 print(type(bdf))
@@ -298,18 +349,16 @@ Sorts the elements of the BodoDataFrame and returns a new sorted BodoDataFrame.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
     {
-        "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+        "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
         "B": ["A1", "B1", "C1", "Abc"] * 3,
-        "C": pd.array([6, 5, 4] * 4, "Int64"),
+        "C": bd.array([6, 5, 4] * 4, "Int64"),
     }
 )
 
-bdf = bodo_pd.from_pandas(df)
 bdf_sorted = bdf.sort_values(by=["A", "C"], ascending=[False, True])
 print(bdf_sorted)
 ```
@@ -353,20 +402,18 @@ Write a DataFrame as a Parquet dataset.
 <p class="api-header">Example</p>
 
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
     {
-        "A": pd.array([1, 2, 3, 7] * 3, "Int64"),
+        "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
         "B": ["A1", "B1", "C1", "Abc"] * 3,
-        "C": pd.array([6, 5, 4] * 4, "Int64"),
+        "C": bd.array([6, 5, 4] * 4, "Int64"),
     }
 )
 
-bdf = bodo_pd.from_pandas(df)
 bdf.to_parquet("output.parquet")
-print(pd.read_parquet("output.parquet"))
+print(bd.read_parquet("output.parquet"))
 ```
 
 Output:
@@ -427,13 +474,12 @@ Refer to [`pandas.DataFrame.to_iceberg`](https://pandas.pydata.org/docs/dev/refe
 
 Simple write of a table on the filesystem without a catalog:
 ``` py
-import bodo.pandas as bodo_pd
-import pandas as pd
+import bodo.pandas as bd
 from pyiceberg.transforms import IdentityTransform
 from pyiceberg.partitioning import PartitionField, PartitionSpec
 from pyiceberg.table.sorting import SortField, SortOrder
 
-df = pd.DataFrame(
+bdf = bd.DataFrame(
         {
             "one": [-1.0, 1.3, 2.5, 3.0, 4.0, 6.0, 10.0],
             "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
@@ -443,12 +489,11 @@ df = pd.DataFrame(
         }
     )
 
-bdf = bodo_pd.from_pandas(df)
 part_spec = PartitionSpec(PartitionField(2, 1001, IdentityTransform(), "id_part"))
 sort_order = SortOrder(SortField(source_id=4, transform=IdentityTransform()))
 bdf.to_iceberg("test_table", location="./iceberg_warehouse", partition_spec=part_spec, sort_order=sort_order)
 
-out_df = bodo_pd.read_iceberg("test_table", location="./iceberg_warehouse")
+out_df = bd.read_iceberg("test_table", location="./iceberg_warehouse")
 # Only reads Parquet files of partition "foo" from storage
 print(out_df[out_df["two"] == "foo"])
 ```
@@ -464,10 +509,10 @@ Output:
 Write a DataFrame to an Iceberg table in S3 Tables using the location parameter:
 
 ``` py
-import bodo.pandas as bodo_pd
-df = bodo_pd.to_iceberg(
+df.to_iceberg(
     table_identifier="my_table",
     location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
 )
+```
 
 ---
