@@ -18,7 +18,7 @@ pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
 
 
 def test_quickstart_local_python_df():
-    """Runs example equivalent to code from top-level README.md
+    """Runs example equivalent to Bodo DF Library code from top-level README.md
     and docs/quick_start/quickstart_local_python.md and ensures
     that it is consistent with pandas.
     """
@@ -54,7 +54,7 @@ def test_quickstart_local_python_df():
 
 
 def test_quickstart_local_python_jit():
-    """Runs example equivalent to code from top-level README.md
+    """Runs example equivalent to Bodo jit code from top-level README.md
     and docs/quick_start/quickstart_local_python.md and ensures
     that it is consistent with pandas.
     """
@@ -83,8 +83,23 @@ def test_quickstart_local_python_jit():
 
 
 @pytest.mark.iceberg
-def test_quickstart_local_iceberg():
-    """Test that the example in docs/quick_start/quickstart_local_iceberg.md"""
+def test_quickstart_local_iceberg_df():
+    """Test the Bodo DF Library example in docs/quick_start/quickstart_local_iceberg.md"""
+    import bodo.pandas as pd
+
+    NUM_GROUPS = 30
+    NUM_ROWS = 2_000
+
+    df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
+    df.to_iceberg("test_table", location="./iceberg_warehouse")
+
+    out_df = pd.read_iceberg("test_table", location="./iceberg_warehouse")
+    pd.testing.assert_frame_equal(out_df, df)
+
+
+@pytest.mark.iceberg
+def test_quickstart_local_iceberg_jit():
+    """Test the Bodo jit example in docs/quick_start/quickstart_local_iceberg.md"""
     NUM_GROUPS = 30
     NUM_ROWS = 2_000
 
