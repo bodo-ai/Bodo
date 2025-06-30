@@ -63,7 +63,7 @@ class SnowflakeUtils {
             if (openParenIndex == -1 || closeParenIndex == -1 || closeParenIndex <= openParenIndex) {
                 throw java.lang.RuntimeException(
                     "UDF formatting error in parseSnowflakeShowFunctionsArguments: " +
-                        "expected signature to look like: 'FUNC(ARGS)'",
+                        "expected signature to look like: 'FUNC(ARGS)', got: '$call'",
                 )
             }
             val argString = call.substring(openParenIndex + 1, closeParenIndex)
