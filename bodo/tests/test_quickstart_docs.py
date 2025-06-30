@@ -35,8 +35,6 @@ def test_quickstart_local_python_df():
         pandas_out = pd.read_parquet(output_path)
 
     def bodo_groupby_write():
-        import numpy as np
-
         import bodo.pandas as pd
 
         df = pd.DataFrame(
