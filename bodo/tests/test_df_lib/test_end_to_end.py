@@ -1722,7 +1722,7 @@ def test_read_csv(datapath):
         py_out,
     )
 
-    col_names=["int0", "float0", "float1", "int1"]
+    col_names = ["int0", "float0", "float1", "int1"]
     bodo_out = bd.read_csv(data1_path, names=col_names)
     py_out = pd.read_csv(data1_path, names=col_names)
 
@@ -1731,7 +1731,7 @@ def test_read_csv(datapath):
         py_out,
     )
 
-    col_names=["int0", "float0", "date0", "int1"]
+    col_names = ["int0", "float0", "date0", "int1"]
     bodo_out = bd.read_csv(date_path, names=col_names, parse_dates=[2])
     py_out = pd.read_csv(date_path, names=col_names, parse_dates=[2])
 
