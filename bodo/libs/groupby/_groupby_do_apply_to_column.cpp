@@ -2820,7 +2820,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
 #undef APPLY_TO_COLUMN_CALL
     throw std::runtime_error(
         std::string("do_apply_to_column: unsupported array dtype: ") +
-        std::string(GetDtype_as_string(in_col->dtype)));
+        std::string(GetDtype_as_string(in_col->dtype)) + " " +
+        get_name_for_Bodo_FTypes(ftype));
 }
 
 void do_apply_size(const std::shared_ptr<array_info>& out_col,

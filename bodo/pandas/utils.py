@@ -57,12 +57,12 @@ def get_lazy_single_manager_class() -> type[
     )
 
 
-def cpp_table_to_df(cpp_table, arrow_schema=None):
+def cpp_table_to_df(cpp_table, arrow_schema=None, use_arrow_dtypes=True):
     """Convert a C++ table (table_info) to a pandas DataFrame."""
     from bodo.ext import plan_optimizer
 
     arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
-    df = arrow_table_to_pandas(arrow_table, arrow_schema)
+    df = arrow_table_to_pandas(arrow_table, arrow_schema, use_arrow_dtypes)
     return df
 
 
@@ -629,8 +629,13 @@ def run_func_on_table(cpp_table, result_type, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
-    input = cpp_table_to_df(cpp_table)
     func, is_series, is_attr, args, kwargs = in_args
+
+    # Arrow dtypes can be very slow for UDFs in Pandas:
+    # https://github.com/pandas-dev/pandas/issues/61747
+    # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
+    use_arrow_dtypes = not (is_attr and func == "apply")
+    input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
 
     if is_series:
         assert input.shape[1] == 1, "run_func_on_table: single column expected"
@@ -885,7 +890,7 @@ def _fix_struct_arr_names(arr, pa_type):
     )
 
 
-def _arrow_to_pd_array(arrow_array, pa_type):
+def _arrow_to_pd_array(arrow_array, pa_type, use_arrow_dtypes=True):
     """Convert a PyArrow array to a pandas array with the specified Arrow type."""
 
     # Our type inference may fail for some object columns so use the proper Arrow type
@@ -901,10 +906,13 @@ def _arrow_to_pd_array(arrow_array, pa_type):
     if pa_type != arrow_array.type:
         arrow_array = arrow_array.cast(pa_type)
 
-    return pd.array(arrow_array, dtype=pd.ArrowDtype(pa_type))
+    if use_arrow_dtypes:
+        return pd.array(arrow_array, dtype=pd.ArrowDtype(pa_type))
+
+    return arrow_array.to_pandas()
 
 
-def arrow_table_to_pandas(arrow_table, arrow_schema=None):
+def arrow_table_to_pandas(arrow_table, arrow_schema=None, use_arrow_dtypes=True):
     """Convert a PyArrow Table to a pandas DataFrame. Not using Table.to_pandas()
     since it doesn't use ArrowDtype and has issues (e.g. repeated column names fails).
 
@@ -921,7 +929,7 @@ def arrow_table_to_pandas(arrow_table, arrow_schema=None):
 
     df = pd.DataFrame(
         {
-            i: _arrow_to_pd_array(arrow_table.columns[i], field.type)
+            i: _arrow_to_pd_array(arrow_table.columns[i], field.type, use_arrow_dtypes)
             for i, field in enumerate(arrow_schema)
         }
     )
