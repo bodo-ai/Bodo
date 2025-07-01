@@ -18,18 +18,20 @@ rest_catalog = load_catalog(
     "tpch",
     **catalog_properties,
 )
-if rest_catalog.table_exists("sf1000.orders_copy_pyiceberg"):
-    rest_catalog.purge_table("sf1000.orders_copy_pyiceberg")
+if rest_catalog.table_exists("sf1000.orders_copy_bodo"):
+    rest_catalog.purge_table("sf1000.orders_copy_bodo")
 
 start = time.time()
 try:
     orders_table = pd.read_iceberg(
-        "sf1000.orders", catalog_properties=catalog_properties
+        "sf1000.orders",
+        location=s3tables_arn,
     )
     orders_table.to_iceberg(
-        "sf1000.orders_copy_pyiceberg", catalog_properties=catalog_properties
+        "sf1000.orders_copy_bodo",
+        location=s3tables_arn,
     )
     end = time.time()
     print("Time taken to copy orders: ", end - start)
 finally:
-    rest_catalog.purge_table("sf1000.orders_copy_pyiceberg")
+    rest_catalog.purge_table("sf1000.orders_copy_pbodo")
