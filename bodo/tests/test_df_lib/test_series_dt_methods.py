@@ -61,17 +61,19 @@ test_map_arg = {
     ],
     "month_name": [
         ((), {}),
-        ((), {"locale": "en_US.UTF-8"}),
-        ((), {"locale": "en_US.utf-8"}),
-        ((), {"locale": "fr_FR.UTF-8"}),
-        ((), {"locale": "pt_BR.UTF-8"}),
+        # NOTE: Comments out locale tests due to locale issues in CI
+        # ((), {"locale": "en_US.UTF-8"}),
+        # ((), {"locale": "en_US.utf-8"}),
+        # ((), {"locale": "fr_FR.UTF-8"}),
+        # ((), {"locale": "pt_BR.UTF-8"}),
     ],
     "day_name": [
         ((), {}),
-        ((), {"locale": "en_US.UTF-8"}),
-        ((), {"locale": "en_US.utf-8"}),
-        ((), {"locale": "fr_FR.UTF-8"}),
-        ((), {"locale": "pt_BR.UTF-8"}),
+        # NOTE: Comments out locale tests due to locale issues in CI
+        # ((), {"locale": "en_US.UTF-8"}),
+        # ((), {"locale": "en_US.utf-8"}),
+        # ((), {"locale": "fr_FR.UTF-8"}),
+        # ((), {"locale": "pt_BR.UTF-8"}),
     ],
     "floor": [
         (("2h"), {}),
