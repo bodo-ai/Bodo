@@ -36,10 +36,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
-    // Getting source bindings before processing the source since there
-    // are destructive operations in the Visit function like
-    // std::move(op.expressions).
-    // TODO: avoid destructive operations in the Visit function.
     std::vector<duckdb::ColumnBinding> source_cols =
         op.children[0]->GetColumnBindings();
 
@@ -50,7 +46,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
 
     auto saved_bodo_schema = g_idx_schema[op.table_index];
     auto physical_op = std::make_shared<PhysicalProjection>(
-        source_cols, std::move(op.expressions), in_table_schema,
+        source_cols, op.expressions, in_table_schema,
         saved_bodo_schema);
     this->active_pipeline->AddOperator(physical_op);
 }

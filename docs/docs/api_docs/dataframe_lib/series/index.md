@@ -2,15 +2,16 @@
 The Bodo DataFrame Library supports Pandas Series methods and accessors that are listed below. They can be accessed through `BodoSeries` and follow the same behavior as their Pandas equivalents. For details on usage, we link to the corresponding Pandas documentation.
 
 !!! note
-	If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo DataFrame Library gracefully falls 
-	back to native Pandas. See [overview][overview] of the Bodo DataFrame Library for more info.
+    If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo
+	 DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of 
+	 the Bodo DataFrame Library for more info.
 
 ## Computations / descriptive stats
 - [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
 - [`bodo.pandas.BodoSeries.clip`][bodoseriesclip]
 - [`bodo.pandas.BodoSeries.round`][bodoseriesround]
 !!! note
-	For the following reduction methods, only default parameters are currently supported.
+    For the following reduction methods, only default parameters are currently supported.
 - [`bodo.pandas.BodoSeries.count`][bodoseriescount]
 - [`bodo.pandas.BodoSeries.max`][bodoseriesmax]
 - [`bodo.pandas.BodoSeries.min`][bodoseriesmin]
@@ -22,20 +23,24 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ## Datetimelike properties
 
 !!! note
-	Input must be a Series of `datetime-like` data.
+    Input must be a Series of `datetime-like` data.
 
 
 ### Datetime properties
 !!! note
-	For missing datetime values (`NaT`), Bodo's datetime predicate accessors (e.g., `.is_month_end`, `.is_leap_year`) return `<NA>` to preserve nullability, whereas Pandas returns `False`.
+    For missing datetime values (`NaT`), Bodo's datetime predicate accessors (e.g., `.is_month_end`, `.is_leap_year`) return `<NA>` to preserve nullability, whereas Pandas returns `False`.
 - [`bodo.pandas.BodoSeries.dt.year`][bodoseriesdtyear]
 - [`bodo.pandas.BodoSeries.dt.month`][bodoseriesdtmonth]
 - [`bodo.pandas.BodoSeries.dt.day`][bodoseriesdtday]
+- [`bodo.pandas.BodoSeries.dt.days`][bodoseriesdtdays]
 - [`bodo.pandas.BodoSeries.dt.hour`][bodoseriesdthour]
 - [`bodo.pandas.BodoSeries.dt.minute`][bodoseriesdtminute]
 - [`bodo.pandas.BodoSeries.dt.second`][bodoseriesdtsecond]
+- [`bodo.pandas.BodoSeries.dt.seconds`][bodoseriesdtseconds]
 - [`bodo.pandas.BodoSeries.dt.microsecond`][bodoseriesdtmicrosecond]
+- [`bodo.pandas.BodoSeries.dt.microseconds`][bodoseriesdtmicroseconds]
 - [`bodo.pandas.BodoSeries.dt.nanosecond`][bodoseriesdtnanosecond]
+- [`bodo.pandas.BodoSeries.dt.nanoseconds`][bodoseriesdtnanoseconds]
 - [`bodo.pandas.BodoSeries.dt.dayofweek`][bodoseriesdtdayofweek]
 - [`bodo.pandas.BodoSeries.dt.day_of_week`][bodoseriesdtday_of_week]
 - [`bodo.pandas.BodoSeries.dt.weekday`][bodoseriesdtweekday]
@@ -53,21 +58,35 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.dt.is_year_start`][bodoseriesdtis_year_start]
 - [`bodo.pandas.BodoSeries.dt.is_year_end`][bodoseriesdtis_year_end]
 - [`bodo.pandas.BodoSeries.dt.is_leap_year`][bodoseriesdtis_leap_year]
+- [`bodo.pandas.BodoSeries.dt.components`][bodoseriesdtcomponents]
 
 ---
 
 ### Datetime methods
 !!! note
-	Locale format must be strict: The locale parameter in `month_name` and `day_name` must follow the 
-	exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8"). Variants like 
-	"pt_BR.utf8" may not be recognized and trigger an error.
+    Locale format must be strict: The locale parameter in `month_name` and `day_name` must 
+	follow the exact system locale naming convention (e.g., "pt_BR.UTF-8" or "en_US.utf-8"). 
+	Variants like "pt_BR.utf8" may not be recognized and trigger an error.
 
 - [`bodo.pandas.BodoSeries.dt.normalize`][bodoseriesdtnormalize]
 - [`bodo.pandas.BodoSeries.dt.floor`][bodoseriesdtfloor]
 - [`bodo.pandas.BodoSeries.dt.ceil`][bodoseriesdtceil]
 - [`bodo.pandas.BodoSeries.dt.month_name`][bodoseriesdtmonth_name]
 - [`bodo.pandas.BodoSeries.dt.day_name`][bodoseriesdtday_name]
+- [`bodo.pandas.BodoSeries.dt.round`][bodoseriesdtround]
 - [`bodo.pandas.BodoSeries.dt.total_seconds`][bodoseriesdttotal_seconds]
+- [`bodo.pandas.BodoSeries.dt.isocalendar`][bodoseriesdtisocalendar]
+
+!!! note
+    Bodo currently only supports "NaT" for the ambiguous parameter in `tz_localize`. 
+	"raise", "infer", or boolean arrays are not supported and will trigger a fallback to 
+	Pandas. Similarly, for the nonexistent parameter, 
+    "raise" is not supported and will trigger a fallback. Due to these limitations, the
+	default behavior in Bodo is `ambiguous="NaT"` and `nonexistent="NaT"`.
+
+
+- [`bodo.pandas.BodoSeries.dt.tz_localize`][bodoseriesdttz_localize]
+
 
 ---
 
@@ -101,7 +120,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.str.capitalize`][bodoseriesstrcapitalize]
 - [`bodo.pandas.BodoSeries.str.casefold`][bodoseriesstrcasefold]
 !!! note
-	`cat` falls back to Pandas when the others parameter is not specified (i.e., `others=None`).
+    `cat` falls back to Pandas when the others parameter is not specified (i.e., `others=None`).
 - [`bodo.pandas.BodoSeries.str.cat`][bodoseriesstrcat]
 - [`bodo.pandas.BodoSeries.str.center`][bodoseriesstrcenter]
 - [`bodo.pandas.BodoSeries.str.contains`][bodoseriesstrcontains]
@@ -254,16 +273,17 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesstrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.partition.html
 [bodoseriesstrrpartition]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rpartition.html
 [bodoseriesdtquarter]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.quarter.html
-
 [bodoseriesstrnormalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.normalize.html
+
+
 [bodoseriesstrjoin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.join.html
 [bodoseriesstrencode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.encode.html
 [bodoseriesstrdecode]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.decode.html
+
 [bodoseriesstrcat]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.cat.html
 [bodoseriesstrextract]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.extract.html
 [bodoseriesstrsplit]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.split.html
 [bodoseriesstrrsplit]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rsplit.html
-
 [bodoseriesisna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isna.html
 [bodoseriesnotna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notna.html
 [bodoseriesdttotal_seconds]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.total_seconds.html
@@ -273,3 +293,15 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesmin]: https://pandas.pydata.org/docs/reference/api/pandas.Series.min.html
 [bodoseriesproduct]: https://pandas.pydata.org/docs/reference/api/pandas.Series.product.html
 [bodoseriessum]: https://pandas.pydata.org/docs/reference/api/pandas.Series.sum.html
+
+[bodoseriesdtround]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.round.html
+[bodoseriesdttz_localize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.tz_localize.html
+
+
+[bodoseriesdtdays]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.days.html
+[bodoseriesdtseconds]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.seconds.html
+[bodoseriesdtmicroseconds]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.microseconds.html
+[bodoseriesdtnanoseconds]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.nanoseconds.html
+
+[bodoseriesdtcomponents]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.components.html
+[bodoseriesdtisocalendar]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.isocalendar.html

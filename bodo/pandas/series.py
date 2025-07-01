@@ -679,7 +679,7 @@ class BodoStringMethods:
 
     def __init__(self, series):
         # Validate input series
-        allowed_types = allowed_types_map["default"]
+        allowed_types = allowed_types_map["str_default"]
         if not (
             isinstance(series, BodoSeries)
             and isinstance(series.dtype, pd.ArrowDtype)
@@ -888,19 +888,11 @@ class BodoDatetimeProperties:
     """Support Series.dt datetime accessors same as Pandas."""
 
     def __init__(self, series):
-        self._series = series
+        allowed_types = allowed_types_map["dt_default"]
         # Validates series type
-        if not (
-            isinstance(series, BodoSeries)
-            and series.dtype
-            in (
-                pd.ArrowDtype(pa.timestamp("ns")),
-                pd.ArrowDtype(pa.date64()),
-                pd.ArrowDtype(pa.time64("ns")),
-                pd.ArrowDtype(pa.duration("ns")),
-            ),
-        ):
+        if not (isinstance(series, BodoSeries) and series.dtype in allowed_types,):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
+        self._series = series
         self._dtype = series.dtype
 
     @check_args_fallback(unsupported="none")
@@ -916,6 +908,154 @@ class BodoDatetimeProperties:
             if not name.startswith("_"):
                 warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._series).dt, name)
+
+    @check_args_fallback(unsupported="none")
+    def isocalendar(self):
+        """Calculate year, week, and day according to the ISO 8601 standard, returns a BodoDataFrame"""
+        series = self._series
+        dtype = pd.ArrowDtype(
+            pa.list_(pa.uint32())
+        )  # Match output type of Pandas: UInt32
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.series._isocalendar_helper",
+            (),
+            {},
+            is_method=False,
+        )
+
+        n_index_arrays = get_n_index_arrays(index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
+        # Create schema for output DataFrame with 3 columns
+        arrow_schema = pa.schema(
+            [pa.field(f"{label}", pa.uint32()) for label in ["year", "week", "day"]]
+        )
+        empty_data = arrow_to_empty_df(arrow_schema)
+        empty_data.index = index
+
+        expr = tuple(
+            get_col_as_series_expr(idx, empty_data, series_out, index_cols)
+            for idx in range(3)
+        )
+
+        assert series_out.is_lazy_plan()
+
+        # Creates DataFrame with 3 columns
+        df_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            series_out._plan,
+            expr + index_col_refs,
+        )
+
+        return wrap_plan(plan=df_plan)
+
+    @property
+    def components(self):
+        """Calculate year, week, and day according to the ISO 8601 standard, returns a BodoDataFrame"""
+        series = self._series
+        dtype = pd.ArrowDtype(pa.list_(pa.int64()))
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.series._components_helper",
+            (),
+            {},
+            is_method=False,
+        )
+
+        n_index_arrays = get_n_index_arrays(index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
+        # Create schema for output DataFrame with 3 columns
+        arrow_schema = pa.schema(
+            [
+                pa.field(f"{label}", pa.int64())
+                for label in [
+                    "days",
+                    "hours",
+                    "minutes",
+                    "seconds",
+                    "milliseconds",
+                    "microseconds",
+                    "nanoseconds",
+                ]
+            ]
+        )
+        empty_data = arrow_to_empty_df(arrow_schema)
+        empty_data.index = index
+
+        expr = tuple(
+            get_col_as_series_expr(idx, empty_data, series_out, index_cols)
+            for idx in range(7)
+        )
+
+        assert series_out.is_lazy_plan()
+
+        # Creates DataFrame with 3 columns
+        df_plan = LazyPlan(
+            "LogicalProjection",
+            empty_data,
+            series_out._plan,
+            expr + index_col_refs,
+        )
+
+        return wrap_plan(plan=df_plan)
+
+    @check_args_fallback(unsupported="none")
+    def tz_localize(self, tz=None, ambiguous="NaT", nonexistent="NaT"):
+        """Localize tz-naive Datetime Series to tz-aware Datetime Series."""
+
+        if (
+            ambiguous != "NaT"
+            or nonexistent not in ("shift_forward", "shift_backward", "NaT")
+            and not isinstance(nonexistent, pd.Timedelta)
+        ):
+            raise BodoLibNotImplementedException(
+                "BodoDatetimeProperties.tz_localize is unsupported for the given arguments, falling back to Pandas"
+            )
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.timestamp("ns", tz))
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        return _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.series._tz_localize_helper",
+            (
+                tz,
+                nonexistent,
+            ),
+            {},
+            is_method=False,
+        )
 
 
 def validate_reduce(func_name, pa_type):
@@ -1004,6 +1144,35 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
 
     # TODO: use parallel reduction for slight improvement in very large scales
     return getattr(pd.Series(out_rank), func_name)()
+
+
+def _tz_localize_helper(s, tz, nonexistent):
+    """Apply tz_localize on individual elements with ambiguous set to 'raise', fill with None."""
+
+    def _tz_localize(d):
+        try:
+            return d.tz_localize(tz, ambiguous="raise", nonexistent=nonexistent)
+        except Exception:
+            return None
+
+    return s.map(_tz_localize)
+
+
+def _isocalendar_helper(s):
+    """Maps pandas.Timestamp.isocalendar() to non-null elements, otherwise fills with None."""
+
+    def get_iso(ts):
+        if isinstance(ts, pd.Timestamp):
+            return list(ts.isocalendar())
+        return None
+
+    return s.map(get_iso)
+
+
+def _components_helper(s):
+    """Applies Series.dt.components to input series, maps tolist() to create series."""
+    df = s.dt.components
+    return pd.Series([df.iloc[i, :].tolist() for i in range(len(s))])
 
 
 def _str_cat_helper(df, sep, na_rep):
@@ -1519,14 +1688,17 @@ def validate_dtype(name, obj):
         return
 
     dtype = obj._dtype
-    parts = name.split(".")
-    accessor, method = parts[0], parts[1]
-    if accessor == "str.":
+    accessor = name.split(".")[0]
+    if accessor == "str":
         if dtype not in allowed_types_map.get(
-            method, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
+            name, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
         ):
             raise AttributeError("Can only use .str accessor with string values!")
-    # Implement accessor == "dt." case if necessary.
+    if accessor == "dt":
+        if dtype not in allowed_types_map.get(
+            name, [pd.ArrowDtype(pa.timestamp("ns")), pd.ArrowDtype(pa.duration("ns"))]
+        ):
+            raise AttributeError("Can only use .dt accessor with datetimelike values!")
 
 
 def gen_method(
@@ -1543,7 +1715,7 @@ def gen_method(
             sig_bind(name, accessor_type, *args, **kwargs)  # Argument validation
 
         series = self._series if accessor_type else self
-        dtype = self.dtype if not return_type else return_type
+        dtype = series.dtype if not return_type else return_type
 
         index = series.head(0).index
         new_metadata = pd.Series(
@@ -1666,6 +1838,10 @@ dt_accessors = [
             "daysinmonth",
             "days_in_month",
             "quarter",
+            "days",
+            "seconds",
+            "microseconds",
+            "nanoseconds",
         ],
         pd.ArrowDtype(pa.int32()),
     ),
@@ -1707,6 +1883,7 @@ dt_methods = [
             "normalize",
             "floor",
             "ceil",
+            "round",
             # TODO: implement end_time
         ],
         pd.ArrowDtype(pa.timestamp("ns")),
@@ -1762,13 +1939,13 @@ dir_methods = [
 ]
 
 allowed_types_map = {
-    "decode": [
+    "str.decode": [
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.binary()),
         pd.ArrowDtype(pa.large_binary()),
     ],
-    "join": [
+    "str.join": [
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.list_(pa.string())),
@@ -1776,7 +1953,7 @@ allowed_types_map = {
         pd.ArrowDtype(pa.large_list(pa.string())),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
     ],
-    "default": [
+    "str_default": [
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
@@ -1784,6 +1961,15 @@ allowed_types_map = {
         pd.ArrowDtype(pa.list_(pa.string())),
         pd.ArrowDtype(pa.large_binary()),
         pd.ArrowDtype(pa.binary()),
+    ],
+    "dt.round": [
+        pd.ArrowDtype(pa.timestamp("ns")),
+    ],
+    "dt_default": [
+        pd.ArrowDtype(pa.timestamp("ns")),
+        pd.ArrowDtype(pa.date64()),
+        pd.ArrowDtype(pa.time64("ns")),
+        pd.ArrowDtype(pa.duration("ns")),
     ],
 }
 
