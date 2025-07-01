@@ -2842,9 +2842,6 @@ def test_series_map_supported_types(series_val):
 def test_series_map_args(memory_leak_check):
     """Test Series.map with unsupported and wrong arguments"""
 
-    def test_na_action_ignore(S):
-        return S.map(lambda a: a, na_action="ignore")
-
     def test_na_action_none(S):
         return S.map(lambda a: a, na_action=None)
 
@@ -2852,8 +2849,6 @@ def test_series_map_args(memory_leak_check):
         return S.map("XX")
 
     S = pd.Series([2, 1, 3])
-    with pytest.raises(BodoError, match="Series.map.* only supports default value"):
-        bodo.jit(test_na_action_ignore)(S)
 
     bodo.jit(test_na_action_none)(S)
 
@@ -2861,6 +2856,18 @@ def test_series_map_args(memory_leak_check):
         BodoError, match="Series.map.*: user-defined function not supported"
     ):
         bodo.jit(test_wrong_func)(S)
+
+
+@pytest.mark.slow
+@pytest.mark.df_lib
+def test_series_map_na_action(memory_leak_check):
+    """Test Series.map with na_action argument"""
+
+    def test_impl(S):
+        return S.map(lambda a: 2 * a, na_action="ignore")
+
+    S = pd.Series([2, 1, 3, None, 4, 5], dtype="Int64")
+    check_func(test_impl, (S,), check_dtype=False)
 
 
 # TODO: add memory_leak_check after fix its failure with Categorical
