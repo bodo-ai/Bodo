@@ -112,6 +112,20 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
         if (args)
             Py_DECREF(args);
     }
+    BodoPythonScalarFunctionData(const BodoPythonScalarFunctionData &other) : args(other.args), out_schema(other.out_schema) {
+        if (args)
+            Py_INCREF(args);
+    }
+    BodoPythonScalarFunctionData& operator=(const BodoPythonScalarFunctionData &other) {
+        if (this != &other) {
+            Py_INCREF(other.args);
+            Py_DECREF(args);
+            args = other.args;
+            out_schema = other.out_schema;
+        }
+        return *this;
+    }
+
     bool Equals(const FunctionData &other_p) const override {
         const BodoPythonScalarFunctionData &other =
             other_p.Cast<BodoPythonScalarFunctionData>();
