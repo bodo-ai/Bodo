@@ -127,8 +127,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     mgr = bodo.spawn.spawner.get_spawner().scatter_data(self)
                     res_id = mgr._md_result_id
                     nrows = len(self)
-                self._source_plan = LazyPlan(
-                    "LogicalGetPandasReadParallel",
+                self._source_plan = (
                     empty_data,
                     LazyPlan(
                         "LogicalGetPandasReadParallel",
