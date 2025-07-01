@@ -1,0 +1,191 @@
+# Copied from https://github.com/modin-project/modin/blob/main/examples/tutorial/jupyter/execution/pandas_on_ray/cluster/modin-cluster.yaml with some modifications.
+
+# An unique identifier for the head node and workers of this cluster.
+cluster_name: daft_tpch
+
+# The maximum number of workers nodes to launch in addition to the head
+# node.
+max_workers: 3
+
+# This executes all commands on all nodes in the docker container,
+# and opens all the necessary ports to support the Ray cluster.
+# Empty string means disabled.
+docker:
+    image: rayproject/ray:latest-cpu
+    container_name: "ray_container"
+    # If true, pulls latest version of image. Otherwise, `docker run` will only pull the image
+    # if no cached version is present.
+    pull_before_run: True
+    run_options:   # Extra options to pass into "docker run"
+        - --ulimit nofile=65536:65536
+
+# If a node is idle for this many minutes, it will be removed.
+idle_timeout_minutes: 60
+
+# Cloud-provider specific configuration.
+provider:
+    type: aws
+    # For accessing bodo-example-data
+    region: us-east-2
+    # Availability zone(s), comma-separated, that nodes may be launched in.
+    # Nodes will be launched in the first listed availability zone and will
+    # be tried in the subsequent availability zones if launching fails.
+    availability_zone: us-east-2c, us-east-2b, us-east-2a
+    # Whether to allow node reuse. If set to False, nodes will be terminated
+    # instead of stopped.
+    cache_stopped_nodes: False # If not present, the default is True.
+
+# How Ray will authenticate with newly launched nodes.
+auth:
+    ssh_user: ubuntu
+
+# Tell the autoscaler the allowed node types and the resources they provide.
+# The key is the name of the node type, which is just for debugging purposes.
+# The node config specifies the launch config and physical instance type.
+available_node_types:
+    ray.head.default:
+        # Auto-detect resources
+        resources: {}
+        # Provider-specific config for this node type, e.g. instance type. By default
+        # Ray will auto-configure unspecified fields such as SubnetId and KeyName.
+        # For more documentation on available fields, see:
+        # http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.ServiceResource.create_instances
+        node_config:
+            InstanceType: c6i.32xlarge
+            # Default AMI for us-east-2.
+            # Check https://github.com/ray-project/ray/blob/master/python/ray/autoscaler/_private/aws/config.py
+            # for default images for other zones.
+            ImageId: ami-0c77cd5ca05bf1281
+            # ray autoscaler defaults + pass roles to worker nodes.
+            IamInstanceProfile:
+                Name: benchmark-using-ray-head
+            # Note: provisioning extra space for Ray objects
+            BlockDeviceMappings:
+                - DeviceName: /dev/sda1
+                  Ebs:
+                      VolumeSize: 500
+                      VolumeType: gp3
+            # Additional options in the boto docs.
+    ray.worker.default:
+        # Auto-detect resources
+        resources: {}
+        # The minimum number of worker nodes of this type to launch.
+        min_workers: 3
+        # The maximum number of worker nodes of this type to launch.
+        max_workers: 3
+        # Provider-specific config for this node type, e.g. instance type. By default
+        # Ray will auto-configure unspecified fields such as SubnetId and KeyName.
+        # For more documentation on available fields, see:
+        # http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.ServiceResource.create_instances
+        node_config:
+            InstanceType: c6i.32xlarge
+            # Default AMI for us-east-2.
+            # Check https://github.com/ray-project/ray/blob/master/python/ray/autoscaler/_private/aws/config.py
+            # for default images for other zones.
+            ImageId: ami-0c77cd5ca05bf1281
+            # S3 Full Access (for writing output to S3 on all workers)
+            IamInstanceProfile:
+                Name: benchmark-using-ray-worker
+            # Note: provisioning extra space for Ray objects
+            BlockDeviceMappings:
+                - DeviceName: /dev/sda1
+                  Ebs:
+                      VolumeSize: 500
+                      VolumeType: gp3
+
+# Specify the node type of the head node (as configured above).
+head_node_type: ray.head.default
+
+# Whether changes to directories in file_mounts or cluster_synced_files in the head node
+# should sync to the worker node continuously
+file_mounts_sync_continuously: False
+
+# List of shell commands to run to set up nodes.
+setup_commands:
+    - conda create -n "bench" -c conda-forge "ray-default">=2.1.0,!=2.5.0 -y
+    - conda activate bench && pip install -U fsspec>=2022.11.0 s3fs boto3 pyopenssl pandas "getdaft[ray,aws]" pyiceberg
+    - echo "conda activate bench" >> ~/.bashrc
+    - echo 'conda list'
+
+head_start_ray_commands:
+    - ray stop
+    - echo 'export TMPDIR="$(dirname $(mktemp tmp.XXXXXXXXXX -ut))"' >> ~/.bashrc
+    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --plasma-directory=$TMPDIR --dashboard-host=0.0.0.0
+
+worker_start_ray_commands:
+    - ray stop
+    - echo 'export TMPDIR="$(dirname $(mktemp tmp.XXXXXXXXXX -ut))"' >> ~/.bashrc
+    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 --plasma-directory=$TMPDIR
+
+# cluster_name: daft_tpch
+
+# max_workers: 3
+
+# docker:
+#     image: rayproject/ray:latest-cpu
+#     container_name: "ray_container"
+#     pull_before_run: True
+#     run_options:
+#         - --ulimit nofile=65536:65536
+
+# idle_timeout_minutes: 60
+
+# provider:
+#     type: aws
+#     region: us-east-2
+#     availability_zone: us-east-2a,us-east-2b,us-east-2c
+#     cache_stopped_nodes: False
+
+# auth:
+#     ssh_user: ubuntu
+
+# available_node_types:
+#     ray.head.default:
+#         resources: {}
+#         node_config:
+#             InstanceType: c6i.4xlarge
+#             ImageId: ami-0c77cd5ca05bf1281
+#             IamInstanceProfile:
+#                 Name: benchmark-using-ray-head
+#             BlockDeviceMappings:
+#                 - DeviceName: /dev/sda1
+#                   Ebs:
+#                       VolumeSize: 500
+#                       VolumeType: gp3
+
+#     ray.worker.default:
+#         min_workers: 3
+#         max_workers: 3
+#         resources: {}
+#         node_config:
+#             InstanceType: c6i.4xlarge
+#             ImageId: ami-0c77cd5ca05bf1281
+#             IamInstanceProfile:
+#                 Name: benchmark-using-ray-worker
+#             BlockDeviceMappings:
+#                 - DeviceName: /dev/sda1
+#                   Ebs:
+#                       VolumeSize: 500
+#                       VolumeType: gp3
+
+# head_node_type: ray.head.default
+
+# file_mounts_sync_continuously: False
+
+# setup_commands:
+#     - conda create -n bench -y python=3.10
+#     - echo "conda activate bench" >> ~/.bashrc
+#     - . ~/.bashrc && conda activate bench && pip install --upgrade pip
+#     - . ~/.bashrc && conda activate bench && pip install "getdaft[ray,aws]" boto3 awscli
+#     - conda activate bench && pip install -U fsspec>=2022.11.0 s3fs boto3 pyopenssl pandas "getdaft[ray,aws]" pyiceberg
+
+# head_start_ray_commands:
+#     - ray stop
+#     - ulimit -n 65536
+#     - ray start --head --port=6379 --object-manager-port=8076 --dashboard-host=0.0.0.0
+
+# worker_start_ray_commands:
+#     - ray stop
+#     - ulimit -n 65536
+#     - ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076
+
