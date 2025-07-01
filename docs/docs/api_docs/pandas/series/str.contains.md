@@ -14,6 +14,9 @@
 !!! note
 	Input must be a Series of `String` data.
 
+!!! note
+	Argument `na` has default value `None` that's different than Pandas default.
+
 ### Example Usage:
 ``` py
 >>> @bodo.jit

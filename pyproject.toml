@@ -7,7 +7,7 @@ requires = [
     # Build Libraries
     "numpy>=1.24",
     "pyarrow==19.0.0",
-    "mpi4py~=4.0",
+    "mpi4py>=4.0,<4.1",
     "pip"
 ]
 build-backend = "scikit_build_core.build"

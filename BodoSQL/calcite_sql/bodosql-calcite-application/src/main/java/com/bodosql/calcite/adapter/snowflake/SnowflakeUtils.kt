@@ -57,15 +57,16 @@ class SnowflakeUtils {
             }
             val call = callParts[0]
 
-            val argParts = call.split("(", ")")
+            val openParenIndex = call.indexOf('(')
+            val closeParenIndex = call.lastIndexOf(')')
 
-            if (argParts.size != 3) {
+            if (openParenIndex == -1 || closeParenIndex == -1 || closeParenIndex <= openParenIndex) {
                 throw java.lang.RuntimeException(
                     "UDF formatting error in parseSnowflakeShowFunctionsArguments: " +
-                        "unexpected special characters",
+                        "expected signature to look like: 'FUNC(ARGS)', got: '$call'",
                 )
             }
-            val argString = argParts[1].trim()
+            val argString = call.substring(openParenIndex + 1, closeParenIndex)
             val (argList, numOptional) =
                 if (argString.isEmpty()) {
                     Pair(listOf(), 0)

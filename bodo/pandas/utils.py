@@ -283,7 +283,7 @@ def check_args_fallback(
                     msg = (
                         f"{func.__name__} is not "
                         "implemented in Bodo dataframe library for the specified arguments yet. "
-                        "Falling back to Pandas (may be slow or run out of memory."
+                        "Falling back to Pandas (may be slow or run out of memory)."
                     )
                     if except_msg:
                         msg += f"\nException: {except_msg}"
@@ -932,7 +932,10 @@ def arrow_table_to_pandas(arrow_table, arrow_schema=None):
     df_with_index = _reconstruct_pandas_index(df, arrow_schema)
 
     # Handle multi-level column names e.g. ["('A', 'sum')", "('A', 'mean')"]
-    if len(arrow_schema.pandas_metadata.get("column_indexes", [])) > 1:
+    if (
+        arrow_schema.pandas_metadata is not None
+        and len(arrow_schema.pandas_metadata.get("column_indexes", [])) > 1
+    ):
         columns_zipped = zip(*[eval(col) for col in df_with_index.columns])
         df_with_index.columns = pd.MultiIndex.from_arrays(columns_zipped)
 
