@@ -60,6 +60,22 @@ from bodo.utils.typing import (
 )
 
 
+from pandas.core.indexing import _LocIndexer
+
+class BodoDataFrameLocIndexer(_LocIndexer):
+    def __init__(self, df):
+        self.df = df
+
+    def __getitem__(self, key):
+        if isinstance(key, tuple) and len(key) == 2:
+            row_sel, col_sel = key
+            if row_sel == slice(None, None, None):
+                return self.df.__getitem__(col_sel)
+
+        # Delegate to original behavior
+        return super(self.df).loc.__getitem__(key)
+
+
 class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     # We need to store the head_df to avoid data pull when head is called.
     # Since BlockManagers are in Cython it's tricky to override all methods
@@ -84,6 +100,21 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __init__(self, *args, **kwargs):
         # No-op since already initialized by __new__
         pass
+
+    @property
+    def loc(self):
+        return BodoDataFrameLocIndexer(self)
+
+    def __setattr__(self, name, value):
+        # Intercept direct setting of columns attribute
+        # and copy new column names to _head_df if it
+        # exists so that when column names are propagated
+        # from there they match the latest dataframe
+        # column names.
+        if name == "columns":
+            if self._head_df is not None:
+                self._head_df.columns = value
+        super().__setattr__(name, value)
 
     @property
     def _plan(self):
@@ -834,7 +865,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # We want to avoid having self appear on the rhs since the unique_ptr
         # to the duckdb plan will delete it on the lhs first before it processes the rhs
         # TODO [BSE-4865]: check right._plan for self recursively.
-        right_plan = deepcopy(right._plan) if self is right else right._plan
+        right_plan = deepcopy(right._plan)
 
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
@@ -933,6 +964,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 just one element. """
             if isinstance(key, str):
                 key = [key]
+                output_series = True
+            else:
+                output_series = False
             assert isinstance(key, Iterable)
             key = list(key)
             # convert column name to index
@@ -948,7 +982,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Create column reference expressions for selected columns
             exprs = make_col_ref_exprs(key_indices, self._plan)
 
-            empty_data = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
+            empty_data = zero_size_self.__getitem__(key[0] if output_series else key)
             return wrap_plan(
                 plan=LazyPlan(
                     "LogicalProjection",
