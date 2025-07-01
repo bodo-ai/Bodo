@@ -19,21 +19,13 @@ def test_read_csv_hf(datapath, memory_leak_check):
 @pytest.mark.slow
 def test_read_json_hf(datapath, memory_leak_check):
     """Test read_json from Hugging Face"""
-    from huggingface_hub import hf_hub_download
-
-    # Download the file from the dataset repository
-    file_path = hf_hub_download(
-        repo_id="HuggingFaceH4/MATH-500", repo_type="dataset", filename="test.jsonl"
-    )
-
-    pandas_result = pd.read_json(file_path, lines=True)
 
     def test_impl():
         return pd.read_json(
-            "hf://datasets/HuggingFaceH4/MATH-500/test.jsonl", lines=True
+            "hf://datasets/craigwu/vstar_bench/test_questions.jsonl", lines=True
         )
 
-    check_func(test_impl, (), py_output=pandas_result)
+    check_func(test_impl, ())
 
 
 @pytest.mark.slow
