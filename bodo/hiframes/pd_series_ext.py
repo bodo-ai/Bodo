@@ -647,7 +647,9 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         # Return the signature
         return ret(*folded_args).replace(pysig=pysig)
 
-    def _resolve_map_func(self, ary, func, pysig, fname, f_args=None, kws=None):
+    def _resolve_map_func(
+        self, ary, func, pysig, fname, f_args=None, kws=None, na_action=None
+    ):
         """Find type signature of Series.map/apply method.
         ary: Series type (TODO: rename)
         func: user-defined function
@@ -672,6 +674,10 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         if kws is None:
             kws = {}
         return_nullable = False
+
+        # The output may contain NAs from input in this case
+        if na_action == "ignore":
+            return_nullable = True
 
         # Is the function a UDF or a builtin
         is_udf = True
@@ -769,22 +775,27 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         func = args[0] if len(args) > 0 else kws["arg"]
         kws.pop("arg", None)
         na_action = args[1] if len(args) > 1 else kws.pop("na_action", types.none)
-
-        unsupported_args = {"na_action": na_action}
-        map_defaults = {"na_action": None}
-        check_unsupported_args(
-            "Series.map",
-            unsupported_args,
-            map_defaults,
-            package_name="pandas",
-            module_name="Series",
+        if not (
+            is_overload_none(na_action)
+            or (
+                is_overload_constant_str(na_action)
+                and (get_overload_const_str(na_action) == "ignore")
+            )
+        ):
+            raise BodoError(
+                "Series.map(): 'na_action' must be None or constant string 'ignore'"
+            )
+        na_action = (
+            get_overload_const_str(na_action)
+            if is_overload_constant_str(na_action)
+            else None
         )
 
         def map_stub(arg, na_action=None):  # pragma: no cover
             pass
 
         pysig = numba.core.utils.pysignature(map_stub)
-        return self._resolve_map_func(ary, func, pysig, "map")
+        return self._resolve_map_func(ary, func, pysig, "map", na_action=na_action)
 
     @bound_function("series.apply", no_unliteral=True)
     def resolve_apply(self, ary, args, kws):
