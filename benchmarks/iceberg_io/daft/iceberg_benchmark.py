@@ -11,6 +11,7 @@ from pyiceberg.catalog import load_catalog
 
 def read_write_iceberg():
     s3tables_arn = "arn:aws:s3tables:us-east-2:427443013497:bucket/tpch"
+    tpch_dataset = "sf100.orders"
     rest_catalog = load_catalog(
         "tpch",
         **{
@@ -22,15 +23,15 @@ def read_write_iceberg():
             "rest.signing-region": "us-east-2",
         },
     )
-    if rest_catalog.table_exists("sf1000.orders_copy_daft"):
-        rest_catalog.purge_table("sf1000.orders_copy_daft")
+    if rest_catalog.table_exists(f"{tpch_dataset}_copy_daft"):
+        rest_catalog.purge_table(f"{tpch_dataset}_copy_daft")
 
-    orders_table = rest_catalog.load_table("sf1000.orders")
+    orders_table = rest_catalog.load_table(tpch_dataset)
 
     start = time.time()
     try:
         orders_copy = rest_catalog.create_table(
-            "sf1000.orders_copy_daft", orders_table.schema()
+            f"{tpch_dataset}_copy_daft", orders_table.schema()
         )
         dataset = daft.read_iceberg(orders_table)
         dataset.write_iceberg(orders_copy, mode="overwrite")
@@ -38,7 +39,7 @@ def read_write_iceberg():
         end = time.time()
         print("Total read-write time:", (end - start))
     finally:
-        rest_catalog.purge_table("sf1000.orders_copy_daft")
+        rest_catalog.purge_table(f"{tpch_dataset}_copy_daft")
 
 
 def main():
