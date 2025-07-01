@@ -1,5 +1,9 @@
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.csv as csv
+import pyarrow.dataset as ds
+import pyarrow.parquet as pq
 import pytest
 from pyarrow import fs as pafs
 
@@ -7,6 +11,7 @@ import bodo
 from bodo.tests.utils import _get_dist_arg, cast_dt64_to_ns, check_func
 from bodo.utils.testing import ensure_clean2
 from bodo.utils.typing import BodoError
+from bodo.utils.utils import run_rank0
 
 pytestmark = pytest.mark.s3
 
@@ -402,6 +407,19 @@ def test_s3_parquet_write_seq(
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df, f"s3://{bucket_name}/test_df_bodo_seq.pq")
 
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        out_df = pq.read_table(
+            f"{bucket_name}/test_df_bodo_seq.pq", filesystem=fs
+        ).to_pandas()
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
+
 
 # Memory leak check is disabled because to_parquet lowers a
 # constant, which has a leak
@@ -417,6 +435,19 @@ def test_s3_parquet_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
 
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        out_df = pq.read_table(
+            "bodo-test/test_df_bodo_1D.pq", filesystem=fs
+        ).to_pandas()
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
+
 
 # Memory leak check is disabled because to_parquet lowers a
 # constant, which has a leak
@@ -431,6 +462,19 @@ def test_s3_parquet_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
+
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        out_df = pq.read_table(
+            "bodo-test/test_df_bodo_1D_var.pq", filesystem=fs
+        ).to_pandas()
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
 
 
 @pytest.mark.parametrize(
@@ -457,6 +501,28 @@ def test_s3_csv_write_seq(
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df, f"s3://{bucket_name}/test_df_bodo_seq.csv")
 
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(
+            endpoint_override="http://localhost:9000",
+            region="us-east-1" if bucket_name == "bodo-test" else "us-west-2",
+        )
+        file_obj = fs.open_input_file(f"{bucket_name}/test_df_bodo_seq.csv")
+        out_df = csv.read_csv(
+            file_obj,
+            read_options=csv.ReadOptions(column_names=["A", "B", "C"]),
+            convert_options=csv.ConvertOptions(
+                column_types={"A": "float64", "B": "bool", "C": "int64"}
+            ),
+        ).to_pandas()
+        return out_df
+
+    out_df = read_table()
+
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
+
 
 def test_s3_csv_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
@@ -468,6 +534,36 @@ def test_s3_csv_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
 
     bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
+
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        dataset = ds.dataset(
+            "bodo-test/test_df_bodo_1D.csv/",
+            format=ds.CsvFileFormat(
+                read_options=csv.ReadOptions(column_names=["A", "B", "C"]),
+                convert_options=csv.ConvertOptions(
+                    column_types={"A": "float64", "B": "bool", "C": "int64"}
+                ),
+            ),
+            filesystem=fs,
+            schema=pa.schema(
+                [
+                    ("A", pa.float64()),
+                    ("B", pa.bool_()),
+                    ("C", pa.int64()),
+                ]
+            ),
+        )
+
+        out_df = dataset.to_table().to_pandas()
+
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
 
 
 def test_s3_csv_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
@@ -483,6 +579,34 @@ def test_s3_csv_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
 
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        dataset = ds.dataset(
+            "bodo-test/test_df_bodo_1D_var.csv/",
+            format=ds.CsvFileFormat(
+                read_options=csv.ReadOptions(column_names=["A", "B", "C"]),
+                convert_options=csv.ConvertOptions(
+                    column_types={"A": "float64", "B": "bool", "C": "int64"}
+                ),
+            ),
+            filesystem=fs,
+            schema=pa.schema(
+                [
+                    ("A", pa.float64()),
+                    ("B", pa.bool_()),
+                    ("C", pa.int64()),
+                ]
+            ),
+        )
+        out_df = dataset.to_table().to_pandas()
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
+
 
 def test_s3_csv_write_header_seq(minio_server_with_s3_envs, s3_bucket, test_df):
     """
@@ -494,6 +618,19 @@ def test_s3_csv_write_header_seq(minio_server_with_s3_envs, s3_bucket, test_df):
 
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df)
+
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        file_obj = fs.open_input_file("bodo-test/test_df_bodo_header_seq.csv")
+        out_df = csv.read_csv(file_obj)
+        return out_df.to_pandas()
+
+    out_df = read_table()
+
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
 
 
 def test_s3_csv_write_header_1D(minio_server_with_s3_envs, s3_bucket, test_df):
@@ -507,6 +644,30 @@ def test_s3_csv_write_header_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
 
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        dataset = ds.dataset(
+            "bodo-test/test_df_bodo_header_1D.csv/",
+            format="csv",
+            filesystem=fs,
+            schema=pa.schema(
+                [
+                    ("A", pa.float64()),
+                    ("B", pa.bool_()),
+                    ("C", pa.int64()),
+                ]
+            ),
+        )
+        out_df = dataset.to_table().to_pandas()
+        return out_df
+
+    out_df = read_table()
+
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
+
 
 def test_s3_csv_write_header_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
@@ -518,6 +679,30 @@ def test_s3_csv_write_header_1D_var(minio_server_with_s3_envs, s3_bucket, test_d
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
+
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        dataset = ds.dataset(
+            "bodo-test/test_df_bodo_header_1D_var.csv/",
+            format="csv",
+            filesystem=fs,
+            schema=pa.schema(
+                [
+                    ("A", pa.float64()),
+                    ("B", pa.bool_()),
+                    ("C", pa.int64()),
+                ]
+            ),
+        )
+        out_df = dataset.to_table().to_pandas()
+
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
 
 
 def test_s3_csv_write_file_prefix(minio_server_with_s3_envs, s3_bucket, test_df):
@@ -586,6 +771,23 @@ def test_s3_json_write_records_lines_seq(
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df, f"s3://{bucket_name}/df_records_lines_seq.json")
 
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(
+            endpoint_override="http://localhost:9000",
+            region="us-east-1" if bucket_name == "bodo-test" else "us-west-2",
+        )
+        dataset = ds.dataset(
+            "bodo-test/df_records_lines_seq.json", format="json", filesystem=fs
+        )
+        out_df = dataset.to_table().to_pandas()
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
+
 
 @pytest.mark.timeout(1000)
 def test_s3_json_write_records_lines_1D(minio_server_with_s3_envs, s3_bucket, test_df):
@@ -600,6 +802,20 @@ def test_s3_json_write_records_lines_1D(minio_server_with_s3_envs, s3_bucket, te
 
     bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
+
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        dataset = ds.dataset(
+            "bodo-test/df_records_lines_1D.json", format="json", filesystem=fs
+        )
+        out_df = dataset.to_table().to_pandas()
+        return out_df
+
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
 
 
 @pytest.mark.timeout(1000)
@@ -618,52 +834,67 @@ def test_s3_json_write_records_lines_1D_var(
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
 
+    @run_rank0
+    def read_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        dataset = ds.dataset(
+            "bodo-test/df_records_lines_1D_var.json", format="json", filesystem=fs
+        )
+        out_df = dataset.to_table().to_pandas()
+        return out_df
 
-def test_s3_parquet_read_seq(minio_server_with_s3_envs, s3_bucket, test_df):
+    out_df = read_table()
+    pd.testing.assert_frame_equal(
+        out_df, test_df, check_dtype=False, check_column_type=False
+    )
+
+
+@pytest.mark.df_lib
+def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_parquet
     test the parquet file we just wrote sequentially
     """
 
+    @run_rank0
+    def write_table():
+        table = pa.Table.from_pandas(test_df)
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        pq.write_table(table, "bodo-test/test_df_bodo_read.pq", filesystem=fs)
+
+    write_table()
+
     def test_read():
-        return pd.read_parquet("s3://bodo-test/test_df_bodo_seq.pq")
+        return pd.read_parquet("s3://bodo-test/test_df_bodo_read.pq")
 
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_parquet_read_1D(minio_server_with_s3_envs, s3_bucket, test_df, datapath):
-    """
-    read_parquet
-    test the parquet file we just wrote in 1D
-    """
-
-    def test_read():
-        return pd.read_parquet("s3://bodo-test/test_df_bodo_1D.pq")
-
-    check_func(test_read, (), py_output=test_df)
-
-
-def test_s3_parquet_read_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
-    """
-    read_parquet
-    test the parquet file we just wrote  in 1D Var
-    """
-
-    def test_read():
-        return pd.read_parquet("s3://bodo-test/test_df_bodo_1D_var.pq")
-
-    check_func(test_read, (), py_output=test_df)
-
-
-def test_s3_csv_read_seq(minio_server_with_s3_envs, s3_bucket, test_df):
+def test_s3_csv_read(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_csv
     test the csv file we just wrote sequentially
     """
 
+    @run_rank0
+    def write_table():
+        table = pa.Table.from_pandas(test_df)
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        fs.create_dir("bodo-test")
+        out_file_object = fs.open_output_stream("bodo-test/test_df_bodo_read.csv")
+        csv.write_csv(
+            table,
+            out_file_object,
+            write_options=csv.WriteOptions(
+                include_header=False,
+            ),
+        )
+
+    write_table()
+
     def test_read():
         return pd.read_csv(
-            "s3://bodo-test/test_df_bodo_seq.csv",
+            "s3://bodo-test/test_df_bodo_read.csv",
             names=["A", "B", "C"],
             dtype={"A": float, "B": "bool", "C": int},
         )
@@ -671,75 +902,29 @@ def test_s3_csv_read_seq(minio_server_with_s3_envs, s3_bucket, test_df):
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_csv_read_1D(minio_server_with_s3_envs, s3_bucket, test_df):
-    """
-    read_csv
-    test the csv file we just wrote in 1D
-    """
-
-    def test_read():
-        return pd.read_csv(
-            "s3://bodo-test/test_df_bodo_1D.csv",
-            names=["A", "B", "C"],
-            dtype={"A": float, "B": "bool", "C": int},
-        )
-
-    check_func(test_read, (), py_output=test_df)
-
-
-def test_s3_csv_read_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
-    """
-    read_csv
-    test the csv file we just wrote in 1D Var
-    """
-
-    def test_read():
-        return pd.read_csv(
-            "s3://bodo-test/test_df_bodo_1D_var.csv",
-            names=["A", "B", "C"],
-            dtype={"A": float, "B": "bool", "C": int},
-        )
-
-    check_func(test_read, (), py_output=test_df)
-
-
-def test_s3_csv_read_header_seq(minio_server_with_s3_envs, s3_bucket, test_df):
+def test_s3_csv_read_header(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_csv with header and infer dtypes
     test the csv file we just wrote sequentially
     """
 
-    def test_read():
-        return pd.read_csv(
-            "s3://bodo-test/test_df_bodo_header_seq.csv",
+    @run_rank0
+    def write_table():
+        table = pa.Table.from_pandas(test_df)
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        out_file_object = fs.open_output_stream(
+            "bodo-test/test_df_bodo_read_header.csv"
+        )
+        csv.write_csv(
+            table,
+            out_file_object,
         )
 
-    check_func(test_read, (), py_output=test_df)
-
-
-def test_s3_csv_read_header_1D(minio_server_with_s3_envs, s3_bucket, test_df):
-    """
-    read_csv with header and infer dtypes
-    test the csv file we just wrote in 1D
-    """
+    write_table()
 
     def test_read():
         return pd.read_csv(
-            "s3://bodo-test/test_df_bodo_header_1D.csv",
-        )
-
-    check_func(test_read, (), py_output=test_df)
-
-
-def test_s3_csv_read_1D_header_var(minio_server_with_s3_envs, s3_bucket, test_df):
-    """
-    read_csv with header and infer dtypes
-    test the csv file we just wrote in 1D Var
-    """
-
-    def test_read():
-        return pd.read_csv(
-            "s3://bodo-test/test_df_bodo_header_1D_var.csv",
+            "s3://bodo-test/test_df_bodo_read_header.csv",
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -885,75 +1070,34 @@ def test_s3_np_fromfile_1D_var(minio_server_with_s3_envs, s3_bucket, test_np_arr
 
 
 @pytest.mark.timeout(1000)
-def test_s3_json_read_records_lines_seq(minio_server_with_s3_envs, s3_bucket, test_df):
+def test_s3_json_read(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_json(orient="records", lines=True)
     test the json file we just wrote sequentially
     """
 
+    @run_rank0
+    def write_table():
+        fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+        with fs.open_output_stream("bodo-test/df_records_lines.json") as f:
+            test_df.to_json(
+                f,
+                orient="records",
+                lines=True,
+            )
+
+    write_table()
+
     def test_read():
         return pd.read_json(
-            "s3://bodo-test/df_records_lines_seq.json",
+            "s3://bodo-test/df_records_lines.json",
             orient="records",
             lines=True,
         )
 
     def test_read_infer_dtype():
         return pd.read_json(
-            "s3://bodo-test/df_records_lines_seq.json",
-            orient="records",
-            lines=True,
-            dtype={"A": float, "B": "bool", "C": int},  # type: ignore
-        )
-
-    check_func(test_read, (), py_output=test_df)
-    check_func(test_read_infer_dtype, (), py_output=test_df)
-
-
-@pytest.mark.timeout(1000)
-def test_s3_json_read_records_lines_1D(minio_server_with_s3_envs, s3_bucket, test_df):
-    """
-    read_json(orient="records", lines=True)
-    test the json file we just wrote in 1D
-    """
-
-    def test_read():
-        return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D.json",
-            orient="records",
-            lines=True,
-        )
-
-    def test_read_infer_dtype():
-        return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D.json",
-            orient="records",
-            lines=True,
-        )
-
-    check_func(test_read, (), py_output=test_df)
-    check_func(test_read_infer_dtype, (), py_output=test_df)
-
-
-@pytest.mark.timeout(1000)
-def test_s3_json_read_records_lines_1D_var(
-    minio_server_with_s3_envs, s3_bucket, test_df
-):
-    """
-    read_json(orient="records", lines=True)
-    test the json file we just wrote in 1D Var
-    """
-
-    def test_read():
-        return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D_var.json",
-            orient="records",
-            lines=True,
-        )
-
-    def test_read_infer_dtype():
-        return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D_var.json",
+            "s3://bodo-test/df_records_lines.json",
             orient="records",
             lines=True,
             dtype={"A": float, "B": "bool", "C": int},  # type: ignore

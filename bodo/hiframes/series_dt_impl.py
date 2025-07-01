@@ -436,7 +436,7 @@ def create_timedelta_method_overload(method):
             func_text += "    B = np.empty(n, np.float64)\n"
         # Only other method is to_pytimedelta, which is an arr of datetimes
         else:
-            func_text += "    B = bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(n)\n"
+            func_text += "    B = bodo.hiframes.datetime_timedelta_ext.alloc_timedelta_array(n)\n"
 
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "        if bodo.libs.array_kernels.isna(A, i):\n"

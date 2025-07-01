@@ -2933,8 +2933,7 @@ def test_series_groupby_by_arg_supported_types(series_val, memory_leak_check):
     # check_func(test_impl_by_types, (S, ))
 
 
-# TODO [BSE-4802]: DataFrame Lib: Incorrect cast of output batch float->int.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest.mark.parametrize(
     "S",
     [

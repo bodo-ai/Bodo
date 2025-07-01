@@ -59,6 +59,8 @@ from bodo.tests.utils import (
 from bodo.utils.testing import ensure_clean2
 from bodo.utils.utils import BodoError, run_rank0
 
+pytestmark = pytest.mark.iceberg
+
 
 @pytest.mark.slow
 def test_write_existing_fail(

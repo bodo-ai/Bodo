@@ -731,7 +731,14 @@ def test_df_merge_error_handling(func, err_regex):
 
 
 pd_supported_merge_cols = [
-    pytest.param(pd.Categorical([1, 1, 1, 2, 3]), id="CategoricalArrayType"),
+    pytest.param(
+        pd.Categorical([1, 1, 1, 2, 3]),
+        id="CategoricalArrayType",
+        marks=pytest.mark.skipif(
+            bodo.test_dataframe_library_enabled,
+            reason="[BSE-4804] General categorical support in DF lib.",
+        ),
+    ),
     pytest.param(np.array([1, 2, 3, 4, 5]), id="Array"),
     pytest.param(
         pd.array([1, 2, 3, 4, 5], dtype=pd.Int32Dtype()), id="IntegerArrayType"
@@ -796,6 +803,7 @@ bodo_only_merge_cols = [
 ]
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize("key", pd_supported_merge_cols)
 def test_df_merge_col_key_types(key, memory_leak_check):
     def impl(df1, df2):
@@ -814,21 +822,26 @@ def test_df_merge_col_key_types(key, memory_leak_check):
     check_func(impl, (df1, df2), reset_index=True, sort_output=True)
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize("val", pd_supported_merge_cols + bodo_only_merge_cols)
-# TODO: [BE-1738]: Add memory_leak_check
-def test_df_merge_col_value_types(val):
+def test_df_merge_col_value_types(val, memory_leak_check):
     def impl(df1, df2):
         return df1.merge(df2, on="key")
 
     df1 = pd.DataFrame({"key": ["bar", "bar", "baz", "foo", "foo"], "value": val})
     df2 = pd.DataFrame({"key": ["bar", "bar", "baz", "foo", "foo"], "value": val})
 
-    check_func(impl, (df1, df2))
+    check_func(
+        impl,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+    )
 
 
+@pytest.mark.df_lib
 @pytest.mark.parametrize("key", bodo_only_merge_cols)
-# TODO: [BE-1738]: Add memory_leak_check
-def test_df_merge_col_key_bodo_only(key):
+def test_df_merge_col_key_bodo_only(key, memory_leak_check):
     def impl(df1, df2):
         return df1.merge(df2, on="key")
 
@@ -838,8 +851,13 @@ def test_df_merge_col_key_bodo_only(key):
     df2 = pd.DataFrame({"key": key, "value": val_y})
 
     df_exp = pd.DataFrame({"key": key, "value_x": val_x, "value_y": val_y})
-    df_act = bodo.jit(impl)(df1, df2)
-    pd.testing.assert_frame_equal(df_act, df_exp, check_column_type=False)
+    check_func(
+        impl,
+        (df1, df2),
+        py_output=df_exp,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 @pytest.mark.parametrize(

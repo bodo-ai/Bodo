@@ -13,6 +13,7 @@ import pytest
 from pyiceberg.expressions.literals import TimeLiteral
 
 import bodo
+from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.catalog.dir import DirCatalog
 from bodo.tests.iceberg_database_helpers.utils import (
     PartitionField,
@@ -61,7 +62,9 @@ def test_filter_pushdown_time_direct(iceberg_database, iceberg_table_conn):
 
     from bodo.io.iceberg import get_iceberg_file_list_parallel
 
-    get_iceberg_file_list_parallel(conn, table_id, filter_expr)
+    catalog = conn_str_to_catalog(conn)
+
+    get_iceberg_file_list_parallel(catalog, table_id, filter_expr)
 
 
 @pytest.mark.skip(

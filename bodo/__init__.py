@@ -192,6 +192,10 @@ test_dataframe_library_enabled = os.environ.get("BODO_ENABLE_TEST_DATAFRAME_LIBR
 # single core).
 dataframe_library_run_parallel = os.environ.get("BODO_DATAFRAME_LIBRARY_RUN_PARALLEL", "1") != "0"
 
+# If enabled (non-zero), dumps the dataframe library plans pre and post
+# optimized plans to the screen.
+dataframe_library_dump_plans = os.environ.get("BODO_DATAFRAME_LIBRARY_DUMP_PLANS", "0") != "0"
+
 # -------------------------- End DataFrame Library Config --------------------------
 
 bodo_use_native_type_inference = (
@@ -358,7 +362,7 @@ from bodo.hiframes.timestamptz_ext import (
 )
 from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
-    datetime_timedelta_array_type,
+    timedelta_array_type,
     pd_timedelta_type,
 )
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type

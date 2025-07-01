@@ -1,19 +1,18 @@
 #include "_physical_conv.h"
 #include <stdexcept>
-#include "_plan.h"
+#include "_bodo_scan_function.h"
 
-#include "_duckdb_util.h"
-#include "duckdb/planner/expression/bound_columnref_expression.hpp"
-#include "duckdb/planner/expression/bound_comparison_expression.hpp"
-#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
-#include "duckdb/planner/expression/bound_constant_expression.hpp"
-#include "duckdb/planner/expression/bound_function_expression.hpp"
-#include "duckdb/planner/expression/bound_operator_expression.hpp"
+#include "_bodo_write_function.h"
+#include "_util.h"
+#include "physical/aggregate.h"
 #include "physical/filter.h"
 #include "physical/join.h"
 #include "physical/limit.h"
 #include "physical/project.h"
+#include "physical/reduce.h"
 #include "physical/sample.h"
+#include "physical/sort.h"
+#include "physical/write_parquet.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
@@ -34,123 +33,17 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
+    std::vector<duckdb::ColumnBinding> source_cols =
+        op.children[0]->GetColumnBindings();
+
     // Process the source of this projection.
     this->Visit(*op.children[0]);
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
     auto physical_op = std::make_shared<PhysicalProjection>(
-        std::move(op.expressions), in_table_schema);
+        source_cols, op.expressions, in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
-}
-
-/**
- * @brief Convert duckdb expression tree to Bodo physical expression tree.
- *
- * @param expr - the root of input duckdb expression tree
- * @return the root of output Bodo Physical expression tree
- */
-std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
-    duckdb::unique_ptr<duckdb::Expression>& expr) {
-    // Class and type here are really like the general type of the
-    // expression node (expr_class) and a sub-type of that general
-    // type (expr_type).
-    duckdb::ExpressionClass expr_class = expr->GetExpressionClass();
-    duckdb::ExpressionType expr_type = expr->GetExpressionType();
-
-    switch (expr_class) {
-        case duckdb::ExpressionClass::BOUND_COMPARISON: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundComparisonExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundComparisonExpression>(
-                    std::move(expr));
-            // This node type has left and right children which are recursively
-            // processed first and then the resulting Bodo Physical expression
-            // subtrees are combined with the expression sub-type (e.g., equal,
-            // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
-            return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalComparisonExpression>(
-                    buildPhysicalExprTree(bce->left),
-                    buildPhysicalExprTree(bce->right), expr_type));
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundColumnRefExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundColumnRefExpression>(
-                    std::move(expr));
-            duckdb::ColumnBinding binding = bce->binding;
-            return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalColumnRefExpression>(
-                    binding.table_index, binding.column_index));
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_CONSTANT: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundConstantExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundConstantExpression>(
-                    std::move(expr));
-            // Get the constant out of the duckdb node as a C++ variant.
-            // Using auto since variant set will be extended.
-            auto extracted_value = extractValue(bce->value);
-            // Return a PhysicalConstantExpression<T> where T is the actual
-            // type of the value contained within bce->value.
-            auto ret = std::visit(
-                [](const auto& value) {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalConstantExpression<
-                            std::decay_t<decltype(value)>>>(value));
-                },
-                extracted_value);
-            return ret;
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundConjunctionExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundConjunctionExpression>(
-                    std::move(expr));
-            // This node type has left and right children which are recursively
-            // processed first and then the resulting Bodo Physical expression
-            // subtrees are combined with the expression sub-type (e.g., equal,
-            // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
-            return std::static_pointer_cast<PhysicalExpression>(
-                std::make_shared<PhysicalConjunctionExpression>(
-                    buildPhysicalExprTree(bce->children[0]),
-                    buildPhysicalExprTree(bce->children[1]), expr_type));
-        } break;  // suppress wrong fallthrough error
-        case duckdb::ExpressionClass::BOUND_OPERATOR: {
-            // Convert the base duckdb::Expression node to its actual derived
-            // type.
-            duckdb::unique_ptr<duckdb::BoundOperatorExpression> bce =
-                dynamic_cast_unique_ptr<duckdb::BoundOperatorExpression>(
-                    std::move(expr));
-            switch (bce->children.size()) {
-                case 1: {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalUnaryExpression>(
-                            buildPhysicalExprTree(bce->children[0]),
-                            expr_type));
-                } break;
-                case 2: {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalBinaryExpression>(
-                            buildPhysicalExprTree(bce->children[0]),
-                            buildPhysicalExprTree(bce->children[1]),
-                            expr_type));
-                } break;
-                default:
-                    throw std::runtime_error(
-                        "Unsupported number of children for bound operator");
-            }
-        } break;  // suppress wrong fallthrough error
-        default:
-            throw std::runtime_error(
-                "Unsupported duckdb expression type" +
-                std::to_string(static_cast<int>(expr_class)));
-    }
-    throw std::logic_error("Control should never reach here");
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
@@ -158,12 +51,16 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     this->Visit(*op.children[0]);
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
+    std::vector<duckdb::ColumnBinding> source_cols =
+        op.children[0]->GetColumnBindings();
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+        getColRefMap(source_cols);
 
     std::shared_ptr<PhysicalExpression> physExprTree =
-        buildPhysicalExprTree(op.expressions[0]);
+        buildPhysicalExprTree(op.expressions[0], col_ref_map);
     for (size_t i = 1; i < op.expressions.size(); ++i) {
         std::shared_ptr<PhysicalExpression> subExprTree =
-            buildPhysicalExprTree(op.expressions[i]);
+            buildPhysicalExprTree(op.expressions[i], col_ref_map);
         physExprTree = std::static_pointer_cast<PhysicalExpression>(
             std::make_shared<PhysicalConjunctionExpression>(
                 physExprTree, subExprTree,
@@ -174,13 +71,83 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     this->active_pipeline->AddOperator(physical_op);
 }
 
+void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
+    // Process the source of this aggregate.
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    // Single column reduction like Series.max()
+    if (op.groups.empty()) {
+        if (op.expressions.size() != 1 ||
+            op.expressions[0]->type !=
+                duckdb::ExpressionType::BOUND_AGGREGATE) {
+            throw std::runtime_error(
+                "LogicalAggregate with no groups must have exactly one "
+                "aggregate expression for reduction.");
+        }
+        auto& agg_expr =
+            op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
+
+        if (agg_expr.function.name == "count_star") {
+            auto physical_op = std::make_shared<PhysicalCountStar>();
+            // Finish the pipeline at this point so that Finalize can run
+            // to reduce the number of collected rows to the desired amount.
+            finished_pipelines.emplace_back(
+                this->active_pipeline->Build(physical_op));
+            // The same operator will exist in both pipelines.  The sink of the
+            // previous pipeline and the source of the next one.
+            // We record the pipeline dependency between these two pipelines.
+            this->active_pipeline =
+                std::make_shared<PipelineBuilder>(physical_op);
+            return;
+        }
+
+        // Extract bind_info
+        BodoAggFunctionData& bind_info =
+            agg_expr.bind_info->Cast<BodoAggFunctionData>();
+
+        auto out_schema = bind_info.out_schema;
+        auto bodo_schema = bodo::Schema::FromArrowSchema(out_schema);
+
+        auto physical_op = std::make_shared<PhysicalReduce>(
+            bodo_schema, agg_expr.function.name);
+        finished_pipelines.emplace_back(
+            this->active_pipeline->Build(physical_op));
+        this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+        return;
+    }
+
+    // Regular groupby aggregation with groups and expressions.
+    auto physical_agg =
+        std::make_shared<PhysicalAggregate>(in_table_schema, op);
+    // Finish the current pipeline with groupby build sink
+    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_agg));
+    // Create a new pipeline with groupby output as source
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_agg);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {
+    std::vector<duckdb::ColumnBinding> source_cols =
+        op.children[0]->GetColumnBindings();
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    auto physical_sort =
+        std::make_shared<PhysicalSort>(op, in_table_schema, source_cols);
+    finished_pipelines.emplace_back(
+        this->active_pipeline->Build(physical_sort));
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_sort);
+}
+
 void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // See DuckDB code for background:
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_plan/plan_comparison_join.cpp#L65
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
-    auto physical_join = std::make_shared<PhysicalJoin>(op.conditions);
+    auto physical_join = std::make_shared<PhysicalJoin>(op, op.conditions);
 
     // Create pipelines for the build side of the join (right child)
     PhysicalPlanBuilder rhs_builder;
@@ -263,4 +230,33 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
     // previous pipeline and the source of the next one.
     // We record the pipeline dependency between these two pipelines.
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalTopN& op) {
+    std::vector<duckdb::ColumnBinding> source_cols =
+        op.children[0]->GetColumnBindings();
+
+    // Process the source of this TopN.
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    auto physical_sort = std::make_shared<PhysicalSort>(
+        op, in_table_schema, source_cols, op.limit, op.offset);
+    finished_pipelines.emplace_back(
+        this->active_pipeline->Build(physical_sort));
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_sort);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    BodoWriteFunctionData& write_data =
+        op.bind_data->Cast<BodoWriteFunctionData>();
+    auto physical_op = write_data.CreatePhysicalOperator(in_table_schema);
+
+    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
+    this->active_pipeline = nullptr;
 }

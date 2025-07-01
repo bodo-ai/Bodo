@@ -819,11 +819,13 @@ struct Schema {
      * @brief Same as the previous, except it provides the column indices to
      * keep.
      *
+     * @tparam T Integer type for indices
      * @param column_indices Column indices to keep in the new schema.
      * @return std::unique_ptr<Schema> New schema.
      */
-    std::unique_ptr<Schema> Project(
-        const std::span<const int64_t> column_indices) const;
+    template <typename T>
+        requires(std::integral<T> && !std::same_as<T, bool>)
+    std::unique_ptr<Schema> Project(const std::vector<T>& column_indices) const;
 
     /// @brief Convert to an Arrow schema
     std::shared_ptr<::arrow::Schema> ToArrowSchema() const;
@@ -1275,9 +1277,6 @@ struct array_info {
             case bodo_array_type::MAP:
             case bodo_array_type::CATEGORICAL:
                 return true;
-            case bodo_array_type::NUMPY:
-                // TODO: Remove when TIMEDELTA moves to nullable arrays.
-                return dtype == Bodo_CTypes::TIMEDELTA;
             default:
                 return false;
         }

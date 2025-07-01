@@ -79,7 +79,6 @@ from bodo.utils.utils import (
 )
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
-_timedelta_index_data_typ = types.Array(types.NPTimedelta("ns"), 1, "C")
 iNaT = pd._libs.tslibs.iNaT
 NaT = types.NPDatetime("ns")("NaT")  # TODO: pd.NaT
 
@@ -182,6 +181,15 @@ def typeof_pd_index(val, c):
             get_val_type_maybe_str_literal(val.name),
             boolean_array_type,
         )
+
+    if (
+        val.inferred_type == "timedelta64"
+        or pd._libs.lib.infer_dtype(val, True) == "timedelta64"
+    ):
+        return TimedeltaIndexType(
+            get_val_type_maybe_str_literal(val.name), bodo.typeof(val.values)
+        )
+
     # catch-all for all remaining Index types
     arr_typ = bodo.hiframes.boxing._infer_series_arr_type(val)
     if arr_typ == bodo.datetime_date_array_type or isinstance(
@@ -192,6 +200,7 @@ def typeof_pd_index(val, c):
             get_val_type_maybe_str_literal(val.name),
             arr_typ,
         )
+
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
     raise NotImplementedError(f"unsupported pd.Index type {val}")
@@ -1287,7 +1296,7 @@ def pd_timedelta_range_overload(
         if not right_closed and len(arr) and arr[-1] == end_t.value:
             arr = arr[:-1]
 
-        S = bodo.utils.conversion.convert_to_dt64ns(arr)
+        S = bodo.utils.conversion.convert_to_td64ns(arr)
         return bodo.hiframes.pd_index_ext.init_timedelta_index(S, name)
 
     return f
@@ -1349,7 +1358,7 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible, SingleIndexT
     ndim = 1
 
     def copy(self):
-        return TimedeltaIndexType(self.name_typ)
+        return TimedeltaIndexType(self.name_typ, self.data)
 
     @property
     def dtype(self):
@@ -1388,9 +1397,9 @@ types.timedelta_index = timedelta_index
 class TimedeltaIndexTypeModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("data", _timedelta_index_data_typ),
+            ("data", fe_type.data),
             ("name", fe_type.name_typ),
-            ("dict", types.DictType(_timedelta_index_data_typ.dtype, types.int64)),
+            ("dict", types.DictType(types.NPTimedelta("ns"), types.int64)),
         ]
         super().__init__(dmm, fe_type, members)
 
@@ -1398,7 +1407,9 @@ class TimedeltaIndexTypeModel(models.StructModel):
 @typeof_impl.register(pd.TimedeltaIndex)
 def typeof_timedelta_index(val, c):
     # keep string literal value in type since reset_index() may need it
-    return TimedeltaIndexType(get_val_type_maybe_str_literal(val.name))
+    return TimedeltaIndexType(
+        get_val_type_maybe_str_literal(val.name), bodo.typeof(val.values)
+    )
 
 
 @box(TimedeltaIndexType)
@@ -1411,10 +1422,8 @@ def box_timedelta_index(typ, val, c):
         c.context, c.builder, val
     )
 
-    c.context.nrt.incref(c.builder, _timedelta_index_data_typ, timedelta_index.data)
-    arr_obj = c.pyapi.from_native_value(
-        _timedelta_index_data_typ, timedelta_index.data, c.env_manager
-    )
+    c.context.nrt.incref(c.builder, typ.data, timedelta_index.data)
+    arr_obj = c.pyapi.from_native_value(typ.data, timedelta_index.data, c.env_manager)
     c.context.nrt.incref(c.builder, typ.name_typ, timedelta_index.name)
     name_obj = c.pyapi.from_native_value(
         typ.name_typ, timedelta_index.name, c.env_manager
@@ -1441,7 +1450,7 @@ def unbox_timedelta_index(typ, val, c):
     # get data and name attributes
     # TODO: use to_numpy()
     values_obj = c.pyapi.object_getattr_string(val, "values")
-    data = c.pyapi.to_native_value(_timedelta_index_data_typ, values_obj).value
+    data = c.pyapi.to_native_value(typ.data, values_obj).value
     name_obj = c.pyapi.object_getattr_string(val, "name")
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
     c.pyapi.decref(values_obj)
@@ -1452,7 +1461,7 @@ def unbox_timedelta_index(typ, val, c):
     index_val.data = data
     index_val.name = name
     # create empty dict for get_loc hashmap
-    dtype = _timedelta_index_data_typ.dtype
+    dtype = types.NPTimedelta("ns")
     _is_error, ind_dict = c.pyapi.call_jit_code(
         lambda: numba.typed.Dict.empty(dtype, types.int64),
         types.DictType(dtype, types.int64)(),
@@ -1481,7 +1490,7 @@ def init_timedelta_index(typingctx, data, name=None):
         context.nrt.incref(builder, signature.args[1], name_val)
 
         # create empty dict for get_loc hashmap
-        dtype = _timedelta_index_data_typ.dtype
+        dtype = types.NPTimedelta("ns")
         timedelta_index.dict = context.compile_internal(
             builder,
             lambda: numba.typed.Dict.empty(dtype, types.int64),
@@ -1491,7 +1500,7 @@ def init_timedelta_index(typingctx, data, name=None):
 
         return timedelta_index._getvalue()
 
-    ret_typ = TimedeltaIndexType(name)
+    ret_typ = TimedeltaIndexType(name, data)
     sig = signature(ret_typ, data, name)
     return sig, codegen
 
@@ -1506,7 +1515,7 @@ class TimedeltaIndexAttribute(AttributeTemplate):
     key = TimedeltaIndexType
 
     def resolve_values(self, ary):
-        return _timedelta_index_data_typ
+        return ary.data
 
     # TODO: support pd.Timedelta
     # @bound_function("timedelta_index.max", no_unliteral=True)
@@ -3233,8 +3242,8 @@ def array_type_to_index(arr_typ, name_typ=None):
     if isinstance(arr_typ, bodo.CategoricalArrayType):
         return CategoricalIndexType(arr_typ, name_typ)
 
-    if arr_typ.dtype == types.NPTimedelta("ns"):
-        return TimedeltaIndexType(name_typ)
+    if arr_typ.dtype in (types.NPTimedelta("ns"), bodo.pd_timedelta_type):
+        return TimedeltaIndexType(name_typ, arr_typ)
 
     if (
         isinstance(
@@ -3637,6 +3646,23 @@ def overload_init_engine(I, ban_unique=True):
                     if not bodo.libs.array_kernels.isna(arr, i):
                         val = bodo.hiframes.pd_categorical_ext.get_code_for_value(
                             arr.dtype, arr[i]
+                        )
+                        if ban_unique and val in I._dict:
+                            raise ValueError(
+                                "Index.get_loc(): non-unique Index not supported yet"
+                            )
+                        I._dict[val] = i
+
+        return impl
+    elif isinstance(I, TimedeltaIndexType) and I.data == bodo.timedelta_array_type:
+
+        def impl(I, ban_unique=True):  # pragma: no cover
+            if len(I) > 0 and not I._dict:
+                arr = bodo.utils.conversion.coerce_to_array(I)
+                for i in range(len(arr)):
+                    if not bodo.libs.array_kernels.isna(arr, i):
+                        val = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                            arr[i].value
                         )
                         if ban_unique and val in I._dict:
                             raise ValueError(

@@ -20,7 +20,6 @@ from bodo.libs.distributed_api import (
     get_num_nodes,
 )
 from bodo.ml_support.sklearn_ext import (
-    check_sklearn_version,
     parallel_predict,
     parallel_predict_log_proba,
     parallel_predict_proba,
@@ -72,8 +71,6 @@ def sklearn_ensemble_RandomForestClassifier_overload(
     max_samples=None,
     monotonic_cst=None,
 ):
-    check_sklearn_version()
-
     # TODO n_jobs should be left unspecified so should probably throw an error if used
 
     def _sklearn_ensemble_RandomForestClassifier_impl(
@@ -129,21 +126,18 @@ def sklearn_ensemble_RandomForestClassifier_overload(
 
 @overload_method(BodoRandomForestClassifierType, "predict", no_unliteral=True)
 def overload_model_predict(m, X):
-    check_sklearn_version()
     """Overload Random Forest Classifier predict. (Data parallelization)"""
     return parallel_predict(m, X)
 
 
 @overload_method(BodoRandomForestClassifierType, "predict_proba", no_unliteral=True)
 def overload_rf_predict_proba(m, X):
-    check_sklearn_version()
     """Overload Random Forest Classifier predict_proba. (Data parallelization)"""
     return parallel_predict_proba(m, X)
 
 
 @overload_method(BodoRandomForestClassifierType, "predict_log_proba", no_unliteral=True)
 def overload_rf_predict_log_proba(m, X):
-    check_sklearn_version()
     """Overload Random Forest Classifier predict_log_proba. (Data parallelization)"""
     return parallel_predict_log_proba(m, X)
 
@@ -203,8 +197,6 @@ def overload_sklearn_rf_regressor(
     """
 
     # TODO n_jobs should be left unspecified so should probably throw an error if used
-
-    check_sklearn_version()
 
     def _sklearn_ensemble_RandomForestRegressor_impl(
         n_estimators=100,
@@ -296,7 +288,7 @@ def random_forest_model_fit(m, X, y):
         if m.random_state is None:
             m.random_state = np.random.RandomState()
 
-        from sklearn.utils import parallel_backend
+        from joblib import parallel_backend
 
         with parallel_backend("threading"):
             m.fit(X, y)

@@ -8,6 +8,8 @@
 #include <arrow/builder.h>
 #include <arrow/compute/cast.h>
 #include <arrow/table.h>
+#include <arrow/type.h>
+#include <arrow/type_fwd.h>
 #include "arrow/util/key_value_metadata.h"
 
 #include "_array_utils.h"
@@ -162,19 +164,13 @@ get_data_type_from_bodo_fixed_width_array(
             }
             break;
         case Bodo_CTypes::TIMEDELTA:
+            in_num_bytes = sizeof(int64_t) * array->length;
             // Convert timedelta to ns frequency in case of
             // snowflake write
             if (convert_timedelta_to_int64) {
-                in_num_bytes = sizeof(int64_t) * array->length;
                 type = arrow::int64();
             } else {
-                // NOTE: Parquet/Iceberg will raise an error on Python side when
-                // _get_numba_typ_from_pa_typ is reached. raise error for any
-                // other operation.
-                throw std::runtime_error(
-                    "Converting Bodo arrays to Arrow format is "
-                    "currently "
-                    "not supported for Timedelta.");
+                type = arrow::duration(arrow::TimeUnit::NANO);
             }
             break;
         case Bodo_CTypes::DATETIME:
@@ -702,14 +698,25 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     size_t num_cols = table->ncols();
     std::vector<std::string> field_names(num_cols);
     for (size_t i = 0; i < num_cols; i++) {
-        field_names[i] = "A" + std::to_string(i);
+        // Use column names if available
+        if (table->column_names.size() > 0) {
+            field_names[i] = table->column_names[i];
+        } else {
+            field_names[i] = "A" + std::to_string(i);
+        }
     }
-    return bodo_table_to_arrow(std::move(table), std::move(field_names));
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = {};
+    if (table->metadata != nullptr) {
+        schema_metadata = std::make_shared<arrow::KeyValueMetadata>(
+            table->metadata->keys, table->metadata->values);
+    }
+    return bodo_table_to_arrow(std::move(table), std::move(field_names),
+                               schema_metadata);
 }
 
 std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     std::shared_ptr<table_info> table, std::vector<std::string> field_names,
-    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata,
+    const std::shared_ptr<const arrow::KeyValueMetadata> schema_metadata,
     bool convert_timedelta_to_int64, std::string tz,
     arrow::TimeUnit::type time_unit, bool downcast_time_ns_to_us,
     bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
@@ -1443,6 +1450,20 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_numeric_array_to_bodo<arrow::TimestampArray>(
                 ts_arr, Bodo_CTypes::DATETIME, src_pool);
         }
+        case arrow::Type::DURATION: {
+            auto dur_arr =
+                std::static_pointer_cast<arrow::DurationArray>(arrow_arr);
+            std::shared_ptr<arrow::DurationType> type =
+                std::static_pointer_cast<arrow::DurationType>(dur_arr->type());
+            if (type->unit() != arrow::TimeUnit::NANO) {
+                throw std::runtime_error(
+                    "arrow_array_to_bodo(): Duration type must be in "
+                    "nanoseconds, but found " +
+                    type->ToString());
+            }
+            return arrow_numeric_array_to_bodo<arrow::DurationArray>(
+                dur_arr, Bodo_CTypes::TIMEDELTA, src_pool);
+        }
         case arrow::Type::INT32:
             return arrow_numeric_array_to_bodo<arrow::Int32Array>(
                 std::static_pointer_cast<arrow::Int32Array>(arrow_arr),
@@ -1479,9 +1500,12 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 time_arr =
                     std::static_pointer_cast<arrow::Time64Array>(casted_arr);
             }
-            return arrow_numeric_array_to_bodo<arrow::Time64Array>(
-                std::static_pointer_cast<arrow::Time64Array>(time_arr),
-                Bodo_CTypes::TIME, src_pool);
+            std::shared_ptr<array_info> bodo_arr =
+                arrow_numeric_array_to_bodo<arrow::Time64Array>(
+                    std::static_pointer_cast<arrow::Time64Array>(time_arr),
+                    Bodo_CTypes::TIME, src_pool);
+            bodo_arr->precision = 9;  // nanosecond precision
+            return bodo_arr;
         }
         case arrow::Type::DICTIONARY:
             return arrow_dictionary_array_to_bodo(
@@ -1585,17 +1609,46 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
         case arrow::Type::UINT32:
         case arrow::Type::DATE32:
         case arrow::Type::TIMESTAMP:
+        case arrow::Type::DURATION:
         case arrow::Type::INT32:
         case arrow::Type::UINT16:
         case arrow::Type::INT16:
         case arrow::Type::UINT8:
-        case arrow::Type::INT8:
-        case arrow::Type::TIME32:
-        case arrow::Type::TIME64: {
+        case arrow::Type::INT8: {
             return std::make_unique<bodo::DataType>(
                 bodo_array_type::NULLABLE_INT_BOOL,
                 arrow_to_bodo_type(arrow_type->id()));
         }
+
+        case arrow::Type::TIME32:
+        case arrow::Type::TIME64: {
+            std::shared_ptr<arrow::TimeType> time_type =
+                std::static_pointer_cast<arrow::TimeType>(arrow_type);
+            int8_t precision;
+            switch (time_type->unit()) {
+                case arrow::TimeUnit::SECOND:
+                    precision = 0;
+                    break;
+                case arrow::TimeUnit::MILLI:
+                    precision = 3;
+                    break;
+                case arrow::TimeUnit::MICRO:
+                    precision = 6;
+                    break;
+                case arrow::TimeUnit::NANO:
+                    precision = 9;
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "Unsupported time unit passed to "
+                        "arrow_type_to_bodo_data_type: " +
+                        time_type->ToString());
+            }
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()), precision);
+        }
+
         // decimal array
         case arrow::Type::DECIMAL128: {
             auto arrow_decimal_type =

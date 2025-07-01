@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create Micromamba Environment
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: bodosql_build 
           create-args: conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
@@ -41,14 +41,14 @@ jobs:
       - name: 'Download the Bodo conda'
         uses: actions/download-artifact@v4
         with:
-          name: bodo-conda-3.12-linux-x86
+          name: bodo-conda-3.13-linux-x86
           run-id: ${{ github.event.workflow_run.id }}
           path: ./Bodo-CondaPkg-Linux
 
       - name: 'Build Conda Package'
         run: |
           set -exo pipefail
-          source $HOME/micromamba/etc/profile.d/micromamba.sh
+          eval "$(micromamba shell hook -s posix)"
           micromamba activate bodosql_build
 
           # Determine Output Version

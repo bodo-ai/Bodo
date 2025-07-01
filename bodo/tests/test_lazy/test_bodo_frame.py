@@ -412,17 +412,6 @@ def test_slice(pandas_managers, head_df, collect_func):
     assert lam_df._lazy
     assert lam_sliced_head_df.equals(head_df[1:3])
 
-    # slicing for cols triggers a data fetch
-    lam_sliced_df = lam_df["A0"]
-    assert not lam_df._lazy
-    assert lam_sliced_df.equals(collect_func(0)["A0"])
-
-    # slicing for rows after slicing over cols
-    lam_sliced_twice_df = lam_sliced_df[1:3]
-    assert lam_sliced_twice_df.equals(collect_func(0)["A0"][1:3])
-    lam_sliced_twice_df = lam_sliced_df[10:30]
-    assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
-
     # Slicing with negative indices (does not trigger a data fetch)
     lam = lazy_manager(
         [],
@@ -442,57 +431,6 @@ def test_slice(pandas_managers, head_df, collect_func):
     lam_sliced_head_df = lam_df.iloc[-3:]
     assert not lam_df._lazy
     pd.testing.assert_frame_equal(lam_sliced_head_df, collect_func(0)[-3:])
-
-
-def test_parquet(collect_func):
-    """Tests that to_parquet() writes the frame correctly and does not trigger data fetch"""
-
-    @bodo.jit(spawn=True)
-    def _get_bodo_df(df):
-        return df
-
-    df = collect_func(0)
-    bodo_df = _get_bodo_df(df)
-    fname = os.path.join("bodo", "tests", "data", "example")
-    with ensure_clean2(fname):
-        bodo_df.to_parquet(fname)
-        assert bodo_df._lazy
-        read_df = pd.read_parquet(fname)
-
-    pd.testing.assert_frame_equal(
-        read_df,
-        df,
-        check_dtype=False,
-    )
-    pd.testing.assert_frame_equal(
-        bodo_df,
-        df,
-        check_dtype=False,
-    )
-
-
-def test_parquet_param(collect_func):
-    """Tests that to_parquet() raises an error on unsupported parameters"""
-
-    @bodo.jit(spawn=True)
-    def _get_bodo_df(df):
-        return df
-
-    df = collect_func(0)
-    bodo_df = _get_bodo_df(df)
-    fname = os.path.join("bodo", "tests", "data", "example")
-
-    with ensure_clean2(fname):
-        with pytest.raises(
-            bodo.utils.typing.BodoError,
-            match=r"DataFrame.to_parquet\(\): only pyarrow engine supported",
-        ):
-            bodo_df.to_parquet(fname, engine="fastparquet")
-        with pytest.raises(
-            bodo.utils.typing.BodoError,
-            match=r"to_parquet\(\): row_group_size must be integer",
-        ):
-            bodo_df.to_parquet(fname, row_group_size="a")
 
 
 @pytest.mark.iceberg

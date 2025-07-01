@@ -227,6 +227,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             self.blocks = data._mgr.blocks
             self.axes = data._mgr.axes
             self._plan = None
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
             BlockManager._rebuild_blknos_and_blklocs(self)
             return data
 
@@ -289,6 +292,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         if name in {
             "blocks",
             "get_slice",
+            "copy",
             "_rebuild_blknos_and_blklocs",
             "__reduce__",
             "__setstate__",
@@ -480,6 +484,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self.blocks = data._mgr.blocks
             self.axes = data._mgr.axes
             self._plan = None
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
             return data
 
     def _collect(self):
@@ -534,7 +541,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "_disable_collect",
         }:
             return object.__getattribute__(self, name)
-        if name == "blocks":
+        if name in {"blocks", "copy"}:
             self._collect()
         return super().__getattribute__(name)
 

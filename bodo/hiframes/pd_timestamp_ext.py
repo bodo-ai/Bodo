@@ -2326,11 +2326,28 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
 
             return impl_datetime_timedelta
 
+        if arg_a == bodo.timedelta_array_type:
+
+            def impl_timedelta_arr(
+                arg_a, unit="ns", errors="raise"
+            ):  # pragma: no cover
+                n = len(arg_a)
+                B = np.empty(n, td64_dtype)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    val = iNaT
+                    if not bodo.libs.array_kernels.isna(arg_a, i):
+                        timedelta_val = arg_a[i]
+                        val = timedelta_val.value
+                    B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val)
+                return bodo.hiframes.pd_index_ext.init_timedelta_index(B, None)
+
+            return impl_timedelta_arr
+
     if is_overload_none(arg_a):  # pragma: no cover
         # None input
         return lambda arg_a, unit="ns", errors="raise": None
 
-    raise_bodo_error(f"pd.to_timedelta(): cannot convert date type {arg_a.dtype}")
+    raise_bodo_error(f"pd.to_timedelta(): cannot convert data type {arg_a.dtype}")
 
 
 @register_jitable

@@ -590,7 +590,7 @@ def test_cbrt(num_arr):
                 Decimal("-1"),
             ]
         ),
-        np.array(
+        pd.array(
             [
                 datetime.timedelta(days=5, seconds=4, weeks=4),
                 datetime.timedelta(days=5, seconds=5, weeks=4),
@@ -652,7 +652,12 @@ def test_any(bodo_arr_val, memory_leak_check):
         # This tests that there is a parallel version for a Numpy Array type
         bodo_arr_val = np.array(bodo_arr_val)
 
-    check_func(test_impl, (bodo_arr_val,))
+    py_output = (
+        bool(bodo_arr_val.any())
+        if isinstance(bodo_arr_val, pd.arrays.TimedeltaArray)
+        else no_default
+    )
+    check_func(test_impl, (bodo_arr_val,), py_output=py_output)
 
 
 @pytest.mark.slow
@@ -666,7 +671,12 @@ def test_all(bodo_arr_val, memory_leak_check):
         # This tests that there is a parallel version for a Numpy Array type
         bodo_arr_val = np.array(bodo_arr_val)
 
-    check_func(test_impl, (bodo_arr_val,))
+    py_output = (
+        bool(bodo_arr_val.all())
+        if isinstance(bodo_arr_val, pd.arrays.TimedeltaArray)
+        else no_default
+    )
+    check_func(test_impl, (bodo_arr_val,), py_output=py_output)
 
 
 @pytest.mark.slow
@@ -1281,7 +1291,7 @@ def test_np_select_none_default(arr_tuple_val, memory_leak_check):
     )  # .astype(arr_tuple_val[0].dtype)
 
     if arr_tuple_val[0].dtype.name.startswith("float"):
-        py_out[pd.isna(py_out)] = np.NAN
+        py_out[pd.isna(py_out)] = np.nan
         py_out = py_out.astype(float)
 
     if isinstance(py_out[0], bool):

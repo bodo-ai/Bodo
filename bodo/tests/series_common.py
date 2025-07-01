@@ -119,10 +119,6 @@ series_val_params = [
             ]
         ),
         id="timedelta",
-        marks=pytest.mark.skipif(
-            bodo.test_dataframe_library_enabled,
-            reason="[BSE-4779] Duration[ns] support.",
-        ),
     ),
     pytest.param(
         pd.Series(

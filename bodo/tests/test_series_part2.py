@@ -69,8 +69,7 @@ def test_series_map_dict_arg(S, d, memory_leak_check):
         pd.Series([-1, 11, 2, 3, 5]),
     ],
 )
-# TODO [BSE-4801]: DataFrame Lib: Initial sample is None
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_series_map_none(S, memory_leak_check):
     """Test returning None from UDF"""
 
@@ -91,9 +90,7 @@ def test_series_map_none_str(memory_leak_check):
     check_func(test_impl, (S,), check_dtype=False, only_1DVar=True)
 
 
-# TODO [BSE-4802]: DataFrame Lib: Fails in two rank case
-# (worker has an all-None output data)
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_series_map_none_timestamp(memory_leak_check):
     """Test returning Optional(timestamp) from UDF"""
 
@@ -106,8 +103,7 @@ def test_series_map_none_timestamp(memory_leak_check):
     check_func(impl, (S,))
 
 
-# TODO [BSE-4779]: DataFrame Lib: Support for duration[ns] type.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_series_map_isna_check(memory_leak_check):
     """Test checking for NA input values in UDF"""
 
@@ -131,8 +127,7 @@ def test_series_map_isna_check(memory_leak_check):
     check_func(impl2, (S,))
 
 
-# TODO: [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch float->int.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 def test_series_map_global1(memory_leak_check):
     def test_impl(S):
         return S.map(arg=lambda a: a + GLOBAL_VAL)
@@ -163,8 +158,7 @@ def g4(a):
     return [a, 2 * a]
 
 
-# TODO: [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch float->int.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_func_cases1(memory_leak_check):
     """test map() called with a function defined as global/freevar outside or passed as
@@ -210,8 +204,7 @@ def test_series_map_func_cases1(memory_leak_check):
     check_func(test_impl5, (S,))
 
 
-# TODO: [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch float->int.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_global_jit(memory_leak_check):
     """Test UDF defined as a global jit function"""
@@ -234,8 +227,7 @@ def test_series_map_wrap_python(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO [BSE-4802]: DataFrame Lib: Incorrect conversion of output batch tuple->struct.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup1(memory_leak_check):
     def test_impl(S):
@@ -245,8 +237,7 @@ def test_series_map_tup1(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO: [BSE-4802]: Incorrect conversion of output batch tuple->struct.
-# @pytest.mark.df_lib
+@pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_map1(memory_leak_check):
     def test_impl(S):
@@ -285,7 +276,7 @@ def test_series_map_tup_list2(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO [BSE-4801]: DataFrame Lib: Make type inference more robust.
+# TODO [BSE-4824]: DataFrame Lib: Can't convert types to Arrow, falls back to pandas.
 # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_list3(memory_leak_check):
@@ -3549,7 +3540,7 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
 
     if series_val.dtype.name.startswith("float"):
         py_out = impl(A1, A2, cond1, cond2)
-        py_out[pd.isna(py_out)] = np.NAN
+        py_out[pd.isna(py_out)] = np.nan
         py_out = py_out.astype(float)
     else:
         py_out = no_default

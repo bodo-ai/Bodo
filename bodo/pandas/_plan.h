@@ -4,182 +4,17 @@
 #pragma once
 
 #include <Python.h>
+#include <arrow/type.h>
+#include <fmt/format.h>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
+#include "duckdb/main/attached_database.hpp"
+#include "duckdb/main/database.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/expression.hpp"
-#include "physical/expression.h"
-#include "physical/operator.h"
-
-/**
- * @brief Superclass for Bodo's DuckDB TableFunction classes.
- *
- */
-class BodoScanFunction : public duckdb::TableFunction {
-   public:
-    BodoScanFunction(std::string name)
-        : TableFunction(name, {}, nullptr, nullptr, nullptr, nullptr) {}
-};
-
-/**
- * @brief Superclass for Bodo's DuckDB TableFunctionData classes.
- *
- */
-class BodoScanFunctionData : public duckdb::TableFunctionData {
-   public:
-    BodoScanFunctionData() = default;
-    /**
-     * @brief Create a PhysicalOperator for reading data from this source.
-     *
-     * @return std::shared_ptr<PhysicalSource> read operator
-     */
-    virtual std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) = 0;
-};
-
-/**
- * @brief Bodo's DuckDB TableFunction for reading Parquet datasets with Bodo
- * metadata (used in LogicalGet).
- *
- */
-class BodoParquetScanFunction : public BodoScanFunction {
-   public:
-    BodoParquetScanFunction() : BodoScanFunction("bodo_read_parquet") {
-        filter_pushdown = true;
-        filter_prune = true;
-        projection_pushdown = true;
-        limit_pushdown = true;
-        // TODO: set statistics and other optimization flags as needed
-        // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/include/duckdb/function/table_function.hpp#L357
-    }
-};
-
-/**
- * @brief Data for Bodo's DuckDB TableFunction for reading Parquet datasets.
- *
- */
-class BodoParquetScanFunctionData : public BodoScanFunctionData {
-   public:
-    BodoParquetScanFunctionData(PyObject *path, PyObject *pyarrow_schema,
-                                PyObject *storage_options)
-        : path(path),
-          pyarrow_schema(pyarrow_schema),
-          storage_options(storage_options) {
-        Py_INCREF(pyarrow_schema);
-        Py_INCREF(storage_options);
-        Py_INCREF(path);
-    }
-
-    ~BodoParquetScanFunctionData() {
-        Py_DECREF(pyarrow_schema);
-        Py_DECREF(storage_options);
-        Py_DECREF(path);
-    }
-
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
-
-    // Parquet dataset path
-    PyObject *path;
-    PyObject *pyarrow_schema;
-    PyObject *storage_options;
-};
-
-/**
- * @brief Bodo's DuckDB TableFunction for reading dataframe rows
- * (used in LogicalGet).
- *
- */
-class BodoDataFrameScanFunction : public BodoScanFunction {
-   public:
-    BodoDataFrameScanFunction() : BodoScanFunction("bodo_read_df") {
-        projection_pushdown = true;
-    }
-};
-
-/**
- * @brief Data for Bodo's DuckDB TableFunction for reading dataframe rows on
- * spawner sequentially.
- *
- */
-class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
-   public:
-    BodoDataFrameSeqScanFunctionData(
-        PyObject *df, std::shared_ptr<arrow::Schema> arrow_schema)
-        : df(df), arrow_schema(arrow_schema) {
-        Py_INCREF(df);
-    }
-    ~BodoDataFrameSeqScanFunctionData() { Py_DECREF(df); }
-    /**
-     * @brief Create a PhysicalOperator for reading from the dataframe.
-     *
-     * @return std::shared_ptr<PhysicalOperator> dataframe read operator
-     */
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
-
-    PyObject *df;
-    const std::shared_ptr<arrow::Schema> arrow_schema;
-};
-
-/**
- * @brief Data for Bodo's DuckDB TableFunction for reading dataframe rows on
- * workers in parallel.
- *
- */
-class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
-   public:
-    BodoDataFrameParallelScanFunctionData(
-        std::string result_id, std::shared_ptr<arrow::Schema> arrow_schema)
-        : result_id(result_id), arrow_schema(arrow_schema) {}
-    ~BodoDataFrameParallelScanFunctionData() {}
-    /**
-     * @brief Create a PhysicalOperator for reading from the dataframe.
-     *
-     * @return std::shared_ptr<PhysicalOperator> dataframe read operator
-     */
-    std::shared_ptr<PhysicalSource> CreatePhysicalOperator(
-        std::vector<int> &selected_columns,
-        duckdb::TableFilterSet &filter_exprs,
-        duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) override;
-    std::string result_id;
-    const std::shared_ptr<arrow::Schema> arrow_schema;
-};
-
-/**
- * @brief UDF plan node data to pass around in DuckDB plans in
- * BoundFunctionExpression.
- *
- */
-struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
-    BodoPythonScalarFunctionData(PyObject *args,
-                                 std::shared_ptr<arrow::Schema> out_schema)
-        : args(args), out_schema(out_schema) {
-        Py_INCREF(args);
-    }
-    ~BodoPythonScalarFunctionData() override { Py_DECREF(args); }
-    bool Equals(const FunctionData &other_p) const override {
-        const BodoPythonScalarFunctionData &other =
-            other_p.Cast<BodoPythonScalarFunctionData>();
-        return (other.args == this->args);
-    }
-    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args,
-                                                               out_schema);
-    }
-
-    PyObject *args;
-    std::shared_ptr<arrow::Schema> out_schema;
-};
 
 /**
  * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
@@ -228,6 +63,38 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     PyObject *out_schema_py);
 
 /**
+ * @brief Creates a LogicalOrder node.
+ *
+ * @param source - the data source to order
+ * @param asc - vector of bool to say whether corresponding key is sorted
+ *              ascending (true) or descending (false)
+ * @param na_position - vector of bool to say whether corresponding key places
+ *              na values first (true) or last (false)
+ * @param cols - vector of int specifying the key column indices for sorting
+ * @param schema_py - the schema of data coming into the order
+ * @return duckdb::unique_ptr<duckdb::LogicalOrder> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
+    std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
+    std::vector<bool> &na_position, std::vector<int> &cols,
+    PyObject *schema_py);
+
+/**
+ * @brief Creates a LogicalAggregate node.
+ *
+ * @param source - the data source to aggregate
+ * @param key_indices - key column indices to group by
+ * @param exprs - vector of aggregate exprs
+ * @param out_schema_py - the schema of data coming out of the aggregate
+ * @return duckdb::unique_ptr<duckdb::LogicalAggregate> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<int> &key_indices,
+    std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
+    PyObject *out_schema_py);
+
+/**
  * @brief Get column indices that are pushed down from a projection node to its
  * source. Used for testing.
  *
@@ -258,7 +125,7 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
  * @param val - the constant int for the expression
  * @return duckdb::unique_ptr<duckdb::Expression> - the const int expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val);
+duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int64_t val);
 
 /**
  * @brief Create an expression from a constant float.
@@ -266,7 +133,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int val);
  * @param val - the constant float for the expression
  * @return duckdb::unique_ptr<duckdb::Expression> - the const float expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val);
+duckdb::unique_ptr<duckdb::Expression> make_const_double_expr(double val);
 
 /**
  * @brief Create an expression from a constant string.
@@ -276,6 +143,14 @@ duckdb::unique_ptr<duckdb::Expression> make_const_float_expr(float val);
  */
 duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
     const std::string &val);
+
+/**
+ * @brief Create an expression from a constant bool.
+ *
+ * @param val - the constant bool for the expression
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const bool expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_bool_expr(bool val);
 
 /**
  * @brief Create an expression from a constant timestamp with ns resolution.
@@ -299,6 +174,23 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
     int col_idx);
 
 /**
+ * @brief Create an aggregate expression for a given function name and input
+ * source node
+ *
+ * @param source input source node to aggregate
+ * @param out_schema_py output data type, used only for reduction operators
+ * @param function_name function name for matching in backend
+ * @param input_column_indices argument column indices for the input source
+ * @param dropna argument column indices for the input source
+ * @return duckdb::unique_ptr<duckdb::Expression> new BoundAggregateExpression
+ * object
+ */
+duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
+    std::string function_name, std::vector<int> input_column_indices,
+    bool dropna);
+
+/**
  * @brief Create an expression from two sources and an operator.
  *
  * @param lhs - the left-hand side of the expression
@@ -306,9 +198,32 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
  * @param etype - the expression type comparing the two sources
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
-std::unique_ptr<duckdb::Expression> make_binop_expr(
+std::unique_ptr<duckdb::Expression> make_comparison_expr(
     std::unique_ptr<duckdb::Expression> &lhs,
     std::unique_ptr<duckdb::Expression> &rhs, duckdb::ExpressionType etype);
+
+/**
+ * @brief Create an expression from two sources and an operator.
+ *
+ * @param lhs - the left-hand side of the expression
+ * @param rhs - the right-hand side of the expression
+ * @param opstr - the name of the function combining the two sources
+ * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
+ */
+std::unique_ptr<duckdb::Expression> make_arithop_expr(
+    std::unique_ptr<duckdb::Expression> &lhs,
+    std::unique_ptr<duckdb::Expression> &rhs, std::string opstr,
+    PyObject *out_schema_py);
+
+/**
+ * @brief Create an expression from a source and function as a string.
+ *
+ * @param source - the source of the expression
+ * @param opstr - the name of the function to apply to the source
+ * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
+ */
+std::unique_ptr<duckdb::Expression> make_unaryop_expr(
+    std::unique_ptr<duckdb::Expression> &source, std::string opstr);
 
 /**
  * @brief Create a conjunction (and/or) expression from two sources.
@@ -368,38 +283,89 @@ duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
  * Bodo metadata.
  *
  * @param parquet_path path to the Parquet dataset
+ * @param pyarrow_schema schema of the dataframe
+ * @param num_rows estimated number of rows for this source
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
-    PyObject *parquet_path, PyObject *pyarrow_schema,
-    PyObject *storage_options);
+    PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
+    int64_t num_rows);
+
+/**
+ * @brief Create a LogicalCopyToFile node for writing a Parquet dataset.
+ *
+ * @param source input data to write
+ * @param pyarrow_schema schema of the data to write
+ * @param path path to write
+ * @param compression compression type to use (e.g., "snappy")
+ * @param bucket_region region for the S3 bucket (if applicable)
+ * @param row_group_size row group size for Parquet files
+ * @return duckdb::unique_ptr<duckdb::LogicalCopyToFile> created node
+ */
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string path, std::string compression, std::string bucket_region,
+    int64_t row_group_size);
+
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string table_loc, std::string bucket_region, int64_t max_pq_chunksize,
+    std::string compression, PyObject *partition_tuples, PyObject *sort_tuples,
+    std::string iceberg_schema_str, PyObject *output_pa_schema, PyObject *pyfs);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe sequentially
  *
  * @param df input dataframe to read
  * @param pyarrow_schema schema of the dataframe
+ * @param num_rows estimated number of rows for this source
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
-    PyObject *df, PyObject *pyarrow_schema);
+    PyObject *df, PyObject *pyarrow_schema, int64_t num_rows);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe in parallel
  *
  * @param result_id input dataframe id on workers to read
  * @param pyarrow_schema schema of the dataframe
+ * @param num_rows estimated number of rows for this source
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
-    std::string result_id, PyObject *pyarrow_schema);
+    std::string result_id, PyObject *pyarrow_schema, int64_t num_rows);
+
+/**
+ * @brief Creates a LogicalGet node for reading an Iceberg dataset in DuckDB
+ * with Bodo metadata.
+ *
+ * @param pyarrow_schema schema of the Iceberg dataset
+ * @param table_name Identifier for the Iceberg table, includes schema and table
+ * @param pyiceberg_catalog Iceberg catalog object
+ * @param iceberg_filter Iceberg filter expression
+ * @param iceberg_schema Iceberg schema object
+ * @param snapshot_id Snapshot ID to read from
+ * @param table_len_estimate Estimated number of rows in the Iceberg table
+ * @return duckdb::unique_ptr<duckdb::LogicalGet> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
+    PyObject *pyarrow_schema, std::string table_identifier,
+    PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
+    PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate);
+
+/**
+ * @brief Returns a statically created DuckDB database.
+ *
+ * @return duckdb::DuckDB& static context object
+ */
+duckdb::shared_ptr<duckdb::DuckDB> get_duckdb();
 
 /**
  * @brief Returns a statically created DuckDB client context.
  *
  * @return duckdb::ClientContext& static context object
  */
-duckdb::ClientContext &get_duckdb_context();
+duckdb::shared_ptr<duckdb::ClientContext> get_duckdb_context();
 
 /**
  * @brief Returns a statically created DuckDB binder.
@@ -413,7 +379,7 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder();
  *
  * @return duckdb::Optimizer& static optimizer object
  */
-duckdb::Optimizer &get_duckdb_optimizer();
+duckdb::shared_ptr<duckdb::Optimizer> get_duckdb_optimizer();
 
 /**
  * @brief Convert an Arrow schema to DuckDB column names and data types to pass
@@ -447,27 +413,6 @@ std::string plan_to_string(std::unique_ptr<duckdb::LogicalOperator> &plan,
                            bool graphviz_format);
 
 /**
- * @brief Dynamic cast of base pointer to derived pointer.
- *
- * @param base_ptr - the base pointer to cast from
- * @return a non-NULL pointer of the derived type if the cast is possible else
- *         NULL
- */
-template <typename Derived, typename Base>
-duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
-    duckdb::unique_ptr<Base> &&base_ptr) noexcept {
-    // Perform dynamic_cast on the raw pointer
-    if (Derived *derived_raw = dynamic_cast<Derived *>(base_ptr.get())) {
-        // Release ownership from the base_ptr and transfer it to a new
-        // unique_ptr
-        base_ptr.release();  // Release the ownership of the raw pointer
-        return duckdb::unique_ptr<Derived>(derived_raw);
-    }
-    // If the cast fails, return a nullptr unique_ptr
-    return nullptr;
-}
-
-/**
  * @brief Count the number of nodes in the expression tree.
  *
  * @param op root of expression tree
@@ -476,9 +421,17 @@ duckdb::unique_ptr<Derived> dynamic_cast_unique_ptr(
 int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op);
 
 /**
- * @brief Set the C++ table column names and metadata from PyArrow schema object
+ * @brief convert a PyArrow table to a Bodo C++ table pointer.
  *
- * @param table_pointer C++ table pointer
- * @param pyarrow_schema input PyArrow schema object
+ * @param pyarrow_table input PyArrow table object
+ * @return int64_t C++ table pointer cast to int64_t
  */
-void set_table_meta_from_arrow(int64_t table_pointer, PyObject *pyarrow_schema);
+int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table);
+
+/**
+ * @brief convert a Bodo C++ table pointer to a PyArrow table object.
+ *
+ * @param cpp_table C++ table pointer cast to int64_t
+ * @return PyObject* PyArrow table object
+ */
+PyObject *cpp_table_to_pyarrow(int64_t cpp_table);

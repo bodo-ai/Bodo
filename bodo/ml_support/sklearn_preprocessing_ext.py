@@ -25,7 +25,6 @@ from sklearn.utils.extmath import (
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.csr_matrix_ext import CSRMatrixType
-from bodo.ml_support.sklearn_ext import check_sklearn_version
 from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
@@ -193,8 +192,6 @@ def sklearn_preprocessing_one_hot_encoder_overload(
             denoted as None.
     """
 
-    check_sklearn_version()
-
     # Because we only support dense float64 matrix output for now, check that
     # `sparse_output=False` and that `dtype=np.float64`. For compatibility with
     # check_unsupported_args, we convert `dtype` to string representation
@@ -269,7 +266,7 @@ def sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X):
         fit_result_or_err = m._fit(
             X,
             handle_unknown=m.handle_unknown,
-            force_all_finite="allow-nan",
+            ensure_all_finite="allow-nan",
         )
     except ValueError as e:  # pragma: no cover
         # Catch if any rank raises a ValueError for unknown categories,
@@ -494,8 +491,6 @@ def sklearn_preprocessing_standard_scaler_overload(
     Provide implementation for __init__ functions of StandardScaler.
     We simply call sklearn in objmode.
     """
-
-    check_sklearn_version()
 
     def _sklearn_preprocessing_standard_scaler_impl(
         copy=True, with_mean=True, with_std=True
@@ -790,8 +785,6 @@ def sklearn_preprocessing_max_abs_scaler_overload(copy=True):
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_max_abs_scaler_impl(copy=True):  # pragma: no cover
         with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
             m = sklearn.preprocessing.MaxAbsScaler(copy=copy)
@@ -1023,8 +1016,6 @@ def sklearn_preprocessing_minmax_scaler_overload(
     Provide implementation for __init__ functions of MinMaxScaler.
     We simply call sklearn in objmode.
     """
-
-    check_sklearn_version()
 
     def _sklearn_preprocessing_minmax_scaler_impl(
         feature_range=(0, 1),
@@ -1282,8 +1273,6 @@ def sklearn_preprocessing_robust_scaler_overload(
     We simply call sklearn in objmode.
     """
 
-    check_sklearn_version()
-
     def _sklearn_preprocessing_robust_scaler_impl(
         with_centering=True,
         with_scaling=True,
@@ -1318,8 +1307,6 @@ def overload_preprocessing_robust_scaler_fit(
     We only support numpy arrays and Pandas DataFrames at the moment.
     CSR matrices are not yet supported.
     """
-
-    check_sklearn_version()
 
     # TODO Add general error-checking [BE-52]
 
@@ -1427,8 +1414,6 @@ def overload_preprocessing_robust_scaler_transform(
     We simply call sklearn's transform on each rank.
     """
 
-    check_sklearn_version()
-
     def _preprocessing_robust_scaler_transform_impl(
         m,
         X,
@@ -1452,8 +1437,6 @@ def overload_preprocessing_robust_scaler_inverse_transform(
     We simply call sklearn's inverse_transform on each rank.
     """
 
-    check_sklearn_version()
-
     def _preprocessing_robust_scaler_inverse_transform_impl(
         m,
         X,
@@ -1474,12 +1457,12 @@ def overload_preprocessing_robust_scaler_inverse_transform(
 # ----------------------------------------------------------------------------------------
 
 
-def _pa_str_to_obj(a):
-    """Convert string[pyarrow] arrays to object arrays to workaround Scikit-learn issues
-    as of 1.4.0. See test_label_encoder.
+def _pa_arr_to_numpy(a):
+    """Convert Arrow arrays to Numpy arrays to workaround Scikit-learn issues
+    as of 1.7.0. See test_label_encoder.
     """
-    if isinstance(a, pd.arrays.ArrowStringArray):
-        return a.astype(object)
+    if isinstance(a, (pd.arrays.ArrowStringArray, pd.arrays.ArrowExtensionArray)):
+        return a.to_numpy()
     return a
 
 
@@ -1500,8 +1483,6 @@ def sklearn_preprocessing_label_encoder_overload():
     Provide implementation for __init__ functions of LabelEncoder.
     We simply call sklearn in objmode.
     """
-
-    check_sklearn_version()
 
     def _sklearn_preprocessing_label_encoder_impl():  # pragma: no cover
         with bodo.objmode(m="preprocessing_label_encoder_type"):
@@ -1534,7 +1515,7 @@ def overload_preprocessing_label_encoder_fit(
                 y_classes, ascending=True, inplace=False
             )
             with bodo.objmode:
-                y_classes_obj = _pa_str_to_obj(y_classes)
+                y_classes_obj = _pa_arr_to_numpy(y_classes)
                 m.classes_ = y_classes_obj
 
             return m

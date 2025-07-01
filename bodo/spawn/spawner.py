@@ -630,16 +630,12 @@ class Spawner:
         pickled_args = cloudpickle.dumps((args_to_send, kwargs_to_send))
         self.worker_intercomm.bcast(pickled_args, root=self.bcast_root)
         if is_dispatcher:
-            func_to_execute.decorator_args["distributed"] = (
-                func_to_execute.decorator_args.get("distributed", set()).union(
-                    dist_flags["distributed"]
-                )
-            )
-            func_to_execute.decorator_args["distributed_block"] = (
-                func_to_execute.decorator_args.get("distributed_block", set()).union(
-                    dist_flags["distributed_block"]
-                )
-            )
+            func_to_execute.decorator_args["distributed"] = set(
+                func_to_execute.decorator_args.get("distributed", set())
+            ).union(dist_flags["distributed"])
+            func_to_execute.decorator_args["distributed_block"] = set(
+                func_to_execute.decorator_args.get("distributed_block", set())
+            ).union(dist_flags["distributed_block"])
         # Send DataFrame/Series/Index/array arguments (others are already sent)
         for arg, arg_meta in itertools.chain(
             zip(args, args_meta), zip(kwargs.values(), kwargs_meta.values())

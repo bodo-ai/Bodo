@@ -735,6 +735,8 @@ def generate_expr_filter(
     input_vars_str = ",".join([x[0] for x in filter_scalars])
     glbs = globals()
     glbs["ds"] = ds
+    glbs["pc"] = pc
+    glbs["pa"] = pa
     loc_vars = {}
     # By passing in the scalars as arguments, they will
     # get mapped correctly in the expr_filter_str.

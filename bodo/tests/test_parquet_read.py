@@ -206,10 +206,6 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
         check_func(test_impl2, (), only_seq=True)
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4766] All null columns not supported yet.",
-)
 @pytest.mark.parametrize(
     "fname",
     [
@@ -2118,7 +2114,7 @@ def test_read_parquet_partitioned_read_as_dict(memory_leak_check):
 # ---------------------------- Test Additional Args ---------------------------- #
 @pytest.mark.skipif(
     bodo.test_dataframe_library_enabled,
-    reason="[BSE-4766] All null columns not supported yet.",
+    reason="[BSE-4770] Support the columns argument for read_parquet.",
 )
 @pytest.mark.parametrize(
     "col_subset",
@@ -2692,23 +2688,19 @@ def test_pq_schema(datapath, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(
-    bodo.test_dataframe_library_enabled,
-    reason="[BSE-4766] requires Null column support.",
-)
 def test_unify_null_column(memory_leak_check):
     """
     Tests reading from parquet with a null column in the first
     file unifies properly.
     """
-    if bodo.get_rank() == 0:
-        os.mkdir("temp_parquet_test")
-        df1 = pd.DataFrame({"A": np.arange(10), "B": [None] * 10})
-        df1.to_parquet("temp_parquet_test/f1.pq")
-        df2 = pd.DataFrame({"A": np.arange(10, 16), "B": [None, "A"] * 3})
-        df2.to_parquet("temp_parquet_test/f2.pq")
-    bodo.barrier()
-    try:
+    with ensure_clean2("temp_parquet_test"):
+        if bodo.get_rank() == 0:
+            os.mkdir("temp_parquet_test")
+            df1 = pd.DataFrame({"A": np.arange(10), "B": [None] * 10})
+            df1.to_parquet("temp_parquet_test/f1.pq")
+            df2 = pd.DataFrame({"A": np.arange(10, 16), "B": [None, "A"] * 3})
+            df2.to_parquet("temp_parquet_test/f2.pq")
+        bodo.barrier()
 
         def impl():
             return pd.read_parquet("temp_parquet_test")
@@ -2720,10 +2712,6 @@ def test_unify_null_column(memory_leak_check):
         )
 
         check_func(impl, (), py_output=py_output)
-    finally:
-        bodo.barrier()
-        if bodo.get_rank() == 0:
-            shutil.rmtree("temp_parquet_test")
 
 
 @pytest.mark.slow

@@ -173,26 +173,30 @@ static arrow::Status WriteTable(
 }
 // ----------------------------------------------------------------------------
 
+void pq_write_create_dir(const char *_path_name) {
+    int myrank, num_ranks;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+    std::string orig_path(_path_name);
+    std::string path_name;
+    std::string dirname;
+    std::string fname;
+    std::shared_ptr<::arrow::io::OutputStream> out_stream;
+    Bodo_Fs::FsEnum fs_option;
+    bool is_parallel = true;
+    const char *prefix = "";
+
+    extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
+                        num_ranks, &fs_option, &dirname, &fname, &orig_path,
+                        &path_name);
+
+    create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
+                        "parquet");
+}
+
 void pq_write_create_dir_py_entry(const char *_path_name) {
     try {
-        int myrank, num_ranks;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-        std::string orig_path(_path_name);
-        std::string path_name;
-        std::string dirname;
-        std::string fname;
-        std::shared_ptr<::arrow::io::OutputStream> out_stream;
-        Bodo_Fs::FsEnum fs_option;
-        bool is_parallel = true;
-        const char *prefix = "";
-
-        extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
-                            num_ranks, &fs_option, &dirname, &fname, &orig_path,
-                            &path_name);
-
-        create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
-                            "parquet");
+        pq_write_create_dir(_path_name);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }

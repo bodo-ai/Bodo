@@ -20,7 +20,6 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import NumericIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.ml_support.sklearn_ext import check_sklearn_version
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     check_unsupported_args,
@@ -65,8 +64,6 @@ def sklearn_model_selection_leave_p_out_overload(
     Provide implementation for __init__ function of LeavePOut.
     We simply call sklearn in objmode.
     """
-
-    check_sklearn_version()
 
     def _sklearn_model_selection_leave_p_out_impl(
         p,
@@ -232,8 +229,6 @@ def sklearn_model_selection_kfold_overload(
     Provide implementation for __init__ function of KFold.
     We simply call sklearn in objmode.
     """
-
-    check_sklearn_version()
 
     def _sklearn_model_selection_kfold_impl(
         n_splits=5,
@@ -536,7 +531,7 @@ def overload_train_test_split(
     If data is distributed and shuffle=False, use slicing and then rebalance across ranks
     If data is distributed and shuffle=True, generate a global train/test mask, shuffle, and rebalance across ranks.
     """
-    check_sklearn_version()
+
     # TODO: Check if labels is None and change output accordingly
     # no_labels = False
     # if is_overload_none(labels):

@@ -174,7 +174,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             assert self.arrays is not None
             return len(self.arrays) == 1
 
-    def get_dtypes(self) -> np.typing.NDArray[np.object_]:
+    def get_dtypes(self) -> np._typing.NDArray[np.object_]:
         """
         Get dtypes of the arrays in the manager.
         Uses head if we don't have the data yet, otherwise uses the base ArrayManager's get_dtypes.
@@ -262,6 +262,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             self.arrays = data._mgr.arrays
             self._axes = data._mgr._axes
             self._plan = None
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
             return data
 
     def _collect(self):
@@ -311,8 +314,8 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             "_disable_collect",
         }:
             return object.__getattribute__(self, name)
-        # If the attribute is 'arrays', we ensure we have the data.
-        if name == "arrays":
+        # If the attribute is 'arrays' or 'copy', we ensure we have the data.
+        if name in {"arrays", "copy"}:
             self._collect()
         return ArrayManager.__getattribute__(self, name)
 
@@ -503,6 +506,9 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             self.arrays = data._mgr.arrays
             self._axes = data._mgr.axes
             self._plan = None
+            self._md_result_id = None
+            self._md_nrows = None
+            self._md_head = None
             return data
 
     def _collect(self):
@@ -598,8 +604,8 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             "_disable_collect",
         }:
             return object.__getattribute__(self, name)
-        # If the attribute is 'arrays', we ensure we have the data.
-        if name == "arrays":
+        # If the attribute is 'arrays' or 'copy', we ensure we have the data.
+        if name in {"arrays", "copy"}:
             self._collect()
         return SingleArrayManager.__getattribute__(self, name)
 

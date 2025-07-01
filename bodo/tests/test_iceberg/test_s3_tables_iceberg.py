@@ -19,7 +19,7 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 
-pytest_mark = pytest_s3_tables
+pytestmark = pytest_s3_tables
 
 # This bucket must exist and have the read_namespace and write_namespace namespaces
 # created. Additionally, the bodo_iceberg_read_test table should have contents

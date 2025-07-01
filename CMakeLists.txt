@@ -111,10 +111,6 @@ if(WIN32)
   find_package(OpenSSL REQUIRED)
 endif()
 
-# Add boost as a dependency
-# We use the header-only version of boost::json: https://www.boost.org/doc/libs/1_87_0/libs/json/doc/html/json/overview.html
-find_package(Boost 1.85 REQUIRED COMPONENTS json)
-
 # ----------------------------- Download Apache Datasketches -------------------------
 include(ExternalProject)
 ExternalProject_Add(datasketches
@@ -325,13 +321,16 @@ endif()
 
 # Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
-  message(STATUS "Downloading MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
-  execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
-  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
+  # NOTE: The new mpich wheels have library dependencies that are not available during the build
+  #       process and cause errors for wheel repair.
+  # TODO [BSE-4934]: Use mpi4py 4.1 as dependency and avoid vendoring mpi4py and MPICH.
+  message(STATUS "Downloading Bodo's previous version to vendor MPICH")
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download bodo==2025.6 --python-version=3.12 --no-deps --default-timeout=100)
+  execute_process(COMMAND unzip "bodo-*.whl" "bodo*.data/*" -d mpich-tmp-extract-dir)
+  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/bodo-*.data/data/*")
   file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
     FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
-  file(GLOB MPICH_WHEEL "mpich-*.whl")
+  file(GLOB MPICH_WHEEL "bodo-*.whl")
   file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
   message(STATUS "Moved MPICH to ${SKBUILD_DATA_DIR}")
 
@@ -542,13 +541,15 @@ add_custom_command(
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
+  "bodo/pandas/_bodo_scan_function.cpp"
+  "bodo/pandas/_bodo_write_function.cpp"
   "bodo/pandas/_plan.cpp"
   "bodo/pandas/_pipeline.cpp"
   "bodo/pandas/_physical_conv.cpp"
-  "bodo/pandas/_duckdb_util.cpp"
+  "bodo/pandas/_util.cpp"
   "bodo/pandas/physical/expression.cpp"
   "bodo/pandas/physical/operator.cpp"
-  "bodo/pandas/physical/project.cpp"
+  "bodo/pandas/physical/read_iceberg.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"

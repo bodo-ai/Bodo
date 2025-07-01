@@ -8,7 +8,10 @@
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../tests/utils.h"
+#include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "operator.h"
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
@@ -43,9 +46,11 @@ class TableExprResult : public ExprResult {
  */
 class ArrayExprResult : public ExprResult {
    public:
-    ArrayExprResult(std::shared_ptr<array_info> val) : result(val) {}
+    ArrayExprResult(std::shared_ptr<array_info> val, std::string col)
+        : result(val), column_name(col) {}
     virtual ~ArrayExprResult() = default;
     const std::shared_ptr<array_info> result;
+    const std::string column_name;
 };
 
 /**
@@ -72,6 +77,10 @@ class ScalarExprResult : public ExprResult {
  */
 class PhysicalExpression {
    public:
+    PhysicalExpression() {}
+    PhysicalExpression(
+        std::vector<std::shared_ptr<PhysicalExpression>> &_children)
+        : children(_children) {}
     virtual ~PhysicalExpression() = default;
 
     /**
@@ -115,6 +124,14 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator);
+
+/**
+ * @brief Convert ExprResult to arrow and cast to the requested type.
+ *
+ */
+std::shared_ptr<array_info> do_arrow_compute_cast(
+    std::shared_ptr<ExprResult> left_res,
+    const duckdb::LogicalType &return_type);
 
 /**
  * @brief Physical expression tree node type for comparisons resulting in
@@ -168,7 +185,8 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             children[1]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_binary(left_res, right_res, comparator);
-        return std::make_shared<ArrayExprResult>(result);
+        return std::make_shared<ArrayExprResult>(result,
+                                                 "Comparison" + comparator);
     }
 
    protected:
@@ -179,15 +197,18 @@ class PhysicalComparisonExpression : public PhysicalExpression {
 template <typename T, typename std::enable_if<std::is_arithmetic<T>::value &&
                                                   !std::is_same<T, bool>::value,
                                               int>::type = 0>
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const T &value) {
+std::shared_ptr<arrow::Array> ScalarToArrowArray(const T &value,
+                                                 size_t num_elements = 1) {
     using ArrowType = typename arrow::CTypeTraits<T>::ArrowType;
     using BuilderType = arrow::NumericBuilder<ArrowType>;
 
     BuilderType builder;
     arrow::Status status;
-    status = builder.Append(value);
-    if (!status.ok()) {
-        throw std::runtime_error("builder.Append failed.");
+    for (size_t i = 0; i < num_elements; ++i) {
+        status = builder.Append(value);
+        if (!status.ok()) {
+            throw std::runtime_error("builder.Append failed.");
+        }
     }
     std::shared_ptr<arrow::Array> array;
     status = builder.Finish(&array);
@@ -198,15 +219,16 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(const T &value) {
 }
 
 // String specialization
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
-    const std::string &value);
+std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string &value,
+                                                 size_t num_elements = 1);
 
-// arrow::TimestampScalar specialization
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(
-    const arrow::TimestampScalar &value);
+// arrow::Scalar specialization
+std::shared_ptr<arrow::Array> ScalarToArrowArray(
+    const std::shared_ptr<arrow::Scalar> &value, size_t num_elements = 1);
 
 // bool specialization
-std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value);
+std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
+                                                 size_t num_elements = 1);
 
 /**
  * @brief Physical expression tree node type for scalar constants.
@@ -215,17 +237,33 @@ std::shared_ptr<arrow::Array> CreateOneElementArrowArray(bool value);
 template <typename T>
 class PhysicalConstantExpression : public PhysicalExpression {
    public:
-    PhysicalConstantExpression(const T &val) : constant(val) {}
+    PhysicalConstantExpression(const T &val, bool no_scalars)
+        : constant(val), generate_array(no_scalars) {}
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::shared_ptr<arrow::Array> array =
-            CreateOneElementArrowArray(constant);
+        // The current rule is that if the expression infrastructure
+        // is used for filtering then constants are treated as
+        // scalars and if used for projection then constants become
+        // full columns.  If used in a projection then generate_array
+        // will be true and we generate an array the size of the
+        // batch and return an ArrayExprResult.
+        if (generate_array) {
+            std::shared_ptr<arrow::Array> array =
+                ScalarToArrowArray(constant, input_batch->nrows());
 
-        auto result =
-            arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
-        return std::make_shared<ScalarExprResult>(std::move(result));
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ArrayExprResult>(std::move(result),
+                                                     "Constant");
+        } else {
+            std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
+
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ScalarExprResult>(std::move(result));
+        }
     }
 
     friend std::ostream &operator<<(std::ostream &os,
@@ -236,22 +274,33 @@ class PhysicalConstantExpression : public PhysicalExpression {
 
    private:
     const T constant;
+    const bool generate_array;
 };
 
 template <>
 class PhysicalConstantExpression<std::string> : public PhysicalExpression {
    public:
-    PhysicalConstantExpression(const std::string &val) : constant(val) {}
+    PhysicalConstantExpression(const std::string &val, bool no_scalars)
+        : constant(val), generate_array(no_scalars) {}
     virtual ~PhysicalConstantExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::shared_ptr<arrow::Array> array =
-            CreateOneElementArrowArray(constant);
+        if (generate_array) {
+            std::shared_ptr<arrow::Array> array =
+                ScalarToArrowArray(constant, input_batch->nrows());
 
-        auto result =
-            arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
-        return std::make_shared<ScalarExprResult>(std::move(result));
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ArrayExprResult>(std::move(result),
+                                                     "StringConstant");
+        } else {
+            std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
+
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ScalarExprResult>(std::move(result));
+        }
     }
 
     friend std::ostream &operator<<(
@@ -263,6 +312,7 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
 
    private:
     const std::string constant;
+    bool generate_array;
 };
 
 /**
@@ -271,22 +321,26 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
  */
 class PhysicalColumnRefExpression : public PhysicalExpression {
    public:
-    PhysicalColumnRefExpression(duckdb::idx_t table, duckdb::idx_t column)
-        : table_index(table), selected_columns({(int64_t)column}) {}
+    PhysicalColumnRefExpression(size_t column, const std::string &_bound_name)
+        : col_idx(column), bound_name(_bound_name) {}
     virtual ~PhysicalColumnRefExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) {
-        std::shared_ptr<table_info> out_table_info =
-            ProjectTable(input_batch, selected_columns);
-        // ProjectTable returns a table so extract the singular column
-        // out since we must return array_info result here.
-        return std::make_shared<ArrayExprResult>(out_table_info->columns[0]);
+        std::shared_ptr<array_info> res_array = input_batch->columns[col_idx];
+
+        std::string column_name;
+        if (input_batch->column_names.size() > 0) {
+            column_name = input_batch->column_names[col_idx];
+        } else {
+            column_name = bound_name;
+        }
+        return std::make_shared<ArrayExprResult>(res_array, column_name);
     }
 
    protected:
-    duckdb::idx_t table_index;
-    const std::vector<int64_t> selected_columns;
+    size_t col_idx;
+    std::string bound_name;
 };
 
 /**
@@ -329,11 +383,43 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
             children[1]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_binary(left_res, right_res, comparator);
-        return std::make_shared<ArrayExprResult>(result);
+        return std::make_shared<ArrayExprResult>(result,
+                                                 "Conjunction" + comparator);
     }
 
    protected:
     std::string comparator;
+};
+
+/**
+ * @brief Physical expression tree node type for casting.
+ *
+ */
+class PhysicalCastExpression : public PhysicalExpression {
+   public:
+    PhysicalCastExpression(std::shared_ptr<PhysicalExpression> left,
+                           duckdb::LogicalType _return_type)
+        : return_type(_return_type) {
+        children.push_back(left);
+    }
+
+    virtual ~PhysicalCastExpression() = default;
+
+    /**
+     * @brief How to process this expression tree node.
+     *
+     */
+    virtual std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch) {
+        // Process child first.
+        std::shared_ptr<ExprResult> left_res =
+            children[0]->ProcessBatch(input_batch);
+        auto result = do_arrow_compute_cast(left_res, return_type);
+        return std::make_shared<ArrayExprResult>(result, "Cast");
+    }
+
+   protected:
+    duckdb::LogicalType return_type;
 };
 
 /**
@@ -353,6 +439,16 @@ class PhysicalUnaryExpression : public PhysicalExpression {
                 throw std::runtime_error("Unhandled unary op expression type.");
         }
     }
+    PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
+                            std::string &opstr) {
+        children.push_back(left);
+        if (opstr == "floor") {
+            comparator = "floor";
+        } else {
+            throw std::runtime_error("Unhandled unary expression opstr " +
+                                     opstr);
+        }
+    }
 
     virtual ~PhysicalUnaryExpression() = default;
 
@@ -366,7 +462,7 @@ class PhysicalUnaryExpression : public PhysicalExpression {
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
         auto result = do_arrow_compute_unary(left_res, comparator);
-        return std::make_shared<ArrayExprResult>(result);
+        return std::make_shared<ArrayExprResult>(result, "Unary" + comparator);
     }
 
    protected:
@@ -386,7 +482,30 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         children.push_back(right);
         switch (etype) {
             default:
-                throw std::runtime_error("Unhandled binary expression type.");
+                throw std::runtime_error(
+                    "Unhandled binary expression type " +
+                    std::to_string(static_cast<int>(etype)));
+        }
+    }
+
+    PhysicalBinaryExpression(std::shared_ptr<PhysicalExpression> left,
+                             std::shared_ptr<PhysicalExpression> right,
+                             std::string &opstr) {
+        children.push_back(left);
+        children.push_back(right);
+        if (opstr == "+") {
+            comparator = "add";
+        } else if (opstr == "-") {
+            comparator = "subtract";
+        } else if (opstr == "*") {
+            comparator = "multiply";
+        } else if (opstr == "/") {
+            comparator = "divide";
+        } else if (opstr == "floor") {
+            comparator = "floor";
+        } else {
+            throw std::runtime_error("Unhandled binary expression opstr " +
+                                     opstr);
         }
     }
 
@@ -405,9 +524,50 @@ class PhysicalBinaryExpression : public PhysicalExpression {
             children[1]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_binary(left_res, right_res, comparator);
-        return std::make_shared<ArrayExprResult>(result);
+        return std::make_shared<ArrayExprResult>(result, "Binary" + comparator);
     }
 
    protected:
     std::string comparator;
+};
+
+/**
+ * @brief Convert duckdb expression tree to Bodo physical expression tree.
+ *
+ * @param expr - the root of input duckdb expression tree
+ * @param col_ref_map - mapping of table and column indices to overall index
+ * @param no_scalars - true if batch sized arrays should be generated for consts
+ * @return the root of output Bodo Physical expression tree
+ */
+std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
+    duckdb::unique_ptr<duckdb::Expression> &expr,
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
+    bool no_scalars = false);
+
+/**
+ * @brief Physical expression tree node type for UDF.
+ *
+ */
+class PhysicalUDFExpression : public PhysicalExpression {
+   public:
+    PhysicalUDFExpression(
+        std::vector<std::shared_ptr<PhysicalExpression>> &children,
+        BodoPythonScalarFunctionData &_scalar_func_data,
+        const std::shared_ptr<arrow::DataType> &_result_type)
+        : PhysicalExpression(children),
+          scalar_func_data(_scalar_func_data),
+          result_type(_result_type) {}
+
+    virtual ~PhysicalUDFExpression() = default;
+
+    /**
+     * @brief How to process this expression tree node.
+     *
+     */
+    virtual std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch);
+
+   protected:
+    BodoPythonScalarFunctionData scalar_func_data;
+    const std::shared_ptr<arrow::DataType> result_type;
 };

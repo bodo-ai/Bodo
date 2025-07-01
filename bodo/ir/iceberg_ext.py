@@ -26,7 +26,8 @@ import bodo.user_logging
 from bodo.hiframes.table import TableType
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
-from bodo.io.helpers import pyarrow_schema_type
+from bodo.io.helpers import pyarrow_schema_type, pyiceberg_catalog_type
+from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import IcebergConnectionType
 from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
 from bodo.ir.connector import Connector, log_limit_pushdown
@@ -84,7 +85,7 @@ parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
 @intrinsic
 def iceberg_pq_read_py_entry(
     typingctx,
-    conn_str,
+    catalog,
     table_id,
     parallel,
     limit,
@@ -117,7 +118,7 @@ def iceberg_pq_read_py_entry(
 
     Args:
         typingctx (Context): Context used for typing
-        conn_str (types.voidptr): C string for the connection
+        catalog (pyiceberg_catalog_type): Pyiceberg catalog to use for the read.
         sql_request_str (types.voidptr): C string for the Iceberg table identifier
         parallel (types.boolean): Is the read in parallel
         limit (types.int64): Max number of rows to read. -1 if all rows
@@ -208,7 +209,7 @@ def iceberg_pq_read_py_entry(
         [table_type, types.int64, types.pyobject_of_list_type, types.int64]
     )
     sig = ret_type(
-        types.voidptr,
+        pyiceberg_catalog_type,
         types.voidptr,
         types.boolean,
         types.int64,
@@ -231,7 +232,7 @@ def iceberg_pq_read_py_entry(
 @intrinsic
 def iceberg_pq_reader_init_py_entry(
     typingctx,
-    conn_str,
+    catalog,
     table_id,
     parallel,
     limit,
@@ -254,7 +255,7 @@ def iceberg_pq_reader_init_py_entry(
 
     Args:
         typingctx (Context): Context used for typing
-        conn_str (types.voidptr): C string for the connection
+        catalog (pyiceberg_catalog_type): Pyiceberg catalog to use for the read.
         table_id (types.voidptr): C string for Iceberg table id
         parallel (types.boolean): Is the read in parallel
         limit (types.int64): Max number of rows to read. -1 if all rows
@@ -288,7 +289,7 @@ def iceberg_pq_reader_init_py_entry(
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
-                lir.IntType(8).as_pointer(),  # conn_str void*
+                lir.IntType(8).as_pointer(),  # catalog void*
                 lir.IntType(8).as_pointer(),  # table_id void*
                 lir.IntType(1),  # parallel bool
                 lir.IntType(64),  # tot_rows_to_read int64
@@ -316,7 +317,7 @@ def iceberg_pq_reader_init_py_entry(
         return iceberg_reader
 
     sig = arrow_reader_t.instance_type(
-        types.voidptr,
+        pyiceberg_catalog_type,
         types.voidptr,
         types.boolean,
         types.int64,
@@ -1341,9 +1342,10 @@ def _gen_iceberg_reader_chunked_py(
         f'  iceberg_filters = get_filters_pyobject("{filter_str}", ({filter_args}{comma}))\n'
         f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
         f"{rtjf_str}"
+        f"  catalog = conn_str_to_catalog(conn)\n"
         # Iceberg C++ Parquet Reader
         f"  iceberg_reader = iceberg_pq_reader_init_py_entry(\n"
-        f"    unicode_to_utf8(conn),\n"
+        f"    catalog,\n"
         f"    unicode_to_utf8(table_id),\n"
         f"    {parallel},\n"
         f"    {-1 if limit is None else limit},\n"
@@ -1387,6 +1389,7 @@ def _gen_iceberg_reader_chunked_py(
             f"build_cols_{call_id}": build_cols_list,
             f"probe_cols_{call_id}": probe_cols_list,
             "log_message": bodo.user_logging.log_message,
+            "conn_str_to_catalog": conn_str_to_catalog,
         }
     )
     loc_vars = {}
@@ -1543,9 +1546,10 @@ def _gen_iceberg_reader_py(
         f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
         f'  iceberg_filters = get_filters_pyobject("{filter_str}", ({filter_args}{comma}))\n'
         f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
+        f"  catalog = conn_str_to_catalog(conn)\n"
         # Iceberg C++ Parquet Reader
         f"  out_table, total_rows, file_list, snapshot_id = iceberg_pq_read_py_entry(\n"
-        f"    unicode_to_utf8(conn),\n"
+        f"    catalog,\n"
         f"    unicode_to_utf8(table_id),\n"
         f"    {parallel},\n"
         f"    {-1 if limit is None else limit},\n"
@@ -1651,6 +1655,7 @@ def _gen_iceberg_reader_py(
             f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
             "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
             "iceberg_pq_read_py_entry": iceberg_pq_read_py_entry,
+            "conn_str_to_catalog": conn_str_to_catalog,
         }
     )
 

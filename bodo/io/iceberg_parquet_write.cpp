@@ -584,9 +584,10 @@ std::shared_ptr<arrow::Table> cast_arrow_table_to_iceberg_schema(
  */
 std::vector<PyObject *> iceberg_pq_write_helper(
     const char *fpath, const std::shared_ptr<table_info> table,
-    const std::shared_ptr<array_info> col_names_arr, const char *compression,
+    const std::vector<std::string> col_names, const char *compression,
     bool is_parallel, const char *bucket_region, int64_t row_group_size,
-    char *iceberg_metadata, std::shared_ptr<arrow::Schema> iceberg_arrow_schema,
+    const char *iceberg_metadata,
+    std::shared_ptr<arrow::Schema> iceberg_arrow_schema,
     std::shared_ptr<arrow::fs::FileSystem> arrow_fs,
     UpdateSketchCollection *sketches) {
     std::unordered_map<std::string, std::string> md = {
@@ -604,7 +605,7 @@ std::vector<PyObject *> iceberg_pq_write_helper(
     // The underlying already is in UTC already
     // for timezone aware types, and for timezone
     // naive, it won't matter.
-    std::vector<std::string> col_names = array_to_string_vector(col_names_arr);
+
     std::shared_ptr<arrow::KeyValueMetadata> schema_metadata =
         ::arrow::key_value_metadata(md);
     std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
@@ -682,16 +683,14 @@ in which case the filesystem is inferred from the path.
  * @param sketches collection of theta sketches accumulating ndv for the table
  * as it is being written.
  */
-void iceberg_pq_write(const char *table_data_loc,
-                      std::shared_ptr<table_info> table,
-                      const std::shared_ptr<array_info> col_names_arr,
-                      PyObject *partition_spec, PyObject *sort_order,
-                      const char *compression, bool is_parallel,
-                      const char *bucket_region, int64_t row_group_size,
-                      char *iceberg_metadata, PyObject *iceberg_files_info_py,
-                      std::shared_ptr<arrow::Schema> iceberg_schema,
-                      std::shared_ptr<arrow::fs::FileSystem> arrow_fs,
-                      UpdateSketchCollection *sketches) {
+void iceberg_pq_write(
+    const char *table_data_loc, std::shared_ptr<table_info> table,
+    const std::vector<std::string> col_names_arr, PyObject *partition_spec,
+    PyObject *sort_order, const char *compression, bool is_parallel,
+    const char *bucket_region, int64_t row_group_size,
+    const char *iceberg_metadata, PyObject *iceberg_files_info_py,
+    std::shared_ptr<arrow::Schema> iceberg_schema,
+    std::shared_ptr<arrow::fs::FileSystem> arrow_fs, void *sketches_ptr) {
     tracing::Event ev("iceberg_pq_write", is_parallel);
     ev.add_attribute("table_data_loc", table_data_loc);
     ev.add_attribute("iceberg_metadata", iceberg_metadata);
@@ -705,6 +704,13 @@ void iceberg_pq_write(const char *table_data_loc,
         throw std::runtime_error(
             "IcebergParquetWrite: partition_spec is not a list");
     }
+
+    // Create dummy sketches if not provided.
+    UpdateSketchCollection *sketches =
+        (sketches_ptr == nullptr)
+            ? new UpdateSketchCollection(
+                  std::vector<bool>(table->ncols(), false))
+            : static_cast<UpdateSketchCollection *>(sketches_ptr);
 
     std::shared_ptr<table_info> working_table = table;
 
@@ -1089,6 +1095,11 @@ void iceberg_pq_write(const char *table_data_loc,
         }
         ev_general.finalize();
     }
+
+    // Clean up the dummy sketches if we created them
+    if (sketches_ptr == nullptr) {
+        delete sketches;
+    }
 }
 
 /**
@@ -1100,9 +1111,9 @@ PyObject *iceberg_pq_write_py_entry(
     const char *table_data_loc, table_info *in_table,
     array_info *in_col_names_arr, PyObject *partition_spec,
     PyObject *sort_order, const char *compression, bool is_parallel,
-    const char *bucket_region, int64_t row_group_size, char *iceberg_metadata,
-    PyObject *iceberg_arrow_schema_py, PyObject *arrow_fs,
-    UpdateSketchCollection *sketches) {
+    const char *bucket_region, int64_t row_group_size,
+    const char *iceberg_metadata, PyObject *iceberg_arrow_schema_py,
+    PyObject *arrow_fs, void *sketches_ptr) {
     try {
         std::shared_ptr<table_info> table =
             std::shared_ptr<table_info>(in_table);
@@ -1129,10 +1140,11 @@ PyObject *iceberg_pq_write_py_entry(
             "Error during Iceberg write: Failed to unwrap Arrow filesystem",
             fs);
 
-        iceberg_pq_write(table_data_loc, table, col_names_arr, partition_spec,
-                         sort_order, compression, is_parallel, bucket_region,
-                         row_group_size, iceberg_metadata,
-                         iceberg_files_info_py, iceberg_schema, fs, sketches);
+        iceberg_pq_write(
+            table_data_loc, table, array_to_string_vector(col_names_arr),
+            partition_spec, sort_order, compression, is_parallel, bucket_region,
+            row_group_size, iceberg_metadata, iceberg_files_info_py,
+            iceberg_schema, fs, sketches_ptr);
 
         return iceberg_files_info_py;
     } catch (const std::exception &e) {

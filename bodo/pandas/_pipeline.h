@@ -6,6 +6,12 @@
 
 #include "physical/operator.h"
 
+// #define DEBUG_PIPELINE  // enable and build to print debug info on the
+// pipeline
+#ifdef DEBUG_PIPELINE
+#include <iostream>
+#endif
+
 /// @brief Pipeline class for executing a sequence of physical operators.
 class Pipeline {
    private:
@@ -36,9 +42,10 @@ class Pipeline {
      */
     void Execute();
 
-    /// @brief Get the final result. Should be anything because of write, but
-    /// stick to table_info for now
-    std::shared_ptr<table_info> GetResult();
+    /// @brief Get the final result. Result collector returns table_info,
+    // Parquet write returns null table_info pointer, and Iceberg write
+    // returns a PyObject* of Iceberg files infos.
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult();
 };
 
 class PipelineBuilder {
@@ -58,10 +65,20 @@ class PipelineBuilder {
     /// @brief Build the pipeline and return it
     std::shared_ptr<Pipeline> Build(std::shared_ptr<PhysicalSink> sink);
 
-    /// @brief Build the last pipeline for a plan, using a result collector as
-    /// the sink.
+    /**
+     * @brief Build the last pipeline for a plan, using a result collector as
+     * the sink.
+     *
+     * @param in_schema Schema of input data to the sink from the previous
+     * operator.
+     * @param out_schema Schema of output data from the sink expected by Python.
+     * Only column orders may be different from the input schema due to DuckDB
+     * optimizers changes (e.g. reorder build/probe sides in join).
+     * @return std::shared_ptr<Pipeline> finalized pipeline
+     */
     std::shared_ptr<Pipeline> BuildEnd(
-        std::shared_ptr<arrow::Schema> out_schema);
+        std::shared_ptr<bodo::Schema> in_schema,
+        std::shared_ptr<bodo::Schema> out_schema);
 
     /**
      * @brief Get the physical schema of the output of the last operator in the

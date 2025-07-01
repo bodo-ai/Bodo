@@ -21,20 +21,10 @@
 #include "../libs/_chunked_table_builder.h"
 #include "../libs/_dict_builder.h"
 #include "../libs/_query_profile_collector.h"
+#include "arrow_compat.h"
 
 #define QUERY_PROFILE_INIT_STAGE_ID 0
 #define QUERY_PROFILE_READ_STAGE_ID 1
-
-/**
- * @brief Unwrap PyArrow Schema PyObject and return the C++ value
- * NOTE: Not calling arrow::py::unwrap_schema() in ArrowReader constructor
- * directly due to a segfault with pip. See:
- * https://bodo.atlassian.net/browse/BSE-2925
- *
- * @param pyarrow_schema input PyArrow Schema
- * @return std::shared_ptr<arrow::Schema> C++ Schema
- */
-std::shared_ptr<arrow::Schema> unwrap_schema(PyObject* pyarrow_schema);
 
 #define CHECK_ARROW_READER(expr, msg)                                        \
     if (!(expr.ok())) {                                                      \

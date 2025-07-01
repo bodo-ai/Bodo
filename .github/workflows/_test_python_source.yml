@@ -64,7 +64,7 @@ jobs:
             role-duration-seconds: 10800
         - name: Install Extra Test dependencies
           # This isn't published on pypi so no good way to list it as a dependency
-          run: pip install 'git+https://github.com/apache/polaris.git#subdirectory=client/python'
+          run: pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
 
         # Run Tests
         - name: Run Tests
@@ -127,12 +127,6 @@ jobs:
             BODO_SPAWN_MODE: "0"
             BODO_BUFFER_POOL_REMOTE_MODE: "1"
             BODO_BUFFER_POOL_DEBUG_MODE: "1"
-            # Pyspark Config
-            SPARK_LOCAL_IP: 127.0.0.1
-            PYSPARK_SUBMIT_ARGS: >
-              --conf spark.driver.bindAddress=127.0.0.1 
-              --conf spark.driver.host=127.0.0.1 
-              pyspark-shell
             # Testing Credentials
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
@@ -152,14 +146,14 @@ jobs:
           if: inputs.collect-coverage && (success() || failure())
           run: |
             mkdir -p outputs
-            mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}.json
-            mv .coverage outputs/.coverage_${{ inputs.batch }}
-            mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}.json
+            mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}_${{ inputs.test-type }}.json
+            mv .coverage outputs/.coverage_${{ inputs.batch }}_${{ inputs.test-type }}
+            mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}_${{ inputs.test-type }}.json
           shell: bash
         - name: Upload Timings and Coverage
           uses: actions/upload-artifact@v4
           if: inputs.collect-coverage && (success() || failure())
           with:
-            name: output-${{ inputs.batch }}
+            name: output-${{ inputs.batch }}-${{ inputs.test-type }}
             path: outputs/
             include-hidden-files: true

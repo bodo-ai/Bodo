@@ -15,7 +15,6 @@ from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
 
 import bodo
 from bodo.ml_support.sklearn_ext import (
-    check_sklearn_version,
     parallel_predict,
     parallel_predict_log_proba,
     parallel_predict_proba,
@@ -77,8 +76,6 @@ def sklearn_linear_model_SGDClassifier_overload(
     warm_start=False,
     average=False,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_SGDClassifier_impl(
         loss="hinge",
         penalty="l2",
@@ -175,7 +172,7 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
         cur_loss_sum = comm.allreduce(cur_loss, op=MPI.SUM)
         cur_loss = cur_loss_sum / nranks
         # https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/linear_model/_sgd_fast.pyx#L620
-        if m.tol > np.NINF and cur_loss > best_loss - m.tol * total_datasize:
+        if m.tol > -np.inf and cur_loss > best_loss - m.tol * total_datasize:
             no_improvement_count += 1
         else:
             no_improvement_count = 0
@@ -197,7 +194,6 @@ def overload_sgdc_model_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    check_sklearn_version()
     """
     Provide implementations for the fit function.
     In case input is replicated, we simply call sklearn,
@@ -341,8 +337,6 @@ def sklearn_linear_model_SGDRegressor_overload(
     warm_start=False,
     average=False,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_SGDRegressor_impl(
         loss="squared_error",
         penalty="l2",
@@ -401,8 +395,6 @@ def overload_sgdr_model_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    check_sklearn_version()
-
     if is_overload_true(_is_data_distributed):
         if not is_overload_none(sample_weight):
             raise BodoError(
@@ -507,8 +499,6 @@ def sklearn_linear_model_logistic_regression_overload(
     n_jobs=None,
     l1_ratio=None,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_logistic_regression_impl(
         penalty="l2",
         dual=False,
@@ -688,8 +678,6 @@ def sklearn_linear_model_linear_regression_overload(
     n_jobs=None,
     positive=False,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_linear_regression_impl(
         fit_intercept=True,
         copy_X=True,
@@ -815,8 +803,6 @@ def sklearn_linear_model_lasso_overload(
     random_state=None,
     selection="cyclic",
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_lasso_impl(
         alpha=1.0,
         fit_intercept=True,
@@ -951,8 +937,6 @@ def sklearn_linear_model_ridge_overload(
     positive=False,
     random_state=None,
 ):
-    check_sklearn_version()
-
     def _sklearn_linear_model_ridge_impl(
         alpha=1.0,
         fit_intercept=True,

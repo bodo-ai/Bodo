@@ -4,8 +4,10 @@
 #include <utility>
 
 #include <arrow/python/pyarrow.h>
+#include <arrow/table.h>
 
 #include "../libs/_bodo_to_arrow.h"
+#include "../libs/_table_builder_utils.h"
 #include "operator.h"
 
 /// @brief Physical node for reading Parquet files in pipelines.
@@ -14,13 +16,13 @@ class PhysicalReadPandas : public PhysicalSource {
     PyObject* df;
     int64_t current_row = 0;
     int64_t num_rows;
-    const std::shared_ptr<arrow::Schema> arrow_schema;
+    const std::shared_ptr<bodo::Schema> output_schema;
 
    public:
     explicit PhysicalReadPandas(PyObject* _df_or_series,
                                 std::vector<int>& selected_columns,
                                 std::shared_ptr<arrow::Schema> arrow_schema)
-        : arrow_schema(arrow_schema) {
+        : output_schema(initOutputSchema(selected_columns, arrow_schema)) {
         this->setInputDF(_df_or_series);
 
         // Select only the specified columns if provided by the optimizer
@@ -79,6 +81,25 @@ class PhysicalReadPandas : public PhysicalSource {
         num_rows = PyObject_Length(df);
     }
 
+    /**
+     * @brief Initialize the output schema based on the selected columns and
+     * Arrow schema.
+     *
+     * @param selected_columns The selected columns to project.
+     * @param arrow_schema The Arrow schema of the DataFrame.
+     * @return std::shared_ptr<bodo::Schema> The initialized output schema.
+     */
+    static std::shared_ptr<bodo::Schema> initOutputSchema(
+        std::vector<int>& selected_columns,
+        std::shared_ptr<arrow::Schema> arrow_schema) {
+        std::shared_ptr<bodo::Schema> output_schema =
+            bodo::Schema::FromArrowSchema(arrow_schema);
+        if (!selected_columns.empty()) {
+            output_schema = output_schema->Project(selected_columns);
+        }
+        return output_schema;
+    }
+
     virtual ~PhysicalReadPandas() { Py_DECREF(df); }
 
     void Finalize() override {}
@@ -109,10 +130,18 @@ class PhysicalReadPandas : public PhysicalSource {
         std::shared_ptr<arrow::Table> table =
             arrow::py::unwrap_table(pa_table).ValueOrDie();
 
-        // Convert Arrow arrays to Bodo arrays
-        auto* bodo_pool = bodo::BufferPool::DefaultPtr();
-        std::shared_ptr<table_info> out_table =
-            arrow_table_to_bodo(table, bodo_pool);
+        std::shared_ptr<table_info> out_table;
+        if (table->num_rows() == 0) {
+            // Use alloc_table here since calling from_pandas on an empty slice
+            // might return different types.
+            out_table = alloc_table(output_schema);
+        } else {
+            // Convert Arrow arrays to Bodo arrays
+            // (passing nullptr for pool since not allocated through Bodo so
+            // can't support spilling etc,
+            // TODO: pass bodo's buffer pool to Arrow)
+            out_table = arrow_table_to_bodo(table, nullptr);
+        }
 
         // Clean up Python references
         Py_DECREF(iloc);
@@ -137,7 +166,7 @@ class PhysicalReadPandas : public PhysicalSource {
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
-        return bodo::Schema::FromArrowSchema(this->arrow_schema);
+        return output_schema;
     }
 
    private:

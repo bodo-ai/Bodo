@@ -140,6 +140,40 @@ if _check_pandas_change:
 pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type = _concat_same_type
 
 
+pd_str_find = pd.core.arrays.arrow.array.ArrowExtensionArray._str_find
+
+
+def _str_find(self, sub: str, start: int = 0, end: int | None = None):
+    # Bodo change: add fallback to regular Series.str.find() if args not supported by
+    # ArrowExtensionArray. See: test_df_lib/test_series_str.py::test_auto_find
+    if (start != 0 and end is not None) or (start == 0 and end is None):
+        return pd_str_find(self, sub, start, end)
+    else:
+        return pd.Series(self.to_numpy()).str.find(sub, start, end).array
+
+
+if _check_pandas_change:
+    lines = inspect.getsource(pd.core.arrays.arrow.array.ArrowExtensionArray._str_find)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "179388243335db6b590d875b3ac1c249efffac4194b8bc56c9c54d956ab5f370"
+    ):  # pragma: no cover
+        warnings.warn(
+            "pd.core.arrays.arrow.array.ArrowExtensionArray._str_find has changed"
+        )
+
+pd.core.arrays.arrow.array.ArrowExtensionArray._str_find = _str_find
+
+
+# Bodo change: add missing str_map() for ArrowExtensionArray that is used in operations
+# like zfill.
+def arrow_arr_str_map(self, f, na_value=None, dtype=None, convert=True):
+    return pd.Series(self.to_numpy()).array._str_map(f, na_value, dtype, convert)
+
+
+pd.core.arrays.arrow.array.ArrowExtensionArray._str_map = arrow_arr_str_map
+
+
 # Add support for pow() in join conditions
 pd.core.computation.ops.MATHOPS = pd.core.computation.ops.MATHOPS + ("pow",)
 
@@ -301,7 +335,27 @@ if pandas_version >= (3, 0):
             decorator: Callable | None,
             skip_na: bool,
         ):
-            raise NotImplementedError("BodoExecutionEngine: map not implemented yet.")
+            if not isinstance(data, pd.Series):
+                raise ValueError(
+                    f"BodoExecutionEngine: map() expected input data to be Series, got: {type(data)}"
+                )
+
+            if skip_na:
+                raise ValueError(
+                    "BodoExecutionEngine: na_action not supported other than the default None for map()."
+                )
+
+            if args or kwargs:
+                raise ValueError(
+                    "BodoExecutionEngine: passing additional arguments to UDF not supported for map()."
+                )
+
+            def map_func(data):
+                return data.map(func)
+
+            map_func_jit = decorator(map_func)
+
+            return map_func_jit(data)
 
         @staticmethod
         def apply(

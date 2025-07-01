@@ -63,7 +63,7 @@ jobs:
       needs.validate.outputs.run_bodosql_customer_tests == 'true'
 
     steps:
-      - uses: convictional/trigger-workflow-and-wait@v1.6.1
+      - uses: convictional/trigger-workflow-and-wait@v1.6.5
         with:
           owner: bodo-ai
           repo: customer-sample-code
@@ -83,12 +83,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      # TODO: Reenable and fix Sccache
-      # - uses: actions/checkout@v4
-      # - name: Build from Source
-      #   uses: ./.github/actions/build-source
-      #   with:
-      #     build-all: false
+      - uses: actions/checkout@v4
+      - name: Build from Source
+        uses: ./.github/actions/build-source
+        with:
+          build-all: false
       - name: Load and Save Hadoop to Cache
         id: hadoop-cache
         if: ${{ runner.os != 'Windows' }}
@@ -115,7 +114,7 @@ jobs:
     with:
       batch: ${{ matrix.batch }}
       total-batches: 12
-      pytest-marker: "not slow and not weekly or smoke"
+      pytest-marker: "not slow and not weekly and not iceberg or smoke"
       collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: NORMAL
@@ -128,8 +127,8 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "spawn_mode"
-      collect-coverage: false
+      pytest-marker: "spawn_mode and not iceberg"
+      collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: SPAWN
     secrets: inherit
@@ -141,8 +140,8 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "df_lib and not weekly"
-      collect-coverage: false
+      pytest-marker: "df_lib and not weekly and not iceberg"
+      collect-coverage: true
       os: ${{ inputs.runner_os || 'ubuntu-latest' }}
       test-type: "DF_LIB"
     secrets: inherit
@@ -167,7 +166,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
       # Get all source code for mapping coverage to LOC
       - uses: actions/checkout@v4
         with:

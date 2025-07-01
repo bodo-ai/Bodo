@@ -74,7 +74,7 @@ export NRANKS=2
 export MAX_TEST_PART=30
 export START_TEST_PART=1
 export END_TEST_PART=10
-export PYTEST_MARKER="bodo_${TEST_PART}of${MAX_TEST_PART} and (not weekly) and (not hdfs)"
+export PYTEST_MARKER="bodo_${TEST_PART}of${MAX_TEST_PART} and (not weekly) and (not hdfs) and (not iceberg)"
 if [[ $NRANKS -gt 1 ]]; then
     export BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST=true
 else
@@ -91,6 +91,6 @@ find . -name "bodo*311*.whl" -exec pip install {} \;
 # Run test part 1 through 10
 for TEST_PART in $(seq $START_TEST_PART $END_TEST_PART); do
     # Run azure nightly ci
-    export PYTEST_MARKER="bodo_${TEST_PART}of${MAX_TEST_PART} and (not weekly)"
+    export PYTEST_MARKER="bodo_${TEST_PART}of${MAX_TEST_PART} and (not weekly) and (not iceberg)"
     python -m bodo.runtests "BODO_${NRANKS}P_${TEST_PART}_OF_${MAX_TEST_PART}" "$NRANKS" --pyargs bodo -s -v --import-mode=append -m "$PYTEST_MARKER"
 done

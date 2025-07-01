@@ -147,11 +147,8 @@ def _build_index_data(
                         ArrowExtensionArray(pa.array(res.index.right)), logger
                     ),
                 )
-            case pd.CategoricalIndex | pd.DatetimeIndex:
+            case pd.CategoricalIndex | pd.DatetimeIndex | pd.TimedeltaIndex:
                 return bodo.gatherv(res.index._data)
-            # TODO[BSE-4196]: support TimedeltaArray directly
-            case pd.TimedeltaIndex:
-                return bodo.gatherv(res.index._data.to_numpy())
             case pd.PeriodIndex:
                 # This is a hack since we can't unbox a numpy array created from res.index._data for PeriodIndex
                 # since we're missing a proper PeriodArray but it's fine since we'll replace this
@@ -453,8 +450,7 @@ def exec_func_handler(
     # not be replicated in the non-JIT cases like map_partitions, so we have to define
     # the semantics (e.g. gather all values across ranks in a list?).
     if not is_dispatcher:
-        assert is_distributable_typ(bodo.typeof(res)) or res is None
-        is_distributed = True
+        is_distributed = is_distributable_typ(bodo.typeof(res))
 
     debug_worker_msg(logger, f"Function result {is_distributed=}")
 

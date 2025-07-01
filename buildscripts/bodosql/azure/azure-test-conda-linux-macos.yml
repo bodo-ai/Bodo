@@ -81,7 +81,7 @@ jobs:
       pixi run -e azure python -c "import bodosql; print(bodosql.__version__)"
 
       # This isn't published on pypi so no good way to list it as a dependency
-      pixi run -e azure pip install 'git+https://github.com/apache/polaris.git#subdirectory=client/python'
+      pixi run -e azure pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then

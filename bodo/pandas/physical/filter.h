@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <memory>
@@ -44,7 +43,8 @@ class PhysicalFilter : public PhysicalSourceSink {
         std::shared_ptr<array_info> bitmask = arr_output->result;
         if (bitmask->dtype != Bodo_CTypes::_BOOL) {
             throw std::runtime_error(
-                "Filter expression tree did not result in a boolean array");
+                "Filter expression tree did not result in a boolean array " +
+                std::to_string(static_cast<int>(bitmask->dtype)));
         }
 
         // Apply the bitmask to the input_batch to do row filtering.

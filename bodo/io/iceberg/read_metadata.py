@@ -6,7 +6,6 @@ and processing their metadata for later steps.
 
 from __future__ import annotations
 
-import io
 import itertools
 import json
 import os
@@ -17,7 +16,6 @@ import pyarrow as pa
 
 import bodo
 import bodo.utils.tracing as tracing
-from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import (
     FieldIDs,
     FieldNames,
@@ -33,6 +31,7 @@ from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.utils.utils import BodoError, run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.catalog import Catalog
     from pyiceberg.expressions import BooleanExpression
     from pyiceberg.io import FileIO
     from pyiceberg.table import FileScanTask, Table
@@ -46,9 +45,16 @@ def _construct_parquet_infos(
     from the Iceberg table scanner. This includes performing additional
     operations to get the schema ID and sanitized path for each file.
     """
-
-    from avro.datafile import DataFileReader
-    from avro.io import DatumReader
+    from pyiceberg.manifest import (
+        DEFAULT_READ_VERSION,
+        MANIFEST_ENTRY_SCHEMAS,
+        AvroFile,
+        DataFile,
+        DataFileContent,
+        FileFormat,
+        ManifestEntry,
+        ManifestEntryStatus,
+    )
 
     file_path_to_schema_id = {}
 
@@ -58,16 +64,20 @@ def _construct_parquet_infos(
     assert snap is not None
 
     for manifest_file in snap.manifests(table.io):
-        # Open Avro file
-        with table.io.new_input(manifest_file.manifest_path).open(seekable=True) as f:
-            # gcs doesn't support seeking to the end of a file which the avro reader depends on.
-            reader = DataFileReader(io.BytesIO(f.read()), DatumReader())
-            schema_serialized = reader.get_meta("schema")
-            assert schema_serialized is not None
-            schema_id = int(json.loads(schema_serialized)["schema-id"])
+        # Similar to PyIceberg's fetch_manifest_entry here:
+        # https://github.com/apache/iceberg-python/blob/38ebb19a39407f52fe439289af8be81268932b0b/pyiceberg/manifest.py#L696
+        input_file = table.io.new_input(manifest_file.manifest_path)
+        with AvroFile[ManifestEntry](
+            input_file,
+            MANIFEST_ENTRY_SCHEMAS[DEFAULT_READ_VERSION],
+            read_types={-1: ManifestEntry, 2: DataFile},
+            read_enums={0: ManifestEntryStatus, 101: FileFormat, 134: DataFileContent},
+        ) as reader:
+            schema_id = int(json.loads(reader.header.meta["schema"])["schema-id"])
+            for entry in reader:
+                file_path = entry.data_file.file_path
+                file_path_to_schema_id[file_path] = schema_id
 
-            for line in reader:
-                file_path_to_schema_id[line["data_file"]["file_path"]] = schema_id
     get_file_to_schema_us = time.monotonic_ns() - s
 
     # Construct the list of Parquet file info
@@ -128,10 +138,11 @@ def _get_total_num_pq_files_in_table(table: Table) -> int:
 
 @run_rank0
 def get_iceberg_file_list_parallel(
-    conn_str: str,
+    catalog: Catalog,
     table_id: str,
     filters: BooleanExpression,
     snapshot_id: int = -1,
+    limit: int = -1,
 ) -> tuple[list[IcebergParquetInfo], dict, int, FileIO, int]:
     """
     Wrapper around 'get_iceberg_file_list' which calls it
@@ -145,6 +156,7 @@ def get_iceberg_file_list_parallel(
         table_id (str): Iceberg table identifier
         filters (optional): Filters for file pruning. Defaults to None.
         snapshot_id (int, optional): Snapshot ID to read from. Defaults to -1.
+        limit (int, optional): Limit on the number of rows to read. Defaults to -1.
 
     Returns:
         tuple[IcebergParquetInfo, int, dict[int, pa.Schema]]:
@@ -159,13 +171,13 @@ def get_iceberg_file_list_parallel(
     if tracing.is_tracing():  # pragma: no cover
         ev_iceberg_fl.add_attribute("g_filters", filters)
     try:
-        catalog = conn_str_to_catalog(conn_str)
         table = catalog.load_table(table_id)
-
         pq_infos, get_file_to_schema_us = _construct_parquet_infos(
             table,
             table.scan(
-                filters, snapshot_id=snapshot_id if snapshot_id > -1 else None
+                filters,
+                snapshot_id=snapshot_id if snapshot_id > -1 else None,
+                limit=limit if limit > -1 else None,
             ).plan_files(),
         )
 
@@ -294,3 +306,67 @@ def group_file_frags_by_schema_group_identifier(
     metrics.nunique_sgs_seen += len(schema_group_id_to_frags)
 
     return schema_group_id_to_frags
+
+
+def get_table_length(table, snapshot_id: int = -1) -> int:
+    """
+    Get the total number of rows in the Iceberg table.
+    If a snapshot ID is provided, it will return the number of rows
+    in that snapshot. Otherwise, it will return the number of rows
+    in the current snapshot.
+
+    Args:
+        table (Table): The Iceberg table to get the length of.
+        snapshot_id (int, optional): The snapshot ID to get the length of. Defaults to -1.
+
+    Returns:
+        int: The total number of rows in the Iceberg table.
+    """
+    from pyiceberg.manifest import ManifestContent, ManifestEntryStatus
+
+    table_len = 0
+    snapshot = (
+        table.current_snapshot()
+        if snapshot_id == -1
+        else table.snapshot_by_id(snapshot_id)
+    )
+    assert snapshot is not None
+    # If the snapshot has a summary with total-records, use that.
+    if (
+        hasattr(snapshot, "summary")
+        and snapshot.summary is not None
+        and "total-records" in snapshot.summary
+    ):
+        table_len = int(snapshot.summary["total-records"])
+    # If the snapshot has manifests with existing_rows_count and added_rows_count,
+    # use those to get the table length.
+    elif all(
+        hasattr(manifest, "existing_rows_count")
+        and manifest.existing_rows_count is not None
+        and hasattr(manifest, "added_rows_count")
+        and manifest.added_rows_count is not None
+        for manifest in snapshot.manifests(table.io)
+    ):
+        table_len = sum(
+            [
+                manifest.existing_rows_count + manifest.added_rows_count
+                if manifest.content == ManifestContent.DATA
+                else 0
+                for manifest in snapshot.manifests(table.io)
+            ]
+        )
+    # Otherwise we need to go through the manifest entries to estimate the table length.
+    else:
+        for manifest in snapshot.manifests(table.io):
+            manifest_entries = manifest.fetch_manifest_entry(table.io)
+            for entry in manifest_entries:
+                if (
+                    entry.status == ManifestEntryStatus.DELETED
+                    or entry.content != ManifestContent.DATA
+                ):
+                    continue
+                datafile = entry.data_file
+                if datafile is not None and datafile.record_count is not None:
+                    table_len += datafile.record_count
+
+    return table_len

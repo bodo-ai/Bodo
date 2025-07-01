@@ -12,6 +12,7 @@
 #include "_dict_builder.h"
 #include "_shuffle.h"
 #include "_table_builder_utils.h"
+#include "streaming/_shuffle.h"
 
 void print_and_raise_detailed_mpi_test_all_err(
     int err, const std::vector<MPI_Status> &req_status_arr,
@@ -83,26 +84,6 @@ void _dist_transpose_comm(char *output, char *input, int typ_enum,
     bodo_alltoallv(input, send_counts, send_disp, mpi_typ, output, recv_counts,
                    recv_disp, mpi_typ, MPI_COMM_WORLD);
 }
-
-/**
- * @brief State for non-blocking is_last synchronization using IBarrier.
- Used in streaming Iceberg and Parquet writes currently.
- *
- */
-class IsLastState {
-   public:
-    // The IBarrier request used for is_last synchronization
-    MPI_Request is_last_request = MPI_REQUEST_NULL;
-    bool is_last_barrier_started = false;
-    bool global_is_last = false;
-    MPI_Comm is_last_comm;
-
-    IsLastState() {
-        CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->is_last_comm),
-                  "IsLastState: MPI error on MPI_Comm_dup:");
-    }
-    ~IsLastState() { MPI_Comm_free(&this->is_last_comm); }
-};
 
 /**
  * @brief Create a new IsLastState and return to Python

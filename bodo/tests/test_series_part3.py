@@ -863,7 +863,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
     )
     df_int = pd.DataFrame(
         {
-            "A": pd.array([1, 295, 3] * 2, dtype="Int32"),
+            "A": pd.array([1, 95, 3] * 2, dtype="Int32"),
             "B": pd.Series([4, None, 7] * 2, dtype="Int8"),
             "C": ["1", None, "4"] * 2,
         }
@@ -971,7 +971,7 @@ def test_heterogeneous_series_df_apply_astype_classes():
     )
     df_int = pd.DataFrame(
         {
-            "A": pd.array([1, 295, 3] * 2, dtype="Int32"),
+            "A": pd.array([1, 95, 3] * 2, dtype="Int32"),
             "B": pd.Series([4, None, 7] * 2, dtype="Int8"),
             "C": ["1", None, "4"] * 2,
         }

@@ -28,7 +28,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
+from bodo.hiframes.datetime_timedelta_ext import timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import hdist
@@ -1284,65 +1284,6 @@ def gatherv_impl_jit(
 
         return impl_matrix
 
-    # DatetimeTimeDeltaArrayType (not supported by C++ below yet)
-    if data == datetime_timedelta_array_type:
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def impl_timedelta(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            days = bodo.gatherv(data._days_data, allgather, warn_if_rep, root, comm)
-            seconds = bodo.gatherv(
-                data._seconds_data, allgather, warn_if_rep, root, comm
-            )
-            microseconds = bodo.gatherv(
-                data._microseconds_data, allgather, warn_if_rep, root, comm
-            )
-
-            rank = bodo.get_rank()
-            is_receiver = rank == root
-            if comm != 0:
-                is_receiver = root == MPI.ROOT
-            n_loc = len(data)
-            n_bytes = (n_loc + 7) >> 3
-            recv_counts = gather_scalar(
-                np.int32(n_loc), allgather, warn_if_rep, root, comm
-            )
-
-            recv_counts_nulls = np.empty(1, np.int64)
-            displs_nulls = np.empty(1, np.int64)
-            tmp_null_bytes = np.empty(1, np.uint8)
-            if is_receiver or allgather:
-                recv_counts_nulls = np.empty(len(recv_counts), np.int64)
-                for i in range(len(recv_counts)):
-                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
-                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-
-            c_gatherv(
-                data._null_bitmap.ctypes,
-                np.int64(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                char_typ_enum,
-                allgather,
-                np.int32(root),
-                comm,
-            )
-            out_null_bitmap = np.empty(recv_counts.sum() >> 3, np.uint8)
-            copy_gathered_null_bytes(
-                out_null_bitmap.ctypes,
-                tmp_null_bytes,
-                recv_counts_nulls,
-                recv_counts,
-            )
-            return bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
-                days, seconds, microseconds, out_null_bitmap
-            )
-
-        return impl_timedelta
-
     if is_array_typ(data, False):
         dtype = data
 
@@ -1905,8 +1846,12 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return np.array([datetime.date(2011, 8, 9)])
 
     # timedelta array
-    if dtype == datetime_timedelta_array_type:
-        return np.array([datetime.timedelta(33)])
+    if dtype == timedelta_array_type:
+        # Use Arrow duration array to ensure pd.Index() below doesn't convert it to
+        # a non-nullable numpy timedelta64 array (leading to parallel errors).
+        return pd.array(
+            [datetime.timedelta(33)], dtype=pd.ArrowDtype(pa.duration("ns"))
+        )
 
     # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(dtype):
@@ -2452,19 +2397,16 @@ def scatterv_impl_jit(
 
         return scatterv_impl_bool_arr
 
-    if (
-        isinstance(
-            data,
-            (
-                IntegerArrayType,
-                FloatingArrayType,
-                DecimalArrayType,
-                DatetimeArrayType,
-                TimeArrayType,
-            ),
-        )
-        or data == datetime_date_array_type
-    ):
+    if isinstance(
+        data,
+        (
+            IntegerArrayType,
+            FloatingArrayType,
+            DecimalArrayType,
+            DatetimeArrayType,
+            TimeArrayType,
+        ),
+    ) or data in (datetime_date_array_type, timedelta_array_type):
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         # these array need a data array and a null bitmap array to be initialized by
@@ -2488,6 +2430,10 @@ def scatterv_impl_jit(
             )  # pragma: no cover
         if data == datetime_date_array_type:
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
+        if data == timedelta_array_type:
+            init_func = (
+                bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array
+            )
         if isinstance(data, TimeArrayType):
             precision = data.precision
             init_func = numba.njit(no_cpython_wrapper=True)(
@@ -2529,30 +2475,6 @@ def scatterv_impl_jit(
             )
 
         return impl_interval_arr
-
-    # DatetimeTimeDeltaArrayType
-    if data == datetime_timedelta_array_type:
-
-        def impl_timedelta_arr(
-            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
-        ):  # pragma: no cover
-            days = bodo.libs.distributed_api.scatterv_impl(
-                data._days_data, send_counts, warn_if_dist, root, comm
-            )
-            seconds = bodo.libs.distributed_api.scatterv_impl(
-                data._seconds_data, send_counts, warn_if_dist, root, comm
-            )
-            microseconds = bodo.libs.distributed_api.scatterv_impl(
-                data._microseconds_data, send_counts, warn_if_dist, root, comm
-            )
-            out_null_bitmap = _scatterv_null_bitmap(
-                data._null_bitmap, send_counts, len(data), root, comm
-            )
-            return bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
-                days, seconds, microseconds, out_null_bitmap
-            )
-
-        return impl_timedelta_arr
 
     # NullArray
     if data == bodo.null_array_type:

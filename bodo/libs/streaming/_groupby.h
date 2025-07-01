@@ -1045,6 +1045,9 @@ class GroupbyState {
     bool parallel;
     const int64_t output_batch_size;
 
+    // drop_na flag in DataFrame library
+    const bool pandas_drop_na;
+
     std::vector<std::shared_ptr<BasicColSet>> col_sets;
 
     // Shuffle state
@@ -1055,10 +1058,10 @@ class GroupbyState {
     // f_in_cols is a list of physical column indices.
     // For example:
     //
-    // f_in_offsets = (0, 1, 5)
+    // f_in_offsets = (0, 1, 6)
     // f_in_cols = (0, 7, 1, 3, 4, 0)
     // The first function uses the columns in f_in_cols[0:1]. IE physical index
-    // 0 in the input table. The second function uses the column f_in_cols[1:5].
+    // 0 in the input table. The second function uses the column f_in_cols[1:6].
     // IE physical index 7, 1, 3, 4, 0 in the input table.
     const std::vector<int32_t> f_in_offsets;
     const std::vector<int32_t> f_in_cols;
@@ -1162,7 +1165,8 @@ class GroupbyState {
         bool parallel_, int64_t sync_iter_, int64_t op_id_,
         int64_t op_pool_size_bytes_, bool allow_any_work_stealing = true,
         std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
-            key_dict_builders_ = std::nullopt);
+            key_dict_builders_ = std::nullopt,
+        bool use_sql_rules = true, bool pandas_drop_na_ = false);
 
     ~GroupbyState() { MPI_Comm_free(&this->shuffle_comm); }
 
@@ -1612,3 +1616,38 @@ class GroupingSetsState {
     // Dictionary builders that are shared between all group by states.
     std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
 };
+
+/**
+ * @brief Logic to consume a build table batch. This is called
+ * directly by groupby_build_consume_batch_py_entry to avoid
+ * complex exception handling with grouping sets.
+ *
+ * @param groupby_state groupby state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch (in this pipeline) locally
+ * @param is_final_pipeline Is this the final pipeline. Only relevant for the
+ * Union-Distinct case where this is called in multiple pipelines. For regular
+ * groupby, this should always be true. We only call FinalizeBuild in the last
+ * pipeline.
+ * @param[out] request_input whether to request input rows from preceding
+ * operators.
+ * @return updated global is_last with possibility of false negatives due to
+ * iterations between syncs
+ */
+bool groupby_build_consume_batch(GroupbyState* groupby_state,
+                                 std::shared_ptr<table_info> input_table,
+                                 bool is_last, const bool is_final_pipeline,
+                                 bool* request_input);
+
+/**
+ * @brief Function to produce an output table called directly from
+ * Python. This handles all the functionality separately for exception
+ * handling with grouping sets.
+ *
+ * @param groupby_state groupby state pointer
+ * @param[out] out_is_last is last batch
+ * @param produce_output whether to produce output
+ * @return table_info* output table batch
+ */
+std::shared_ptr<table_info> groupby_produce_output_batch_wrapper(
+    GroupbyState* groupby_state, bool* out_is_last, bool produce_output);

@@ -40,7 +40,7 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import (
     _no_input,
-    datetime_timedelta_array_type,
+    timedelta_array_type,
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import (
@@ -3627,7 +3627,7 @@ def common_validate_merge_merge_asof_spec(
         dict_str_arr_type,
         binary_array_type,
         datetime_date_array_type,
-        datetime_timedelta_array_type,
+        timedelta_array_type,
         boolean_array_type,
         timestamptz_array_type,
     }

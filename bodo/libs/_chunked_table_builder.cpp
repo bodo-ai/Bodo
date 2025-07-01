@@ -1421,6 +1421,11 @@ void AbstractChunkedTableBuilder::AppendJoinOutput(
                                         bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::DATETIME);
                         break;
+                    case Bodo_CTypes::TIMEDELTA:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
+                                        Bodo_CTypes::TIMEDELTA);
+                        break;
                     case Bodo_CTypes::TIME:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
                                         bodo_array_type::NULLABLE_INT_BOOL,

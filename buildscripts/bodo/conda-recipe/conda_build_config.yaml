@@ -30,6 +30,3 @@ c_compiler:    # [win]
   - vs2022     # [win]
 cxx_compiler:  # [win]
   - vs2022     # [win]
-
-numpy:
-  - 1.23

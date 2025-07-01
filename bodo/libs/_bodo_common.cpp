@@ -138,7 +138,8 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
             return Bodo_CTypes::TIME;
         case arrow::Type::BOOL:
             return Bodo_CTypes::_BOOL;
-        // TODO Timedelta
+        case arrow::Type::DURATION:
+            return Bodo_CTypes::TIMEDELTA;
         default: {
             // TODO: Construct the type from the id
             throw std::runtime_error("arrow_to_bodo_type");
@@ -451,8 +452,9 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
         case Bodo_CTypes::DATE:
             dtype = arrow::date32();
             break;
+        // TODO: check precision
         case Bodo_CTypes::TIME:
-            dtype = arrow::time64(arrow::TimeUnit::SECOND);
+            dtype = arrow::time64(arrow::TimeUnit::NANO);
             break;
         // TODO: Is there a way to get timezone?
         case Bodo_CTypes::DATETIME:
@@ -662,16 +664,18 @@ std::unique_ptr<Schema> Schema::Project(size_t first_n) const {
                                     this->metadata);
 }
 
+template <typename T>
+    requires(std::integral<T> && !std::same_as<T, bool>)
 std::unique_ptr<Schema> Schema::Project(
-    const std::span<const int64_t> column_indices) const {
+    const std::vector<T>& column_indices) const {
     std::vector<std::unique_ptr<DataType>> dtypes;
     std::vector<std::string> col_names;
     dtypes.reserve(column_indices.size());
     if (this->column_names.size() > 0) {
         col_names.reserve(column_indices.size());
     }
-    for (int64_t col_idx : column_indices) {
-        assert((size_t)col_idx < this->column_types.size());
+    for (T col_idx : column_indices) {
+        assert(static_cast<size_t>(col_idx) < this->column_types.size());
         dtypes.push_back(this->column_types[col_idx]->copy());
         if (this->column_names.size() > 0) {
             col_names.push_back(this->column_names[col_idx]);
@@ -680,6 +684,14 @@ std::unique_ptr<Schema> Schema::Project(
     return std::make_unique<Schema>(std::move(dtypes), std::move(col_names),
                                     this->metadata);
 }
+
+// Explicit template instantiations
+template std::unique_ptr<Schema> Schema::Project<int>(
+    const std::vector<int>& column_indices) const;
+template std::unique_ptr<Schema> Schema::Project<int64_t>(
+    const std::vector<int64_t>& column_indices) const;
+template std::unique_ptr<Schema> Schema::Project<uint64_t>(
+    const std::vector<uint64_t>& column_indices) const;
 
 std::shared_ptr<arrow::Schema> Schema::ToArrowSchema() const {
     if (this->column_names.size() == 0 && this->ncols() != 0) {

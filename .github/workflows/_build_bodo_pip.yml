@@ -48,7 +48,7 @@ jobs:
       # some of the envs is enough
       - name: Install Pixi for Compiler
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
-        uses: prefix-dev/setup-pixi@v0.8.1
+        uses: prefix-dev/setup-pixi@v0.8.8
         with:
           pixi-version: v0.40.2
           cache: true
@@ -98,7 +98,7 @@ jobs:
             rm -f {package}/mpich.whl
             # Install mpich for mpi.h needed by mpi4py
             MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
-            pip install mpich=="$MPICH_VERSION" -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100
+            pip install mpich=="$MPICH_VERSION" --default-timeout=100
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
@@ -154,7 +154,7 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
             sccache --show-stats && 
             auditwheel -v repair
-            --exclude libmpi.so.12 --exclude libmpi.so.40 
+            --exclude libmpi.so.12 --exclude libmpi.so.40
             --exclude libarrow.so.1900 --exclude libarrow_acero.so.1900 --exclude libarrow_dataset.so.1900
             --exclude libarrow_python.so.1900 --exclude libparquet.so.1900
             --exclude libaws-cpp-sdk-core.so --exclude libaws-crt-cpp.so --exclude libaws-c-mqtt.so.1.0.0

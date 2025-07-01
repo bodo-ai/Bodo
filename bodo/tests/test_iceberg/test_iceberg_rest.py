@@ -130,3 +130,30 @@ def test_iceberg_polaris_write_basic(
             assert not write_complete, (
                 f"Cleanup failed, {table_name} may need manual cleanup"
             )
+
+
+def test_get_table_len(polaris_connection, memory_leak_check):
+    """
+    Test getting the length of an Iceberg table in a Polaris REST catalog.
+    """
+    rest_uri, polaris_warehouse, polaris_credential = polaris_connection
+    con_str = get_rest_catalog_connection_string(
+        rest_uri, polaris_warehouse, polaris_credential
+    )
+    df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+    namespace = "CI"
+    table_name = "get_table_len_test"
+    table_id = f"{namespace}.{table_name}"
+    try:
+        py_catalog: Catalog = conn_str_to_catalog(con_str)
+        run_rank0(
+            lambda: py_catalog.create_table(table_id, pa.Schema.from_pandas(df)).append(
+                pa.Table.from_pandas(df)
+            )
+        )()
+
+        assert bodo.io.iceberg.read_metadata.get_table_length(
+            py_catalog.load_table(table_id)
+        ) == len(df)
+    finally:
+        run_rank0(lambda: py_catalog.purge_table(table_id))()

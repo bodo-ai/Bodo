@@ -38,6 +38,8 @@ from numba.np.arrayobj import get_itemsize, make_array, populate_array
 from numba.np.numpy_support import as_dtype
 
 import bodo
+import bodo.hiframes
+import bodo.hiframes.datetime_timedelta_ext
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.timestamptz_ext import timestamptz_array_type, timestamptz_type
 from bodo.libs.binary_arr_ext import bytes_type
@@ -119,8 +121,7 @@ _numba_to_c_type_map = {
     types.uint16: CTypeEnum.UInt16.value,
     int128_type: CTypeEnum.Int128.value,
     bodo.hiframes.datetime_date_ext.datetime_date_type: CTypeEnum.Date.value,
-    # TODO: Timedelta arrays need to be supported
-    # bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type: CTypeEnum.Timedelta.value,
+    bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type: CTypeEnum.Timedelta.value,
     types.unicode_type: CTypeEnum.STRING.value,
     bodo.libs.binary_arr_ext.bytes_type: CTypeEnum.BINARY.value,
     # Null arrays are passed as nullable bool arrays to C++ currently.
@@ -183,7 +184,7 @@ alloc_calls = {
     ("alloc_int_array", "bodo.libs.int_arr_ext"),
     ("alloc_float_array", "bodo.libs.float_arr_ext"),
     ("alloc_datetime_date_array", "bodo.hiframes.datetime_date_ext"),
-    ("alloc_datetime_timedelta_array", "bodo.hiframes.datetime_timedelta_ext"),
+    ("alloc_timedelta_array", "bodo.hiframes.datetime_timedelta_ext"),
     ("alloc_decimal_array", "bodo.libs.decimal_arr_ext"),
     ("alloc_categorical_array", "bodo.hiframes.pd_categorical_ext"),
     ("gen_na_array", "bodo.libs.array_kernels"),
@@ -233,6 +234,8 @@ def numba_to_c_type(t) -> int:  # pragma: no cover
         return CTypeEnum.Decimal.value
     elif isinstance(t, PandasDatetimeTZDtype):
         return CTypeEnum.Datetime.value
+    elif t == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
+        return CTypeEnum.Timedelta.value
     elif isinstance(t, PandasTimestampType):
         return CTypeEnum.Int64.value
     elif isinstance(t, bodo.hiframes.time_ext.TimeType):
@@ -672,12 +675,10 @@ def empty_like_type_overload(n, arr):
 
         return empty_like_type_time_arr
 
-    if arr == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type:
+    if arr == bodo.hiframes.datetime_timedelta_ext.timedelta_array_type:
 
         def empty_like_type_datetime_timedelta_arr(n, arr):  # pragma: no cover
-            return bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
-                n
-            )
+            return bodo.hiframes.datetime_timedelta_ext.alloc_timedelta_array(n)
 
         return empty_like_type_datetime_timedelta_arr
     if isinstance(arr, bodo.libs.decimal_arr_ext.DecimalArrayType):
@@ -1043,12 +1044,12 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             dict_ref_arr=None: bodo.hiframes.time_ext.alloc_time_array(n, precision)
         )  # pragma: no cover
 
-    if typ.dtype == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
+    if typ.dtype == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
         return (
             lambda n,
             t,
             s=None,
-            dict_ref_arr=None: bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
+            dict_ref_arr=None: bodo.hiframes.datetime_timedelta_ext.alloc_timedelta_array(
                 n
             )
         )  # pragma: no cover
@@ -1926,6 +1927,26 @@ def bodo_exec(func_text, glbls, loc_vars, mod_name):
         pattern, lambda m: m.group(1) + func_name + m.group(3), func_text, count=1
     )
     return bodo_exec_internal(func_name, func_text, glbls, loc_vars, mod_name)
+
+
+def bodo_spawn_exec(func_text, glbls, loc_vars, mod_name):
+    """
+    Creates a new function from the given func_text on the main worker by
+    sending it to all the other workers and creating it locally as well.
+    See bodo_exec above for a description of the arguments.
+    """
+    import bodo.spawn.spawner
+
+    if bodo.spawn_mode:
+        # In the spawn mode case we need to bodo_exec on the workers as well
+        # so the code object is available to the caching infra.
+        def f(func_text, glbls, loc_vars, mod_name):
+            bodo.utils.utils.bodo_exec(func_text, glbls, loc_vars, mod_name)
+
+        bodo.spawn.spawner.submit_func_to_workers(
+            f, [], func_text, glbls, loc_vars, mod_name
+        )
+    return bodo_exec(func_text, glbls, loc_vars, mod_name)
 
 
 def cached_call_internal(context, builder, impl, sig, args):

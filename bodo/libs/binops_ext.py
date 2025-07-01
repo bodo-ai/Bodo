@@ -21,8 +21,8 @@ from bodo.hiframes.datetime_date_ext import (
 )
 from bodo.hiframes.datetime_timedelta_ext import (
     datetime_datetime_type,
-    datetime_timedelta_array_type,
     pd_timedelta_type,
+    timedelta_array_type,
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import (
@@ -510,7 +510,7 @@ def create_overload_cmp_operator(op):
             )
 
         # datetime.timedelta array
-        if lhs == datetime_timedelta_array_type or rhs == datetime_timedelta_array_type:
+        if lhs == timedelta_array_type or rhs == timedelta_array_type:
             impl = bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload(op)
             return impl(lhs, rhs)
 
@@ -719,7 +719,7 @@ def sub_datetime_and_timedeltas(lhs, rhs):
     td_cond = (is_timedelta_type(lhs) or lhs == datetime_datetime_type) and (
         is_timedelta_type(rhs)
     )
-    array_cond = lhs == datetime_timedelta_array_type and rhs == datetime_timedelta_type
+    array_cond = lhs == timedelta_array_type and rhs == datetime_timedelta_type
 
     return td_cond or array_cond
 

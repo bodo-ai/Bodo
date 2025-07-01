@@ -6,11 +6,11 @@ conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
-default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "312" }
-azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "312" }
+default =      { features = ["rcpp", "dev", "local-mpi"],          solve-group = "313" }
+azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group = "313" }
 # Platform
-platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "312-platform" }
-platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "312-platform" }
+platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
+platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
 # Pip C++ Deps
 pip-cpp-macos-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip" }
 
@@ -65,25 +65,25 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 macos = "12.0"
 
 [dependencies]
-python = "3.12.*"
+python = "3.13.*"
 pip = "*"
 # Core Python Deps
 numba = "==0.61.2"
 numpy = ">=1.24"
-pandas = ">=2.2,<2.3"
+pandas = ">=2.2"
 pyarrow = { version = "==19.0.0", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
-cloudpickle = ">=3.0,<4.0"
+cloudpickle = ">=3.0"
 psutil = "*"
 # Core Java Deps
-openjdk = "=11"
-py4j = "==0.10.9.7"
+openjdk = "=17"
+py4j = "==0.10.9.9"
 # HDFS
 h5py = "*"
 # Data Science
 scipy = "*"
-scikit-learn = "1.4.*"
+scikit-learn = ">=1.4"
 matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
@@ -92,7 +92,7 @@ botocore = "*"
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
-pyiceberg = ">=0.9,<0.10"
+pyiceberg = ">=0.9"
 mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
 zstandard = "*"
@@ -130,10 +130,10 @@ hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_impi_*" }
 # Build Python
 setuptools = ">=64"
 setuptools_scm = ">=8"
-cython = ">=3.0,<3.1"
+cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py
-mpi4py = "~=4.0"
+mpi4py = ">=4.0,<4.1"
 
 # Build C++ Deps
 cmake = "*"
@@ -148,11 +148,8 @@ sqlglot = "*"
 # Once 1.2.2 is released, we can remove this, test_non_numeric_window_functions fails on 1.2.1
 duckdb = "!=1.2.1"
 
-# Note: PySpark 3.5 is necessary for Python 3.12
-pyspark = "3.5.*"
-# Platform conda package needs numpy >2.0 which is not compatible with our matplotlib
-# requirement, removing from the platform for now.
-matplotlib = "<=3.8.2"
+pyspark = "4.*"
+matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
@@ -184,7 +181,7 @@ pyyaml = "*"
 # Developer Tools
 ruff = "*"
 pre-commit = "*"
-ipython = "==8.16.1"
+ipython = "*"
 
 # For deltalake testing
 # As of 2023-10-06, deltalake requires pyarrow <=12.0.0
@@ -209,14 +206,14 @@ gcc_linux-aarch64 = ">=9"
 gxx_linux-aarch64 = ">=9"
 
 [feature.dev.target.osx-64.dependencies]
-clang_osx-64 = "=19"
-clangxx_osx-64 = "=19"
-clang-tools = "=19"
+clang_osx-64 = ">=19"
+clangxx_osx-64 = ">=19"
+clang-tools = ">=19"
 
 [feature.dev.target.osx-arm64.dependencies]
-clang_osx-arm64 = "=19"
-clangxx_osx-arm64 = "=19"
-clang-tools = "=19"
+clang_osx-arm64 = ">=19"
+clangxx_osx-arm64 = ">=19"
+clang-tools = ">=19"
 
 [feature.platform]
 platforms = ["linux-64"]
@@ -252,12 +249,12 @@ dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = 
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
-clang_osx-64 = "=19"
-clangxx_osx-64 = "=19"
+clang_osx-64 = ">=19"
+clangxx_osx-64 = ">=19"
 
 [feature.pip.target.osx-arm64.dependencies]
-clang_osx-arm64 = "=19"
-clangxx_osx-arm64 = "=19"
+clang_osx-arm64 = ">=19"
+clangxx_osx-arm64 = ">=19"
 
 # Azure CI
 [feature.azure.dependencies]

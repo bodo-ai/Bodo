@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <utility>
+#include "../../libs/streaming/_join.h"
 #include "../libs/_array_utils.h"
 #include "../libs/_distributed.h"
 #include "../libs/_table_builder.h"
@@ -64,8 +65,11 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
             auto next_batch = collected_rows->builder->PopChunk();
             uint64_t select_local =
                 std::min(local_remaining, (uint64_t)std::get<1>(next_batch));
+            auto unified_table = unify_dictionary_arrays_helper(
+                std::get<0>(next_batch), reduced_collected_rows->dict_builders,
+                0);
             reduced_collected_rows->builder->AppendBatch(
-                std::get<0>(next_batch), get_n_rows(select_local));
+                unified_table, get_n_rows(select_local));
             reduced_collected_rows->builder->FinalizeActiveChunk();
             local_remaining -= select_local;
         }
@@ -102,14 +106,18 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         if (!collected_rows) {
             collected_rows = std::make_unique<ChunkedTableBuilderState>(
-                input_batch->schema(), input_batch->nrows());
+                input_batch->schema(), get_streaming_batch_size());
         }
         // Every rank will collect n rows.  We remove extras in Finalize.
         uint64_t select_local = std::min(local_remaining, input_batch->nrows());
-        collected_rows->builder->AppendBatch(input_batch,
-                                             get_n_rows(select_local));
-        collected_rows->builder->FinalizeActiveChunk();
-        local_remaining -= select_local;
+        if (select_local > 0) {
+            auto unified_table = unify_dictionary_arrays_helper(
+                input_batch, collected_rows->dict_builders, 0);
+            collected_rows->builder->AppendBatch(unified_table,
+                                                 get_n_rows(select_local));
+            collected_rows->builder->FinalizeActiveChunk();
+            local_remaining -= select_local;
+        }
         return (local_remaining == 0 ||
                 prev_op_result == OperatorResult::FINISHED)
                    ? OperatorResult::FINISHED
@@ -119,7 +127,7 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
-    std::shared_ptr<table_info> GetResult() override {
+    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         // Limit should be between pipelines and act alternatively as a sink
         // then source but there should never be the need to ask for the result
         // all in one go.
@@ -133,7 +141,7 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
-        auto next_batch = collected_rows->builder->PopChunk();
+        auto next_batch = collected_rows->builder->PopChunk(true);
         return {std::get<0>(next_batch),
                 collected_rows->builder->empty()
                     ? OperatorResult::FINISHED

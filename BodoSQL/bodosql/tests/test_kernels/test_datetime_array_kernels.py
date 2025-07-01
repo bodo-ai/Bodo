@@ -3880,7 +3880,7 @@ def test_create_timestamp_optional(memory_leak_check):
             id="date-vector",
         ),
         pytest.param(
-            datetime.date(2017, 6, 15), "%M %d %Y", "June 15 2017", id="date-scalar"
+            datetime.date(2017, 6, 15), "%m %d %Y", "06 15 2017", id="date-scalar"
         ),
         pytest.param(
             pd.Series(
@@ -3899,8 +3899,8 @@ def test_create_timestamp_optional(memory_leak_check):
         ),
         pytest.param(
             pd.Timestamp("2022-11-6 12:40:45"),
-            "%M %d %Y %H:%i:%S",
-            "Nov 06 2022 12:40:45",
+            "%m %d %Y %H:%M:%S",
+            "11 06 2022 12:40:45",
             id="timestamp-scalar",
         ),
     ],
@@ -3914,7 +3914,7 @@ def test_date_format(expr, format_str, answer, memory_leak_check):
         return pd.Series(bodosql.kernels.date_format(expr, format_str))
 
     if isinstance(expr, (datetime.date, pd.Timestamp)):
-        return lambda expr, format: bodosql.kernels.date_format(expr, format_str)
+        impl = lambda expr, format: bodosql.kernels.date_format(expr, format_str)
 
     check_func(
         impl,
