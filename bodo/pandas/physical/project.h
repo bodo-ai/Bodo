@@ -21,7 +21,7 @@ class PhysicalProjection : public PhysicalSourceSink {
    public:
     explicit PhysicalProjection(
         std::vector<duckdb::ColumnBinding>& source_cols,
-        duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> &exprs,
+        duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
         std::shared_ptr<bodo::Schema> input_schema) {
         // Map of column bindings to column indices in physical input table
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
