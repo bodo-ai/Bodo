@@ -780,14 +780,9 @@ class Spawner:
         | LazySingleArrayManager
     ):
         """Scatter data to all workers and return the result ID"""
-        import bodo.spawn.spawner
-        from bodo.mpi4py import MPI
-        from bodo.spawn.spawner import CommandType
-
-        bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-        self.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
+        self.worker_intercomm.bcast(CommandType.SCATTER.value, self.bcast_root)
         bodo.libs.distributed_api.scatterv(
-            data, root=bcast_root, comm=self.worker_intercomm
+            data, root=self.bcast_root, comm=self.worker_intercomm
         )
         res_id = self.worker_intercomm.recv(None, source=0)
         if isinstance(data, pd.DataFrame):
