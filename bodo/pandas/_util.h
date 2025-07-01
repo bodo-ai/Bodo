@@ -120,8 +120,8 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     BodoPythonScalarFunctionData &operator=(
         const BodoPythonScalarFunctionData &other) {
         if (this != &other) {
-            Py_INCREF(other.args);
-            Py_DECREF(args);
+            Py_XINCREF(other.args);
+            Py_XDECREF(args);
             args = other.args;
             out_schema = other.out_schema;
         }
