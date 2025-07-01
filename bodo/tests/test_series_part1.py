@@ -2859,7 +2859,6 @@ def test_series_map_args(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.df_lib
 def test_series_map_na_action_kws(memory_leak_check):
     """Test Series.map with na_action and kw arguments"""
 
