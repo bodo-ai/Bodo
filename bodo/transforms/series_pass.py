@@ -3501,16 +3501,15 @@ class SeriesPass:
         if func_name in ("map", "apply"):
             nodes = []
             kws = dict(rhs.kws)
-            extra_args = []
             if func_name == "apply":
                 func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
-                extra_args = get_call_expr_arg("apply", rhs.args, kws, 2, "args", [])
-                if extra_args:
-                    extra_args = get_build_sequence_vars(
-                        self.func_ir, self.typemap, self.calltypes, extra_args, nodes
-                    )
             else:
                 func_var = get_call_expr_arg("map", rhs.args, kws, 0, "arg")
+            extra_args = get_call_expr_arg(func_name, rhs.args, kws, 2, "args", [])
+            if extra_args:
+                extra_args = get_build_sequence_vars(
+                    self.func_ir, self.typemap, self.calltypes, extra_args, nodes
+                )
             na_action = None
             if func_name == "map":
                 kws.pop("arg", None)

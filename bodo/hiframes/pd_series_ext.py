@@ -790,10 +790,12 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
             if is_overload_constant_str(na_action)
             else None
         )
+        # NOTE: pandas doesn't support args but we support it to make UDF engine simpler
+        f_args = args[2] if len(args) > 2 else kws.pop("args", None)
 
         # add dummy default value for UDF kws to avoid errors
         kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
-        func_text = f"def map_stub(arg, na_action=None, {kw_names}):\n"
+        func_text = f"def map_stub(arg, na_action=None, args=(), {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -801,9 +803,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
 
         pysig = numba.core.utils.pysignature(map_stub)
 
-        return self._resolve_map_func(
-            ary, func, pysig, "map", na_action=na_action, kws=kws
-        )
+        return self._resolve_map_func(ary, func, pysig, "map", f_args, kws, na_action)
 
     @bound_function("series.apply", no_unliteral=True)
     def resolve_apply(self, ary, args, kws):
