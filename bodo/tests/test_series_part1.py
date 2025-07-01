@@ -2826,7 +2826,6 @@ def test_series_apply_args(memory_leak_check):
 @pytest.mark.df_lib
 def test_series_map_supported_types(series_val):
     """Test Series.map with all Bodo supported Types"""
-    bodo.set_verbose_level(2)
 
     def test_impl(S):
         return S.map(lambda a: a)  # if not pd.isna(a) else None)
