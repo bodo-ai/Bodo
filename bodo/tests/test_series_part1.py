@@ -2860,14 +2860,15 @@ def test_series_map_args(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.df_lib
-def test_series_map_na_action(memory_leak_check):
+def test_series_map_na_action_kws(memory_leak_check):
     """Test Series.map with na_action argument"""
 
     def test_impl(S):
-        return S.map(lambda a: 2 * a, na_action="ignore")
+        return S.map(lambda a, b: 2 * a + b, na_action="ignore", b=4)
 
     S = pd.Series([2, 1, 3, None, 4, 5], dtype="Int64")
-    check_func(test_impl, (S,), check_dtype=False)
+    py_out = pd.Series([8, 6, 10, None, 12, 14], dtype="Int64")
+    check_func(test_impl, (S,), py_output=py_out, check_dtype=False)
 
 
 # TODO: add memory_leak_check after fix its failure with Categorical
