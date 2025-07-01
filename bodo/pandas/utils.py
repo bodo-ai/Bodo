@@ -619,7 +619,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
     # Arrow dtypes can be very slow for UDFs in Pandas:
     # https://github.com/pandas-dev/pandas/issues/61747
     # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
-    use_arrow_dtypes = not (is_attr and func in ("apply", "str"))
+    use_arrow_dtypes = not (is_attr and func in ("apply", "map"))
     input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
 
     if is_series:
