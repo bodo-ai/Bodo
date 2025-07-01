@@ -673,6 +673,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def count(self):
         return _compute_series_reduce(self, "count")
 
+    @property
+    def ndim(self) -> int:
+        return super().ndim
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
