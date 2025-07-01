@@ -802,12 +802,15 @@ class Spawner:
         elif isinstance(data, pd.Series):
             return get_lazy_single_manager_class()(
                 None,
-                data.axis,
+                None,
                 result_id=res_id,
                 nrows=len(data),
                 head=data._mgr,
                 collect_func=self.lazy_manager_collect_func,
                 del_func=self.lazy_manager_del_func,
+                index_data=data.index.to_frame()
+                if isinstance(data.index, pd.MultiIndex)
+                else data.index,
                 plan=None,
             )
         else:

@@ -106,7 +106,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                         # so we need to re-distribute the results.
                         nrows = len(self)
                         mgr = bodo.spawn.spawner.get_spawner().scatter_data(self)
-                        res_id = self._mgr._md_result_id
+                        res_id = mgr._md_result_id
                     self._source_plan = LazyPlan(
                         "LogicalGetPandasReadParallel",
                         empty_data,
