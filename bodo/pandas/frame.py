@@ -30,6 +30,8 @@ if pt.TYPE_CHECKING:
     from pyiceberg.table.sorting import SortOrder
 
 
+from pandas.core.indexing import _LocIndexer
+
 import bodo
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazyArrayManager
@@ -60,17 +62,18 @@ from bodo.utils.typing import (
 )
 
 
-from pandas.core.indexing import _LocIndexer
-
 class BodoDataFrameLocIndexer(_LocIndexer):
-    def __init__(self, df):
-        self.df = df
+    def __init__(self, name, obj):
+        self.df = obj
+        super().__init__(name, obj)
 
     def __getitem__(self, key):
         if isinstance(key, tuple) and len(key) == 2:
             row_sel, col_sel = key
             if row_sel == slice(None, None, None):
                 return self.df.__getitem__(col_sel)
+            else:
+                return super(self.df).loc.__getitem__(key)
 
         # Delegate to original behavior
         return super(self.df).loc.__getitem__(key)
@@ -103,7 +106,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @property
     def loc(self):
-        return BodoDataFrameLocIndexer(self)
+        return BodoDataFrameLocIndexer("loc", self)
 
     def __setattr__(self, name, value):
         # Intercept direct setting of columns attribute
@@ -940,9 +943,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if isinstance(columns, str):
             columns = [columns]
         if not isinstance(columns, list):
-            raise BodoError(
-                "drop columns must be string or list of string"
-            )
+            raise BodoError("drop columns must be string or list of string")
         cur_col_names = self.columns.tolist()
         columns_to_use = [x for x in cur_col_names if x not in columns]
         if len(columns_to_use) != len(cur_col_names) - len(columns):
