@@ -3,10 +3,8 @@
 1) Create file `terraform.tfvars` in the following format:
 
 ```
-github_app = {
-  app_id     = "12345"
-  key_base64 = "base64-encoded-private-key"
-}
+github_app_id     = "12345"
+github_key_base64 = "base64-encoded-private-key"
 ```
 
 Fill in the actual values. See `variables.tf` for more details.
