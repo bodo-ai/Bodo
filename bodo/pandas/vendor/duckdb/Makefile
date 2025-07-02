@@ -1,4 +1,4 @@
-te.PHONY: all opt unit clean debug release test unittest allunit benchmark docs doxygen format sqlite
+PHONY: all opt unit clean debug release test unittest allunit benchmark docs doxygen format sqlite
 
 all: release
 opt: release
