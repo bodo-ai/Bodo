@@ -30,7 +30,10 @@ from bodo.pandas import (
     LazyArrowExtensionArray,
     LazyMetadata,
 )
+from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
+from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
@@ -385,33 +388,33 @@ class Spawner:
         self._run_del_queue()
         return res
 
+    def lazy_manager_collect_func(self, res_id: str):
+        root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
+        # collect is sometimes triggered during receive (e.g. for unsupported types
+        # like IntervalIndex) so we may be in the middle of function execution
+        # already.
+        initial_running = self._is_running
+        if not initial_running:
+            self._is_running = True
+        self.worker_intercomm.bcast(CommandType.GATHER.value, root=root)
+        self.worker_intercomm.bcast(res_id, root=root)
+        res = bodo.libs.distributed_api.gatherv(
+            None, root=root, comm=self.worker_intercomm
+        )
+        if not initial_running:
+            self._is_running = False
+            self._run_del_queue()
+        return res
+
+    def lazy_manager_del_func(self, res_id: str):
+        self._del_queue.append(res_id)
+        self._run_del_queue()
+
     def wrap_distributed_result(
         self,
         lazy_metadata: LazyMetadata | list | dict | tuple,
     ) -> BodoDataFrame | BodoSeries | LazyArrowExtensionArray | list | dict | tuple:
         """Wrap the distributed return of a function into a BodoDataFrame, BodoSeries, or LazyArrowExtensionArray."""
-        root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
-
-        def collect_func(res_id: str):
-            # collect is sometimes triggered during receive (e.g. for unsupported types
-            # like IntervalIndex) so we may be in the middle of function execution
-            # already.
-            initial_running = self._is_running
-            if not initial_running:
-                self._is_running = True
-            self.worker_intercomm.bcast(CommandType.GATHER.value, root=root)
-            self.worker_intercomm.bcast(res_id, root=root)
-            res = bodo.libs.distributed_api.gatherv(
-                None, root=root, comm=self.worker_intercomm
-            )
-            if not initial_running:
-                self._is_running = False
-                self._run_del_queue()
-            return res
-
-        def del_func(res_id: str):
-            self._del_queue.append(res_id)
-            self._run_del_queue()
 
         if isinstance(lazy_metadata, list):
             return [self.wrap_distributed_result(d) for d in lazy_metadata]
@@ -432,13 +435,21 @@ class Spawner:
 
         if isinstance(head, pd.DataFrame):
             return BodoDataFrame.from_lazy_metadata(
-                lazy_metadata, collect_func, del_func
+                lazy_metadata,
+                self.lazy_manager_collect_func,
+                self.lazy_manager_del_func,
             )
         elif isinstance(head, pd.Series):
-            return BodoSeries.from_lazy_metadata(lazy_metadata, collect_func, del_func)
+            return BodoSeries.from_lazy_metadata(
+                lazy_metadata,
+                self.lazy_manager_collect_func,
+                self.lazy_manager_del_func,
+            )
         elif isinstance(head, ArrowExtensionArray):
             return LazyArrowExtensionArray.from_lazy_metadata(
-                lazy_metadata, collect_func, del_func
+                lazy_metadata,
+                self.lazy_manager_collect_func,
+                self.lazy_manager_del_func,
             )
         else:
             raise Exception(f"Got unexpected distributed result type: {type(head)}")
@@ -759,6 +770,53 @@ class Spawner:
         self.worker_intercomm.bcast(CommandType.EXIT.value, root=self.bcast_root)
         self._is_running = False
         self.destroyed = True
+
+    def scatter_data(
+        self, data: pd.DataFrame | pd.Series
+    ) -> (
+        LazyBlockManager
+        | LazySingleBlockManager
+        | LazyArrayManager
+        | LazySingleArrayManager
+    ):
+        """Scatter data to all workers and return the manager for the data."""
+        self.worker_intercomm.bcast(CommandType.SCATTER.value, self.bcast_root)
+        bodo.libs.distributed_api.scatterv(
+            data, root=self.bcast_root, comm=self.worker_intercomm
+        )
+        res_id = self.worker_intercomm.recv(None, source=0)
+        if isinstance(data, pd.DataFrame):
+            return get_lazy_manager_class()(
+                None,
+                None,
+                result_id=res_id,
+                nrows=len(data),
+                head=data._mgr,
+                collect_func=self.lazy_manager_collect_func,
+                del_func=self.lazy_manager_del_func,
+                index_data=data.index.to_frame()
+                if isinstance(data.index, pd.MultiIndex)
+                else data.index,
+                plan=None,
+            )
+        elif isinstance(data, pd.Series):
+            return get_lazy_single_manager_class()(
+                None,
+                None,
+                result_id=res_id,
+                nrows=len(data),
+                head=data._mgr,
+                collect_func=self.lazy_manager_collect_func,
+                del_func=self.lazy_manager_del_func,
+                index_data=data.index.to_frame()
+                if isinstance(data.index, pd.MultiIndex)
+                else data.index,
+                plan=None,
+            )
+        else:
+            raise TypeError(
+                f"Unsupported type for scatter_data: {type(data)}. Expected DataFrame or Series."
+            )
 
 
 spawner: Spawner | None = None
