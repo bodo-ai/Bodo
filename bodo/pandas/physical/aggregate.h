@@ -136,6 +136,54 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value());
     }
 
+    explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
+                               duckdb::LogicalDistinct& op) {
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+            getColRefMap(op.children[0]->GetColumnBindings());
+
+        this->initKeys(col_ref_map, op.distinct_targets);
+
+        uint64_t ncols = in_table_schema->ncols();
+        initInputColumnMapping(this->input_col_inds, this->keys, ncols);
+
+        std::shared_ptr<bodo::Schema> in_table_schema_reordered =
+            in_table_schema->Project(this->input_col_inds);
+
+        std::vector<bool> cols_to_keep_vec(ncols, true);
+
+        // Add keys to output schema
+        this->output_schema = std::make_shared<bodo::Schema>();
+        for (size_t i = 0; i < this->keys.size(); i++) {
+            this->output_schema->append_column(
+                in_table_schema_reordered->column_types[i]->copy());
+            if (in_table_schema_reordered->column_names.size() > 0) {
+                this->output_schema->column_names.push_back(
+                    in_table_schema_reordered->column_names[i]);
+            } else {
+                this->output_schema->column_names.push_back("key_" +
+                                                            std::to_string(i));
+            }
+        }
+        this->output_schema->metadata = std::make_shared<TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+
+        std::vector<int32_t> ftypes;
+        // Create input data column indices (only single data column for now)
+        std::vector<int32_t> f_in_cols;
+
+        // Offsets for the input data columns, which are trivial since we have a
+        // single data column
+        std::vector<int32_t> f_in_offsets(f_in_cols.size() + 1);
+        std::iota(f_in_offsets.begin(), f_in_offsets.end(), 0);
+
+        this->groupby_state = std::make_unique<GroupbyState>(
+            std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
+            std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
+            std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
+            get_streaming_batch_size(), true, -1, -1, -1, false, std::nullopt,
+            /*use_sql_rules*/ false, /* pandas_drop_na_*/ true);
+    }
+
     virtual ~PhysicalAggregate() = default;
 
     void Finalize() override {}

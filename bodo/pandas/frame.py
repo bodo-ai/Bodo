@@ -1259,7 +1259,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     ) -> BodoDataFrame | None:
         from bodo.pandas.base import _empty_like
 
-        breakpoint()
         zero_size_self = _empty_like(self)
         exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
         return wrap_plan(

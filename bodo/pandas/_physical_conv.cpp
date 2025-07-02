@@ -260,3 +260,17 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
     finished_pipelines.emplace_back(this->active_pipeline->Build(physical_op));
     this->active_pipeline = nullptr;
 }
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalDistinct& op) {
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> in_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    // Regular groupby aggregation with groups and expressions.
+    auto physical_agg =
+        std::make_shared<PhysicalAggregate>(in_table_schema, op);
+    // Finish the current pipeline with groupby build sink
+    finished_pipelines.emplace_back(this->active_pipeline->Build(physical_agg));
+    // Create a new pipeline with groupby output as source
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_agg);
+}
