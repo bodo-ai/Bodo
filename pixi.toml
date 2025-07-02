@@ -115,7 +115,7 @@ libarrow = { version = "==19.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
-zstd = "<=1.5.6"
+zstd = "*"
 boost-cpp = "1.85.*"
 aws-sdk-cpp = "<=1.11.485"
 
@@ -136,7 +136,8 @@ scikit-build-core = "*"
 mpi4py = ">=4.0,<4.1"
 
 # Build C++ Deps
-cmake = "*"
+# Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
+cmake = "<4.0,>=3.23"
 ninja = "*"
 make = "*"
 ccache = "*"
