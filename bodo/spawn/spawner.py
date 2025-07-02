@@ -779,7 +779,7 @@ class Spawner:
         | LazyArrayManager
         | LazySingleArrayManager
     ):
-        """Scatter data to all workers and return the result ID"""
+        """Scatter data to all workers and return the manager for the data."""
         self.worker_intercomm.bcast(CommandType.SCATTER.value, self.bcast_root)
         bodo.libs.distributed_api.scatterv(
             data, root=self.bcast_root, comm=self.worker_intercomm
