@@ -115,7 +115,7 @@ libarrow = { version = "==19.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
-zstd = "<=1.5.7"
+zstd = "*"
 boost-cpp = "1.85.*"
 aws-sdk-cpp = "<=1.11.485"
 
@@ -207,14 +207,15 @@ gcc_linux-aarch64 = ">=9"
 gxx_linux-aarch64 = ">=9"
 
 [feature.dev.target.osx-64.dependencies]
-clang_osx-64 = ">=19"
-clangxx_osx-64 = ">=19"
-clang-tools = ">=19"
+# Adding clang =19 to prevent build errors from upgrading zstd
+clang_osx-64 = "=19"
+clangxx_osx-64 = "=19"
+clang-tools = "=19"
 
 [feature.dev.target.osx-arm64.dependencies]
-clang_osx-arm64 = ">=19"
-clangxx_osx-arm64 = ">=19"
-clang-tools = ">=19"
+clang_osx-arm64 = "=19"
+clangxx_osx-arm64 = "=19"
+clang-tools = "=19"
 
 [feature.platform]
 platforms = ["linux-64"]
