@@ -116,7 +116,7 @@ libarrow = { version = "==19.0.0", channel = "bodo.ai" }
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
 zstd = "*"
-boost-cpp = "1.85.*"
+boost-cpp = "*"
 aws-sdk-cpp = "<=1.11.485"
 
 [feature.rcpp.target.osx.dependencies]
