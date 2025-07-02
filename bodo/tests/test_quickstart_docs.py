@@ -14,11 +14,47 @@ from bodo.tests.utils import check_func, pytest_spawn_mode, temp_env_override
 from bodo.utils.testing import ensure_clean2
 from bodo.utils.typing import BodoError
 
-pytestmark = pytest_spawn_mode + [pytest.mark.test_docs]
+pytestmark = pytest_spawn_mode + [pytest.mark.test_docs] + [pytest.mark.df_lib]
 
 
-def test_quickstart_local_python():
-    """Runs example equivalent to code from top-level README.md
+def test_quickstart_local_python_df():
+    """Runs example equivalent to Bodo DF Library code from top-level README.md
+    and docs/quick_start/quickstart_local_python.md and ensures
+    that it is consistent with pandas.
+    """
+    # Generate sample data
+    NUM_GROUPS = 30
+    NUM_ROWS = 2_000
+    output_path = "my_data.pq"
+
+    df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
+    pandas_df = df.groupby("A", as_index=False)["B"].max()
+
+    with ensure_clean2(output_path):
+        pandas_df.to_parquet(output_path)
+        pandas_out = pd.read_parquet(output_path)
+
+    def bodo_groupby_write():
+        import bodo.pandas as pd
+
+        df = pd.DataFrame(
+            {"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)}
+        )
+        df2 = df.groupby("A", as_index=False)["B"].max()
+        df2.to_parquet(output_path)
+
+    with ensure_clean2(output_path):
+        bodo_groupby_write()
+        bodo_out = pd.read_parquet(output_path)
+
+    pandas_out = pandas_out.sort_values("A").reset_index(drop=True)
+    bodo_out = bodo_out.sort_values("A").reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(bodo_out, pandas_out, check_dtype=False)
+
+
+def test_quickstart_local_python_jit():
+    """Runs example equivalent to Bodo jit code from top-level README.md
     and docs/quick_start/quickstart_local_python.md and ensures
     that it is consistent with pandas.
     """
@@ -28,33 +64,42 @@ def test_quickstart_local_python():
 
     df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
 
-    input_df_path = "my_data.pq"
-    output_df_path = "out.pq"
+    output_df_path = "my_data.pq"
 
-    with ensure_clean2(input_df_path):
-        df.to_parquet(input_df_path)
+    def computation(df):
+        return df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)
 
-        def computation(input_df_path):
-            df = pd.read_parquet(input_df_path)
-            df2 = pd.DataFrame(
-                {"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)}
-            )
-            df2.to_parquet(output_df_path)
+    with ensure_clean2(output_df_path):
+        S = bodo.jit(cache=True, spawn=True)(computation)(df)
+        pd.DataFrame({"C": S}).to_parquet(output_df_path)
+        bodo_out = pd.read_parquet(output_df_path)
 
-        with ensure_clean2(output_df_path):
-            bodo.jit(cache=True, spawn=True)(computation)(input_df_path)
-            bodo_out = pd.read_parquet(output_df_path)
+    with ensure_clean2(output_df_path):
+        S = computation(df)
+        pd.DataFrame({"C": S}).to_parquet(output_df_path)
+        pandas_out = pd.read_parquet(output_df_path)
 
-        with ensure_clean2(output_df_path):
-            computation(input_df_path)
-            pandas_out = pd.read_parquet(output_df_path)
-
-        pd.testing.assert_frame_equal(bodo_out, pandas_out)
+    pd.testing.assert_frame_equal(bodo_out, pandas_out)
 
 
 @pytest.mark.iceberg
-def test_quickstart_local_iceberg():
-    """Test that the example in docs/quick_start/quickstart_local_iceberg.md"""
+def test_quickstart_local_iceberg_df():
+    """Test the Bodo DF Library example in docs/quick_start/quickstart_local_iceberg.md"""
+    import bodo.pandas as pd
+
+    NUM_GROUPS = 30
+    NUM_ROWS = 2_000
+
+    df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
+    df.to_iceberg("test_table", location="./iceberg_warehouse")
+
+    out_df = pd.read_iceberg("test_table", location="./iceberg_warehouse")
+    pd.testing.assert_frame_equal(out_df, df)
+
+
+@pytest.mark.iceberg
+def test_quickstart_local_iceberg_jit():
+    """Test the Bodo jit example in docs/quick_start/quickstart_local_iceberg.md"""
     NUM_GROUPS = 30
     NUM_ROWS = 2_000
 
