@@ -925,6 +925,33 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return DataFrameGroupBy(self, by, as_index, dropna)
 
+    @check_args_fallback(supported=["columns"])
+    def drop(
+        self,
+        labels: IndexLabel | None = None,
+        *,
+        axis: Axis = 0,
+        index: IndexLabel | None = None,
+        columns: IndexLabel | None = None,
+        level: Level | None = None,
+        inplace: bool = False,
+        errors: IgnoreRaise = "raise",
+    ) -> BodoDataFrame | None:
+        if isinstance(columns, str):
+            columns = [columns]
+        if not isinstance(columns, list):
+            raise BodoError(
+                "drop columns must be string or list of string"
+            )
+        cur_col_names = self.columns.tolist()
+        columns_to_use = [x for x in cur_col_names if x not in columns]
+        if len(columns_to_use) != len(cur_col_names) - len(columns):
+            not_found = [x for x in columns if x not in cur_col_names]
+            raise KeyError(
+                f"drop columns includes names {not_found} not present in dataframe"
+            )
+        return self.__getitem__(columns_to_use)
+
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
