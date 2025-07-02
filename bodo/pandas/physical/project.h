@@ -70,7 +70,7 @@ class PhysicalProjection : public PhysicalSourceSink {
                 }
             } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
                 this->output_schema->append_column(
-                    std::move(saved_output_schema->column_types[i]->copy()));
+                    saved_output_schema->column_types[i]->copy());
                 col_names.emplace_back(saved_output_schema->column_names[i]);
             } else if (expr->type == duckdb::ExpressionType::COMPARE_EQUAL ||
                        expr->type == duckdb::ExpressionType::COMPARE_NOTEQUAL ||
