@@ -15,8 +15,6 @@
 #include "physical/union_all.h"
 #include "physical/write_parquet.h"
 
-extern std::map<duckdb::idx_t, std::shared_ptr<bodo::Schema>> g_idx_schema;
-
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
     // operators
@@ -44,9 +42,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    auto saved_bodo_schema = g_idx_schema[op.table_index];
     auto physical_op = std::make_shared<PhysicalProjection>(
-        source_cols, op.expressions, in_table_schema, saved_bodo_schema);
+        source_cols, op.expressions, in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
 }
 

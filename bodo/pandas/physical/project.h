@@ -22,9 +22,7 @@ class PhysicalProjection : public PhysicalSourceSink {
     explicit PhysicalProjection(
         std::vector<duckdb::ColumnBinding>& source_cols,
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
-        std::shared_ptr<bodo::Schema> input_schema,
-        std::shared_ptr<bodo::Schema> saved_bodo_schema)
-        : saved_output_schema(saved_bodo_schema) {
+        std::shared_ptr<bodo::Schema> input_schema) {
         // Map of column bindings to column indices in physical input table
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(source_cols);
@@ -69,9 +67,15 @@ class PhysicalProjection : public PhysicalSourceSink {
                         expr->ToString());
                 }
             } else if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
-                this->output_schema->append_column(
-                    saved_output_schema->column_types[i]->copy());
-                col_names.emplace_back(saved_output_schema->column_names[i]);
+                auto& const_expr =
+                    expr->Cast<duckdb::BoundConstantExpression>();
+
+                std::unique_ptr<bodo::DataType> col_type =
+                    arrow_type_to_bodo_data_type(
+                        duckdbValueToArrowType(const_expr.value))
+                        ->copy();
+                this->output_schema->append_column(std::move(col_type));
+                col_names.emplace_back(const_expr.value.ToString());
             } else if (expr->type == duckdb::ExpressionType::COMPARE_EQUAL ||
                        expr->type == duckdb::ExpressionType::COMPARE_NOTEQUAL ||
                        expr->type == duckdb::ExpressionType::COMPARE_LESSTHAN ||
@@ -100,13 +104,6 @@ class PhysicalProjection : public PhysicalSourceSink {
         }
         this->output_schema->column_names = col_names;
         this->output_schema->metadata = input_schema->metadata;
-        /*
-        if (this->output_schema->ToString() !=
-        this->saved_output_schema->ToString()) { std::cout << "proj output " <<
-        this->output_schema->ToString() << std::endl; std::cout << "proj saved "
-        << this->saved_output_schema->ToString() << std::endl;
-        }
-        */
     }
 
     virtual ~PhysicalProjection() = default;
@@ -161,7 +158,6 @@ class PhysicalProjection : public PhysicalSourceSink {
 
    private:
     std::shared_ptr<bodo::Schema> output_schema;
-    std::shared_ptr<bodo::Schema> saved_output_schema;
     std::vector<std::string> col_names;
     std::vector<std::shared_ptr<PhysicalExpression>> physical_exprs;
 };
