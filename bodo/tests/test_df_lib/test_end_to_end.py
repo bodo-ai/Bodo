@@ -1763,8 +1763,12 @@ def test_isin(datapath):
 
 
 def test_drop(datapath):
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(columns=["A", "F"])
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(columns=["A", "F"])
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
+        columns=["A", "F"]
+    )
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
+        columns=["A", "F"]
+    )
 
     assert bodo_df1.is_lazy_plan()
 
@@ -1778,8 +1782,12 @@ def test_drop(datapath):
 
 
 def test_loc(datapath):
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[:, ["A", "F"]]
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[:, ["A", "F"]]
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
+        :, ["A", "F"]
+    ]
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
+        :, ["A", "F"]
+    ]
 
     assert bodo_df1.is_lazy_plan()
 
