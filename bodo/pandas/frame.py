@@ -1247,6 +1247,29 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ),
         )
 
+    @check_args_fallback("none")
+    def drop_duplicates(
+        self,
+        subset: Hashable | Sequence[Hashable] | None = None,
+        *,
+        keep: DropKeep = "first",
+        inplace: bool = False,
+        ignore_index: bool = False,
+    ) -> BodoDataFrame | None:
+        from bodo.pandas.base import _empty_like
+
+        breakpoint()
+        zero_size_self = _empty_like(self)
+        exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
+        return wrap_plan(
+            plan=LazyPlan(
+                "LogicalDistinct",
+                zero_size_self,
+                self._plan,
+                exprs,
+            ),
+        )
+
     @contextmanager
     def disable_collect(self):
         """Disable collect calls in internal manager to allow updating internal state.

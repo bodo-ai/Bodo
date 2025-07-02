@@ -265,6 +265,10 @@ cdef extern from "duckdb/planner/operator/logical_projection.hpp" namespace "duc
     cdef cppclass CLogicalProjection" duckdb::LogicalProjection"(CLogicalOperator):
         pass
 
+cdef extern from "duckdb/planner/operator/logical_distinct.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalDistinct" duckdb::LogicalDistinct"(CLogicalOperator):
+        pass
+
 cdef extern from "duckdb/planner/operator/logical_order.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalOrder" duckdb::LogicalOrder"(CLogicalOperator):
         pass
@@ -302,6 +306,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
+    cdef unique_ptr[CLogicalDistinct] make_distinct(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
@@ -431,6 +436,29 @@ cdef class LogicalProjection(LogicalOperator):
 
     def __str__(self):
         return f"LogicalProjection({self.out_schema})"
+
+    def getCardinality(self):
+        return self.sources[0].getCardinality()
+
+
+cdef class LogicalDistinct(LogicalOperator):
+    """Wrapper around DuckDB's LogicalDistinct to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, LogicalOperator source, object exprs):
+        cdef vector[unique_ptr[CExpression]] expr_vec
+
+        for expr in exprs:
+            expr_vec.push_back(move((<Expression>expr).c_expression))
+
+        self.out_schema = out_schema
+        self.sources = [source]
+
+        cdef unique_ptr[CLogicalDistinct] c_logical_distinct = make_distinct(source.c_logical_operator, expr_vec, out_schema)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_distinct.release())
+
+    def __str__(self):
+        return f"LogicalDistinct({self.out_schema})"
 
     def getCardinality(self):
         return self.sources[0].getCardinality()

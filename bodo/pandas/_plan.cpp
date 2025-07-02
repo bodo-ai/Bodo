@@ -417,6 +417,31 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     return proj;
 }
 
+duckdb::unique_ptr<duckdb::LogicalDistinct> make_distinct(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
+    PyObject *out_schema_py) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+
+    std::vector<duckdb::unique_ptr<duckdb::Expression>> distinct_expressions;
+    for (auto &expr : expr_vec) {
+        // Convert std::unique_ptr to duckdb::unique_ptr.
+        auto expr_duck = to_duckdb(expr);
+        distinct_expressions.push_back(std::move(expr_duck));
+    }
+
+    // Create distinct node.
+    duckdb::unique_ptr<duckdb::LogicalDistinct> distinct =
+        duckdb::make_uniq<duckdb::LogicalDistinct>(
+            std::move(distinct_expressions), duckdb::DistinctType::DISTINCT);
+
+    // Add the source of the distinct.
+    distinct->children.push_back(std::move(source_duck));
+
+    return distinct;
+}
+
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
     std::vector<bool> &na_position, std::vector<int> &cols,
