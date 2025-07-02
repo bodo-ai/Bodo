@@ -444,7 +444,8 @@ add_custom_command(
   DEPENDS bodo/utils/tracing.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" -3 -E "BODO_DEV_BUILD=${BODO_DEV_BUILD}" --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/utils/tracing.c" "bodo/utils/tracing.pyx"
+  COMMAND "${CYTHON_EXECUTABLE}" -3 -E "BODO_DEV_BUILD=${BODO_DEV_BUILD}" --output-file "bodo/utils/tracing.c" "bodo/utils/tracing.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/utils/tracing.c" "${CMAKE_CURRENT_BINARY_DIR}/bodo/utils/tracing.c"
   COMMENT "Cythonizing Source bodo/utils/tracing.pyx into bodo/utils/tracing.c"
 )
 
@@ -460,7 +461,8 @@ add_custom_command(
   DEPENDS bodo/memory.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/memory.cpp" "bodo/memory.pyx"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/memory.cpp" "bodo/memory.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/memory.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/memory.cpp"
   COMMENT "Cythonizing Source bodo/memory.pyx into bodo/memory.cpp"
 )
 
@@ -476,7 +478,8 @@ add_custom_command(
   DEPENDS bodo/tests/memory_tester.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/tests/memory_tester.cpp" "bodo/tests/memory_tester.pyx"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/tests/memory_tester.cpp" "bodo/tests/memory_tester.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/tests/memory_tester.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/tests/memory_tester.cpp"
   COMMENT "Cythonizing Source bodo/tests/memory_tester.pyx into bodo/tests/memory_tester.cpp"
 )
 
@@ -510,7 +513,8 @@ add_custom_command(
   DEPENDS bodo/transforms/type_inference/native_typer.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/native_typer.cpp" "bodo/transforms/type_inference/native_typer.pyx"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/transforms/type_inference/native_typer.cpp" "bodo/transforms/type_inference/native_typer.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/transforms/type_inference/native_typer.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/native_typer.cpp"
   COMMENT "Cythonizing Source bodo/transforms/type_inference/native_typer.pyx into bodo/transforms/type_inference/native_typer.cpp"
 )
 
@@ -533,7 +537,8 @@ add_custom_command(
   DEPENDS bodo/pandas/plan_optimizer.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/plan_optimizer.cpp" "bodo/pandas/plan_optimizer.pyx"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/pandas/plan_optimizer.cpp" "bodo/pandas/plan_optimizer.pyx"
+  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/pandas/plan_optimizer.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/plan_optimizer.cpp"
   COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
 )
 
