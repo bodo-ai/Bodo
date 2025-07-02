@@ -47,8 +47,6 @@ def read_write_iceberg():
             f"{tpch_dataset}_copy_daft", orders_table.schema()
         )
         dataset = daft.read_iceberg(orders_table)
-        dataset = dataset.limit(10000000)  # 10000000 works.
-
         dataset.write_iceberg(orders_copy, mode="overwrite")
         end = time.time()
         print("Total read-write time:", (end - start))
