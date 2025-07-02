@@ -63,14 +63,17 @@ from bodo.utils.typing import (
 
 
 class BodoDataFrameLocIndexer(_LocIndexer):
-    def __init__(self, df):
-        self.df = df
+    def __init__(self, name, obj):
+        self.df = obj
+        super().__init__(name, obj)
 
     def __getitem__(self, key):
         if isinstance(key, tuple) and len(key) == 2:
             row_sel, col_sel = key
             if row_sel == slice(None, None, None):
                 return self.df.__getitem__(col_sel)
+            else:
+                return super(self.df).loc.__getitem__(key)
 
         # Delegate to original behavior
         return super(self.df).loc.__getitem__(key)
@@ -103,7 +106,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @property
     def loc(self):
-        return BodoDataFrameLocIndexer(self)
+        return BodoDataFrameLocIndexer("loc", self)
 
     def __setattr__(self, name, value):
         # Intercept direct setting of columns attribute
