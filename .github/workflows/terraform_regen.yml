@@ -26,9 +26,11 @@ jobs:
         terraform_version: 1.7.1
     - uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.SELF_HOSTED_AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.SELF_HOSTED_AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-2
+        role-to-assume: arn:aws:iam::427443013497:role/SelfHostedGHTerraformRole
+        role-session-name: BodoEngineNightlySession
+        role-skip-session-tagging: true
+        role-duration-seconds: 7200
 
     - name: Terraform Fmt
       id: fmt
