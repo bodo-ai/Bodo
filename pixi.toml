@@ -208,6 +208,7 @@ gxx_linux-aarch64 = ">=9"
 
 [feature.dev.target.osx-64.dependencies]
 # Adding clang =19 to prevent build errors from upgrading zstd
+# Consistent with conda package env
 clang_osx-64 = "=19"
 clangxx_osx-64 = "=19"
 clang-tools = "=19"
@@ -251,12 +252,14 @@ dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = 
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
-clang_osx-64 = ">=19"
-clangxx_osx-64 = ">=19"
+# Adding clang =19 to prevent build errors from upgrading zstd
+# Consistent with conda package env
+clang_osx-64 = "=19"
+clangxx_osx-64 = "=19"
 
 [feature.pip.target.osx-arm64.dependencies]
-clang_osx-arm64 = ">=19"
-clangxx_osx-arm64 = ">=19"
+clang_osx-arm64 = "=19"
+clangxx_osx-arm64 = "=19"
 
 # Azure CI
 [feature.azure.dependencies]
