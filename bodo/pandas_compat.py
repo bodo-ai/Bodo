@@ -340,22 +340,19 @@ if pandas_version >= (3, 0):
                     f"BodoExecutionEngine: map() expected input data to be Series, got: {type(data)}"
                 )
 
-            if skip_na:
-                raise ValueError(
-                    "BodoExecutionEngine: na_action not supported other than the default None for map()."
+            if isinstance(func, Callable):
+                args, _ = _prepare_function_arguments(
+                    func, args, kwargs, num_required_args=1
                 )
 
-            if args or kwargs:
-                raise ValueError(
-                    "BodoExecutionEngine: passing additional arguments to UDF not supported for map()."
-                )
+            na_action = "ignore" if skip_na else None
 
-            def map_func(data):
-                return data.map(func)
+            def map_func(data, args):
+                return data.map(func, na_action=na_action, args=args)
 
             map_func_jit = decorator(map_func)
 
-            return map_func_jit(data)
+            return map_func_jit(data, args)
 
         @staticmethod
         def apply(
