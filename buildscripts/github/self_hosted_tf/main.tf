@@ -19,7 +19,7 @@ resource "aws_resourcegroups_group" "resourcegroups_group" {
 }
 
 module "runners" {
-  source = "philips-labs/github-runner/aws//modules/multi-runner"
+  source = "github-aws-runners/github-runner/aws//modules/multi-runner"
   # Same as local.version
   version = "5.21.0"
 
@@ -147,7 +147,7 @@ module "runners" {
 }
 
 module "webhook_github_app" {
-  source     = "philips-labs/github-runner/aws//modules/webhook-github-app"
+  source     = "github-aws-runners/github-runner/aws//modules/webhook-github-app"
   version    = "5.21.0"
   depends_on = [module.runners]
 
@@ -160,7 +160,7 @@ module "webhook_github_app" {
 }
 
 module "spot_termination_watchter" {
-  source     = "philips-labs/github-runner/aws//modules/termination-watcher"
+  source     = "github-aws-runners/github-runner/aws//modules/termination-watcher"
   version    = "5.21.0"
   depends_on = [module.runners]
 
