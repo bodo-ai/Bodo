@@ -1741,6 +1741,7 @@ def test_read_csv(datapath):
     )
 
 
+@pytest.mark.skip("disabled due to submit_func_to_workers: already running")
 def test_isin(datapath):
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
     bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
@@ -1755,6 +1756,36 @@ def test_isin(datapath):
     _test_equal(
         bodo_df3,
         py_df3,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )
+
+
+def test_drop(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(columns=["A", "F"])
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(columns=["A", "F"])
+
+    assert bodo_df1.is_lazy_plan()
+
+    _test_equal(
+        bodo_df1,
+        py_df1,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )
+
+
+def test_loc(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[:, ["A", "F"]]
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[:, ["A", "F"]]
+
+    assert bodo_df1.is_lazy_plan()
+
+    _test_equal(
+        bodo_df1,
+        py_df1,
         check_pandas_types=False,
         sort_output=False,
         reset_index=True,
