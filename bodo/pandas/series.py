@@ -681,7 +681,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback(supported=["ddof"])
     def std(self, axis=None, skipna=True, ddof=1, numeric_only=False, **kwargs):
-        if (n := _compute_series_reduce(self, "count")) <= 0:
+        if (n := _compute_series_reduce(self, "count")) <= 0 or n <= ddof:
             return pd.NA
         sum = _compute_series_reduce(self, "sum")
         squared = self.map(lambda x: x * x)
