@@ -115,25 +115,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     return self._source_plan[1]
 
             if bodo.dataframe_library_run_parallel:
-                if getattr(self._mgr, "_md_result_id", None) is not None:
-                    # If the plan has been executed but the results are still
-                    # distributed then re-use those results as is.
-                    nrows = self._mgr._md_nrows
-                    res_id = self._mgr._md_result_id
-                    mgr = self._mgr
-                else:
-                    # The data has been collected and is no longer distributed
-                    # so we need to re-distribute the results.
-                    mgr = bodo.spawn.spawner.get_spawner().scatter_data(self)
-                    res_id = mgr._md_result_id
-                    nrows = len(self)
+                nrows = len(self)
                 self._source_plan = (
                     empty_data,
                     LazyPlan(
                         "LogicalGetPandasReadParallel",
                         empty_data,
                         nrows,
-                        LazyPlanDistributedArg(mgr, res_id),
+                        LazyPlanDistributedArg(self),
                     ),
                 )
             else:

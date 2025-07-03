@@ -65,13 +65,11 @@ def from_pandas(df):
 
     res_id = None
     if bodo.dataframe_library_run_parallel:
-        mgr = bodo.spawn.spawner.get_spawner().scatter_data(df)
-        res_id = mgr._md_result_id
         plan = LazyPlan(
             "LogicalGetPandasReadParallel",
             empty_df,
             n_rows,
-            LazyPlanDistributedArg(mgr, res_id),
+            LazyPlanDistributedArg(df),
         )
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
