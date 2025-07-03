@@ -146,3 +146,42 @@ df = bd.read_iceberg(
     location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
 )
 ```
+
+
+## bodo.pandas.read_iceberg_table
+``` py
+bodo.pandas.read_iceberg_table(
+    table: pyiceberg.table.Table,
+) -> BodoDataFrame
+```
+
+Creates a BodoDataFrame object for reading from an Iceberg table lazily.
+
+!!! warning
+    This function is not part of the Pandas API and is specific to Bodo.
+
+<p class="api-header">Parameters</p>
+
+: __table_identifier: *pyiceberg.table.Table*:__ PyIceberg Table object to read with Bodo.
+
+<p class="api-header">Returns</p>
+: __BodoDataFrame__
+
+<p class="api-header">Examples</p>
+
+Simple read of a local table stored in a sql catalog:
+``` py
+from pyiceberg.catalog import load_catalog
+
+warehouse_path = "/tmp/warehouse"
+catalog = load_catalog(
+    "default",
+    **{
+        'type': 'sql',
+        "uri": f"sqlite:///{warehouse_path}/pyiceberg_catalog.db",
+        "warehouse": f"file://{warehouse_path}",
+    },
+)
+table = catalog.load_table("my_schema.my_table")
+df = bodo.pandas.read_iceberg_table(table)
+```

@@ -121,32 +121,13 @@ def test_udf_str(engine):
 
 def test_udf_map(engine):
     """Test basic map support with bodo engine."""
-    ser = pd.Series(np.arange(30))
+    ser = pd.Series([1, 2, 3, 4, None] * 2, dtype="Int64")
 
-    def udf(x):
-        return str(x + 10)
+    def udf(x, a):
+        return x + a
 
-    bodo_out = ser.map(udf, engine=engine)
+    bodo_out = ser.map(udf, na_action="ignore", engine=engine, a=4)
 
-    pandas_out = ser.map(udf)
+    pandas_out = ser.map(udf, na_action="ignore", a=4).astype("Int64")
 
-    _test_equal(bodo_out, pandas_out, check_pandas_types=False)
-
-
-def test_udf_map_unsupported():
-    """Test passing unsupported arguments to map raises appropriate errors."""
-    ser = pd.Series([1, 2, 3, 4, None] * 2)
-    engine = bodo.jit
-
-    def udf(x, y=2):
-        if x is None:
-            return None
-        return str(x + y)
-
-    # additional kwargs are not supported
-    with pytest.raises(ValueError, match=r"BodoExecutionEngine:.*"):
-        ser.map(udf, y=1, engine=engine)
-
-    # na_action='ignore' not supported
-    with pytest.raises(ValueError, match=r"BodoExecutionEngine:.*"):
-        ser.map(udf, na_action="ignore", engine=engine)
+    _test_equal(bodo_out, pandas_out, check_pandas_types=False, check_dtype=False)

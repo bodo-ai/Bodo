@@ -217,8 +217,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
             if (!arrowSchemaTypeEquals(rhs_arrow, lhs_arrow)) {
                 throw std::runtime_error(
                     "PhysicalPlanBuilder::Visit(LogicalSetOperation lhs and "
-                    "rhs schemas not identical. " + lhs_arrow.ToString() +
-                    " versus " + rhs_arrow.ToString());
+                    "rhs schemas not identical. " +
+                    lhs_arrow.ToString() + " versus " + rhs_arrow.ToString());
             }
 
             finished_pipelines.emplace_back(
