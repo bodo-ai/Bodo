@@ -780,11 +780,14 @@ class Spawner:
         | LazySingleArrayManager
     ):
         """Scatter data to all workers and return the manager for the data."""
+        self._is_running = True
         self.worker_intercomm.bcast(CommandType.SCATTER.value, self.bcast_root)
         bodo.libs.distributed_api.scatterv(
             data, root=self.bcast_root, comm=self.worker_intercomm
         )
         res_id = self.worker_intercomm.recv(None, source=0)
+        self._is_running = False
+        self._run_del_queue()
         if isinstance(data, pd.DataFrame):
             return get_lazy_manager_class()(
                 None,
