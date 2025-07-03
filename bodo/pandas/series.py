@@ -679,6 +679,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return pd.NA
         return _compute_series_reduce(self, "sum") / n
 
+    @check_args_fallback(supported=["ddof"])
+    def std(self, axis=None, skipna=True, ddof=1, numeric_only=False, **kwargs):
+        if (n := _compute_series_reduce(self, "count")) <= 0:
+            return pd.NA
+        sum = _compute_series_reduce(self, "sum")
+        squared = self.map(lambda x: x * x)
+        squared_sum = _compute_series_reduce(squared, "sum")
+        return ((squared_sum - (sum**2) / n) / (n - ddof)) ** 0.5
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
