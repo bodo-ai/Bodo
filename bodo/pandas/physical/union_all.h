@@ -9,7 +9,7 @@
 #include "operator.h"
 
 /**
- * @brief Physical node for limit.
+ * @brief Physical node for union all.
  *
  */
 class PhysicalUnionAll : public PhysicalSource, public PhysicalSink {
@@ -22,7 +22,7 @@ class PhysicalUnionAll : public PhysicalSource, public PhysicalSink {
     void Finalize() override {}
 
     /**
-     * @brief Do limit.
+     * @brief Do union all.
      *
      * @return std::pair<std::shared_ptr<table_info>, OperatorResult>
      * The output table from the current operation and whether there is more
@@ -44,10 +44,10 @@ class PhysicalUnionAll : public PhysicalSource, public PhysicalSink {
      * @brief GetResult - just for API compatability but should never be called
      */
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
-        // Limit should be between pipelines and act alternatively as a sink
+        // Union all should be between pipelines and act alternatively as a sink
         // then source but there should never be the need to ask for the result
         // all in one go.
-        throw std::runtime_error("GetResult called on a limit node.");
+        throw std::runtime_error("GetResult called on a union all node.");
     }
 
     /**

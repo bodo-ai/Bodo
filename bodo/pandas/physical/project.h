@@ -29,8 +29,7 @@ class PhysicalProjection : public PhysicalSourceSink {
 
         // Create the output schema from expressions
         this->output_schema = std::make_shared<bodo::Schema>();
-        for (size_t i = 0; i < exprs.size(); ++i) {
-            auto& expr = exprs[i];
+        for (auto& expr : exprs) {
             physical_exprs.emplace_back(
                 buildPhysicalExprTree(expr, col_ref_map, true));
 

@@ -63,7 +63,7 @@ extractValue(const duckdb::Value &value) {
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double,
              std::shared_ptr<arrow::Scalar>>
-getNullValue(const duckdb::Value &value) {
+getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
     duckdb::LogicalTypeId type = value.type().id();
     switch (type) {
         case duckdb::LogicalTypeId::TINYINT:
@@ -103,7 +103,7 @@ getNullValue(const duckdb::Value &value) {
             return arrow::MakeNullScalar(date_type);
         } break;
         default:
-            throw std::runtime_error("getNullValue unhandled type." +
+            throw std::runtime_error("getDefaultValueForDuckdbValueType unhandled type." +
                                      std::to_string(static_cast<int>(type)));
     }
 }
@@ -392,7 +392,7 @@ std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
                 return ret;
             }
         },
-        getNullValue(value));
+        getDefaultValueForDuckdbValueType(value));
     if (!scalar_res.ok()) {
         throw std::runtime_error(
             "Failed to convert duckdb value to arrow type: " +

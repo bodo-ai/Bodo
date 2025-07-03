@@ -424,6 +424,10 @@ cdef class LogicalSetOperation(LogicalOperator):
     """
 
     def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, str setop):
+        """
+        setop - only value supported for now is "union all".  In the future,
+                "union" and "intersect" may be supported.
+        """
         self.out_schema = out_schema
 
         cdef unique_ptr[CLogicalSetOperation] c_logical_set_operation = make_set_operation(lhs.c_logical_operator, rhs.c_logical_operator, setop.encode(), len(self.out_schema))

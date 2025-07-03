@@ -192,7 +192,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
     if (op.type == duckdb::LogicalOperatorType::LOGICAL_UNION) {
         // UNION ALL
         if (op.setop_all) {
-            // Rightt-child will feed into a table.
+            // Right-child will feed into a table.
             PhysicalPlanBuilder rhs_builder;
             rhs_builder.Visit(*op.children[0]);
             std::shared_ptr<bodo::Schema> rhs_table_schema =
@@ -215,11 +215,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                 this->active_pipeline->getPrevOpOutputSchema();
             ::arrow::Schema lhs_arrow = *(lhs_table_schema->ToArrowSchema());
             if (!arrowSchemaTypeEquals(rhs_arrow, lhs_arrow)) {
-                std::cout << "lhs " << lhs_arrow.ToString() << std::endl;
-                std::cout << "rhs " << rhs_arrow.ToString() << std::endl;
                 throw std::runtime_error(
                     "PhysicalPlanBuilder::Visit(LogicalSetOperation lhs and "
-                    "rhs schemas not identical");
+                    "rhs schemas not identical. " + lhs_arrow.ToString() +
+                    " versus " + rhs_arrow.ToString());
             }
 
             finished_pipelines.emplace_back(

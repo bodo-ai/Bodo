@@ -67,11 +67,9 @@ std::shared_ptr<arrow::Array> NullArrowArray(const std::string& value,
                                              size_t num_elements) {
     arrow::StringBuilder builder;
     arrow::Status status;
-    for (size_t i = 0; i < num_elements; ++i) {
-        status = builder.AppendNull();
-        if (!status.ok()) {
-            throw std::runtime_error("builder.Append failed.");
-        }
+    status = builder.AppendNulls(num_elements);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.AppendNulls failed.");
     }
     std::shared_ptr<arrow::Array> array;
     status = builder.Finish(&array);
@@ -96,12 +94,9 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
     arrow::BooleanBuilder builder;
     arrow::Status status;
 
-    for (size_t i = 0; i < num_elements; ++i) {
-        // Append boolean value
-        status = builder.AppendNull();
-        if (!status.ok()) {
-            throw std::runtime_error("builder.Append failed.");
-        }
+    status = builder.AppendNulls(num_elements);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.AppendNulls failed.");
     }
 
     // Finalize the Arrow array

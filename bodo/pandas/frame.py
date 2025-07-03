@@ -1031,12 +1031,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self._update_setitem_internal_state(new_plan, key, value)
             return
 
+        # Match cases like df[["B", "C"]] = 1
         if (
             self.is_lazy_plan()
             and isinstance(key, Iterable)
             and all(isinstance(x, str) for x in key)
             and pd.api.types.is_scalar(value)
         ):
+            # Implement as recursive calls to the above code segment for
+            # single column assignment.
             for new_col in key:
                 self.__setitem__(new_col, value)
             return

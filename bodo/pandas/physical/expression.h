@@ -241,11 +241,9 @@ std::shared_ptr<arrow::Array> NullArrowArray(const T &value,
 
     BuilderType builder;
     arrow::Status status;
-    for (size_t i = 0; i < num_elements; ++i) {
-        status = builder.AppendNull();
-        if (!status.ok()) {
-            throw std::runtime_error("builder.Append failed.");
-        }
+    status = builder.AppendNulls(num_elements);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.AppendNulls failed.");
     }
     std::shared_ptr<arrow::Array> array;
     status = builder.Finish(&array);
@@ -294,7 +292,8 @@ class PhysicalNullExpression : public PhysicalExpression {
                 arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
             return std::make_shared<ArrayExprResult>(std::move(result), "Null");
         } else {
-            std::shared_ptr<arrow::Array> array = ScalarToArrowArray(constant);
+            std::shared_ptr<arrow::Array> array =
+                NullArrowArray(constant, 1);
 
             auto result =
                 arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
@@ -304,7 +303,7 @@ class PhysicalNullExpression : public PhysicalExpression {
 
     friend std::ostream &operator<<(std::ostream &os,
                                     const PhysicalNullExpression<T> &obj) {
-        os << "PhysicalNullExpression " << obj.constant << std::endl;
+        os << "PhysicalNullExpression " << std::endl;
         return os;
     }
 
