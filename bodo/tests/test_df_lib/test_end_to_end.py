@@ -1739,3 +1739,21 @@ def test_read_csv(datapath):
         bodo_out,
         py_out,
     )
+
+
+def test_df_state_change():
+    """Make sure dataframe state change doesn't lead to stale result id in plan
+    execution"""
+
+    @bodo.jit(spawn=True)
+    def get_df(df):
+        return df
+
+    bdf = get_df(pd.DataFrame({"A": [1, 2, 3, 4, 5, 6]}))
+    bdf2 = bdf.A.map(lambda x: x)
+
+    # Collect the df, original result id is stale
+    print(bdf)
+
+    # Plan execution shouldn't fail due to stale res id
+    print(bdf2)
