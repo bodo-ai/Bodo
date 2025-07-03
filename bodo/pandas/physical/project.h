@@ -71,7 +71,7 @@ class PhysicalProjection : public PhysicalSourceSink {
 
                 std::unique_ptr<bodo::DataType> col_type =
                     arrow_type_to_bodo_data_type(
-                        convertDuckdbValueToArrowScalar(const_expr.value)->type)
+                        duckdbValueToArrowType(const_expr.value))
                         ->copy();
                 this->output_schema->append_column(std::move(col_type));
                 col_names.emplace_back(const_expr.value.ToString());

@@ -31,6 +31,17 @@ std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
 extractValue(const duckdb::Value &value);
 
 /**
+ * @brief Convert duckdb value to null var of right type.
+ *
+ * @param expr - the duckdb value to convert
+ * @return the C++ variant converted value
+ */
+std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
+             uint64_t, bool, std::string, float, double,
+             std::shared_ptr<arrow::Scalar>>
+getDefaultValueForDuckdbValueType(const duckdb::Value &value);
+
+/**
  * @brief Return a string representation of the column names in the Arrow schema
  * for printing purposes (e.g. plan prints).
  *
@@ -198,4 +209,13 @@ PyObject *duckdbFilterSetToPyicebergFilter(
  * @return std::shared_ptr<arrow::Scalar> equivalent Arrow scalar object
  */
 std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
+    const duckdb::Value &value);
+
+/**
+ * @brief Convert a DuckDB Value object to the corresponding arrow type
+ *
+ * @param value DuckDB Value object to convert
+ * @return std::shared_ptr<arrow::DataType> Arrow type of DuckDB value
+ */
+std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
     const duckdb::Value &value);

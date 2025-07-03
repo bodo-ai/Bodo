@@ -60,6 +60,54 @@ extractValue(const duckdb::Value &value) {
     }
 }
 
+std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
+             uint64_t, bool, std::string, float, double,
+             std::shared_ptr<arrow::Scalar>>
+getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
+    duckdb::LogicalTypeId type = value.type().id();
+    switch (type) {
+        case duckdb::LogicalTypeId::TINYINT:
+            return int8_t{};
+        case duckdb::LogicalTypeId::SMALLINT:
+            return int16_t{};
+        case duckdb::LogicalTypeId::INTEGER:
+            return int32_t{};
+        case duckdb::LogicalTypeId::BIGINT:
+            return int64_t{};
+        case duckdb::LogicalTypeId::UTINYINT:
+            return uint8_t{};
+        case duckdb::LogicalTypeId::USMALLINT:
+            return uint16_t{};
+        case duckdb::LogicalTypeId::UINTEGER:
+            return uint32_t{};
+        case duckdb::LogicalTypeId::UBIGINT:
+            return uint64_t{};
+        case duckdb::LogicalTypeId::FLOAT:
+            return float{};
+        case duckdb::LogicalTypeId::DOUBLE:
+            return double{};
+        case duckdb::LogicalTypeId::BOOLEAN:
+            return bool{};
+        case duckdb::LogicalTypeId::VARCHAR:
+            return std::string{};
+        case duckdb::LogicalTypeId::TIMESTAMP_NS: {
+            // Define a timestamp type with nanosecond precision
+            auto timestamp_type = arrow::timestamp(arrow::TimeUnit::NANO);
+            // Create a TimestampScalar with nanosecond value
+            return std::make_shared<arrow::TimestampScalar>(timestamp_type);
+        } break;
+        case duckdb::LogicalTypeId::DATE: {
+            // Define a date type
+            auto date_type = arrow::date32();
+            // Create a DateScalar with the date value
+            return arrow::MakeNullScalar(date_type);
+        } break;
+        default:
+            throw std::runtime_error(
+                "getDefaultValueForDuckdbValueType unhandled type." +
+                std::to_string(static_cast<int>(type)));
+    }
+}
 std::string schemaColumnNamesToString(
     const std::shared_ptr<arrow::Schema> arrow_schema) {
     std::string ret = "";
@@ -326,6 +374,32 @@ std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
                                  scalar_res.status().ToString());
     }
     return scalar_res.ValueOrDie();
+}
+
+std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
+    const duckdb::Value &value) {
+    arrow::Result<std::shared_ptr<arrow::Scalar>> scalar_res = std::visit(
+        [](const auto &&value) {
+            if constexpr (std::is_same_v<decltype(value),
+                                         std::shared_ptr<arrow::Scalar>>) {
+                // If the value is already a scalar, we can just wrap it
+                // in an arrow::Result and return it.
+                arrow::Result<std::shared_ptr<arrow::Scalar>> ret =
+                    arrow::ToResult(value);
+                return value;
+            } else {
+                arrow::Result<std::shared_ptr<arrow::Scalar>> ret =
+                    arrow::MakeScalar(value);
+                return ret;
+            }
+        },
+        getDefaultValueForDuckdbValueType(value));
+    if (!scalar_res.ok()) {
+        throw std::runtime_error(
+            "Failed to convert duckdb value to arrow type: " +
+            scalar_res.status().ToString());
+    }
+    return scalar_res.ValueOrDie()->type;
 }
 
 std::string expressionTypeToPyicebergclass(duckdb::ExpressionType expr_type) {

@@ -348,7 +348,8 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
-                    return getattr(base_class, func.__name__)(self, *args, **kwargs)
+                    py_res = getattr(base_class, func.__name__)(self, *args, **kwargs)
+                    return py_res
 
         return wrapper
 

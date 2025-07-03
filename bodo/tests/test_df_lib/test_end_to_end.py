@@ -1757,3 +1757,41 @@ def test_df_state_change():
 
     # Plan execution shouldn't fail due to stale res id
     print(bdf2)
+
+
+def test_dataframe_concat(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))[["A", "D"]]
+    bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))[["A", "E"]]
+    bodo_df3 = bd.concat([bodo_df1, bodo_df2, bodo_df2])
+    assert bodo_df3.is_lazy_plan()
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))[["A", "D"]]
+    py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))[["A", "E"]]
+    py_df3 = pd.concat([py_df1, py_df2, py_df2])
+
+    _test_equal(
+        bodo_df3,
+        py_df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_series_concat(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))["A"]
+    bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))["A"]
+    bodo_df3 = bd.concat([bodo_df1, bodo_df2, bodo_df2])
+    assert bodo_df3.is_lazy_plan()
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))["A"]
+    py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))["A"]
+    py_df3 = pd.concat([py_df1, py_df2, py_df2])
+
+    _test_equal(
+        bodo_df3,
+        py_df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )

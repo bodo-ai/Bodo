@@ -77,6 +77,15 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     return out_plan;
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
+                                                       int64_t field_idx) {
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
+    const std::shared_ptr<arrow::Field> &field = arrow_schema->field(field_idx);
+    auto [_, out_type] = arrow_field_to_duckdb(field);
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value(out_type));
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(val));
@@ -396,6 +405,7 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
+
     auto binder = get_duckdb_binder();
     auto table_idx = binder.get()->GenerateTableIndex();
 
@@ -593,6 +603,31 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     return comp_join;
 }
 
+duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
+    std::unique_ptr<duckdb::LogicalOperator> &lhs,
+    std::unique_ptr<duckdb::LogicalOperator> &rhs, const std::string &setop,
+    int64_t num_cols) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto lhs_duck = to_duckdb(lhs);
+    auto rhs_duck = to_duckdb(rhs);
+    auto binder = get_duckdb_binder();
+    auto table_idx = binder.get()->GenerateTableIndex();
+    bool setop_all = false;
+
+    duckdb::LogicalOperatorType optype;
+    if (setop == "union" || setop == "union all") {
+        optype = duckdb::LogicalOperatorType::LOGICAL_UNION;
+        setop_all = (setop == "union all");
+    } else {
+        throw std::runtime_error("make_set_operation unsupported type " +
+                                 setop);
+    }
+    auto set_operation = duckdb::make_uniq<duckdb::LogicalSetOperation>(
+        table_idx, num_cols, std::move(lhs_duck), std::move(rhs_duck), optype,
+        setop_all);
+    return set_operation;
+}
+
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
@@ -616,6 +651,7 @@ std::pair<int64_t, PyObject *> execute_plan(
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
+    // Clear out the table_index to schema mapping for the next plan.
     return {reinterpret_cast<int64_t>(new table_info(*output_table)),
             pyarrow_schema};
 }

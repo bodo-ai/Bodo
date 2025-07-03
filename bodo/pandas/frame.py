@@ -917,6 +917,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 just one element. """
             if isinstance(key, str):
                 key = [key]
+                output_series = True
+            else:
+                output_series = False
             assert isinstance(key, Iterable)
             key = list(key)
             # convert column name to index
@@ -932,7 +935,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Create column reference expressions for selected columns
             exprs = make_col_ref_exprs(key_indices, self._plan)
 
-            empty_data = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
+            empty_data = zero_size_self.__getitem__(key[0] if output_series else key)
             return wrap_plan(
                 plan=LazyPlan(
                     "LogicalProjection",
@@ -1010,6 +1013,19 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 proj_exprs,
             )
             self._update_setitem_internal_state(new_plan, key, value)
+            return
+
+        # Match cases like df[["B", "C"]] = 1
+        if (
+            self.is_lazy_plan()
+            and isinstance(key, Iterable)
+            and all(isinstance(x, str) for x in key)
+            and pd.api.types.is_scalar(value)
+        ):
+            # Implement as recursive calls to the above code segment for
+            # single column assignment.
+            for new_col in key:
+                self.__setitem__(new_col, value)
             return
 
         raise BodoLibNotImplementedException(

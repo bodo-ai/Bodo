@@ -230,6 +230,87 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(
 std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
                                                  size_t num_elements = 1);
 
+// Numeric type specialization
+template <typename T, typename std::enable_if<std::is_arithmetic<T>::value &&
+                                                  !std::is_same<T, bool>::value,
+                                              int>::type = 0>
+std::shared_ptr<arrow::Array> NullArrowArray(const T &value,
+                                             size_t num_elements = 1) {
+    using ArrowType = typename arrow::CTypeTraits<T>::ArrowType;
+    using BuilderType = arrow::NumericBuilder<ArrowType>;
+
+    BuilderType builder;
+    arrow::Status status;
+    status = builder.AppendNulls(num_elements);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.AppendNulls failed.");
+    }
+    std::shared_ptr<arrow::Array> array;
+    status = builder.Finish(&array);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.Finish failed.");
+    }
+    return array;
+}
+
+// String specialization
+std::shared_ptr<arrow::Array> NullArrowArray(const std::string &value,
+                                             size_t num_elements = 1);
+
+// arrow::Scalar specialization
+std::shared_ptr<arrow::Array> NullArrowArray(
+    const std::shared_ptr<arrow::Scalar> &value, size_t num_elements = 1);
+
+// bool specialization
+std::shared_ptr<arrow::Array> NullArrowArray(bool value,
+                                             size_t num_elements = 1);
+
+/**
+ * @brief Physical expression tree node type for scalar constants.
+ *
+ */
+template <typename T>
+class PhysicalNullExpression : public PhysicalExpression {
+   public:
+    PhysicalNullExpression(const T &val, bool no_scalars)
+        : constant(val), generate_array(no_scalars) {}
+    virtual ~PhysicalNullExpression() = default;
+
+    virtual std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch) {
+        // The current rule is that if the expression infrastructure
+        // is used for filtering then constants are treated as
+        // scalars and if used for projection then constants become
+        // full columns.  If used in a projection then generate_array
+        // will be true and we generate an array the size of the
+        // batch and return an ArrayExprResult.
+        if (generate_array) {
+            std::shared_ptr<arrow::Array> array =
+                NullArrowArray(constant, input_batch->nrows());
+
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ArrayExprResult>(std::move(result), "Null");
+        } else {
+            std::shared_ptr<arrow::Array> array = NullArrowArray(constant, 1);
+
+            auto result =
+                arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
+            return std::make_shared<ScalarExprResult>(std::move(result));
+        }
+    }
+
+    friend std::ostream &operator<<(std::ostream &os,
+                                    const PhysicalNullExpression<T> &obj) {
+        os << "PhysicalNullExpression " << std::endl;
+        return os;
+    }
+
+   private:
+    const T constant;  // holds no real value, only for type
+    const bool generate_array;
+};
+
 /**
  * @brief Physical expression tree node type for scalar constants.
  *

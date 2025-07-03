@@ -62,6 +62,53 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(bool value,
     return array;
 }
 
+// String specialization
+std::shared_ptr<arrow::Array> NullArrowArray(const std::string& value,
+                                             size_t num_elements) {
+    arrow::StringBuilder builder;
+    arrow::Status status;
+    status = builder.AppendNulls(num_elements);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.AppendNulls failed.");
+    }
+    std::shared_ptr<arrow::Array> array;
+    status = builder.Finish(&array);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.Finish failed.");
+    }
+    return array;
+}
+
+std::shared_ptr<arrow::Array> NullArrowArray(
+    const std::shared_ptr<arrow::Scalar>& value, size_t num_elements) {
+    arrow::Result<std::shared_ptr<arrow::Array>> array_result =
+        arrow::MakeArrayOfNull(value->type, num_elements);
+    if (!array_result.ok()) {
+        throw std::runtime_error("MakeArrayFromScalar failed: " +
+                                 array_result.status().message());
+    }
+    return array_result.ValueOrDie();
+}
+
+std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
+    arrow::BooleanBuilder builder;
+    arrow::Status status;
+
+    status = builder.AppendNulls(num_elements);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.AppendNulls failed.");
+    }
+
+    // Finalize the Arrow array
+    std::shared_ptr<arrow::Array> array;
+    status = builder.Finish(&array);
+    if (!status.ok()) {
+        throw std::runtime_error("builder.Finish failed.");
+    }
+
+    return array;
+}
+
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator) {
@@ -222,19 +269,38 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // Convert the base duckdb::Expression node to its actual derived
             // type.
             auto& bce = expr->Cast<duckdb::BoundConstantExpression>();
-            // Get the constant out of the duckdb node as a C++ variant.
-            // Using auto since variant set will be extended.
-            auto extracted_value = extractValue(bce.value);
-            // Return a PhysicalConstantExpression<T> where T is the actual
-            // type of the value contained within bce.value.
-            auto ret = std::visit(
-                [no_scalars](const auto& value) {
-                    return std::static_pointer_cast<PhysicalExpression>(
-                        std::make_shared<PhysicalConstantExpression<
-                            std::decay_t<decltype(value)>>>(value, no_scalars));
-                },
-                extracted_value);
-            return ret;
+            if (bce.value.IsNull()) {
+                // Get the constant out of the duckdb node as a C++ variant.
+                // Using auto since variant set will be extended.
+                auto extracted_value =
+                    getDefaultValueForDuckdbValueType(bce.value);
+                // Return a PhysicalConstantExpression<T> where T is the actual
+                // type of the value contained within bce.value.
+                auto ret = std::visit(
+                    [no_scalars](const auto& value) {
+                        return std::static_pointer_cast<PhysicalExpression>(
+                            std::make_shared<PhysicalNullExpression<
+                                std::decay_t<decltype(value)>>>(value,
+                                                                no_scalars));
+                    },
+                    extracted_value);
+                return ret;
+            } else {
+                // Get the constant out of the duckdb node as a C++ variant.
+                // Using auto since variant set will be extended.
+                auto extracted_value = extractValue(bce.value);
+                // Return a PhysicalConstantExpression<T> where T is the actual
+                // type of the value contained within bce.value.
+                auto ret = std::visit(
+                    [no_scalars](const auto& value) {
+                        return std::static_pointer_cast<PhysicalExpression>(
+                            std::make_shared<PhysicalConstantExpression<
+                                std::decay_t<decltype(value)>>>(value,
+                                                                no_scalars));
+                    },
+                    extracted_value);
+                return ret;
+            }
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
             // Convert the base duckdb::Expression node to its actual derived

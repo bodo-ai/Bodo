@@ -50,6 +50,19 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::vector<std::pair<int, int>> &cond_vec);
 
 /**
+ * @brief Creates a LogicalSetOperation node.
+ *
+ * @param lhs - left-side of the set operation
+ * @param rhs - right-side of the set operation
+ * @param setop - the type of set operation, e.g., "UNION"
+ * @return duckdb::unique_ptr<duckdb::LogicalSetOperation> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
+    std::unique_ptr<duckdb::LogicalOperator> &lhs,
+    std::unique_ptr<duckdb::LogicalOperator> &rhs, const std::string &setop,
+    int64_t num_cols);
+
+/**
  * @brief Creates a LogicalProjection node.
  *
  * @param source - the data source to project from
@@ -118,6 +131,15 @@ std::vector<int> get_projection_pushed_down_columns(
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     PyObject *args, const std::vector<int> &selected_columns);
+
+/**
+ * @brief Create an expression for a NULL value of given type.
+ *
+ * @param val - the type to create the NULL value of
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const null expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
+                                                       int64_t field_idx);
 
 /**
  * @brief Create an expression from a constant integer.
