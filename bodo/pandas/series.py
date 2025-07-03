@@ -688,6 +688,32 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         squared_sum = _compute_series_reduce(squared, "sum")
         return ((squared_sum - (sum**2) / n) / (n - ddof)) ** 0.5
 
+    @check_args_fallback(unsupported="all")
+    def describe(self, percentiles=None, include=None, exclude=None):
+        count_val = _compute_series_reduce(self, "count")
+        mean_val = self.mean()
+        std_val = self.std()
+        min_val = _compute_series_reduce(self, "min")
+        max_val = _compute_series_reduce(self, "max")
+        result = [count_val, mean_val, std_val, min_val, max_val]
+        quantiles = self.quantile([0.25, 0.5, 0.75])
+        for q in quantiles:
+            result.append(q)
+        return pd.Series(
+            result,
+            index=[
+                "count",
+                "mean",
+                "std",
+                "min",
+                "max",
+                "25%",
+                "50%",
+                "75%",
+            ],
+            name=self.name,
+        )
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
