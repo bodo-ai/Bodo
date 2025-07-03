@@ -299,7 +299,7 @@ def check_args_fallback(
                         func.__qualname__,
                         unsupported_args,
                         unsupported_kwargs,
-                        args,
+                        (self, *args),
                         kwargs,
                         package_name=package_name,
                         fn_str=fn_str,
