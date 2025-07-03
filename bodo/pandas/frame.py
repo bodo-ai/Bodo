@@ -72,10 +72,18 @@ class BodoDataFrameLocIndexer(_LocIndexer):
             if row_sel == slice(None, None, None):
                 return self.df.__getitem__(col_sel)
             else:
-                warnings.warn(BodoLibFallbackWarning("Selected variant of BodoDataFrame.loc[] not supported."))
+                warnings.warn(
+                    BodoLibFallbackWarning(
+                        "Selected variant of BodoDataFrame.loc[] not supported."
+                    )
+                )
                 return super(self.df).loc.__getitem__(key)
 
-        warnings.warn(BodoLibFallbackWarning("Selected variant of BodoDataFrame.loc[] not supported."))
+        warnings.warn(
+            BodoLibFallbackWarning(
+                "Selected variant of BodoDataFrame.loc[] not supported."
+            )
+        )
         # Delegate to original behavior
         return super(self.df).loc.__getitem__(key)
 
