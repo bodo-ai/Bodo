@@ -3501,25 +3501,48 @@ class SeriesPass:
         if func_name in ("map", "apply"):
             nodes = []
             kws = dict(rhs.kws)
-            extra_args = []
             if func_name == "apply":
                 func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
-                extra_args = get_call_expr_arg("apply", rhs.args, kws, 2, "args", [])
-                if extra_args:
-                    extra_args = get_build_sequence_vars(
-                        self.func_ir, self.typemap, self.calltypes, extra_args, nodes
-                    )
             else:
                 func_var = get_call_expr_arg("map", rhs.args, kws, 0, "arg")
+            extra_args = get_call_expr_arg(func_name, rhs.args, kws, 2, "args", [])
+            if extra_args:
+                extra_args = get_build_sequence_vars(
+                    self.func_ir, self.typemap, self.calltypes, extra_args, nodes
+                )
+            na_action = None
             if func_name == "map":
                 kws.pop("arg", None)
+                na_action = get_call_expr_arg(
+                    "map", rhs.args, kws, 1, "na_action", use_default=True
+                )
                 kws.pop("na_action", None)
+                if na_action is not None:
+                    na_action = self.typemap[na_action.name]
+                    if is_overload_none(na_action):
+                        na_action = None
+                    else:
+                        assert is_overload_constant_str(na_action), (
+                            "Series.map(): na_action should be a constant string"
+                        )
+                        na_action = get_overload_const_str(na_action)
+                        assert na_action == "ignore", (
+                            "Series.map(): na_action should be None or 'ignore''"
+                        )
             else:
                 kws.pop("func", None)
                 kws.pop("convert_dtype", None)
             kws.pop("args", None)
             return self._handle_series_map(
-                assign, lhs, rhs, series_var, func_var, extra_args, kws, nodes
+                assign,
+                lhs,
+                rhs,
+                series_var,
+                func_var,
+                na_action,
+                extra_args,
+                kws,
+                nodes,
             )
 
         # astype with string output
@@ -3551,7 +3574,7 @@ class SeriesPass:
         return [assign]
 
     def _handle_series_map(
-        self, assign, lhs, rhs, series_var, func_var, extra_args, kws, nodes
+        self, assign, lhs, rhs, series_var, func_var, na_action, extra_args, kws, nodes
     ):
         """translate df.A.map(lambda a:...) to prange()"""
         # get the function object (ir.Expr.make_function or actual python function)
@@ -3658,6 +3681,11 @@ class SeriesPass:
                 f"  S{i} = bodo.utils.utils.alloc_type(n, _arr_typ{i}, (-1,))\n"
             )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+        if na_action == "ignore":
+            func_text += "    if bodo.libs.array_kernels.isna(A, i):\n"
+            for i in range(n_out_cols):
+                func_text += f"      bodo.libs.array_kernels.setna(S{i}, i)\n"
+            func_text += "      continue\n"
         func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
         func_text += f"    v = map_func(t2, {udf_arg_names})\n"
         if is_df_output:
