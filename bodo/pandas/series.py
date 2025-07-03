@@ -673,6 +673,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def count(self):
         return _compute_series_reduce(self, "count")
 
+    @check_args_fallback(unsupported="all")
+    def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
+        if (n := _compute_series_reduce(self, "count")) <= 0:
+            return pd.NA
+        return _compute_series_reduce(self, "sum") / n
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -1098,8 +1104,8 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
 
     from bodo.pandas.base import _empty_like
 
-    # TODO: support other functions like mean, etc.
-    assert func_name in ("min", "max", "sum", "product", "count"), (
+    # TODO: expand coverage for other reduction functions
+    assert func_name in ("min", "max", "sum", "product", "count", "mean"), (
         f"Unsupported function {func_name} for series reduction."
     )
 
