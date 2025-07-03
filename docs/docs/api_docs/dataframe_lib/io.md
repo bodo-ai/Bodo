@@ -153,6 +153,7 @@ df = bd.read_iceberg(
 bodo.pandas.read_iceberg_table(
     table: pyiceberg.table.Table,
 ) -> BodoDataFrame
+```
 
 Creates a BodoDataFrame object for reading from an Iceberg table lazily.
 
