@@ -3697,7 +3697,7 @@ class TypingTransforms:
 
         # mapping of Series functions to their arguments that require constant values
         series_call_const_args = {
-            "map": [(0, "arg")],
+            "map": [(0, "arg"), (1, "na_action")],
             "apply": [(0, "func")],
             "to_frame": [(0, "name")],
             "value_counts": [

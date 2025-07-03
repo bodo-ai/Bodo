@@ -25,7 +25,7 @@ from pandas._typing import (
 from pandas.core.tools.datetimes import _unit_map
 from pandas.io.parsers.readers import _c_parser_defaults
 
-import bodo
+import bodo.spawn.spawner  # noqa: F401
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
 from bodo.pandas.utils import (
@@ -41,6 +41,9 @@ from bodo.pandas.utils import (
     wrap_plan,
 )
 from bodo.utils.utils import bodo_spawn_exec
+
+if pt.TYPE_CHECKING:
+    from pyiceberg.table import Table as PyIcebergTable
 
 
 def from_pandas(df):
@@ -65,13 +68,13 @@ def from_pandas(df):
 
     res_id = None
     if bodo.dataframe_library_run_parallel:
-        nrows = len(df)
-        res_id = bodo.spawn.utils.scatter_data(df)
+        mgr = bodo.spawn.spawner.get_spawner().scatter_data(df)
+        res_id = mgr._md_result_id
         plan = LazyPlan(
             "LogicalGetPandasReadParallel",
             empty_df,
-            nrows,
-            LazyPlanDistributedArg(None, res_id),
+            n_rows,
+            LazyPlanDistributedArg(mgr, res_id),
         )
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
@@ -258,6 +261,27 @@ def read_iceberg(
         )
 
     return wrap_plan(plan=plan)
+
+
+def read_iceberg_table(table: "PyIcebergTable") -> BodoDataFrame:
+    import pyiceberg.catalog
+
+    # We can't scatter catalogs so we need to use properties instead so the workers can
+    # create the catalog themselves.
+    catalog_properties = table.catalog.properties
+    catalog_properties.update(
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: table.catalog.__class__.__module__
+            + "."
+            + table.catalog.__class__.__name__,
+        }
+    )
+
+    return read_iceberg(
+        ".".join(table._identifier),
+        catalog_name=table.catalog.name,
+        catalog_properties=catalog_properties,
+    )
 
 
 @check_args_fallback(
