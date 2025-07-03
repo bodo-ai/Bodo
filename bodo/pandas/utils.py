@@ -433,14 +433,24 @@ class LazyPlan:
         if "Expression" not in self.plan_class and id(self) in cache:
             return cache[id(self)]
 
-        def recursive_check(x):
+        def recursive_check(x, use_cache):
             """Recursively convert LazyPlans but return other types unmodified."""
             if isinstance(x, LazyPlan):
-                return x.generate_duckdb(cache=cache)
+                return x.generate_duckdb(cache=cache if use_cache else None)
             elif isinstance(x, (tuple, list)):
-                return type(x)(recursive_check(i) for i in x)
+                return type(x)(recursive_check(i, use_cache) for i in x)
             else:
                 return x
+
+        # NOTE: Caching is necessary to make sure source operators which have table
+        # indexes and are reused in various nodes (e.g. expressions) are not re-created
+        # with different table indexes.
+        # Join however doesn't need this and cannot use caching since a sub-plan may
+        # be reused across right and left sides (e.g. self-join) leading to unique_ptr
+        # errors.
+        use_cache = True
+        if self.plan_class == "LogicalComparisonJoin":
+            use_cache = False
 
         # Convert any LazyPlan in the args or kwargs.
         # We do this in reverse order because we expect the first arg to be
@@ -450,8 +460,8 @@ class LazyPlan:
         # we will get nullptr exceptions.  So, process the args that don't
         # claim ownership first (in the reverse direction) and finally
         # process the first arg which we expect will take ownership.
-        kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
-        args = [recursive_check(x) for x in reversed(self.args)]
+        kwargs = {k: recursive_check(v, use_cache) for k, v in self.kwargs.items()}
+        args = [recursive_check(x, use_cache) for x in reversed(self.args)]
         args.reverse()
 
         # Create real duckdb class.
@@ -523,9 +533,30 @@ def execute_plan(plan: LazyPlan):
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner
 
+        # Initialize LazyPlanDistributedArg objects that may need scattering data
+        # to workers before execution.
+        for a in plan.args:
+            _init_lazy_distributed_arg(a)
+
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
+
+
+def _init_lazy_distributed_arg(arg):
+    """Initialize the LazyPlanDistributedArg objects for the given plan argument that
+    may need scattering data to workers before execution.
+    Has to be called right before plan execution since the dataframe state
+    may change (distributed to collected) and the result ID may not be valid anymore.
+    """
+    if isinstance(arg, LazyPlan):
+        for a in arg.args:
+            _init_lazy_distributed_arg(a)
+    elif isinstance(arg, (tuple, list)):
+        for a in arg:
+            _init_lazy_distributed_arg(a)
+    elif isinstance(arg, LazyPlanDistributedArg):
+        arg.init()
 
 
 def get_plan_cardinality(plan: LazyPlan):
@@ -1036,9 +1067,30 @@ class LazyPlanDistributedArg:
     Class to hold the arguments for a LazyPlan that are distributed on the workers.
     """
 
-    def __init__(self, mgr, res_id: str):
-        self.mgr = mgr
-        self.res_id = res_id
+    def __init__(self, df: pd.DataFrame):
+        self.df = df
+        self.mgr = None
+        self.res_id = None
+
+    def init(self):
+        """Initialize to make sure the result ID is set in preparation for pickling
+        result ID to workers for execution.
+        Should be called right before execution of the plan since the dataframe state
+        may change (distributed to collected) and the result ID may not be valid
+        anymore.
+        """
+        if getattr(self.df._mgr, "_md_result_id", None) is not None:
+            # The dataframe is already distributed so we can use the existing result ID
+            self.res_id = self.df._mgr._md_result_id
+        elif self.mgr is not None:
+            # We scattered a DataFrame already and own a manager to reuse
+            self.res_id = self.mgr._md_result_id
+        else:
+            # The dataframe is not distributed yet so we need to scatter it
+            # and create a new result ID.
+            mgr = bodo.spawn.spawner.get_spawner().scatter_data(self.df)
+            self.res_id = mgr._md_result_id
+            self.mgr = mgr
 
     def __reduce__(self):
         """
@@ -1046,6 +1098,9 @@ class LazyPlanDistributedArg:
         We can't send the manager to the workers without triggering collection
         so we just send the result ID instead.
         """
+        assert self.res_id is not None, (
+            "LazyPlanDistributedArg: result ID is not set, call init() first"
+        )
         return (str, (self.res_id,))
 
 
