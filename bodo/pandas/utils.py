@@ -433,14 +433,24 @@ class LazyPlan:
         if "Expression" not in self.plan_class and id(self) in cache:
             return cache[id(self)]
 
-        def recursive_check(x):
+        def recursive_check(x, use_cache):
             """Recursively convert LazyPlans but return other types unmodified."""
             if isinstance(x, LazyPlan):
-                return x.generate_duckdb(cache=cache)
+                return x.generate_duckdb(cache=cache if use_cache else None)
             elif isinstance(x, (tuple, list)):
-                return type(x)(recursive_check(i) for i in x)
+                return type(x)(recursive_check(i, use_cache) for i in x)
             else:
                 return x
+
+        # NOTE: Caching is necessary to make sure source operators which have table
+        # indexes and are reused in various nodes (e.g. expressions) are not re-created
+        # with different table indexes.
+        # Join however doesn't need this and cannot use caching since a sub-plan may
+        # be reused across right and left sides (e.g. self-join) leading to unique_ptr
+        # errors.
+        use_cache = True
+        if self.plan_class == "LogicalComparisonJoin":
+            use_cache = False
 
         # Convert any LazyPlan in the args or kwargs.
         # We do this in reverse order because we expect the first arg to be
@@ -450,8 +460,8 @@ class LazyPlan:
         # we will get nullptr exceptions.  So, process the args that don't
         # claim ownership first (in the reverse direction) and finally
         # process the first arg which we expect will take ownership.
-        kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
-        args = [recursive_check(x) for x in reversed(self.args)]
+        kwargs = {k: recursive_check(v, use_cache) for k, v in self.kwargs.items()}
+        args = [recursive_check(x, use_cache) for x in reversed(self.args)]
         args.reverse()
 
         # Create real duckdb class.

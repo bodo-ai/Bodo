@@ -4,7 +4,6 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
-from copy import deepcopy
 
 import pandas as pd
 from pandas._libs import lib
@@ -820,16 +819,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_join_out.columns = [
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
-        # We want to avoid having self appear on the rhs since the unique_ptr
-        # to the duckdb plan will delete it on the lhs first before it processes the rhs
-        # TODO [BSE-4865]: check right._plan for self recursively.
-        right_plan = deepcopy(right._plan) if self is right else right._plan
 
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
             empty_join_out,
             self._plan,
-            right_plan,
+            right._plan,
             plan_optimizer.CJoinType.INNER,
             key_indices,
         )
