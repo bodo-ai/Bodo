@@ -103,8 +103,9 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             return arrow::MakeNullScalar(date_type);
         } break;
         default:
-            throw std::runtime_error("getDefaultValueForDuckdbValueType unhandled type." +
-                                     std::to_string(static_cast<int>(type)));
+            throw std::runtime_error(
+                "getDefaultValueForDuckdbValueType unhandled type." +
+                std::to_string(static_cast<int>(type)));
     }
 }
 std::string schemaColumnNamesToString(

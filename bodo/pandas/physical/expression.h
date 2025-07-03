@@ -292,8 +292,7 @@ class PhysicalNullExpression : public PhysicalExpression {
                 arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
             return std::make_shared<ArrayExprResult>(std::move(result), "Null");
         } else {
-            std::shared_ptr<arrow::Array> array =
-                NullArrowArray(constant, 1);
+            std::shared_ptr<arrow::Array> array = NullArrowArray(constant, 1);
 
             auto result =
                 arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());

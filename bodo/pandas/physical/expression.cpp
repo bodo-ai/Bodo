@@ -272,7 +272,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             if (bce.value.IsNull()) {
                 // Get the constant out of the duckdb node as a C++ variant.
                 // Using auto since variant set will be extended.
-                auto extracted_value = getDefaultValueForDuckdbValueType(bce.value);
+                auto extracted_value =
+                    getDefaultValueForDuckdbValueType(bce.value);
                 // Return a PhysicalConstantExpression<T> where T is the actual
                 // type of the value contained within bce.value.
                 auto ret = std::visit(
