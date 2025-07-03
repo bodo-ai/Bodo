@@ -281,7 +281,6 @@ def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     assert lam_s._lazy
     assert lam_sliced_head_s.tolist() == (head_s[1:3]).tolist()
 
-    """
     # slicing for data outside of head triggers a fetch
     lam_sliced_s = lam_s[10:30]
     assert not lam_s._lazy
@@ -306,4 +305,3 @@ def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     lam_sliced_head_s = lam_s[-3:]
     assert not lam_s._lazy
     pd.testing.assert_series_equal(lam_sliced_head_s, collect_func(0)[-3:])
-    """

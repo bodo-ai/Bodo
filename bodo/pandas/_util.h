@@ -39,7 +39,7 @@ extractValue(const duckdb::Value &value);
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double,
              std::shared_ptr<arrow::Scalar>>
-getNullValue(const duckdb::Value &value);
+getDefaultValueForDuckdbValueType(const duckdb::Value &value);
 
 /**
  * @brief Return a string representation of the column names in the Arrow schema
