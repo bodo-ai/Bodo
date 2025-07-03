@@ -25,7 +25,7 @@ from pandas._typing import (
 from pandas.core.tools.datetimes import _unit_map
 from pandas.io.parsers.readers import _c_parser_defaults
 
-import bodo
+import bodo.spawn.spawner  # noqa: F401
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
 from bodo.pandas.utils import (
@@ -65,13 +65,13 @@ def from_pandas(df):
 
     res_id = None
     if bodo.dataframe_library_run_parallel:
-        nrows = len(df)
-        res_id = bodo.spawn.utils.scatter_data(df)
+        mgr = bodo.spawn.spawner.get_spawner().scatter_data(df)
+        res_id = mgr._md_result_id
         plan = LazyPlan(
             "LogicalGetPandasReadParallel",
             empty_df,
-            nrows,
-            LazyPlanDistributedArg(None, res_id),
+            n_rows,
+            LazyPlanDistributedArg(mgr, res_id),
         )
     else:
         plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
