@@ -117,7 +117,7 @@ libarrow = { version = "==19.0.0", channel = "bodo.ai" }
 [feature.rcpp.dependencies]
 zstd = "*"
 boost-cpp = "*"
-aws-sdk-cpp = "<=1.11.485"
+aws-sdk-cpp = "*"
 
 [feature.rcpp.target.osx.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }

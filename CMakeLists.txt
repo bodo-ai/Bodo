@@ -351,7 +351,7 @@ endif()
 cmake_print_variables(MPI_INCLUDE_DIR)
 
 # Vendor MPI4Py
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
+if(DEFINED(ENV{BODO_VENDOR_MPI4PY}) AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
   message(STATUS "Copying MPI4Py to Source Directory")
   # Extract the location of the site-packages directory containing mpi4py
   execute_process(
@@ -359,10 +359,10 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
     OUTPUT_VARIABLE MPI4PY_PACKAGE_DIR
     OUTPUT_STRIP_TRAILING_WHITESPACE
   )
-  file(COPY ${MPI4PY_PACKAGE_DIR} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
+  file(GLOB MPI4PY_CONTENTS "${MPI4PY_PACKAGE_DIR}/*")
+  file(COPY ${MPI4PY_CONTENTS} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
+  file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/mpi4py/")
 endif()
-message(STATUS "Copying MPI4Py to Bodo Directory")
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/")
 
 # Find PyArrow Include and Lib Directory
 # TODO: Use Arrow Directories from Conda Instead if Available
