@@ -71,7 +71,7 @@ pip = "*"
 numba = "==0.61.2"
 numpy = ">=1.24"
 pandas = ">=2.2"
-pyarrow = { version = "==19.0.0", channel = "conda-forge" }
+pyarrow = { version = "==19.0.1", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
