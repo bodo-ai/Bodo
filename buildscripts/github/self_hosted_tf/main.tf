@@ -1,7 +1,7 @@
 locals {
   prefix     = "bodo-gh-ci"
   aws_region = "us-east-2"
-  version    = "5.16.0"
+  version    = "6.6.0"
 }
 
 
@@ -19,9 +19,9 @@ resource "aws_resourcegroups_group" "resourcegroups_group" {
 }
 
 module "runners" {
-  source = "philips-labs/github-runner/aws//modules/multi-runner"
+  source = "github-aws-runners/github-runner/aws//modules/multi-runner"
   # Same as local.version
-  version = "5.16.0"
+  version = "6.6.0"
 
   # Multi-Size Runners to Use
   # Assume all Runners are Using Amazon Linux 2023
@@ -147,8 +147,8 @@ module "runners" {
 }
 
 module "webhook_github_app" {
-  source     = "philips-labs/github-runner/aws//modules/webhook-github-app"
-  version    = "5.16.0"
+  source     = "github-aws-runners/github-runner/aws//modules/webhook-github-app"
+  version    = "6.6.0"
   depends_on = [module.runners]
 
   github_app = {
@@ -160,8 +160,8 @@ module "webhook_github_app" {
 }
 
 module "spot_termination_watchter" {
-  source     = "philips-labs/github-runner/aws//modules/termination-watcher"
-  version    = "5.16.0"
+  source     = "github-aws-runners/github-runner/aws//modules/termination-watcher"
+  version    = "6.6.0"
   depends_on = [module.runners]
 
   config = {

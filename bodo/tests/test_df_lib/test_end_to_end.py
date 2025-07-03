@@ -1741,6 +1741,24 @@ def test_read_csv(datapath):
     )
 
 
+def test_df_state_change():
+    """Make sure dataframe state change doesn't lead to stale result id in plan
+    execution"""
+
+    @bodo.jit(spawn=True)
+    def get_df(df):
+        return df
+
+    bdf = get_df(pd.DataFrame({"A": [1, 2, 3, 4, 5, 6]}))
+    bdf2 = bdf.A.map(lambda x: x)
+
+    # Collect the df, original result id is stale
+    print(bdf)
+
+    # Plan execution shouldn't fail due to stale res id
+    print(bdf2)
+
+
 def test_dataframe_concat(datapath):
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))[["A", "D"]]
     bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))[["A", "E"]]

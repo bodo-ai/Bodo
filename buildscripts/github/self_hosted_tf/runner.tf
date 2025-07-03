@@ -18,7 +18,7 @@ locals {
     # For now, choose the option most likely to not be interrupted
     instance_allocation_strategy = "capacity-optimized"
     # Use On-Demand Instances if Spot Instances are Unavailable
-    enable_on_demand_failover_for_errors = ["InsufficientInstanceCapacity"]
+    enable_on_demand_failover_for_errors = ["InsufficientInstanceCapacity", "UnfulfillableCapacity"]
 
     # Let the module manage the service linked role
     create_service_linked_role_spot = true

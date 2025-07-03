@@ -803,6 +803,10 @@ cdef class LogicalGetPandasReadParallel(LogicalOperator):
         # plan locally for cardinality.  If so, extract res_id from that object.
         if not isinstance(result_id, str):
             result_id = result_id.res_id
+            # Set dummy result_id when not available, which is the case when we are constructing the plan just for cardinality
+            # and not for execution.
+            if result_id is None:
+                result_id = ""
         self.out_schema = out_schema
         self.nrows = nrows
         cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_parallel_node(result_id.encode(), out_schema, self.getCardinality())

@@ -15,6 +15,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     defaults:
       run:
         shell: bash
@@ -26,9 +28,11 @@ jobs:
         terraform_version: 1.7.1
     - uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.SELF_HOSTED_AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.SELF_HOSTED_AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-2
+        role-to-assume: arn:aws:iam::427443013497:role/SelfHostedGHTerraformRole
+        role-session-name: SelfHostedTerraformRegenCI
+        role-skip-session-tagging: true
+        role-duration-seconds: 7200
 
     - name: Terraform Fmt
       id: fmt
@@ -42,63 +46,6 @@ jobs:
     - name: Terraform Plan
       id: plan
       run: terraform plan -input=false -var 'github_app_id=804367' -var 'github_key_base64=${{ secrets.SELF_HOSTED_TF_KEY_BASE64 }}'
-    - uses: actions/github-script@v7
-      if: github.event_name == 'pull_request'
-      env:
-        PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          // 1. Retrieve existing bot comments for the PR
-          const { data: comments } = await github.rest.issues.listComments({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: context.issue.number,
-          })
-          const botComment = comments.find(comment => {
-            return comment.user.type === 'Bot' && comment.body.includes('Terraform Format and Style')
-          })
-    
-          // 2. Prepare format of the comment
-          const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-          #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-          #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
-          <details><summary>Validation Output</summary>
-    
-          \`\`\`\n
-          ${{ steps.validate.outputs.stdout }}
-          \`\`\`
-    
-          </details>
-    
-          #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
-    
-          <details><summary>Show Plan</summary>
-    
-          \`\`\`\n
-          ${process.env.PLAN}
-          \`\`\`
-    
-          </details>
-    
-          *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`./buildscripts/github/self_hosted_tf\`, Workflow: \`${{ github.workflow }}\`*`;
-    
-          // 3. If we have a comment, update it, otherwise create a new one
-          if (botComment) {
-            github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: botComment.id,
-              body: output
-            })
-          } else {
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
-          }
 
     - name: Terraform Apply
       id: apply
