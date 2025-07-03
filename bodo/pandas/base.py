@@ -42,6 +42,9 @@ from bodo.pandas.utils import (
 )
 from bodo.utils.utils import bodo_spawn_exec
 
+if pt.TYPE_CHECKING:
+    from pyiceberg.table import Table as PyIcebergTable
+
 
 def from_pandas(df):
     """Convert a Pandas DataFrame to a BodoDataFrame."""
@@ -258,6 +261,27 @@ def read_iceberg(
         )
 
     return wrap_plan(plan=plan)
+
+
+def read_iceberg_table(table: "PyIcebergTable") -> BodoDataFrame:
+    import pyiceberg.catalog
+
+    # We can't scatter catalogs so we need to use properties instead so the workers can
+    # create the catalog themselves.
+    catalog_properties = table.catalog.properties
+    catalog_properties.update(
+        {
+            pyiceberg.catalog.PY_CATALOG_IMPL: table.catalog.__class__.__module__
+            + "."
+            + table.catalog.__class__.__name__,
+        }
+    )
+
+    return read_iceberg(
+        ".".join(table._identifier),
+        catalog_name=table.catalog.name,
+        catalog_properties=catalog_properties,
+    )
 
 
 @check_args_fallback(
