@@ -25,7 +25,7 @@ For a general introduction on how to use Iceberg in Bodo, take a look at our [qu
 Otherwise, start by installing the `bodo-iceberg-connector` package from Conda.
 
 ```bash
-conda install bodo-iceberg-connector
+conda install -c bodo.ai bodo-iceberg-connector
 ```
 
 ## Supported Iceberg Catalogs
