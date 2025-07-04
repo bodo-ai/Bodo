@@ -7,7 +7,7 @@ tags:
 
 ---
 
-<!-- 
+<!--
 NOTE: the examples in this file are covered by tests in bodo/tests/test_quickstart_docs.py. Any changes to examples in this file should also update the corresponding unit test(s).
  -->
 
@@ -19,7 +19,7 @@ important concepts briefly.
 
 Installation
 ------------
-[Install Bodo](../installation_and_setup/install.md) to get started with Python development (e.g., `pip install -U bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
+[Install Bodo](../installation_and_setup/install.md) to get started with Python development (e.g., `pip install -U bodo` or `conda install bodo -c conda-forge`).
 
 Data Transform Example with Bodo
 --------------------------------
@@ -51,7 +51,7 @@ df.to_parquet("pd_example.pq", row_group_size=100_000)
 
 Save this code in `gen_data.py` and run in command line:
 
-``` 
+```
 python gen_data.py
 ```
 
@@ -123,7 +123,7 @@ if __name__ == "__main__":
 Save this code in `bodo_data_transform.py` and run on a single core from
 command line:
 
-``` 
+```
 $ BODO_NUM_WORKERS=1 python bodo_data_transform.py
 Total time: 1.78
 ```
@@ -135,7 +135,7 @@ interpreter overheads in `apply`.
 Now let's run the code on all CPU cores - the example below assumes an 8 core
 machine.
 
-``` 
+```
 $ python bodo_data_transform.py
 Total time: 0.38
 ```
@@ -180,7 +180,7 @@ if __name__ == "__main__":
 
 Save this code in `data_transform2.py` and run in command line:
 
-``` 
+```
 $ python data_transform2.py
 Total time first call: 4.72
 Total time second call: 1.92
@@ -215,7 +215,7 @@ if __name__ == "__main__":
 Save this code in `data_transform_cache.py` and run in command line
 twice:
 
-``` 
+```
 $ python data_transform_cache.py
 Total time: 4.70
 $ python data_transform_cache.py
@@ -276,9 +276,9 @@ Save this code in `load_data.py` and run on two cores:
     9999997 2015-09-29  9999997
     9999998 2015-09-29  9999998
     9999999 2015-09-29  9999999
-    
+
     [10000000 rows x 2 columns]
-    
+
     Bodo dataframe:
                      A        B
     0       1970-01-01        0
@@ -292,9 +292,9 @@ Save this code in `load_data.py` and run on two cores:
     4999997 2014-05-17  4999997
     4999998 2014-05-17  4999998
     4999999 2014-05-17  4999999
-    
+
     [5000000 rows x 2 columns]
-    
+
     5000000 2014-05-18  5000000
     5000001 2014-05-18  5000001
     5000002 2014-05-18  5000002
@@ -306,11 +306,11 @@ Save this code in `load_data.py` and run on two cores:
     9999997 2015-09-29  9999997
     9999998 2015-09-29  9999998
     9999999 2015-09-29  9999999
-    
+
     [5000000 rows x 2 columns]
     ```
 
-</details>   
+</details>
 
 The first dataframe is a regular Pandas dataframe and has all 10 million rows.
 However, the second dataframe is a Bodo parallelized Pandas
@@ -351,7 +351,7 @@ if __name__ == "__main__":
 
 Save this code as `data_groupby.py` and run from command line:
 
-``` 
+```
 $ BODO_NUM_WORKERS=8 python data_groupby.py
 ```
 
@@ -428,7 +428,7 @@ if __name__ == "__main__":
 
 Save this code as `df_unsupported.py` and run from command line:
 
-``` 
+```
 $ python df_unsupported.py
 # bodo.utils.typing.BodoError: Dataframe.transpose() not supported yet.
 ```
@@ -468,7 +468,7 @@ if __name__ == "__main__":
 
 Save this code as `groupby_keys.py` and run from command line:
 
-``` 
+```
 $ python groupby_keys.py
 # bodo.utils.typing.BodoError: groupby(): argument 'by' requires a constant value but variable 'keys' is updated inplace using 'append'
 ```

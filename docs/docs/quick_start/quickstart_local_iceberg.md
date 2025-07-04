@@ -1,4 +1,4 @@
-<!-- 
+<!--
 NOTE: the examples in this file are covered by tests in bodo/tests/test_quickstart_docs.py. Any changes to examples in this file should also update the corresponding unit test(s).
  -->
 
@@ -8,7 +8,7 @@ This quickstart guide will walk you through the process of creating and reading 
 
 ## Installation
 
-[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo` or `conda install bodo -c bodo.ai -c conda-forge`).
+[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo` or `conda install bodo -c conda-forge`).
 
 
 ## Create a Local Iceberg Table with Bodo DataFrame Library
