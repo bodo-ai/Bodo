@@ -212,6 +212,7 @@ def check_args_fallback(
 
                 @functools.wraps(func)
                 def wrapper(self, *args, **kwargs):
+                    self = self.collect()
                     # Call the same method in the base class.
                     return getattr(self.__class__.__bases__[0], func.__name__)(
                         self, *args, **kwargs
@@ -348,6 +349,9 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
+
+                    # execute the plan and collect results on spawner.
+                    self = self.collect()
                     return getattr(base_class, func.__name__)(self, *args, **kwargs)
 
         return wrapper
@@ -1102,6 +1106,9 @@ class LazyPlanDistributedArg:
             "LazyPlanDistributedArg: result ID is not set, call init() first"
         )
         return (str, (self.res_id,))
+
+    def __str__(self):
+        return f"LazyPlanDistributedArg(res_id={self.res_id})"
 
 
 def count_plan(self):
