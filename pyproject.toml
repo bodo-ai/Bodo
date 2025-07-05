@@ -17,7 +17,7 @@ name = "bodo"
 dynamic = ["version"]
 description = "High-Performance Python Compute Engine for Data and AI"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.9,<3.14"
 keywords = ["data", "analytics", "cluster"]
 authors = [{ name = "Bodo.ai" }]
 
@@ -27,6 +27,7 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
