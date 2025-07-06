@@ -532,19 +532,18 @@ class Spawner:
             out_arg: input argument metadata
         """
         if isinstance(arg_meta, ArgMetadata):
-            match arg_meta:
-                case ArgMetadata.BROADCAST:
-                    bodo.libs.distributed_api.bcast(
-                        arg, root=self.bcast_root, comm=spawner.worker_intercomm
-                    )
-                case ArgMetadata.SCATTER:
-                    bodo.libs.distributed_api.scatterv(
-                        arg, root=self.bcast_root, comm=spawner.worker_intercomm
-                    )
-                case ArgMetadata.LAZY:
-                    spawner.worker_intercomm.bcast(
-                        arg._get_result_id(), root=self.bcast_root
-                    )
+            if arg_meta == ArgMetadata.BROADCAST:
+                bodo.libs.distributed_api.bcast(
+                    arg, root=self.bcast_root, comm=spawner.worker_intercomm
+                )
+            elif arg_meta == ArgMetadata.SCATTER:
+                bodo.libs.distributed_api.scatterv(
+                    arg, root=self.bcast_root, comm=spawner.worker_intercomm
+                )
+            elif arg_meta == ArgMetadata.LAZY:
+                spawner.worker_intercomm.bcast(
+                    arg._get_result_id(), root=self.bcast_root
+                )
 
         # Send table DataFrames for BodoSQLContext
         if isinstance(arg_meta, BodoSQLContextMetadata):
