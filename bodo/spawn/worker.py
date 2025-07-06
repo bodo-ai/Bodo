@@ -47,9 +47,9 @@ DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 spawnerpid = None
 
 
-_recv_arg_return_t = (
-    tuple[pt.Any, ArgMetadata | None] | tuple["_recv_arg_return_t", ...]
-)
+_recv_arg_return_t = pt.Union[
+    tuple[pt.Any, pt.Union[ArgMetadata, None]], tuple["_recv_arg_return_t", ...]
+]
 
 
 def _recv_arg(
@@ -107,17 +107,17 @@ RESULT_REGISTRY: dict[str, pt.Any] = {}
 
 # Once >3.12 is our minimum version we can use the below instead
 # type is_distributed_t = bool + list[is_distributed_t] | tuple[is_distributed_t]
-is_distributed_t: pt.TypeAlias = (
-    bool | list["is_distributed_t"] | tuple["is_distributed_t"]
-)
+is_distributed_t = pt.Union[
+    bool, list["is_distributed_t"], tuple["is_distributed_t", ...]
+]
 
 
-distributed_return_metadata_t: pt.TypeAlias = (
-    LazyMetadata
-    | list["distributed_return_metadata_t"]
-    | dict[pt.Any, "distributed_return_metadata_t"]
-    | ExtensionArray
-)
+distributed_return_metadata_t = pt.Union[
+    LazyMetadata,
+    list["distributed_return_metadata_t"],
+    dict[pt.Any, "distributed_return_metadata_t"],
+    ExtensionArray,
+]
 
 
 def _build_index_data(
