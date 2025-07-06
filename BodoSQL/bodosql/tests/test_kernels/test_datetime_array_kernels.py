@@ -3155,13 +3155,12 @@ def test_timestamp_from_date_and_time(timetype, memory_leak_check):
         return np.datetime64(ts)
 
     time_value_constructor = time_constructor
-    match timetype:
-        case "time":
-            time_value_constructor = time_constructor
-        case "timestamp":
-            time_value_constructor = timestamp_constructor
-        case "datetime":
-            time_value_constructor = datetime_constructor
+    if timetype == "time":
+        time_value_constructor = time_constructor
+    elif timetype == "timestamp":
+        time_value_constructor = timestamp_constructor
+    elif timetype == "datetime64":
+        time_value_constructor = datetime_constructor
 
     def impl(date, time):
         return pd.Series(bodosql.kernels.timestamp_from_date_and_time(date, time))
