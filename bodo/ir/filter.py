@@ -341,48 +341,41 @@ def build_filter_from_ir(filter_var: ir.Var, fir: ir.FunctionIR, typemap) -> Fil
         )
 
     fdef = guard(find_callname, fir, filter_def)
-    match fdef:
-        case ("make_scalar", "bodo.ir.filter"):
-            if len(filter_def.args) != 1:
-                raise BodoError(
-                    "Building Filter from IR Failed, Scalar filter has more than 1 argument"
-                )
-            return Scalar(filter_def.args[0])
-
-        case ("make_ref", "bodo.ir.filter"):
-            if len(filter_def.args) != 1:
-                raise BodoError(
-                    "Building Filter from IR Failed, Ref filter has more than 1 argument"
-                )
-            if not is_overload_constant_str(typemap[filter_def.args[0].name]):
-                raise BodoError(
-                    "Building Filter from IR Failed, Ref filter arg is not constant str"
-                )
-            arg_val: str = get_const_value_inner(
-                fir, filter_def.args[0], typemap=typemap
-            )
-            return Ref(arg_val)
-
-        case ("make_op", "bodo.ir.filter"):
-            if not is_overload_constant_str(typemap[filter_def.args[0].name]):
-                raise BodoError(
-                    "Building Filter from IR Failed, first arg of Op filter is not constant str"
-                )
-            op_name: str = get_const_value_inner(
-                fir, filter_def.args[0], typemap=typemap
-            )
-
-            args = (
-                build_filter_from_ir(arg, fir, typemap) for arg in filter_def.args[1:]
-            )
-            return Op(op_name, *args)
-
-        case (name, path):
+    if fdef == ("make_scalar", "bodo.ir.filter"):
+        if len(filter_def.args) != 1:
             raise BodoError(
-                f"Building Filter from IR Failed, Unknown Filter Func: {path}.{name}"
+                "Building Filter from IR Failed, Scalar filter has more than 1 argument"
             )
-        case None:
-            raise ValueError("Building Filter from IR Failed, Undefined Filter Def")
+        return Scalar(filter_def.args[0])
+
+    elif fdef == ("make_ref", "bodo.ir.filter"):
+        if len(filter_def.args) != 1:
+            raise BodoError(
+                "Building Filter from IR Failed, Ref filter has more than 1 argument"
+            )
+        if not is_overload_constant_str(typemap[filter_def.args[0].name]):
+            raise BodoError(
+                "Building Filter from IR Failed, Ref filter arg is not constant str"
+            )
+        arg_val: str = get_const_value_inner(fir, filter_def.args[0], typemap=typemap)
+        return Ref(arg_val)
+
+    elif fdef == ("make_op", "bodo.ir.filter"):
+        if not is_overload_constant_str(typemap[filter_def.args[0].name]):
+            raise BodoError(
+                "Building Filter from IR Failed, first arg of Op filter is not constant str"
+            )
+        op_name: str = get_const_value_inner(fir, filter_def.args[0], typemap=typemap)
+
+        args = (build_filter_from_ir(arg, fir, typemap) for arg in filter_def.args[1:])
+        return Op(op_name, *args)
+    elif fdef == None:
+        raise ValueError("Building Filter from IR Failed, Undefined Filter Def")
+    else:
+        name, path = fdef
+        raise BodoError(
+            f"Building Filter from IR Failed, Unknown Filter Func: {path}.{name}"
+        )
 
 
 def get_filter_predicate_compute_func(col_val) -> str:
