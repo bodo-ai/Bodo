@@ -1155,6 +1155,11 @@ def string_from_string_and_size(self, string, size):
 
 numba.core.pythonapi.PythonAPI.string_from_string_and_size = string_from_string_and_size
 
+# Numba 0.61 replaces import_module_noblock with import_module so we set it here
+# to support Numba >=0.60 (required for Python 3.9)
+if not hasattr(numba.core.pythonapi.PythonAPI, "import_module"):
+    numba.core.pythonapi.PythonAPI.import_module = numba.core.pythonapi.PythonAPI.import_module_noblock
+
 
 # This replaces Numba's numba.core.dispatcher._DispatcherBase._compile_for_args
 # method to delete args before returning the dispatcher object and handle BodoError.
