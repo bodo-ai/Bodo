@@ -37,19 +37,19 @@ SPARK_JAR_PACKAGES = [
 @dataclass(frozen=True)
 class SparkIcebergCatalog:
     catalog_name: str
-    default_schema: str | None = field(default=None, kw_only=True)
+    default_schema: str | None = field(default=None)
 
 
 @dataclass(frozen=True)
 class SparkFilesystemIcebergCatalog(SparkIcebergCatalog):
-    path: str
+    path: str = None
 
 
 @dataclass(frozen=True)
 class SparkRestIcebergCatalog(SparkIcebergCatalog):
-    uri: str
-    credential: str
-    warehouse: str
+    uri: str = None
+    credential: str = None
+    warehouse: str = None
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class SparkAzureIcebergCatalog(SparkRestIcebergCatalog):
 
 @dataclass(frozen=True)
 class SparkAwsIcebergCatalog(SparkRestIcebergCatalog):
-    region: str = field(default="us-east-2", kw_only=True)
+    region: str = field(default="us-east-2")
 
 
 def get_spark_catalog_for_connection(connection: tuple[str, str, str]):
