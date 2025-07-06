@@ -48,74 +48,72 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             row_indexes = []
             for ss_axis in head.axes[1:]:
                 # BSE-4099: Support other types of indexes
-                match type(ss_axis):
-                    case pd.RangeIndex:
-                        row_indexes.append(
-                            pd.RangeIndex(
-                                ss_axis.start,
-                                ss_axis.start + (ss_axis.step * nrows),
-                                ss_axis.step,
-                                name=ss_axis.name,
-                            )
+                if isinstance(ss_axis, pd.RangeIndex):
+                    row_indexes.append(
+                        pd.RangeIndex(
+                            ss_axis.start,
+                            ss_axis.start + (ss_axis.step * nrows),
+                            ss_axis.step,
+                            name=ss_axis.name,
                         )
-                    case pd.Index:
-                        assert index_data is not None
-                        row_indexes.append(pd.Index(index_data, name=ss_axis.name))
-                    case pd.MultiIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.MultiIndex.from_frame(
-                                index_data,
-                                sortorder=ss_axis.sortorder,
-                                names=ss_axis.names,
-                            )
+                    )
+                elif isinstance(ss_axis, pd.Index):
+                    assert index_data is not None
+                    row_indexes.append(pd.Index(index_data, name=ss_axis.name))
+                elif isinstance(ss_axis, pd.MultiIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.MultiIndex.from_frame(
+                            index_data,
+                            sortorder=ss_axis.sortorder,
+                            names=ss_axis.names,
                         )
-                    case pd.IntervalIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.IntervalIndex.from_arrays(
-                                index_data[0],
-                                index_data[1],
-                                ss_axis.closed,
-                                ss_axis.name,
-                                dtype=ss_axis.dtype,
-                            )
+                    )
+                elif isinstance(ss_axis, pd.IntervalIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.IntervalIndex.from_arrays(
+                            index_data[0],
+                            index_data[1],
+                            ss_axis.closed,
+                            ss_axis.name,
+                            dtype=ss_axis.dtype,
                         )
-                    case pd.CategoricalIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.CategoricalIndex(
-                                index_data,
-                                categories=ss_axis.categories,
-                                ordered=ss_axis.ordered,
-                                name=ss_axis.name,
-                            )
+                    )
+                elif isinstance(ss_axis, pd.CategoricalIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.CategoricalIndex(
+                            index_data,
+                            categories=ss_axis.categories,
+                            ordered=ss_axis.ordered,
+                            name=ss_axis.name,
                         )
-                    case pd.DatetimeIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.DatetimeIndex(
-                                index_data,
-                                name=ss_axis.name,
-                                tz=ss_axis.tz,
-                                freq=ss_axis.freq,
-                            )
+                    )
+                elif isinstance(ss_axis, pd.DatetimeIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.DatetimeIndex(
+                            index_data,
+                            name=ss_axis.name,
+                            tz=ss_axis.tz,
+                            freq=ss_axis.freq,
                         )
-                    case pd.PeriodIndex:
-                        assert index_data is not None
-                        row_indexes.append(index_data)
-                    case pd.TimedeltaIndex:
-                        assert index_data is not None
-                        row_indexes.append(
-                            pd.TimedeltaIndex(
-                                index_data, name=ss_axis.name, unit=ss_axis.unit
-                            )
+                    )
+                elif isinstance(ss_axis, pd.PeriodIndex):
+                    assert index_data is not None
+                    row_indexes.append(index_data)
+                elif isinstance(ss_axis, pd.TimedeltaIndex):
+                    assert index_data is not None
+                    row_indexes.append(
+                        pd.TimedeltaIndex(
+                            index_data, name=ss_axis.name, unit=ss_axis.unit
                         )
-
-                    case _:
-                        raise ValueError(
-                            f"Index type {type(ss_axis)} not supported in LazyBlockManager"
-                        )
+                    )
+                else:
+                    raise ValueError(
+                        f"Index type {type(ss_axis)} not supported in LazyBlockManager"
+                    )
 
             obj = super().__new__(
                 cls,
@@ -355,58 +353,57 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             # Create axis based on head
             head_axis = head.axes[0]
             # BSE-4099: Support other types of indexes
-            match type(head_axis):
-                case pd.RangeIndex:
-                    axis_ = pd.RangeIndex(
-                        head_axis.start,
-                        head_axis.start + (head_axis.step * nrows),
-                        head_axis.step,
-                        name=head_axis.name,
-                    )
-                case pd.Index:
-                    assert index_data is not None
-                    axis_ = pd.Index(index_data, name=head_axis.name)
-                case pd.MultiIndex:
-                    axis_ = pd.MultiIndex.from_frame(
-                        index_data, sortorder=head_axis.sortorder, names=head_axis.names
-                    )
-                case pd.IntervalIndex:
-                    assert index_data is not None
-                    axis_ = pd.IntervalIndex.from_arrays(
-                        index_data[0],
-                        index_data[1],
-                        head_axis.closed,
-                        head_axis.name,
-                        dtype=head_axis.dtype,
-                    )
-                case pd.CategoricalIndex:
-                    assert index_data is not None
-                    axis_ = pd.CategoricalIndex(
-                        index_data,
-                        categories=head_axis.categories,
-                        ordered=head_axis.ordered,
-                        name=head_axis.name,
-                    )
-                case pd.DatetimeIndex:
-                    assert index_data is not None
-                    axis_ = pd.DatetimeIndex(
-                        index_data,
-                        name=head_axis.name,
-                        tz=head_axis.tz,
-                        freq=head_axis.freq,
-                    )
-                case pd.PeriodIndex:
-                    assert index_data is not None
-                    axis_ = index_data
-                case pd.TimedeltaIndex:
-                    assert index_data is not None
-                    axis_ = pd.TimedeltaIndex(
-                        index_data, name=head_axis.name, unit=head_axis.unit
-                    )
-                case _:
-                    raise ValueError(
-                        "Index type {type(head_axis)} not supported in LazySingleBlockManager"
-                    )
+            if isinstance(head_axis, pd.RangeIndex):
+                axis_ = pd.RangeIndex(
+                    head_axis.start,
+                    head_axis.start + (head_axis.step * nrows),
+                    head_axis.step,
+                    name=head_axis.name,
+                )
+            elif isinstance(head_axis, pd.Index):
+                assert index_data is not None
+                axis_ = pd.Index(index_data, name=head_axis.name)
+            elif isinstance(head_axis, pd.MultiIndex):
+                axis_ = pd.MultiIndex.from_frame(
+                    index_data, sortorder=head_axis.sortorder, names=head_axis.names
+                )
+            elif isinstance(head_axis, pd.IntervalIndex):
+                assert index_data is not None
+                axis_ = pd.IntervalIndex.from_arrays(
+                    index_data[0],
+                    index_data[1],
+                    head_axis.closed,
+                    head_axis.name,
+                    dtype=head_axis.dtype,
+                )
+            elif isinstance(head_axis, pd.CategoricalIndex):
+                assert index_data is not None
+                axis_ = pd.CategoricalIndex(
+                    index_data,
+                    categories=head_axis.categories,
+                    ordered=head_axis.ordered,
+                    name=head_axis.name,
+                )
+            elif isinstance(head_axis, pd.DatetimeIndex):
+                assert index_data is not None
+                axis_ = pd.DatetimeIndex(
+                    index_data,
+                    name=head_axis.name,
+                    tz=head_axis.tz,
+                    freq=head_axis.freq,
+                )
+            elif isinstance(head_axis, pd.PeriodIndex):
+                assert index_data is not None
+                axis_ = index_data
+            elif isinstance(head_axis, pd.TimedeltaIndex):
+                assert index_data is not None
+                axis_ = pd.TimedeltaIndex(
+                    index_data, name=head_axis.name, unit=head_axis.unit
+                )
+            else:
+                raise ValueError(
+                    "Index type {type(head_axis)} not supported in LazySingleBlockManager"
+                )
 
         # Flag for disabling collect to allow updating internal pandas metadata
         # See DataFrame.__setitem__
