@@ -2,6 +2,8 @@
 Helper functions to enable typing.
 """
 
+from __future__ import annotations
+
 import copy
 import itertools
 import operator
@@ -55,7 +57,7 @@ INDEX_SENTINEL = "$_bodo_index_"
 
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
-Index: pt.TypeAlias = list[str | dict]
+Index = pt.Union[list, tuple]
 FileSchema: pt.TypeAlias = tuple[
     list[str], list, Index, list[int], list, list, list, pa.Schema
 ]
