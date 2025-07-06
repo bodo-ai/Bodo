@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import os
-import typing as pt
 from pathlib import PureWindowsPath
 from urllib.parse import urlparse
 
@@ -45,7 +46,6 @@ class BodoPyArrowFileIO(PyArrowFileIO):
     """
 
     @staticmethod
-    @pt.override
     def parse_location(location: str) -> tuple[str, str, str]:
         """Return the path without the scheme."""
 
@@ -72,7 +72,6 @@ class BodoPyArrowFileIO(PyArrowFileIO):
         else:
             return uri.scheme, uri.netloc, f"{uri.netloc}{uri.path}"
 
-    @pt.override
     def _initialize_fs(self, scheme: str, netloc: str | None = None) -> FileSystem:
         if netloc:
             scheme, netloc = _map_wasb_to_abfs(scheme, netloc)
