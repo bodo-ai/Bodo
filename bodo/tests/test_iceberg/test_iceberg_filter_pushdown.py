@@ -2,6 +2,8 @@
 Basic E2E tests for each type of filter pushdown on Iceberg tables.
 """
 
+from __future__ import annotations
+
 import datetime
 import io
 
