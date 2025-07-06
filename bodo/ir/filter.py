@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 This file contains dictionaries mapping BodoSQL kernel name to
 corresponding SQL functions. This file also contains

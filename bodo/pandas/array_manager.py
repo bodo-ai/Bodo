@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """LazyArrayManager and LazySingleArrayManager classes for lazily loading data from workers in BodoSeries/DataFrames."""
 
 import typing as pt
