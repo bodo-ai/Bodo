@@ -127,12 +127,7 @@ def _build_index_data(
     Construct distributed return metadata for the index of res if it has an index
     """
     if isinstance(res, (pd.DataFrame, pd.Series)):
-        if isinstance(res.index, pd.Index):
-            # Convert index data to ArrowExtensionArray because we have a lazy ArrowExtensionArray
-            return _build_distributed_return_metadata(
-                ArrowExtensionArray(pa.array(res.index._data)), logger
-            )
-        elif isinstance(res.index, pd.MultiIndex):
+        if isinstance(res.index, pd.MultiIndex):
             return _build_distributed_return_metadata(
                 res.index.to_frame(index=False, allow_duplicates=True), logger
             )
@@ -154,6 +149,11 @@ def _build_index_data(
             # since we're missing a proper PeriodArray but it's fine since we'll replace this
             # with lazy numpy soon
             return bodo.gatherv(res.index)
+        elif isinstance(res.index, pd.Index):
+            # Convert index data to ArrowExtensionArray because we have a lazy ArrowExtensionArray
+            return _build_distributed_return_metadata(
+                ArrowExtensionArray(pa.array(res.index._data)), logger
+            )
 
     return None
 

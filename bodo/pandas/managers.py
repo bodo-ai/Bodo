@@ -59,9 +59,6 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                             name=ss_axis.name,
                         )
                     )
-                elif isinstance(ss_axis, pd.Index):
-                    assert index_data is not None
-                    row_indexes.append(pd.Index(index_data, name=ss_axis.name))
                 elif isinstance(ss_axis, pd.MultiIndex):
                     assert index_data is not None
                     row_indexes.append(
@@ -112,6 +109,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                             index_data, name=ss_axis.name, unit=ss_axis.unit
                         )
                     )
+                elif isinstance(ss_axis, pd.Index):
+                    assert index_data is not None
+                    row_indexes.append(pd.Index(index_data, name=ss_axis.name))
                 else:
                     raise ValueError(
                         f"Index type {type(ss_axis)} not supported in LazyBlockManager"
@@ -362,9 +362,6 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                     head_axis.step,
                     name=head_axis.name,
                 )
-            elif isinstance(head_axis, pd.Index):
-                assert index_data is not None
-                axis_ = pd.Index(index_data, name=head_axis.name)
             elif isinstance(head_axis, pd.MultiIndex):
                 axis_ = pd.MultiIndex.from_frame(
                     index_data, sortorder=head_axis.sortorder, names=head_axis.names
@@ -402,6 +399,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                 axis_ = pd.TimedeltaIndex(
                     index_data, name=head_axis.name, unit=head_axis.unit
                 )
+            elif isinstance(head_axis, pd.Index):
+                assert index_data is not None
+                axis_ = pd.Index(index_data, name=head_axis.name)
             else:
                 raise ValueError(
                     "Index type {type(head_axis)} not supported in LazySingleBlockManager"

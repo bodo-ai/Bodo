@@ -96,8 +96,6 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
                     head_axis0.step,
                     name=head_axis0.name,
                 )
-            elif isinstance(head_axis0, pd.Index):
-                new_axis0 = pd.Index(index_data, name=head_axis0.name)
             elif isinstance(head_axis0, pd.MultiIndex):
                 new_axis0 = pd.MultiIndex.from_frame(
                     index_data,
@@ -137,6 +135,8 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
                 new_axis0 = pd.TimedeltaIndex(
                     index_data, name=head_axis0.name, unit=head_axis0.unit
                 )
+            elif isinstance(head_axis0, pd.Index):
+                new_axis0 = pd.Index(index_data, name=head_axis0.name)
             else:
                 raise ValueError(
                     f"{type(head_axis0)} is not supported in LazyArrayManager"
@@ -408,8 +408,6 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
                     head_axis.step,
                     name=head_axis.name,
                 )
-            elif isinstance(head_axis, pd.Index):
-                new_axis = pd.Index(index_data, name=head_axis.name)
             elif isinstance(head_axis, pd.MultiIndex):
                 new_axis = pd.MultiIndex.from_frame(
                     index_data, sortorder=head_axis.sortorder, names=head_axis.names
@@ -447,6 +445,8 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
                 new_axis = pd.TimedeltaIndex(
                     index_data, name=head_axis.name, unit=head_axis.unit
                 )
+            elif isinstance(head_axis, pd.Index):
+                new_axis = pd.Index(index_data, name=head_axis.name)
             else:
                 raise ValueError(
                     f"{type(head_axis)} is not supported in LazySingleArrayManager"
