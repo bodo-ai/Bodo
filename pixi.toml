@@ -1,7 +1,8 @@
 [project]
 name = "bodo"
-channels = ["conda-forge"]
+channels = ["bodo.ai", "conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+conda-pypi-map = { "bodo.ai" = "buildscripts/bodo_mapping.json" }
 
 [environments]
 # Development
@@ -64,9 +65,10 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 macos = "12.0"
 
 [dependencies]
-python = "3.9.*"
+python = "3.13.*"
 pip = "*"
 # Core Python Deps
+# Numba 0.60 is required for Python 3.9 (required for PyIceberg CI)
 numba = ">=0.60"
 numpy = ">=1.24"
 pandas = ">=2.2"
@@ -109,8 +111,8 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
-pyarrow = { version = "==19.0.0" }
-libarrow = { version = "==19.0.0" }
+pyarrow = { version = "==19.0.0", channel = "bodo.ai" }
+libarrow = { version = "==19.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
