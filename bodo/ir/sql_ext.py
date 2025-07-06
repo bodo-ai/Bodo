@@ -4,6 +4,8 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
+from __future__ import annotations
+
 import datetime
 import sys
 from collections.abc import Iterable
@@ -1965,7 +1967,7 @@ def snowflake_reader_init_py_entry(
         "snowflake_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
     )
 
-    def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
+    def codegen(context: BaseContext, builder: IRBuilder, signature, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
