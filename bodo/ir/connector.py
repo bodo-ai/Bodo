@@ -2,6 +2,8 @@
 Common IR extension functions for connectors such as CSV, Parquet and JSON readers.
 """
 
+from __future__ import annotations
+
 import sys
 import typing as pt
 from abc import ABCMeta, abstractmethod
@@ -70,7 +72,7 @@ class Connector(ir.Stmt, metaclass=ABCMeta):
         """
         ...
 
-    def typeinfer_out_vars(self, typeinferer: "TypeInferer") -> None:
+    def typeinfer_out_vars(self, typeinferer: TypeInferer) -> None:
         """
         Set the typing constraints for the current connector node.
         This is used for showing type dependencies. As a result,
@@ -149,7 +151,7 @@ def connector_distributed_analysis(node: Connector, array_dists):
         array_dists[v.name] = out_dist
 
 
-def connector_typeinfer(node: Connector, typeinferer: "TypeInferer") -> None:
+def connector_typeinfer(node: Connector, typeinferer: TypeInferer) -> None:
     """
     Set the typing constraints for various connector nodes.
     See Connector.typeinfer_out_vars for more information.
@@ -175,13 +177,13 @@ class VarVisitor(FilterVisitor[bif.Filter]):
     def __init__(self, func: pt.Callable[[ir.Var], ir.Var]):
         self.func = func
 
-    def visit_scalar(self, scalar: "Scalar") -> "Filter":
+    def visit_scalar(self, scalar: Scalar) -> Filter:
         return bif.Scalar(self.func(scalar.val))
 
-    def visit_ref(self, ref: "Ref") -> "Filter":
+    def visit_ref(self, ref: Ref) -> Filter:
         return ref
 
-    def visit_op(self, filter: "Op") -> "Filter":
+    def visit_op(self, filter: Op) -> Filter:
         return bif.Op(filter.op, *[self.visit(arg) for arg in filter.args])
 
 
@@ -599,12 +601,12 @@ class ArrowFilterVisitor(FilterVisitor[VisitorOut]):
             rhs_typ,  # self.partition_names, self.source
         )
 
-    def visit_scalar(self, scalar: "Scalar") -> VisitorOut:
+    def visit_scalar(self, scalar: Scalar) -> VisitorOut:
         """Convert Scalar Values to Arrow Compute Expression String"""
         fname, ftype = self.unwrap_scalar(scalar)
         return f"ds.scalar({fname})", ftype
 
-    def visit_ref(self, ref: "Ref") -> VisitorOut:
+    def visit_ref(self, ref: Ref) -> VisitorOut:
         col_type = self.original_out_types[self.orig_colname_map[ref.val]]
 
         if self.source == "parquet" and ref.val in self.partition_names:
@@ -627,7 +629,7 @@ class ArrowFilterVisitor(FilterVisitor[VisitorOut]):
         ref_str = f"{{{ref.val}}}" if self.output_f_string else ref.val
         return f"ds.field('{ref_str}'){col_cast}", col_type
 
-    def visit_op(self, filter: "Op") -> VisitorOut:
+    def visit_op(self, filter: Op) -> VisitorOut:
         if filter.op == "ALWAYS_TRUE":
             return "ds.scalar(True)", types.bool_
         elif filter.op == "ALWAYS_FALSE":
