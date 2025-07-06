@@ -63,24 +63,21 @@ def _recv_arg(
         Any: received function argument
     """
     if isinstance(arg, ArgMetadata):
-        match arg:
-            case ArgMetadata.BROADCAST:
-                return (
-                    bodo.libs.distributed_api.bcast(
-                        None, root=0, comm=spawner_intercomm
-                    ),
-                    arg,
-                )
-            case ArgMetadata.SCATTER:
-                return (
-                    bodo.libs.distributed_api.scatterv(
-                        None, root=0, comm=spawner_intercomm
-                    ),
-                    arg,
-                )
-            case ArgMetadata.LAZY:
-                res_id = spawner_intercomm.bcast(None, root=0)
-                return (RESULT_REGISTRY[res_id], arg)
+        if arg == ArgMetadata.BROADCAST:
+            return (
+                bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm),
+                arg,
+            )
+        elif arg == ArgMetadata.SCATTER:
+            return (
+                bodo.libs.distributed_api.scatterv(
+                    None, root=0, comm=spawner_intercomm
+                ),
+                arg,
+            )
+        elif arg == ArgMetadata.LAZY:
+            res_id = spawner_intercomm.bcast(None, root=0)
+            return (RESULT_REGISTRY[res_id], arg)
 
     if isinstance(arg, BodoSQLContextMetadata):
         from bodosql import BodoSQLContext, TablePath
@@ -128,32 +125,33 @@ def _build_index_data(
     Construct distributed return metadata for the index of res if it has an index
     """
     if isinstance(res, (pd.DataFrame, pd.Series)):
-        match type(res.index):
-            case pd.Index:
-                # Convert index data to ArrowExtensionArray because we have a lazy ArrowExtensionArray
-                return _build_distributed_return_metadata(
-                    ArrowExtensionArray(pa.array(res.index._data)), logger
-                )
-            case pd.MultiIndex:
-                return _build_distributed_return_metadata(
-                    res.index.to_frame(index=False, allow_duplicates=True), logger
-                )
-            case pd.IntervalIndex:
-                return (
-                    _build_distributed_return_metadata(
-                        ArrowExtensionArray(pa.array(res.index.left)), logger
-                    ),
-                    _build_distributed_return_metadata(
-                        ArrowExtensionArray(pa.array(res.index.right)), logger
-                    ),
-                )
-            case pd.CategoricalIndex | pd.DatetimeIndex | pd.TimedeltaIndex:
-                return bodo.gatherv(res.index._data)
-            case pd.PeriodIndex:
-                # This is a hack since we can't unbox a numpy array created from res.index._data for PeriodIndex
-                # since we're missing a proper PeriodArray but it's fine since we'll replace this
-                # with lazy numpy soon
-                return bodo.gatherv(res.index)
+        if isinstance(res.index, pd.Index):
+            # Convert index data to ArrowExtensionArray because we have a lazy ArrowExtensionArray
+            return _build_distributed_return_metadata(
+                ArrowExtensionArray(pa.array(res.index._data)), logger
+            )
+        elif isinstance(res.index, pd.MultiIndex):
+            return _build_distributed_return_metadata(
+                res.index.to_frame(index=False, allow_duplicates=True), logger
+            )
+        elif isinstance(res.index, pd.IntervalIndex):
+            return (
+                _build_distributed_return_metadata(
+                    ArrowExtensionArray(pa.array(res.index.left)), logger
+                ),
+                _build_distributed_return_metadata(
+                    ArrowExtensionArray(pa.array(res.index.right)), logger
+                ),
+            )
+        elif isinstance(
+            res.index, (pd.CategoricalIndex, pd.DatetimeIndex, pd.TimedeltaIndex)
+        ):
+            return bodo.gatherv(res.index._data)
+        elif isinstance(res.index, pd.PeriodIndex):
+            # This is a hack since we can't unbox a numpy array created from res.index._data for PeriodIndex
+            # since we're missing a proper PeriodArray but it's fine since we'll replace this
+            # with lazy numpy soon
+            return bodo.gatherv(res.index)
 
     return None
 
