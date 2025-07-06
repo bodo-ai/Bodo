@@ -2,6 +2,8 @@
 Implement pd.DataFrame typing and data model handling.
 """
 
+from __future__ import annotations
+
 import operator
 import time
 import typing as pt
@@ -147,7 +149,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
 
     def __init__(
         self,
-        data: Sequence["types.ArrayCompatible"] | None = None,
+        data: Sequence[types.ArrayCompatible] | None = None,
         index=None,
         columns: Sequence[str] | None = None,
         dist=None,
