@@ -2357,11 +2357,10 @@ def _gen_objmode_overload(
         # We can't support them, and it breaks our infrastructure, so omit them.
         #
         def get_default(default_val):
-            match default_val:
-                case str():
-                    return "'" + default_val + "'"
-                case _:
-                    return str(default_val)
+            if isinstance(default_val, str):
+                return "'" + default_val + "'"
+            else:
+                return str(default_val)
 
         args = func_spec.args[1:] if attr_name else func_spec.args[:]
         arg_strs = []
