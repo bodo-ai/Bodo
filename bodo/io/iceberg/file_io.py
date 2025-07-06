@@ -12,15 +12,13 @@ def _map_wasb_to_abfs(scheme: str, netloc: str) -> tuple[str, str]:
     """
     Map wasb and wasbs to abfss and abfs. Leaves others as is
     """
-    match scheme:
-        case "wasb":
-            scheme = "abfs"
-            netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
-        case "wasbs":
-            scheme = "abfss"
-            netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
-        case _:
-            pass
+    if scheme == "wasb":
+        scheme = "abfs"
+        netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
+    elif scheme == "wasbs":
+        scheme = "abfss"
+        netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
+
     return scheme, netloc
 
 
