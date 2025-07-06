@@ -474,13 +474,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return (count_plan(self),)
-            case ExecState.DISTRIBUTED:
-                return (self._mgr._md_nrows,)
-            case ExecState.COLLECTED:
-                return super().shape
+        if self._exec_state == ExecState.PLAN:
+            return (count_plan(self),)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return (self._mgr._md_nrows,)
+        if self._exec_state == ExecState.COLLECTED:
+            return super().shape
 
     def head(self, n: int = 5):
         """
@@ -517,13 +516,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __len__(self):
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return count_plan(self)
-            case ExecState.DISTRIBUTED:
-                return self._mgr._md_nrows
-            case ExecState.COLLECTED:
-                return super().__len__()
+        if self._exec_state == ExecState.PLAN:
+            return count_plan(self)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return self._mgr._md_nrows
+        if self._exec_state == ExecState.COLLECTED:
+            return super().__len__()
 
     def __repr__(self):
         # Pandas repr implementation calls len() first which will execute an extra
