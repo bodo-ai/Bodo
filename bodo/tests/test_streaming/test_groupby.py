@@ -919,43 +919,41 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
         delete_groupby_state(groupby_state)
         return pd.concat(out_dfs)
 
-    match fstr:
-        case "count":
-            expected_df = df.groupby(
-                "A", as_index=False, dropna=False, sort=True
-            ).count()
-        case "first":
-            expected_df = df.groupby("A", as_index=False, dropna=False, sort=True).agg(
-                dict.fromkeys(df.columns[1:], "first")
-            )
+    if fstr == "count":
+        expected_df = df.groupby("A", as_index=False, dropna=False, sort=True).count()
+    elif fstr == "first":
+        expected_df = df.groupby("A", as_index=False, dropna=False, sort=True).agg(
+            dict.fromkeys(df.columns[1:], "first")
+        )
 
-            # We don't care if the value is actually the first element,
-            # so we set df to have the same data value for each instance of a group key.
-            cols = {"A": df["A"]}
-            cols.update(
-                {
-                    col: pd.Series(
-                        # This works because df.groupby is sorted and
-                        # the keys are 0,1,2 so we can use them as an index.
-                        # If the sequence isn't consecutive, this wouldn't work.
-                        df["A"].apply(lambda x: expected_df[col][x]),
-                        dtype=df[col].dtype,
-                    )
-                    for col in expected_df.columns[1:]
-                }
-            )
-            df = pd.DataFrame(cols)
-        case "size":
-            expected_df = df.copy(deep=True)
-            # Logically replace every column with an integer due to pyarrow
-            # issues.
-            for i in range(1, len(expected_df.columns)):
-                expected_df[expected_df.columns[i]] = 1
-            expected_df = expected_df.groupby("A", as_index=False, dropna=False).agg(
-                {column: lambda x: len(x) for column in expected_df.columns[1:]}
-            )
-        case "sum":
-            expected_df = pd.DataFrame()
+        # We don't care if the value is actually the first element,
+        # so we set df to have the same data value for each instance of a group key.
+        cols = {"A": df["A"]}
+        cols.update(
+            {
+                col: pd.Series(
+                    # This works because df.groupby is sorted and
+                    # the keys are 0,1,2 so we can use them as an index.
+                    # If the sequence isn't consecutive, this wouldn't work.
+                    df["A"].apply(lambda x: expected_df[col][x]),
+                    dtype=df[col].dtype,
+                )
+                for col in expected_df.columns[1:]
+            }
+        )
+        df = pd.DataFrame(cols)
+    elif fstr == "size":
+        expected_df = df.copy(deep=True)
+        # Logically replace every column with an integer due to pyarrow
+        # issues.
+        for i in range(1, len(expected_df.columns)):
+            expected_df[expected_df.columns[i]] = 1
+        expected_df = expected_df.groupby("A", as_index=False, dropna=False).agg(
+            {column: lambda x: len(x) for column in expected_df.columns[1:]}
+        )
+    elif fstr == "sum":
+        expected_df = pd.DataFrame()
+
     if fstr == "sum":
         with pytest.raises(
             BodoError,
