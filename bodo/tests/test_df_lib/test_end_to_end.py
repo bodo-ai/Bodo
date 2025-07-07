@@ -778,6 +778,14 @@ def test_set_df_column_const(datapath, index_val):
     assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf, check_pandas_types=False)
 
+    # Two new integer columns
+    bdf = bd.from_pandas(df)
+    bdf[["D", "G"]] = 111
+    pdf = df.copy()
+    pdf[["D", "G"]] = 111
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
     # Replace existing column with float
     bdf = bd.from_pandas(df)
     bdf["B"] = 1.23
