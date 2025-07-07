@@ -206,6 +206,7 @@ done
 [tool.cibuildwheel.macos]
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
+set -exo pipefail
 BODO_NUM_WORKERS=2 python {project}/buildscripts/bodo/pip/test.py
 
 # Check that only expected libs are included in the wheel
