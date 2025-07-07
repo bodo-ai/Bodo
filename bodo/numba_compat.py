@@ -1155,7 +1155,7 @@ def string_from_string_and_size(self, string, size):
 
 numba.core.pythonapi.PythonAPI.string_from_string_and_size = string_from_string_and_size
 
-# Numba 0.61 replaces import_module_noblock with import_module so we set it here
+# Numba 0.61 renames import_module_noblock to import_module so we set it here
 # to support Numba >=0.60 (required for Python 3.9)
 if not hasattr(numba.core.pythonapi.PythonAPI, "import_module"):
     numba.core.pythonapi.PythonAPI.import_module = numba.core.pythonapi.PythonAPI.import_module_noblock

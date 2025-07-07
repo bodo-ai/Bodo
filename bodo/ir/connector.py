@@ -683,7 +683,7 @@ class ArrowFilterVisitor(FilterVisitor[VisitorOut]):
                 types.bool_,
             )
 
-        if filter.op == "COALESCE":
+        elif filter.op == "COALESCE":
             col_code, col_type = self.visit(filter.args[0])
             scalars = [self.visit(f) for f in filter.args[1:]]
             col_cast, scalar_cast = determine_filter_cast(col_type, scalars[0][1])

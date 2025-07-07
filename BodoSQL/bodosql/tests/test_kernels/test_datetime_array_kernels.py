@@ -3159,7 +3159,7 @@ def test_timestamp_from_date_and_time(timetype, memory_leak_check):
         time_value_constructor = time_constructor
     elif timetype == "timestamp":
         time_value_constructor = timestamp_constructor
-    elif timetype == "datetime64":
+    elif timetype == "datetime":
         time_value_constructor = datetime_constructor
 
     def impl(date, time):
