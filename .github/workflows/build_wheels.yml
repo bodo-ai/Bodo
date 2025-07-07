@@ -98,7 +98,7 @@ jobs:
       - uses: actions/download-artifact@v4
         id: download-artifact
         with:
-          pattern: cibw-wheels-linux-x86
+          pattern: cibw-wheels-linux-x86-3.13
           path: .
 
       - name: Build BodoSQL Wheels
@@ -127,7 +127,7 @@ jobs:
       - uses: actions/download-artifact@v4
         id: download-bodo-artifact
         with:
-          pattern: cibw-wheels-linux-x86
+          pattern: cibw-wheels-linux-x86-3.13
           path: .
       - uses: actions/download-artifact@v4
         id: download-bodosql-artifact
