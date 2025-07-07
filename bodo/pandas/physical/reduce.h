@@ -48,7 +48,6 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
             false /*convert_timedelta_to_int64*/, "", time_unit,
             false, /*downcast_time_ns_to_us*/
             bodo::default_buffer_memory_manager());
-        std::vector<std::shared_ptr<arrow::Scalar>> output_scalar_batches;
         for (size_t i = 0; i < function_names.size(); i++) {
             auto function_name = function_names[i];
             // Reduce Arrow array using compute function
@@ -57,12 +56,11 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
             CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
             std::shared_ptr<arrow::Scalar> out_scalar_batch =
                 cmp_res.ValueOrDie().scalar();
-            output_scalar_batches.push_back(out_scalar_batch);
             ReductionType reduction_type = getReductionType(function_name);
 
             // Update reduction result
             if (iter == 0) {
-                output_scalars = output_scalar_batches;
+                output_scalars.push_back(out_scalar_batch);
             } else {
                 arrow::Result<arrow::Datum> cmp_res_scalar =
                     arrow::compute::CallFunction(
@@ -104,12 +102,6 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         // Create a vector of Arrow arrays from output_scalars
         std::vector<std::shared_ptr<arrow::Array>> arrow_arrays;
         for (const auto& output_scalar : output_scalars) {
-            if (output_scalar->type->id() != arrow::Type::INT64 &&
-                output_scalar->type->id() != arrow::Type::DOUBLE &&
-                output_scalar->type->id() != arrow::Type::BOOL) {
-                throw std::runtime_error("Unexpected scalar type: " +
-                                         output_scalar->type->ToString());
-            }
             std::shared_ptr<arrow::Array> array =
                 ScalarToArrowArray(output_scalar);
             arrow_arrays.push_back(array);
