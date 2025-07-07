@@ -58,7 +58,6 @@ class PhysicalUnionAll : public PhysicalSource, public PhysicalSink {
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         auto next_batch = collected_rows->builder->PopChunk(true);
-        std::shared_ptr<table_info> out_batch = std::get<0>(next_batch);
         return {std::get<0>(next_batch),
                 collected_rows->builder->empty()
                     ? OperatorResult::FINISHED

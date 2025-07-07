@@ -175,6 +175,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     this->active_pipeline->AddOperator(physical_join);
 }
 
+/*
+ * arrowSchemeTypeEquals
+ *
+ * Used to compare two arrow schema for type equality.
+ * Can be used when schema may have differing column names
+ * and thus the regular schema equality test is too strict.
+ */
 bool arrowSchemaTypeEquals(const ::arrow::Schema& s1,
                            const ::arrow::Schema& s2) {
     if (s1.num_fields() != s2.num_fields())

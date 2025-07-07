@@ -82,6 +82,8 @@ duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
     const std::shared_ptr<arrow::Field> &field = arrow_schema->field(field_idx);
     auto [_, out_type] = arrow_field_to_duckdb(field);
+    // This is how duckdb makes a NULL value of a specific type.
+    // You just pass the duckdb type to the Value constructor.
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(out_type));
 }
@@ -651,7 +653,6 @@ std::pair<int64_t, PyObject *> execute_plan(
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
-    // Clear out the table_index to schema mapping for the next plan.
     return {reinterpret_cast<int64_t>(new table_info(*output_table)),
             pyarrow_schema};
 }

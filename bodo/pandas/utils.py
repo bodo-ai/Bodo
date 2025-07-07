@@ -450,7 +450,7 @@ class LazyPlan:
         # be reused across right and left sides (e.g. self-join) leading to unique_ptr
         # errors.
         use_cache = True
-        if self.plan_class == "LogicalComparisonJoin":
+        if self.plan_class in ["LogicalComparisonJoin", "LogicalSetOperation"]:
             use_cache = False
 
         # Convert any LazyPlan in the args or kwargs.

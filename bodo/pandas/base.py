@@ -1,4 +1,3 @@
-import copy as py_copy
 import csv
 import importlib
 import typing as pt
@@ -447,7 +446,7 @@ def to_datetime(
     )
 
 
-@check_args_fallback("none")
+@check_args_fallback(unsupported="all")
 def concat(
     objs: Iterable[BodoSeries | BodoDataFrame]
     | Mapping[HashableT, BodoSeries | BodoDataFrame],
@@ -490,8 +489,6 @@ def concat(
             copy=copy,
         )
 
-        orig_a = py_copy.deepcopy(a._plan)
-        orig_b = py_copy.deepcopy(b._plan)
         if isinstance(empty_data, pd.DataFrame):
 
             def get_mapping(new_schema, old_schema, plan):
@@ -511,20 +508,20 @@ def concat(
             a_plan = LazyPlan(
                 "LogicalProjection",
                 empty_data,
-                orig_a,
-                get_mapping(empty_data, a.columns.tolist(), orig_a),
+                a._plan,
+                get_mapping(empty_data, a.columns.tolist(), a._plan),
             )
             # Create a reordering of the temp b_new_cols so that the columns are in
             # the same order as the Pandas simulation on empty data.
             b_plan = LazyPlan(
                 "LogicalProjection",
                 empty_data,
-                orig_b,
-                get_mapping(empty_data, b.columns.tolist(), orig_b),
+                b._plan,
+                get_mapping(empty_data, b.columns.tolist(), b._plan),
             )
         else:
-            a_plan = orig_a
-            b_plan = orig_b
+            a_plan = a._plan
+            b_plan = b._plan
 
         # DuckDB Union operator requires schema to already be matching.
         planUnion = LazyPlan(
