@@ -12,7 +12,7 @@
  * @brief Physical node for union all.
  *
  */
-class PhysicalUnionAll : public PhysicalSource, public PhysicalSink {
+class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
    public:
     explicit PhysicalUnionAll(std::shared_ptr<bodo::Schema> input_schema)
         : output_schema(input_schema) {}
@@ -51,17 +51,33 @@ class PhysicalUnionAll : public PhysicalSource, public PhysicalSink {
     }
 
     /**
-     * @brief ProduceBatch - act as a data source
+     * @brief ProcessBatch streaming through union
      *
      * returns std::pair<std::shared_ptr<table_info>, OperatorResult>
      */
-    std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
-        override {
-        auto next_batch = collected_rows->builder->PopChunk(true);
-        return {std::get<0>(next_batch),
-                collected_rows->builder->empty()
-                    ? OperatorResult::FINISHED
-                    : OperatorResult::HAVE_MORE_OUTPUT};
+    std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch,
+        OperatorResult prev_op_result) override {
+        if (!first_processed_batch) {
+            first_processed_batch = input_batch;
+        }
+        if (collected_rows && !collected_rows->builder->empty()) {
+            auto next_batch = collected_rows->builder->PopChunk(true);
+            return {std::get<0>(next_batch),
+                    //(prev_op_result == OperatorResult::FINISHED &&
+                    // collected_rows->builder->empty())
+                    //    ? OperatorResult::FINISHED
+                    //    : OperatorResult::HAVE_MORE_OUTPUT};
+                    OperatorResult::HAVE_MORE_OUTPUT};
+        } else {
+            if (first_processed_batch) {
+                input_batch = first_processed_batch;
+                first_processed_batch = nullptr;
+            }
+            return {input_batch, prev_op_result == OperatorResult::FINISHED
+                                     ? OperatorResult::FINISHED
+                                     : OperatorResult::NEED_MORE_INPUT};
+        }
     }
 
     /**
@@ -75,5 +91,6 @@ class PhysicalUnionAll : public PhysicalSource, public PhysicalSink {
 
    private:
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
+    std::shared_ptr<table_info> first_processed_batch;
     const std::shared_ptr<bodo::Schema> output_schema;
 };

@@ -201,7 +201,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
         if (op.setop_all) {
             // Right-child will feed into a table.
             PhysicalPlanBuilder rhs_builder;
-            rhs_builder.Visit(*op.children[0]);
+            rhs_builder.Visit(*op.children[1]);
             std::shared_ptr<bodo::Schema> rhs_table_schema =
                 rhs_builder.active_pipeline->getPrevOpOutputSchema();
             std::vector<std::shared_ptr<Pipeline>> build_pipelines =
@@ -217,7 +217,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                                             build_pipelines.end());
 
             // Left-child will feed into the same table.
-            this->Visit(*op.children[1]);
+            this->Visit(*op.children[0]);
             std::shared_ptr<bodo::Schema> lhs_table_schema =
                 this->active_pipeline->getPrevOpOutputSchema();
             ::arrow::Schema lhs_arrow = *(lhs_table_schema->ToArrowSchema());
@@ -228,11 +228,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                     lhs_arrow.ToString() + " versus " + rhs_arrow.ToString());
             }
 
-            finished_pipelines.emplace_back(
-                this->active_pipeline->Build(physical_union_all));
-            // Downstream pipelines pull from the singular table.
-            this->active_pipeline =
-                std::make_shared<PipelineBuilder>(physical_union_all);
+            this->active_pipeline->AddOperator(physical_union_all);
         } else {
             throw std::runtime_error(
                 "PhysicalPlanBuilder::Visit(LogicalSetOperation non-all union "
