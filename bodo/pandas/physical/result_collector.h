@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include "../libs/_table_builder.h"
 
 #include "physical/operator.h"
@@ -17,6 +18,8 @@ class PhysicalResultCollector : public PhysicalSink {
         : in_schema(in_schema), out_schema(out_schema) {
         // TODO: check that the input schema is compatible with the output
         // schema
+        printf("IN: %s\n", in_schema->ToString().c_str());
+        printf("OUT: %s\n", out_schema->ToString().c_str());
         if (in_schema->ncols() != out_schema->ncols()) {
             throw std::runtime_error(
                 "Input and output schemas must have the same number of "
@@ -38,8 +41,13 @@ class PhysicalResultCollector : public PhysicalSink {
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        printf("Printing input batch:\n");
+        std::stringstream ss;
+        DEBUG_PrintTable(ss, input_batch);
+        std::cout << ss.str() << std::endl;
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
-
+        printf("PhysicalResultCollector::ConsumeBatch: input batch size %llu\n",
+               input_batch->nrows());
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;

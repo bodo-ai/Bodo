@@ -1336,6 +1336,7 @@ std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
 std::shared_ptr<array_info> arrow_array_to_bodo(
     std::shared_ptr<arrow::Array> arrow_arr, bodo::IBufferPool *src_pool,
     int64_t array_id, std::shared_ptr<array_info> dicts_ref_arr) {
+    printf("arrow_array_to_bodo: %s\n", arrow_arr->type()->ToString().c_str());
     switch (arrow_arr->type_id()) {
         case arrow::Type::LARGE_STRING:
             return arrow_string_binary_array_to_bodo(

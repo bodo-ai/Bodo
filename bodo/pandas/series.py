@@ -1148,6 +1148,72 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     if func_name == "count":
         func_name = "sum"
 
+    print(out_rank)
+    print(type(out_rank))
+
+    # TODO: use parallel reduction for slight improvement in very large scales
+    return getattr(pd.Series(out_rank), func_name)()
+
+
+def _compute_series_reduce_2(bodo_series: BodoSeries, func_names: list[str]):
+    """Compute a reduction function like min/max on a BodoSeries."""
+
+    from bodo.pandas.base import _empty_like
+
+    # TODO: expand coverage for other reduction functions
+    for func_name in func_names:
+        assert func_name in ("min", "max", "sum", "product", "count", "mean"), (
+            f"Unsupported function {func_name} for series reduction."
+        )
+
+    # Drop Index columns since not necessary for reduction output.
+    zero_size_self = _empty_like(bodo_series).reset_index(drop=True)
+    # zero_size_self = arrow_to_empty_df(pa.schema([pa.field(f"{idx}", pa.int64()) for idx in range(len(func_names))]))
+    # zero_size_self = arrow_to_empty_df(pa.schema([pa.field(f"{0}", pa.list_(pa.int64()))]))
+
+    # For null arrays, return default value
+    # if pa.types.is_null(pa_type):
+    #     if func_name == "sum":
+    #         return 0
+    #     if func_name == "product":
+    #         return 1
+
+    # TODO: update accordingly
+    # if output_type := validate_reduce(func_name, pa_type):
+    #     zero_size_self = zero_size_self.astype(output_type)
+    # zero_size_self = zero_size_self.astype(pd.ArrowDtype(pa.list_(pa.int64())))
+
+    exprs = [
+        LazyPlan(
+            "AggregateExpression",
+            zero_size_self,
+            bodo_series._plan,
+            func_name,
+            [0],
+            True,  # dropna
+        )
+        for func_name in func_names
+    ]
+
+    print(len(exprs), "exprs")
+
+    plan = LazyPlan(
+        "LogicalAggregate",
+        zero_size_self,
+        bodo_series._plan,
+        [],
+        exprs,
+    )
+    # breakpoint()
+    out_rank = execute_plan(plan)
+
+    # TODO: update accordingly
+    # if func_name == "count":
+    #     func_name = "sum"
+
+    # breakpoint()
+    print(out_rank)
+
     # TODO: use parallel reduction for slight improvement in very large scales
     return getattr(pd.Series(out_rank), func_name)()
 

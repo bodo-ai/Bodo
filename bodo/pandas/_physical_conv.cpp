@@ -79,13 +79,46 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
     // Single column reduction like Series.max()
     if (op.groups.empty()) {
-        if (op.expressions.size() != 1 ||
-            op.expressions[0]->type !=
-                duckdb::ExpressionType::BOUND_AGGREGATE) {
+        if (op.expressions[0]->type !=
+            duckdb::ExpressionType::BOUND_AGGREGATE) {
             throw std::runtime_error(
                 "LogicalAggregate with no groups must have exactly one "
                 "aggregate expression for reduction.");
         }
+        if (op.expressions.size() != 1) {
+            printf(
+                "Inside LogicalAggregate with no groups, "
+                "but found %zu expressions.\n",
+                op.expressions.size());
+
+            std::vector<std::string> function_names;
+            std::vector<duckdb::BoundAggregateExpression*> agg_expressions;
+            for (auto& expr : op.expressions) {
+                auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
+                agg_expressions.push_back(&agg_expr);
+                function_names.emplace_back(agg_expr.function.name);
+            }
+            printf("Found %zu aggregate expressions for reduction.\n",
+                   agg_expressions.size());
+            // Extract bind_info
+            BodoAggFunctionData& bind_info =
+                agg_expressions[0]->bind_info->Cast<BodoAggFunctionData>();
+            printf("Extracted.\n");
+
+            auto out_schema = bind_info.out_schema;
+            printf("%s\n", out_schema->ToString().c_str());
+            auto bodo_schema = bodo::Schema::FromArrowSchema(out_schema);
+
+            auto physical_op =
+                std::make_shared<PhysicalReduce2>(bodo_schema, function_names);
+            finished_pipelines.emplace_back(
+                this->active_pipeline->Build(physical_op));
+            this->active_pipeline =
+                std::make_shared<PipelineBuilder>(physical_op);
+            printf("Returning from LogicalAggregate with no groups.\n");
+            return;
+        }
+
         auto& agg_expr =
             op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
 

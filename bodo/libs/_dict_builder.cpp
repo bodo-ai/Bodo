@@ -413,6 +413,7 @@ DictionaryBuilder::DictionaryBuilder(
 std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     const std::shared_ptr<array_info>& in_arr, bool use_cache,
     bool unify_empty) {
+    printf("Inside UnifyDictionaryArray\n");
     // Unify child arrays for nested arrays
     if (this->child_dict_builders.size() > 0) {
         assert(in_arr->arr_type == bodo_array_type::ARRAY_ITEM ||
