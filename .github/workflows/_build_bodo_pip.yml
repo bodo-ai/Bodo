@@ -64,12 +64,22 @@ jobs:
         run: |
           pixi global install sccache
 
-      - name: Calculate CIBW_BUILD
+      - name: Calculate CIBW_BUILD (Unix)
+        if: runner.os != 'Windows'
         env:
           PYTHON_VERSION: ${{ inputs.python_version }}
         run: |
           CIBW_BUILD="cp$(echo $PYTHON_VERSION | sed 's/\.//')-*"
           echo "CIBW_BUILD=$CIBW_BUILD" >> $GITHUB_ENV
+
+      - name: Calculate CIBW_BUILD (Windows)
+        if: runner.os == 'Windows'
+        env:
+          PYTHON_VERSION: ${{ inputs.python_version }}
+        shell: pwsh
+        run: |
+          $CIBW_BUILD = "cp$($env:PYTHON_VERSION -replace '\.', '')-*"
+          echo "CIBW_BUILD=$CIBW_BUILD" >> $env:GITHUB_ENV
 
       - name: Build Wheels
         run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
