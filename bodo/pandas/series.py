@@ -1530,10 +1530,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
         is_method=False,
     )
 
-    # TODO: Implement Series.max()
     n_cols = length_series.max()
-
-    print(n_cols)
 
     n_index_arrays = get_n_index_arrays(index)
     index_cols = tuple(range(1, 1 + n_index_arrays))

@@ -138,7 +138,6 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
 
     // Get DuckDB output type
     auto field = out_schema->field(0);
-    // printf("%s\n", out_schema->ToString().c_str());
     auto [_, out_type] = arrow_field_to_duckdb(field);
 
     // Get arguments and their types for the aggregate function.
