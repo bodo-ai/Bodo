@@ -181,6 +181,48 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
                                bodo::BufferPool::DefaultPtr());
 }
 
+arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
+                                     arrow::Datum right_res,
+                                     const std::string& comparator) {
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::CallFunction(comparator, {left_res, right_res});
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_array_compute_binary: Error in Arrow compute: " +
+            cmp_res.status().message());
+    }
+
+    return cmp_res.ValueOrDie();
+}
+
+arrow::Datum do_arrow_compute_unary(arrow::Datum left_res,
+                                    const std::string& comparator) {
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::CallFunction(comparator, {left_res});
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_array_compute_unary: Error in Arrow compute: " +
+            cmp_res.status().message());
+    }
+
+    return cmp_res.ValueOrDie();
+}
+
+arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
+                                   const duckdb::LogicalType& return_type) {
+    std::shared_ptr<arrow::DataType> arrow_ret_type =
+        duckdbTypeToArrow(return_type);
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::Cast(left_res, arrow_ret_type);
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_array_compute_cast: Error in Arrow compute: " +
+            cmp_res.status().message());
+    }
+
+    return cmp_res.ValueOrDie();
+}
+
 std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     duckdb::unique_ptr<duckdb::Expression>& expr,
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>& col_ref_map,
