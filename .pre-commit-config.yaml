@@ -20,21 +20,21 @@ repos:
         args: [--allow-missing-credentials]
   # Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.12
+    rev: v0.12.2
     hooks:
       - id: ruff
         args: [ --fix, --exit-non-zero-on-fix ]
       - id: ruff-format
   # Cython
   - repo: https://github.com/MarcoGorelli/cython-lint
-    rev: v0.16.6
+    rev: v0.16.7
     hooks:
       - id: cython-lint
         args: [--no-pycodestyle]  # Because it doesn't autofix, it would be too annoying
       - id: double-quote-cython-strings
   # Java and Kotlin
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-    rev: v2.14.0
+    rev: v2.15.0
     hooks:
       - id: pretty-format-java
         args: ["--autofix", "--google-java-formatter-version", "1.24.0"]
@@ -42,7 +42,7 @@ repos:
         args: ["--autofix"]
   # C++
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v20.1.5
+    rev: v20.1.7
     hooks:
       - id: clang-format
         types_or: [c++]
