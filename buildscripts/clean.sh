@@ -5,6 +5,18 @@ echo "Removing the build directory"
 rm -rf build
 echo "Removing bodo/io/csv_json_reader.cpp"
 find . -name "csv_json_reader.cpp" | xargs rm -f
+echo "Removing bodo/io/pyarrow_wrappers.cpp"
+find . -name "pyarrow_wrappers.cpp" | xargs rm -f
+echo "Removing bodo/utils/tracing.c"
+find . -name "tracing.c" | xargs rm -f
+echo "Removing bodo/memory.cpp"
+find . -name "memory.cpp" | xargs rm -f
+echo "Removing bodo/tests/memory_tester.cpp"
+find . -name "memory_tester.cpp" | xargs rm -f
+echo "Removing bodo/transforms/type_inference/native_typer.cpp"
+find . -name "native_typer.cpp" | xargs rm -f
+echo "Removing bodo/pandas/plan_optimizer.cpp"
+find . -name "plan_optimizer.cpp" | xargs rm -f
 echo "Removing vendored mpi4py"
 rm -rf bodo/mpi4py/_vendored_mpi4py
 echo "Removing DuckDB build"
