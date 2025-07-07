@@ -25427,7 +25427,7 @@
 
 
 <h1 id="install">Installing Bodo Engine<a class="headerlink" href="#install" title="Permanent link">&para;</a></h1>
-<p>Bodo compute engine can be installed using either <code>pip</code> or <code>conda</code> (see how to install <a class="autorefs autorefs-internal" href="#conda">conda</a> below). 
+<p>Bodo compute engine can be installed using either <code>pip</code> or <code>conda</code> (see how to install <a class="autorefs autorefs-internal" href="#conda">conda</a> below).
 To install Bodo and its dependencies with <code>pip</code>, use the following command:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="go">pip install -U bodo</span>
 </code></pre></div>
@@ -25435,7 +25435,7 @@ To install Bodo and its dependencies with <code>pip</code>, use the following co
 Bodo and its dependencies in it as shown below:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="go">conda create -n Bodo python=3.13 -c conda-forge</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="go">conda activate Bodo</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="go">conda install bodo -c bodo.ai -c conda-forge</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="go">conda install bodo -c conda-forge</span>
 </code></pre></div>
 <p>Bodo uses <a href="https://en.wikipedia.org/wiki/Message_Passing_Interface" target="blank">MPI</a>
 for parallelization, which is automatically installed as part of the
@@ -25460,7 +25460,7 @@ Here are example commands to install Python and Bodo on WSL:</p>
 </code></pre></div>
 <h2 id="optionaldep">Optional Dependencies<a class="headerlink" href="#optionaldep" title="Permanent link">&para;</a></h2>
 <p>Some Bodo functionality may require other dependencies, as summarized in
-the table below. </p>
+the table below.</p>
 <p>All optional dependencies except Hadoop, HDF5, and OpenJDK can be installed through pip using the command:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="go">pip install sqlalchemy snowflake-connector-python deltalake</span>
 </code></pre></div>
@@ -25574,7 +25574,7 @@ between the hosts. There are multiple ways to do this. Here is one way:</p>
 </code></pre></div>
 </li>
 <li>
-<p>Copy over the generated private key (<code>cluster_ssh_key</code>) and public key (<code>cluster_ssh_key.pub</code>) to all the hosts and 
+<p>Copy over the generated private key (<code>cluster_ssh_key</code>) and public key (<code>cluster_ssh_key.pub</code>) to all the hosts and
     store them in <code>~/.ssh/id_rsa</code> and <code>~/.ssh/id_rsa.pub</code> respectively.</p>
 </li>
 <li>

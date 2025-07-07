@@ -25147,6 +25147,66 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#202572" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.7.2
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.7.2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#highlights_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🎉 Highlights
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-upgrades_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Dependency Upgrades
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#202573" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.7.3
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -25253,6 +25313,66 @@
   <a href="#202571" class="md-nav__link">
     <span class="md-ellipsis">
       2025.7.1
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#202572" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.7.2
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.7.2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#highlights_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🎉 Highlights
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-upgrades_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Dependency Upgrades
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#202573" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.7.3
     </span>
   </a>
   
@@ -25389,6 +25509,28 @@
 </ul>
 <h2 id="202571">2025.7.1<a class="headerlink" href="#202571" title="Permanent link">&para;</a></h2>
 <p>Minor release to fix a bug when reading Parquet files from S3.</p>
+<h2 id="202572">2025.7.2<a class="headerlink" href="#202572" title="Permanent link">&para;</a></h2>
+<h3 id="highlights_1">🎉 Highlights<a class="headerlink" href="#highlights_1" title="Permanent link">&para;</a></h3>
+<p>Bodo is now available on conda-forge for all supported platforms.</p>
+<h3 id="new-features_1">✨ New Features<a class="headerlink" href="#new-features_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Bodo.pandas.read_iceberg_table for reading PyIceberg tables.</li>
+<li>Added 8 Series.dt methods/accessors including dt.isocalendar().</li>
+<li>Improve the performance of DataFrame.apply calls significantly in some cases.</li>
+<li>Support na_action and kws in Series.map() JIT support.</li>
+</ul>
+<h3 id="bug-fixes_1">🐛 Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Fixed a parallelism bug for distributing in-memory dataframes.</li>
+<li>Fixed issues with repeated sub-plans in join sides.</li>
+<li>Fixed memory leaks when distributing Pandas dataframes for plan execution.</li>
+</ul>
+<h3 id="dependency-upgrades_1">⚙️ Dependency Upgrades<a class="headerlink" href="#dependency-upgrades_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Upgraded zstd, boost, aws-sdk-cpp and pyarrow dependencies.</li>
+</ul>
+<h2 id="202573">2025.7.3<a class="headerlink" href="#202573" title="Permanent link">&para;</a></h2>
+<p>Minor release to re-enable Python 3.9 support.</p>
 
 
 
