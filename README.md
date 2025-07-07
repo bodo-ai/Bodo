@@ -63,7 +63,7 @@ See Bodo documentation to learn more: https://docs.bodo.ai/
 
 ## Installation
 
-Note: Bodo requires Python 3.10, 3.11, 3.12, or 3.13.
+Note: Bodo requires Python 3.9+.
 
 Bodo can be installed using Pip or Conda:
 
@@ -76,7 +76,7 @@ or
 ```bash
 conda create -n Bodo python=3.13 -c conda-forge
 conda activate Bodo
-conda install bodo -c bodo.ai -c conda-forge
+conda install bodo -c conda-forge
 ```
 
 Bodo works with Linux x86, both Mac x86 and Mac ARM, and Windows right now. We will have Linux ARM support (and more) coming soon!

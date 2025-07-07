@@ -57,7 +57,7 @@ def verify_pyiceberg_installed():
 
 
 T = pt.TypeVar("T")
-TVals = T | tuple["TVals", ...]
+TVals = pt.Union[T, tuple["TVals", ...]]
 
 
 def flatten_tuple(x: tuple[TVals, ...]) -> tuple[T]:
@@ -94,11 +94,11 @@ def flatten_concatenation(list_of_lists: list[list[pt.Any]]) -> list[pt.Any]:
     return flat_list
 
 
-FieldID: pt.TypeAlias = int | tuple["FieldID", ...]
-FieldIDs: pt.TypeAlias = tuple[FieldID, ...]
-FieldName: pt.TypeAlias = str | tuple["FieldName", ...]
-FieldNames: pt.TypeAlias = tuple[FieldName, ...]
-SchemaGroupIdentifier: pt.TypeAlias = tuple[FieldIDs, FieldNames]
+FieldID = pt.Union[int, tuple["FieldID", ...]]
+FieldIDs = tuple[FieldID, ...]
+FieldName = pt.Union[str, tuple["FieldName", ...]]
+FieldNames = tuple[FieldName, ...]
+SchemaGroupIdentifier = tuple[FieldIDs, FieldNames]
 
 
 # ===================================================================

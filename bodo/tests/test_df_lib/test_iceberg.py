@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import operator
 import os
@@ -601,6 +603,28 @@ def test_read_s3_tables_location():
     catalog = S3TablesCatalog(None, **catalog_properties)
     pdf = catalog.load_table("sf1000.nation").scan().to_pandas()
     bdf = bpd.read_iceberg("sf1000.nation", location=location)
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_read_s3_tables_read_iceberg_table():
+    location = "arn:aws:s3tables:us-east-2:427443013497:bucket/tpch"
+    region = "us-east-2"
+    catalog_properties = {
+        S3TABLES_TABLE_BUCKET_ARN: location,
+        S3TABLES_REGION: region,
+    }
+    catalog = S3TablesCatalog(None, **catalog_properties)
+    table = catalog.load_table("sf1000.nation")
+
+    pdf = table.scan().to_pandas()
+    bdf = bpd.read_iceberg_table(table)
+
     _test_equal(
         bdf,
         pdf,

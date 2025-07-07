@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import shutil
 from dataclasses import dataclass, field
 from typing import NamedTuple
@@ -35,19 +37,19 @@ SPARK_JAR_PACKAGES = [
 @dataclass(frozen=True)
 class SparkIcebergCatalog:
     catalog_name: str
-    default_schema: str | None = field(default=None, kw_only=True)
+    default_schema: str | None = field(default=None)
 
 
 @dataclass(frozen=True)
 class SparkFilesystemIcebergCatalog(SparkIcebergCatalog):
-    path: str
+    path: str = None
 
 
 @dataclass(frozen=True)
 class SparkRestIcebergCatalog(SparkIcebergCatalog):
-    uri: str
-    credential: str
-    warehouse: str
+    uri: str = None
+    credential: str = None
+    warehouse: str = None
 
 
 @dataclass(frozen=True)
@@ -57,7 +59,7 @@ class SparkAzureIcebergCatalog(SparkRestIcebergCatalog):
 
 @dataclass(frozen=True)
 class SparkAwsIcebergCatalog(SparkRestIcebergCatalog):
-    region: str = field(default="us-east-2", kw_only=True)
+    region: str = field(default="us-east-2")
 
 
 def get_spark_catalog_for_connection(connection: tuple[str, str, str]):
@@ -108,50 +110,45 @@ def get_spark(
     return spark
 
     def add_catalog(builder: SparkSession.Builder, catalog: SparkIcebergCatalog):
-        match catalog:
-            case SparkFilesystemIcebergCatalog():
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}",
-                    "org.apache.iceberg.spark.SparkCatalog",
-                )
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.type", "hadoop"
-                )
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.warehouse", catalog.path
-                )
-            case SparkRestIcebergCatalog():
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}",
-                    "org.apache.iceberg.spark.SparkCatalog",
-                )
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.catalog-impl",
-                    "org.apache.iceberg.rest.RESTCatalog",
-                )
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.uri", catalog.uri
-                )
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.credential",
-                    catalog.credential,
-                )
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.warehouse",
-                    catalog.warehouse,
-                )
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.scope",
-                    "PRINCIPAL_ROLE:ALL",
-                )
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.X-Iceberg-Access-Delegation",
-                    "vended-credentials",
-                )
-                builder.config(
-                    f"spark.sql.catalog.{catalog.catalog_name}.token-refresh-enabled",
-                    "true",
-                )
+        if catalog == SparkFilesystemIcebergCatalog():
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}",
+                "org.apache.iceberg.spark.SparkCatalog",
+            )
+            builder.config(f"spark.sql.catalog.{catalog.catalog_name}.type", "hadoop")
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.warehouse", catalog.path
+            )
+        elif catalog == SparkRestIcebergCatalog():
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}",
+                "org.apache.iceberg.spark.SparkCatalog",
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.catalog-impl",
+                "org.apache.iceberg.rest.RESTCatalog",
+            )
+            builder.config(f"spark.sql.catalog.{catalog.catalog_name}.uri", catalog.uri)
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.credential",
+                catalog.credential,
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.warehouse",
+                catalog.warehouse,
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.scope",
+                "PRINCIPAL_ROLE:ALL",
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.X-Iceberg-Access-Delegation",
+                "vended-credentials",
+            )
+            builder.config(
+                f"spark.sql.catalog.{catalog.catalog_name}.token-refresh-enabled",
+                "true",
+            )
         if catalog.default_schema:
             builder.config(
                 f"spark.sql.catalog.{catalog.catalog_name}.default-namespace",

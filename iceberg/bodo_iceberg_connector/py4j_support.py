@@ -2,6 +2,8 @@
 Contains information used to access the Java package via py4j.
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import typing as pt
@@ -18,7 +20,7 @@ if pt.TYPE_CHECKING:
 gateway: JavaGateway | None = None
 
 # Java Classes used by the Python Portion
-CLASSES: dict[str, "JavaClass"] = {}
+CLASSES: dict[str, JavaClass] = {}
 
 # Dictionary mapping table info -> Reader obj
 catalog_dict = {}
@@ -128,7 +130,7 @@ def launch_jvm() -> JavaGateway:
 
 
 def get_class_wrapper(
-    class_name: str, class_inst: pt.Callable[[JavaGateway], "JavaClass"]
+    class_name: str, class_inst: pt.Callable[[JavaGateway], JavaClass]
 ):
     """
     Wrapper around getting the constructor for a specified Java class

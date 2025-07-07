@@ -1745,3 +1745,80 @@ def test_read_csv(datapath):
         bodo_out,
         py_out,
     )
+
+
+def test_df_state_change():
+    """Make sure dataframe state change doesn't lead to stale result id in plan
+    execution"""
+
+    @bodo.jit(spawn=True)
+    def get_df(df):
+        return df
+
+    bdf = get_df(pd.DataFrame({"A": [1, 2, 3, 4, 5, 6]}))
+    bdf2 = bdf.A.map(lambda x: x)
+
+    # Collect the df, original result id is stale
+    print(bdf)
+
+    # Plan execution shouldn't fail due to stale res id
+    print(bdf2)
+
+
+@pytest.mark.skip("disabled due to submit_func_to_workers: already running")
+def test_isin(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
+    bodo_df3 = (bodo_df1["D"] + 100).isin(bodo_df2["E"])
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))
+    py_df3 = (py_df1["D"] + 100).isin(py_df2["E"])
+
+    assert bodo_df3.is_lazy_plan()
+
+    _test_equal(
+        bodo_df3,
+        py_df3,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )
+
+
+def test_drop(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
+        columns=["A", "F"]
+    )
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
+        columns=["A", "F"]
+    )
+
+    assert bodo_df1.is_lazy_plan()
+
+    _test_equal(
+        bodo_df1,
+        py_df1,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )
+
+
+def test_loc(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
+        :, ["A", "F"]
+    ]
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
+        :, ["A", "F"]
+    ]
+
+    assert bodo_df1.is_lazy_plan()
+
+    _test_equal(
+        bodo_df1,
+        py_df1,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )

@@ -7,7 +7,7 @@ tags:
 ---
 # Installing Bodo Engine {#install}
 
-Bodo compute engine can be installed using either `pip` or `conda` (see how to install [conda][conda] below). 
+Bodo compute engine can be installed using either `pip` or `conda` (see how to install [conda][conda] below).
 To install Bodo and its dependencies with `pip`, use the following command:
 
 ```console
@@ -20,7 +20,7 @@ Bodo and its dependencies in it as shown below:
 ```console
 conda create -n Bodo python=3.13 -c conda-forge
 conda activate Bodo
-conda install bodo -c bodo.ai -c conda-forge
+conda install bodo -c conda-forge
 ```
 
 Bodo uses [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
@@ -58,7 +58,7 @@ pip install -U bodo
 ## Optional Dependencies {#optionaldep}
 
 Some Bodo functionality may require other dependencies, as summarized in
-the table below. 
+the table below.
 
 All optional dependencies except Hadoop, HDF5, and OpenJDK can be installed through pip using the command:
 
@@ -79,11 +79,11 @@ conda install sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjd
 
 | Functionality            |   Dependency
 |--------------------------|------------------------------------------------------------------------------------
-|`pd.read_sql / df.to_sql` |`sqlalchemy`                                                                       
-|`Snowflake I/O`           |`snowflake-connector-python`                                                       
-|`Delta Lake`              |`deltalake`                                                                        
-|`HDFS or ADLS Gen2`       |[hadoop](http://hadoop.apache.org/docs/stable/){target="html"} (only the Hadoop client is needed) 
-|`HDF5`                    |`hdf5 (MPI version)`                                                               
+|`pd.read_sql / df.to_sql` |`sqlalchemy`
+|`Snowflake I/O`           |`snowflake-connector-python`
+|`Delta Lake`              |`deltalake`
+|`HDFS or ADLS Gen2`       |[hadoop](http://hadoop.apache.org/docs/stable/){target="html"} (only the Hadoop client is needed)
+|`HDF5`                    |`hdf5 (MPI version)`
 
 </center>
 
@@ -172,12 +172,12 @@ between the hosts. There are multiple ways to do this. Here is one way:
 
 1.  Generate an SSH key pair using a tool like `ssh-keygen`, for
     instance:
-    
+
     ```shell
     ssh-keygen -b 2048 -f cluster_ssh_key -N ""
     ```
-    
-2.  Copy over the generated private key (`cluster_ssh_key`) and public key (`cluster_ssh_key.pub`) to all the hosts and 
+
+2.  Copy over the generated private key (`cluster_ssh_key`) and public key (`cluster_ssh_key.pub`) to all the hosts and
     store them in `~/.ssh/id_rsa` and `~/.ssh/id_rsa.pub` respectively.
 
 3.  Add the public key to `~/.ssh/authorized_keys` on all hosts.
@@ -189,4 +189,4 @@ between the hosts. There are multiple ways to do this. Here is one way:
     Host *
         StrictHostKeyChecking no
     ```
-    
+

@@ -1,6 +1,8 @@
 """Utilities for aggregating query profiles from multiple ranks into a single
 profile"""
 
+from __future__ import annotations
+
 from typing import Any
 
 import numpy as np

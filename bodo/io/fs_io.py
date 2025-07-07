@@ -2,6 +2,8 @@
 S3 & Hadoop file system supports, and file system dependent calls
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import typing as pt

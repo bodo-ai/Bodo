@@ -68,10 +68,11 @@ macos = "12.0"
 python = "3.13.*"
 pip = "*"
 # Core Python Deps
-numba = "==0.61.2"
+# Numba 0.60 is required for Python 3.9 (required for PyIceberg CI)
+numba = ">=0.60"
 numpy = ">=1.24"
 pandas = ">=2.2"
-pyarrow = { version = "==19.0.0", channel = "conda-forge" }
+pyarrow = { version = "==19.0.1", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
@@ -115,9 +116,9 @@ libarrow = { version = "==19.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
-zstd = "<=1.5.6"
-boost-cpp = "1.85.*"
-aws-sdk-cpp = "<=1.11.485"
+zstd = "*"
+boost-cpp = "*"
+aws-sdk-cpp = "*"
 
 [feature.rcpp.target.osx.dependencies]
 hdf5 = { version = ">=1.14.3,<1.14.4.0a0", build = "*mpi_mpich_*" }
@@ -136,7 +137,8 @@ scikit-build-core = "*"
 mpi4py = ">=4.0,<4.1"
 
 # Build C++ Deps
-cmake = "*"
+# Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
+cmake = "<4.0,>=3.23"
 ninja = "*"
 make = "*"
 ccache = "*"
@@ -206,14 +208,16 @@ gcc_linux-aarch64 = ">=9"
 gxx_linux-aarch64 = ">=9"
 
 [feature.dev.target.osx-64.dependencies]
-clang_osx-64 = ">=19"
-clangxx_osx-64 = ">=19"
-clang-tools = ">=19"
+# Adding clang =19 to prevent build errors from upgrading zstd
+# Consistent with conda package env
+clang_osx-64 = "=19"
+clangxx_osx-64 = "=19"
+clang-tools = "=19"
 
 [feature.dev.target.osx-arm64.dependencies]
-clang_osx-arm64 = ">=19"
-clangxx_osx-arm64 = ">=19"
-clang-tools = ">=19"
+clang_osx-arm64 = "=19"
+clangxx_osx-arm64 = "=19"
+clang-tools = "=19"
 
 [feature.platform]
 platforms = ["linux-64"]
@@ -249,12 +253,14 @@ dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = 
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
-clang_osx-64 = ">=19"
-clangxx_osx-64 = ">=19"
+# Adding clang =19 to prevent build errors from upgrading zstd
+# Consistent with conda package env
+clang_osx-64 = "=19"
+clangxx_osx-64 = "=19"
 
 [feature.pip.target.osx-arm64.dependencies]
-clang_osx-arm64 = ">=19"
-clangxx_osx-arm64 = ">=19"
+clang_osx-arm64 = "=19"
+clangxx_osx-arm64 = "=19"
 
 # Azure CI
 [feature.azure.dependencies]
