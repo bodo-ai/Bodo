@@ -1685,8 +1685,8 @@ def test_series_min_max_unsupported_types():
         bdf["A"].max()
 
 
-def test_series_sum_product_count():
-    """Basic test for Series sum, product, and count."""
+def test_series_reductions():
+    """Basic test for Series sum, product, count, and mean."""
     n = 10000
     df = pd.DataFrame(
         {
@@ -1706,6 +1706,12 @@ def test_series_sum_product_count():
         assert np.isclose(bdf[c].sum(), df[c].sum(), rtol=1e-6)
         assert np.isclose(bdf[c].product(), df[c].product(), rtol=1e-6)
         assert bdf[c].count() == df[c].count()
+        out_pandas, out_bodo = df[c].mean(), bdf[c].mean()
+        assert (
+            np.isclose(out_pandas, out_bodo, rtol=1e-6)
+            if not pd.isna(out_bodo)
+            else pd.isna(out_pandas)
+        )
 
 
 def test_read_csv(datapath):
