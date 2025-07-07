@@ -190,5 +190,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ inputs.name }}
+          name: cibw-wheels-${{ inputs.name }}-${{ inputs.python_version }}
           path: ./wheelhouse/*.whl
