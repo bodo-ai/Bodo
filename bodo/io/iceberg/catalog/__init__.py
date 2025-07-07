@@ -63,83 +63,82 @@ def conn_str_to_catalog(conn_str: str) -> Catalog:
         cache_key = "glue"
 
     else:
-        match parse_res.scheme:
-            case (
-                "iceberg"
-                | "iceberg+file"
-                | "iceberg+s3"
-                | "iceberg+abfs"
-                | "iceberg+abfss"
-                | "iceberg+gs"
-            ):
-                from .dir import DirCatalog
+        if parse_res.scheme in (
+            "iceberg",
+            "iceberg+file",
+            "iceberg+s3",
+            "iceberg+abfs",
+            "iceberg+abfss",
+            "iceberg+gs",
+        ):
+            from .dir import DirCatalog
 
-                catalog = DirCatalog
-                properties[WAREHOUSE_LOCATION] = base_url.removeprefix("file://")
-                cache_key = base_url
+            catalog = DirCatalog
+            properties[WAREHOUSE_LOCATION] = base_url.removeprefix("file://")
+            cache_key = base_url
 
-            case "iceberg+http" | "iceberg+https" | "iceberg+rest":
-                from pyiceberg.catalog.rest import RestCatalog
+        elif parse_res.scheme in ("iceberg+http", "iceberg+https", "iceberg+rest"):
+            from pyiceberg.catalog.rest import RestCatalog
 
-                catalog = RestCatalog
-                properties[URI] = base_url
-                properties[OAUTH2_SERVER_URI] = (
-                    base_url + ("/" if base_url[-1] != "/" else "") + "v1/oauth/tokens"
-                )
-                cache_key = (
-                    base_url
-                    + properties[OAUTH2_SERVER_URI]
-                    + properties[WAREHOUSE_LOCATION]
-                    + properties.get("scope", "")
-                )
+            catalog = RestCatalog
+            properties[URI] = base_url
+            properties[OAUTH2_SERVER_URI] = (
+                base_url + ("/" if base_url[-1] != "/" else "") + "v1/oauth/tokens"
+            )
+            cache_key = (
+                base_url
+                + properties[OAUTH2_SERVER_URI]
+                + properties[WAREHOUSE_LOCATION]
+                + properties.get("scope", "")
+            )
 
-            case "iceberg+thrift":
-                from pyiceberg.catalog.hive import HiveCatalog
+        elif parse_res.scheme == "iceberg+thrift":
+            from pyiceberg.catalog.hive import HiveCatalog
 
-                catalog = HiveCatalog
-                properties[URI] = base_url
-                cache_key = base_url
+            catalog = HiveCatalog
+            properties[URI] = base_url
+            cache_key = base_url
 
-            case "iceberg+arn":
-                from .s3_tables import (
-                    S3TABLES_REGION,
-                    S3TABLES_TABLE_BUCKET_ARN,
-                    S3TablesCatalog,
-                )
+        elif parse_res.scheme == "iceberg+arn":
+            from .s3_tables import (
+                S3TABLES_REGION,
+                S3TABLES_TABLE_BUCKET_ARN,
+                S3TablesCatalog,
+            )
 
-                catalog = S3TablesCatalog
-                properties[S3TABLES_TABLE_BUCKET_ARN] = (
-                    f"arn:{parse_res.netloc}{parse_res.path}"
-                )
-                parsed = re.match(S3_TABLES_PAT, conn_str)
-                if not parsed:
-                    raise ValueError(f"Invalid S3 Tables ARN: {conn_str}")
-                properties[S3TABLES_REGION] = parsed.group(1)
-                cache_key = properties[S3TABLES_TABLE_BUCKET_ARN]
+            catalog = S3TablesCatalog
+            properties[S3TABLES_TABLE_BUCKET_ARN] = (
+                f"arn:{parse_res.netloc}{parse_res.path}"
+            )
+            parsed = re.match(S3_TABLES_PAT, conn_str)
+            if not parsed:
+                raise ValueError(f"Invalid S3 Tables ARN: {conn_str}")
+            properties[S3TABLES_REGION] = parsed.group(1)
+            cache_key = properties[S3TABLES_TABLE_BUCKET_ARN]
 
-            case "iceberg+snowflake":
-                from bodo.io.snowflake import parse_conn_str
+        elif parse_res.scheme == "iceberg+snowflake":
+            from bodo.io.snowflake import parse_conn_str
 
-                from .snowflake import SnowflakeCatalog
+            from .snowflake import SnowflakeCatalog
 
-                catalog = SnowflakeCatalog
-                properties[URI] = base_url
-                # Need to extract properties from the connection string and add them
-                comps = parse_conn_str(base_url)
-                properties = {**properties, **comps}
-                cache_key = comps["account"]
+            catalog = SnowflakeCatalog
+            properties[URI] = base_url
+            # Need to extract properties from the connection string and add them
+            comps = parse_conn_str(base_url)
+            properties = {**properties, **comps}
+            cache_key = comps["account"]
 
-            case _:
-                raise ValueError(
-                    "Iceberg connection strings must start with one of the following: \n"
-                    "  Hadoop / Directory Catalog: 'iceberg://', 'iceberg+file://', 'iceberg+s3://', 'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+gs://'\n"
-                    "  REST Catalog: 'iceberg+http://', 'iceberg+https://', 'iceberg+rest://'\n"
-                    "  Glue Catalog: 'iceberg+glue'\n"
-                    "  Hive Catalog: 'iceberg+thrift://'\n"
-                    "  Snowflake-Managed Iceberg Tables: 'iceberg+snowflake://'\n"
-                    "  S3 Tables Catalog: 'iceberg+arn'\n"
-                    f"Checking '{conn_str}' ('{parse_res.scheme}')"
-                )
+        else:
+            raise ValueError(
+                "Iceberg connection strings must start with one of the following: \n"
+                "  Hadoop / Directory Catalog: 'iceberg://', 'iceberg+file://', 'iceberg+s3://', 'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+gs://'\n"
+                "  REST Catalog: 'iceberg+http://', 'iceberg+https://', 'iceberg+rest://'\n"
+                "  Glue Catalog: 'iceberg+glue'\n"
+                "  Hive Catalog: 'iceberg+thrift://'\n"
+                "  Snowflake-Managed Iceberg Tables: 'iceberg+snowflake://'\n"
+                "  S3 Tables Catalog: 'iceberg+arn'\n"
+                f"Checking '{conn_str}' ('{parse_res.scheme}')"
+            )
 
     if cache_key in CATALOG_CACHE:
         return CATALOG_CACHE[cache_key]

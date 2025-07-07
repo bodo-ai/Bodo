@@ -3,6 +3,8 @@ transforms the IR to remove features that Numba's type inference cannot support
 such as non-uniform dictionary input of `pd.DataFrame({})`.
 """
 
+from __future__ import annotations
+
 import datetime
 import itertools
 import sys
@@ -3531,7 +3533,7 @@ def _get_sql_types_arr_colnames(
     downcast_decimal_to_double: bool = False,
     orig_table_const: str | None = None,
     orig_table_indices_const: tuple[int] | None = None,
-    snowflake_conn_cache: dict[str, "SnowflakeConnection"] | None = None,
+    snowflake_conn_cache: dict[str, SnowflakeConnection] | None = None,
     convert_snowflake_column_names: bool = True,
 ):
     """
@@ -3669,7 +3671,7 @@ def _get_sql_df_type_from_db(
     downcast_decimal_to_double: bool,
     orig_table_const: str | None = None,
     orig_table_indices_const: tuple[int] | None = None,
-    snowflake_conn_cache: dict[str, "SnowflakeConnection"] | None = None,
+    snowflake_conn_cache: dict[str, SnowflakeConnection] | None = None,
     convert_snowflake_column_names: bool = True,
 ):
     """access the database to find df type for read_sql() output.

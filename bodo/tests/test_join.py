@@ -1,5 +1,7 @@
 """Test join operations like df.merge(), df.join(), pd.merge_asof() ..."""
 
+from __future__ import annotations
+
 import io
 import os
 import random

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import typing as pt
 from collections.abc import Callable
@@ -24,7 +26,7 @@ class BodoLazyWrapper(abc.ABC):
         lazy_metadata: LazyMetadata,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
-    ) -> "BodoLazyWrapper":
+    ) -> BodoLazyWrapper:
         return cls()
 
     @abc.abstractmethod

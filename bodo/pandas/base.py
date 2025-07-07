@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import csv
 import importlib
 import typing as pt
@@ -261,7 +263,7 @@ def read_iceberg(
     return wrap_plan(plan=plan)
 
 
-def read_iceberg_table(table: "PyIcebergTable") -> BodoDataFrame:
+def read_iceberg_table(table: PyIcebergTable) -> BodoDataFrame:
     import pyiceberg.catalog
 
     # We can't scatter catalogs so we need to use properties instead so the workers can

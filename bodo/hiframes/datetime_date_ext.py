@@ -1,5 +1,7 @@
 """Numba extension support for datetime.date objects and their arrays."""
 
+from __future__ import annotations
+
 import datetime
 import operator
 import warnings

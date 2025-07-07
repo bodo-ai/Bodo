@@ -2,6 +2,8 @@
 Collection of utility functions. Needs to be refactored in separate files.
 """
 
+from __future__ import annotations
+
 import functools
 import hashlib
 import importlib
@@ -1778,11 +1780,7 @@ def set_wrapper(a):
     return set(a)
 
 
-T = pt.TypeVar("T")
-P = pt.ParamSpec("P")
-
-
-def run_rank0(func: Callable[P, T], bcast_result: bool = True, result_default=None):
+def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
     """
     Utility function decorator to run a function on just rank 0
     but re-raise any Exceptions safely on all ranks.
@@ -1801,7 +1799,7 @@ def run_rank0(func: Callable[P, T], bcast_result: bool = True, result_default=No
     """
 
     @functools.wraps(func)
-    def inner(*args, **kwargs) -> T:
+    def inner(*args, **kwargs):
         comm = MPI.COMM_WORLD
         result = result_default
         err = None

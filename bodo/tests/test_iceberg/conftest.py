@@ -5,7 +5,6 @@ import time
 
 import boto3
 import pytest
-from testcontainers.core.container import DockerContainer, wait_for_logs
 
 import bodo
 from bodo.mpi4py import MPI
@@ -68,6 +67,7 @@ def polaris_server():
     enabling "Allow the default Docker socket to be used" in
     advanced settings of Docker Desktop.
     """
+    from testcontainers.core.container import DockerContainer, wait_for_logs
 
     # Can't use run_rank0 because containers aren't pickelable
     err = None

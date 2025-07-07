@@ -1,5 +1,7 @@
 """Support for MultiIndex type of Pandas"""
 
+from __future__ import annotations
+
 import operator
 import typing as pt
 
@@ -29,13 +31,13 @@ from bodo.utils.typing import (
     is_overload_none,
 )
 
-IndexNameType: pt.TypeAlias = (
-    types.NoneType
-    | types.StringLiteral
-    | types.UnicodeType
-    | types.Integer
-    | types.IntegerLiteral
-)
+IndexNameType = pt.Union[
+    types.NoneType,
+    types.StringLiteral,
+    types.UnicodeType,
+    types.Integer,
+    types.IntegerLiteral,
+]
 
 
 # NOTE: minimal MultiIndex support that just stores the index arrays without factorizing

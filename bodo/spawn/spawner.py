@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Spawner-worker compilation implementation"""
 
 import atexit
@@ -273,7 +275,7 @@ class Spawner:
 
     def submit_func_to_workers(
         self,
-        func_to_execute: "SpawnDispatcher" | pt.Callable,
+        func_to_execute: SpawnDispatcher | pt.Callable,
         propagate_env,
         *args,
         **kwargs,
@@ -532,19 +534,18 @@ class Spawner:
             out_arg: input argument metadata
         """
         if isinstance(arg_meta, ArgMetadata):
-            match arg_meta:
-                case ArgMetadata.BROADCAST:
-                    bodo.libs.distributed_api.bcast(
-                        arg, root=self.bcast_root, comm=spawner.worker_intercomm
-                    )
-                case ArgMetadata.SCATTER:
-                    bodo.libs.distributed_api.scatterv(
-                        arg, root=self.bcast_root, comm=spawner.worker_intercomm
-                    )
-                case ArgMetadata.LAZY:
-                    spawner.worker_intercomm.bcast(
-                        arg._get_result_id(), root=self.bcast_root
-                    )
+            if arg_meta == ArgMetadata.BROADCAST:
+                bodo.libs.distributed_api.bcast(
+                    arg, root=self.bcast_root, comm=spawner.worker_intercomm
+                )
+            elif arg_meta == ArgMetadata.SCATTER:
+                bodo.libs.distributed_api.scatterv(
+                    arg, root=self.bcast_root, comm=spawner.worker_intercomm
+                )
+            elif arg_meta == ArgMetadata.LAZY:
+                spawner.worker_intercomm.bcast(
+                    arg._get_result_id(), root=self.bcast_root
+                )
 
         # Send table DataFrames for BodoSQLContext
         if isinstance(arg_meta, BodoSQLContextMetadata):
@@ -568,7 +569,7 @@ class Spawner:
                 self._send_arg_meta(val, out_val)
 
     def _send_args_update_dist_flags(
-        self, func_to_execute: "SpawnDispatcher" | pt.Callable, args, kwargs
+        self, func_to_execute: SpawnDispatcher | pt.Callable, args, kwargs
     ) -> tuple[tuple[ArgMetadata | None, ...], dict[str, ArgMetadata | None]]:
         """Send function arguments from spawner to workers. DataFrame/Series/Index/array
         arguments are sent separately using broadcast or scatter (depending on flags).
@@ -847,7 +848,7 @@ atexit.register(destroy_spawner)
 
 
 def submit_func_to_workers(
-    func_to_execute: "SpawnDispatcher" | pt.Callable, propagate_env, *args, **kwargs
+    func_to_execute: SpawnDispatcher | pt.Callable, propagate_env, *args, **kwargs
 ):
     """Get the global spawner and submit `func_to_execute` for execution"""
     spawner = get_spawner()
