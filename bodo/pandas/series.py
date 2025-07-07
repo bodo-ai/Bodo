@@ -675,10 +675,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback(unsupported="all")
     def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
-        reduce_list = _compute_series_reduce(self, ["count", "sum"])
-        if (n := reduce_list[0]) <= 0:
+        reduced = _compute_series_reduce(self, ["count", "sum"])
+        count, sum = reduced[0], reduced[1]
+        if count <= 0:
             return pd.NA
-        return reduce_list[1] / n
+        return sum / count
 
 
 class BodoStringMethods:
