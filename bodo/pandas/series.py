@@ -1120,10 +1120,12 @@ def generate_null_reduce(func_names):
     for func_name in func_names:
         if func_name in ("max", "min"):
             res.append(pd.NA)
-        if func_name in ("sum", "count"):
+        elif func_name in ("sum", "count"):
             res.append(0)
-        if func_name == "product":
+        elif func_name == "product":
             res.append(1)
+        else:
+            raise BodoLibNotImplementedException(f"{func_name}() not implemented.")
     return res
 
 
