@@ -15,10 +15,6 @@ on:
         description: 'Bodo Version to Build'
         type: string
         required: true
-      python_version:
-        description: 'Python version to build'
-        type: string
-        required: true
 
 jobs:
   build_bodo_wheels:
@@ -67,7 +63,6 @@ jobs:
       - name: Build Wheels
         run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
         env:
-          CIBW_BUILD: "${{ inputs.python_version }}"
           CIBW_BEFORE_ALL_LINUX: |
             # Install Pixi and Environment
             curl -fsSL https://pixi.sh/install.sh | bash
