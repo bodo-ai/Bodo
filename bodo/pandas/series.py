@@ -662,11 +662,76 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback(unsupported="all")
     def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
+        """Returns sample mean."""
         reduced = _compute_series_reduce(self, ["count", "sum"])
         count, sum = reduced[0], reduced[1]
         if count <= 0:
             return pd.NA
         return sum / count
+
+    @check_args_fallback(supported=["ddof"])
+    def std(self, axis=None, skipna=True, ddof=1, numeric_only=False, **kwargs):
+        """Returns sample standard deviation."""
+        reduced_self = _compute_series_reduce(self, ["count", "sum"])
+        count, sum = reduced_self[0], reduced_self[1]
+        if count <= 0 or count <= ddof:
+            return pd.NA
+        squared = self.map(lambda x: x * x)
+        squared_sum = _compute_series_reduce(squared, ["sum"])[0]
+        return ((squared_sum - (sum**2) / count) / (count - ddof)) ** 0.5
+
+    @check_args_fallback(unsupported="all")
+    def describe(self, percentiles=None, include=None, exclude=None):
+        """
+        Generates descriptive statistics.
+        Descriptive statistics include those that summarize the central tendency, dispersion and
+        shape of a dataset's distribution, excluding NaN values.
+        """
+        reduced_self = _compute_series_reduce(self, ["count", "min", "max", "sum"])
+        count, min, max, sum = (
+            reduced_self[0],
+            reduced_self[1],
+            reduced_self[2],
+            reduced_self[3],
+        )
+
+        # Evaluate mean
+        if count <= 0:
+            return pd.NA
+        mean_val = sum / count
+
+        # Evaluate std
+        squared = self.map(lambda x: x * x)
+        squared_sum = _compute_series_reduce(squared, ["sum"])[0]
+        std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
+
+        # TODO: implement quantile
+        quantile = self.quantile([0.25, 0.5, 0.75])
+        result = [
+            count,
+            mean_val,
+            std_val,
+            min,
+            quantile[0.25],
+            quantile[0.5],
+            quantile[0.75],
+            max,
+        ]
+
+        return pd.Series(
+            result,
+            index=[
+                "count",
+                "mean",
+                "std",
+                "min",
+                "25%",
+                "50%",
+                "75%",
+                "max",
+            ],
+            name=self.name,
+        )
 
     @property
     def ndim(self) -> int:
