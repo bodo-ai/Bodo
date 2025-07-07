@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 BodoSQL utils used to help construct Python code.
 """

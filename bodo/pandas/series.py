@@ -474,13 +474,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return (count_plan(self),)
-            case ExecState.DISTRIBUTED:
-                return (self._mgr._md_nrows,)
-            case ExecState.COLLECTED:
-                return super().shape
+        if self._exec_state == ExecState.PLAN:
+            return (count_plan(self),)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return (self._mgr._md_nrows,)
+        if self._exec_state == ExecState.COLLECTED:
+            return super().shape
 
     def head(self, n: int = 5):
         """
@@ -517,13 +516,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __len__(self):
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return count_plan(self)
-            case ExecState.DISTRIBUTED:
-                return self._mgr._md_nrows
-            case ExecState.COLLECTED:
-                return super().__len__()
+        if self._exec_state == ExecState.PLAN:
+            return count_plan(self)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return self._mgr._md_nrows
+        if self._exec_state == ExecState.COLLECTED:
+            return super().__len__()
 
     def __repr__(self):
         # Pandas repr implementation calls len() first which will execute an extra
@@ -628,13 +626,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def min(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
     ):
-        return _compute_series_reduce(self, "min")
+        return _compute_series_reduce(self, ["min"])[0]
 
     @check_args_fallback(unsupported="all")
     def max(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
     ):
-        return _compute_series_reduce(self, "max")
+        return _compute_series_reduce(self, ["max"])[0]
 
     @check_args_fallback(unsupported="all")
     def sum(
@@ -645,7 +643,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         min_count=0,
         **kwargs,
     ):
-        return _compute_series_reduce(self, "sum")
+        return _compute_series_reduce(self, ["sum"])[0]
 
     @check_args_fallback(unsupported="all")
     def product(
@@ -656,11 +654,23 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         min_count=0,
         **kwargs,
     ):
-        return _compute_series_reduce(self, "product")
+        return _compute_series_reduce(self, ["product"])[0]
 
     @check_args_fallback(unsupported="all")
     def count(self):
-        return _compute_series_reduce(self, "count")
+        return _compute_series_reduce(self, ["count"])[0]
+
+    @check_args_fallback(unsupported="all")
+    def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
+        reduced = _compute_series_reduce(self, ["count", "sum"])
+        count, sum = reduced[0], reduced[1]
+        if count <= 0:
+            return pd.NA
+        return sum / count
+
+    @property
+    def ndim(self) -> int:
+        return super().ndim
 
     @property
     def ndim(self) -> int:
@@ -1051,8 +1061,22 @@ class BodoDatetimeProperties:
         )
 
 
+def map_validate_reduce(func_names, pa_type):
+    """Maps validate_reduce to func_names list, returns resulting pyarrow schema."""
+    res = []
+    for idx in range(len(func_names)):
+        func_name = func_names[idx]
+        if func_name not in ("min", "max", "sum", "product", "count"):
+            raise BodoLibNotImplementedException(
+                f"{func_name}() not implemented for {pa_type} type."
+            )
+        assigned_type = validate_reduce(func_name, pa_type)
+        res.append(pa.field(f"{idx}", assigned_type))
+    return pa.schema(res)
+
+
 def validate_reduce(func_name, pa_type):
-    """Validates input Series to _compute_series_reduce, returns upcast input type if necessary, otherwise None."""
+    """Validates individual function name, returns upcast input type if necessary, otherwise original type."""
 
     if func_name in (
         "max",
@@ -1065,51 +1089,56 @@ def validate_reduce(func_name, pa_type):
             raise BodoLibNotImplementedException(
                 f"{func_name}() not implemented for {pa_type} type."
             )
-        return None
+        return pa_type
 
     elif func_name in (
         "sum",
         "product",
     ):
         if pa.types.is_unsigned_integer(pa_type):
-            return pd.ArrowDtype(pa.uint64())
+            return pa.uint64()
         elif pa.types.is_integer(pa_type):
-            return pd.ArrowDtype(pa.int64())
+            return pa.int64()
         elif pa.types.is_floating(pa_type):
-            return pd.ArrowDtype(pa.float64())
+            return pa.float64()
         else:
             raise BodoLibNotImplementedException(
                 f"{func_name}() not implemented for {pa_type} type."
             )
 
     elif func_name in ("count",):
-        return pd.ArrowDtype(pa.int64())
+        return pa.int64()
 
 
-def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
-    """Compute a reduction function like min/max on a BodoSeries."""
+def generate_null_reduce(func_names):
+    """Generates a list that maps reduction operations to their default values."""
+    res = []
+    for func_name in func_names:
+        if func_name in ("max", "min"):
+            res.append(pd.NA)
+        elif func_name in ("sum", "count"):
+            res.append(0)
+        elif func_name == "product":
+            res.append(1)
+        else:
+            raise BodoLibNotImplementedException(f"{func_name}() not implemented.")
+    return res
 
-    from bodo.pandas.base import _empty_like
 
-    # TODO: support other functions like mean, etc.
-    assert func_name in ("min", "max", "sum", "product", "count"), (
-        f"Unsupported function {func_name} for series reduction."
-    )
+def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
+    """
+    Computes a list of reduction functions like ["min", "max"] on a BodoSeries.
+    Returns a list of equal length that stores reduction values of each function.
+    """
 
     # Drop Index columns since not necessary for reduction output.
-    zero_size_self = _empty_like(bodo_series).reset_index(drop=True)
-    pa_type = zero_size_self.dtype.pyarrow_dtype
+    pa_type = bodo_series.dtype.pyarrow_dtype
 
-    # For null arrays, return default value
     if pa.types.is_null(pa_type):
-        if func_name == "sum":
-            return 0
-        if func_name == "product":
-            return 1
+        return generate_null_reduce(func_names)
 
-    # Check for supported types
-    if output_type := validate_reduce(func_name, pa_type):
-        zero_size_self = zero_size_self.astype(output_type)
+    new_arrow_schema = map_validate_reduce(func_names, pa_type)
+    zero_size_self = arrow_to_empty_df(new_arrow_schema)
 
     exprs = [
         LazyPlan(
@@ -1120,6 +1149,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
             [0],
             True,  # dropna
         )
+        for func_name in func_names
     ]
 
     plan = LazyPlan(
@@ -1131,12 +1161,18 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     )
     out_rank = execute_plan(plan)
 
-    # TODO: generalize if necessary
-    if func_name == "count":
-        func_name = "sum"
-
+    df = pd.DataFrame(out_rank)
+    res = []
     # TODO: use parallel reduction for slight improvement in very large scales
-    return getattr(pd.Series(out_rank), func_name)()
+    for i in range(len(df.columns)):
+        func_name = func_names[i]
+        reduced_val = getattr(
+            df[str(i)], "sum" if func_name == "count" else func_name
+        )()
+        res.append(reduced_val)
+
+    assert len(res) == len(func_names)
+    return res
 
 
 def _tz_localize_helper(s, tz, nonexistent):
@@ -1498,7 +1534,6 @@ def _split_internal(self, name, pat, n, expand, regex=None):
         is_method=False,
     )
 
-    # TODO: Implement Series.max()
     n_cols = length_series.max()
 
     n_index_arrays = get_n_index_arrays(index)

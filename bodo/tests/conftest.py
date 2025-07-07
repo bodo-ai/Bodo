@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import gc
 import glob
@@ -12,7 +14,6 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
-    Optional,
     Protocol,
 )
 from uuid import uuid4
@@ -551,7 +552,7 @@ def iceberg_database() -> Generator[
     # make this safer to use - calling this function will invalidate all old
     # spark referneces.
     def create_tables_on_rank_one(
-        tables: list[str] | str = [], spark: Optional["SparkSession"] = None
+        tables: list[str] | str = [], spark: SparkSession | None = None
     ) -> tuple[str, str]:
         if not isinstance(tables, list):
             tables = [tables]

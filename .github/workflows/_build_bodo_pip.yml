@@ -15,6 +15,10 @@ on:
         description: 'Bodo Version to Build'
         type: string
         required: true
+      python_version:
+        description: 'Python Version to build for'
+        type: string
+        required: true
 
 jobs:
   build_bodo_wheels:
@@ -59,6 +63,23 @@ jobs:
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
         run: |
           pixi global install sccache
+
+      - name: Calculate CIBW_BUILD (Unix)
+        if: runner.os != 'Windows'
+        env:
+          PYTHON_VERSION: ${{ inputs.python_version }}
+        run: |
+          CIBW_BUILD="cp$(echo $PYTHON_VERSION | sed 's/\.//')-*"
+          echo "CIBW_BUILD=$CIBW_BUILD" >> $GITHUB_ENV
+
+      - name: Calculate CIBW_BUILD (Windows)
+        if: runner.os == 'Windows'
+        env:
+          PYTHON_VERSION: ${{ inputs.python_version }}
+        shell: pwsh
+        run: |
+          $CIBW_BUILD = "cp$($env:PYTHON_VERSION -replace '\.', '')-*"
+          echo "CIBW_BUILD=$CIBW_BUILD" >> $env:GITHUB_ENV
 
       - name: Build Wheels
         run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
@@ -165,8 +186,9 @@ jobs:
             --exclude libs2n.so.1
             --plat manylinux_2_28_$(uname -m) {wheel} -w {dest_dir} &&
             python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}
+          CIBW_BUILD: ${{ env.CIBW_BUILD }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ inputs.name }}
+          name: cibw-wheels-${{ inputs.name }}-${{ inputs.python_version }}
           path: ./wheelhouse/*.whl

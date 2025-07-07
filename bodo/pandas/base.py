@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import csv
 import importlib
 import typing as pt
@@ -12,11 +14,14 @@ import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
 from pandas._typing import (
+    Axis,
     CompressionOptions,
     CSVEngine,
     DtypeArg,
     DtypeBackend,
     FilePath,
+    Hashable,
+    HashableT,
     IndexLabel,
     ReadCsvBuffer,
     StorageOptions,
@@ -261,7 +266,7 @@ def read_iceberg(
     return wrap_plan(plan=plan)
 
 
-def read_iceberg_table(table: "PyIcebergTable") -> BodoDataFrame:
+def read_iceberg_table(table: PyIcebergTable) -> BodoDataFrame:
     import pyiceberg.catalog
 
     # We can't scatter catalogs so we need to use properties instead so the workers can
@@ -441,6 +446,100 @@ def to_datetime(
         in_kwargs,
         is_method=False,
     )
+
+
+@check_args_fallback(unsupported="all")
+def concat(
+    objs: Iterable[BodoSeries | BodoDataFrame]
+    | Mapping[HashableT, BodoSeries | BodoDataFrame],
+    *,
+    axis: Axis = 0,
+    join: str = "outer",
+    ignore_index: bool = False,
+    keys: Iterable[Hashable] | None = None,
+    levels=None,
+    names: list[HashableT] | None = None,
+    verify_integrity: bool = False,
+    sort: bool = False,
+    copy: bool | None = None,
+) -> BodoDataFrame | BodoSeries:
+    if isinstance(objs, Mapping):
+        raise BodoLibNotImplementedException(
+            "concat does not current support objs of Mapping type"
+        )
+
+    if len(objs) == 0:
+        raise ValueError("No objects to concatenate")
+    elif len(objs) == 1:
+        return objs[0]
+
+    def concat_two(a, b):
+        """Process two dataframes or series to concat just two together."""
+        zero_size_a = _empty_like(a)
+        zero_size_b = _empty_like(b)
+
+        # Simulate operation in Pandas with empty entities.
+        empty_data = pd.concat(
+            [zero_size_a, zero_size_b],
+            axis=axis,
+            join=join,
+            ignore_index=ignore_index,
+            keys=keys,
+            levels=levels,
+            names=names,
+            sort=sort,
+            copy=copy,
+        )
+
+        if isinstance(empty_data, pd.DataFrame):
+
+            def get_mapping(new_schema, old_schema, plan):
+                """Create col ref expressions to do the reordering between
+                the old schema column order and the new one.
+                """
+                exprs = []
+                for field_idx, x in enumerate(new_schema):
+                    if x in old_schema:
+                        exprs.extend(make_col_ref_exprs([old_schema.index(x)], plan))
+                    else:
+                        exprs.append(LazyPlan("NullExpression", new_schema, field_idx))
+                return exprs
+
+            # Create a reordering of the temp a_new_cols so that the columns are in
+            # the same order as the Pandas simulation on empty data.
+            a_plan = LazyPlan(
+                "LogicalProjection",
+                empty_data,
+                a._plan,
+                get_mapping(empty_data, a.columns.tolist(), a._plan),
+            )
+            # Create a reordering of the temp b_new_cols so that the columns are in
+            # the same order as the Pandas simulation on empty data.
+            b_plan = LazyPlan(
+                "LogicalProjection",
+                empty_data,
+                b._plan,
+                get_mapping(empty_data, b.columns.tolist(), b._plan),
+            )
+        else:
+            a_plan = a._plan
+            b_plan = b._plan
+
+        # DuckDB Union operator requires schema to already be matching.
+        planUnion = LazyPlan(
+            "LogicalSetOperation", empty_data, a_plan, b_plan, "union all"
+        )
+
+        return wrap_plan(planUnion)
+
+    # High-level approach is to process two dataframes or series at a time.  If
+    # the programmer gave more than 2 then combine the 3rd with the result of
+    # first two, the 4th with the result of that and so on.
+    cur_res = concat_two(objs[0], objs[1])
+    for i in range(2, len(objs)):
+        cur_res = concat_two(cur_res, objs[i])
+
+    return cur_res
 
 
 def _validate_df_to_datetime(df):

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as pt
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -51,4 +53,4 @@ class LazyMetadata:
     result_id: str
     head: pd.DataFrame | pd.Series | ArrowExtensionArray
     nrows: int
-    index_data: "LazyMetadata | None"
+    index_data: LazyMetadata | None

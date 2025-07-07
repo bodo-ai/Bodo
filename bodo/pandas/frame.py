@@ -276,13 +276,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __len__(self):
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return count_plan(self)
-            case ExecState.DISTRIBUTED:
-                return self._mgr._md_nrows
-            case ExecState.COLLECTED:
-                return super().__len__()
+        if self._exec_state == ExecState.PLAN:
+            return count_plan(self)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return self._mgr._md_nrows
+        if self._exec_state == ExecState.COLLECTED:
+            return super().__len__()
 
     def __repr__(self):
         # Pandas repr implementation calls len() first which will execute an extra
@@ -305,13 +304,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def shape(self):
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return (count_plan(self), len(self._head_df.columns))
-            case ExecState.DISTRIBUTED:
-                return (self._mgr._md_nrows, len(self._head_df.columns))
-            case ExecState.COLLECTED:
-                return super().shape
+        if self._exec_state == ExecState.PLAN:
+            return (count_plan(self), len(self._head_df.columns))
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return (self._mgr._md_nrows, len(self._head_df.columns))
+        if self._exec_state == ExecState.COLLECTED:
+            return super().shape
 
     @check_args_fallback(supported=["columns", "copy"])
     def rename(
@@ -1082,6 +1080,19 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 proj_exprs,
             )
             self._update_setitem_internal_state(new_plan, key, value)
+            return
+
+        # Match cases like df[["B", "C"]] = 1
+        if (
+            self.is_lazy_plan()
+            and isinstance(key, Iterable)
+            and all(isinstance(x, str) for x in key)
+            and pd.api.types.is_scalar(value)
+        ):
+            # Implement as recursive calls to the above code segment for
+            # single column assignment.
+            for new_col in key:
+                self.__setitem__(new_col, value)
             return
 
         raise BodoLibNotImplementedException(

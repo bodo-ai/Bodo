@@ -3,6 +3,8 @@ catalog contains all information needed to connect to a Snowflake account
 in Java and load relevant schema information.
 """
 
+from __future__ import annotations
+
 from copy import deepcopy
 
 from numba.core import types
@@ -162,7 +164,7 @@ class SnowflakeCatalog(DatabaseCatalog):
         self.iceberg_volume = iceberg_volume
 
     @classmethod
-    def from_conn_str(cls, conn_str: str) -> "SnowflakeCatalog":
+    def from_conn_str(cls, conn_str: str) -> SnowflakeCatalog:
         conn_contents = parse_conn_str(conn_str, strict_parsing=True)
         ref_str = "See https://docs.snowflake.com/developer-guide/python-connector/sqlalchemy#connection-parameters for constructing a connection URL."
 

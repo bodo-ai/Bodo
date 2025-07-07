@@ -68,7 +68,8 @@ macos = "12.0"
 python = "3.13.*"
 pip = "*"
 # Core Python Deps
-numba = "==0.61.2"
+# Numba 0.60 is required for Python 3.9 (required for PyIceberg CI)
+numba = ">=0.60"
 numpy = ">=1.24"
 pandas = ">=2.2"
 pyarrow = { version = "==19.0.1", channel = "conda-forge" }
