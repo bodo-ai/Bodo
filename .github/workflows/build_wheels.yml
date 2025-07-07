@@ -53,13 +53,13 @@ jobs:
       fail-fast: false
       matrix:
         python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
-        os: [macos-13, macos-latest, windows-latest]
+        os: [{os: macos-13, name: macos-x86}, {os: macos-latest, name: macos-arm}, {os: windows-latest, name: windows}]
           # Don't publish linux arm until we can get nightly fixed
           #- os: ubuntu-24.04-arm
           #  name: linux-arm
     with:
-      os: ${{ matrix.os }}
-      name: ${{ matrix.name }}
+      os: ${{ matrix.os.os }}
+      name: ${{ matrix.os.name }}
       bodo_version: ${{ needs.get_version.outputs.bodo_version }}
       python_version: ${{ matrix.python_version }}
     secrets: inherit
