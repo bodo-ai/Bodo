@@ -1700,9 +1700,9 @@ def test_series_reductions():
         assert bdf[c].count() == df[c].count()
         out_pandas, out_bodo = df[c].mean(), bdf[c].mean()
         assert (
-            pd.isna(out_pandas)
-            if pd.isna(out_bodo)
-            else np.isclose(out_pandas, out_bodo, rtol=1e-6)
+            np.isclose(out_pandas, out_bodo, rtol=1e-6)
+            if not pd.isna(out_bodo)
+            else pd.isna(out_pandas)
         )
 
 
