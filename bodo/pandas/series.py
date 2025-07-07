@@ -1168,6 +1168,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
 
     df = pd.DataFrame(out_rank)
     res = []
+    # TODO: use parallel reduction for slight improvement in very large scales
     for i in range(len(df.columns)):
         func_name = func_names[i]
         reduced_val = getattr(
