@@ -34,11 +34,16 @@ jobs:
   build_bodo_linux:
     uses: ./.github/workflows/_build_bodo_pip.yml
     needs: [get_version]
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
     with:
       # Only Linux x86 in this job
       os: ubuntu-latest
       name: linux-x86
       bodo_version: ${{ needs.get_version.outputs.bodo_version }}
+      python_version: ${{ matrix.python_version }}
     secrets: inherit
 
   build_bodo_other:
@@ -62,6 +67,7 @@ jobs:
       os: ${{ matrix.os }}
       name: ${{ matrix.name }}
       bodo_version: ${{ needs.get_version.outputs.bodo_version }}
+      python_version: ${{ matrix.python_version }}
     secrets: inherit
 
   build_bodosql_wheels:
