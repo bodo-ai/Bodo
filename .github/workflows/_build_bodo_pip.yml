@@ -68,7 +68,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ inputs.python_version }}
         run: |
-          CIBW_BUILD=cp$(echo $PYTHON_VERSION | sed 's/\.//')-*
+          CIBW_BUILD="cp$(echo $PYTHON_VERSION | sed 's/\.//')-*"
           echo "CIBW_BUILD=$CIBW_BUILD" >> $GITHUB_ENV
 
       - name: Build Wheels
