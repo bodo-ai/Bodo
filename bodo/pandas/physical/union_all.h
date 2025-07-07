@@ -32,7 +32,7 @@ class PhysicalUnionAll : public PhysicalSource, public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         if (!collected_rows) {
             collected_rows = std::make_unique<ChunkedTableBuilderState>(
-                input_batch->schema(), input_batch->nrows());
+                input_batch->schema(), get_streaming_batch_size());
         }
         collected_rows->builder->AppendBatch(input_batch);
         return (prev_op_result == OperatorResult::FINISHED)
