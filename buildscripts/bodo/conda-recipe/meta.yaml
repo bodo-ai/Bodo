@@ -55,7 +55,7 @@ requirements:
     - mpich 4.1.*               # [not win]
     - impi-devel                # [win64]
     # Corresponding dependency is automatically added in reqs/run.
-    - aws-sdk-cpp <=1.11.485
+    - aws-sdk-cpp
     - zstd
 
   run:
