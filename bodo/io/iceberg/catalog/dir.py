@@ -4,6 +4,8 @@ Only supports loading, creating/replacing/appending to tables
 from a directory structure.
 """
 
+from __future__ import annotations
+
 from functools import cached_property
 from pathlib import Path
 from urllib.parse import urlparse

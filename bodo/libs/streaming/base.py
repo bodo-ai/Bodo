@@ -2,6 +2,8 @@
 Base class implementations for supporting streaming operators.
 """
 
+from __future__ import annotations
+
 import numba
 import numpy as np
 from numba.core import types

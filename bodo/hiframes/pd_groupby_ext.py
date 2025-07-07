@@ -1,5 +1,7 @@
 """Support for Pandas Groupby operations"""
 
+from __future__ import annotations
+
 import operator
 from enum import Enum
 

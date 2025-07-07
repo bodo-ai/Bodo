@@ -4,6 +4,8 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
+from __future__ import annotations
+
 import datetime
 import sys
 from collections.abc import Iterable
@@ -393,68 +395,68 @@ class SnowflakeFilterVisitor(bif.FilterVisitor[str]):
         return '\\"' + col_name + '\\"'
 
     def visit_op(self, op: bif.Op) -> str:
-        match op.op:
-            case "ALWAYS_TRUE":
-                # Special operator for True
-                return "(TRUE)"
-            case "ALWAYS_FALSE":
-                # Special operators for False.
-                return "(FALSE)"
-            case "ALWAYS_NULL":
-                # Special operators for NULL.
-                return "(NULL)"
+        if op.op == "ALWAYS_TRUE":
+            # Special operator for True
+            return "(TRUE)"
+        elif op.op == "ALWAYS_FALSE":
+            # Special operators for False.
+            return "(FALSE)"
+        elif op.op == "ALWAYS_NULL":
+            # Special operators for NULL.
+            return "(NULL)"
 
-            case "AND":
-                return " AND ".join(self.visit(c) for c in op.args)
-            case "OR":
-                return " OR ".join(self.visit(c) for c in op.args)
-            case "NOT":
-                return f"(NOT {self.visit(op.args[0])})"
+        elif op.op == "AND":
+            return " AND ".join(self.visit(c) for c in op.args)
+        elif op.op == "OR":
+            return " OR ".join(self.visit(c) for c in op.args)
+        elif op.op == "NOT":
+            return f"(NOT {self.visit(op.args[0])})"
 
-            case "IS_NULL":
-                return f"({self.visit(op.args[0])} IS NULL)"
-            case "IS_NOT_NULL":
-                return f"({self.visit(op.args[0])} IS NOT NULL)"
+        elif op.op == "IS_NULL":
+            return f"({self.visit(op.args[0])} IS NULL)"
+        elif op.op == "IS_NOT_NULL":
+            return f"({self.visit(op.args[0])} IS NOT NULL)"
 
-            case "case_insensitive_equality":
-                # Equality is just =, not a function
-                return f"(LOWER({self.visit(op.args[0])}) = LOWER({self.visit(op.args[1])}))"
-            case (
-                "case_insensitive_startswith"
-                | "case_insensitive_endswith"
-                | "case_insensitive_contains"
-            ):
-                op_name = op.op[len("case_insensitive_") :]
-                return f"({op_name}(LOWER({self.visit(op.args[0])}), LOWER({self.visit(op.args[1])})))"
-            case "like" | "ilike":
-                # You can't pass the empty string to escape. As a result we
-                # must confirm its not the empty string
-                escape_arg = op.args[2]
-                assert isinstance(escape_arg, bif.Scalar)
-                has_escape = True
-                escape_typ = self.typemap[escape_arg.val.name]
-                if is_overload_constant_str(escape_typ):
-                    escape_val = get_overload_const_str(escape_typ)
-                    has_escape = escape_val != ""
-                escape_section = (
-                    f"escape {self.visit(escape_arg)}" if has_escape else ""
+        elif op.op == "case_insensitive_equality":
+            # Equality is just =, not a function
+            return (
+                f"(LOWER({self.visit(op.args[0])}) = LOWER({self.visit(op.args[1])}))"
+            )
+        elif op.op in (
+            "case_insensitive_startswith",
+            "case_insensitive_endswith",
+            "case_insensitive_contains",
+        ):
+            op_name = op.op[len("case_insensitive_") :]
+            return f"({op_name}(LOWER({self.visit(op.args[0])}), LOWER({self.visit(op.args[1])})))"
+        elif op.op in ("like", "ilike"):
+            # You can't pass the empty string to escape. As a result we
+            # must confirm its not the empty string
+            escape_arg = op.args[2]
+            assert isinstance(escape_arg, bif.Scalar)
+            has_escape = True
+            escape_typ = self.typemap[escape_arg.val.name]
+            if is_overload_constant_str(escape_typ):
+                escape_val = get_overload_const_str(escape_typ)
+                has_escape = escape_val != ""
+            escape_section = f"escape {self.visit(escape_arg)}" if has_escape else ""
+
+            return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])} {escape_section})"
+
+        # Infix Operators
+        elif op.op in ("=", "==", "!=", "<>", "<", "<=", ">", ">=", "IN"):
+            return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])})"
+
+        # Handles all functions in general, including previous special cases like
+        # REGEXP_LIKE
+        else:
+            func = op.op
+            if func not in supported_funcs_map:
+                raise NotImplementedError(
+                    f"Snowflake Filter pushdown not implemented for {func} function"
                 )
-
-                return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])} {escape_section})"
-
-            # Infix Operators
-            case "=" | "==" | "!=" | "<>" | "<" | "<=" | ">" | ">=" | "IN":
-                return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])})"
-
-            # Handles all functions in general, including previous special cases like
-            # REGEXP_LIKE
-            case func:
-                if func not in supported_funcs_map:
-                    raise NotImplementedError(
-                        f"Snowflake Filter pushdown not implemented for {func} function"
-                    )
-                sql_func = supported_funcs_map[func]
-                return f"({sql_func}({', '.join(self.visit(c) for c in op.args)}))"
+            sql_func = supported_funcs_map[func]
+            return f"({sql_func}({', '.join(self.visit(c) for c in op.args)}))"
 
 
 # Class for a the RTJF min/max/unique stored values
@@ -1965,7 +1967,7 @@ def snowflake_reader_init_py_entry(
         "snowflake_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
     )
 
-    def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
+    def codegen(context: BaseContext, builder: IRBuilder, signature, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [

@@ -261,6 +261,10 @@ cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace
         CLogicalComparisonJoin(CJoinType join_type)
         CJoinType join_type
 
+cdef extern from "duckdb/planner/operator/logical_set_operation.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalSetOperation" duckdb::LogicalSetOperation"(CLogicalOperator):
+        pass
+
 cdef extern from "duckdb/planner/operator/logical_projection.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalProjection" duckdb::LogicalProjection"(CLogicalOperator):
         pass
@@ -300,6 +304,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
+    cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
@@ -311,6 +316,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
+    cdef unique_ptr[CExpression] make_const_null(object arrow_schema, int64_t field_idx) except +
     cdef unique_ptr[CExpression] make_const_int_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_double_expr(double val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
@@ -413,6 +419,24 @@ cdef class LogicalComparisonJoin(LogicalOperator):
         return f"LogicalComparisonJoin({join_type})"
 
 
+cdef class LogicalSetOperation(LogicalOperator):
+    """Wrapper around DuckDB's LogicalSetOperation to provide access in Python.
+    """
+
+    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, str setop):
+        """
+        setop - only value supported for now is "union all".  In the future,
+                "union" and "intersect" may be supported.
+        """
+        self.out_schema = out_schema
+
+        cdef unique_ptr[CLogicalSetOperation] c_logical_set_operation = make_set_operation(lhs.c_logical_operator, rhs.c_logical_operator, setop.encode(), len(self.out_schema))
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_set_operation.release())
+
+    def __str__(self):
+        return f"LogicalSetOperation()"
+
+
 cdef class LogicalProjection(LogicalOperator):
     """Wrapper around DuckDB's LogicalProjection to provide access in Python.
     """
@@ -510,6 +534,17 @@ cdef class ColRefExpression(Expression):
 
     def __str__(self):
         return f"ColRefExpression({self.out_schema})"
+
+
+cdef class NullExpression(Expression):
+    """Wrapper around DuckDB's BoundConstantExpression to provide access in Python.
+    """
+
+    def __cinit__(self, object dummy_schema, int64_t field_idx):
+        self.c_expression = make_const_null(dummy_schema, field_idx)
+
+    def __str__(self):
+        return f"NullExpression()"
 
 
 cdef class ConstantExpression(Expression):

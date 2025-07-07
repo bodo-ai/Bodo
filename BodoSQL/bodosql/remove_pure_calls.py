@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 File used to handle the logic for BodoSQL specific calls in the BodoSQL package.
 """

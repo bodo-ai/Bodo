@@ -1,5 +1,7 @@
 """IR node for the join and merge"""
 
+from __future__ import annotations
+
 from collections import defaultdict
 from collections.abc import Sequence
 from itertools import chain
@@ -157,11 +159,11 @@ class Join(ir.Stmt):
         left_keys: list[str] | str,
         right_keys: list[str] | str,
         out_data_vars: list[ir.Var],
-        out_df_type: "DataFrameType",
+        out_df_type: DataFrameType,
         left_vars: list[ir.Var],
-        left_df_type: "DataFrameType",
+        left_df_type: DataFrameType,
         right_vars: list[ir.Var],
-        right_df_type: "DataFrameType",
+        right_df_type: DataFrameType,
         how: HOW_OPTIONS,
         suffix_left: str,
         suffix_right: str,

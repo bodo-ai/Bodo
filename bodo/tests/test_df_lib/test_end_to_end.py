@@ -778,6 +778,14 @@ def test_set_df_column_const(datapath, index_val):
     assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf, check_pandas_types=False)
 
+    # Two new integer columns
+    bdf = bd.from_pandas(df)
+    bdf[["D", "G"]] = 111
+    pdf = df.copy()
+    pdf[["D", "G"]] = 111
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
     # Replace existing column with float
     bdf = bd.from_pandas(df)
     bdf["B"] = 1.23
@@ -1677,8 +1685,8 @@ def test_series_min_max_unsupported_types():
         bdf["A"].max()
 
 
-def test_series_sum_product_count():
-    """Basic test for Series sum, product, and count."""
+def test_series_reductions():
+    """Basic test for Series sum, product, count, and mean."""
     n = 10000
     df = pd.DataFrame(
         {
@@ -1698,6 +1706,12 @@ def test_series_sum_product_count():
         assert np.isclose(bdf[c].sum(), df[c].sum(), rtol=1e-6)
         assert np.isclose(bdf[c].product(), df[c].product(), rtol=1e-6)
         assert bdf[c].count() == df[c].count()
+        out_pandas, out_bodo = df[c].mean(), bdf[c].mean()
+        assert (
+            np.isclose(out_pandas, out_bodo, rtol=1e-6)
+            if not pd.isna(out_bodo)
+            else pd.isna(out_pandas)
+        )
 
 
 def test_read_csv(datapath):
@@ -1757,3 +1771,100 @@ def test_df_state_change():
 
     # Plan execution shouldn't fail due to stale res id
     print(bdf2)
+
+
+def test_dataframe_concat(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))[["A", "D"]]
+    bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))[["A", "E"]]
+    bodo_df3 = bd.concat([bodo_df1, bodo_df2, bodo_df2])
+    assert bodo_df3.is_lazy_plan()
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))[["A", "D"]]
+    py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))[["A", "E"]]
+    py_df3 = pd.concat([py_df1, py_df2, py_df2])
+
+    _test_equal(
+        bodo_df3,
+        py_df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_series_concat(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))["A"]
+    bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))["A"]
+    bodo_df3 = bd.concat([bodo_df1, bodo_df2, bodo_df2])
+    assert bodo_df3.is_lazy_plan()
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))["A"]
+    py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))["A"]
+    py_df3 = pd.concat([py_df1, py_df2, py_df2])
+
+    _test_equal(
+        bodo_df3,
+        py_df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.skip("disabled due to submit_func_to_workers: already running")
+def test_isin(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
+    bodo_df3 = (bodo_df1["D"] + 100).isin(bodo_df2["E"])
+
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))
+    py_df3 = (py_df1["D"] + 100).isin(py_df2["E"])
+
+    assert bodo_df3.is_lazy_plan()
+
+    _test_equal(
+        bodo_df3,
+        py_df3,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )
+
+
+def test_drop(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
+        columns=["A", "F"]
+    )
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
+        columns=["A", "F"]
+    )
+
+    assert bodo_df1.is_lazy_plan()
+
+    _test_equal(
+        bodo_df1,
+        py_df1,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )
+
+
+def test_loc(datapath):
+    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
+        :, ["A", "F"]
+    ]
+    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
+        :, ["A", "F"]
+    ]
+
+    assert bodo_df1.is_lazy_plan()
+
+    _test_equal(
+        bodo_df1,
+        py_df1,
+        check_pandas_types=False,
+        sort_output=False,
+        reset_index=True,
+    )

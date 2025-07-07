@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import functools
 import importlib
 import inspect
@@ -299,7 +301,7 @@ def check_args_fallback(
                         func.__qualname__,
                         unsupported_args,
                         unsupported_kwargs,
-                        args,
+                        (self, *args),
                         kwargs,
                         package_name=package_name,
                         fn_str=fn_str,
@@ -348,7 +350,8 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
-                    return getattr(base_class, func.__name__)(self, *args, **kwargs)
+                    py_res = getattr(base_class, func.__name__)(self, *args, **kwargs)
+                    return py_res
 
         return wrapper
 
@@ -449,7 +452,7 @@ class LazyPlan:
         # be reused across right and left sides (e.g. self-join) leading to unique_ptr
         # errors.
         use_cache = True
-        if self.plan_class == "LogicalComparisonJoin":
+        if self.plan_class in ["LogicalComparisonJoin", "LogicalSetOperation"]:
             use_cache = False
 
         # Convert any LazyPlan in the args or kwargs.
