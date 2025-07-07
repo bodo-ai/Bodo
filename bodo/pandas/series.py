@@ -639,13 +639,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def min(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
     ):
-        return _compute_series_reduce(self, "min")
+        return _compute_series_reduce(self, ["min"]).get("min")
 
     @check_args_fallback(unsupported="all")
     def max(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
     ):
-        return _compute_series_reduce(self, "max")
+        return _compute_series_reduce(self, ["max"]).get("max")
 
     @check_args_fallback(unsupported="all")
     def sum(
@@ -656,7 +656,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         min_count=0,
         **kwargs,
     ):
-        return _compute_series_reduce(self, "sum")
+        return _compute_series_reduce(self, ["sum"]).get("sum")
 
     @check_args_fallback(unsupported="all")
     def product(
@@ -667,17 +667,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         min_count=0,
         **kwargs,
     ):
-        return _compute_series_reduce(self, "product")
+        return _compute_series_reduce(self, ["product"]).get("product")
 
     @check_args_fallback(unsupported="all")
     def count(self):
-        return _compute_series_reduce(self, "count")
+        return _compute_series_reduce(self, ["count"]).get("count")
 
     @check_args_fallback(unsupported="all")
     def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
-        if (n := _compute_series_reduce(self, "count")) <= 0:
+        reduce_map = _compute_series_reduce(self, ["count", "sum"])
+        if (n := reduce_map["count"]) <= 0:
             return pd.NA
-        return _compute_series_reduce(self, "sum") / n
+        return reduce_map["sum"] / n
 
 
 class BodoStringMethods:
@@ -1064,6 +1065,20 @@ class BodoDatetimeProperties:
         )
 
 
+def map_validate_reduce(func_names, pa_type):
+    """Validates input Series to _compute_series_reduce, returns upcast input type if necessary, otherwise None."""
+    res, idx = [], 0
+    for func_name in func_names:
+        if func_name not in ("min", "max", "sum", "product", "count"):
+            raise BodoLibNotImplementedException(
+                f"{func_name}() not implemented for {pa_type} type."
+            )
+        assigned_type = validate_reduce(func_name, pa_type)
+        res.append(pa.field(f"{idx}", assigned_type))
+        idx += 1
+    return pa.schema(res)
+
+
 def validate_reduce(func_name, pa_type):
     """Validates input Series to _compute_series_reduce, returns upcast input type if necessary, otherwise None."""
 
@@ -1078,51 +1093,50 @@ def validate_reduce(func_name, pa_type):
             raise BodoLibNotImplementedException(
                 f"{func_name}() not implemented for {pa_type} type."
             )
-        return None
+        return pa_type
 
     elif func_name in (
         "sum",
         "product",
     ):
         if pa.types.is_unsigned_integer(pa_type):
-            return pd.ArrowDtype(pa.uint64())
+            return pa.uint64()
         elif pa.types.is_integer(pa_type):
-            return pd.ArrowDtype(pa.int64())
+            return pa.int64()
         elif pa.types.is_floating(pa_type):
-            return pd.ArrowDtype(pa.float64())
+            return pa.float64()
         else:
             raise BodoLibNotImplementedException(
                 f"{func_name}() not implemented for {pa_type} type."
             )
 
     elif func_name in ("count",):
-        return pd.ArrowDtype(pa.int64())
+        return pa.int64()
 
 
-def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
+def generate_null_reduce(func_names):
+    res = {}
+    for func_name in func_names:
+        if func_name in ("max", "min"):
+            res[func_name] = pd.NA
+        if func_name in ("sum", "count"):
+            res[func_name] = 0
+        if func_name == "product":
+            res[func_name] = 1
+    return res
+
+
+def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
     """Compute a reduction function like min/max on a BodoSeries."""
 
-    from bodo.pandas.base import _empty_like
-
-    # TODO: expand coverage for other reduction functions
-    assert func_name in ("min", "max", "sum", "product", "count", "mean"), (
-        f"Unsupported function {func_name} for series reduction."
-    )
-
     # Drop Index columns since not necessary for reduction output.
-    zero_size_self = _empty_like(bodo_series).reset_index(drop=True)
-    pa_type = zero_size_self.dtype.pyarrow_dtype
+    pa_type = bodo_series.dtype.pyarrow_dtype
 
-    # For null arrays, return default value
     if pa.types.is_null(pa_type):
-        if func_name == "sum":
-            return 0
-        if func_name == "product":
-            return 1
+        return generate_null_reduce(func_names)
 
-    # Check for supported types
-    if output_type := validate_reduce(func_name, pa_type):
-        zero_size_self = zero_size_self.astype(output_type)
+    new_arrow_schema = map_validate_reduce(func_names, pa_type)
+    zero_size_self = arrow_to_empty_df(new_arrow_schema)
 
     exprs = [
         LazyPlan(
@@ -1133,6 +1147,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
             [0],
             True,  # dropna
         )
+        for func_name in func_names
     ]
 
     plan = LazyPlan(
@@ -1144,12 +1159,16 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     )
     out_rank = execute_plan(plan)
 
-    # TODO: generalize if necessary
-    if func_name == "count":
-        func_name = "sum"
+    # print(pd.DataFrame(out_rank))
+    df = pd.DataFrame(out_rank)
+    res = {}
 
-    # TODO: use parallel reduction for slight improvement in very large scales
-    return getattr(pd.Series(out_rank), func_name)()
+    for i in range(len(df.columns)):
+        func_name = func_names[i]
+        res[func_name] = getattr(
+            df[str(i)], "sum" if func_name == "count" else func_name
+        )()
+    return res
 
 
 def _tz_localize_helper(s, tz, nonexistent):

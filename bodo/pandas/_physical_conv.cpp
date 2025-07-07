@@ -1,5 +1,6 @@
 #include "_physical_conv.h"
 #include <stdexcept>
+#include <string>
 #include "_bodo_scan_function.h"
 
 #include "_bodo_write_function.h"
@@ -79,16 +80,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
     // Single column reduction like Series.max()
     if (op.groups.empty()) {
-        if (op.expressions.size() != 1 ||
-            op.expressions[0]->type !=
-                duckdb::ExpressionType::BOUND_AGGREGATE) {
-            throw std::runtime_error(
-                "LogicalAggregate with no groups must have exactly one "
-                "aggregate expression for reduction.");
+        for (const auto& expr : op.expressions) {
+            if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
+                throw std::runtime_error(
+                    "LogicalAggregate with no groups must have BOUND_AGGREGATE "
+                    "expression types for reduction.");
+            }
         }
         auto& agg_expr =
             op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
-
         if (agg_expr.function.name == "count_star") {
             auto physical_op = std::make_shared<PhysicalCountStar>();
             // Finish the pipeline at this point so that Finalize can run
@@ -102,16 +102,28 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                 std::make_shared<PipelineBuilder>(physical_op);
             return;
         }
+        std::vector<std::string> function_names;
+        std::vector<duckdb::BoundAggregateExpression*> agg_expressions;
+        for (auto& expr : op.expressions) {
+            auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
+            agg_expressions.push_back(&agg_expr);
+            function_names.emplace_back(agg_expr.function.name);
+        }
 
-        // Extract bind_info
+        auto bodo_schema = std::make_shared<bodo::Schema>();
         BodoAggFunctionData& bind_info =
-            agg_expr.bind_info->Cast<BodoAggFunctionData>();
-
-        auto out_schema = bind_info.out_schema;
-        auto bodo_schema = bodo::Schema::FromArrowSchema(out_schema);
-
-        auto physical_op = std::make_shared<PhysicalReduce>(
-            bodo_schema, agg_expr.function.name);
+            agg_expressions[0]->bind_info->Cast<BodoAggFunctionData>();
+        auto col_schema = bind_info.out_schema;
+        auto bodo_col_schema = bodo::Schema::FromArrowSchema(col_schema);
+        for (size_t i = 0; i < bodo_col_schema->column_types.size(); i++) {
+            bodo_schema->append_column(
+                bodo_col_schema->column_types[i]->copy());
+            bodo_schema->column_names.push_back(std::to_string(i));
+        }
+        bodo_schema->metadata = std::make_shared<TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+        auto physical_op =
+            std::make_shared<PhysicalReduce>(bodo_schema, function_names);
         finished_pipelines.emplace_back(
             this->active_pipeline->Build(physical_op));
         this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);

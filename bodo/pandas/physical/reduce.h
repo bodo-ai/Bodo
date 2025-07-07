@@ -29,11 +29,11 @@ enum class ReductionType {
 class PhysicalReduce : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalReduce(std::shared_ptr<bodo::Schema> out_schema,
-                            std::string function_name)
+                            std::vector<std::string> function_names)
         // Drop Index columns since not necessary in output
-        : out_schema(out_schema->Project(1)),
-          function_name(function_name),
-          scalar_cmp_name(getScalarOpName(function_name)) {}
+        : out_schema(out_schema),
+          function_names(function_names),
+          scalar_cmp_names(getScalarOpNames(function_names)) {}
 
     virtual ~PhysicalReduce() = default;
 
@@ -41,50 +41,61 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
-        // Convert to Arrow array
-        arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-        std::shared_ptr<arrow::Array> in_arrow_array = bodo_array_to_arrow(
-            bodo::BufferPool::DefaultPtr(), input_batch->columns[0],
-            false /*convert_timedelta_to_int64*/, "", time_unit,
-            false, /*downcast_time_ns_to_us*/
-            bodo::default_buffer_memory_manager());
+        try {
+            // Convert to Arrow array
+            arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+            std::shared_ptr<arrow::Array> in_arrow_array = bodo_array_to_arrow(
+                bodo::BufferPool::DefaultPtr(), input_batch->columns[0],
+                false /*convert_timedelta_to_int64*/, "", time_unit,
+                false, /*downcast_time_ns_to_us*/
+                bodo::default_buffer_memory_manager());
+            std::vector<std::shared_ptr<arrow::Scalar>> output_scalar_batches;
+            for (size_t i = 0; i < function_names.size(); i++) {
+                auto function_name = function_names[i];
+                // Reduce Arrow array using compute function
+                arrow::Result<arrow::Datum> cmp_res =
+                    arrow::compute::CallFunction(function_name,
+                                                 {in_arrow_array});
+                CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
+                std::shared_ptr<arrow::Scalar> out_scalar_batch =
+                    cmp_res.ValueOrDie().scalar();
+                output_scalar_batches.push_back(out_scalar_batch);
+                ReductionType reduction_type = getReductionType(function_name);
 
-        // Reduce Arrow array using compute function
-        arrow::Result<arrow::Datum> cmp_res =
-            arrow::compute::CallFunction(function_name, {in_arrow_array});
-        CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
-        std::shared_ptr<arrow::Scalar> out_scalar_batch =
-            cmp_res.ValueOrDie().scalar();
-
-        ReductionType reduction_type = getReductionType(function_name);
-
-        // Update reduction result
-        if (iter == 0) {
-            output_scalar = out_scalar_batch;
-        } else {
-            arrow::Result<arrow::Datum> cmp_res_scalar =
-                arrow::compute::CallFunction(scalar_cmp_name,
-                                             {out_scalar_batch, output_scalar});
-            CHECK_ARROW(cmp_res_scalar.status(),
-                        "Error in Arrow compute scalar comparison");
-            const std::shared_ptr<arrow::Scalar> cmp_scalar =
-                cmp_res_scalar.ValueOrDie().scalar();
-            if (reduction_type == ReductionType::COMPARISON) {
-                if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
-                    output_scalar = out_scalar_batch;
+                // Update reduction result
+                if (iter == 0) {
+                    output_scalars = output_scalar_batches;
+                } else {
+                    arrow::Result<arrow::Datum> cmp_res_scalar =
+                        arrow::compute::CallFunction(
+                            scalar_cmp_names[i],
+                            {out_scalar_batch, output_scalars[i]});
+                    CHECK_ARROW(cmp_res_scalar.status(),
+                                "Error in Arrow compute scalar comparison");
+                    const std::shared_ptr<arrow::Scalar> cmp_scalar =
+                        cmp_res_scalar.ValueOrDie().scalar();
+                    if (reduction_type == ReductionType::COMPARISON) {
+                        if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
+                            output_scalars[i] = out_scalar_batch;
+                        }
+                    } else if (reduction_type == ReductionType::AGGREGATION) {
+                        output_scalars[i] = cmp_scalar;
+                    } else {
+                        throw std::runtime_error(
+                            "Unsupported reduction function: " + function_name);
+                    }
                 }
-            } else if (reduction_type == ReductionType::AGGREGATION) {
-                output_scalar = cmp_scalar;
-            } else {
-                throw std::runtime_error("Unsupported reduction function: " +
-                                         function_name);
             }
-        }
 
-        iter++;
-        return prev_op_result == OperatorResult::FINISHED
-                   ? OperatorResult::FINISHED
-                   : OperatorResult::NEED_MORE_INPUT;
+            iter++;
+            return prev_op_result == OperatorResult::FINISHED
+                       ? OperatorResult::FINISHED
+                       : OperatorResult::NEED_MORE_INPUT;
+        } catch (const std::exception& e) {
+            std::string err_msg =
+                std::string("PhysicalReduce::ConsumeBatch: ") + e.what();
+            throw std::runtime_error(err_msg);
+        }
     }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
@@ -97,14 +108,28 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
-        // Return reduction result as a single-element table
-        std::shared_ptr<arrow::Array> array = ScalarToArrowArray(output_scalar);
-
-        std::shared_ptr<array_info> result =
-            arrow_array_to_bodo(array, bodo::BufferPool::DefaultPtr());
-        std::vector<std::shared_ptr<array_info>> cvec = {result};
+        // Create a vector of Arrow arrays from output_scalars
+        std::vector<std::shared_ptr<arrow::Array>> arrow_arrays;
+        for (const auto& output_scalar : output_scalars) {
+            if (output_scalar->type->id() != arrow::Type::INT64 &&
+                output_scalar->type->id() != arrow::Type::DOUBLE &&
+                output_scalar->type->id() != arrow::Type::BOOL) {
+                throw std::runtime_error("Unexpected scalar type: " +
+                                         output_scalar->type->ToString());
+            }
+            std::shared_ptr<arrow::Array> array =
+                ScalarToArrowArray(output_scalar);
+            arrow_arrays.push_back(array);
+        }
+        // Wrap Arrow arrays into Bodo arrays
+        std::vector<std::shared_ptr<array_info>> bodo_arrays;
+        for (const auto& arr : arrow_arrays) {
+            std::shared_ptr<array_info> bodo_arr =
+                arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr());
+            bodo_arrays.push_back(bodo_arr);
+        }
         std::shared_ptr<table_info> next_batch =
-            std::make_shared<table_info>(cvec);
+            std::make_shared<table_info>(bodo_arrays);
 
         return {next_batch, OperatorResult::FINISHED};
     }
@@ -135,6 +160,15 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         }
     }
 
+    static std::vector<std::string> getScalarOpNames(
+        const std::vector<std::string>& func_names) {
+        std::vector<std::string> scalar_cmp_names;
+        for (const auto& func_name : func_names) {
+            scalar_cmp_names.push_back(getScalarOpName(func_name));
+        }
+        return scalar_cmp_names;
+    }
+
     static ReductionType getReductionType(std::string func_name) {
         if (func_name == "max") {
             return ReductionType::COMPARISON;
@@ -152,10 +186,19 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         }
     }
 
+    static std::vector<ReductionType> getReductionTypes(
+        const std::vector<std::string>& func_names) {
+        std::vector<ReductionType> reduction_types;
+        for (const auto& func_name : func_names) {
+            reduction_types.push_back(getReductionType(func_name));
+        }
+        return reduction_types;
+    }
+
     const std::shared_ptr<bodo::Schema> out_schema;
-    const std::string function_name;
-    const std::string scalar_cmp_name;
+    const std::vector<std::string> function_names;
+    const std::vector<std::string> scalar_cmp_names;
 
     int64_t iter = 0;
-    std::shared_ptr<arrow::Scalar> output_scalar;
+    std::vector<std::shared_ptr<arrow::Scalar>> output_scalars;
 };
