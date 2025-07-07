@@ -3,7 +3,7 @@ are in the vendored case and routes to the correct package.
 """
 
 try:
-    from _vendored_mpi4py import MPI as _MPI
+    from ._vendored_mpi4py import MPI as _MPI
 except ImportError:
     from mpi4py import MPI as _MPI
 
