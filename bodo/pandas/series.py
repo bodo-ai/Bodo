@@ -95,23 +95,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
                 empty_data = _empty_like(self)
                 if bodo.dataframe_library_run_parallel:
-                    if getattr(self._mgr, "_md_result_id", None) is not None:
-                        # If the plan has been executed but the results are still
-                        # distributed then re-use those results as is.
-                        nrows = self._mgr._md_nrows
-                        res_id = self._mgr._md_result_id
-                        mgr = self._mgr
-                    else:
-                        # The data has been collected and is no longer distributed
-                        # so we need to re-distribute the results.
-                        nrows = len(self)
-                        res_id = bodo.spawn.utils.scatter_data(self)
-                        mgr = None
+                    nrows = len(self)
                     self._source_plan = LazyPlan(
                         "LogicalGetPandasReadParallel",
                         empty_data,
                         nrows,
-                        LazyPlanDistributedArg(mgr, res_id),
+                        LazyPlanDistributedArg(self),
                     )
                 else:
                     self._source_plan = LazyPlan(
@@ -485,13 +474,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return (count_plan(self),)
-            case ExecState.DISTRIBUTED:
-                return (self._mgr._md_nrows,)
-            case ExecState.COLLECTED:
-                return super().shape
+        if self._exec_state == ExecState.PLAN:
+            return (count_plan(self),)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return (self._mgr._md_nrows,)
+        if self._exec_state == ExecState.COLLECTED:
+            return super().shape
 
     def head(self, n: int = 5):
         """
@@ -528,13 +516,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __len__(self):
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return count_plan(self)
-            case ExecState.DISTRIBUTED:
-                return self._mgr._md_nrows
-            case ExecState.COLLECTED:
-                return super().__len__()
+        if self._exec_state == ExecState.PLAN:
+            return count_plan(self)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return self._mgr._md_nrows
+        if self._exec_state == ExecState.COLLECTED:
+            return super().__len__()
 
     def __repr__(self):
         # Pandas repr implementation calls len() first which will execute an extra
@@ -672,6 +659,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback(unsupported="all")
     def count(self):
         return _compute_series_reduce(self, "count")
+
+    @property
+    def ndim(self) -> int:
+        return super().ndim
 
 
 class BodoStringMethods:

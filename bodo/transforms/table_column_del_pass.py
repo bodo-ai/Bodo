@@ -4,6 +4,8 @@ when they are no longer used. This enables garbage collecting
 single columns when tables are represented by a single variable.
 """
 
+from __future__ import annotations
+
 import copy
 import typing as pt
 from collections import defaultdict

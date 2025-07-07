@@ -4,7 +4,6 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
-from copy import deepcopy
 
 import pandas as pd
 from pandas._libs import lib
@@ -29,6 +28,8 @@ if pt.TYPE_CHECKING:
     from pyiceberg.partitioning import PartitionSpec
     from pyiceberg.table.sorting import SortOrder
 
+
+from pandas.core.indexing import _LocIndexer
 
 import bodo
 from bodo.ext import plan_optimizer
@@ -60,6 +61,33 @@ from bodo.utils.typing import (
 )
 
 
+class BodoDataFrameLocIndexer(_LocIndexer):
+    def __init__(self, name, obj):
+        self.df = obj
+        super().__init__(name, obj)
+
+    def __getitem__(self, key):
+        if isinstance(key, tuple) and len(key) == 2:
+            row_sel, col_sel = key
+            if row_sel == slice(None, None, None):
+                return self.df.__getitem__(col_sel)
+            else:
+                warnings.warn(
+                    BodoLibFallbackWarning(
+                        "Selected variant of BodoDataFrame.loc[] not supported."
+                    )
+                )
+                return super(self.df).loc.__getitem__(key)
+
+        warnings.warn(
+            BodoLibFallbackWarning(
+                "Selected variant of BodoDataFrame.loc[] not supported."
+            )
+        )
+        # Delegate to original behavior
+        return super(self.df).loc.__getitem__(key)
+
+
 class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     # We need to store the head_df to avoid data pull when head is called.
     # Since BlockManagers are in Cython it's tricky to override all methods
@@ -84,6 +112,21 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __init__(self, *args, **kwargs):
         # No-op since already initialized by __new__
         pass
+
+    @property
+    def loc(self):
+        return BodoDataFrameLocIndexer("loc", self)
+
+    def __setattr__(self, name, value):
+        # Intercept direct setting of columns attribute
+        # and copy new column names to _head_df if it
+        # exists so that when column names are propagated
+        # from there they match the latest dataframe
+        # column names.
+        if name == "columns":
+            if self._head_df is not None:
+                self._head_df.columns = value
+        super().__setattr__(name, value)
 
     @property
     def _plan(self):
@@ -115,25 +158,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     return self._source_plan[1]
 
             if bodo.dataframe_library_run_parallel:
-                if getattr(self._mgr, "_md_result_id", None) is not None:
-                    # If the plan has been executed but the results are still
-                    # distributed then re-use those results as is.
-                    nrows = self._mgr._md_nrows
-                    res_id = self._mgr._md_result_id
-                    mgr = self._mgr
-                else:
-                    # The data has been collected and is no longer distributed
-                    # so we need to re-distribute the results.
-                    nrows = len(self)
-                    res_id = bodo.spawn.utils.scatter_data(self)
-                    mgr = None
+                nrows = len(self)
                 self._source_plan = (
                     empty_data,
                     LazyPlan(
                         "LogicalGetPandasReadParallel",
                         empty_data,
                         nrows,
-                        LazyPlanDistributedArg(mgr, res_id),
+                        LazyPlanDistributedArg(self),
                     ),
                 )
             else:
@@ -244,13 +276,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __len__(self):
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return count_plan(self)
-            case ExecState.DISTRIBUTED:
-                return self._mgr._md_nrows
-            case ExecState.COLLECTED:
-                return super().__len__()
+        if self._exec_state == ExecState.PLAN:
+            return count_plan(self)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return self._mgr._md_nrows
+        if self._exec_state == ExecState.COLLECTED:
+            return super().__len__()
 
     def __repr__(self):
         # Pandas repr implementation calls len() first which will execute an extra
@@ -273,13 +304,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def shape(self):
         from bodo.pandas.utils import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return (count_plan(self), len(self._head_df.columns))
-            case ExecState.DISTRIBUTED:
-                return (self._mgr._md_nrows, len(self._head_df.columns))
-            case ExecState.COLLECTED:
-                return super().shape
+        if self._exec_state == ExecState.PLAN:
+            return (count_plan(self), len(self._head_df.columns))
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return (self._mgr._md_nrows, len(self._head_df.columns))
+        if self._exec_state == ExecState.COLLECTED:
+            return super().shape
 
     @check_args_fallback(supported=["columns", "copy"])
     def rename(
@@ -831,16 +861,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         empty_join_out.columns = [
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
-        # We want to avoid having self appear on the rhs since the unique_ptr
-        # to the duckdb plan will delete it on the lhs first before it processes the rhs
-        # TODO [BSE-4865]: check right._plan for self recursively.
-        right_plan = deepcopy(right._plan) if self is right else right._plan
 
         planComparisonJoin = LazyPlan(
             "LogicalComparisonJoin",
             empty_join_out,
             self._plan,
-            right_plan,
+            right._plan,
             plan_optimizer.CJoinType.INNER,
             key_indices,
         )
@@ -894,6 +920,31 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return DataFrameGroupBy(self, by, as_index, dropna)
 
+    @check_args_fallback(supported=["columns"])
+    def drop(
+        self,
+        labels: IndexLabel | None = None,
+        *,
+        axis: Axis = 0,
+        index: IndexLabel | None = None,
+        columns: IndexLabel | None = None,
+        level: Level | None = None,
+        inplace: bool = False,
+        errors: IgnoreRaise = "raise",
+    ) -> BodoDataFrame | None:
+        if isinstance(columns, str):
+            columns = [columns]
+        if not isinstance(columns, list):
+            raise BodoError("drop columns must be string or list of string")
+        cur_col_names = self.columns.tolist()
+        columns_to_use = [x for x in cur_col_names if x not in columns]
+        if len(columns_to_use) != len(cur_col_names) - len(columns):
+            not_found = [x for x in columns if x not in cur_col_names]
+            raise KeyError(
+                f"drop columns includes names {not_found} not present in dataframe"
+            )
+        return self.__getitem__(columns_to_use)
+
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
@@ -933,6 +984,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 just one element. """
             if isinstance(key, str):
                 key = [key]
+                output_series = True
+            else:
+                output_series = False
             assert isinstance(key, Iterable)
             key = list(key)
             # convert column name to index
@@ -948,7 +1002,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Create column reference expressions for selected columns
             exprs = make_col_ref_exprs(key_indices, self._plan)
 
-            empty_data = zero_size_self.__getitem__(key[0] if len(key) == 1 else key)
+            empty_data = zero_size_self.__getitem__(key[0] if output_series else key)
             return wrap_plan(
                 plan=LazyPlan(
                     "LogicalProjection",

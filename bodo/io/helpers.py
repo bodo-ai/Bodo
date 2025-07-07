@@ -2,6 +2,8 @@
 File that contains some IO related helpers.
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import threading
@@ -616,7 +618,7 @@ def pyarrow_type_to_numba(arrow_type):
 # ---------------------------- Compilation Time Helpers ----------------------------- #
 def map_cpp_to_py_table_column_idxs(
     col_names: list[str], out_used_cols: list[int]
-) -> "npt.NDArray[np.int64]":
+) -> npt.NDArray[np.int64]:
     """
     Compilation-time helper that maps the index / location of each
     column in the table type to its 'physical index' in the C++ table
@@ -784,7 +786,7 @@ class ExceptionPropagatingThread(threading.Thread):
         return self.ret
 
 
-def get_table_iterator(rhs: "ir.Inst", func_ir: "ir.FunctionIR") -> str:
+def get_table_iterator(rhs: ir.Inst, func_ir: ir.FunctionIR) -> str:
     """pattern match "table, is_last = read_arrow_next(reader)" and return the reader
     variable name.
 

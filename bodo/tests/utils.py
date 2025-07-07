@@ -2,6 +2,8 @@
 Utility functions for testing such as check_func() that tests a function.
 """
 
+from __future__ import annotations
+
 import datetime
 import gzip
 import io

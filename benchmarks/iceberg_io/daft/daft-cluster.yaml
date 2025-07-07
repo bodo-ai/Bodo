@@ -25,7 +25,7 @@ idle_timeout_minutes: 60
 # Cloud-provider specific configuration.
 provider:
     type: aws
-    # For accessing bodo-example-data
+    # For accessing s3tables data
     region: us-east-2
     # Availability zone(s), comma-separated, that nodes may be launched in.
     # Nodes will be launched in the first listed availability zone and will

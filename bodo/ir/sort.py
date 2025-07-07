@@ -1,5 +1,7 @@
 """IR node for the data sorting"""
 
+from __future__ import annotations
+
 from collections import defaultdict
 
 import numba

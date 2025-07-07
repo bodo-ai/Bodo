@@ -2,6 +2,8 @@
 Support for streaming window functions.
 """
 
+from __future__ import annotations
+
 from functools import cached_property
 
 import llvmlite.binding as ll

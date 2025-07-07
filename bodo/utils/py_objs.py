@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from numba.core import cgutils, types
 from numba.extending import (
     NativeValue,

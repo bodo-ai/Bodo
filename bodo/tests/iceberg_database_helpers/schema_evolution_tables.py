@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from copy import deepcopy
 from itertools import chain, combinations
@@ -539,71 +541,70 @@ def create_combo_table(table: str, spark=None, postfix: str = ""):
         ops = table.split("_")[:-1]
         col_name = "A"
         for op in ops:
-            match op:
-                case "PROMOTE":
-                    spark.sql(
-                        f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {col_name} TYPE BIGINT"
-                    )
-                    append_to_iceberg_table(df, sql_schema, table, spark)
-                case "RENAME":
-                    prev_col_name = col_name
-                    col_name = f"{prev_col_name}_renamed"
-                    spark.sql(
-                        f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} RENAME COLUMN {prev_col_name} TO {col_name}"
-                    )
-                    df = df.rename(columns={prev_col_name: col_name})
-                    sql_schema = [
-                        (column.replace(prev_col_name, col_name), type, nullable)
-                        for (column, type, nullable) in sql_schema
-                    ]
-                    append_to_iceberg_table(df, sql_schema, table, spark)
-                case "NULLABLE":
-                    spark.sql(
-                        f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {col_name} DROP NOT NULL"
-                    )
-                    sql_schema = [
-                        (column, type, True if column == col_name else nullable)
-                        for (column, type, nullable) in sql_schema
-                    ]
-                    append_to_iceberg_table(df, sql_schema, table, spark)
-                case "REORDER":
-                    spark.sql(
-                        f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {col_name} AFTER B"
-                    )
-                    df = df[["B"] + [col for col in df.columns if col != "B"]]
-                    sql_schema = [
-                        (column, type, nullable)
-                        for (column, type, nullable) in sql_schema
-                        if column == "B"
-                    ] + [
-                        (column, type, nullable)
-                        for (column, type, nullable) in sql_schema
-                        if column != "B"
-                    ]
-                    append_to_iceberg_table(df, sql_schema, table, spark)
+            if op == "PROMOTE":
+                spark.sql(
+                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {col_name} TYPE BIGINT"
+                )
+                append_to_iceberg_table(df, sql_schema, table, spark)
+            elif op == "RENAME":
+                prev_col_name = col_name
+                col_name = f"{prev_col_name}_renamed"
+                spark.sql(
+                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} RENAME COLUMN {prev_col_name} TO {col_name}"
+                )
+                df = df.rename(columns={prev_col_name: col_name})
+                sql_schema = [
+                    (column.replace(prev_col_name, col_name), type, nullable)
+                    for (column, type, nullable) in sql_schema
+                ]
+                append_to_iceberg_table(df, sql_schema, table, spark)
+            elif op == "NULLABLE":
+                spark.sql(
+                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {col_name} DROP NOT NULL"
+                )
+                sql_schema = [
+                    (column, type, True if column == col_name else nullable)
+                    for (column, type, nullable) in sql_schema
+                ]
+                append_to_iceberg_table(df, sql_schema, table, spark)
+            elif op == "REORDER":
+                spark.sql(
+                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {col_name} AFTER B"
+                )
+                df = df[["B"] + [col for col in df.columns if col != "B"]]
+                sql_schema = [
+                    (column, type, nullable)
+                    for (column, type, nullable) in sql_schema
+                    if column == "B"
+                ] + [
+                    (column, type, nullable)
+                    for (column, type, nullable) in sql_schema
+                    if column != "B"
+                ]
+                append_to_iceberg_table(df, sql_schema, table, spark)
 
-                case "ADD":
-                    spark.sql(
-                        f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ADD COLUMNS (new_column_one INT, new_column_two STRING)"
-                    )
-                    df["new_column_one"] = 1
-                    df["new_column_two"] = "new_column_two"
-                    sql_schema = sql_schema + [
-                        ("new_column_one", "INT", True),
-                        ("new_column_two", "STRING", True),
-                    ]
-                    append_to_iceberg_table(df, sql_schema, table, spark)
-                case "DROP":
-                    spark.sql(
-                        f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} DROP COLUMN {col_name}"
-                    )
-                    df = df.drop(columns=[col_name])
-                    sql_schema = [
-                        (column, type, nullable)
-                        for (column, type, nullable) in sql_schema
-                        if column != col_name
-                    ]
-                    append_to_iceberg_table(df, sql_schema, table, spark)
+            elif op == "ADD":
+                spark.sql(
+                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ADD COLUMNS (new_column_one INT, new_column_two STRING)"
+                )
+                df["new_column_one"] = 1
+                df["new_column_two"] = "new_column_two"
+                sql_schema = sql_schema + [
+                    ("new_column_one", "INT", True),
+                    ("new_column_two", "STRING", True),
+                ]
+                append_to_iceberg_table(df, sql_schema, table, spark)
+            elif op == "DROP":
+                spark.sql(
+                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} DROP COLUMN {col_name}"
+                )
+                df = df.drop(columns=[col_name])
+                sql_schema = [
+                    (column, type, nullable)
+                    for (column, type, nullable) in sql_schema
+                    if column != col_name
+                ]
+                append_to_iceberg_table(df, sql_schema, table, spark)
 
 
 def create_adversarial_table(table: str, spark=None, postfix: str = ""):
