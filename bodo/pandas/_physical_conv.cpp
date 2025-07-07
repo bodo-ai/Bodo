@@ -87,9 +87,19 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                     "expression types for reduction.");
             }
         }
-        auto& agg_expr =
-            op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
-        if (agg_expr.function.name == "count_star") {
+        std::vector<std::string> function_names;
+        std::vector<duckdb::BoundAggregateExpression*> agg_expressions;
+        for (auto& expr : op.expressions) {
+            auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
+            agg_expressions.push_back(&agg_expr);
+            function_names.emplace_back(agg_expr.function.name);
+        }
+        if (agg_expressions[0]->function.name == "count_star") {
+            if (op.expressions.size() != 1) {
+                throw std::runtime_error(
+                    "CountStar must have exactly one "
+                    "aggregate expression for reduction.");
+            }
             auto physical_op = std::make_shared<PhysicalCountStar>();
             // Finish the pipeline at this point so that Finalize can run
             // to reduce the number of collected rows to the desired amount.
@@ -101,13 +111,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             this->active_pipeline =
                 std::make_shared<PipelineBuilder>(physical_op);
             return;
-        }
-        std::vector<std::string> function_names;
-        std::vector<duckdb::BoundAggregateExpression*> agg_expressions;
-        for (auto& expr : op.expressions) {
-            auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
-            agg_expressions.push_back(&agg_expr);
-            function_names.emplace_back(agg_expr.function.name);
         }
 
         auto bodo_schema = std::make_shared<bodo::Schema>();
