@@ -94,6 +94,35 @@ class PhysicalExpression {
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) = 0;
 
+    bool join_expr(array_info **left_table, array_info **right_table,
+                   void **left_data, void **right_data, void **left_null_bitmap,
+                   void **right_null_bitmap, int64_t left_index,
+                   int64_t right_index) {
+        arrow::Datum res = join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        if (!res.is_scalar()) {
+            throw std::runtime_error(
+                "join_expr_internal did not return scalar.");
+        }
+        if (res.scalar()->type->id() != arrow::Type::BOOL) {
+            throw std::runtime_error("join_expr_internal did not return bool.");
+        }
+        auto bool_scalar =
+            std::dynamic_pointer_cast<arrow::BooleanScalar>(res.scalar());
+        if (bool_scalar && bool_scalar->is_valid) {
+            return bool_scalar->value;
+        } else {
+            throw std::runtime_error(
+                "join_expr_internal bool is null or invalid.");
+        }
+    }
+
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) = 0;
+
    protected:
     std::vector<std::shared_ptr<PhysicalExpression>> children;
 };
@@ -132,6 +161,28 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 std::shared_ptr<array_info> do_arrow_compute_cast(
     std::shared_ptr<ExprResult> left_res,
     const duckdb::LogicalType &return_type);
+
+/**
+ * @brief Run arrow compute operation on unary Datum.
+ *
+ */
+arrow::Datum do_arrow_compute_unary(arrow::Datum left_res,
+                                    const std::string &comparator);
+
+/**
+ * @brief Run arrow compute operation on two Datums.
+ *
+ */
+arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
+                                     arrow::Datum right_res,
+                                     const std::string &comparator);
+
+/**
+ * @brief Run cast on arrow Datum.
+ *
+ */
+arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
+                                   const duckdb::LogicalType &return_type);
 
 /**
  * @brief Physical expression tree node type for comparisons resulting in
@@ -187,6 +238,19 @@ class PhysicalComparisonExpression : public PhysicalExpression {
         auto result = do_arrow_compute_binary(left_res, right_res, comparator);
         return std::make_shared<ArrayExprResult>(result,
                                                  "Comparison" + comparator);
+    }
+
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        arrow::Datum left_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        arrow::Datum right_datum = children[1]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        return do_arrow_compute_binary(left_datum, right_datum, comparator);
     }
 
    protected:
@@ -266,6 +330,13 @@ class PhysicalConstantExpression : public PhysicalExpression {
         }
     }
 
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        return arrow::Datum(constant);
+    }
+
     friend std::ostream &operator<<(std::ostream &os,
                                     const PhysicalConstantExpression<T> &obj) {
         os << "PhysicalConstantExpression " << obj.constant << std::endl;
@@ -303,6 +374,13 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
         }
     }
 
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        return arrow::Datum(constant);
+    }
+
     friend std::ostream &operator<<(
         std::ostream &os, const PhysicalConstantExpression<std::string> &obj) {
         os << "PhysicalConstantExpression<string> " << obj.constant
@@ -336,6 +414,13 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
             column_name = bound_name;
         }
         return std::make_shared<ArrayExprResult>(res_array, column_name);
+    }
+
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        throw std::runtime_error("unimplemented.");
     }
 
    protected:
@@ -387,6 +472,13 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
                                                  "Conjunction" + comparator);
     }
 
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        throw std::runtime_error("unimplemented.");
+    }
+
    protected:
     std::string comparator;
 };
@@ -416,6 +508,13 @@ class PhysicalCastExpression : public PhysicalExpression {
             children[0]->ProcessBatch(input_batch);
         auto result = do_arrow_compute_cast(left_res, return_type);
         return std::make_shared<ArrayExprResult>(result, "Cast");
+    }
+
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        throw std::runtime_error("unimplemented.");
     }
 
    protected:
@@ -463,6 +562,13 @@ class PhysicalUnaryExpression : public PhysicalExpression {
             children[0]->ProcessBatch(input_batch);
         auto result = do_arrow_compute_unary(left_res, comparator);
         return std::make_shared<ArrayExprResult>(result, "Unary" + comparator);
+    }
+
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        throw std::runtime_error("unimplemented.");
     }
 
    protected:
@@ -527,6 +633,13 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         return std::make_shared<ArrayExprResult>(result, "Binary" + comparator);
     }
 
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        throw std::runtime_error("unimplemented.");
+    }
+
    protected:
     std::string comparator;
 };
@@ -566,6 +679,13 @@ class PhysicalUDFExpression : public PhysicalExpression {
      */
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch);
+
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        throw std::runtime_error("unimplemented.");
+    }
 
    protected:
     BodoPythonScalarFunctionData scalar_func_data;
