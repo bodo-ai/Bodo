@@ -72,7 +72,7 @@ pip = "*"
 numba = ">=0.60"
 numpy = ">=1.24"
 pandas = ">=2.2"
-pyarrow = { version = ">=20", channel = "conda-forge" }
+pyarrow = { version = ">=18.1", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
@@ -93,6 +93,7 @@ botocore = "*"
 # Due to s3fs pinning aiobotocore and not regularly updating
 s3fs = ">=2022.1"
 adlfs = ">=2022.1"
+pyiceberg = ">=0.9"
 mypy-boto3-glue = "*"  # Required for PyIceberg Glue Catalog
 huggingface_hub = "*"
 zstandard = "*"
