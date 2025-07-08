@@ -73,23 +73,17 @@ NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
 
-def example_write_iceberg_table():
-    df = pd.DataFrame({
-        "A": np.arange(NUM_ROWS) % NUM_GROUPS,
-        "B": np.arange(NUM_ROWS)
-    })
-    df.to_iceberg(f"{NAMESPACE}.my_table_1", location=ARN)
+df = pd.DataFrame({
+    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
+    "B": np.arange(NUM_ROWS)
+})
+df.to_iceberg(f"{NAMESPACE}.my_table_1", location=ARN)
 
-example_write_iceberg_table()
 
-def example_read_iceberg():
-    df = pd.read_iceberg(
-        f"{NAMESPACE}.my_table_1",
-        location=ARN,
-    )
-    return df
-
-df_read = example_read_iceberg()
+df_read = pd.read_iceberg(
+    f"{NAMESPACE}.my_table_1",
+    location=ARN,
+)
 print(df_read)
 ```
 
