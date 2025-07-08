@@ -12,7 +12,7 @@ ICEBERG_VERSION="1.6.1"
 AWS_SDK_VERSION="2.29.26"
 S3TABLES_VERSION="0.1.7"
 
-WAREHOUSE_ARN="arn:aws:s3tables:<region>:<account>:bucket/<your-bucket-name>"
+WAREHOUSE_ARN="arn:aws:s3tables:us-east-2:427443013497:bucket/tpch"
 CATALOG_NAME="s3tbl"
 
 PY_SCRIPT="spark_iceberg_benchmark.py"
@@ -45,11 +45,3 @@ curl -s -LO "https://repo1.maven.org/maven2/software/amazon/s3tables/s3-tables-c
 
 cd ..
 
-# # === 3. Run Spark job ===
-# echo "Running Spark job..."
-# "$SPARK_DIR/bin/spark-submit" \
-#   --jars "$(echo $JAR_DIR/*.jar | tr ' ' ',')" \
-#   --conf "spark.sql.catalog.$CATALOG_NAME=org.apache.iceberg.spark.SparkCatalog" \
-#   --conf "spark.sql.catalog.$CATALOG_NAME.catalog-impl=software.amazon.s3tables.iceberg.S3TablesCatalog" \
-#   --conf "spark.sql.catalog.$CATALOG_NAME.warehouse=$WAREHOUSE_ARN" \
-#   "$PY_SCRIPT"

@@ -22,7 +22,7 @@ def main():
 
     # Drop destination table if it exists
     spark.sql("SHOW NAMESPACES IN s3tbl").show()
-    spark.sql("SHOW TABLES IN s3tbl.sf100").show()
+    spark.sql("SHOW TABLES IN s3tbl.sf1000").show()
 
     """Below is full benchmark code, does not run yet."""
     # start = time.time()
