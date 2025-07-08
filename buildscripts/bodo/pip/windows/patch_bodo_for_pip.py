@@ -14,12 +14,18 @@ def patch_mpi4py(wheel_dir: str) -> None:
     Fix module path references in mpi4py.__init__.py to reflect the
     fact that the module is part of the bodo package.
     """
-    with open(os.path.join(wheel_dir, "bodo", "mpi4py", "__init__.py")) as init_f:
+    mpi_init_path = os.path.join(
+        wheel_dir, "bodo", "mpi4py", "_vendored_mpi4py", "__init__.py"
+    )
+
+    with open(mpi_init_path) as init_f:
         mpi_init_text: str = init_f.read()
 
-    patched_mpi_init_text = mpi_init_text.replace("mpi4py.MPI", "bodo.mpi4py.MPI")
+    patched_mpi_init_text = mpi_init_text.replace(
+        "mpi4py.MPI", "bodo._vendored_mpi4py.mpi4py.MPI"
+    )
 
-    with open(os.path.join(wheel_dir, "bodo", "mpi4py", "__init__.py"), "w") as init_f:
+    with open(mpi_init_path, "w") as init_f:
         init_f.write(patched_mpi_init_text)
 
 
