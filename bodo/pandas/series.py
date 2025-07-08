@@ -688,12 +688,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         shape of a dataset's distribution, excluding NaN values.
         """
         reduced_self = _compute_series_reduce(self, ["count", "min", "max", "sum"])
-        count, min, max, sum = (
-            reduced_self[0],
-            reduced_self[1],
-            reduced_self[2],
-            reduced_self[3],
-        )
+        count, min, max, sum = (reduced_self[i] for i in range(4))
 
         # Evaluate mean
         if count <= 0:
@@ -705,7 +700,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
         std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
 
-        # TODO: implement quantile
+        # TODO [BSE-4970]: implement Series.quantile
         quantile = self.quantile([0.25, 0.5, 0.75])
         result = [
             count,

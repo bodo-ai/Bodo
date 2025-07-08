@@ -1696,8 +1696,7 @@ def test_series_reductions():
             "C2": np.append(np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2),
             "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
             "E": [None] * n,
-            # TODO: fix test case below that fails for n > 68
-            # "F": [i for i in range(n-1)] + [None]
+            "F": np.append(np.arange(n - 1), [None]),
         }
     )
 
@@ -1875,3 +1874,23 @@ def test_loc(datapath):
         sort_output=False,
         reset_index=True,
     )
+
+
+def test_series_describe():
+    """Basic test for Series describe."""
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+
+    for c in df.columns:
+        describe_pd = df[c].describe()
+        describe_bodo = bdf[c].describe()
+        _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
