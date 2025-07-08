@@ -320,7 +320,7 @@ else()
 endif()
 
 # Vendor MPICH
-if(DEFINED ENV{BODO_VENDOR_MPICH})
+if(DEFINED ENV{BODO_BUILD_WHEEL})
   # NOTE: The new mpich wheels have library dependencies that are not available during the build
   #       process and cause errors for wheel repair.
   # TODO [BSE-4934]: Use mpi4py 4.1 as dependency and avoid vendoring mpi4py and MPICH.
@@ -336,6 +336,9 @@ if(DEFINED ENV{BODO_VENDOR_MPICH})
 
   set(MPI_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
   set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
+
+  # If we are building a wheel, we need to set the Python API version to make an ABI compatible wheel
+  add_compile_definitions(Py_LIMITED_API=0x03090000) # Python 3.9 API
 else()
   set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
   set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
