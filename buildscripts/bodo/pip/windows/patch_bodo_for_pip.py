@@ -22,7 +22,7 @@ def patch_mpi4py(wheel_dir: str) -> None:
         mpi_init_text: str = init_f.read()
 
     patched_mpi_init_text = mpi_init_text.replace(
-        "mpi4py.MPI", "bodo._vendored_mpi4py.mpi4py.MPI"
+        "mpi4py.MPI", "bodo.mpi4py._vendored_mpi4py.MPI"
     )
 
     with open(mpi_init_path, "w") as init_f:
