@@ -777,7 +777,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             reduced = _compute_series_reduce(self, func)
             return BodoSeries(reduced, index=func)
         else:
-            raise BodoLibNotImplementedException()
+            raise BodoLibNotImplementedException(
+                "Series.agg() is not supported for the provided arguments yet."
+            )
 
 
 class BodoStringMethods:
