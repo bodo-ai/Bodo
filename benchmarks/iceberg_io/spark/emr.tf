@@ -105,6 +105,11 @@ resource "aws_iam_role_policy" "emr_instance_profile_policy" {
 EOF
 }
 
+resource "aws_iam_role_policy_attachment" "emr_instance_role_s3tables_fullaccess" {
+  role       = aws_iam_role.emr_ec2_instance_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3TablesFullAccess"
+}
+
 resource "aws_iam_instance_profile" "emr_profile" {
   name = "EMR_EC2_Instance_Profile"
   role = aws_iam_role.emr_ec2_instance_role.name
@@ -191,12 +196,12 @@ resource "aws_emr_cluster" "emr_cluster" {
   }
 
   master_instance_group {
-    instance_type = "c6i.32xlarge"
+    instance_type = "c6i.8xlarge"
   }
 
   core_instance_group {
-    instance_type  = "c6i.32xlarge"
-    instance_count = 3
+    instance_type  = "c6i.8xlarge"
+    instance_count = 1
 
     ebs_config {
       size                 = "40"
@@ -218,7 +223,11 @@ resource "aws_emr_cluster" "emr_cluster" {
     action_on_failure = "TERMINATE_CLUSTER"
     hadoop_jar_step {
       jar  = "command-runner.jar"
-      args = ["spark-submit", "s3://${aws_s3_bucket.emr_bucket.id}/scripts/spark_iceberg_benchmark.py"]
+      args = ["spark-submit",
+      "--packages",
+      "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.7",
+      "s3://${aws_s3_bucket.emr_bucket.id}/scripts/spark_iceberg_benchmark.py",
+      ]
     }
   }
 
