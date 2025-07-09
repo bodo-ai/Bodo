@@ -6,7 +6,7 @@ requires = [
     "cython>=3.0",
     # Build Libraries
     "numpy>=1.24",
-    "pyarrow>=19.0,<19.1",
+    "pyarrow>=19",
     "mpi4py>=4.0,<4.1",
     "pip"
 ]
@@ -38,7 +38,7 @@ classifiers = [
 
 dependencies = [
     "numba>=0.60",
-    "pyarrow>=19.0,<19.1",
+    "pyarrow>=19",
     "pandas>=2.2",
     "numpy>=1.24",
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
