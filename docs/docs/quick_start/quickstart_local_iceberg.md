@@ -7,8 +7,7 @@ NOTE: the examples in this file are covered by tests in bodo/tests/test_quicksta
 This quickstart guide will walk you through the process of creating and reading from an Iceberg table using Bodo on your local machine.
 
 ## Installation
-
-[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo` or `conda install bodo -c conda-forge`).
+[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo[iceberg]` or `conda install bodo pyiceberg -c conda-forge`).
 
 
 ## Create a Local Iceberg Table with Bodo DataFrame Library
@@ -60,46 +59,31 @@ Make sure you have your environment ready:
 Now you are ready to use Bodo to read and write S3 Tables. Run this example code (replace bucket name, account ID, region, namespace):
 
 ```python
-import pandas as pd
 import numpy as np
-import bodo
+
+import bodo.pandas as pd
 
 BUCKET_NAME="my-test-bucket"
 ACCOUNT_ID="111122223333"
 REGION="us-east-2"
 NAMESPACE="my_namespace"
-CONN_STR=f"iceberg+arn:aws:s3tables:{REGION}:{ACCOUNT_ID}:bucket/{BUCKET_NAME}"
+ARN=f"arn:aws:s3tables:{REGION}:{ACCOUNT_ID}:bucket/{BUCKET_NAME}"
 
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
 
-@bodo.jit
-def example_write_iceberg_table():
-    df = pd.DataFrame({
-        "A": np.arange(NUM_ROWS) % NUM_GROUPS,
-        "B": np.arange(NUM_ROWS)
-    })
-    df.to_sql(
-        name="my_table_1",
-        con=CONN_STR,
-        schema=NAMESPACE,
-        if_exists="replace"
-    )
+df = pd.DataFrame({
+    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
+    "B": np.arange(NUM_ROWS)
+})
+df.to_iceberg(f"{NAMESPACE}.my_table_1", location=ARN)
 
-example_write_iceberg_table()
 
-@bodo.jit
-def example_read_iceberg():
-    df = pd.read_sql_table(
-            table_name="my_table_1",
-            con=CONN_STR,
-            schema=NAMESPACE
-         )
-    print(df)
-    return df
-
-df_read = example_read_iceberg()
+df_read = pd.read_iceberg(
+    f"{NAMESPACE}.my_table_1",
+    location=ARN,
+)
 print(df_read)
 ```
 
