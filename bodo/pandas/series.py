@@ -781,6 +781,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 "Series.agg() is not supported for the provided arguments yet."
             )
 
+    aggregate = agg
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
