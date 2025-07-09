@@ -136,7 +136,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return object.__getattribute__(pd.Series(self), name)
+            return object.__getattribute__(pd.Series(self._obj), name)
 
         return object.__getattribute__(self, name)
 
