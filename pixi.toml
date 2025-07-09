@@ -72,7 +72,7 @@ pip = "*"
 numba = ">=0.60"
 numpy = ">=1.24"
 pandas = ">=2.2"
-pyarrow = { version = ">=18.1", channel = "conda-forge" }
+pyarrow = { version = ">=19", channel = "conda-forge" }
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0"
@@ -111,8 +111,8 @@ cx_oracle = "*"
 pyzmq = "*"
 
 [target.linux-64.dependencies]
-pyarrow = { version = "==19.0.0", channel = "bodo.ai" }
-libarrow = { version = "==19.0.0", channel = "bodo.ai" }
+pyarrow = { version = ">=19.0.0", channel = "bodo.ai" }
+libarrow = { version = ">=19.0.0", channel = "bodo.ai" }
 
 # Runtime C++ Deps
 [feature.rcpp.dependencies]
