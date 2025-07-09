@@ -17,7 +17,7 @@ name = "bodo"
 dynamic = ["version"]
 description = "High-Performance Python Compute Engine for Data and AI"
 readme = "README.md"
-requires-python = ">=3.9,<3.14"
+requires-python = ">=3.9"
 keywords = ["data", "analytics", "cluster"]
 authors = [{ name = "Bodo.ai" }]
 
