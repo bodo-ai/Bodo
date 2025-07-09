@@ -72,6 +72,11 @@ class DataFrameGroupBy:
         try:
             return object.__getattribute__(self, name)
         except AttributeError:
+            pass
+        try:
+            # Attempts to use name as key and select column
+            return self.__getitem__(name)
+        except BodoLibNotImplementedException:
             msg = (
                 f"DataFrameGroupBy.{name} is not "
                 "implemented in Bodo dataframe library yet. "
