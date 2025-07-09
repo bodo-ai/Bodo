@@ -17,25 +17,30 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     explicit PhysicalJoin(
         duckdb::LogicalComparisonJoin& logical_join,
         const duckdb::vector<duckdb::JoinCondition>& conditions) {
-        // Initialize column indices in join build/probe that need to be
-        // produced according to join output bindings
-        duckdb::idx_t left_table_index = -1;
-        duckdb::idx_t right_table_index = -1;
-        std::vector<duckdb::ColumnBinding> left_findings =
-            logical_join.children[0]->GetColumnBindings();
-        std::vector<duckdb::ColumnBinding> right_findings =
-            logical_join.children[1]->GetColumnBindings();
-        if (left_findings.size() > 0) {
-            left_table_index = left_findings[0].table_index;
+        // Find left/right table columns that will be in the join output.
+        // Similar to DuckDB:
+        // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_hash_join.cpp#L58
+        if (logical_join.left_projection_map.empty()) {
+            for (duckdb::idx_t i = 0;
+                 i < logical_join.children[0]->GetColumnBindings().size();
+                 i++) {
+                this->bound_left_inds.insert(i);
+            }
+        } else {
+            for (const auto& c : logical_join.left_projection_map) {
+                this->bound_left_inds.insert(c);
+            }
         }
-        if (right_findings.size() > 0) {
-            right_table_index = right_findings[0].table_index;
-        }
-        for (auto& c : logical_join.GetColumnBindings()) {
-            if (c.table_index == left_table_index) {
-                this->bound_left_inds.insert(c.column_index);
-            } else if (c.table_index == right_table_index) {
-                this->bound_right_inds.insert(c.column_index);
+
+        if (logical_join.right_projection_map.empty()) {
+            for (duckdb::idx_t i = 0;
+                 i < logical_join.children[1]->GetColumnBindings().size();
+                 i++) {
+                this->bound_right_inds.insert(i);
+            }
+        } else {
+            for (const auto& c : logical_join.right_projection_map) {
+                this->bound_right_inds.insert(c);
             }
         }
 
