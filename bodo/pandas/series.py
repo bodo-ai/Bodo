@@ -118,27 +118,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __getattribute__(self, name: str):
         """Custom attribute access that triggers a fallback warning for unsupported attributes."""
 
-        ignore_fallback_attrs = [
-            "dtype",
-            "name",
-            "to_string",
-        ]
-        cls = object.__getattribute__(self, "__class__")
-        base = cls.__mro__[0]
-
-        if (
-            name not in base.__dict__
-            and name not in ignore_fallback_attrs
-            and not name.startswith("_")
-        ):
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
             msg = (
-                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                f"Series.{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
             return object.__getattribute__(pd.Series(self._obj), name)
-
-        return object.__getattribute__(self, name)
 
     @check_args_fallback("all")
     def _cmp_method(self, other, op):
