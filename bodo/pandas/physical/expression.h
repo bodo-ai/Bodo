@@ -94,29 +94,12 @@ class PhysicalExpression {
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) = 0;
 
-    bool join_expr(array_info **left_table, array_info **right_table,
-                   void **left_data, void **right_data, void **left_null_bitmap,
-                   void **right_null_bitmap, int64_t left_index,
-                   int64_t right_index) {
-        arrow::Datum res = join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        if (!res.is_scalar()) {
-            throw std::runtime_error(
-                "join_expr_internal did not return scalar.");
-        }
-        if (res.scalar()->type->id() != arrow::Type::BOOL) {
-            throw std::runtime_error("join_expr_internal did not return bool.");
-        }
-        auto bool_scalar =
-            std::dynamic_pointer_cast<arrow::BooleanScalar>(res.scalar());
-        if (bool_scalar && bool_scalar->is_valid) {
-            return bool_scalar->value;
-        } else {
-            throw std::runtime_error(
-                "join_expr_internal bool is null or invalid.");
-        }
-    }
+    static bool join_expr(array_info **left_table, array_info **right_table,
+                          void **left_data, void **right_data,
+                          void **left_null_bitmap, void **right_null_bitmap,
+                          int64_t left_index, int64_t right_index);
+
+    static PhysicalExpression *cur_join_expr;
 
     virtual arrow::Datum join_expr_internal(
         array_info **left_table, array_info **right_table, void **left_data,
@@ -364,6 +347,14 @@ class PhysicalNullExpression : public PhysicalExpression {
         }
     }
 
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index) {
+        throw std::runtime_error(
+            "PhysicalNullExpression::join_expr_internal unimplemented ");
+    }
+
     friend std::ostream &operator<<(std::ostream &os,
                                     const PhysicalNullExpression<T> &obj) {
         os << "PhysicalNullExpression " << std::endl;
@@ -480,8 +471,9 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
  */
 class PhysicalColumnRefExpression : public PhysicalExpression {
    public:
-    PhysicalColumnRefExpression(size_t column, const std::string &_bound_name)
-        : col_idx(column), bound_name(_bound_name) {}
+    PhysicalColumnRefExpression(size_t column, const std::string &_bound_name,
+                                bool _left_side = true)
+        : col_idx(column), bound_name(_bound_name), left_side(_left_side) {}
     virtual ~PhysicalColumnRefExpression() = default;
 
     virtual std::shared_ptr<ExprResult> ProcessBatch(
@@ -497,16 +489,39 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
         return std::make_shared<ArrayExprResult>(res_array, column_name);
     }
 
+    arrow::Datum join_expr_internal(array_info **table, void **data,
+                                    void **null_bitmap, int64_t index) {
+        array_info *sel_col = table[col_idx];
+        void *sel_data = data[col_idx];
+        std::unique_ptr<bodo::DataType> col_dt = sel_col->data_type();
+        std::shared_ptr<::arrow::DataType> arrow_dt = col_dt->ToArrowDataType();
+        int32_t dt_byte_width = arrow_dt->byte_width();
+        if (dt_byte_width <= 0) {
+            throw std::runtime_error(
+                "Non-fixed datatype byte width in PhysicalColumnRefExpression "
+                "join_expr_internal.");
+        }
+        void *index_ptr = ((char *)sel_data) + (index * dt_byte_width);
+        return ConvertToDatum(index_ptr, arrow_dt);
+    }
+
     virtual arrow::Datum join_expr_internal(
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error("unimplemented.");
+        if (left_side) {
+            return join_expr_internal(left_table, left_data, left_null_bitmap,
+                                      left_index);
+        } else {
+            return join_expr_internal(right_table, right_data,
+                                      right_null_bitmap, right_index);
+        }
     }
 
    protected:
     size_t col_idx;
     std::string bound_name;
+    bool left_side;
 };
 
 /**
@@ -557,7 +572,13 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error("unimplemented.");
+        arrow::Datum left_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        arrow::Datum right_datum = children[1]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        return do_arrow_compute_binary(left_datum, right_datum, comparator);
     }
 
    protected:
@@ -595,7 +616,8 @@ class PhysicalCastExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error("unimplemented.");
+        throw std::runtime_error(
+            "PhysicalCastExpression::join_expr_internal unimplemented ");
     }
 
    protected:
@@ -649,7 +671,10 @@ class PhysicalUnaryExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error("unimplemented.");
+        arrow::Datum left_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        return do_arrow_compute_unary(left_datum, comparator);
     }
 
    protected:
@@ -718,7 +743,13 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error("unimplemented.");
+        arrow::Datum left_datum = children[0]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        arrow::Datum right_datum = children[1]->join_expr_internal(
+            left_table, right_table, left_data, right_data, left_null_bitmap,
+            right_null_bitmap, left_index, right_index);
+        return do_arrow_compute_binary(left_datum, right_datum, comparator);
     }
 
    protected:
@@ -765,7 +796,8 @@ class PhysicalUDFExpression : public PhysicalExpression {
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) {
-        throw std::runtime_error("unimplemented.");
+        throw std::runtime_error(
+            "PhysicalUDFExpression::join_expr_internal unimplemented ");
     }
 
    protected:

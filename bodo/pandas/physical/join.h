@@ -5,6 +5,7 @@
 #include "../../libs/streaming/_join.h"
 #include "../_util.h"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/joinside.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "operator.h"
 
@@ -16,20 +17,23 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
    public:
     explicit PhysicalJoin(
         duckdb::LogicalComparisonJoin& logical_join,
-        const duckdb::vector<duckdb::JoinCondition>& conditions) {
+        duckdb::vector<duckdb::JoinCondition>& conditions,
+        const std::shared_ptr<bodo::Schema> build_table_schema,
+        const std::shared_ptr<bodo::Schema> probe_table_schema)
+        : has_non_equi_cond(false) {
         // Initialize column indices in join build/probe that need to be
         // produced according to join output bindings
         duckdb::idx_t left_table_index = -1;
         duckdb::idx_t right_table_index = -1;
-        std::vector<duckdb::ColumnBinding> left_findings =
+        duckdb::vector<duckdb::ColumnBinding> left_bindings =
             logical_join.children[0]->GetColumnBindings();
-        std::vector<duckdb::ColumnBinding> right_findings =
+        duckdb::vector<duckdb::ColumnBinding> right_bindings =
             logical_join.children[1]->GetColumnBindings();
-        if (left_findings.size() > 0) {
-            left_table_index = left_findings[0].table_index;
+        if (left_bindings.size() > 0) {
+            left_table_index = left_bindings[0].table_index;
         }
-        if (right_findings.size() > 0) {
-            right_table_index = right_findings[0].table_index;
+        if (right_bindings.size() > 0) {
+            right_table_index = right_bindings[0].table_index;
         }
         for (auto& c : logical_join.GetColumnBindings()) {
             if (c.table_index == left_table_index) {
@@ -42,8 +46,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         // Check conditions and add key columns
         for (const duckdb::JoinCondition& cond : conditions) {
             if (cond.comparison != duckdb::ExpressionType::COMPARE_EQUAL) {
-                throw std::runtime_error(
-                    "Non-equi join condition not supported yet.");
+                has_non_equi_cond = true;
             }
             if (cond.left->GetExpressionClass() !=
                 duckdb::ExpressionClass::BOUND_COLUMN_REF) {
@@ -55,32 +58,29 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                 throw std::runtime_error(
                     "Join condition right side is not a column reference.");
             }
-            this->left_keys.push_back(
-                cond.left->Cast<duckdb::BoundColumnRefExpression>()
-                    .binding.column_index);
-            this->right_keys.push_back(
-                cond.right->Cast<duckdb::BoundColumnRefExpression>()
-                    .binding.column_index);
+            auto& left_bce =
+                cond.left->Cast<duckdb::BoundColumnRefExpression>();
+            auto& right_bce =
+                cond.right->Cast<duckdb::BoundColumnRefExpression>();
+            if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
+                this->left_keys.push_back(left_bce.binding.column_index);
+                this->right_keys.push_back(right_bce.binding.column_index);
+            }
         }
-    }
 
-    virtual ~PhysicalJoin() = default;
-
-    /**
-     * @brief Initialize the join state using build and probe schemas (called
-     * when available).
-     *
-     * @param build_table_schema schema of the build table
-     * @param probe_table_schema schema of the probe table
-     */
-    void InitializeJoinState(
-        const std::shared_ptr<bodo::Schema> build_table_schema,
-        const std::shared_ptr<bodo::Schema> probe_table_schema) {
         size_t n_build_cols = build_table_schema->ncols();
         size_t n_probe_cols = probe_table_schema->ncols();
 
         initInputColumnMapping(build_col_inds, right_keys, n_build_cols);
         initInputColumnMapping(probe_col_inds, left_keys, n_probe_cols);
+        build_col_inds_rev = std::vector<int64_t>(build_col_inds.size());
+        for (size_t i = 0; i < build_col_inds.size(); ++i) {
+            build_col_inds_rev[build_col_inds[i]] = i;
+        }
+        probe_col_inds_rev = std::vector<int64_t>(probe_col_inds.size());
+        for (size_t i = 0; i < probe_col_inds.size(); ++i) {
+            probe_col_inds_rev[probe_col_inds[i]] = i;
+        }
 
         initOutputColumnMapping(build_kept_cols, right_keys, n_build_cols,
                                 bound_right_inds);
@@ -92,16 +92,54 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         std::shared_ptr<bodo::Schema> probe_table_schema_reordered =
             probe_table_schema->Project(probe_col_inds);
 
+        for (const duckdb::JoinCondition& cond : conditions) {
+            auto& left_bce =
+                cond.left->Cast<duckdb::BoundColumnRefExpression>();
+            auto& right_bce =
+                cond.right->Cast<duckdb::BoundColumnRefExpression>();
+
+            std::shared_ptr<PhysicalExpression> new_phys_expr =
+                std::static_pointer_cast<
+                    PhysicalExpression>(std::make_shared<
+                                        PhysicalComparisonExpression>(
+                    std::make_shared<PhysicalColumnRefExpression>(
+                        this->probe_col_inds_rev[getColRefMap(
+                            left_bindings)[{left_bce.binding.table_index,
+                                            left_bce.binding.column_index}]],
+                        left_bce.GetName(), true),
+                    std::make_shared<PhysicalColumnRefExpression>(
+                        this->build_col_inds_rev[getColRefMap(
+                            right_bindings)[{right_bce.binding.table_index,
+                                             right_bce.binding.column_index}]],
+                        right_bce.GetName(), false),
+                    cond.comparison));
+            if (physExprTree) {
+                physExprTree = std::static_pointer_cast<PhysicalExpression>(
+                    std::make_shared<PhysicalConjunctionExpression>(
+                        physExprTree, new_phys_expr,
+                        duckdb::ExpressionType::CONJUNCTION_AND));
+            } else {
+                physExprTree = new_phys_expr;
+            }
+        }
+
+        // ---------------------------------------------------
+
         // TODO[BSE-4813]: handle outer joins properly
         bool build_table_outer = false;
         bool probe_table_outer = false;
 
+        cond_expr_fn_t join_func = nullptr;
+        if (has_non_equi_cond) {
+            join_func = PhysicalExpression::join_expr;
+        }
         this->join_state = std::make_shared<HashJoinState>(
             build_table_schema_reordered, probe_table_schema_reordered,
             this->left_keys.size(), build_table_outer, probe_table_outer,
             // TODO: support forcing broadcast by the planner
-            false, nullptr, true, true, get_streaming_batch_size(), -1,
-            // TODO: support query profiling
+            false, join_func, true, true, get_streaming_batch_size(), -1,
+            // false, nullptr, true, true, get_streaming_batch_size(), -1,
+            //  TODO: support query profiling
             -1, -1, JOIN_MAX_PARTITION_DEPTH, /*is_na_equal*/ true);
 
         // Create the probe output schema, same as here for consistency:
@@ -150,6 +188,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             std::vector<std::string>({}), std::vector<std::string>({}));
     }
 
+    virtual ~PhysicalJoin() = default;
+
     void Finalize() override {}
 
     /**
@@ -190,16 +230,14 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) override {
+        if (has_non_equi_cond) {
+            PhysicalExpression::cur_join_expr = physExprTree.get();
+        }
         // See
         // https://github.com/bodo-ai/Bodo/blob/546cb5a45f5bc8e3922f5060e7f778cc744a0930/bodo/libs/streaming/_join.cpp#L4062
         this->join_state->InitOutputBuffer(this->build_kept_cols,
                                            this->probe_kept_cols);
 
-        bool contain_non_equi_cond = join_state->cond_func != nullptr;
-        if (contain_non_equi_cond) {
-            throw std::runtime_error(
-                "Non-equi join condition not supported yet.");
-        }
         bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
 
         bool is_last = prev_op_result == OperatorResult::FINISHED;
@@ -208,13 +246,25 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             ProjectTable(input_batch, this->probe_col_inds);
 
         if (has_bloom_filter) {
-            is_last = join_probe_consume_batch<false, false, false, true>(
-                this->join_state.get(), input_batch_reordered, build_kept_cols,
-                probe_kept_cols, is_last);
+            if (has_non_equi_cond) {
+                is_last = join_probe_consume_batch<false, false, true, true>(
+                    this->join_state.get(), input_batch_reordered,
+                    build_kept_cols, probe_kept_cols, is_last);
+            } else {
+                is_last = join_probe_consume_batch<false, false, false, true>(
+                    this->join_state.get(), input_batch_reordered,
+                    build_kept_cols, probe_kept_cols, is_last);
+            }
         } else {
-            is_last = join_probe_consume_batch<false, false, false, false>(
-                this->join_state.get(), input_batch_reordered, build_kept_cols,
-                probe_kept_cols, is_last);
+            if (has_non_equi_cond) {
+                is_last = join_probe_consume_batch<false, false, true, false>(
+                    this->join_state.get(), input_batch_reordered,
+                    build_kept_cols, probe_kept_cols, is_last);
+            } else {
+                is_last = join_probe_consume_batch<false, false, false, false>(
+                    this->join_state.get(), input_batch_reordered,
+                    build_kept_cols, probe_kept_cols, is_last);
+            }
         }
 
         bool request_input = true;
@@ -306,4 +356,9 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
     std::vector<int64_t> build_col_inds;
     std::vector<int64_t> probe_col_inds;
+    std::vector<int64_t> build_col_inds_rev;
+    std::vector<int64_t> probe_col_inds_rev;
+
+    bool has_non_equi_cond;
+    std::shared_ptr<PhysicalExpression> physExprTree;
 };

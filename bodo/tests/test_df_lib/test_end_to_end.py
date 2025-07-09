@@ -1012,6 +1012,42 @@ def test_merge_switch_side():
     )
 
 
+def test_merge_filter():
+    """Simple test for DataFrame merge."""
+    df1 = pd.DataFrame(
+        {
+            "B": pd.array([4, 5, 6], "Int64"),
+            "E": [1.1, 2.2, 3.3],
+            "A": pd.array([2, 2, 3], "Int64"),
+        },
+    )
+    df2 = pd.DataFrame(
+        {
+            "Cat": pd.array([2, 3, 8], "Int64"),
+            "Dog": pd.array([8, 3, 9], "Int64"),
+        },
+    )
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+
+    df4 = df3[df3.B < df3.Dog]
+    bdf4 = bdf3[bdf3.B < bdf3.Dog]
+    # Make sure bdf3 is unevaluated at this point.
+    assert bdf4.is_lazy_plan()
+
+    _test_equal(
+        bdf4.copy(),
+        df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_dataframe_copy(index_val):
     """
     Test that creating a Pandas DataFrame from a Bodo DataFrame has the correct index.

@@ -1,7 +1,10 @@
 #include "_util.h"
+#include <arrow/api.h>
 #include <arrow/compute/api.h>
+#include <arrow/datum.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/result.h>
+#include <arrow/scalar.h>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
@@ -271,6 +274,18 @@ std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
     for (size_t i = 0; i < source_cols.size(); i++) {
         duckdb::ColumnBinding &col = source_cols[i];
         col_ref_map[{col.table_index, col.column_index}] = i;
+    }
+    return col_ref_map;
+}
+
+std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
+    std::vector<std::vector<duckdb::ColumnBinding>> source_cols_vec) {
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map;
+    for (auto &source_cols : source_cols_vec) {
+        for (size_t i = 0; i < source_cols.size(); i++) {
+            duckdb::ColumnBinding &col = source_cols[i];
+            col_ref_map[{col.table_index, col.column_index}] = i;
+        }
     }
     return col_ref_map;
 }
@@ -545,4 +560,58 @@ PyObject *duckdbFilterSetToPyicebergFilter(
     }
 
     return ret;
+}
+
+arrow::Datum ConvertToDatum(void *raw_ptr,
+                            std::shared_ptr<arrow::DataType> type) {
+    using arrow::Type;
+
+    switch (type->id()) {
+        case Type::BOOL: {
+            bool value = *static_cast<bool *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::BooleanScalar>(value));
+        }
+        case Type::INT8: {
+            int8_t value = *static_cast<int8_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::Int8Scalar>(value));
+        }
+        case Type::UINT8: {
+            uint8_t value = *static_cast<uint8_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::UInt8Scalar>(value));
+        }
+        case Type::INT16: {
+            int16_t value = *static_cast<int16_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::Int16Scalar>(value));
+        }
+        case Type::UINT16: {
+            uint16_t value = *static_cast<uint16_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::UInt16Scalar>(value));
+        }
+        case Type::INT32: {
+            int32_t value = *static_cast<int32_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::Int32Scalar>(value));
+        }
+        case Type::UINT32: {
+            uint32_t value = *static_cast<uint32_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::UInt32Scalar>(value));
+        }
+        case Type::INT64: {
+            int64_t value = *static_cast<int64_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::Int64Scalar>(value));
+        }
+        case Type::UINT64: {
+            uint64_t value = *static_cast<uint64_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(value));
+        }
+        case Type::FLOAT: {
+            float value = *static_cast<float *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::FloatScalar>(value));
+        }
+        case Type::DOUBLE: {
+            double value = *static_cast<double *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::DoubleScalar>(value));
+        }
+        default:
+            return arrow::Datum();  // empty/null Datum for unsupported types
+    }
 }

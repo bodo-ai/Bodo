@@ -510,3 +510,28 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
     return std::make_shared<ArrayExprResult>(udf_output->columns[0],
                                              udf_output->column_names[0]);
 }
+
+bool PhysicalExpression::join_expr(array_info** left_table,
+                                   array_info** right_table, void** left_data,
+                                   void** right_data, void** left_null_bitmap,
+                                   void** right_null_bitmap, int64_t left_index,
+                                   int64_t right_index) {
+    arrow::Datum res = cur_join_expr->join_expr_internal(
+        left_table, right_table, left_data, right_data, left_null_bitmap,
+        right_null_bitmap, left_index, right_index);
+    if (!res.is_scalar()) {
+        throw std::runtime_error("join_expr_internal did not return scalar.");
+    }
+    if (res.scalar()->type->id() != arrow::Type::BOOL) {
+        throw std::runtime_error("join_expr_internal did not return bool.");
+    }
+    auto bool_scalar =
+        std::dynamic_pointer_cast<arrow::BooleanScalar>(res.scalar());
+    if (bool_scalar && bool_scalar->is_valid) {
+        return bool_scalar->value;
+    } else {
+        throw std::runtime_error("join_expr_internal bool is null or invalid.");
+    }
+}
+
+PhysicalExpression* PhysicalExpression::cur_join_expr = nullptr;
