@@ -1885,6 +1885,7 @@ def test_series_describe():
             "B": np.flip(np.arange(n, dtype=np.int32)),
             "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
             "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": [None] * n,
         }
     )
 

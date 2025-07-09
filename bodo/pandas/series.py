@@ -687,12 +687,46 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Descriptive statistics include those that summarize the central tendency, dispersion and
         shape of a dataset's distribution, excluding NaN values.
         """
+        pa_type = self.dtype.pyarrow_dtype
+
+        if pa.types.is_null(pa_type):
+            return pd.Series(
+                [0, 0, pd.NA, pd.NA],
+                index=["count", "unique", "top", "freq"],
+                name=self.name,
+            )
+
+        # TODO: Support describe() for non-numeric Series
+        if not (
+            pa.types.is_unsigned_integer(pa_type)
+            or pa.types.is_integer(pa_type)
+            or pa.types.is_floating(pa_type)
+        ):
+            raise BodoLibNotImplementedException(
+                "Series.describe() is not supported for non-numeric Series yet."
+            )
+
         reduced_self = _compute_series_reduce(self, ["count", "min", "max", "sum"])
         count, min, max, sum = (reduced_self[i] for i in range(4))
 
+        if count == 0:
+            return pd.Series(
+                [0] + [pd.NA] * 7,
+                index=[
+                    "count",
+                    "mean",
+                    "std",
+                    "min",
+                    "25%",
+                    "50%",
+                    "75%",
+                    "max",
+                ],
+                name=self.name,
+                dtype=pd.ArrowDtype(pa.float64()),
+            )
+
         # Evaluate mean
-        if count <= 0:
-            return pd.NA
         mean_val = sum / count
 
         # Evaluate std
@@ -1186,6 +1220,9 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
     Computes a list of reduction functions like ["min", "max"] on a BodoSeries.
     Returns a list of equal length that stores reduction values of each function.
     """
+
+    if not isinstance(bodo_series.dtype, pd.ArrowDtype):
+        raise BodoLibNotImplementedException()
 
     # Drop Index columns since not necessary for reduction output.
     pa_type = bodo_series.dtype.pyarrow_dtype
