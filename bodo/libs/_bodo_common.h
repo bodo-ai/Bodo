@@ -656,6 +656,8 @@ struct DataType {
     virtual std::shared_ptr<::arrow::Field> ToArrowType(
         std::string& name) const;
 
+    virtual std::shared_ptr<::arrow::DataType> ToArrowDataType() const;
+
     ///@brief Deep copy the Datatype, returns the proper child type if
     /// appropriate
     std::unique_ptr<DataType> copy() const;
