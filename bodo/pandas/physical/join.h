@@ -138,7 +138,6 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             this->left_keys.size(), build_table_outer, probe_table_outer,
             // TODO: support forcing broadcast by the planner
             false, join_func, true, true, get_streaming_batch_size(), -1,
-            // false, nullptr, true, true, get_streaming_batch_size(), -1,
             //  TODO: support query profiling
             -1, -1, JOIN_MAX_PARTITION_DEPTH, /*is_na_equal*/ true);
 
