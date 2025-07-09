@@ -646,7 +646,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return _compute_series_reduce(self, ["sum"])[0]
 
     @check_args_fallback(unsupported="all")
-    def product(
+    def prod(
         self,
         axis: Axis | None = 0,
         skipna: bool = True,
@@ -655,6 +655,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         **kwargs,
     ):
         return _compute_series_reduce(self, ["product"])[0]
+
+    product = prod
 
     @check_args_fallback(unsupported="all")
     def count(self):
@@ -765,6 +767,17 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @property
     def ndim(self) -> int:
         return super().ndim
+
+    @check_args_fallback(supported=["func"])
+    def agg(self, func=None, axis=0, *args, **kwargs):
+        """Aggregate using one or more operations."""
+        if isinstance(func, str):
+            return _compute_series_reduce(self, [func])[0]
+        elif isinstance(func, list):
+            reduced = _compute_series_reduce(self, func)
+            return BodoSeries(reduced, index=func)
+        else:
+            raise BodoLibNotImplementedException()
 
 
 class BodoStringMethods:
@@ -1156,7 +1169,7 @@ def map_validate_reduce(func_names, pa_type):
     res = []
     for idx in range(len(func_names)):
         func_name = func_names[idx]
-        if func_name not in ("min", "max", "sum", "product", "count"):
+        if func_name not in ("min", "max", "sum", "product", "prod", "count"):
             raise BodoLibNotImplementedException(
                 f"{func_name}() not implemented for {pa_type} type."
             )
