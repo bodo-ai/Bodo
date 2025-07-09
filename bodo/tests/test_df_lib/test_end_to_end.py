@@ -1685,7 +1685,8 @@ def test_series_min_max_unsupported_types():
         bdf["A"].max()
 
 
-def test_series_reductions():
+@pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
+def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
     n = 10000
     df = pd.DataFrame(
@@ -1703,16 +1704,8 @@ def test_series_reductions():
     bdf = bd.from_pandas(df)
 
     for c in df.columns:
-        assert np.isclose(bdf[c].sum(), df[c].sum(), rtol=1e-6)
-        assert np.isclose(bdf[c].product(), df[c].product(), rtol=1e-6)
-        assert bdf[c].count() == df[c].count()
-        out_pandas, out_bodo = df[c].mean(), bdf[c].mean()
-        assert (
-            np.isclose(out_pandas, out_bodo, rtol=1e-6)
-            if not pd.isna(out_bodo)
-            else pd.isna(out_pandas)
-        )
-        out_pandas, out_bodo = df[c].std(), bdf[c].std()
+        out_pandas = getattr(df[c], method)()
+        out_bodo = getattr(bdf[c], method)()
         assert (
             np.isclose(out_pandas, out_bodo, rtol=1e-6)
             if not pd.isna(out_bodo)
