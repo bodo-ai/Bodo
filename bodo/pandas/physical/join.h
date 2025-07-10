@@ -68,11 +68,11 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                 throw std::runtime_error(
                     "Join condition right side is not a column reference.");
             }
-            auto& left_bce =
-                cond.left->Cast<duckdb::BoundColumnRefExpression>();
-            auto& right_bce =
-                cond.right->Cast<duckdb::BoundColumnRefExpression>();
             if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
+                auto& left_bce =
+                    cond.left->Cast<duckdb::BoundColumnRefExpression>();
+                auto& right_bce =
+                    cond.right->Cast<duckdb::BoundColumnRefExpression>();
                 this->left_keys.push_back(left_bce.binding.column_index);
                 this->right_keys.push_back(right_bce.binding.column_index);
             }
@@ -103,6 +103,11 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             probe_table_schema->Project(probe_col_inds);
 
         for (const duckdb::JoinCondition& cond : conditions) {
+            if (cond.comparison == duckdb::ExpressionType::COMPARE_EQUAL) {
+                // These cases are handled by the left_keys and right_keys
+                // above.  Only the non-equi tests are handled here.
+                continue;
+            }
             auto& left_bce =
                 cond.left->Cast<duckdb::BoundColumnRefExpression>();
             auto& right_bce =
@@ -123,6 +128,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                                              right_bce.binding.column_index}]],
                         right_bce.GetName(), false),
                     cond.comparison));
+            // If we have more than one non-equi join condition then 'and'
+            // them together.
             if (physExprTree) {
                 physExprTree = std::static_pointer_cast<PhysicalExpression>(
                     std::make_shared<PhysicalConjunctionExpression>(
