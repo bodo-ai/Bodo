@@ -1888,3 +1888,36 @@ def test_series_describe():
         describe_pd = df[c].describe()
         describe_bodo = bdf[c].describe()
         _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
+
+
+def test_groupby_getattr_fallback_behavior():
+    import warnings
+
+    import pandas as pds
+
+    df = pds.DataFrame({"apply": [1], "B": [1], "C": [2]})
+    bdf = bd.from_pandas(df)
+
+    grouped = bdf.groupby("B")
+
+    # Accessing a column: should not raise a warning
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+    assert not record, f"Unexpected warning when accessing column: {record}"
+
+    # Accessing an implemented Pandas GroupBy method: should raise fallback warning
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+    fallback_warnings = [
+        w for w in record if issubclass(w.category, BodoLibFallbackWarning)
+    ]
+    assert len(fallback_warnings) == 1
+    assert "apply" in str(fallback_warnings[0].message)
+
+    # Accessing unknown attribute: should raise AttributeError
+    try:
+        _ = grouped.not_a_column
+    except AttributeError:
+        pass
+    else:
+        assert False, "Expected AttributeError when accessing unknown attribute"
