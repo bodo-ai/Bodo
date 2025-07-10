@@ -1040,7 +1040,7 @@ def test_merge_non_equi_cond():
     assert bdf4.is_lazy_plan()
 
     # Make sure filter node gets pushed into join.
-    pre, post = bd.utils.getPlanStatistics(bdf4._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
     _test_equal(pre, 5)
     _test_equal(post, 4)
 
