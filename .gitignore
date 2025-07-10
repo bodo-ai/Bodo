@@ -94,7 +94,7 @@ bodosql-protocol-mvn/
 BodoSQL/docs/_build/
 
 # Vendored packages
-bodo/mpi4py**
+bodo/mpi4py/_vendor_mpi4py**
 
 # Distribution / packaging
 BodoSQL/.Python
