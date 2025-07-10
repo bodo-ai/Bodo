@@ -195,14 +195,11 @@ def execute_plan(plan: LazyPlan):
     if bodo.dataframe_library_run_parallel:
         # Initialize LazyPlanDistributedArg objects that may need scattering data
         # to workers before execution.
-        import time
 
         import bodo.spawn.spawner
 
-        start_init = time.time()
         for a in plan.args:
             _init_lazy_distributed_arg(a)
-        print("initializing lazy args took: ", time.time() - start_init)
 
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
@@ -215,7 +212,7 @@ def _init_lazy_distributed_arg(arg, cache=None):
     Has to be called right before plan execution since the dataframe state
     may change (distributed to collected) and the result ID may not be valid anymore.
     """
-    # cache LazyPlan's to prevent redundant checking.
+    # cache LazyPlans to prevent redundant checking.
     if cache is None:
         cache = set()
 
