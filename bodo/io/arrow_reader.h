@@ -341,29 +341,6 @@ class ArrowReader {
         }
     }
 
-    /*
-     * @brief determine how many batches to read ahead. Arrows defaults are
-     * based on a single reader and we need to adjust for the number of ranks on
-     * the node while always ensuring at least one batch is read ahead.
-     */
-    static int32_t batch_readahead() {
-        int ranksOnNode = std::get<0>(dist_get_ranks_on_node());
-        return std::max(arrow::dataset::kDefaultBatchReadahead / ranksOnNode,
-                        1);
-    }
-
-    /*
-     * @brief determine how many batches to read ahead. Arrows defaults are
-     * based on a single reader and we need to adjust for the number of ranks on
-     * the node. We don't make sure this is at least one because fragments can
-     * be large, and if we have a lot of ranks a full extra fragment can be too
-     * much memory.
-     */
-    static int32_t frag_readahead() {
-        int ranksOnNode = std::get<0>(dist_get_ranks_on_node());
-        return arrow::dataset::kDefaultFragmentReadahead / ranksOnNode;
-    }
-
     /**
      * @brief Report Init Stage metrics if they haven't already been reported.
      * Note that this will only report the metrics to the QueryProfileCollector
@@ -567,6 +544,40 @@ class ArrowReader {
     /// ArrowReader::ReportReadStageMetrics *after* reporting their own metrics.
     bool reported_init_stage_metrics = false;
     bool reported_read_stage_metrics = false;
+
+    const int32_t batch_readahead = init_batch_readahead();
+    const int32_t frag_readahead = init_frag_readahead();
+
+    /*
+     * @brief determine how many batches to read ahead. Arrows defaults are
+     * based on a single reader and we need to adjust for the number of ranks on
+     * the node while always ensuring at least one batch is read ahead.
+     */
+    int32_t init_batch_readahead() {
+        if (!this->parallel) {
+            // If not parallel, we don't need to adjust the readahead
+            return arrow::dataset::kDefaultBatchReadahead;
+        }
+        int ranksOnNode = std::get<0>(dist_get_ranks_on_node());
+        return std::max(arrow::dataset::kDefaultBatchReadahead / ranksOnNode,
+                        1);
+    }
+
+    /*
+     * @brief determine how many batches to read ahead. Arrows defaults are
+     * based on a single reader and we need to adjust for the number of ranks on
+     * the node. We don't make sure this is at least one because fragments can
+     * be large, and if we have a lot of ranks a full extra fragment can be too
+     * much memory.
+     */
+    int32_t init_frag_readahead() {
+        if (!this->parallel) {
+            // If not parallel, we don't need to adjust the readahead
+            return arrow::dataset::kDefaultFragmentReadahead;
+        }
+        int ranksOnNode = std::get<0>(dist_get_ranks_on_node());
+        return arrow::dataset::kDefaultFragmentReadahead / ranksOnNode;
+    }
 
    private:
     // XXX needed to call into Python?

@@ -187,8 +187,8 @@ void ParquetReader::init_pq_scanner() {
         int(parallel), this->filesystem.get(), str_as_dict_cols_py.get(),
         this->start_row_first_piece, this->count, this->ds_partitioning.get(),
         this->pyarrow_schema, batch_size == -1 ? 128 * 1024 : batch_size,
-        static_cast<long>(this->batch_readahead()),
-        static_cast<long>(this->frag_readahead()));
+        static_cast<long>(this->batch_readahead),
+        static_cast<long>(this->frag_readahead));
     if (scanner_batches_tup == nullptr && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
