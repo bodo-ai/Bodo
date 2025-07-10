@@ -1039,6 +1039,11 @@ def test_merge_non_equi_cond():
     # Make sure bdf3 is unevaluated at this point.
     assert bdf4.is_lazy_plan()
 
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.utils.getPlanStatistics(bdf4._mgr._plan)
+    _test_equal(pre, 5)
+    _test_equal(post, 4)
+
     _test_equal(
         bdf4.copy(),
         df4,
@@ -1963,3 +1968,37 @@ def test_series_describe():
         describe_pd = df[c].describe()
         describe_bodo = bdf[c].describe()
         _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
+
+
+def test_groupby_apply():
+    """Test for a groupby.aply from TPCH Q8."""
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2] * 12, "Int32"),
+            "B": pd.array([1, 2, 2, 1] * 6, "Int32"),
+            "C": pd.array(list(range(24)), "Int32"),
+        }
+    )
+
+    def impl(df):
+        def udf(df):
+            denom = df["C"].sum()
+            df = df[df["B"] == 2]
+            num = df["C"].sum()
+            return num / denom
+
+        ret = df.groupby("A", as_index=False).apply(udf)
+        ret.columns = ["A", "Q"]
+        return ret
+
+    pd_out = impl(df)
+    bodo_out = impl(bd.from_pandas(df))
+
+    _test_equal(
+        bodo_out,
+        pd_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
