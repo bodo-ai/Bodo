@@ -22,19 +22,12 @@ from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
-from bodo.pandas.utils import (
-    BodoLibFallbackWarning,
-    BodoLibNotImplementedException,
+from bodo.pandas.plan import (
     LazyPlan,
     LazyPlanDistributedArg,
     _get_df_python_func_plan,
-    arrow_to_empty_df,
-    check_args_fallback,
     execute_plan,
-    get_lazy_single_manager_class,
-    get_n_index_arrays,
     get_proj_expr_single,
-    get_scalar_udf_result_type,
     get_single_proj_source_if_present,
     is_arith_expr,
     is_col_ref,
@@ -42,6 +35,15 @@ from bodo.pandas.utils import (
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
+)
+from bodo.pandas.utils import (
+    BodoLibFallbackWarning,
+    BodoLibNotImplementedException,
+    arrow_to_empty_df,
+    check_args_fallback,
+    get_lazy_single_manager_class,
+    get_n_index_arrays,
+    get_scalar_udf_result_type,
     wrap_plan,
 )
 from bodo.utils.typing import BodoError
@@ -472,7 +474,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
-        from bodo.pandas.utils import count_plan
+        from bodo.pandas.plan import count_plan
 
         if self._exec_state == ExecState.PLAN:
             return (count_plan(self),)
@@ -514,7 +516,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return self._head_s.head(n)
 
     def __len__(self):
-        from bodo.pandas.utils import count_plan
+        from bodo.pandas.plan import count_plan
 
         if self._exec_state == ExecState.PLAN:
             return count_plan(self)

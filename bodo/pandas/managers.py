@@ -204,7 +204,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             return super().__repr__()
 
     def execute_plan(self):
-        from bodo.pandas.utils import execute_plan
+        from bodo.pandas.plan import execute_plan
 
         data = execute_plan(self._plan)
         if isinstance(data, BodoLazyWrapper):
@@ -460,7 +460,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             return super().__repr__()
 
     def execute_plan(self):
-        from bodo.pandas.utils import execute_plan
+        from bodo.pandas.plan import execute_plan
 
         data = execute_plan(self._plan)
         if isinstance(data, BodoLazyWrapper):

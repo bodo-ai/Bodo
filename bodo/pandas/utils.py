@@ -495,11 +495,7 @@ def wrap_plan(plan, res_id=None, nrows=None):
 
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.lazy_metadata import LazyMetadata
-    from bodo.pandas.plan import (
-        LazyPlan,
-        get_lazy_manager_class,
-        get_lazy_single_manager_class,
-    )
+    from bodo.pandas.plan import LazyPlan
     from bodo.pandas.series import BodoSeries
 
     assert isinstance(plan, LazyPlan), "wrap_plan: LazyPlan expected"

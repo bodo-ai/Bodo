@@ -38,21 +38,23 @@ from bodo.pandas.groupby import DataFrameGroupBy
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
+from bodo.pandas.plan import (
+    LazyPlan,
+    LazyPlanDistributedArg,
+    _get_df_python_func_plan,
+    execute_plan,
+    get_proj_expr_single,
+    is_single_projection,
+    make_col_ref_exprs,
+)
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
-    LazyPlan,
-    LazyPlanDistributedArg,
-    _get_df_python_func_plan,
     check_args_fallback,
-    execute_plan,
     get_lazy_manager_class,
     get_n_index_arrays,
-    get_proj_expr_single,
     get_scalar_udf_result_type,
-    is_single_projection,
-    make_col_ref_exprs,
     wrap_plan,
 )
 from bodo.utils.typing import (
@@ -274,7 +276,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             return self._head_df.head(n)
 
     def __len__(self):
-        from bodo.pandas.utils import count_plan
+        from bodo.pandas.plan import count_plan
 
         if self._exec_state == ExecState.PLAN:
             return count_plan(self)
@@ -302,7 +304,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @property
     def shape(self):
-        from bodo.pandas.utils import count_plan
+        from bodo.pandas.plan import count_plan
 
         if self._exec_state == ExecState.PLAN:
             return (count_plan(self), len(self._head_df.columns))

@@ -32,17 +32,19 @@ from pandas.io.parsers.readers import _c_parser_defaults
 
 import bodo.spawn.spawner  # noqa: F401
 from bodo.pandas.frame import BodoDataFrame
+from bodo.pandas.plan import (
+    LazyPlan,
+    LazyPlanDistributedArg,
+    _get_df_python_func_plan,
+    make_col_ref_exprs,
+)
 from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
     BodoLibNotImplementedException,
-    LazyPlan,
-    LazyPlanDistributedArg,
-    _get_df_python_func_plan,
     arrow_to_empty_df,
     check_args_fallback,
     ensure_datetime64ns,
-    make_col_ref_exprs,
     wrap_plan,
 )
 from bodo.utils.utils import bodo_spawn_exec
