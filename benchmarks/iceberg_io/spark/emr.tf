@@ -2,6 +2,22 @@ provider "aws" {
   region = "us-east-2"
 }
 
+variable "input_table_bucket_arn" {
+  description = "The ARN of the S3 bucket containing Iceberg tables."
+  type        = string
+}
+
+variable "input_namespace" {
+  description = "The namespace of the table to copy."
+  type        = string
+}
+
+variable "input_table_name" {
+  description = "The name of the table to copy."
+  type        = string
+}
+
+
 resource "aws_s3_bucket" "emr_bucket" {
   bucket        = "spark-benchmark-python-script-bucket-${random_id.bucket_id.hex}"
   force_destroy = true
@@ -99,15 +115,24 @@ resource "aws_iam_role_policy" "emr_instance_profile_policy" {
         "arn:aws:s3:::${aws_s3_bucket.emr_bucket.id}/*",
         "arn:aws:s3:::${aws_s3_bucket.emr_bucket.id}"
       ]
+    },
+    {
+      "Sid": "S3TablesAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3tables:DeleteTable",
+        "s3tables:UpdateTableMetadataLocation",
+        "s3tables:GetTableData",
+        "s3tables:PutTableData",
+        "s3tables:GetTableMetadataLocation"
+      ],
+      "Resource": [
+        "${var.input_table_bucket_arn}/*"
+        ]
     }
   ]
 }
 EOF
-}
-
-resource "aws_iam_role_policy_attachment" "emr_instance_role_s3tables_fullaccess" {
-  role       = aws_iam_role.emr_ec2_instance_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3TablesFullAccess"
 }
 
 resource "aws_iam_instance_profile" "emr_profile" {
@@ -227,6 +252,9 @@ resource "aws_emr_cluster" "emr_cluster" {
       "--packages",
       "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.7",
       "s3://${aws_s3_bucket.emr_bucket.id}/scripts/spark_iceberg_benchmark.py",
+      "--warehouse-loc", "${var.input_table_bucket_arn}",
+      "--namespace", "${var.input_namespace}",
+      "--table-name", "${var.input_table_name}"
       ]
     }
   }

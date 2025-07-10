@@ -1,44 +1,84 @@
+import argparse
+import time
+
 from pyspark.sql import SparkSession
 
-SPARK_JAR_PACKAGES = [
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1",
-    "software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.7",
-]
 
-table_bucket = "my-bucket"
-namespace = "my_namespace"
-source_table = f"`{table_bucket}`.{namespace}.`my_table_1`"
-destination_table = f"`{table_bucket}`.{namespace}.`my_table_1_copy`"
+def get_spark(warehouse_loc, table_bucket):
+    """Get and configure spark session."""
+    SPARK_JAR_PACKAGES = [
+        "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1",
+        "software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.7",
+    ]
 
-builder = SparkSession.builder.appName("spark")
-builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
+    builder = SparkSession.builder.appName("spark")
+    builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
 
-builder.config(
-    f"spark.sql.catalog.{table_bucket}", "org.apache.iceberg.spark.SparkCatalog"
-)
-builder.config(
-    f"spark.sql.catalog.{table_bucket}.catalog-impl",
-    "software.amazon.s3tables.iceberg.S3TablesCatalog",
-)
-builder.config(
-    f"spark.sql.catalog.{table_bucket}.warehouse",
-    "arn:aws:s3tables:us-east-2:427443013497:bucket/my-bucket1121",
-)
-builder.config(
-    "spark.sql.extensions",
-    "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-)
+    builder.config(
+        f"spark.sql.catalog.{table_bucket}", "org.apache.iceberg.spark.SparkCatalog"
+    )
+    builder.config(
+        f"spark.sql.catalog.{table_bucket}.catalog-impl",
+        "software.amazon.s3tables.iceberg.S3TablesCatalog",
+    )
+    builder.config(f"spark.sql.catalog.{table_bucket}.warehouse", warehouse_loc)
+    builder.config(
+        "spark.sql.extensions",
+        "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+    )
 
-spark = builder.getOrCreate()
+    spark = builder.getOrCreate()
 
-spark.sparkContext.setLogLevel("ERROR")
+    spark.sparkContext.setLogLevel("ERROR")
 
-print(spark.sql(f"SHOW TABLES IN `{table_bucket}`.my_namespace").show())
+    return spark
 
-df = spark.sql(f" SELECT * FROM {source_table} ")
 
-df.writeTo(destination_table).using("Iceberg").tableProperty(
-    "format-version", "2"
-).createOrReplace()
+def copy_s3table(spark, source_table, destination_table):
+    df = spark.sql(f" SELECT * FROM {source_table} ")
 
-print("DONE!")
+    df.writeTo(destination_table).using("Iceberg").tableProperty(
+        "format-version", "2"
+    ).createOrReplace()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run Spark S3Tables job")
+    parser.add_argument(
+        "--warehouse-loc",
+        type=str,
+        default="arn:aws:s3tables:us-east-2:012345678910:bucket/my-bucket1121",
+        help="The ARN of the S3Tables warehouse location",
+    )
+    parser.add_argument(
+        "--namespace",
+        type=str,
+        default="my_namespace",
+        help="The namespace for the table",
+    )
+    parser.add_argument(
+        "--table-name",
+        type=str,
+        default="my_table_1",
+        help="The name of the table to copy",
+    )
+    args = parser.parse_args()
+
+    warehouse_loc = args.warehouse_loc
+    namespace = args.namespace
+    table_name = args.table_name
+
+    table_bucket = warehouse_loc.split("/")[-1]
+
+    source_table = f"`{table_bucket}`.{namespace}.`{table_name}`"
+    destination_table = f"`{table_bucket}`.{namespace}.`{table_name}_copy`"
+
+    spark = get_spark(warehouse_loc, table_bucket)
+
+    start_copy = time.time()
+    copy_s3table(spark, source_table, destination_table)
+    print(f"total read/write time: {(time.time() - start_copy):.2f}")
+
+
+if __name__ == "__main__":
+    main()
