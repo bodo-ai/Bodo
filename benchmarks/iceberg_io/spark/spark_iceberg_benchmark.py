@@ -1,3 +1,13 @@
+""" Copy an S3Table using Spark. This script is intended to be run on an EMR cluster
+using the provided terraform script:
+
+Example Usage:
+    terraform apply \
+    -var="input_table_bucket_arn=arn:aws:s3tables:us-east-2:012345678910:bucket/my-bucket" \
+    -var="input_namespace=my_namespace" \
+    -var="input_table_name=my_table_"
+"""
+
 import argparse
 import time
 
@@ -35,6 +45,7 @@ def get_spark(warehouse_loc, table_bucket):
 
 
 def copy_s3table(spark, source_table, destination_table):
+    """Read from source table and copy to destination (replace if exists)."""
     df = spark.sql(f" SELECT * FROM {source_table} ")
 
     df.writeTo(destination_table).using("Iceberg").tableProperty(
