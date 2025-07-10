@@ -1012,6 +1012,45 @@ def test_merge_switch_side():
     )
 
 
+def test_merge_output_column_to_input_map():
+    """Test for a bug in join output column to input column mapping in
+    TPCH Q20.
+    """
+
+    jn2 = pd.DataFrame(
+        {
+            "PS_PARTKEY": pd.array([1, 4, -3, 5], "Int32"),
+            "PS_SUPPKEY": pd.array([7, 1, -3, 3], "Int32"),
+            "L_QUANTITY": pd.array([5.0, 17.0, 2.0, 29.0], "Float64"),
+        }
+    )
+    supplier = pd.DataFrame(
+        {
+            "S_SUPPKEY": pd.array([-1, 4, 2], "Int32"),
+            "S_NAME": [f"Supplier#{i:09d}" for i in range(3)],
+        }
+    )
+
+    def impl(jn2, supplier):
+        gb = jn2.groupby(["PS_PARTKEY", "PS_SUPPKEY"], as_index=False, sort=False)[
+            "L_QUANTITY"
+        ].sum()
+        jn3 = gb.merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
+        return jn3[["L_QUANTITY", "S_NAME"]]
+
+    pd_out = impl(jn2, supplier)
+    bodo_out = impl(bd.from_pandas(jn2), bd.from_pandas(supplier))
+    assert bodo_out.is_lazy_plan()
+
+    _test_equal(
+        bodo_out,
+        pd_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_dataframe_copy(index_val):
     """
     Test that creating a Pandas DataFrame from a Bodo DataFrame has the correct index.
