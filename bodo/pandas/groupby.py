@@ -75,19 +75,17 @@ class DataFrameGroupBy:
         try:
             return object.__getattribute__(self, name)
         except AttributeError as e:
-            gb = pd.DataFrame(self._obj).groupby(
-                self._keys, as_index=self._as_index, dropna=self._dropna
-            )
-
-            if self._selection is not None:
-                gb = gb[self._selection]
-
-            if hasattr(type(gb), name):
+            if hasattr(pd.core.groupby.generic.DataFrameGroupBy, name):
                 msg = (
                     f"DataFrameGroupBy.{name} is not "
                     "implemented in Bodo dataframe library yet. "
                     "Falling back to Pandas (may be slow or run out of memory)."
                 )
+                gb = pd.DataFrame(self._obj).groupby(
+                    self._keys, as_index=self._as_index, dropna=self._dropna
+                )
+                if self._selection is not None:
+                    gb = gb[self._selection]
                 warnings.warn(BodoLibFallbackWarning(msg))
                 return object.__getattribute__(gb, name)
 
