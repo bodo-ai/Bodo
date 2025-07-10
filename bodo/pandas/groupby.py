@@ -74,7 +74,7 @@ class DataFrameGroupBy:
     def __getattribute__(self, name: str, /) -> Any:
         try:
             return object.__getattribute__(self, name)
-        except AttributeError:
+        except AttributeError as e:
             gb = pd.DataFrame(self._obj).groupby(
                 self._keys, as_index=self._as_index, dropna=self._dropna
             )
@@ -94,7 +94,7 @@ class DataFrameGroupBy:
             if name in self._obj:
                 return self.__getitem__(name)
 
-            raise AttributeError(msg)
+            raise AttributeError(e)
 
     @check_args_fallback(supported="func")
     def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
