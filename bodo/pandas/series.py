@@ -27,8 +27,6 @@ from bodo.pandas.plan import (
     LazyPlanDistributedArg,
     _get_df_python_func_plan,
     execute_plan,
-    get_lazy_single_manager_class,
-    get_n_index_arrays,
     get_proj_expr_single,
     get_single_proj_source_if_present,
     is_arith_expr,
