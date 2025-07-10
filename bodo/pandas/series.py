@@ -662,11 +662,105 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback(unsupported="all")
     def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
+        """Returns sample mean."""
         reduced = _compute_series_reduce(self, ["count", "sum"])
         count, sum = reduced[0], reduced[1]
         if count <= 0:
             return pd.NA
         return sum / count
+
+    @check_args_fallback(supported=["ddof"])
+    def std(self, axis=None, skipna=True, ddof=1, numeric_only=False, **kwargs):
+        """Returns sample standard deviation."""
+        reduced_self = _compute_series_reduce(self, ["count", "sum"])
+        count, sum = reduced_self[0], reduced_self[1]
+        if count <= 0 or count <= ddof:
+            return pd.NA
+        squared = self.map(lambda x: x * x)
+        squared_sum = _compute_series_reduce(squared, ["sum"])[0]
+        return ((squared_sum - (sum**2) / count) / (count - ddof)) ** 0.5
+
+    @check_args_fallback(unsupported="all")
+    def describe(self, percentiles=None, include=None, exclude=None):
+        """
+        Generates descriptive statistics.
+        Descriptive statistics include those that summarize the central tendency, dispersion and
+        shape of a dataset's distribution, excluding NaN values.
+        """
+        pa_type = self.dtype.pyarrow_dtype
+
+        if pa.types.is_null(pa_type):
+            return pd.Series(
+                [0, 0, pd.NA, pd.NA],
+                index=["count", "unique", "top", "freq"],
+                name=self.name,
+            )
+
+        # TODO: Support describe() for non-numeric Series
+        if not (
+            pa.types.is_unsigned_integer(pa_type)
+            or pa.types.is_integer(pa_type)
+            or pa.types.is_floating(pa_type)
+        ):
+            raise BodoLibNotImplementedException(
+                "Series.describe() is not supported for non-numeric Series yet."
+            )
+
+        reduced_self = _compute_series_reduce(self, ["count", "min", "max", "sum"])
+        count, min, max, sum = (reduced_self[i] for i in range(4))
+
+        if count == 0:
+            return pd.Series(
+                [0] + [pd.NA] * 7,
+                index=[
+                    "count",
+                    "mean",
+                    "std",
+                    "min",
+                    "25%",
+                    "50%",
+                    "75%",
+                    "max",
+                ],
+                name=self.name,
+                dtype=pd.ArrowDtype(pa.float64()),
+            )
+
+        # Evaluate mean
+        mean_val = sum / count
+
+        # Evaluate std
+        squared = self.map(lambda x: x * x)
+        squared_sum = _compute_series_reduce(squared, ["sum"])[0]
+        std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
+
+        # TODO [BSE-4970]: implement Series.quantile
+        quantile = self.quantile([0.25, 0.5, 0.75])
+        result = [
+            count,
+            mean_val,
+            std_val,
+            min,
+            quantile[0.25],
+            quantile[0.5],
+            quantile[0.75],
+            max,
+        ]
+
+        return pd.Series(
+            result,
+            index=[
+                "count",
+                "mean",
+                "std",
+                "min",
+                "25%",
+                "50%",
+                "75%",
+                "max",
+            ],
+            name=self.name,
+        )
 
     @property
     def ndim(self) -> int:
@@ -1126,6 +1220,9 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
     Computes a list of reduction functions like ["min", "max"] on a BodoSeries.
     Returns a list of equal length that stores reduction values of each function.
     """
+
+    if not isinstance(bodo_series.dtype, pd.ArrowDtype):
+        raise BodoLibNotImplementedException()
 
     # Drop Index columns since not necessary for reduction output.
     pa_type = bodo_series.dtype.pyarrow_dtype

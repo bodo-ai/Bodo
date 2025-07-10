@@ -1685,7 +1685,8 @@ def test_series_min_max_unsupported_types():
         bdf["A"].max()
 
 
-def test_series_reductions():
+@pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
+def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
     n = 10000
     df = pd.DataFrame(
@@ -1703,10 +1704,8 @@ def test_series_reductions():
     bdf = bd.from_pandas(df)
 
     for c in df.columns:
-        assert np.isclose(bdf[c].sum(), df[c].sum(), rtol=1e-6)
-        assert np.isclose(bdf[c].product(), df[c].product(), rtol=1e-6)
-        assert bdf[c].count() == df[c].count()
-        out_pandas, out_bodo = df[c].mean(), bdf[c].mean()
+        out_pandas = getattr(df[c], method)()
+        out_bodo = getattr(bdf[c], method)()
         assert (
             np.isclose(out_pandas, out_bodo, rtol=1e-6)
             if not pd.isna(out_bodo)
@@ -1868,3 +1867,24 @@ def test_loc(datapath):
         sort_output=False,
         reset_index=True,
     )
+
+
+def test_series_describe():
+    """Basic test for Series describe."""
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": [None] * n,
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+
+    for c in df.columns:
+        describe_pd = df[c].describe()
+        describe_bodo = bdf[c].describe()
+        _test_equal(describe_pd, describe_bodo, check_pandas_types=False)

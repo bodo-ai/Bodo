@@ -272,13 +272,13 @@ def read_iceberg_table(table: PyIcebergTable) -> BodoDataFrame:
     # We can't scatter catalogs so we need to use properties instead so the workers can
     # create the catalog themselves.
     catalog_properties = table.catalog.properties
-    catalog_properties.update(
-        {
-            pyiceberg.catalog.PY_CATALOG_IMPL: table.catalog.__class__.__module__
-            + "."
-            + table.catalog.__class__.__name__,
-        }
-    )
+
+    # NOTE: catalog implementation and type cannot be set at the same time:
+    # https://github.com/ehsantn/iceberg-python/blob/cae24259aa7ea3923703f65b58da7ff5a67414ba/pyiceberg/catalog/__init__.py#L242
+    if pyiceberg.catalog.TYPE not in catalog_properties:
+        catalog_properties[pyiceberg.catalog.PY_CATALOG_IMPL] = (
+            table.catalog.__class__.__module__ + "." + table.catalog.__class__.__name__,
+        )
 
     return read_iceberg(
         ".".join(table._identifier),

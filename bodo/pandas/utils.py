@@ -855,6 +855,10 @@ def _reconstruct_pandas_index(df, arrow_schema):
     for descr in arrow_schema.pandas_metadata.get("index_columns", []):
         if isinstance(descr, str):
             index_name = None if _is_generated_index_name(descr) else descr
+            # Index not found in table: matching Pyarrow's behavior, which treats
+            # missing index as RangeIndex.
+            if descr not in df:
+                continue
             index_level = df[descr]
             df = df.drop(columns=[descr])
         elif descr["kind"] == "range":
