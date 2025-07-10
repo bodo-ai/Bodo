@@ -54,6 +54,9 @@ class DataFrameGroupBy:
         """
         Return a DataFrameGroupBy or SeriesGroupBy for the selected data columns.
         """
+        if key not in self._obj:
+            raise KeyError(f"Column not found: {key}")
+
         if isinstance(key, str):
             return SeriesGroupBy(
                 self._obj, self._keys, [key], self._as_index, self._dropna
@@ -72,23 +75,26 @@ class DataFrameGroupBy:
         try:
             return object.__getattribute__(self, name)
         except AttributeError:
-            pass
-        try:
-            # Attempts to use name as key and select column
-            return self.__getitem__(name)
-        except BodoLibNotImplementedException:
-            msg = (
-                f"DataFrameGroupBy.{name} is not "
-                "implemented in Bodo dataframe library yet. "
-                "Falling back to Pandas (may be slow or run out of memory)."
-            )
-            warnings.warn(BodoLibFallbackWarning(msg))
             gb = pd.DataFrame(self._obj).groupby(
                 self._keys, as_index=self._as_index, dropna=self._dropna
             )
+
             if self._selection is not None:
                 gb = gb[self._selection]
-            return object.__getattribute__(gb, name)
+
+            if hasattr(type(gb), name):
+                msg = (
+                    f"DataFrameGroupBy.{name} is not "
+                    "implemented in Bodo dataframe library yet. "
+                    "Falling back to Pandas (may be slow or run out of memory)."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+                return object.__getattribute__(gb, name)
+
+            if name in self._obj:
+                return self.__getitem__(name)
+
+            raise AttributeError(msg)
 
     @check_args_fallback(supported="func")
     def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
