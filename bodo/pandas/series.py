@@ -22,19 +22,12 @@ from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
-from bodo.pandas.utils import (
-    BodoLibFallbackWarning,
-    BodoLibNotImplementedException,
+from bodo.pandas.plan import (
     LazyPlan,
     LazyPlanDistributedArg,
     _get_df_python_func_plan,
-    arrow_to_empty_df,
-    check_args_fallback,
     execute_plan,
-    get_lazy_single_manager_class,
-    get_n_index_arrays,
     get_proj_expr_single,
-    get_scalar_udf_result_type,
     get_single_proj_source_if_present,
     is_arith_expr,
     is_col_ref,
@@ -42,6 +35,15 @@ from bodo.pandas.utils import (
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
+)
+from bodo.pandas.utils import (
+    BodoLibFallbackWarning,
+    BodoLibNotImplementedException,
+    arrow_to_empty_df,
+    check_args_fallback,
+    get_lazy_single_manager_class,
+    get_n_index_arrays,
+    get_scalar_udf_result_type,
     wrap_plan,
 )
 from bodo.utils.typing import BodoError
@@ -118,11 +120,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __getattribute__(self, name: str):
         """Custom attribute access that triggers a fallback warning for unsupported attributes."""
 
-        ignore_fallback_attrs = [
-            "dtype",
-            "name",
-            "to_string",
-        ]
+        ignore_fallback_attrs = ["dtype", "name", "to_string", "attrs", "flags"]
+
         cls = object.__getattribute__(self, "__class__")
         base = cls.__mro__[0]
 
@@ -136,7 +135,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return object.__getattribute__(self, name)
+            return fallback_wrapper(object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
@@ -472,7 +471,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
-        from bodo.pandas.utils import count_plan
+        from bodo.pandas.plan import count_plan
 
         if self._exec_state == ExecState.PLAN:
             return (count_plan(self),)
@@ -514,7 +513,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return self._head_s.head(n)
 
     def __len__(self):
-        from bodo.pandas.utils import count_plan
+        from bodo.pandas.plan import count_plan
 
         if self._exec_state == ExecState.PLAN:
             return count_plan(self)
@@ -687,6 +686,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Descriptive statistics include those that summarize the central tendency, dispersion and
         shape of a dataset's distribution, excluding NaN values.
         """
+        if not isinstance(self.dtype, pd.ArrowDtype):
+            raise BodoLibNotImplementedException(
+                "BodoSeries.describe() is not supported for non-Arrow dtypes."
+            )
+
         pa_type = self.dtype.pyarrow_dtype
 
         if pa.types.is_null(pa_type):
@@ -1149,6 +1153,29 @@ class BodoDatetimeProperties:
             {},
             is_method=False,
         )
+
+
+def fallback_wrapper(attr):
+    """
+    Wrap callable attributes with a warning silencer, unless they are known
+    accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
+    """
+
+    # Avoid wrapping indexers & accessors
+    if (
+        callable(attr)
+        and not hasattr(attr, "__getitem__")
+        and not hasattr(attr, "__getattr__")
+    ):
+
+        def silenced_method(*args, **kwargs):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+                return attr(*args, **kwargs)
+
+        return silenced_method
+
+    return attr
 
 
 def map_validate_reduce(func_names, pa_type):

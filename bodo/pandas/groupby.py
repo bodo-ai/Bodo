@@ -13,12 +13,11 @@ import pyarrow as pa
 from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
+from bodo.pandas.plan import LazyPlan, make_col_ref_exprs
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
-    LazyPlan,
     check_args_fallback,
-    make_col_ref_exprs,
     wrap_plan,
 )
 
