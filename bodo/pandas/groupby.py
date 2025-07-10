@@ -54,14 +54,19 @@ class DataFrameGroupBy:
         """
         Return a DataFrameGroupBy or SeriesGroupBy for the selected data columns.
         """
-        if key not in self._obj:
-            raise KeyError(f"Column not found: {key}")
-
         if isinstance(key, str):
+            if key not in self._obj:
+                raise KeyError(f"Column not found: {key}")
             return SeriesGroupBy(
                 self._obj, self._keys, [key], self._as_index, self._dropna
             )
         elif isinstance(key, list) and all(isinstance(key_, str) for key_ in key):
+            invalid_keys = []
+            for k in key:
+                if k not in self._obj:
+                    invalid_keys.append(f"'{k}'")
+            if invalid_keys:
+                raise KeyError(f"Column not found: {', '.join(invalid_keys)}")
             return DataFrameGroupBy(
                 self._obj, self._keys, self._as_index, self._dropna, selection=key
             )
