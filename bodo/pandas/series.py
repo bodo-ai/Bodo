@@ -1151,14 +1151,27 @@ class BodoDatetimeProperties:
         )
 
 
-def fallback_wrapper(func):
-    def silenced(*args, **kwargs):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            res = func(*args, **kwargs)
-            return res
+def fallback_wrapper(attr):
+    """
+    Wrap callable attributes with a warning silencer, unless they are known
+    accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
+    """
 
-    return silenced
+    # Avoid wrapping indexers & accessors
+    if (
+        callable(attr)
+        and not hasattr(attr, "__getitem__")
+        and not hasattr(attr, "__getattr__")
+    ):
+
+        def silenced_method(*args, **kwargs):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return attr(*args, **kwargs)
+
+        return silenced_method
+
+    return attr
 
 
 def map_validate_reduce(func_names, pa_type):
