@@ -1180,8 +1180,8 @@ void IcebergParquetReader::init_scanners() {
             dataset_py, dataset_expr_filter_py, this->selected_fields,
             this->batch_size != -1 ? this->batch_size
                                    : arrow::dataset::kDefaultBatchSize,
-            /*use_threads*/ true, arrow::dataset::kDefaultBatchReadahead,
-            arrow::dataset::kDefaultFragmentReadahead, this->cpu_executor()));
+            /*use_threads*/ true, this->batch_readahead(),
+            this->frag_readahead()));
     }
     this->iceberg_reader_metrics.create_scanners_time += end_timer(start);
 

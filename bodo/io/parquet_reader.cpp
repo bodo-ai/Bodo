@@ -182,11 +182,13 @@ void ParquetReader::init_pq_scanner() {
     // get_scanner_batches returns a tuple with the record batch reader and the
     // updated offset for the first batch.
     PyObjectPtr scanner_batches_tup = PyObject_CallMethod(
-        pq_mod, "get_scanner_batches", "OOOdiOOLLOOO", fnames_list_py.get(),
+        pq_mod, "get_scanner_batches", "OOOdiOOLLOOLll", fnames_list_py.get(),
         this->expr_filters.get(), selected_fields_py.get(), avg_num_pieces,
         int(parallel), this->filesystem.get(), str_as_dict_cols_py.get(),
         this->start_row_first_piece, this->count, this->ds_partitioning.get(),
-        this->pyarrow_schema, batch_size_py.get());
+        this->pyarrow_schema, batch_size == -1 ? 128 * 1024 : batch_size,
+        static_cast<long>(this->batch_readahead()),
+        static_cast<long>(this->frag_readahead()));
     if (scanner_batches_tup == nullptr && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }

@@ -13,6 +13,7 @@
 #include <stdexcept>
 
 #include <arrow/array.h>
+#include <arrow/dataset/scanner.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/table.h>
 #include <arrow/type.h>
@@ -21,6 +22,7 @@
 #include "../libs/_chunked_table_builder.h"
 #include "../libs/_dict_builder.h"
 #include "../libs/_query_profile_collector.h"
+#include "../libs/_utils.h"
 #include "arrow_compat.h"
 
 #define QUERY_PROFILE_INIT_STAGE_ID 0
@@ -337,6 +339,29 @@ class ArrowReader {
             }
             return out_table;
         }
+    }
+
+    /*
+     * @brief determine how many batches to read ahead. Arrows defaults are
+     * based on a single reader and we need to adjust for the number of ranks on
+     * the node while always ensuring at least one batch is read ahead.
+     */
+    static int32_t batch_readahead() {
+        int ranksOnNode = std::get<0>(dist_get_ranks_on_node());
+        return std::max(arrow::dataset::kDefaultBatchReadahead / ranksOnNode,
+                        1);
+    }
+
+    /*
+     * @brief determine how many batches to read ahead. Arrows defaults are
+     * based on a single reader and we need to adjust for the number of ranks on
+     * the node. We don't make sure this is at least one because fragments can
+     * be large, and if we have a lot of ranks a full extra fragment can be too
+     * much memory.
+     */
+    static int32_t frag_readahead() {
+        int ranksOnNode = std::get<0>(dist_get_ranks_on_node());
+        return arrow::dataset::kDefaultFragmentReadahead / ranksOnNode;
     }
 
     /**
