@@ -557,7 +557,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback(unsupported="none")
     def map(self, arg, na_action=None):
         """
-        Apply function to elements in a Series
+        Map values of Series according to an input mapping or function.
         """
 
         # Get output data type by running the UDF on a sample of the data.
@@ -771,19 +771,21 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return super().ndim
 
     @check_args_fallback(supported=["func"])
-    def agg(self, func=None, axis=0, *args, **kwargs):
+    def aggregate(self, func=None, axis=0, *args, **kwargs):
         """Aggregate using one or more operations."""
-        if isinstance(func, str):
-            return _compute_series_reduce(self, [func])[0]
-        elif isinstance(func, list):
+        if isinstance(func, list):
             reduced = _compute_series_reduce(self, func)
             return BodoSeries(reduced, index=func)
+
+        elif isinstance(func, str):
+            return _compute_series_reduce(self, [func])[0]
+
         else:
             raise BodoLibNotImplementedException(
-                "Series.agg() is not supported for the provided arguments yet."
+                "Series.aggregate() is not supported for the provided arguments yet."
             )
 
-    aggregate = agg
+    agg = aggregate
 
 
 class BodoStringMethods:
@@ -1193,16 +1195,27 @@ def fallback_wrapper(attr):
     return attr
 
 
+def func_name_to_str(func_name):
+    """Converts built-in functions to string."""
+    if func_name in ("min", "max", "sum", "product", "prod", "count"):
+        return func_name
+    if func_name == sum:
+        return "sum"
+    if func_name == max:
+        return "max"
+    if func_name == min:
+        return "min"
+    raise BodoLibNotImplementedException(
+        f"{func_name}() not supported for BodoSeries reduction."
+    )
+
+
 def map_validate_reduce(func_names, pa_type):
     """Maps validate_reduce to func_names list, returns resulting pyarrow schema."""
     res = []
     for idx in range(len(func_names)):
-        func_name = func_names[idx]
-        if func_name not in ("min", "max", "sum", "product", "prod", "count"):
-            raise BodoLibNotImplementedException(
-                f"{func_name}() not implemented for {pa_type} type."
-            )
-        assigned_type = validate_reduce(func_name, pa_type)
+        func_names[idx] = func_name_to_str(func_names[idx])
+        assigned_type = validate_reduce(func_names[idx], pa_type)
         res.append(pa.field(f"{idx}", assigned_type))
     return pa.schema(res)
 
