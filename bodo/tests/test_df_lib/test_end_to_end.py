@@ -1012,8 +1012,8 @@ def test_merge_switch_side():
     )
 
 
-def test_merge_filter():
-    """Simple test for DataFrame merge."""
+def test_merge_non_equi_cond():
+    """Simple test for non-equi join conditions."""
     df1 = pd.DataFrame(
         {
             "B": pd.array([4, 5, 6], "Int64"),
