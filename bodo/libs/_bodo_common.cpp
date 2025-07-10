@@ -476,78 +476,9 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
 }
 
 std::shared_ptr<::arrow::DataType> DataType::ToArrowDataType() const {
-    if (array_type == bodo_array_type::STRING) {
-        if (c_type == Bodo_CTypes::STRING) {
-            return arrow::large_utf8();
-        } else {
-            return arrow::large_binary();
-        }
-
-    } else if (array_type == bodo_array_type::DICT) {
-        return arrow::large_utf8();
-    } else if (array_type == bodo_array_type::TIMESTAMPTZ) {
-        throw std::runtime_error("TIMESTAMPTZ is not supported in Arrow");
-    }
-
-    std::shared_ptr<arrow::DataType> dtype;
-    switch (c_type) {
-        case Bodo_CTypes::INT8:
-            dtype = arrow::int8();
-            break;
-        case Bodo_CTypes::UINT8:
-            dtype = arrow::uint8();
-            break;
-        case Bodo_CTypes::INT16:
-            dtype = arrow::int16();
-            break;
-        case Bodo_CTypes::UINT16:
-            dtype = arrow::uint16();
-            break;
-        case Bodo_CTypes::INT32:
-            dtype = arrow::int32();
-            break;
-        case Bodo_CTypes::UINT32:
-            dtype = arrow::uint32();
-            break;
-        case Bodo_CTypes::INT64:
-            dtype = arrow::int64();
-            break;
-        case Bodo_CTypes::UINT64:
-            dtype = arrow::uint64();
-            break;
-        case Bodo_CTypes::FLOAT32:
-            dtype = arrow::float32();
-            break;
-        case Bodo_CTypes::FLOAT64:
-            dtype = arrow::float64();
-            break;
-        case Bodo_CTypes::_BOOL:
-            dtype = arrow::boolean();
-            break;
-        case Bodo_CTypes::DATE:
-            dtype = arrow::date32();
-            break;
-        // TODO: check precision
-        case Bodo_CTypes::TIME:
-            dtype = arrow::time64(arrow::TimeUnit::NANO);
-            break;
-        // TODO: Is there a way to get timezone?
-        case Bodo_CTypes::DATETIME:
-            dtype = arrow::timestamp(arrow::TimeUnit::NANO);
-            break;
-        case Bodo_CTypes::TIMEDELTA:
-            dtype = arrow::duration(arrow::TimeUnit::NANO);
-            break;
-        case Bodo_CTypes::DECIMAL:
-            dtype = arrow::decimal128(precision, scale);
-            break;
-        default: {
-            throw std::runtime_error("ToArrowType: unsupported dtype " +
-                                     std::string(dtype_to_str(c_type)));
-        }
-    }
-
-    return dtype;
+    std::string dummy = "dummy";
+    std::shared_ptr<::arrow::Field> field = ToArrowType(dummy);
+    return field->type();
 }
 
 std::shared_ptr<::arrow::Field> ArrayType::ToArrowType(
