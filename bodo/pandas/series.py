@@ -118,16 +118,22 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __getattribute__(self, name: str):
         """Custom attribute access that triggers a fallback warning for unsupported attributes."""
 
+        ignore_fallback_attrs = ["dtype", "name", "to_string", "attrs", "flags"]
+
         cls = object.__getattribute__(self, "__class__")
         base = cls.__mro__[0]
 
-        if name not in base.__dict__ and not name.startswith("_"):
+        if (
+            name not in base.__dict__
+            and name not in ignore_fallback_attrs
+            and not name.startswith("_")
+        ):
             msg = (
                 f"{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return object.__getattribute__(pd.Series(self._obj), name)
+            return fallback_wrapper(object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
@@ -678,6 +684,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Descriptive statistics include those that summarize the central tendency, dispersion and
         shape of a dataset's distribution, excluding NaN values.
         """
+        if not isinstance(self.dtype, pd.ArrowDtype):
+            raise BodoLibNotImplementedException("self is not a BodoSeries.")
+
         pa_type = self.dtype.pyarrow_dtype
 
         if pa.types.is_null(pa_type):
@@ -1140,6 +1149,16 @@ class BodoDatetimeProperties:
             {},
             is_method=False,
         )
+
+
+def fallback_wrapper(func):
+    def silenced(*args, **kwargs):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = func(*args, **kwargs)
+            return res
+
+    return silenced
 
 
 def map_validate_reduce(func_names, pa_type):
