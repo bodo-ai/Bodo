@@ -611,7 +611,49 @@ arrow::Datum ConvertToDatum(void *raw_ptr,
             double value = *static_cast<double *>(raw_ptr);
             return arrow::Datum(std::make_shared<arrow::DoubleScalar>(value));
         }
+            // ————— Date/Time types —————
+        case Type::DATE32: {
+            // days since UNIX epoch
+            auto v = *static_cast<int32_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::Date32Scalar>(v));
+        }
+        case Type::DATE64: {
+            // milliseconds since UNIX epoch
+            auto v = *static_cast<int64_t *>(raw_ptr);
+            return arrow::Datum(std::make_shared<arrow::Date64Scalar>(v));
+        }
+        case Type::TIME32: {
+            // time32 can be SECOND or MILLI unit—pass the type through
+            auto time32_type =
+                std::static_pointer_cast<arrow::Time32Type>(type);
+            auto v = *static_cast<int32_t *>(raw_ptr);
+            return arrow::Datum(
+                std::make_shared<arrow::Time32Scalar>(v, time32_type));
+        }
+        case Type::TIME64: {
+            auto time64_type =
+                std::static_pointer_cast<arrow::Time64Type>(type);
+            auto v = *static_cast<int64_t *>(raw_ptr);
+            return arrow::Datum(
+                std::make_shared<arrow::Time64Scalar>(v, time64_type));
+        }
+        case Type::TIMESTAMP: {
+            // timestamp value in the unit of its type (s, ms, μs, or ns)
+            auto ts_type = std::static_pointer_cast<arrow::TimestampType>(type);
+            auto v = *static_cast<int64_t *>(raw_ptr);
+            return arrow::Datum(
+                std::make_shared<arrow::TimestampScalar>(v, ts_type));
+        }
+        case Type::DURATION: {
+            // duration value in the unit of its type (s, ms, μs, or ns)
+            auto dur_type = std::static_pointer_cast<arrow::DurationType>(type);
+            auto v = *static_cast<int64_t *>(raw_ptr);
+            return arrow::Datum(
+                std::make_shared<arrow::DurationScalar>(v, dur_type));
+        }
         default:
-            return arrow::Datum();  // empty/null Datum for unsupported types
+            throw std::runtime_error(
+                "ConvertToDatum does not support arrow::DataType " +
+                type->ToString());
     }
 }
