@@ -449,6 +449,8 @@ def get_fpath_without_protocol_prefix(
     prefix = ""
     if protocol == "s3":
         prefix = "s3://"
+    elif protocol == "s3a":
+        prefix = "s3a://"
     elif protocol == "hdfs":
         # HDFS filesystem is initialized with host:port info. Once
         # initialized, the filesystem needs the <protocol>://<host><port>
@@ -502,7 +504,7 @@ def fpath_without_protocol_prefix(fpath: str) -> str:
         # initialized, the filesystem needs the <protocol>://<host><port>
         # prefix removed to query and access files
         prefix = f"{protocol}://{parsed_url.netloc}"
-    elif protocol in {"s3", "gcs", "gs"}:
+    elif protocol in {"s3", "s3a", "gcs", "gs"}:
         prefix = f"{protocol}://"
 
     return fpath[len(prefix) :]
