@@ -209,18 +209,25 @@ def execute_plan(plan: LazyPlan):
     return _exec_plan(plan)
 
 
-def _init_lazy_distributed_arg(arg):
+def _init_lazy_distributed_arg(arg, cache=None):
     """Initialize the LazyPlanDistributedArg objects for the given plan argument that
     may need scattering data to workers before execution.
     Has to be called right before plan execution since the dataframe state
     may change (distributed to collected) and the result ID may not be valid anymore.
     """
+    # cache LazyPlan's to prevent redundant checking.
+    if cache is None:
+        cache = set()
+
     if isinstance(arg, LazyPlan):
+        if id(arg) in cache:
+            return
+        cache.add(id(arg))
         for a in arg.args:
-            _init_lazy_distributed_arg(a)
+            _init_lazy_distributed_arg(a, cache=cache)
     elif isinstance(arg, (tuple, list)):
         for a in arg:
-            _init_lazy_distributed_arg(a)
+            _init_lazy_distributed_arg(a, cache=cache)
     elif isinstance(arg, LazyPlanDistributedArg):
         arg.init()
 
@@ -327,7 +334,7 @@ class LazyPlanDistributedArg:
         anymore.
         """
         if getattr(self.df._mgr, "_md_result_id", None) is not None:
-            print("initializing", self)
+            # print("initializing", self)
             # The dataframe is already distributed so we can use the existing result ID
             self.res_id = self.df._mgr._md_result_id
         elif self.mgr is not None:
