@@ -1166,7 +1166,7 @@ def fallback_wrapper(attr):
 
         def silenced_method(*args, **kwargs):
             with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
+                warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
                 return attr(*args, **kwargs)
 
         return silenced_method
