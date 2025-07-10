@@ -685,7 +685,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         shape of a dataset's distribution, excluding NaN values.
         """
         if not isinstance(self.dtype, pd.ArrowDtype):
-            raise BodoLibNotImplementedException("self is not a BodoSeries.")
+            raise BodoLibNotImplementedException(
+                "BodoSeries.describe() is not supported for non-Arrow dtypes."
+            )
 
         pa_type = self.dtype.pyarrow_dtype
 
