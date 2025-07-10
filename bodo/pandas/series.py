@@ -118,11 +118,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __getattribute__(self, name: str):
         """Custom attribute access that triggers a fallback warning for unsupported attributes."""
 
-        ignore_fallback_attrs = [
-            "dtype",
-            "name",
-            "to_string",
-        ]
+        ignore_fallback_attrs = ["dtype", "name", "to_string", "attrs", "flags"]
+
         cls = object.__getattribute__(self, "__class__")
         base = cls.__mro__[0]
 
@@ -136,7 +133,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return object.__getattribute__(self, name)
+            return fallback_wrapper(object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
@@ -689,6 +686,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Descriptive statistics include those that summarize the central tendency, dispersion and
         shape of a dataset's distribution, excluding NaN values.
         """
+        if not isinstance(self.dtype, pd.ArrowDtype):
+            raise BodoLibNotImplementedException(
+                "BodoSeries.describe() is not supported for non-Arrow dtypes."
+            )
+
         pa_type = self.dtype.pyarrow_dtype
 
         if pa.types.is_null(pa_type):
@@ -1166,6 +1168,29 @@ class BodoDatetimeProperties:
             {},
             is_method=False,
         )
+
+
+def fallback_wrapper(attr):
+    """
+    Wrap callable attributes with a warning silencer, unless they are known
+    accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
+    """
+
+    # Avoid wrapping indexers & accessors
+    if (
+        callable(attr)
+        and not hasattr(attr, "__getitem__")
+        and not hasattr(attr, "__getattr__")
+    ):
+
+        def silenced_method(*args, **kwargs):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+                return attr(*args, **kwargs)
+
+        return silenced_method
+
+    return attr
 
 
 def map_validate_reduce(func_names, pa_type):
