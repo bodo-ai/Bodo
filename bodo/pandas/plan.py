@@ -193,12 +193,16 @@ def execute_plan(plan: LazyPlan):
         )
 
     if bodo.dataframe_library_run_parallel:
-        import bodo.spawn.spawner
-
         # Initialize LazyPlanDistributedArg objects that may need scattering data
         # to workers before execution.
+        import time
+
+        import bodo.spawn.spawner
+
+        start_init = time.time()
         for a in plan.args:
             _init_lazy_distributed_arg(a)
+        print("initializing lazy args took: ", time.time() - start_init)
 
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
@@ -323,6 +327,7 @@ class LazyPlanDistributedArg:
         anymore.
         """
         if getattr(self.df._mgr, "_md_result_id", None) is not None:
+            print("initializing", self)
             # The dataframe is already distributed so we can use the existing result ID
             self.res_id = self.df._mgr._md_result_id
         elif self.mgr is not None:
