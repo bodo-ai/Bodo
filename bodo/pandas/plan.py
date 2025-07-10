@@ -161,8 +161,6 @@ def execute_plan(plan: LazyPlan):
             # triggers execution.  This traceback can help fix the bug or
             # select a different Pandas API or an internal Pandas function that
             # bypasses the issue.
-            traceback.print_stack(file=sys.stdout)
-            print("")  # Print on new line during tests.
             print("Unoptimized plan")
             print(duckdb_plan.toString())
 
@@ -201,6 +199,8 @@ def execute_plan(plan: LazyPlan):
         for a in plan.args:
             _init_lazy_distributed_arg(a)
 
+        traceback.print_stack(file=sys.stdout)
+        print("")  # Print on new line during tests.
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
