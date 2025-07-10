@@ -228,6 +228,48 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
                                bodo::BufferPool::DefaultPtr());
 }
 
+arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
+                                     arrow::Datum right_res,
+                                     const std::string& comparator) {
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::CallFunction(comparator, {left_res, right_res});
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_array_compute_binary: Error in Arrow compute: " +
+            cmp_res.status().message());
+    }
+
+    return cmp_res.ValueOrDie();
+}
+
+arrow::Datum do_arrow_compute_unary(arrow::Datum left_res,
+                                    const std::string& comparator) {
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::CallFunction(comparator, {left_res});
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_array_compute_unary: Error in Arrow compute: " +
+            cmp_res.status().message());
+    }
+
+    return cmp_res.ValueOrDie();
+}
+
+arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
+                                   const duckdb::LogicalType& return_type) {
+    std::shared_ptr<arrow::DataType> arrow_ret_type =
+        duckdbTypeToArrow(return_type);
+    arrow::Result<arrow::Datum> cmp_res =
+        arrow::compute::Cast(left_res, arrow_ret_type);
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_array_compute_cast: Error in Arrow compute: " +
+            cmp_res.status().message());
+    }
+
+    return cmp_res.ValueOrDie();
+}
+
 std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     duckdb::unique_ptr<duckdb::Expression>& expr,
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>& col_ref_map,
@@ -468,3 +510,28 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
     return std::make_shared<ArrayExprResult>(udf_output->columns[0],
                                              udf_output->column_names[0]);
 }
+
+bool PhysicalExpression::join_expr(array_info** left_table,
+                                   array_info** right_table, void** left_data,
+                                   void** right_data, void** left_null_bitmap,
+                                   void** right_null_bitmap, int64_t left_index,
+                                   int64_t right_index) {
+    arrow::Datum res = cur_join_expr->join_expr_internal(
+        left_table, right_table, left_data, right_data, left_null_bitmap,
+        right_null_bitmap, left_index, right_index);
+    if (!res.is_scalar()) {
+        throw std::runtime_error("join_expr_internal did not return scalar.");
+    }
+    if (res.scalar()->type->id() != arrow::Type::BOOL) {
+        throw std::runtime_error("join_expr_internal did not return bool.");
+    }
+    auto bool_scalar =
+        std::dynamic_pointer_cast<arrow::BooleanScalar>(res.scalar());
+    if (bool_scalar && bool_scalar->is_valid) {
+        return bool_scalar->value;
+    } else {
+        throw std::runtime_error("join_expr_internal bool is null or invalid.");
+    }
+}
+
+PhysicalExpression* PhysicalExpression::cur_join_expr = nullptr;
