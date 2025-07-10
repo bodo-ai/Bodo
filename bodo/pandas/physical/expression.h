@@ -6,6 +6,7 @@
 #include <string>
 #include <type_traits>
 #include "../libs/_array_utils.h"
+#include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../tests/utils.h"
 #include "_util.h"
@@ -465,6 +466,7 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
     bool generate_array;
 };
 
+#include <iostream>
 /**
  * @brief Physical expression tree node type for getting column from table.
  *
@@ -502,7 +504,15 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
                 "join_expr_internal.");
         }
         void *index_ptr = ((char *)sel_data) + (index * dt_byte_width);
-        return ConvertToDatum(index_ptr, arrow_dt);
+        arrow::Datum ret = ConvertToDatum(index_ptr, arrow_dt);
+        std::cout << "todd " << sel_col->get_null_bit(index) << std::endl;
+        if (null_bitmap[col_idx] != nullptr && sel_col->get_null_bit(index)) {
+            // if (null_bitmap[col_idx] != nullptr && GetBit((const uint8_t
+            // *)null_bitmap[col_idx], index)) {
+            std::cout << "todd found" << std::endl;
+            ret = arrow::Datum(arrow::MakeNullScalar(ret.type()));
+        }
+        return ret;
     }
 
     virtual arrow::Datum join_expr_internal(
