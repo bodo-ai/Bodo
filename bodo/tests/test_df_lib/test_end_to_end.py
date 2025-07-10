@@ -1012,8 +1012,8 @@ def test_merge_switch_side():
     )
 
 
-def test_merge_filter():
-    """Simple test for DataFrame merge."""
+def test_merge_non_equi_cond():
+    """Simple test for non-equi join conditions."""
     df1 = pd.DataFrame(
         {
             "B": pd.array([4, 5, 6], "Int64"),
@@ -1042,6 +1042,45 @@ def test_merge_filter():
     _test_equal(
         bdf4.copy(),
         df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_merge_output_column_to_input_map():
+    """Test for a bug in join output column to input column mapping in
+    TPCH Q20.
+    """
+
+    jn2 = pd.DataFrame(
+        {
+            "PS_PARTKEY": pd.array([1, 4, -3, 5], "Int32"),
+            "PS_SUPPKEY": pd.array([7, 1, -3, 3], "Int32"),
+            "L_QUANTITY": pd.array([5.0, 17.0, 2.0, 29.0], "Float64"),
+        }
+    )
+    supplier = pd.DataFrame(
+        {
+            "S_SUPPKEY": pd.array([-1, 4, 2], "Int32"),
+            "S_NAME": [f"Supplier#{i:09d}" for i in range(3)],
+        }
+    )
+
+    def impl(jn2, supplier):
+        gb = jn2.groupby(["PS_PARTKEY", "PS_SUPPKEY"], as_index=False, sort=False)[
+            "L_QUANTITY"
+        ].sum()
+        jn3 = gb.merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
+        return jn3[["L_QUANTITY", "S_NAME"]]
+
+    pd_out = impl(jn2, supplier)
+    bodo_out = impl(bd.from_pandas(jn2), bd.from_pandas(supplier))
+    assert bodo_out.is_lazy_plan()
+
+    _test_equal(
+        bodo_out,
+        pd_out,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
@@ -1721,7 +1760,8 @@ def test_series_min_max_unsupported_types():
         bdf["A"].max()
 
 
-def test_series_reductions():
+@pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
+def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
     n = 10000
     df = pd.DataFrame(
@@ -1739,10 +1779,8 @@ def test_series_reductions():
     bdf = bd.from_pandas(df)
 
     for c in df.columns:
-        assert np.isclose(bdf[c].sum(), df[c].sum(), rtol=1e-6)
-        assert np.isclose(bdf[c].product(), df[c].product(), rtol=1e-6)
-        assert bdf[c].count() == df[c].count()
-        out_pandas, out_bodo = df[c].mean(), bdf[c].mean()
+        out_pandas = getattr(df[c], method)()
+        out_bodo = getattr(bdf[c], method)()
         assert (
             np.isclose(out_pandas, out_bodo, rtol=1e-6)
             if not pd.isna(out_bodo)
@@ -1904,3 +1942,24 @@ def test_loc(datapath):
         sort_output=False,
         reset_index=True,
     )
+
+
+def test_series_describe():
+    """Basic test for Series describe."""
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": [None] * n,
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+
+    for c in df.columns:
+        describe_pd = df[c].describe()
+        describe_bodo = bdf[c].describe()
+        _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
