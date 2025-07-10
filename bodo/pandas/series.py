@@ -31,6 +31,7 @@ from bodo.pandas.utils import (
     arrow_to_empty_df,
     check_args_fallback,
     execute_plan,
+    fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_proj_expr_single,
@@ -775,7 +776,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Aggregate using one or more operations."""
         if isinstance(func, list):
             reduced = _compute_series_reduce(self, func)
-            return BodoSeries(reduced, index=func)
+            return BodoSeries(reduced, index=func, name=self._name)
 
         elif isinstance(func, str):
             return _compute_series_reduce(self, [func])[0]
@@ -1172,29 +1173,6 @@ class BodoDatetimeProperties:
         )
 
 
-def fallback_wrapper(attr):
-    """
-    Wrap callable attributes with a warning silencer, unless they are known
-    accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
-    """
-
-    # Avoid wrapping indexers & accessors
-    if (
-        callable(attr)
-        and not hasattr(attr, "__getitem__")
-        and not hasattr(attr, "__getattr__")
-    ):
-
-        def silenced_method(*args, **kwargs):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
-                return attr(*args, **kwargs)
-
-        return silenced_method
-
-    return attr
-
-
 def func_name_to_str(func_name):
     """Converts built-in functions to string."""
     if func_name in ("min", "max", "sum", "product", "prod", "count"):
@@ -1248,11 +1226,15 @@ def validate_reduce(func_name, pa_type):
             return pa.float64()
         else:
             raise BodoLibNotImplementedException(
-                f"{func_name}() not implemented for {pa_type} type."
+                f"{func_name}() not implemented for BodoSeries reduction."
             )
 
     elif func_name in ("count",):
         return pa.int64()
+    else:
+        raise BodoLibNotImplementedException(
+            f"{func_name}() not implemented for {pa_type} type."
+        )
 
 
 def generate_null_reduce(func_names):
@@ -1318,7 +1300,6 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
             df[str(i)], "sum" if func_name == "count" else func_name
         )()
         res.append(reduced_val)
-
     assert len(res) == len(func_names)
     return res
 
