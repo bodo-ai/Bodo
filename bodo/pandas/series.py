@@ -766,10 +766,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def ndim(self) -> int:
         return super().ndim
 
-    @property
-    def ndim(self) -> int:
-        return super().ndim
-
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
