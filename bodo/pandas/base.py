@@ -380,7 +380,7 @@ def read_csv(
         func_args.append(parse_dates)
     func += ")\n"
     csv_func = bodo_spawn_exec(func, {"pd": pd}, {}, __name__)
-    jit_csv_func = bodo.jit(csv_func)
+    jit_csv_func = bodo.jit(csv_func, cache=True)
     return jit_csv_func(filepath_or_buffer, *func_args)
 
 
