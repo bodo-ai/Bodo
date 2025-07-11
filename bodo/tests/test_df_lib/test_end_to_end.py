@@ -1985,28 +1985,21 @@ def test_groupby_getattr_fallback_behavior():
     # Accessing a column: should not raise a warning
     with warnings.catch_warnings(record=True) as record:
         warnings.simplefilter("always")
+        _ = grouped.B
     assert not record, f"Unexpected warning when accessing column: {record}"
 
     # Accessing an implemented Pandas GroupBy method: should raise fallback warning
-    with warnings.catch_warnings(record=True) as record:
-        warnings.simplefilter("always")
-    fallback_warnings = [
-        w for w in record if issubclass(w.category, BodoLibFallbackWarning)
-    ]
-    assert len(fallback_warnings) == 1
-    assert "apply" in str(fallback_warnings[0].message)
+    with pytest.warns(BodoLibFallbackWarning) as record:
+        _ = grouped.apply
+    assert len(record) == 1
 
     # Accessing unknown attribute: should raise AttributeError
-    try:
+    with pytest.raises(AttributeError):
         _ = grouped.not_a_column
-    except AttributeError:
-        pass
-    else:
-        assert False, "Expected AttributeError when accessing unknown attribute"
 
 
 def test_groupby_apply():
-    """Test for a groupby.aply from TPCH Q8."""
+    """Test for a groupby.apply from TPCH Q8."""
 
     df = pd.DataFrame(
         {
