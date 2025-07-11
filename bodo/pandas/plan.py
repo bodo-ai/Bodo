@@ -162,7 +162,10 @@ class Expression(LazyPlan):
 class LogicalProjection(LogicalOperator):
     """Logical operator for projecting columns and expressions."""
 
-    pass
+    def __init__(self, empty_data, source, exprs):
+        self.source = source
+        self.exprs = exprs
+        super().__init__("LogicalProjection", empty_data, source, exprs)
 
 
 class LogicalFilter(LogicalOperator):
@@ -417,7 +420,7 @@ def getPlanStatistics(plan: LazyPlan):
 def get_proj_expr_single(proj: LazyPlan):
     """Get the single expression from a LogicalProjection node."""
     if is_single_projection(proj):
-        return proj.args[1][0]
+        return proj.exprs[0]
     else:
         if not proj.is_series:
             raise Exception("Got a non-Series in get_proj_expr_single")
@@ -427,7 +430,7 @@ def get_proj_expr_single(proj: LazyPlan):
 def get_single_proj_source_if_present(proj: LazyPlan):
     """Get the single expression from a LogicalProjection node."""
     if is_single_projection(proj):
-        return proj.args[0]
+        return proj.source
     else:
         if not proj.is_series:
             raise Exception("Got a non-Series in get_single_proj_source_if_present")
@@ -436,16 +439,14 @@ def get_single_proj_source_if_present(proj: LazyPlan):
 
 def is_single_projection(proj: LazyPlan):
     """Return True if plan is a projection with a single expression"""
-    return (
-        isinstance(proj, LazyPlan)
-        and isinstance(proj, LogicalProjection)
-        and len(proj.args[1]) == (get_n_index_arrays(proj.empty_data.index) + 1)
+    return isinstance(proj, LogicalProjection) and len(proj.exprs) == (
+        get_n_index_arrays(proj.empty_data.index) + 1
     )
 
 
 def is_single_colref_projection(proj: LazyPlan):
     """Return True if plan is a projection with a single expression that is a column reference"""
-    return is_single_projection(proj) and isinstance(proj.args[1][0], ColRefExpression)
+    return is_single_projection(proj) and isinstance(proj.exprs[0], ColRefExpression)
 
 
 def make_col_ref_exprs(key_indices, src_plan):
