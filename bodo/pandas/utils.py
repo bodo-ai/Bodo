@@ -395,9 +395,6 @@ def _empty_pd_array(pa_type):
         return pd.array(
             ["dummy"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string()))
         )[:0]
-    elif isinstance(pa_type, pa.TimestampType):
-        # Convert timestamp types to nanoseconds to match backend types.
-        pa_type = pa.timestamp("ns")
 
     pa_arr = pa.array([], type=pa_type, from_pandas=True)
     return pd.array(pa_arr, dtype=pd.ArrowDtype(pa_type))
