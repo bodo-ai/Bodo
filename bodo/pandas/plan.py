@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import traceback
 
 import pandas as pd
@@ -148,7 +149,11 @@ def execute_plan(plan: LazyPlan):
         import bodo
         from bodo.ext import plan_optimizer
 
+        if bodo.libs.distributed_api.get_rank() == 0:
+            start_time = time.perf_counter()
         duckdb_plan = plan.generate_duckdb()
+        if bodo.libs.distributed_api.get_rank() == 0:
+            print("profile_time gen", time.perf_counter() - start_time)
 
         if (
             bodo.dataframe_library_dump_plans
@@ -170,7 +175,11 @@ def execute_plan(plan: LazyPlan):
             with open("pre_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(pre_optimize_graphviz, file=f)
 
+        if bodo.libs.distributed_api.get_rank() == 0:
+            start_time = time.perf_counter()
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
+        if bodo.libs.distributed_api.get_rank() == 0:
+            print("profile_time opt", time.perf_counter() - start_time)
 
         if (
             bodo.dataframe_library_dump_plans
@@ -186,9 +195,14 @@ def execute_plan(plan: LazyPlan):
                 print(post_optimize_graphviz, file=f)
 
         output_func = cpp_table_to_series if plan.is_series else cpp_table_to_df
-        return plan_optimizer.py_execute_plan(
+        if bodo.libs.distributed_api.get_rank() == 0:
+            start_time = time.perf_counter()
+        ret = plan_optimizer.py_execute_plan(
             optimized_plan, output_func, duckdb_plan.out_schema
         )
+        if bodo.libs.distributed_api.get_rank() == 0:
+            print("profile_time execute", time.perf_counter() - start_time)
+        return ret
 
     if bodo.dataframe_library_run_parallel:
         # Initialize LazyPlanDistributedArg objects that may need scattering data
@@ -196,12 +210,19 @@ def execute_plan(plan: LazyPlan):
 
         import bodo.spawn.spawner
 
+        start_time = time.perf_counter()
         for a in plan.args:
             _init_lazy_distributed_arg(a)
+        print(
+            "profile_time _init_lazy_distributed_arg", time.perf_counter() - start_time
+        )
 
         traceback.print_stack(file=sys.stdout)
         print("")  # Print on new line during tests.
-        return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
+        start_time = time.perf_counter()
+        ret = bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
+        print("profile_time total_execute_plan", time.perf_counter() - start_time)
+        return ret
 
     return _exec_plan(plan)
 

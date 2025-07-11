@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import atexit
 import functools
 import importlib
 import inspect
+import time
 import warnings
 
 import pandas as pd
@@ -158,6 +160,21 @@ class BodoLibFallbackWarning(Warning):
     """
 
 
+top_time = 0
+method_time = 0
+
+
+def report_times():
+    import bodo
+
+    if bodo.libs.distributed_api.get_rank() == 0:
+        print("profile_time atexit top_time", top_time)
+        print("profile_time atexit method_time", method_time)
+
+
+atexit.register(report_times)
+
+
 def check_args_fallback(
     unsupported=None,
     supported=None,
@@ -273,7 +290,11 @@ def check_args_fallback(
                     except_msg = ""
                     if not error:
                         try:
-                            return func(*args, **kwargs)
+                            start_time = time.perf_counter()
+                            ret = func(*args, **kwargs)
+                            global top_time
+                            top_time += time.perf_counter() - start_time
+                            return ret
                         except BodoLibNotImplementedException as e:
                             # Fall back to Pandas below
                             except_msg = str(e)
@@ -309,7 +330,11 @@ def check_args_fallback(
                     except_msg = ""
                     if not error:
                         try:
-                            return func(self, *args, **kwargs)
+                            start_time = time.perf_counter()
+                            ret = func(self, *args, **kwargs)
+                            global method_time
+                            method_time += time.perf_counter() - start_time
+                            return ret
                         except BodoLibNotImplementedException as e:
                             # Fall back to Pandas below
                             except_msg = str(e)
