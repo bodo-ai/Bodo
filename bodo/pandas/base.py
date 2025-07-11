@@ -67,7 +67,7 @@ def _cast_timestamp_dtypes(pa_schema):
         for idx in idxs:
             field = pa_schema.field(idx)
             if pa.types.is_timestamp(field.type):
-                new_field = pa.field(field.name, pa.timestamp("ns"))
+                new_field = pa.field(field.name, pa.timestamp("ns", tz=field.type.tz))
                 pa_schema = pa_schema.set(idx, new_field)
 
     return pa_schema
