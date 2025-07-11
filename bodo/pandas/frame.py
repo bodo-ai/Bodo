@@ -343,11 +343,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             warnings.warn(
                 "BodoDataFrame::rename copy=False argument ignored assuming A=A.rename(copy=False) idiom."
             )
-        renamed_plan = LazyPlan(
-            orig_plan.plan_class,
-            orig_plan.empty_data.rename(columns=columns),
-            *orig_plan.args,
-            **orig_plan.kwargs,
+        renamed_plan = orig_plan.replace_empty_data(
+            orig_plan.empty_data.rename(columns=columns)
         )
         return wrap_plan(renamed_plan)
 
