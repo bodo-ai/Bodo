@@ -48,11 +48,7 @@ class DataFrameGroupBy:
         self._keys = keys
         self._as_index = as_index
         self._dropna = dropna
-        self._selection = (
-            selection
-            if selection is not None
-            else list(filter(lambda col: col not in keys, obj.columns))
-        )
+        self._selection = selection
 
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
         """
@@ -95,7 +91,9 @@ class DataFrameGroupBy:
 
     agg = aggregate
 
-    def _normalize_agg_func(self, func, kwargs: dict) -> list[tuple[str, str]]:
+    def _normalize_agg_func(
+        self, func, selection, kwargs: dict
+    ) -> list[tuple[str, str]]:
         """
         Convert func and kwargs into a list of (column, function) tuples.
         """
@@ -118,9 +116,7 @@ class DataFrameGroupBy:
             # for each input column (column names are a multi-index) i.e.:
             # ("A", "sum"), ("A", "count"), ("B", "sum), ("B", "count")
             normalized_func = [
-                (col, _get_aggfunc_str(func_))
-                for col in self._selection
-                for func_ in func
+                (col, _get_aggfunc_str(func_)) for col in selection for func_ in func
             ]
         else:
             func = _get_aggfunc_str(func)
@@ -129,13 +125,13 @@ class DataFrameGroupBy:
             if func == "size":
                 # Getting the size of each groups without any input column.
                 # e.g. df.groupby("B")[[]].size()
-                if len(self._selection) < 1:
+                if len(selection) < 1:
                     raise BodoLibNotImplementedException(
                         "GroupBy.size(): Aggregating without selected columns not supported yet."
                     )
-                normalized_func = [(self._selection[0], "size")]
+                normalized_func = [(selection[0], "size")]
             else:
-                normalized_func = [(col, func) for col in self._selection]
+                normalized_func = [(col, func) for col in selection]
 
         return normalized_func
 
@@ -267,11 +263,11 @@ class SeriesGroupBy:
 
     agg = aggregate
 
-    def _normalize_agg_func(self, func, kwargs):
+    def _normalize_agg_func(self, func, selection, kwargs):
         """
         Convert func and kwargs into a list of (column, function) tuples.
         """
-        col = self._selection[0]
+        col = selection[0]
 
         # list of (input column name, function) pairs
         normalized_func: list[tuple[str, str]] = []
@@ -387,18 +383,24 @@ def _groupby_agg_plan(
     """Compute groupby.func() on the Series or DataFrame GroupBy object."""
     from bodo.pandas.base import _empty_like
 
+    grouped_selection = (
+        grouped._selection
+        if grouped._selection is not None
+        else list(filter(lambda col: col not in grouped._keys, grouped._obj.columns))
+    )
+
     zero_size_df = _empty_like(grouped._obj)
     empty_data_pandas = zero_size_df.groupby(grouped._keys, as_index=grouped._as_index)[
-        grouped._selection[0]
+        grouped_selection[0]
         if isinstance(grouped, SeriesGroupBy)
-        else grouped._selection
+        else grouped_selection
     ].agg(func, *args, **kwargs)
 
-    func = grouped._normalize_agg_func(func, kwargs)
+    func = grouped._normalize_agg_func(func, grouped_selection, kwargs)
 
     # NOTE: assumes no key columns are being aggregated e.g:
     # df1.groupby("C", as_index=False)[["C"]].agg("sum")
-    if set(grouped._keys) & set(grouped._selection):
+    if set(grouped._keys) & set(grouped_selection):
         raise BodoLibNotImplementedException(
             "GroupBy.agg(): Aggregation on key columns not supported yet."
         )
