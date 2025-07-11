@@ -158,6 +158,8 @@ struct ArrowReaderMetrics {
 
     /// Read Stage
     time_t read_batch_total_time = 0;
+    time_t convert_time = 0;
+    time_t cast_string_time = 0;
 };
 
 /**

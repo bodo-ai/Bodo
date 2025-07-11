@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <iostream>
 #include <memory>
 
 #include <arrow/array.h>
@@ -10,6 +11,7 @@
 #include <arrow/table.h>
 #include <arrow/type.h>
 #include <arrow/type_fwd.h>
+#include "_query_profile_collector.h"
 #include "arrow/util/key_value_metadata.h"
 
 #include "_array_utils.h"
@@ -1256,7 +1258,8 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
     // case.
     offset_t *in_offsets = (offset_t *)arrow_bin_arr->raw_value_offsets();
     offset_t first_offset = in_offsets[0];
-    if (first_offset != 0) {
+    if (first_offset % 8 != 0) {
+        std::cout << "copying!" << std::endl;
         int64_t total_chars = in_offsets[n] - first_offset;
         std::shared_ptr<array_info> out_arr =
             alloc_string_array(Bodo_CTypes::STRING, n, total_chars,
@@ -1335,7 +1338,8 @@ std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
 
 std::shared_ptr<array_info> arrow_array_to_bodo(
     std::shared_ptr<arrow::Array> arrow_arr, bodo::IBufferPool *src_pool,
-    int64_t array_id, std::shared_ptr<array_info> dicts_ref_arr) {
+    int64_t array_id, std::shared_ptr<array_info> dicts_ref_arr,
+    uint64_t *cast_counter) {
     switch (arrow_arr->type_id()) {
         case arrow::Type::LARGE_STRING:
             return arrow_string_binary_array_to_bodo(
@@ -1345,12 +1349,16 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
         // layout
         case arrow::Type::STRING: {
             static_assert(OFFSET_BITWIDTH == 64);
+            auto start_cast = start_timer();
             auto res =
                 arrow::compute::Cast(*arrow_arr, arrow::large_utf8(),
                                      arrow::compute::CastOptions::Safe(),
                                      bodo::default_buffer_exec_context());
             std::shared_ptr<arrow::Array> casted_arr;
             CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+            if (cast_counter != nullptr) {
+                *cast_counter += end_timer(start_cast);
+            }
             return arrow_string_binary_array_to_bodo(
                 std::static_pointer_cast<arrow::LargeStringArray>(casted_arr),
                 Bodo_CTypes::STRING, array_id, src_pool);
@@ -1688,12 +1696,14 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
 }
 
 std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
-    std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length) {
+    std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length,
+    uint64_t *cast_counter) {
     std::vector<std::shared_ptr<array_info>> cols;
     cols.reserve(arrow_rb->num_columns());
 
     for (auto col : arrow_rb->columns()) {
-        cols.push_back(arrow_array_to_bodo(col, nullptr));
+        cols.push_back(
+            arrow_array_to_bodo(col, nullptr, -1, nullptr, cast_counter));
     }
 
     return std::make_shared<table_info>(cols, length);

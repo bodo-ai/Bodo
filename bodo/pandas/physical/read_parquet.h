@@ -98,7 +98,16 @@ class PhysicalReadParquet : public PhysicalSource {
     }
     virtual ~PhysicalReadParquet() = default;
 
-    void Finalize() override {}
+    void Finalize() override {
+        std::cout << "total read batch time: "
+                  << this->internal_reader->metrics.read_batch_total_time
+                  << std::endl;
+        std::cout << "total convert batch time: "
+                  << this->internal_reader->metrics.convert_time << std::endl;
+        std::cout << "total cast string time: "
+                  << this->internal_reader->metrics.cast_string_time
+                  << std::endl;
+    }
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {

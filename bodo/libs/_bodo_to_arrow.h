@@ -96,7 +96,8 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
  */
 std::shared_ptr<array_info> arrow_array_to_bodo(
     std::shared_ptr<arrow::Array> arrow_arr, bodo::IBufferPool *src_pool,
-    int64_t array_id = -1, std::shared_ptr<array_info> dicts_ref_arr = nullptr);
+    int64_t array_id = -1, std::shared_ptr<array_info> dicts_ref_arr = nullptr,
+    uint64_t *cast_counter = nullptr);
 
 /**
  * @brief Convert Arrow table to Bodo table_info with zero-copy as much as
@@ -134,7 +135,8 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
  * @return std::shared_ptr<table_into> Output Bodo table
  */
 std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
-    std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length);
+    std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length,
+    uint64_t *cast_counter = nullptr);
 
 /**
  * @brief Returns a vector whose data is a bitmask indicating
