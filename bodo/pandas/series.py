@@ -987,7 +987,7 @@ class BodoDatetimeProperties:
     def __init__(self, series):
         allowed_types = allowed_types_map["dt_default"]
         # Validates series type
-        if not (isinstance(series, BodoSeries) and series.dtype in allowed_types,):
+        if not (isinstance(series, BodoSeries) and series.dtype in allowed_types):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
         self._series = series
         self._dtype = series.dtype
@@ -1847,7 +1847,6 @@ def validate_dtype(name, obj):
             name,
             [
                 pd.ArrowDtype(pa.timestamp("ns")),
-                pd.ArrowDtype(pa.timestamp("us")),
                 pd.ArrowDtype(pa.duration("ns")),
             ],
         ):

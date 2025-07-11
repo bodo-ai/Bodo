@@ -159,13 +159,6 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
-            # Sometimes when an execution is triggered it isn't expected that
-            # an execution should happen at that point.  This traceback is
-            # useful to identify what is triggering the execution as it may be
-            # a bug or the usage of some Pandas API that calls a function that
-            # triggers execution.  This traceback can help fix the bug or
-            # select a different Pandas API or an internal Pandas function that
-            # bypasses the issue.
             print("Unoptimized plan")
             print(duckdb_plan.toString())
 
@@ -205,11 +198,10 @@ def execute_plan(plan: LazyPlan):
         return ret
 
     if bodo.dataframe_library_run_parallel:
-        # Initialize LazyPlanDistributedArg objects that may need scattering data
-        # to workers before execution.
-
         import bodo.spawn.spawner
 
+        # Initialize LazyPlanDistributedArg objects that may need scattering data
+        # to workers before execution.
         start_time = time.perf_counter()
         for a in plan.args:
             _init_lazy_distributed_arg(a)
@@ -217,9 +209,18 @@ def execute_plan(plan: LazyPlan):
             "profile_time _init_lazy_distributed_arg", time.perf_counter() - start_time
         )
 
-        traceback.print_stack(file=sys.stdout)
-        print("")  # Print on new line during tests.
+        if bodo.dataframe_library_dump_plans:
+            # Sometimes when an execution is triggered it isn't expected that
+            # an execution should happen at that point.  This traceback is
+            # useful to identify what is triggering the execution as it may be
+            # a bug or the usage of some Pandas API that calls a function that
+            # triggers execution.  This traceback can help fix the bug or
+            # select a different Pandas API or an internal Pandas function that
+            # bypasses the issue.
+            traceback.print_stack(file=sys.stdout)
+            print("")  # Print on new line during tests.
         start_time = time.perf_counter()
+
         ret = bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
         print("profile_time total_execute_plan", time.perf_counter() - start_time)
         return ret
@@ -227,25 +228,25 @@ def execute_plan(plan: LazyPlan):
     return _exec_plan(plan)
 
 
-def _init_lazy_distributed_arg(arg, cache=None):
+def _init_lazy_distributed_arg(arg, visited_plans=None):
     """Initialize the LazyPlanDistributedArg objects for the given plan argument that
     may need scattering data to workers before execution.
     Has to be called right before plan execution since the dataframe state
     may change (distributed to collected) and the result ID may not be valid anymore.
     """
-    # cache LazyPlans to prevent redundant checking.
-    if cache is None:
-        cache = set()
+    if visited_plans is None:
+        # Keep track of visited LazyPlans to prevent extra checks.
+        visited_plans = set()
 
     if isinstance(arg, LazyPlan):
-        if id(arg) in cache:
+        if id(arg) in visited_plans:
             return
-        cache.add(id(arg))
+        visited_plans.add(id(arg))
         for a in arg.args:
-            _init_lazy_distributed_arg(a, cache=cache)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, (tuple, list)):
         for a in arg:
-            _init_lazy_distributed_arg(a, cache=cache)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, LazyPlanDistributedArg):
         arg.init()
 
