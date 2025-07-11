@@ -53,10 +53,10 @@ class LazyPlan:
         args = self.args
 
         # Avoid duplicated plan strings by omitting data_source.
-        if self.plan_class == "ColRefExpression":
+        if isinstance(self, ColRefExpression):
             col_index = args[1]
             return f"ColRefExpression({col_index})"
-        elif self.plan_class == "PythonScalarFuncExpression":
+        elif isinstance(self, PythonScalarFuncExpression):
             func_name, col_indices = args[1][0], args[2]
             return f"PythonScalarFuncExpression({func_name}, {col_indices})"
 
@@ -92,7 +92,7 @@ class LazyPlan:
         # Don't cache expression nodes.
         # TODO - Try to eliminate caching altogether since it seems to cause
         # more problems than lack of caching.
-        if "Expression" not in self.plan_class and id(self) in cache:
+        if not isinstance(self, Expression) and id(self) in cache:
             return cache[id(self)]
 
         def recursive_check(x, use_cache):
@@ -111,7 +111,7 @@ class LazyPlan:
         # be reused across right and left sides (e.g. self-join) leading to unique_ptr
         # errors.
         use_cache = True
-        if self.plan_class in ["LogicalComparisonJoin", "LogicalSetOperation"]:
+        if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
             use_cache = False
 
         # Convert any LazyPlan in the args or kwargs.
@@ -438,16 +438,14 @@ def is_single_projection(proj: LazyPlan):
     """Return True if plan is a projection with a single expression"""
     return (
         isinstance(proj, LazyPlan)
-        and proj.plan_class == "LogicalProjection"
+        and isinstance(proj, LogicalProjection)
         and len(proj.args[1]) == (get_n_index_arrays(proj.empty_data.index) + 1)
     )
 
 
 def is_single_colref_projection(proj: LazyPlan):
     """Return True if plan is a projection with a single expression that is a column reference"""
-    return (
-        is_single_projection(proj) and proj.args[1][0].plan_class == "ColRefExpression"
-    )
+    return is_single_projection(proj) and isinstance(proj.args[1][0], ColRefExpression)
 
 
 def make_col_ref_exprs(key_indices, src_plan):
@@ -577,12 +575,12 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
 
 
 def is_col_ref(expr):
-    return expr.plan_class == "ColRefExpression"
+    return isinstance(expr, ColRefExpression)
 
 
 def is_scalar_func(expr):
-    return expr.plan_class == "PythonScalarFuncExpression"
+    return isinstance(expr, PythonScalarFuncExpression)
 
 
 def is_arith_expr(expr):
-    return expr.plan_class == "ArithOpExpression"
+    return isinstance(expr, ArithOpExpression)
