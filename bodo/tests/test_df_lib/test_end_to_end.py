@@ -1055,6 +1055,30 @@ def test_merge_non_equi_cond():
         reset_index=True,
     )
 
+    df1.loc[0, "B"] = np.nan
+    bdf1 = bd.from_pandas(df1)
+
+    nan_df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    nan_bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+
+    nan_df4 = nan_df3[nan_df3.B < nan_df3.Dog]
+    nan_bdf4 = nan_bdf3[nan_bdf3.B < nan_bdf3.Dog]
+    # Make sure bdf3 is unevaluated at this point.
+    assert nan_bdf4.is_lazy_plan()
+
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
+    _test_equal(pre, 5)
+    _test_equal(post, 4)
+
+    _test_equal(
+        nan_bdf4.copy(),
+        nan_df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
 
 def test_merge_output_column_to_input_map():
     """Test for a bug in join output column to input column mapping in

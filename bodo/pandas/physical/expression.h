@@ -6,6 +6,7 @@
 #include <string>
 #include <type_traits>
 #include "../libs/_array_utils.h"
+#include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../tests/utils.h"
 #include "_util.h"
@@ -233,7 +234,13 @@ class PhysicalComparisonExpression : public PhysicalExpression {
         arrow::Datum right_datum = children[1]->join_expr_internal(
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);
-        return do_arrow_compute_binary(left_datum, right_datum, comparator);
+        arrow::Datum ret =
+            do_arrow_compute_binary(left_datum, right_datum, comparator);
+        // Pandas if either is NULL then result is false.
+        if (!ret.scalar()->is_valid) {
+            ret = arrow::Datum(std::make_shared<arrow::BooleanScalar>(false));
+        }
+        return ret;
     }
 
    protected:
@@ -502,7 +509,12 @@ class PhysicalColumnRefExpression : public PhysicalExpression {
                 "join_expr_internal.");
         }
         void *index_ptr = ((char *)sel_data) + (index * dt_byte_width);
-        return ConvertToDatum(index_ptr, arrow_dt);
+        arrow::Datum ret = ConvertToDatum(index_ptr, arrow_dt);
+        if (null_bitmap[col_idx] != nullptr &&
+            !GetBit((const uint8_t *)null_bitmap[col_idx], index)) {
+            ret = arrow::Datum(arrow::MakeNullScalar(ret.type()));
+        }
+        return ret;
     }
 
     virtual arrow::Datum join_expr_internal(
@@ -578,7 +590,12 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         arrow::Datum right_datum = children[1]->join_expr_internal(
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);
-        return do_arrow_compute_binary(left_datum, right_datum, comparator);
+        arrow::Datum ret =
+            do_arrow_compute_binary(left_datum, right_datum, comparator);
+        if (!ret.scalar()->is_valid) {
+            ret = arrow::Datum(std::make_shared<arrow::BooleanScalar>(false));
+        }
+        return ret;
     }
 
    protected:
