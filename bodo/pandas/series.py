@@ -1632,10 +1632,6 @@ def _get_series_python_func_plan(
     )
 
 
-def _isdatetimelike(dtype):
-    return dtype in allowed_types_map["dt_default"]
-
-
 def _split_internal(self, name, pat, n, expand, regex=None):
     """
     Internal template shared by split() and rsplit().
