@@ -503,7 +503,6 @@ class LazyPlanDistributedArg:
         anymore.
         """
         if getattr(self.df._mgr, "_md_result_id", None) is not None:
-            # print("initializing", self)
             # The dataframe is already distributed so we can use the existing result ID
             self.res_id = self.df._mgr._md_result_id
         elif self.mgr is not None:
