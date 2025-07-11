@@ -348,7 +348,9 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
-                    py_res = getattr(base_class, func.__name__)(self, *args, **kwargs)
+                    py_res = fallback_wrapper(getattr(base_class, func.__name__))(
+                        self, *args, **kwargs
+                    )
                     return py_res
 
         return wrapper
@@ -799,3 +801,26 @@ def ensure_datetime64ns(df):
         df.index = df.index.astype("datetime64[ns]")
 
     return df
+
+
+def fallback_wrapper(attr):
+    """
+    Wrap callable attributes with a warning silencer, unless they are known
+    accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
+    """
+
+    # Avoid wrapping indexers & accessors
+    if (
+        callable(attr)
+        and not hasattr(attr, "__getitem__")
+        and not hasattr(attr, "__getattr__")
+    ):
+
+        def silenced_method(*args, **kwargs):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+                return attr(*args, **kwargs)
+
+        return silenced_method
+
+    return attr

@@ -215,6 +215,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
         # Already distributed DataFrame case
@@ -234,6 +235,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
 
@@ -1969,6 +1971,23 @@ def test_series_describe():
         describe_pd = df[c].describe()
         describe_bodo = bdf[c].describe()
         _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
+
+
+def test_series_agg():
+    import pandas as pd
+
+    import bodo.pandas as bd
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+    bdf = bd.from_pandas(df)
+
+    bodo_out = bdf.A.aggregate("sum")
+    pd_out = df.A.aggregate("sum")
+    assert bodo_out == pd_out
+
+    bodo_out = bdf.A.aggregate(["min", "max", "count", "product"])
+    pd_out = df.A.aggregate(["min", "max", "count", "product"])
+    _test_equal(bodo_out, pd_out, check_pandas_types=False)
 
 
 def test_groupby_apply():
