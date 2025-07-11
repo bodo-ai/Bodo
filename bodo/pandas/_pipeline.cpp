@@ -1,6 +1,9 @@
 #include "_pipeline.h"
 
+#include <chrono>
 #include "physical/result_collector.h"
+
+using bodo_cpp_clock = std::chrono::steady_clock;
 
 /*
  * This has to be a recursive routine.  Each operator in the pipeline could
@@ -21,8 +24,14 @@ bool Pipeline::midPipelineExecute(unsigned idx,
         std::cout << "midPipelineExecute before ConsumeBatch "
                   << sink->ToString() << std::endl;
 #endif
+        bodo_cpp_clock::time_point start;
+        start = bodo_cpp_clock::now();
         auto ret = sink->ConsumeBatch(batch, prev_op_result) ==
                    OperatorResult::FINISHED;
+        timings[sink->ToString()] +=
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                bodo_cpp_clock::now() - start)
+                .count();
 #ifdef DEBUG_PIPELINE
         for (unsigned i = 0; i < idx; ++i)
             std::cout << " ";
@@ -41,8 +50,14 @@ bool Pipeline::midPipelineExecute(unsigned idx,
                       << op->ToString() << std::endl;
 #endif
             // Process this batch with this operator.
+            bodo_cpp_clock::time_point start;
+            start = bodo_cpp_clock::now();
             std::pair<std::shared_ptr<table_info>, OperatorResult> result =
                 op->ProcessBatch(batch, prev_op_result);
+            timings[std::to_string(idx) + " " + op->ToString()] +=
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    bodo_cpp_clock::now() - start)
+                    .count();
             prev_op_result = result.second;
 
 #ifdef DEBUG_PIPELINE
@@ -80,6 +95,7 @@ void Pipeline::Execute() {
     // TODO: Do we need an explicit Init phase to measure initialization time
     // outside of the time spend in constructors?
 
+    bodo_cpp_clock::time_point start;
     bool finished = false;
     while (!finished) {
         std::shared_ptr<table_info> batch;
@@ -89,8 +105,13 @@ void Pipeline::Execute() {
                   << source->ToString() << std::endl;
 #endif
         // Execute the source to get the base batch
+        start = bodo_cpp_clock::now();
         std::pair<std::shared_ptr<table_info>, OperatorResult> result =
             source->ProduceBatch();
+        timings[source->ToString()] +=
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                bodo_cpp_clock::now() - start)
+                .count();
 #ifdef DEBUG_PIPELINE
         std::cout << "Pipeline::Execute after ProduceBatch "
                   << source->ToString() << std::endl;
@@ -109,12 +130,33 @@ void Pipeline::Execute() {
     }
 
     // Finalize
+    start = bodo_cpp_clock::now();
     source->Finalize();
     for (auto& op : between_ops) {
         op->Finalize();
     }
     sink->Finalize();
+    timings["Finalize"] +=
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            bodo_cpp_clock::now() - start)
+            .count();
 
+    std::cout
+        << "------------------------Pipeline timing------------------------"
+        << std::endl;
+    std::vector<std::string> name_order;
+    name_order.push_back(source->ToString());
+    for (size_t i = 0; i < between_ops.size(); ++i) {
+        name_order.push_back(std::to_string(i) + " " +
+                             between_ops[i]->ToString());
+    }
+    name_order.push_back(sink->ToString());
+    for (const auto& name : name_order) {
+        std::cout << name << " => " << (timings[name] / 1000000.0) << std::endl;
+    }
+    std::cout
+        << "--------------------End Pipeline timing------------------------"
+        << std::endl;
     executed = true;
 }
 
