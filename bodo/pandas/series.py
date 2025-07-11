@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import inspect
 import itertools
 import numbers
@@ -302,6 +303,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 and pd.api.types.is_numeric_dtype(other.dtype)
             )
             or isinstance(other, numbers.Number)
+            and not isinstance(other, tuple(allowed_types_map["binop_dtlike"]))
         ):
             return self._non_arith_binop(other, op, reverse)
 
@@ -364,7 +366,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 return self.rsub(other)
 
         # If other is an iterable, fall back to Pandas.
-        elif not isinstance(other, (dict, set, list, pd.Series)):
+        # TODO: strengthen this check.
+        elif isinstance(other, tuple(allowed_types_map["binop_scalar"])):
             lhs, rhs = (self, other) if not reverse else (other, self)
             if op == "__add__":
                 return lhs.map(lambda x: x + rhs)
@@ -2160,6 +2163,32 @@ allowed_types_map = {
         pd.ArrowDtype(pa.date64()),
         pd.ArrowDtype(pa.time64("ns")),
         pd.ArrowDtype(pa.duration("ns")),
+    ],
+    "binop_scalar": [
+        int,
+        float,
+        str,
+        bool,
+        pd.Timedelta,
+        pd.DateOffset,
+        datetime.timedelta,
+        datetime.datetime,
+        numpy.datetime64,
+        numpy.timedelta64,
+        numpy.int64,
+        numpy.float64,
+        numpy.bool_,
+    ],
+    "binop_dtlike": [
+        pd.Timedelta,
+        pd.DateOffset,
+        datetime.timedelta,
+        datetime.datetime,
+        numpy.datetime64,
+        numpy.timedelta64,
+        numpy.int64,
+        numpy.float64,
+        numpy.bool_,
     ],
 }
 
