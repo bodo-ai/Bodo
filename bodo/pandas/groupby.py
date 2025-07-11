@@ -13,7 +13,12 @@ import pyarrow as pa
 from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
-from bodo.pandas.plan import LazyPlan, make_col_ref_exprs
+from bodo.pandas.plan import (
+    LazyPlan,
+    LogicalAggregate,
+    LogicalProjection,
+    make_col_ref_exprs,
+)
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
@@ -422,8 +427,7 @@ def _groupby_agg_plan(
         ) in enumerate(func)
     ]
 
-    plan = LazyPlan(
-        "LogicalAggregate",
+    plan = LogicalAggregate(
         empty_data,
         grouped._obj._plan,
         key_indices,
@@ -437,8 +441,7 @@ def _groupby_agg_plan(
         col_indices += list(range(len(grouped._keys)))
 
         exprs = make_col_ref_exprs(col_indices, plan)
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             plan,
             exprs,

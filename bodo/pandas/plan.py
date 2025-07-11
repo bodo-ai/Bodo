@@ -133,6 +133,101 @@ class LazyPlan:
         return ret
 
 
+class LogicalOperator(LazyPlan):
+    """Base class for all logical operators in the Bodo query plan."""
+
+    def __init__(self, empty_data, *args, **kwargs):
+        super().__init__(self.__class__.__name__, empty_data, *args, **kwargs)
+
+
+class Expression(LazyPlan):
+    """Base class for all expressions in the Bodo query plan,
+    such as column references, function calls, and arithmetic operations.
+    """
+
+    def __init__(self, empty_data, *args, **kwargs):
+        super().__init__(self.__class__.__name__, empty_data, *args, **kwargs)
+
+
+class LogicalProjection(LogicalOperator):
+    """Logical operator for projecting columns and expressions."""
+
+    pass
+
+
+class LogicalFilter(LogicalOperator):
+    """Logical operator for filtering rows based on conditions."""
+
+    pass
+
+
+class LogicalAggregate(LogicalOperator):
+    """Logical operator for aggregation operations."""
+
+    pass
+
+
+class LogicalComparisonJoin(LogicalOperator):
+    """Logical operator for comparison-based joins."""
+
+    pass
+
+
+class LogicalSetOperation(LogicalOperator):
+    """Logical operator for set operations like union."""
+
+    pass
+
+
+class LogicalLimit(LogicalOperator):
+    """Logical operator for limiting the number of rows (e.g. df.head())."""
+
+    pass
+
+
+class LogicalOrder(LogicalOperator):
+    """Logical operator for sorting data."""
+
+    pass
+
+
+class LogicalGetParquetRead(LogicalOperator):
+    """Logical operator for reading Parquet files."""
+
+    pass
+
+
+class LogicalGetPandasReadSeq(LogicalOperator):
+    """Logical operator for sequential read of a Pandas DataFrame."""
+
+    pass
+
+
+class LogicalGetPandasReadParallel(LogicalOperator):
+    """Logical operator for parallel read of a Pandas DataFrame.\
+    """
+
+    pass
+
+
+class LogicalGetIcebergRead(LogicalOperator):
+    """Logical operator for reading Apache Iceberg tables."""
+
+    pass
+
+
+class LogicalParquetWrite(LogicalOperator):
+    """Logical operator for writing data to Parquet files."""
+
+    pass
+
+
+class LogicalIcebergWrite(LogicalOperator):
+    """Logical operator for writing data to Apache Iceberg tables."""
+
+    pass
+
+
 def execute_plan(plan: LazyPlan):
     """Execute a dataframe plan using Bodo's execution engine.
 
@@ -356,8 +451,7 @@ def count_plan(self):
     # Can't be known statically so create count plan on top of
     # existing plan.
     count_star_schema = pd.Series(dtype="uint64", name="count_star")
-    aggregate_plan = LazyPlan(
-        "LogicalAggregate",
+    aggregate_plan = LogicalAggregate(
         count_star_schema,
         self._plan,
         [],
@@ -374,8 +468,7 @@ def count_plan(self):
             )
         ],
     )
-    projection_plan = LazyPlan(
-        "LogicalProjection",
+    projection_plan = LogicalProjection(
         count_star_schema,
         aggregate_plan,
         make_col_ref_exprs([0], aggregate_plan),
@@ -411,8 +504,7 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
             df_plan,
         )
     )
-    plan = LazyPlan(
-        "LogicalProjection",
+    plan = LogicalProjection(
         empty_data,
         df_plan,
         (udf_arg,) + index_col_refs,

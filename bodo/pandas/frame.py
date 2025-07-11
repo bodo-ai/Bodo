@@ -41,6 +41,10 @@ from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.plan import (
     LazyPlan,
     LazyPlanDistributedArg,
+    LogicalComparisonJoin,
+    LogicalFilter,
+    LogicalLimit,
+    LogicalProjection,
     _get_df_python_func_plan,
     execute_plan,
     get_proj_expr_single,
@@ -261,8 +265,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ):
                 from bodo.pandas.base import _empty_like
 
-                planLimit = LazyPlan(
-                    "LogicalLimit",
+                planLimit = LogicalLimit(
                     _empty_like(self),
                     self._plan,
                     n,
@@ -864,8 +867,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
 
-        planComparisonJoin = LazyPlan(
-            "LogicalComparisonJoin",
+        planComparisonJoin = LogicalComparisonJoin(
             empty_join_out,
             self._plan,
             right._plan,
@@ -886,8 +888,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         # Create column reference expressions for selected columns
         exprs = make_col_ref_exprs(col_indices, planComparisonJoin)
-        proj_plan = LazyPlan(
-            "LogicalProjection",
+        proj_plan = LogicalProjection(
             empty_data,
             planComparisonJoin,
             exprs,
@@ -977,7 +978,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             zero_size_key = _empty_like(key)
             empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
-                plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
+                plan=LogicalFilter(empty_data, self._plan, key_plan),
             )
         else:
             """ This is selecting one or more columns. Be a bit more
@@ -1006,8 +1007,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
             empty_data = zero_size_self.__getitem__(key[0] if output_series else key)
             return wrap_plan(
-                plan=LazyPlan(
-                    "LogicalProjection",
+                plan=LogicalProjection(
                     empty_data,
                     self._plan,
                     exprs,
@@ -1075,8 +1075,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 pa_type = pa.timestamp("ns", pa_type.tz)
             empty_data[key] = empty_data[key].astype(pd.ArrowDtype(pa_type))
 
-            new_plan = LazyPlan(
-                "LogicalProjection",
+            new_plan = LogicalProjection(
                 empty_data,
                 self._plan,
                 proj_exprs,
@@ -1343,8 +1342,7 @@ def _add_proj_expr_to_plan(
     )
     empty_data = df_plan.empty_data.copy()
     empty_data[key] = value_plan.empty_data.copy()
-    new_plan = LazyPlan(
-        "LogicalProjection",
+    new_plan = LogicalProjection(
         empty_data,
         df_plan,
         proj_exprs,

@@ -25,6 +25,10 @@ from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.plan import (
     LazyPlan,
     LazyPlanDistributedArg,
+    LogicalAggregate,
+    LogicalFilter,
+    LogicalLimit,
+    LogicalProjection,
     _get_df_python_func_plan,
     execute_plan,
     get_proj_expr_single,
@@ -172,8 +176,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
@@ -226,8 +229,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
@@ -274,8 +276,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
@@ -325,8 +326,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
@@ -403,7 +403,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             # Drop the explicit integer Index generated from filtering RangeIndex (TODO: support RangeIndex properly).
             empty_data.reset_index(drop=True, inplace=True)
         return wrap_plan(
-            plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
+            plan=LogicalFilter(empty_data, self._plan, key_plan),
         )
 
     @staticmethod
@@ -498,8 +498,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             ):
                 from bodo.pandas.base import _empty_like
 
-                planLimit = LazyPlan(
-                    "LogicalLimit",
+                planLimit = LogicalLimit(
                     _empty_like(self),
                     self._plan,
                     n,
@@ -955,8 +954,7 @@ class BodoStringMethods:
         )
 
         # Creates DataFrame with n_cols columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
+        df_plan = LogicalProjection(
             empty_data,
             series_out._plan,
             expr + index_col_refs,
@@ -1049,8 +1047,7 @@ class BodoDatetimeProperties:
         assert series_out.is_lazy_plan()
 
         # Creates DataFrame with 3 columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
+        df_plan = LogicalProjection(
             empty_data,
             series_out._plan,
             expr + index_col_refs,
@@ -1110,8 +1107,7 @@ class BodoDatetimeProperties:
         assert series_out.is_lazy_plan()
 
         # Creates DataFrame with 3 columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
+        df_plan = LogicalProjection(
             empty_data,
             series_out._plan,
             expr + index_col_refs,
@@ -1272,8 +1268,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
         for func_name in func_names
     ]
 
-    plan = LazyPlan(
-        "LogicalAggregate",
+    plan = LogicalAggregate(
         zero_size_self,
         bodo_series._plan,
         [],
@@ -1515,8 +1510,7 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
         empty_data = pd.concat([left_empty_data, right_empty_data])
         empty_data.index = index
 
-        result = LazyPlan(
-            "LogicalProjection",
+        result = LogicalProjection(
             empty_data,
             result,
             (
@@ -1589,8 +1583,7 @@ def _get_series_python_func_plan(
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
     return wrap_plan(
-        plan=LazyPlan(
-            "LogicalProjection",
+        plan=LogicalProjection(
             empty_data,
             source_data,
             (expr,) + index_col_refs,
@@ -1674,8 +1667,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
     )
 
     # Creates DataFrame with n_cols columns
-    df_plan = LazyPlan(
-        "LogicalProjection",
+    df_plan = LogicalProjection(
         empty_data,
         series_out._plan,
         expr + index_col_refs,
@@ -1734,8 +1726,7 @@ def gen_partition(name):
         assert series_out.is_lazy_plan()
 
         # Creates DataFrame with 3 columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
+        df_plan = LogicalProjection(
             empty_data,
             series_out._plan,
             expr + index_col_refs,

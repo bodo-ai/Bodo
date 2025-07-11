@@ -35,6 +35,9 @@ from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.plan import (
     LazyPlan,
     LazyPlanDistributedArg,
+    LogicalLimit,
+    LogicalProjection,
+    LogicalSetOperation,
     _get_df_python_func_plan,
     make_col_ref_exprs,
 )
@@ -250,16 +253,14 @@ def read_iceberg(
         }
         exprs = make_col_ref_exprs(col_idxs, plan)
         empty_df = empty_df[list(selected_fields)]
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_df,
             plan,
             exprs,
         )
 
     if limit is not None:
-        plan = LazyPlan(
-            "LogicalLimit",
+        plan = LogicalLimit(
             empty_df,
             plan,
             limit,
@@ -509,16 +510,14 @@ def concat(
 
             # Create a reordering of the temp a_new_cols so that the columns are in
             # the same order as the Pandas simulation on empty data.
-            a_plan = LazyPlan(
-                "LogicalProjection",
+            a_plan = LogicalProjection(
                 empty_data,
                 a._plan,
                 get_mapping(empty_data, a.columns.tolist(), a._plan),
             )
             # Create a reordering of the temp b_new_cols so that the columns are in
             # the same order as the Pandas simulation on empty data.
-            b_plan = LazyPlan(
-                "LogicalProjection",
+            b_plan = LogicalProjection(
                 empty_data,
                 b._plan,
                 get_mapping(empty_data, b.columns.tolist(), b._plan),
@@ -528,9 +527,7 @@ def concat(
             b_plan = b._plan
 
         # DuckDB Union operator requires schema to already be matching.
-        planUnion = LazyPlan(
-            "LogicalSetOperation", empty_data, a_plan, b_plan, "union all"
-        )
+        planUnion = LogicalSetOperation(empty_data, a_plan, b_plan, "union all")
 
         return wrap_plan(planUnion)
 
