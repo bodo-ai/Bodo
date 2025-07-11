@@ -2022,3 +2022,71 @@ def test_groupby_apply():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_set_df_column_non_arith_binops():
+    """Test setting dataframe columns using BodoSeries non-arithmetic binary operations."""
+
+    df = pd.DataFrame(
+        {
+            "A": ["a", "b", "c", "d"],
+            "B": pd.date_range("2020-01-01", periods=4),  # datetime64[ns]
+            "C": pd.timedelta_range("1 day", periods=4),  # timedelta64[ns]
+        }
+    )
+
+    # String Series + String
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["A"] + "_suffix"
+    pdf = df.copy()
+    pdf["D"] = pdf["A"] + "_suffix"
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # String Series + String Series
+    bdf = bd.from_pandas(df)
+    bodo_out = bdf["A"] + bdf["A"]
+    pdf = df.copy()
+    pd_out = pdf["A"] + pdf["A"]
+    assert bodo_out.is_lazy_plan()
+    _test_equal(bodo_out, pd_out, check_pandas_types=False)
+
+    # Datetime Series + DateOffset
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["B"] + pd.DateOffset(
+        years=+25,
+        months=+5,
+        days=+12,
+        hours=+8,
+        minutes=+54,
+        seconds=+47,
+        microseconds=+282310,
+    )
+    pdf = df.copy()
+    pdf["D"] = pdf["B"] + pd.DateOffset(
+        years=+25,
+        months=+5,
+        days=+12,
+        hours=+8,
+        minutes=+54,
+        seconds=+47,
+        microseconds=+282310,
+    )
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Timedelta Series + Timedelta
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["C"] + pd.Timedelta(1, "d")
+    pdf = df.copy()
+    pdf["D"] = pdf["C"] + pd.Timedelta(1, "d")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Datetime Series + Timedelta
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["B"] + pd.Timedelta(1, "d")
+    pdf = df.copy()
+    pdf["D"] = pdf["B"] + pd.Timedelta(1, "d")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)

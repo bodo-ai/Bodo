@@ -339,11 +339,20 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return wrap_plan(plan=plan)
 
     def _non_arith_binop(self, other, op, reverse):
-        # TODO: some sort of validation on self and other
-        # other can't be Series (BodoSeries, pd.Series)
-        if isinstance(other, (BodoSeries, pd.Series)):
+        if isinstance(other, BodoSeries):
+            if (
+                isinstance(self.dtype, pd.ArrowDtype)
+                and self.dtype in allowed_types_map["str_default"]
+                and isinstance(other.dtype, pd.ArrowDtype)
+                and other.dtype in allowed_types_map["str_default"]
+                and op in ("__add__", "__radd__")
+            ):
+                if op == "__add__":
+                    return self.str.cat(other)
+                if op == "__radd__":
+                    return other.str.cat(self)
+
             # TODO: implement Series.add()
-            # TODO: link string series addition with str.cat()
             if op == "__add__":
                 return self.add(other)
             if op == "__radd__":
@@ -353,8 +362,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 return self.sub(other)
             if op == "__rsub__":
                 return self.rsub(other)
+
         # If other is an iterable, fall back to Pandas.
-        elif not isinstance(other, (dict, set, list)):
+        elif not isinstance(other, (dict, set, list, pd.Series)):
             lhs, rhs = (self, other) if not reverse else (other, self)
             if op == "__add__":
                 return lhs.map(lambda x: x + rhs)
