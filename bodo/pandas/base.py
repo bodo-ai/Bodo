@@ -60,6 +60,19 @@ if pt.TYPE_CHECKING:
     from pyiceberg.table import Table as PyIcebergTable
 
 
+def _cast_timestamp_dtypes(pa_schema):
+    """Returns a new pa_schema with timestamp types cast to ns."""
+    for name in pa_schema.names:
+        idxs = pa_schema.get_all_field_indices(name)
+        for idx in idxs:
+            field = pa_schema.field(idx)
+            if pa.types.is_timestamp(field.type):
+                new_field = pa.field(field.name, pa.timestamp("ns", tz=field.type.tz))
+                pa_schema = pa_schema.set(idx, new_field)
+
+    return pa_schema
+
+
 def from_pandas(df):
     """Convert a Pandas DataFrame to a BodoDataFrame."""
 
@@ -77,6 +90,8 @@ def from_pandas(df):
 
     # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
     pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
+    pa_schema = _cast_timestamp_dtypes(pa_schema)
+
     empty_df = arrow_to_empty_df(pa_schema)
     n_rows = len(df)
 
@@ -118,6 +133,7 @@ def read_parquet(
         "hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
+    arrow_schema = _cast_timestamp_dtypes(arrow_schema)
 
     empty_df = arrow_to_empty_df(arrow_schema)
 
@@ -382,7 +398,7 @@ def read_csv(
         func_args.append(parse_dates)
     func += ")\n"
     csv_func = bodo_spawn_exec(func, {"pd": pd}, {}, __name__)
-    jit_csv_func = bodo.jit(csv_func)
+    jit_csv_func = bodo.jit(csv_func, cache=True)
     return jit_csv_func(filepath_or_buffer, *func_args)
 
 
