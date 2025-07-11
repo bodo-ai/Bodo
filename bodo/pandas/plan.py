@@ -207,25 +207,25 @@ def execute_plan(plan: LazyPlan):
     return _exec_plan(plan)
 
 
-def _init_lazy_distributed_arg(arg, cache=None):
+def _init_lazy_distributed_arg(arg, visited_plans=None):
     """Initialize the LazyPlanDistributedArg objects for the given plan argument that
     may need scattering data to workers before execution.
     Has to be called right before plan execution since the dataframe state
     may change (distributed to collected) and the result ID may not be valid anymore.
     """
-    # cache LazyPlans to prevent redundant checking.
-    if cache is None:
-        cache = set()
+    if visited_plans is None:
+        # Keep track of visited LazyPlans to prevent extra checks.
+        visited_plans = set()
 
     if isinstance(arg, LazyPlan):
-        if id(arg) in cache:
+        if id(arg) in visited_plans:
             return
-        cache.add(id(arg))
+        visited_plans.add(id(arg))
         for a in arg.args:
-            _init_lazy_distributed_arg(a, cache=cache)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, (tuple, list)):
         for a in arg:
-            _init_lazy_distributed_arg(a, cache=cache)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, LazyPlanDistributedArg):
         arg.init()
 
