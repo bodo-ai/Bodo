@@ -245,7 +245,7 @@ def read_iceberg(
         pyiceberg_schema,
         snapshot_id if snapshot_id is not None else -1,
         table_len_estimate,
-        __pa_schema=arrow_schema,
+        arrow_schema=arrow_schema,
     )
 
     if selected_fields is not None:

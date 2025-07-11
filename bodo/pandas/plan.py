@@ -24,10 +24,9 @@ class LazyPlan:
     can be used to convert to an isolated set of DuckDB objects for execution.
     """
 
-    def __init__(self, plan_class, empty_data, *args, **kwargs):
+    def __init__(self, plan_class, empty_data, *args):
         self.plan_class = plan_class
         self.args = args
-        self.kwargs = kwargs
         assert isinstance(empty_data, (pd.DataFrame, pd.Series)), (
             "LazyPlan: empty_data must be a DataFrame or Series"
         )
@@ -39,15 +38,7 @@ class LazyPlan:
             name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
             self.empty_data = empty_data.to_frame(name=name)
 
-        if (pa_schema := kwargs.get("__pa_schema", None)) is None:
-            # Use the schema of the empty data to create the schema for the plan
-            # Passing in a separate schema is useful for some operators that need
-            # schema metadat like iceberg.
-            pa_schema = pa.Schema.from_pandas(self.empty_data)
-        else:
-            # We don't want this passing to the operator constructors
-            del kwargs["__pa_schema"]
-        self.pa_schema = pa_schema
+        self.pa_schema = pa.Schema.from_pandas(self.empty_data)
 
     def __str__(self):
         args = self.args
@@ -67,9 +58,6 @@ class LazyPlan:
                 args_str += f"{arg.columns.tolist()}\n"
             elif arg is not None:
                 args_str += f"{arg}\n"
-
-        for k, v in self.kwargs.items():
-            args_str += f"{k}: {v}\n"
 
         out += "\n".join(
             f"  {arg_line}"
@@ -114,20 +102,19 @@ class LazyPlan:
         if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
             use_cache = False
 
-        # Convert any LazyPlan in the args or kwargs.
+        # Convert any LazyPlan in the args.
         # We do this in reverse order because we expect the first arg to be
         # the source of the plan and for the node being created to take
-        # ownership of that source.  If other args or kwargs reference that
+        # ownership of that source.  If other args reference that
         # plan then if we process them after we have taken ownership then
         # we will get nullptr exceptions.  So, process the args that don't
         # claim ownership first (in the reverse direction) and finally
         # process the first arg which we expect will take ownership.
-        kwargs = {k: recursive_check(v, use_cache) for k, v in self.kwargs.items()}
         args = [recursive_check(x, use_cache) for x in reversed(self.args)]
         args.reverse()
 
         # Create real duckdb class.
-        ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args, **kwargs)
+        ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args)
         # Add to cache so we don't convert it again.
         cache[id(self)] = ret
         return ret
@@ -137,7 +124,6 @@ class LazyPlan:
         out = self.__class__(
             empty_data,
             *self.args,
-            **self.kwargs,
         )
         out.is_series = self.is_series
         return out
@@ -146,8 +132,8 @@ class LazyPlan:
 class LogicalOperator(LazyPlan):
     """Base class for all logical operators in the Bodo query plan."""
 
-    def __init__(self, empty_data, *args, **kwargs):
-        super().__init__(self.__class__.__name__, empty_data, *args, **kwargs)
+    def __init__(self, empty_data, *args):
+        super().__init__(self.__class__.__name__, empty_data, *args)
 
 
 class Expression(LazyPlan):
@@ -155,8 +141,8 @@ class Expression(LazyPlan):
     such as column references, function calls, and arithmetic operations.
     """
 
-    def __init__(self, empty_data, *args, **kwargs):
-        super().__init__(self.__class__.__name__, empty_data, *args, **kwargs)
+    def __init__(self, empty_data, *args):
+        super().__init__(self.__class__.__name__, empty_data, *args)
 
 
 class LogicalProjection(LogicalOperator):
@@ -226,7 +212,32 @@ class LogicalGetPandasReadParallel(LogicalOperator):
 class LogicalGetIcebergRead(LogicalOperator):
     """Logical operator for reading Apache Iceberg tables."""
 
-    pass
+    def __init__(
+        self,
+        empty_data,
+        table_identifier,
+        catalog_name,
+        catalog_properties,
+        row_filter,
+        pyiceberg_schema,
+        snapshot_id,
+        table_len_estimate,
+        *,
+        arrow_schema,
+    ):
+        super().__init__(
+            empty_data,
+            table_identifier,
+            catalog_name,
+            catalog_properties,
+            row_filter,
+            pyiceberg_schema,
+            snapshot_id,
+            table_len_estimate,
+        )
+        # Iceberg needs schema metadata
+        # TODO: avoid this to support operations like renaming columns
+        self.pa_schema = arrow_schema
 
 
 class LogicalParquetWrite(LogicalOperator):
