@@ -10,6 +10,7 @@ import pytest
 
 import bodo
 import bodo.pandas as bd
+from bodo.pandas.plan import LogicalGetPandasReadParallel, LogicalGetPandasReadSeq
 from bodo.pandas.utils import BodoLibFallbackWarning
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
@@ -46,7 +47,7 @@ def test_from_pandas(datapath, index_val):
     with temp_config_override("dataframe_library_run_parallel", False):
         bdf = bd.from_pandas(df)
         assert bdf.is_lazy_plan()
-        assert bdf._mgr._plan.plan_class == "LogicalGetPandasReadSeq"
+        assert isinstance(bdf._mgr._plan, LogicalGetPandasReadSeq)
         duckdb_plan = bdf._mgr._plan.generate_duckdb()
         _test_equal(duckdb_plan.df, df)
         _test_equal(
@@ -59,7 +60,7 @@ def test_from_pandas(datapath, index_val):
     # Parallel test
     bdf = bd.from_pandas(df)
     assert bdf.is_lazy_plan()
-    assert bdf._mgr._plan.plan_class == "LogicalGetPandasReadParallel"
+    assert isinstance(bdf._mgr._plan, LogicalGetPandasReadParallel)
     _test_equal(
         bdf,
         df,
@@ -214,6 +215,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
         # Already distributed DataFrame case
@@ -233,6 +235,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
 
@@ -276,7 +279,7 @@ def test_filter_pushdown(datapath, file_path, op):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -468,7 +471,7 @@ def test_filter_string_pushdown(datapath):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -528,7 +531,7 @@ def test_filter_datetime_pushdown(datapath, op):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -589,7 +592,7 @@ def test_head_pushdown(datapath):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -1040,7 +1043,7 @@ def test_merge_non_equi_cond():
     assert bdf4.is_lazy_plan()
 
     # Make sure filter node gets pushed into join.
-    pre, post = bd.utils.getPlanStatistics(bdf4._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
     _test_equal(pre, 5)
     _test_equal(post, 4)
 
@@ -1523,7 +1526,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
     # Make sure bodo_filter_a is unevaluated at this point.
     assert bodo_filter_a.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_filter_a._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_filter_a._mgr._plan)
     _test_equal(pre, 3)
     _test_equal(post, 2)
 
@@ -1968,6 +1971,23 @@ def test_series_describe():
         describe_pd = df[c].describe()
         describe_bodo = bdf[c].describe()
         _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
+
+
+def test_series_agg():
+    import pandas as pd
+
+    import bodo.pandas as bd
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+    bdf = bd.from_pandas(df)
+
+    bodo_out = bdf.A.aggregate("sum")
+    pd_out = df.A.aggregate("sum")
+    assert bodo_out == pd_out
+
+    bodo_out = bdf.A.aggregate(["min", "max", "count", "product"])
+    pd_out = df.A.aggregate(["min", "max", "count", "product"])
+    _test_equal(bodo_out, pd_out, check_pandas_types=False)
 
 
 def test_groupby_apply():

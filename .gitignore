@@ -56,6 +56,11 @@ bodo/libs/memory.cpp
 bodo/io/pyarrow_wrappers.cpp
 bodo/io/pyarrow_wrappers.h
 bodo/io/pyarrow_wrappers_api.h
+bodo/memory.cpp
+bodo/pandas/plan_optimizer.cpp
+bodo/tests/memory_tester.cpp
+bodo/transforms/type_inference/native_typer.cpp
+bodo/transforms/type_inference/native_typer.h
 
 # Iceberg Connector
 iceberg_db

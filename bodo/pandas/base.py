@@ -32,17 +32,26 @@ from pandas.io.parsers.readers import _c_parser_defaults
 
 import bodo.spawn.spawner  # noqa: F401
 from bodo.pandas.frame import BodoDataFrame
+from bodo.pandas.plan import (
+    LazyPlanDistributedArg,
+    LogicalGetIcebergRead,
+    LogicalGetPandasReadParallel,
+    LogicalGetPandasReadSeq,
+    LogicalGetParquetRead,
+    LogicalLimit,
+    LogicalProjection,
+    LogicalSetOperation,
+    NullExpression,
+    _get_df_python_func_plan,
+    make_col_ref_exprs,
+)
 from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
     BodoLibNotImplementedException,
-    LazyPlan,
-    LazyPlanDistributedArg,
-    _get_df_python_func_plan,
     arrow_to_empty_df,
     check_args_fallback,
     ensure_datetime64ns,
-    make_col_ref_exprs,
     wrap_plan,
 )
 from bodo.utils.utils import bodo_spawn_exec
@@ -73,14 +82,13 @@ def from_pandas(df):
 
     res_id = None
     if bodo.dataframe_library_run_parallel:
-        plan = LazyPlan(
-            "LogicalGetPandasReadParallel",
+        plan = LogicalGetPandasReadParallel(
             empty_df,
             n_rows,
             LazyPlanDistributedArg(df),
         )
     else:
-        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
+        plan = LogicalGetPandasReadSeq(empty_df, df)
 
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
@@ -113,8 +121,7 @@ def read_parquet(
 
     empty_df = arrow_to_empty_df(arrow_schema)
 
-    plan = LazyPlan(
-        "LogicalGetParquetRead",
+    plan = LogicalGetParquetRead(
         empty_df,
         path,
         storage_options,
@@ -225,8 +232,7 @@ def read_iceberg(
         filter_selectivity_estimate = 0.2
         table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
 
-    plan = LazyPlan(
-        "LogicalGetIcebergRead",
+    plan = LogicalGetIcebergRead(
         empty_df,
         table_identifier,
         catalog_name,
@@ -239,7 +245,7 @@ def read_iceberg(
         pyiceberg_schema,
         snapshot_id if snapshot_id is not None else -1,
         table_len_estimate,
-        __pa_schema=arrow_schema,
+        arrow_schema=arrow_schema,
     )
 
     if selected_fields is not None:
@@ -248,16 +254,14 @@ def read_iceberg(
         }
         exprs = make_col_ref_exprs(col_idxs, plan)
         empty_df = empty_df[list(selected_fields)]
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_df,
             plan,
             exprs,
         )
 
     if limit is not None:
-        plan = LazyPlan(
-            "LogicalLimit",
+        plan = LogicalLimit(
             empty_df,
             plan,
             limit,
@@ -277,7 +281,7 @@ def read_iceberg_table(table: PyIcebergTable) -> BodoDataFrame:
     # https://github.com/ehsantn/iceberg-python/blob/cae24259aa7ea3923703f65b58da7ff5a67414ba/pyiceberg/catalog/__init__.py#L242
     if pyiceberg.catalog.TYPE not in catalog_properties:
         catalog_properties[pyiceberg.catalog.PY_CATALOG_IMPL] = (
-            table.catalog.__class__.__module__ + "." + table.catalog.__class__.__name__,
+            table.catalog.__class__.__module__ + "." + table.catalog.__class__.__name__
         )
 
     return read_iceberg(
@@ -502,21 +506,19 @@ def concat(
                     if x in old_schema:
                         exprs.extend(make_col_ref_exprs([old_schema.index(x)], plan))
                     else:
-                        exprs.append(LazyPlan("NullExpression", new_schema, field_idx))
+                        exprs.append(NullExpression(new_schema, field_idx))
                 return exprs
 
             # Create a reordering of the temp a_new_cols so that the columns are in
             # the same order as the Pandas simulation on empty data.
-            a_plan = LazyPlan(
-                "LogicalProjection",
+            a_plan = LogicalProjection(
                 empty_data,
                 a._plan,
                 get_mapping(empty_data, a.columns.tolist(), a._plan),
             )
             # Create a reordering of the temp b_new_cols so that the columns are in
             # the same order as the Pandas simulation on empty data.
-            b_plan = LazyPlan(
-                "LogicalProjection",
+            b_plan = LogicalProjection(
                 empty_data,
                 b._plan,
                 get_mapping(empty_data, b.columns.tolist(), b._plan),
@@ -526,9 +528,7 @@ def concat(
             b_plan = b._plan
 
         # DuckDB Union operator requires schema to already be matching.
-        planUnion = LazyPlan(
-            "LogicalSetOperation", empty_data, a_plan, b_plan, "union all"
-        )
+        planUnion = LogicalSetOperation(empty_data, a_plan, b_plan, "union all")
 
         return wrap_plan(planUnion)
 

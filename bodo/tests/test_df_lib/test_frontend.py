@@ -181,3 +181,33 @@ def test_fallback_warning_on_unknown_attribute():
         warnings.simplefilter("always")
         _ = bdf.A.dtype
     assert not record, f"Shouldn't raise warnings for this attribute: {record[0]}"
+
+
+def test_single_fallback_warning_emitted():
+    """Test that only the initial fallback warning is emitted when falling back to Pandas."""
+    import warnings
+
+    import pandas as pds
+
+    df = pds.DataFrame({"A": ["a", "b", "a", "c"]})
+    bdf = pd.from_pandas(df)
+
+    # pop(0) will fall back and may internally call other methods, but should only raise initial warning.
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        _ = bdf.A.pop(0)
+
+    fallback_warnings = [
+        w for w in record if issubclass(w.category, BodoLibFallbackWarning)
+    ]
+
+    assert len(fallback_warnings) == 1, (
+        f"Expected 1 fallback warning, got {len(fallback_warnings)}:\n{fallback_warnings}"
+    )
+
+    warning_msg = str(fallback_warnings[0].message)
+    assert (
+        "pop" in warning_msg
+        and "not implemented" in warning_msg
+        and "Falling back to Pandas" in warning_msg
+    ), f"Unexpected warning message: {warning_msg}"
