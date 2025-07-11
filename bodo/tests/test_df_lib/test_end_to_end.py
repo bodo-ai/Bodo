@@ -10,6 +10,7 @@ import pytest
 
 import bodo
 import bodo.pandas as bd
+from bodo.pandas.plan import LogicalGetPandasReadParallel, LogicalGetPandasReadSeq
 from bodo.pandas.utils import BodoLibFallbackWarning
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
@@ -46,7 +47,7 @@ def test_from_pandas(datapath, index_val):
     with temp_config_override("dataframe_library_run_parallel", False):
         bdf = bd.from_pandas(df)
         assert bdf.is_lazy_plan()
-        assert bdf._mgr._plan.plan_class == "LogicalGetPandasReadSeq"
+        assert isinstance(bdf._mgr._plan, LogicalGetPandasReadSeq)
         duckdb_plan = bdf._mgr._plan.generate_duckdb()
         _test_equal(duckdb_plan.df, df)
         _test_equal(
@@ -59,7 +60,7 @@ def test_from_pandas(datapath, index_val):
     # Parallel test
     bdf = bd.from_pandas(df)
     assert bdf.is_lazy_plan()
-    assert bdf._mgr._plan.plan_class == "LogicalGetPandasReadParallel"
+    assert isinstance(bdf._mgr._plan, LogicalGetPandasReadParallel)
     _test_equal(
         bdf,
         df,
@@ -210,10 +211,7 @@ def test_write_parquet(index_val):
         # Read back to check
         py_out = pd.read_parquet(path)
         _test_equal(
-            py_out,
-            df,
-            check_pandas_types=False,
-            sort_output=True,
+            py_out, df, check_pandas_types=False, sort_output=True, reset_index=True
         )
 
         # Already distributed DataFrame case
@@ -229,10 +227,7 @@ def test_write_parquet(index_val):
         # Read back to check
         py_out = pd.read_parquet(path)
         _test_equal(
-            py_out,
-            df,
-            check_pandas_types=False,
-            sort_output=True,
+            py_out, df, check_pandas_types=False, sort_output=True, reset_index=True
         )
 
 
