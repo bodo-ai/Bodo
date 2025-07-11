@@ -295,10 +295,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
             or isinstance(other, numbers.Number)
         ):
-            raise BodoLibNotImplementedException(
-                "'other' should be numeric BodoSeries or a numeric. "
-                f"Got {type(other).__name__} instead."
-            )
+            return self._non_arith_binop(other, op, reverse)
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
@@ -335,9 +332,26 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return wrap_plan(plan=plan)
 
     @check_args_fallback("all")
+    def _non_arith_binop(self, other, op, reverse):
+        # TODO: some sort of validation on self and other
+
+        lhs, rhs = (self, other) if not reverse else (other, self)
+        if op == "__add__":
+            return lhs.map(lambda x: x + rhs)
+        if op == "__radd__":
+            return rhs.map(lambda x: lhs + x)
+        if op == "__sub__":
+            return lhs.map(lambda x: x - rhs)
+        if op == "__rsub__":
+            return rhs.map(lambda x: lhs - x)
+
+        raise BodoLibNotImplementedException(
+            f"BodoSeries.{op} is not supported between 'self' of dtype="
+            f"{self.dtype} and 'other' of type {type(other).__name__}."
+        )
+
+    @check_args_fallback("all")
     def __add__(self, other):
-        if _isdatetimelike(self.dtype):
-            return self.map(lambda x: x + other)
         return self._arith_binop(other, "__add__", False)
 
     @check_args_fallback("all")
