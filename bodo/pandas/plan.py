@@ -132,6 +132,17 @@ class LazyPlan:
         cache[id(self)] = ret
         return ret
 
+    def replace_empty_data(self, empty_data):
+        """Replace the empty_data of the plan with a new empty_data."""
+        out = self.__class__(
+            empty_data,
+            *self.args,
+            **self.kwargs,
+        )
+        out.is_series = self.is_series
+        out.pa_schema = self.pa_schema
+        return out
+
 
 class LogicalOperator(LazyPlan):
     """Base class for all logical operators in the Bodo query plan."""
