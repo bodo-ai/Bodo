@@ -336,6 +336,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback("all")
     def __add__(self, other):
+        if _isdatetimelike(self.dtype):
+            return self.map(lambda x: x + other)
         return self._arith_binop(other, "__add__", False)
 
     @check_args_fallback("all")
@@ -1596,6 +1598,10 @@ def _get_series_python_func_plan(
             (expr,) + index_col_refs,
         ),
     )
+
+
+def _isdatetimelike(dtype):
+    return dtype in allowed_types_map["dt_default"]
 
 
 def _split_internal(self, name, pat, n, expand, regex=None):
