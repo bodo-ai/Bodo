@@ -338,19 +338,32 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
         return wrap_plan(plan=plan)
 
-    @check_args_fallback("all")
     def _non_arith_binop(self, other, op, reverse):
         # TODO: some sort of validation on self and other
-
-        lhs, rhs = (self, other) if not reverse else (other, self)
-        if op == "__add__":
-            return lhs.map(lambda x: x + rhs)
-        if op == "__radd__":
-            return rhs.map(lambda x: lhs + x)
-        if op == "__sub__":
-            return lhs.map(lambda x: x - rhs)
-        if op == "__rsub__":
-            return rhs.map(lambda x: lhs - x)
+        # other can't be Series (BodoSeries, pd.Series)
+        if isinstance(other, (BodoSeries, pd.Series)):
+            # TODO: implement Series.add()
+            # TODO: link string series addition with str.cat()
+            if op == "__add__":
+                return self.add(other)
+            if op == "__radd__":
+                return self.radd(other)
+            # TODO: decide whether Series.sub() is necessary
+            if op == "__sub__":
+                return self.sub(other)
+            if op == "__rsub__":
+                return self.rsub(other)
+        # If other is an iterable, fall back to Pandas.
+        elif not isinstance(other, (dict, set, list)):
+            lhs, rhs = (self, other) if not reverse else (other, self)
+            if op == "__add__":
+                return lhs.map(lambda x: x + rhs)
+            if op == "__radd__":
+                return rhs.map(lambda x: lhs + x)
+            if op == "__sub__":
+                return lhs.map(lambda x: x - rhs)
+            if op == "__rsub__":
+                return rhs.map(lambda x: lhs - x)
 
         raise BodoLibNotImplementedException(
             f"BodoSeries.{op} is not supported between 'self' of dtype="
