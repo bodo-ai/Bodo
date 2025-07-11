@@ -228,6 +228,36 @@ class LogicalIcebergWrite(LogicalOperator):
     pass
 
 
+class ColRefExpression(Expression):
+    """Expression representing a column reference in the query plan."""
+
+    pass
+
+
+class NullExpression(Expression):
+    """Expression representing a null value in the query plan."""
+
+    pass
+
+
+class ConstantExpression(Expression):
+    """Expression representing a constant value in the query plan."""
+
+    pass
+
+
+class AggregateExpression(Expression):
+    """Expression representing an aggregate function in the query plan."""
+
+    pass
+
+
+class PythonScalarFuncExpression(Expression):
+    """Expression representing a Python scalar function call in the query plan."""
+
+    pass
+
+
 def execute_plan(plan: LazyPlan):
     """Execute a dataframe plan using Bodo's execution engine.
 
