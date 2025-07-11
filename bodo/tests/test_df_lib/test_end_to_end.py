@@ -276,7 +276,7 @@ def test_filter_pushdown(datapath, file_path, op):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -468,7 +468,7 @@ def test_filter_string_pushdown(datapath):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -528,7 +528,7 @@ def test_filter_datetime_pushdown(datapath, op):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -589,7 +589,7 @@ def test_head_pushdown(datapath):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -1006,6 +1006,86 @@ def test_merge_switch_side():
     _test_equal(
         bdf3.copy(),
         df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_merge_non_equi_cond():
+    """Simple test for non-equi join conditions."""
+    df1 = pd.DataFrame(
+        {
+            "B": pd.array([4, 5, 6], "Int64"),
+            "E": [1.1, 2.2, 3.3],
+            "A": pd.array([2, 2, 3], "Int64"),
+        },
+    )
+    df2 = pd.DataFrame(
+        {
+            "Cat": pd.array([2, 3, 8], "Int64"),
+            "Dog": pd.array([8, 3, 9], "Int64"),
+        },
+    )
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+
+    df4 = df3[df3.B < df3.Dog]
+    bdf4 = bdf3[bdf3.B < bdf3.Dog]
+    # Make sure bdf3 is unevaluated at this point.
+    assert bdf4.is_lazy_plan()
+
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
+    _test_equal(pre, 5)
+    _test_equal(post, 4)
+
+    _test_equal(
+        bdf4.copy(),
+        df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_merge_output_column_to_input_map():
+    """Test for a bug in join output column to input column mapping in
+    TPCH Q20.
+    """
+
+    jn2 = pd.DataFrame(
+        {
+            "PS_PARTKEY": pd.array([1, 4, -3, 5], "Int32"),
+            "PS_SUPPKEY": pd.array([7, 1, -3, 3], "Int32"),
+            "L_QUANTITY": pd.array([5.0, 17.0, 2.0, 29.0], "Float64"),
+        }
+    )
+    supplier = pd.DataFrame(
+        {
+            "S_SUPPKEY": pd.array([-1, 4, 2], "Int32"),
+            "S_NAME": [f"Supplier#{i:09d}" for i in range(3)],
+        }
+    )
+
+    def impl(jn2, supplier):
+        gb = jn2.groupby(["PS_PARTKEY", "PS_SUPPKEY"], as_index=False, sort=False)[
+            "L_QUANTITY"
+        ].sum()
+        jn3 = gb.merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
+        return jn3[["L_QUANTITY", "S_NAME"]]
+
+    pd_out = impl(jn2, supplier)
+    bodo_out = impl(bd.from_pandas(jn2), bd.from_pandas(supplier))
+    assert bodo_out.is_lazy_plan()
+
+    _test_equal(
+        bodo_out,
+        pd_out,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
@@ -1443,7 +1523,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
     # Make sure bodo_filter_a is unevaluated at this point.
     assert bodo_filter_a.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_filter_a._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_filter_a._mgr._plan)
     _test_equal(pre, 3)
     _test_equal(post, 2)
 
@@ -1921,3 +2001,37 @@ def test_groupby_getattr_fallback_behavior():
         pass
     else:
         assert False, "Expected AttributeError when accessing unknown attribute"
+
+
+def test_groupby_apply():
+    """Test for a groupby.aply from TPCH Q8."""
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2] * 12, "Int32"),
+            "B": pd.array([1, 2, 2, 1] * 6, "Int32"),
+            "C": pd.array(list(range(24)), "Int32"),
+        }
+    )
+
+    def impl(df):
+        def udf(df):
+            denom = df["C"].sum()
+            df = df[df["B"] == 2]
+            num = df["C"].sum()
+            return num / denom
+
+        ret = df.groupby("A", as_index=False).apply(udf)
+        ret.columns = ["A", "Q"]
+        return ret
+
+    pd_out = impl(df)
+    bodo_out = impl(bd.from_pandas(df))
+
+    _test_equal(
+        bodo_out,
+        pd_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
