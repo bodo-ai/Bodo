@@ -504,18 +504,6 @@ cdef class LogicalOrder(LogicalOperator):
         return self.sources[0].getCardinality()
 
 
-cdef class LogicalColRef(LogicalOperator):
-    cdef readonly vector[int] select_vec
-
-    def __cinit__(self, object out_schema, LogicalOperator source, select_idxs):
-        self.out_schema = out_schema
-        self.select_vec = select_idxs
-        self.sources = [source]
-
-    def __str__(self):
-        return f"LogicalColRef({self.select_vec}, {self.out_schema})"
-
-
 cpdef get_pushed_down_columns(proj):
     """Get column indices that are pushed down from projection to its source node. Used for testing.
     """
