@@ -165,7 +165,7 @@ class LogicalProjection(LogicalOperator):
     def __init__(self, empty_data, source, exprs):
         self.source = source
         self.exprs = exprs
-        super().__init__("LogicalProjection", empty_data, source, exprs)
+        super().__init__(empty_data, source, exprs)
 
 
 class LogicalFilter(LogicalOperator):
