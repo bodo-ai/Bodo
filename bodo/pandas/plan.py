@@ -140,7 +140,6 @@ class LazyPlan:
             **self.kwargs,
         )
         out.is_series = self.is_series
-        out.pa_schema = self.pa_schema
         return out
 
 
