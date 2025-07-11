@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import inspect
 import itertools
 import numbers
@@ -302,11 +303,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 and pd.api.types.is_numeric_dtype(other.dtype)
             )
             or isinstance(other, numbers.Number)
+            and not isinstance(other, allowed_types_map["binop_dtlike"])
         ):
-            raise BodoLibNotImplementedException(
-                "'other' should be numeric BodoSeries or a numeric. "
-                f"Got {type(other).__name__} instead."
-            )
+            return self._non_arith_binop(other, op, reverse)
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
@@ -340,6 +339,49 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
+
+    def _non_arith_binop(self, other, op, reverse):
+        if isinstance(other, BodoSeries):
+            if (
+                isinstance(self.dtype, pd.ArrowDtype)
+                and self.dtype in allowed_types_map["str_default"]
+                and isinstance(other.dtype, pd.ArrowDtype)
+                and other.dtype in allowed_types_map["str_default"]
+                and op in ("__add__", "__radd__")
+            ):
+                if op == "__add__":
+                    return self.str.cat(other)
+                if op == "__radd__":
+                    return other.str.cat(self)
+
+            # TODO: implement Series.add()
+            if op == "__add__":
+                return self.add(other)
+            if op == "__radd__":
+                return self.radd(other)
+            # TODO: decide whether Series.sub() is necessary
+            if op == "__sub__":
+                return self.sub(other)
+            if op == "__rsub__":
+                return self.rsub(other)
+
+        # If other is an iterable, fall back to Pandas.
+        # TODO: strengthen this check.
+        elif isinstance(other, allowed_types_map["binop_scalar"]):
+            lhs, rhs = (self, other) if not reverse else (other, self)
+            if op == "__add__":
+                return lhs.map(lambda x: x + rhs)
+            if op == "__radd__":
+                return rhs.map(lambda x: lhs + x)
+            if op == "__sub__":
+                return lhs.map(lambda x: x - rhs)
+            if op == "__rsub__":
+                return rhs.map(lambda x: lhs - x)
+
+        raise BodoLibNotImplementedException(
+            f"BodoSeries.{op} is not supported between 'self' of dtype="
+            f"{self.dtype} and 'other' of type {type(other).__name__}."
+        )
 
     @check_args_fallback("all")
     def __add__(self, other):
@@ -1842,12 +1884,12 @@ def validate_dtype(name, obj):
     accessor = name.split(".")[0]
     if accessor == "str":
         if dtype not in allowed_types_map.get(
-            name, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
+            name, (pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string()))
         ):
             raise AttributeError("Can only use .str accessor with string values!")
     if accessor == "dt":
         if dtype not in allowed_types_map.get(
-            name, [pd.ArrowDtype(pa.timestamp("ns")), pd.ArrowDtype(pa.duration("ns"))]
+            name, (pd.ArrowDtype(pa.timestamp("ns")), pd.ArrowDtype(pa.duration("ns")))
         ):
             raise AttributeError("Can only use .dt accessor with datetimelike values!")
 
@@ -2090,21 +2132,21 @@ dir_methods = [
 ]
 
 allowed_types_map = {
-    "str.decode": [
+    "str.decode": (
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.binary()),
         pd.ArrowDtype(pa.large_binary()),
-    ],
-    "str.join": [
+    ),
+    "str.join": (
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.list_(pa.string())),
         pd.ArrowDtype(pa.list_(pa.large_string())),
         pd.ArrowDtype(pa.large_list(pa.string())),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
-    ],
-    "str_default": [
+    ),
+    "str_default": (
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
@@ -2112,16 +2154,40 @@ allowed_types_map = {
         pd.ArrowDtype(pa.list_(pa.string())),
         pd.ArrowDtype(pa.large_binary()),
         pd.ArrowDtype(pa.binary()),
-    ],
-    "dt.round": [
-        pd.ArrowDtype(pa.timestamp("ns")),
-    ],
-    "dt_default": [
+    ),
+    "dt.round": (pd.ArrowDtype(pa.timestamp("ns")),),
+    "dt_default": (
         pd.ArrowDtype(pa.timestamp("ns")),
         pd.ArrowDtype(pa.date64()),
         pd.ArrowDtype(pa.time64("ns")),
         pd.ArrowDtype(pa.duration("ns")),
-    ],
+    ),
+    "binop_scalar": (
+        int,
+        float,
+        str,
+        bool,
+        pd.Timedelta,
+        pd.DateOffset,
+        datetime.timedelta,
+        datetime.datetime,
+        numpy.datetime64,
+        numpy.timedelta64,
+        numpy.int64,
+        numpy.float64,
+        numpy.bool_,
+    ),
+    "binop_dtlike": (
+        pd.Timedelta,
+        pd.DateOffset,
+        datetime.timedelta,
+        datetime.datetime,
+        numpy.datetime64,
+        numpy.timedelta64,
+        numpy.int64,
+        numpy.float64,
+        numpy.bool_,
+    ),
 }
 
 
