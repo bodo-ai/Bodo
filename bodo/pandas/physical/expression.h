@@ -472,7 +472,6 @@ class PhysicalConstantExpression<std::string> : public PhysicalExpression {
     bool generate_array;
 };
 
-#include <iostream>
 /**
  * @brief Physical expression tree node type for getting column from table.
  *
