@@ -475,6 +475,12 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
     return std::make_shared<::arrow::Field>(name, dtype, is_nullable);
 }
 
+std::shared_ptr<::arrow::DataType> DataType::ToArrowDataType() const {
+    std::string dummy = "dummy";
+    std::shared_ptr<::arrow::Field> field = ToArrowType(dummy);
+    return field->type();
+}
+
 std::shared_ptr<::arrow::Field> ArrayType::ToArrowType(
     std::string& name) const {
     std::string element_name = "element";

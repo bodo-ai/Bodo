@@ -1012,6 +1012,47 @@ def test_merge_switch_side():
     )
 
 
+def test_merge_non_equi_cond():
+    """Simple test for non-equi join conditions."""
+    df1 = pd.DataFrame(
+        {
+            "B": pd.array([4, 5, 6], "Int64"),
+            "E": [1.1, 2.2, 3.3],
+            "A": pd.array([2, 2, 3], "Int64"),
+        },
+    )
+    df2 = pd.DataFrame(
+        {
+            "Cat": pd.array([2, 3, 8], "Int64"),
+            "Dog": pd.array([8, 3, 9], "Int64"),
+        },
+    )
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+
+    df4 = df3[df3.B < df3.Dog]
+    bdf4 = bdf3[bdf3.B < bdf3.Dog]
+    # Make sure bdf3 is unevaluated at this point.
+    assert bdf4.is_lazy_plan()
+
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
+    _test_equal(pre, 5)
+    _test_equal(post, 4)
+
+    _test_equal(
+        bdf4.copy(),
+        df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_merge_output_column_to_input_map():
     """Test for a bug in join output column to input column mapping in
     TPCH Q20.
@@ -1944,3 +1985,37 @@ def test_series_agg():
     bodo_out = bdf.A.aggregate(["min", "max", "count", "product"])
     pd_out = df.A.aggregate(["min", "max", "count", "product"])
     _test_equal(bodo_out, pd_out, check_pandas_types=False)
+
+
+def test_groupby_apply():
+    """Test for a groupby.aply from TPCH Q8."""
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2] * 12, "Int32"),
+            "B": pd.array([1, 2, 2, 1] * 6, "Int32"),
+            "C": pd.array(list(range(24)), "Int32"),
+        }
+    )
+
+    def impl(df):
+        def udf(df):
+            denom = df["C"].sum()
+            df = df[df["B"] == 2]
+            num = df["C"].sum()
+            return num / denom
+
+        ret = df.groupby("A", as_index=False).apply(udf)
+        ret.columns = ["A", "Q"]
+        return ret
+
+    pd_out = impl(df)
+    bodo_out = impl(bd.from_pandas(df))
+
+    _test_equal(
+        bodo_out,
+        pd_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
