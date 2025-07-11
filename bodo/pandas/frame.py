@@ -39,8 +39,19 @@ from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.plan import (
+    ConstantExpression,
     LazyPlan,
     LazyPlanDistributedArg,
+    LogicalComparisonJoin,
+    LogicalFilter,
+    LogicalGetPandasReadParallel,
+    LogicalGetPandasReadSeq,
+    LogicalIcebergWrite,
+    LogicalLimit,
+    LogicalOrder,
+    LogicalParquetWrite,
+    LogicalProjection,
+    PythonScalarFuncExpression,
     _get_df_python_func_plan,
     execute_plan,
     get_proj_expr_single,
@@ -163,8 +174,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 nrows = len(self)
                 self._source_plan = (
                     empty_data,
-                    LazyPlan(
-                        "LogicalGetPandasReadParallel",
+                    LogicalGetPandasReadParallel(
                         empty_data,
                         nrows,
                         LazyPlanDistributedArg(self),
@@ -173,8 +183,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             else:
                 self._source_plan = (
                     empty_data,
-                    LazyPlan(
-                        "LogicalGetPandasReadSeq",
+                    LogicalGetPandasReadSeq(
                         empty_data,
                         self,
                     ),
@@ -261,8 +270,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ):
                 from bodo.pandas.base import _empty_like
 
-                planLimit = LazyPlan(
-                    "LogicalLimit",
+                planLimit = LogicalLimit(
                     _empty_like(self),
                     self._plan,
                     n,
@@ -335,11 +343,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             warnings.warn(
                 "BodoDataFrame::rename copy=False argument ignored assuming A=A.rename(copy=False) idiom."
             )
-        renamed_plan = LazyPlan(
-            orig_plan.plan_class,
-            orig_plan.empty_data.rename(columns=columns),
-            *orig_plan.args,
-            **orig_plan.kwargs,
+        renamed_plan = orig_plan.replace_empty_data(
+            orig_plan.empty_data.rename(columns=columns)
         )
         return wrap_plan(renamed_plan)
 
@@ -382,8 +387,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, False)
 
-        write_plan = LazyPlan(
-            "LogicalParquetWrite",
+        write_plan = LogicalParquetWrite(
             _empty_like(self),
             self._plan,
             path,
@@ -494,8 +498,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         compression = properties.get("write.parquet.compression-codec", "snappy")
         # TODO: support Theta sketches
 
-        write_plan = LazyPlan(
-            "LogicalIcebergWrite",
+        write_plan = LogicalIcebergWrite(
             _empty_like(self),
             self._plan,
             table_loc,
@@ -864,8 +867,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
 
-        planComparisonJoin = LazyPlan(
-            "LogicalComparisonJoin",
+        planComparisonJoin = LogicalComparisonJoin(
             empty_join_out,
             self._plan,
             right._plan,
@@ -886,8 +888,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         # Create column reference expressions for selected columns
         exprs = make_col_ref_exprs(col_indices, planComparisonJoin)
-        proj_plan = LazyPlan(
-            "LogicalProjection",
+        proj_plan = LogicalProjection(
             empty_data,
             planComparisonJoin,
             exprs,
@@ -977,7 +978,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             zero_size_key = _empty_like(key)
             empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
-                plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
+                plan=LogicalFilter(empty_data, self._plan, key_plan),
             )
         else:
             """ This is selecting one or more columns. Be a bit more
@@ -1006,8 +1007,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
             empty_data = zero_size_self.__getitem__(key[0] if output_series else key)
             return wrap_plan(
-                plan=LazyPlan(
-                    "LogicalProjection",
+                plan=LogicalProjection(
                     empty_data,
                     self._plan,
                     exprs,
@@ -1056,8 +1056,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 ikey = None
                 is_replace = False
 
-            const_expr = LazyPlan(
-                "ConstantExpression",
+            const_expr = ConstantExpression(
                 # Dummy empty data for LazyPlan
                 empty_data,
                 value,
@@ -1075,8 +1074,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 pa_type = pa.timestamp("ns", pa_type.tz)
             empty_data[key] = empty_data[key].astype(pd.ArrowDtype(pa_type))
 
-            new_plan = LazyPlan(
-                "LogicalProjection",
+            new_plan = LogicalProjection(
                 empty_data,
                 self._plan,
                 proj_exprs,
@@ -1244,8 +1242,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         zero_size_self = _empty_like(self)
 
         return wrap_plan(
-            plan=LazyPlan(
-                "LogicalOrder",
+            plan=LogicalOrder(
                 zero_size_self,
                 self._plan,
                 ascending,
@@ -1284,8 +1281,7 @@ def _update_func_expr_source(
             n_source_cols + get_n_index_arrays(new_source_plan.empty_data.index),
         )
     )
-    expr = LazyPlan(
-        "PythonScalarFuncExpression",
+    expr = PythonScalarFuncExpression(
         func_expr.empty_data,
         new_source_plan,
         func_expr.args[1],
@@ -1314,37 +1310,20 @@ def _add_proj_expr_to_plan(
     # Get the function expression from the value plan to be added
     func_expr = get_proj_expr_single(value_plan)
 
-    if func_expr.plan_class == "PythonScalarFuncExpression":
-        func_expr = (
-            _update_func_expr_source(func_expr, df_plan, ikey)
-            if replace_func_source
-            # Copy the function expression to avoid modifying the original one below
-            else LazyPlan(
-                "PythonScalarFuncExpression",
-                func_expr.empty_data,
-                *func_expr.args,
-                **func_expr.kwargs,
-            )
-        )
-    else:
-        # Copy since empty_data is changed below
-        func_expr = LazyPlan(
-            func_expr.plan_class,
-            func_expr.empty_data,
-            *func_expr.args,
-            **func_expr.kwargs,
-        )
+    if isinstance(func_expr, PythonScalarFuncExpression) and replace_func_source:
+        func_expr = _update_func_expr_source(func_expr, df_plan, ikey)
 
     # Update output column name
-    func_expr.empty_data = func_expr.empty_data.set_axis([key], axis=1)
+    func_expr = func_expr.replace_empty_data(
+        func_expr.empty_data.set_axis([key], axis=1)
+    )
 
     proj_exprs = _get_setitem_proj_exprs(
         in_empty_df, df_plan, ikey, is_replace, func_expr
     )
     empty_data = df_plan.empty_data.copy()
     empty_data[key] = value_plan.empty_data.copy()
-    new_plan = LazyPlan(
-        "LogicalProjection",
+    new_plan = LogicalProjection(
         empty_data,
         df_plan,
         proj_exprs,
