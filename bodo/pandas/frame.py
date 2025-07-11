@@ -39,12 +39,19 @@ from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyBlockManager, LazyMetadataMixin
 from bodo.pandas.plan import (
+    ConstantExpression,
     LazyPlan,
     LazyPlanDistributedArg,
     LogicalComparisonJoin,
     LogicalFilter,
+    LogicalGetPandasReadParallel,
+    LogicalGetPandasReadSeq,
+    LogicalIcebergWrite,
     LogicalLimit,
+    LogicalOrder,
+    LogicalParquetWrite,
     LogicalProjection,
+    PythonScalarFuncExpression,
     _get_df_python_func_plan,
     execute_plan,
     get_proj_expr_single,
@@ -167,8 +174,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 nrows = len(self)
                 self._source_plan = (
                     empty_data,
-                    LazyPlan(
-                        "LogicalGetPandasReadParallel",
+                    LogicalGetPandasReadParallel(
                         empty_data,
                         nrows,
                         LazyPlanDistributedArg(self),
@@ -177,8 +183,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             else:
                 self._source_plan = (
                     empty_data,
-                    LazyPlan(
-                        "LogicalGetPandasReadSeq",
+                    LogicalGetPandasReadSeq(
                         empty_data,
                         self,
                     ),
@@ -385,8 +390,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, False)
 
-        write_plan = LazyPlan(
-            "LogicalParquetWrite",
+        write_plan = LogicalParquetWrite(
             _empty_like(self),
             self._plan,
             path,
@@ -497,8 +501,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         compression = properties.get("write.parquet.compression-codec", "snappy")
         # TODO: support Theta sketches
 
-        write_plan = LazyPlan(
-            "LogicalIcebergWrite",
+        write_plan = LogicalIcebergWrite(
             _empty_like(self),
             self._plan,
             table_loc,
@@ -1056,8 +1059,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 ikey = None
                 is_replace = False
 
-            const_expr = LazyPlan(
-                "ConstantExpression",
+            const_expr = ConstantExpression(
                 # Dummy empty data for LazyPlan
                 empty_data,
                 value,
@@ -1243,8 +1245,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         zero_size_self = _empty_like(self)
 
         return wrap_plan(
-            plan=LazyPlan(
-                "LogicalOrder",
+            plan=LogicalOrder(
                 zero_size_self,
                 self._plan,
                 ascending,
@@ -1283,8 +1284,7 @@ def _update_func_expr_source(
             n_source_cols + get_n_index_arrays(new_source_plan.empty_data.index),
         )
     )
-    expr = LazyPlan(
-        "PythonScalarFuncExpression",
+    expr = PythonScalarFuncExpression(
         func_expr.empty_data,
         new_source_plan,
         func_expr.args[1],

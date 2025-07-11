@@ -258,6 +258,32 @@ class PythonScalarFuncExpression(Expression):
     pass
 
 
+class ComparisonOpExpression(Expression):
+    """Expression representing a comparison operation in the query plan."""
+
+    pass
+
+
+class ConjunctionOpExpression(Expression):
+    """Expression representing a conjunction (AND) operation in the query plan."""
+
+    pass
+
+
+class UnaryOpExpression(Expression):
+    """Expression representing a unary operation (e.g. negation) in the query plan."""
+
+    pass
+
+
+class ArithOpExpression(Expression):
+    """Expression representing an arithmetic operation (e.g. addition, subtraction)
+    in the query plan.
+    """
+
+    pass
+
+
 def execute_plan(plan: LazyPlan):
     """Execute a dataframe plan using Bodo's execution engine.
 
@@ -424,7 +450,7 @@ def make_col_ref_exprs(key_indices, src_plan):
         # Using Arrow schema instead of zero_size_self.iloc to handle Index
         # columns correctly.
         empty_data = arrow_to_empty_df(pa.schema([src_plan.pa_schema[k]]))
-        p = LazyPlan("ColRefExpression", empty_data, src_plan, k)
+        p = ColRefExpression(empty_data, src_plan, k)
         exprs.append(p)
 
     return exprs
@@ -486,8 +512,7 @@ def count_plan(self):
         self._plan,
         [],
         [
-            LazyPlan(
-                "AggregateExpression",
+            AggregateExpression(
                 count_star_schema,
                 self._plan,
                 "count_star",
@@ -513,8 +538,7 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
     PythonScalarFuncExpression with provided arguments and a LogicalProjection.
     """
     df_len = len(df_plan.empty_data.columns)
-    udf_arg = LazyPlan(
-        "PythonScalarFuncExpression",
+    udf_arg = PythonScalarFuncExpression(
         empty_data,
         df_plan,
         (

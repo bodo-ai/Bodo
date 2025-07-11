@@ -33,11 +33,15 @@ from pandas.io.parsers.readers import _c_parser_defaults
 import bodo.spawn.spawner  # noqa: F401
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.plan import (
-    LazyPlan,
     LazyPlanDistributedArg,
+    LogicalGetIcebergRead,
+    LogicalGetPandasReadParallel,
+    LogicalGetPandasReadSeq,
+    LogicalGetParquetRead,
     LogicalLimit,
     LogicalProjection,
     LogicalSetOperation,
+    NullExpression,
     _get_df_python_func_plan,
     make_col_ref_exprs,
 )
@@ -78,14 +82,13 @@ def from_pandas(df):
 
     res_id = None
     if bodo.dataframe_library_run_parallel:
-        plan = LazyPlan(
-            "LogicalGetPandasReadParallel",
+        plan = LogicalGetPandasReadParallel(
             empty_df,
             n_rows,
             LazyPlanDistributedArg(df),
         )
     else:
-        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
+        plan = LogicalGetPandasReadSeq(empty_df, df)
 
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
@@ -118,8 +121,7 @@ def read_parquet(
 
     empty_df = arrow_to_empty_df(arrow_schema)
 
-    plan = LazyPlan(
-        "LogicalGetParquetRead",
+    plan = LogicalGetParquetRead(
         empty_df,
         path,
         storage_options,
@@ -230,8 +232,7 @@ def read_iceberg(
         filter_selectivity_estimate = 0.2
         table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
 
-    plan = LazyPlan(
-        "LogicalGetIcebergRead",
+    plan = LogicalGetIcebergRead(
         empty_df,
         table_identifier,
         catalog_name,
@@ -505,7 +506,7 @@ def concat(
                     if x in old_schema:
                         exprs.extend(make_col_ref_exprs([old_schema.index(x)], plan))
                     else:
-                        exprs.append(LazyPlan("NullExpression", new_schema, field_idx))
+                        exprs.append(NullExpression(new_schema, field_idx))
                 return exprs
 
             # Create a reordering of the temp a_new_cols so that the columns are in

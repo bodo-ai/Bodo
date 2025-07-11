@@ -14,7 +14,7 @@ from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
 from bodo.pandas.plan import (
-    LazyPlan,
+    AggregateExpression,
     LogicalAggregate,
     LogicalProjection,
     make_col_ref_exprs,
@@ -411,8 +411,7 @@ def _groupby_agg_plan(
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
     exprs = [
-        LazyPlan(
-            "AggregateExpression",
+        AggregateExpression(
             empty_data.iloc[:, i]
             if isinstance(empty_data, pd.DataFrame)
             else empty_data,
