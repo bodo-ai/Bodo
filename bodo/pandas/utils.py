@@ -293,7 +293,13 @@ def check_args_fallback(
                             start_time = time.perf_counter()
                             ret = func(*args, **kwargs)
                             global top_time
-                            top_time += time.perf_counter() - start_time
+                            time_this_call = time.perf_counter() - start_time
+                            print(
+                                "profile_time top_level",
+                                func.__qualname__,
+                                time_this_call,
+                            )
+                            top_time += time_this_call
                             return ret
                         except BodoLibNotImplementedException as e:
                             # Fall back to Pandas below
@@ -333,7 +339,11 @@ def check_args_fallback(
                             start_time = time.perf_counter()
                             ret = func(self, *args, **kwargs)
                             global method_time
-                            method_time += time.perf_counter() - start_time
+                            time_this_call = time.perf_counter() - start_time
+                            print(
+                                "profile_time method", func.__qualname__, time_this_call
+                            )
+                            method_time += time_this_call
                             return ret
                         except BodoLibNotImplementedException as e:
                             # Fall back to Pandas below
