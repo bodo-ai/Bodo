@@ -214,6 +214,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
         # Already distributed DataFrame case
@@ -233,6 +234,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
 
