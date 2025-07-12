@@ -1133,7 +1133,9 @@ def get_scanner_batches(
     rows_to_read: int,  # total number of rows this process is going to read
     partitioning,
     schema: pa.Schema,
-    batch_size: int | None = None,
+    batch_size: int,
+    batch_readahead: int,
+    fragment_readahed: int,
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
     that match filters (or all rows if filters is None). Only project the
@@ -1190,10 +1192,10 @@ def get_scanner_batches(
         # this at some point.
         columns=selected_names,
         filter=filters,
-        batch_size=batch_size or 128 * 1024,
+        batch_size=batch_size,
         use_threads=True,
-        # XXX Specify batch_readahead (default: 16)?
-        # XXX Specify fragment_readahead (default: 4)?
+        batch_readahead=batch_readahead,
+        fragment_readahead=fragment_readahed,
         # XXX Specify memory pool?
     ).to_reader()
     return rb_reader, start_offset

@@ -362,7 +362,7 @@ def get_table_length(table, snapshot_id: int = -1) -> int:
             for entry in manifest_entries:
                 if (
                     entry.status == ManifestEntryStatus.DELETED
-                    or entry.content != ManifestContent.DATA
+                    or manifest.content != ManifestContent.DATA
                 ):
                     continue
                 datafile = entry.data_file
