@@ -189,6 +189,36 @@ def test_read_parquet_series_len_shape(datapath):
     assert bodo_out.is_lazy_plan()
 
 
+def test_read_parquet_filter_projection(datapath):
+    """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
+    and filter column isn't used anywhere in the query.
+    """
+    path = datapath("dataframe_library/q6_sample.pq")
+
+    def impl(lineitem):
+        date1 = pd.Timestamp("1996-01-01")
+        sel = (lineitem.L_SHIPDATE >= date1) & (lineitem.L_DISCOUNT >= 0.08)
+        flineitem = lineitem[sel]
+        return flineitem.L_EXTENDEDPRICE
+
+    bodo_df = bd.read_parquet(path)
+    bodo_df["L_SHIPDATE"] = bd.to_datetime(bodo_df.L_SHIPDATE, format="%Y-%m-%d")
+    py_df = pd.read_parquet(path)
+    py_df["L_SHIPDATE"] = pd.to_datetime(py_df.L_SHIPDATE, format="%Y-%m-%d")
+
+    bodo_out = impl(bodo_df)
+    assert bodo_out.is_lazy_plan()
+    py_out = impl(py_df)
+
+    _test_equal(
+        bodo_out.copy(),
+        py_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
     df = pd.DataFrame(
