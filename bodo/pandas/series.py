@@ -849,7 +849,7 @@ class BodoStringMethods:
             )
 
         # Validates input series and others series are from same df, falls back to Pandas otherwise
-        base_plan = zip_series_plan(self._series, others)
+        base_plan, arg_inds = zip_series_plan(self._series, others)
         index = base_plan.empty_data.index
 
         new_metadata = pd.Series(
@@ -862,7 +862,7 @@ class BodoStringMethods:
             base_plan,
             new_metadata,
             "bodo.pandas.series._str_cat_helper",
-            (sep, na_rep),
+            (sep, na_rep, *arg_inds),
             {},
             is_method=False,
         )
@@ -1334,14 +1334,14 @@ def _components_helper(s):
     return pd.Series([df.iloc[i, :].tolist() for i in range(len(s))])
 
 
-def _str_cat_helper(df, sep, na_rep):
+def _str_cat_helper(df, sep, na_rep, left_idx=0, right_idx=1):
     """Concatenates df[idx] for idx in idx_pair, separated by sep."""
     if sep is None:
         sep = ""
 
     # df is a two-column DataFrame created in zip_series_plan().
-    lhs_col = df.iloc[:, 0]
-    rhs_col = df.iloc[:, 1]
+    lhs_col = df.iloc[:, left_idx]
+    rhs_col = df.iloc[:, right_idx]
 
     return lhs_col.str.cat(rhs_col, sep, na_rep)
 
@@ -1476,17 +1476,29 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
 
     # Initializes index columns info.
     columns = lhs_list[0].empty_data.columns
-    n_index_arrays = get_n_index_arrays(lhs.index)
+    index = lhs_list[0].empty_data.index
+    n_index_arrays = get_n_index_arrays(index)
     n_cols = len(columns)
 
     default_schema = pa.field("default", pa.large_string())
     left_schema, right_schema = default_schema, default_schema
     left_empty_data, right_empty_data = None, None
-    index = lhs_list[0].empty_data.index
+    arg_inds = (0, 1)
+
+    # Shortcut for columns of same dataframe cases like df.A.str.cat(df.B) to avoid
+    # creating an extra projection (which causes issues in df setitem).
+    if (
+        len(lhs_list) == 2
+        and len(rhs_list) == 2
+        and isinstance(lhs_list[1].exprs[0], ColRefExpression)
+        and isinstance(rhs_list[1].exprs[0], ColRefExpression)
+    ):
+        arg_inds = (lhs_list[1].exprs[0].args[1], rhs_list[1].exprs[0].args[1])
+        return result, arg_inds
 
     # Pads shorter list with None values.
-    for i, (lhs_part, rhs_part) in enumerate(
-        itertools.zip_longest(lhs_list[1:], rhs_list[1:], fillvalue=None)
+    for lhs_part, rhs_part in itertools.zip_longest(
+        lhs_list[1:], rhs_list[1:], fillvalue=None
     ):
         # Create the plan for the shared part
         left_expr = None if not lhs_part else lhs_part.args[1][0]
@@ -1539,7 +1551,7 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
             first = False
             n_cols = 2
 
-    return result
+    return result, arg_inds
 
 
 def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
