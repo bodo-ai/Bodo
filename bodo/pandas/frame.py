@@ -1364,8 +1364,14 @@ def _get_setitem_proj_exprs(
         else:
             data_cols.append(make_col_ref_exprs([k], df_plan)[0])
 
-    if not is_replace:
-        # New column should be at the end of data columns to match Pandas
+    # New column should be at the end of data columns to match Pandas
+    # NOTE: output column name may be in source dataframe but not in projected source
+    # so skipped in the loop above but needs added here. Example:
+    # df2 = df[["B", "D"]]
+    # df2["A"] = df["A"] + df["C"]
+    if not is_replace or (
+        out_columns is not None and in_empty_df.columns[ikey] not in out_columns
+    ):
         data_cols.append(func_expr)
 
     index_cols = make_col_ref_exprs(
