@@ -255,7 +255,10 @@ class LogicalIcebergWrite(LogicalOperator):
 class ColRefExpression(Expression):
     """Expression representing a column reference in the query plan."""
 
-    pass
+    def __init__(self, empty_data, source, col_index):
+        self.source = source
+        self.col_index = col_index
+        super().__init__(empty_data, source, col_index)
 
 
 class NullExpression(Expression):
@@ -329,15 +332,6 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
-            # Sometimes when an execution is triggered it isn't expected that
-            # an execution should happen at that point.  This traceback is
-            # useful to identify what is triggering the execution as it may be
-            # a bug or the usage of some Pandas API that calls a function that
-            # triggers execution.  This traceback can help fix the bug or
-            # select a different Pandas API or an internal Pandas function that
-            # bypasses the issue.
-            traceback.print_stack(file=sys.stdout)
-            print("")  # Print on new line during tests.
             print("Unoptimized plan")
             print(duckdb_plan.toString())
 
@@ -375,23 +369,41 @@ def execute_plan(plan: LazyPlan):
         for a in plan.args:
             _init_lazy_distributed_arg(a)
 
+        if bodo.dataframe_library_dump_plans:
+            # Sometimes when an execution is triggered it isn't expected that
+            # an execution should happen at that point.  This traceback is
+            # useful to identify what is triggering the execution as it may be
+            # a bug or the usage of some Pandas API that calls a function that
+            # triggers execution.  This traceback can help fix the bug or
+            # select a different Pandas API or an internal Pandas function that
+            # bypasses the issue.
+            traceback.print_stack(file=sys.stdout)
+            print("")  # Print on new line during tests.
+
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
 
 
-def _init_lazy_distributed_arg(arg):
+def _init_lazy_distributed_arg(arg, visited_plans=None):
     """Initialize the LazyPlanDistributedArg objects for the given plan argument that
     may need scattering data to workers before execution.
     Has to be called right before plan execution since the dataframe state
     may change (distributed to collected) and the result ID may not be valid anymore.
     """
+    if visited_plans is None:
+        # Keep track of visited LazyPlans to prevent extra checks.
+        visited_plans = set()
+
     if isinstance(arg, LazyPlan):
+        if id(arg) in visited_plans:
+            return
+        visited_plans.add(id(arg))
         for a in arg.args:
-            _init_lazy_distributed_arg(a)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, (tuple, list)):
         for a in arg:
-            _init_lazy_distributed_arg(a)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, LazyPlanDistributedArg):
         arg.init()
 
