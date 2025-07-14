@@ -463,6 +463,13 @@ def is_single_colref_projection(proj: LazyPlan):
     return is_single_projection(proj) and isinstance(proj.exprs[0], ColRefExpression)
 
 
+def is_colref_projection(proj: LazyPlan):
+    """Return True if plan is a projection with all expressions being column references"""
+    return isinstance(proj, LogicalProjection) and all(
+        isinstance(expr, ColRefExpression) for expr in proj.exprs
+    )
+
+
 def make_col_ref_exprs(key_indices, src_plan):
     """Create column reference expressions for the given key indices for the input
     source plan.

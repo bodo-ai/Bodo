@@ -889,6 +889,50 @@ def test_set_df_column_arith(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+def test_set_df_column_extra_proj(datapath, index_val):
+    """Test setting a dataframe column with a Series function of the same dataframe to
+    a dataframe that has column projections on top of the source dataframe.
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+
+    # Single projection, new column
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C"]]
+    bdf2["D"] = bdf["A"] + bdf["C"]
+    pdf = df.copy()
+    pdf2 = pdf[["B", "C"]]
+    pdf2["D"] = pdf["A"] + pdf["C"]
+    assert bdf2.is_lazy_plan()
+    _test_equal(bdf2, pdf2, check_pandas_types=False)
+
+    # Multiple projections, new column
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C"]]
+    bdf2["D"] = bdf["B"].str.strip().str.lower()
+    pdf = df.copy()
+    pdf2 = pdf[["B", "C"]]
+    pdf2["D"] = pdf["B"].str.strip().str.lower()
+    assert bdf2.is_lazy_plan()
+    _test_equal(bdf2, pdf2, check_pandas_types=False)
+
+    # Single projection, existing column in source dataframe
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C"]]
+    bdf2["A"] = bdf["A"] + bdf["C"]
+    pdf = df.copy()
+    pdf2 = pdf[["B", "C"]]
+    pdf2["A"] = pdf["A"] + pdf["C"]
+    assert bdf2.is_lazy_plan()
+    _test_equal(bdf2, pdf2, check_pandas_types=False)
+
+
 def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
