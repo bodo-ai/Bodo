@@ -50,6 +50,14 @@ class DataFrameGroupBy:
         self._dropna = dropna
         self._selection = selection
 
+    @property
+    def selection_for_plan(self):
+        return (
+            self._selection
+            if self._selection is not None
+            else list(filter(lambda col: col not in self._keys, self._obj.columns))
+        )
+
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
         """
         Return a DataFrameGroupBy or SeriesGroupBy for the selected data columns.
@@ -257,6 +265,14 @@ class SeriesGroupBy:
         self._as_index = as_index
         self._dropna = dropna
 
+    @property
+    def selection_for_plan(self):
+        return (
+            self._selection
+            if self._selection is not None
+            else list(filter(lambda col: col not in self._keys, self._obj.columns))
+        )
+
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
         try:
@@ -397,11 +413,7 @@ def _groupby_agg_plan(
     """Compute groupby.func() on the Series or DataFrame GroupBy object."""
     from bodo.pandas.base import _empty_like
 
-    grouped_selection = (
-        grouped._selection
-        if grouped._selection is not None
-        else list(filter(lambda col: col not in grouped._keys, grouped._obj.columns))
-    )
+    grouped_selection = grouped.selection_for_plan
 
     zero_size_df = _empty_like(grouped._obj)
     empty_data_pandas = zero_size_df.groupby(grouped._keys, as_index=grouped._as_index)[
