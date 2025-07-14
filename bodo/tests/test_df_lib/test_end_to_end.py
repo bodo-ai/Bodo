@@ -1974,6 +1974,32 @@ def test_series_describe():
         _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
 
 
+def test_groupby_getattr_fallback_behavior():
+    import warnings
+
+    import pandas as pds
+
+    df = pds.DataFrame({"apply": [1], "B": [1], "C": [2]})
+    bdf = bd.from_pandas(df)
+
+    grouped = bdf.groupby("B")
+
+    # Accessing a column: should not raise a warning
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        _ = grouped.B
+    assert not record, f"Unexpected warning when accessing column: {record}"
+
+    # Accessing an implemented Pandas GroupBy method: should raise fallback warning
+    with pytest.warns(BodoLibFallbackWarning) as record:
+        _ = grouped.apply
+    assert len(record) == 1
+
+    # Accessing unknown attribute: should raise AttributeError
+    with pytest.raises(AttributeError):
+        _ = grouped.not_a_column
+
+
 def test_series_agg():
     import pandas as pd
 
@@ -1992,7 +2018,7 @@ def test_series_agg():
 
 
 def test_groupby_apply():
-    """Test for a groupby.aply from TPCH Q8."""
+    """Test for a groupby.apply from TPCH Q8."""
 
     df = pd.DataFrame(
         {
