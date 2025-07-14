@@ -351,17 +351,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 if op == "__radd__":
                     return other.str.cat(self)
 
-            # TODO: implement Series.add()
-            if op == "__add__":
-                return self.add(other)
-            if op == "__radd__":
-                return self.radd(other)
-            # TODO: decide whether Series.sub() is necessary
-            if op == "__sub__":
-                return self.sub(other)
-            if op == "__rsub__":
-                return self.rsub(other)
-
         # If other is an iterable, fall back to Pandas.
         # TODO: strengthen this check.
         elif isinstance(other, allowed_types_map["binop_scalar"]):
