@@ -835,16 +835,17 @@ def fallback_wrapper(self, attr):
                 )
             )
             # TODO: generalize this. Currently, this method is only used for BodoSeries.
-            pd_self = pd.Series(self)
+            if isinstance(self, bodo.pandas.BodoSeries):
+                pd_self = pd.Series(self)
 
-            # self.dtype = pd.ArrowDtype(pa.timestamp("ns")): map to_datetime.
-            if (
-                isinstance(pd_self.dtype, pd.ArrowDtype)
-                and pd_self.dtype.type == pd.Timestamp
-            ):
-                converted = pd_self.map(lambda x: pd.to_datetime(x))
-                # TODO: check if args[1:] is safe/appropriate for all cases.
-                return getattr(converted, attr.__name__)(*args[1:], **kwargs)
+                # When self.dtype is pd.ArrowDtype(pa.timestamp("ns")), apply to_datetime elementwise.
+                if (
+                    isinstance(pd_self.dtype, pd.ArrowDtype)
+                    and pd_self.dtype.type == pd.Timestamp
+                ):
+                    converted = pd_self.map(lambda x: pd.to_datetime(x))
+                    # TODO: check if args[1:] is safe/appropriate for all cases.
+                    return getattr(converted, attr.__name__)(*args[1:], **kwargs)
 
             # Raise TypeError from initial call if self does not fall into any of the covered cases.
             raise TypeError(msg)
