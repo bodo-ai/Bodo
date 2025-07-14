@@ -1441,12 +1441,12 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
     if expr is None:
         idx = 1 if side == "right" else 0
         empty_data = arrow_to_empty_df(pa.schema([schema[idx]]))
-        return ColRefExpression(empty_data, plan, (idx))
+        return ColRefExpression(empty_data, plan, idx)
     elif is_col_ref(expr):
         idx = expr.args[1]
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
-        return ColRefExpression(empty_data, plan, (idx))
+        return ColRefExpression(empty_data, plan, idx)
     elif is_scalar_func(expr):
         idx = expr.args[2][0]
         idx = get_new_idx(idx, first, side)
@@ -1493,7 +1493,7 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
         and isinstance(lhs_list[1].exprs[0], ColRefExpression)
         and isinstance(rhs_list[1].exprs[0], ColRefExpression)
     ):
-        arg_inds = (lhs_list[1].exprs[0].args[1], rhs_list[1].exprs[0].args[1])
+        arg_inds = (lhs_list[1].exprs[0].col_index, rhs_list[1].exprs[0].col_index)
         return result, arg_inds
 
     # Pads shorter list with None values.
