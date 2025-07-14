@@ -1266,7 +1266,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
 
 def _update_func_expr_source(
-    func_expr: LazyPlan, new_source_plan: LazyPlan, col_index_offset: int
+    func_expr: PythonScalarFuncExpression,
+    new_source_plan: LazyPlan,
+    col_index_offset: int,
 ):
     """Update source plan of PythonScalarFuncExpression and add an offset to its
     input data column index.
