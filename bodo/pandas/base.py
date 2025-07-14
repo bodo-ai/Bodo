@@ -77,7 +77,6 @@ def from_pandas(df):
 
     # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
     pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
-
     empty_df = arrow_to_empty_df(pa_schema)
     n_rows = len(df)
 
@@ -119,6 +118,7 @@ def read_parquet(
         "hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
+
     empty_df = arrow_to_empty_df(arrow_schema)
 
     plan = LogicalGetParquetRead(
