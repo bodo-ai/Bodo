@@ -1318,6 +1318,37 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo_copy(
     return out_arr;
 }
 
+template <typename ArrowArrayType, typename ArrowArrayLargeType>
+std::shared_ptr<array_info> arrow_string_binary_array_to_bodo_dispatch(
+    std::shared_ptr<arrow::Array> arrow_arr,
+    std::shared_ptr<arrow::DataType> large_type,
+    Bodo_CTypes::CTypeEnum bodo_ctype, int64_t array_id,
+    bodo::IBufferPool *src_pool) {
+    using in_offset_t = typename ArrowArrayType::offset_type;
+    auto arrow_bin_arr = static_pointer_cast<ArrowArrayType>(arrow_arr);
+    in_offset_t *in_offsets = (in_offset_t *)arrow_bin_arr->raw_value_offsets();
+    in_offset_t first_offset = in_offsets[0];
+
+    if (first_offset == 0) {
+        if (!std::is_same<ArrowArrayType, ArrowArrayLargeType>::value) {
+            auto res = arrow::compute::Cast(
+                *arrow_arr, large_type, arrow::compute::CastOptions::Safe(),
+                bodo::default_buffer_exec_context());
+            std::shared_ptr<arrow::Array> casted_arr;
+            CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+            arrow_arr = casted_arr;
+        }
+        return arrow_string_binary_array_to_bodo(
+            std::static_pointer_cast<ArrowArrayLargeType>(arrow_arr),
+            bodo_ctype, array_id, src_pool);
+    } else {
+        return arrow_string_binary_array_to_bodo_copy<ArrowArrayType,
+                                                      in_offset_t>(
+            std::static_pointer_cast<ArrowArrayType>(arrow_arr), bodo_ctype,
+            array_id, src_pool);
+    }
+}
+
 /**
  * @brief Convert Arrow dict-encoded array to Bodo array_info with zero-copy.
  * The output Bodo array holds references to the Arrow array's buffers and
@@ -1359,102 +1390,26 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
     std::shared_ptr<arrow::Array> arrow_arr, bodo::IBufferPool *src_pool,
     int64_t array_id, std::shared_ptr<array_info> dicts_ref_arr) {
     switch (arrow_arr->type_id()) {
-        case arrow::Type::LARGE_STRING: {
-            using in_offset_t = typename arrow::LargeStringArray::offset_type;
-            auto arrow_bin_arr =
-                static_pointer_cast<arrow::LargeStringArray>(arrow_arr);
-            in_offset_t *in_offsets =
-                (in_offset_t *)arrow_bin_arr->raw_value_offsets();
-            in_offset_t first_offset = in_offsets[0];
-
-            if (first_offset == 0) {
-                return arrow_string_binary_array_to_bodo(
-                    std::static_pointer_cast<arrow::LargeStringArray>(
-                        arrow_arr),
-                    Bodo_CTypes::STRING, array_id, src_pool);
-            } else {
-                return arrow_string_binary_array_to_bodo_copy<
-                    arrow::LargeStringArray, in_offset_t>(
-                    std::static_pointer_cast<arrow::LargeStringArray>(
-                        arrow_arr),
-                    Bodo_CTypes::STRING, array_id, src_pool);
-            }
-        }
-        case arrow::Type::STRING: {
-            static_assert(OFFSET_BITWIDTH == 64);
-            using in_offset_t = typename arrow::StringArray::offset_type;
-            auto arrow_bin_arr =
-                static_pointer_cast<arrow::StringArray>(arrow_arr);
-            in_offset_t *in_offsets =
-                (in_offset_t *)arrow_bin_arr->raw_value_offsets();
-            in_offset_t first_offset = in_offsets[0];
-
-            if (first_offset == 0) {
-                auto res =
-                    arrow::compute::Cast(*arrow_arr, arrow::large_utf8(),
-                                         arrow::compute::CastOptions::Safe(),
-                                         bodo::default_buffer_exec_context());
-                std::shared_ptr<arrow::Array> casted_arr;
-                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
-                return arrow_string_binary_array_to_bodo(
-                    std::static_pointer_cast<arrow::LargeStringArray>(
-                        casted_arr),
-                    Bodo_CTypes::STRING, array_id, src_pool);
-            } else {
-                return arrow_string_binary_array_to_bodo_copy<
-                    arrow::StringArray, in_offset_t>(
-                    std::static_pointer_cast<arrow::StringArray>(arrow_bin_arr),
-                    Bodo_CTypes::STRING, array_id, src_pool);
-            }
-        }
-        case arrow::Type::LARGE_BINARY: {
-            using in_offset_t = typename arrow::LargeBinaryArray::offset_type;
-            auto arrow_bin_arr =
-                static_pointer_cast<arrow::LargeBinaryArray>(arrow_arr);
-            in_offset_t *in_offsets =
-                (in_offset_t *)arrow_bin_arr->raw_value_offsets();
-            in_offset_t first_offset = in_offsets[0];
-
-            if (first_offset == 0) {
-                return arrow_string_binary_array_to_bodo(
-                    std::static_pointer_cast<arrow::LargeBinaryArray>(
-                        arrow_arr),
-                    Bodo_CTypes::BINARY, array_id, src_pool);
-            } else {
-                return arrow_string_binary_array_to_bodo_copy<
-                    arrow::LargeBinaryArray, in_offset_t>(
-                    std::static_pointer_cast<arrow::LargeBinaryArray>(
-                        arrow_arr),
-                    Bodo_CTypes::BINARY, array_id, src_pool);
-            }
-        }
-        case arrow::Type::BINARY: {
-            static_assert(OFFSET_BITWIDTH == 64);
-            using in_offset_t = typename arrow::BinaryArray::offset_type;
-            auto arrow_bin_arr =
-                static_pointer_cast<arrow::BinaryArray>(arrow_arr);
-            in_offset_t *in_offsets =
-                (in_offset_t *)arrow_bin_arr->raw_value_offsets();
-            in_offset_t first_offset = in_offsets[0];
-
-            if (first_offset == 0) {
-                auto res =
-                    arrow::compute::Cast(*arrow_arr, arrow::large_binary(),
-                                         arrow::compute::CastOptions::Safe(),
-                                         bodo::default_buffer_exec_context());
-                std::shared_ptr<arrow::Array> casted_arr;
-                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
-                return arrow_string_binary_array_to_bodo(
-                    std::static_pointer_cast<arrow::LargeBinaryArray>(
-                        casted_arr),
-                    Bodo_CTypes::BINARY, array_id, src_pool);
-            } else {
-                return arrow_string_binary_array_to_bodo_copy<
-                    arrow::BinaryArray, in_offset_t>(
-                    std::static_pointer_cast<arrow::BinaryArray>(arrow_bin_arr),
-                    Bodo_CTypes::BINARY, array_id, src_pool);
-            }
-        }
+        case arrow::Type::LARGE_STRING:
+            return arrow_string_binary_array_to_bodo_dispatch<
+                arrow::LargeStringArray, arrow::LargeStringArray>(
+                arrow_arr, arrow::large_utf8(), Bodo_CTypes::STRING, array_id,
+                src_pool);
+        case arrow::Type::STRING:
+            return arrow_string_binary_array_to_bodo_dispatch<
+                arrow::StringArray, arrow::LargeStringArray>(
+                arrow_arr, arrow::large_utf8(), Bodo_CTypes::STRING, array_id,
+                src_pool);
+        case arrow::Type::LARGE_BINARY:
+            return arrow_string_binary_array_to_bodo_dispatch<
+                arrow::LargeBinaryArray, arrow::LargeBinaryArray>(
+                arrow_arr, arrow::large_binary(), Bodo_CTypes::BINARY, array_id,
+                src_pool);
+        case arrow::Type::BINARY:
+            return arrow_string_binary_array_to_bodo_dispatch<
+                arrow::BinaryArray, arrow::LargeBinaryArray>(
+                arrow_arr, arrow::large_binary(), Bodo_CTypes::BINARY, array_id,
+                src_pool);
         case arrow::Type::LARGE_LIST:
             return arrow_list_array_to_bodo(
                 std::static_pointer_cast<arrow::LargeListArray>(arrow_arr),
