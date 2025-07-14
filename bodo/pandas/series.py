@@ -294,18 +294,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     def _arith_binop(self, other, op, reverse):
         """Called when a BodoSeries is element-wise arithmetically combined with a different entity (other)"""
-        from bodo.pandas.base import _empty_like
+        if is_numeric(other):
+            return self._numeric_binop(other, op, reverse)
 
-        if not (
-            (
-                isinstance(other, BodoSeries)
-                and isinstance(other.dtype, pd.ArrowDtype)
-                and pd.api.types.is_numeric_dtype(other.dtype)
-            )
-            or isinstance(other, numbers.Number)
-            and not isinstance(other, allowed_types_map["binop_dtlike"])
-        ):
-            return self._non_arith_binop(other, op, reverse)
+        return self._non_numeric_binop(other, op, reverse)
+
+    def _numeric_binop(self, other, op, reverse):
+        """Handles op(self, other) when other is a numeric BodoSeries or scalar."""
+        from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
@@ -340,7 +336,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
         return wrap_plan(plan=plan)
 
-    def _non_arith_binop(self, other, op, reverse):
+    def _non_numeric_binop(self, other, op, reverse):
+        """Handles op(self, other) when other is non-numeric (e.g., pd.DateOffset, str, etc.)."""
         if isinstance(other, BodoSeries):
             if (
                 isinstance(self.dtype, pd.ArrowDtype)
@@ -1216,6 +1213,19 @@ class BodoDatetimeProperties:
             {},
             is_method=False,
         )
+
+
+def is_numeric(other):
+    """Returns whether other is a numeric BodoSeries/scalar."""
+    is_numeric_bodoseries = (
+        isinstance(other, BodoSeries)
+        and isinstance(other.dtype, pd.ArrowDtype)
+        and pd.api.types.is_numeric_dtype(other.dtype)
+    )
+    is_numeric_scalar = isinstance(other, numbers.Number) and not isinstance(
+        other, allowed_types_map["binop_dtlike"]
+    )
+    return is_numeric_bodoseries or is_numeric_scalar
 
 
 def func_name_to_str(func_name):
