@@ -150,7 +150,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(object.__getattribute__(self, name))
+            return fallback_wrapper(self, object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
@@ -313,7 +313,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Compute schema of new series.
         empty_data = getattr(zero_size_self, op)(zero_size_other)
         assert isinstance(empty_data, pd.Series), (
-            "_arith_binop: empty_data is not a Series"
+            "_numeric_binop: empty_data is not a Series"
         )
 
         # Extract argument expressions

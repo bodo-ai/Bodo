@@ -348,7 +348,7 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
-                    py_res = fallback_wrapper(getattr(base_class, func.__name__))(
+                    py_res = fallback_wrapper(self, getattr(base_class, func.__name__))(
                         self, *args, **kwargs
                     )
                     return py_res
@@ -803,7 +803,8 @@ def ensure_datetime64ns(df):
     return df
 
 
-def fallback_wrapper(attr):
+# TODO: further generalize. Currently, this method is only used for BodoSeries.
+def fallback_wrapper(self, attr):
     """
     Wrap callable attributes with a warning silencer, unless they are known
     accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
@@ -817,9 +818,36 @@ def fallback_wrapper(attr):
     ):
 
         def silenced_method(*args, **kwargs):
+            msg = ""
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
-                return attr(*args, **kwargs)
+                try:
+                    return attr(*args, **kwargs)
+                except TypeError as e:
+                    msg = e
+                    pass
+
+            # In some cases, fallback fails and raises TypeError due to some operations being unsupported between PyArrow types.
+            # Below logic processes deeper fallback that converts problematic PyArrow types to their Pandas equivalents.
+            warnings.warn(
+                BodoLibFallbackWarning(
+                    "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
+                )
+            )
+            # TODO: generalize this. Currently, this method is only used for BodoSeries.
+            pd_self = pd.Series(self)
+
+            # self.dtype = pd.ArrowDtype(pa.timestamp("ns")): map to_datetime.
+            if (
+                isinstance(pd_self.dtype, pd.ArrowDtype)
+                and pd_self.dtype.type == pd.Timestamp
+            ):
+                converted = pd_self.map(lambda x: pd.to_datetime(x))
+                # TODO: check if args[1:] is safe/appropriate for all cases.
+                return getattr(converted, attr.__name__)(*args[1:], **kwargs)
+
+            # Raise TypeError from initial call if self does not fall into any of the covered cases.
+            raise TypeError(msg)
 
         return silenced_method
 

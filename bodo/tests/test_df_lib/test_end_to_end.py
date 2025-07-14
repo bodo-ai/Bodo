@@ -2183,3 +2183,22 @@ def test_set_df_column_non_arith_binops():
     pdf["D"] = pdf["A"] + np.int64(5)
     assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf)
+
+
+def test_fallback_wrapper_deep_fallback():
+    s = bd.Series(pd.date_range("20130101 09:10:12", periods=10, freq="MS"))
+
+    month_end = pd.offsets.MonthEnd()
+    month_end_series = pd.Series([month_end] * 10)
+    with pytest.warns(BodoLibFallbackWarning) as record:
+        _ = s + month_end_series
+
+    fallback_warnings = [
+        w for w in record if issubclass(w.category, BodoLibFallbackWarning)
+    ]
+    assert len(fallback_warnings) == 2
+
+    warning_msg = str(fallback_warnings[1].message)
+    assert "TypeError triggering deeper fallback" in warning_msg, (
+        f"Unexpected warning message: {warning_msg}"
+    )
