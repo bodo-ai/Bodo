@@ -990,6 +990,8 @@ class BodoDatetimeProperties:
     def __init__(self, series):
         allowed_types = allowed_types_map["dt_default"]
         # Validates series type
+        # Allows duration[ns] type, timestamp any precision without timezone.
+        # TODO: timestamp with timezone, other duration types.
         if not (
             isinstance(series, BodoSeries)
             and (
