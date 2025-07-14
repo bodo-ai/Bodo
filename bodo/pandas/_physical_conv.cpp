@@ -167,8 +167,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
-    auto physical_join = std::make_shared<PhysicalJoin>(op, op.conditions);
-
     // Create pipelines for the build side of the join (right child)
     PhysicalPlanBuilder rhs_builder;
     rhs_builder.Visit(*op.children[1]);
@@ -176,6 +174,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
     std::vector<std::shared_ptr<Pipeline>> build_pipelines =
         std::move(rhs_builder.finished_pipelines);
+
+    // Create pipelines for the probe side of the join (left child)
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> probe_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    auto physical_join = std::make_shared<PhysicalJoin>(
+        op, op.conditions, build_table_schema, probe_table_schema);
+
     build_pipelines.push_back(
         rhs_builder.active_pipeline->Build(physical_join));
     // Build pipelines need to execute before probe pipeline (recursively
@@ -183,13 +190,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     this->finished_pipelines.insert(this->finished_pipelines.begin(),
                                     build_pipelines.begin(),
                                     build_pipelines.end());
-
-    // Create pipelines for the probe side of the join (left child)
-    this->Visit(*op.children[0]);
-    std::shared_ptr<bodo::Schema> probe_table_schema =
-        this->active_pipeline->getPrevOpOutputSchema();
-
-    physical_join->InitializeJoinState(build_table_schema, probe_table_schema);
 
     this->active_pipeline->AddOperator(physical_join);
 }

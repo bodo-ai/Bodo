@@ -10,6 +10,7 @@ import pytest
 
 import bodo
 import bodo.pandas as bd
+from bodo.pandas.plan import LogicalGetPandasReadParallel, LogicalGetPandasReadSeq
 from bodo.pandas.utils import BodoLibFallbackWarning
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
@@ -46,7 +47,7 @@ def test_from_pandas(datapath, index_val):
     with temp_config_override("dataframe_library_run_parallel", False):
         bdf = bd.from_pandas(df)
         assert bdf.is_lazy_plan()
-        assert bdf._mgr._plan.plan_class == "LogicalGetPandasReadSeq"
+        assert isinstance(bdf._mgr._plan, LogicalGetPandasReadSeq)
         duckdb_plan = bdf._mgr._plan.generate_duckdb()
         _test_equal(duckdb_plan.df, df)
         _test_equal(
@@ -59,7 +60,7 @@ def test_from_pandas(datapath, index_val):
     # Parallel test
     bdf = bd.from_pandas(df)
     assert bdf.is_lazy_plan()
-    assert bdf._mgr._plan.plan_class == "LogicalGetPandasReadParallel"
+    assert isinstance(bdf._mgr._plan, LogicalGetPandasReadParallel)
     _test_equal(
         bdf,
         df,
@@ -214,6 +215,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
         # Already distributed DataFrame case
@@ -233,6 +235,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
 
@@ -276,7 +279,7 @@ def test_filter_pushdown(datapath, file_path, op):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -468,7 +471,7 @@ def test_filter_string_pushdown(datapath):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -528,7 +531,7 @@ def test_filter_datetime_pushdown(datapath, op):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -589,7 +592,7 @@ def test_head_pushdown(datapath):
     # Make sure bodo_df2 is unevaluated at this point.
     assert bodo_df2.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_df2._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
@@ -1006,6 +1009,47 @@ def test_merge_switch_side():
     _test_equal(
         bdf3.copy(),
         df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_merge_non_equi_cond():
+    """Simple test for non-equi join conditions."""
+    df1 = pd.DataFrame(
+        {
+            "B": pd.array([4, 5, 6], "Int64"),
+            "E": [1.1, 2.2, 3.3],
+            "A": pd.array([2, 2, 3], "Int64"),
+        },
+    )
+    df2 = pd.DataFrame(
+        {
+            "Cat": pd.array([2, 3, 8], "Int64"),
+            "Dog": pd.array([8, 3, 9], "Int64"),
+        },
+    )
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+
+    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+
+    df4 = df3[df3.B < df3.Dog]
+    bdf4 = bdf3[bdf3.B < bdf3.Dog]
+    # Make sure bdf3 is unevaluated at this point.
+    assert bdf4.is_lazy_plan()
+
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
+    _test_equal(pre, 5)
+    _test_equal(post, 4)
+
+    _test_equal(
+        bdf4.copy(),
+        df4,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
@@ -1482,7 +1526,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
     # Make sure bodo_filter_a is unevaluated at this point.
     assert bodo_filter_a.is_lazy_plan()
 
-    pre, post = bd.utils.getPlanStatistics(bodo_filter_a._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_filter_a._mgr._plan)
     _test_equal(pre, 3)
     _test_equal(post, 2)
 
@@ -1927,3 +1971,80 @@ def test_series_describe():
         describe_pd = df[c].describe()
         describe_bodo = bdf[c].describe()
         _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
+
+
+def test_groupby_getattr_fallback_behavior():
+    import warnings
+
+    import pandas as pds
+
+    df = pds.DataFrame({"apply": [1], "B": [1], "C": [2]})
+    bdf = bd.from_pandas(df)
+
+    grouped = bdf.groupby("B")
+
+    # Accessing a column: should not raise a warning
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        _ = grouped.B
+    assert not record, f"Unexpected warning when accessing column: {record}"
+
+    # Accessing an implemented Pandas GroupBy method: should raise fallback warning
+    with pytest.warns(BodoLibFallbackWarning) as record:
+        _ = grouped.apply
+    assert len(record) == 1
+
+    # Accessing unknown attribute: should raise AttributeError
+    with pytest.raises(AttributeError):
+        _ = grouped.not_a_column
+
+
+def test_series_agg():
+    import pandas as pd
+
+    import bodo.pandas as bd
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+    bdf = bd.from_pandas(df)
+
+    bodo_out = bdf.A.aggregate("sum")
+    pd_out = df.A.aggregate("sum")
+    assert bodo_out == pd_out
+
+    bodo_out = bdf.A.aggregate(["min", "max", "count", "product"])
+    pd_out = df.A.aggregate(["min", "max", "count", "product"])
+    _test_equal(bodo_out, pd_out, check_pandas_types=False)
+
+
+def test_groupby_apply():
+    """Test for a groupby.apply from TPCH Q8."""
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2] * 12, "Int32"),
+            "B": pd.array([1, 2, 2, 1] * 6, "Int32"),
+            "C": pd.array(list(range(24)), "Int32"),
+        }
+    )
+
+    def impl(df):
+        def udf(df):
+            denom = df["C"].sum()
+            df = df[df["B"] == 2]
+            num = df["C"].sum()
+            return num / denom
+
+        ret = df.groupby("A", as_index=False).apply(udf)
+        ret.columns = ["A", "Q"]
+        return ret
+
+    pd_out = impl(df)
+    bodo_out = impl(bd.from_pandas(df))
+
+    _test_equal(
+        bodo_out,
+        pd_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )

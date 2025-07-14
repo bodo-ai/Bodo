@@ -97,6 +97,16 @@ std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
     std::vector<duckdb::ColumnBinding> source_cols);
 
 /**
+ * @brief Create a map of column bindings to column indices in physical input
+ * table
+ *
+ * @param source_cols multiple sets of column bindings in source tables
+ * @return std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+ */
+std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
+    std::vector<std::vector<duckdb::ColumnBinding>> source_cols);
+
+/**
  * @brief Convert duckdb type to arrow type.
  *
  * @param type - the duckdb type to convert
@@ -219,3 +229,14 @@ std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
  */
 std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
     const duckdb::Value &value);
+
+/**
+ * @brief Convert a raw pointer to a value of a given arrow type into an arrow
+ * Datum.
+ *
+ * @param raw_ptr pointer to the value to put into Datum
+ * @param type arrow type of the value
+ * @return arrow::Datum the converted value
+ */
+arrow::Datum ConvertToDatum(void *raw_ptr,
+                            std::shared_ptr<arrow::DataType> type);
