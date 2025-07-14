@@ -255,7 +255,10 @@ class LogicalIcebergWrite(LogicalOperator):
 class ColRefExpression(Expression):
     """Expression representing a column reference in the query plan."""
 
-    pass
+    def __init__(self, empty_data, source, col_index):
+        self.source = source
+        self.col_index = col_index
+        super().__init__(empty_data, source, col_index)
 
 
 class NullExpression(Expression):

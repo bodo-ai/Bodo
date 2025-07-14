@@ -56,6 +56,7 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     arrow_to_empty_df,
     check_args_fallback,
+    fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
@@ -564,7 +565,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback(unsupported="none")
     def map(self, arg, na_action=None):
         """
-        Apply function to elements in a Series
+        Map values of Series according to an input mapping or function.
         """
 
         # Get output data type by running the UDF on a sample of the data.
@@ -649,7 +650,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return _compute_series_reduce(self, ["sum"])[0]
 
     @check_args_fallback(unsupported="all")
-    def product(
+    def prod(
         self,
         axis: Axis | None = 0,
         skipna: bool = True,
@@ -658,6 +659,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         **kwargs,
     ):
         return _compute_series_reduce(self, ["product"])[0]
+
+    product = prod
 
     @check_args_fallback(unsupported="all")
     def count(self):
@@ -774,6 +777,23 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def ndim(self) -> int:
         return super().ndim
 
+    @check_args_fallback(supported=["func"])
+    def aggregate(self, func=None, axis=0, *args, **kwargs):
+        """Aggregate using one or more operations."""
+        if isinstance(func, list):
+            reduced = _compute_series_reduce(self, func)
+            return BodoSeries(reduced, index=func, name=self._name)
+
+        elif isinstance(func, str):
+            return _compute_series_reduce(self, [func])[0]
+
+        else:
+            raise BodoLibNotImplementedException(
+                "Series.aggregate() is not supported for the provided arguments yet."
+            )
+
+    agg = aggregate
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -829,7 +849,7 @@ class BodoStringMethods:
             )
 
         # Validates input series and others series are from same df, falls back to Pandas otherwise
-        base_plan = zip_series_plan(self._series, others)
+        base_plan, arg_inds = zip_series_plan(self._series, others)
         index = base_plan.empty_data.index
 
         new_metadata = pd.Series(
@@ -842,7 +862,7 @@ class BodoStringMethods:
             base_plan,
             new_metadata,
             "bodo.pandas.series._str_cat_helper",
-            (sep, na_rep),
+            (sep, na_rep, *arg_inds),
             {},
             is_method=False,
         )
@@ -1163,39 +1183,27 @@ class BodoDatetimeProperties:
         )
 
 
-def fallback_wrapper(attr):
-    """
-    Wrap callable attributes with a warning silencer, unless they are known
-    accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
-    """
-
-    # Avoid wrapping indexers & accessors
-    if (
-        callable(attr)
-        and not hasattr(attr, "__getitem__")
-        and not hasattr(attr, "__getattr__")
-    ):
-
-        def silenced_method(*args, **kwargs):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
-                return attr(*args, **kwargs)
-
-        return silenced_method
-
-    return attr
+def func_name_to_str(func_name):
+    """Converts built-in functions to string."""
+    if func_name in ("min", "max", "sum", "product", "prod", "count"):
+        return func_name
+    if func_name == sum:
+        return "sum"
+    if func_name == max:
+        return "max"
+    if func_name == min:
+        return "min"
+    raise BodoLibNotImplementedException(
+        f"{func_name}() not supported for BodoSeries reduction."
+    )
 
 
 def map_validate_reduce(func_names, pa_type):
     """Maps validate_reduce to func_names list, returns resulting pyarrow schema."""
     res = []
     for idx in range(len(func_names)):
-        func_name = func_names[idx]
-        if func_name not in ("min", "max", "sum", "product", "count"):
-            raise BodoLibNotImplementedException(
-                f"{func_name}() not implemented for {pa_type} type."
-            )
-        assigned_type = validate_reduce(func_name, pa_type)
+        func_names[idx] = func_name_to_str(func_names[idx])
+        assigned_type = validate_reduce(func_names[idx], pa_type)
         res.append(pa.field(f"{idx}", assigned_type))
     return pa.schema(res)
 
@@ -1228,11 +1236,15 @@ def validate_reduce(func_name, pa_type):
             return pa.float64()
         else:
             raise BodoLibNotImplementedException(
-                f"{func_name}() not implemented for {pa_type} type."
+                f"{func_name}() not implemented for BodoSeries reduction."
             )
 
     elif func_name in ("count",):
         return pa.int64()
+    else:
+        raise BodoLibNotImplementedException(
+            f"{func_name}() not implemented for {pa_type} type."
+        )
 
 
 def generate_null_reduce(func_names):
@@ -1296,7 +1308,6 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
             df[str(i)], "sum" if func_name == "count" else func_name
         )()
         res.append(reduced_val)
-
     assert len(res) == len(func_names)
     return res
 
@@ -1330,14 +1341,14 @@ def _components_helper(s):
     return pd.Series([df.iloc[i, :].tolist() for i in range(len(s))])
 
 
-def _str_cat_helper(df, sep, na_rep):
+def _str_cat_helper(df, sep, na_rep, left_idx=0, right_idx=1):
     """Concatenates df[idx] for idx in idx_pair, separated by sep."""
     if sep is None:
         sep = ""
 
     # df is a two-column DataFrame created in zip_series_plan().
-    lhs_col = df.iloc[:, 0]
-    rhs_col = df.iloc[:, 1]
+    lhs_col = df.iloc[:, left_idx]
+    rhs_col = df.iloc[:, right_idx]
 
     return lhs_col.str.cat(rhs_col, sep, na_rep)
 
@@ -1437,12 +1448,12 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
     if expr is None:
         idx = 1 if side == "right" else 0
         empty_data = arrow_to_empty_df(pa.schema([schema[idx]]))
-        return ColRefExpression(empty_data, plan, (idx))
+        return ColRefExpression(empty_data, plan, idx)
     elif is_col_ref(expr):
         idx = expr.args[1]
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
-        return ColRefExpression(empty_data, plan, (idx))
+        return ColRefExpression(empty_data, plan, idx)
     elif is_scalar_func(expr):
         idx = expr.args[2][0]
         idx = get_new_idx(idx, first, side)
@@ -1472,17 +1483,29 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
 
     # Initializes index columns info.
     columns = lhs_list[0].empty_data.columns
-    n_index_arrays = get_n_index_arrays(lhs.index)
+    index = lhs_list[0].empty_data.index
+    n_index_arrays = get_n_index_arrays(index)
     n_cols = len(columns)
 
     default_schema = pa.field("default", pa.large_string())
     left_schema, right_schema = default_schema, default_schema
     left_empty_data, right_empty_data = None, None
-    index = lhs_list[0].empty_data.index
+    arg_inds = (0, 1)
+
+    # Shortcut for columns of same dataframe cases like df.A.str.cat(df.B) to avoid
+    # creating an extra projection (which causes issues in df setitem).
+    if (
+        len(lhs_list) == 2
+        and len(rhs_list) == 2
+        and isinstance(lhs_list[1].exprs[0], ColRefExpression)
+        and isinstance(rhs_list[1].exprs[0], ColRefExpression)
+    ):
+        arg_inds = (lhs_list[1].exprs[0].col_index, rhs_list[1].exprs[0].col_index)
+        return result, arg_inds
 
     # Pads shorter list with None values.
-    for i, (lhs_part, rhs_part) in enumerate(
-        itertools.zip_longest(lhs_list[1:], rhs_list[1:], fillvalue=None)
+    for lhs_part, rhs_part in itertools.zip_longest(
+        lhs_list[1:], rhs_list[1:], fillvalue=None
     ):
         # Create the plan for the shared part
         left_expr = None if not lhs_part else lhs_part.args[1][0]
@@ -1535,7 +1558,7 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
             first = False
             n_cols = 2
 
-    return result
+    return result, arg_inds
 
 
 def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
