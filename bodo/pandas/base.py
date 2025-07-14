@@ -119,7 +119,6 @@ def read_parquet(
         "hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
-
     empty_df = arrow_to_empty_df(arrow_schema)
 
     plan = LogicalGetParquetRead(
