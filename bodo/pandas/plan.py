@@ -145,6 +145,22 @@ class Expression(LazyPlan):
     def __init__(self, empty_data, *args):
         super().__init__(self.__class__.__name__, empty_data, *args)
 
+    def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
+        """Update the source and column index of function expressions, which could be
+        nested inside this expression."""
+        new_args = [
+            arg.update_func_expr_source(new_source_plan, col_index_offset)
+            if isinstance(arg, Expression)
+            else arg
+            for arg in self.args
+        ]
+        out = self.__class__(
+            self.empty_data,
+            *new_args,
+        )
+        out.is_series = self.is_series
+        return out
+
 
 class LogicalProjection(LogicalOperator):
     """Logical operator for projecting columns and expressions."""
@@ -283,7 +299,32 @@ class AggregateExpression(Expression):
 class PythonScalarFuncExpression(Expression):
     """Expression representing a Python scalar function call in the query plan."""
 
-    pass
+    def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
+        """Update the source and column index of the function expression."""
+        if self.args[0] != new_source_plan:
+            assert len(self.args[2]) == 1 + get_n_index_arrays(self.empty_data.index), (
+                "PythonScalarFuncExpression::update_func_expr_source: expected single input column"
+            )
+            # Previous input data column index
+            in_col_ind = self.args[2][0]
+            n_source_cols = len(new_source_plan.empty_data.columns)
+            # Add Index columns of the new source plan as input
+            index_cols = tuple(
+                range(
+                    n_source_cols,
+                    n_source_cols
+                    + get_n_index_arrays(new_source_plan.empty_data.index),
+                )
+            )
+            expr = PythonScalarFuncExpression(
+                self.empty_data,
+                new_source_plan,
+                self.args[1],
+                (in_col_ind + col_index_offset,) + index_cols,
+            )
+            expr.is_series = self.is_series
+            return expr
+        return self
 
 
 class ComparisonOpExpression(Expression):
@@ -492,6 +533,13 @@ def is_single_projection(proj: LazyPlan):
 def is_single_colref_projection(proj: LazyPlan):
     """Return True if plan is a projection with a single expression that is a column reference"""
     return is_single_projection(proj) and isinstance(proj.exprs[0], ColRefExpression)
+
+
+def is_colref_projection(proj: LazyPlan):
+    """Return True if plan is a projection with all expressions being column references"""
+    return isinstance(proj, LogicalProjection) and all(
+        isinstance(expr, ColRefExpression) for expr in proj.exprs
+    )
 
 
 def make_col_ref_exprs(key_indices, src_plan):

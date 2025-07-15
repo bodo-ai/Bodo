@@ -3,11 +3,12 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include "_util.h"
 
 #include "physical/operator.h"
 
-// #define DEBUG_PIPELINE  // enable and build to print debug info on the
-// pipeline
+// enable and build to print debug info on the pipeline
+// #define DEBUG_PIPELINE
 // #ifdef DEBUG_PIPELINE
 #include <iostream>
 // #endif
