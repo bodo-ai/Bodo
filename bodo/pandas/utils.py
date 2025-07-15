@@ -462,6 +462,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
     """
+    start_time = time.perf_counter()
     func, is_series, is_attr, args, kwargs = in_args
 
     # Arrow dtypes can be very slow for UDFs in Pandas:
@@ -469,7 +470,9 @@ def run_func_on_table(cpp_table, result_type, in_args):
     # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
     use_arrow_dtypes = not (is_attr and func == "apply")
     input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
+    print("run_func_on_table prepare ", 1000000 * (time.perf_counter() - start_time))
 
+    start_time = time.perf_counter()
     if is_series:
         assert input.shape[1] == 1, "run_func_on_table: single column expected"
         input = input.iloc[:, 0]
@@ -489,7 +492,9 @@ def run_func_on_table(cpp_table, result_type, in_args):
         out = func(input, *args, **kwargs)
     else:
         out = func(input, *args, **kwargs)
+    print("run_func_on_table call ", 1000000 * (time.perf_counter() - start_time))
 
+    start_time = time.perf_counter()
     # astype can fail in some cases when input is empty
     if len(out):
         # TODO: verify this is correct for all possible result_type's
@@ -497,7 +502,10 @@ def run_func_on_table(cpp_table, result_type, in_args):
     else:
         out_df = pd.DataFrame({"OUT": _empty_pd_array(result_type)})
 
-    return df_to_cpp_table(out_df)
+    ret = df_to_cpp_table(out_df)
+
+    print("run_func_on_table finish ", 1000000 * (time.perf_counter() - start_time))
+    return ret
 
 
 def _del_func(x):

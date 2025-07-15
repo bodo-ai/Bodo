@@ -1,9 +1,6 @@
 #include "_pipeline.h"
 
-#include <chrono>
 #include "physical/result_collector.h"
-
-using bodo_cpp_clock = std::chrono::steady_clock;
 
 /*
  * This has to be a recursive routine.  Each operator in the pipeline could

@@ -2,7 +2,9 @@
 
 #include <Python.h>
 #include <arrow/api.h>
+#include <chrono>
 #include <cstdint>
+#include <iostream>
 #include <map>
 #include <variant>
 #include "../libs/_array_utils.h"
@@ -18,6 +20,8 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/table_filter.hpp"
+
+using bodo_cpp_clock = std::chrono::steady_clock;
 
 /**
  * @brief Convert duckdb value to C++ variant.
