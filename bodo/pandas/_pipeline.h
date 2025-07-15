@@ -8,9 +8,10 @@
 
 // #define DEBUG_PIPELINE  // enable and build to print debug info on the
 // pipeline
-#ifdef DEBUG_PIPELINE
+// #ifdef DEBUG_PIPELINE
 #include <iostream>
-#endif
+// #endif
+#include <map>
 
 /// @brief Pipeline class for executing a sequence of physical operators.
 class Pipeline {
@@ -35,6 +36,8 @@ class Pipeline {
                             OperatorResult prev_op_result);
 
     friend class PipelineBuilder;
+
+    std::map<std::string, uint64_t> timings;
 
    public:
     /**

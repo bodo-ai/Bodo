@@ -375,9 +375,9 @@ def execute_plan(plan: LazyPlan):
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner
 
+        start_time = time.perf_counter()
         # Initialize LazyPlanDistributedArg objects that may need scattering data
         # to workers before execution.
-        start_time = time.perf_counter()
         for a in plan.args:
             _init_lazy_distributed_arg(a)
         print(
@@ -396,6 +396,7 @@ def execute_plan(plan: LazyPlan):
             print("")  # Print on new line during tests.
         start_time = time.perf_counter()
 
+        start_time = time.perf_counter()
         ret = bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
         print("profile_time total_execute_plan", time.perf_counter() - start_time)
         return ret
