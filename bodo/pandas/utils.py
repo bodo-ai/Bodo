@@ -332,7 +332,7 @@ def check_args_fallback(
                             self._keys,
                             as_index=self._as_index,
                             dropna=self._dropna,
-                        )[self._selection]
+                        )[self.selection_for_plan]
                         base_class = self.__class__
                     elif self.__class__ == bodo.pandas.series.BodoStringMethods:
                         base_class = self._series.__class__.__bases__[0].str
