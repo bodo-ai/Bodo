@@ -301,10 +301,10 @@ class PythonScalarFuncExpression(Expression):
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
         if self.args[0] != new_source_plan:
-            # Previous input data column index
             assert len(self.args[2]) == 1 + get_n_index_arrays(self.empty_data.index), (
                 "PythonScalarFuncExpression::update_func_expr_source: expected single input column"
             )
+            # Previous input data column index
             in_col_ind = self.args[2][0]
             n_source_cols = len(new_source_plan.empty_data.columns)
             # Add Index columns of the new source plan as input
