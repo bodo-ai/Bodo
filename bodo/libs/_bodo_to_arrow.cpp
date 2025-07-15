@@ -1265,8 +1265,7 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
     }
 
     if (first_offset == 0) {
-        // Upcast any int32 to int64 offsets to int64 to match Bodo String
-        // array.
+        // Upcast int32 offsets to int64 to match Bodo String array.
         if (!std::is_same<ArrowArrayType, ArrowArrayLargeType>::value) {
             auto res = arrow::compute::Cast(
                 *arrow_arr, large_type, arrow::compute::CastOptions::Safe(),

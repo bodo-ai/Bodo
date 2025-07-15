@@ -567,13 +567,31 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Map values of Series according to an input mapping or function.
         """
+        import os
 
         # Get output data type by running the UDF on a sample of the data.
-        empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
+        if os.environ.get("BODO_JIT_UDFS", "0") == "1":
+            print("Jitting the udf...")
 
-        return _get_series_python_func_plan(
-            self._plan, empty_series, "map", (arg, na_action), {}
-        )
+            @bodo.jit(cache=True, spawn=False, distributed=False)
+            def map_wrapper(S):
+                return S.map(arg, na_action=na_action)
+
+            empty_series = get_scalar_udf_result_type(
+                self, "map", arg, na_action=na_action
+            )
+
+            return _get_series_python_func_plan(
+                self._plan, empty_series, map_wrapper, (), {}, is_method=False
+            )
+        else:
+            empty_series = get_scalar_udf_result_type(
+                self, "map", arg, na_action=na_action
+            )
+
+            return _get_series_python_func_plan(
+                self._plan, empty_series, "map", (arg, na_action), {}
+            )
 
     @check_args_fallback(supported=["ascending", "na_position", "kind"])
     def sort_values(
