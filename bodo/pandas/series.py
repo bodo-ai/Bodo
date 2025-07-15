@@ -569,6 +569,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
 
         # Get output data type by running the UDF on a sample of the data.
+        bodo.jit(cache=True)(arg)
         empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
 
         return _get_series_python_func_plan(
