@@ -144,6 +144,22 @@ class Expression(LazyPlan):
     def __init__(self, empty_data, *args):
         super().__init__(self.__class__.__name__, empty_data, *args)
 
+    def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
+        """Update the source and column index of function expressions, which could be
+        nested inside this expression."""
+        new_args = [
+            arg.update_func_expr_source(new_source_plan, col_index_offset)
+            if isinstance(arg, Expression)
+            else arg
+            for arg in self.args
+        ]
+        out = self.__class__(
+            self.empty_data,
+            *new_args,
+        )
+        out.is_series = self.is_series
+        return out
+
 
 class LogicalProjection(LogicalOperator):
     """Logical operator for projecting columns and expressions."""
@@ -282,7 +298,32 @@ class AggregateExpression(Expression):
 class PythonScalarFuncExpression(Expression):
     """Expression representing a Python scalar function call in the query plan."""
 
-    pass
+    def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
+        """Update the source and column index of the function expression."""
+        if self.args[0] != new_source_plan:
+            assert len(self.args[2]) == 1 + get_n_index_arrays(self.empty_data.index), (
+                "PythonScalarFuncExpression::update_func_expr_source: expected single input column"
+            )
+            # Previous input data column index
+            in_col_ind = self.args[2][0]
+            n_source_cols = len(new_source_plan.empty_data.columns)
+            # Add Index columns of the new source plan as input
+            index_cols = tuple(
+                range(
+                    n_source_cols,
+                    n_source_cols
+                    + get_n_index_arrays(new_source_plan.empty_data.index),
+                )
+            )
+            expr = PythonScalarFuncExpression(
+                self.empty_data,
+                new_source_plan,
+                self.args[1],
+                (in_col_ind + col_index_offset,) + index_cols,
+            )
+            expr.is_series = self.is_series
+            return expr
+        return self
 
 
 class ComparisonOpExpression(Expression):
@@ -332,15 +373,6 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
-            # Sometimes when an execution is triggered it isn't expected that
-            # an execution should happen at that point.  This traceback is
-            # useful to identify what is triggering the execution as it may be
-            # a bug or the usage of some Pandas API that calls a function that
-            # triggers execution.  This traceback can help fix the bug or
-            # select a different Pandas API or an internal Pandas function that
-            # bypasses the issue.
-            traceback.print_stack(file=sys.stdout)
-            print("")  # Print on new line during tests.
             print("Unoptimized plan")
             print(duckdb_plan.toString())
 
@@ -378,23 +410,41 @@ def execute_plan(plan: LazyPlan):
         for a in plan.args:
             _init_lazy_distributed_arg(a)
 
+        if bodo.dataframe_library_dump_plans:
+            # Sometimes when an execution is triggered it isn't expected that
+            # an execution should happen at that point.  This traceback is
+            # useful to identify what is triggering the execution as it may be
+            # a bug or the usage of some Pandas API that calls a function that
+            # triggers execution.  This traceback can help fix the bug or
+            # select a different Pandas API or an internal Pandas function that
+            # bypasses the issue.
+            traceback.print_stack(file=sys.stdout)
+            print("")  # Print on new line during tests.
+
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
 
 
-def _init_lazy_distributed_arg(arg):
+def _init_lazy_distributed_arg(arg, visited_plans=None):
     """Initialize the LazyPlanDistributedArg objects for the given plan argument that
     may need scattering data to workers before execution.
     Has to be called right before plan execution since the dataframe state
     may change (distributed to collected) and the result ID may not be valid anymore.
     """
+    if visited_plans is None:
+        # Keep track of visited LazyPlans to prevent extra checks.
+        visited_plans = set()
+
     if isinstance(arg, LazyPlan):
+        if id(arg) in visited_plans:
+            return
+        visited_plans.add(id(arg))
         for a in arg.args:
-            _init_lazy_distributed_arg(a)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, (tuple, list)):
         for a in arg:
-            _init_lazy_distributed_arg(a)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, LazyPlanDistributedArg):
         arg.init()
 
@@ -461,6 +511,13 @@ def is_single_projection(proj: LazyPlan):
 def is_single_colref_projection(proj: LazyPlan):
     """Return True if plan is a projection with a single expression that is a column reference"""
     return is_single_projection(proj) and isinstance(proj.exprs[0], ColRefExpression)
+
+
+def is_colref_projection(proj: LazyPlan):
+    """Return True if plan is a projection with all expressions being column references"""
+    return isinstance(proj, LogicalProjection) and all(
+        isinstance(expr, ColRefExpression) for expr in proj.exprs
+    )
 
 
 def make_col_ref_exprs(key_indices, src_plan):
