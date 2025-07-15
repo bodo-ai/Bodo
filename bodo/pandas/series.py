@@ -135,7 +135,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __getattribute__(self, name: str):
         """Custom attribute access that triggers a fallback warning for unsupported attributes."""
 
-        ignore_fallback_attrs = ["dtype", "name", "to_string", "attrs", "flags"]
+        ignore_fallback_attrs = ["dtype", "name", "to_string", "attrs", "flags", "iloc"]
 
         cls = object.__getattribute__(self, "__class__")
         base = cls.__mro__[0]
@@ -338,31 +338,27 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     def _non_numeric_binop(self, other, op, reverse):
         """Handles op(self, other) when other is non-numeric (e.g., pd.DateOffset, str, etc.)."""
-        if isinstance(other, BodoSeries):
-            if (
-                isinstance(self.dtype, pd.ArrowDtype)
-                and self.dtype in allowed_types_map["str_default"]
-                and isinstance(other.dtype, pd.ArrowDtype)
-                and other.dtype in allowed_types_map["str_default"]
-                and op in ("__add__", "__radd__")
-            ):
-                if op == "__add__":
-                    return self.str.cat(other)
-                if op == "__radd__":
-                    return other.str.cat(self)
+        if (
+            is_bodo_string_series(self)
+            and is_bodo_string_series(other)
+            and op in ("__add__", "__radd__")
+        ):
+            if op == "__add__":
+                return self.str.cat(other)
+            if op == "__radd__":
+                return other.str.cat(self)
 
         # If other is an iterable, fall back to Pandas.
         # TODO: strengthen this check.
         elif isinstance(other, allowed_types_map["binop_scalar"]):
-            lhs, rhs = (self, other) if not reverse else (other, self)
             if op == "__add__":
-                return lhs.map(lambda x: x + rhs)
+                return self.add(other)
             if op == "__radd__":
-                return rhs.map(lambda x: lhs + x)
+                return self.radd(other)
             if op == "__sub__":
-                return lhs.map(lambda x: x - rhs)
+                return self.sub(other)
             if op == "__rsub__":
-                return rhs.map(lambda x: lhs - x)
+                return self.rsub(other)
 
         raise BodoLibNotImplementedException(
             f"BodoSeries.{op} is not supported between 'self' of dtype="
@@ -589,6 +585,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @property
     def dt(self):
         return BodoDatetimeProperties(self)
+
+    @property
+    def T(self):
+        return self
 
     @check_args_fallback(unsupported="none")
     def map(self, arg, na_action=None):
@@ -821,6 +821,26 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
     agg = aggregate
+
+    @check_args_fallback(supported=["other"])
+    def add(self, other, level=None, fill_value=None, axis=0):
+        """Return Addition of series and other, element-wise (binary operator add)."""
+        return gen_arith(self, other, "add")
+
+    @check_args_fallback(supported=["other"])
+    def sub(self, other, level=None, fill_value=None, axis=0):
+        """Return Addition of series and other, element-wise (binary operator radd)."""
+        return gen_arith(self, other, "sub")
+
+    @check_args_fallback(supported=["other"])
+    def radd(self, other, level=None, fill_value=None, axis=0):
+        """Return Subtraction of series and other, element-wise (binary operator sub)."""
+        return gen_arith(self, other, "radd")
+
+    @check_args_fallback(supported=["other"])
+    def rsub(self, other, level=None, fill_value=None, axis=0):
+        """Return Subtraction of series and other, element-wise (binary operator rsub)."""
+        return gen_arith(self, other, "rsub")
 
 
 class BodoStringMethods:
@@ -1899,6 +1919,37 @@ def _is_pd_pa_timestamp_no_tz(dtype):
         isinstance(dtype, pd.ArrowDtype)
         and pa.types.is_timestamp(dtype.pyarrow_dtype)
         and dtype.pyarrow_dtype.tz is None
+    )
+
+
+def gen_arith(self, other, name):
+    """Generates Series.add/radd/sub/rsub."""
+    if isinstance(
+        other,
+        (
+            BodoSeries,
+            pd.Series,
+        ),
+    ):
+        raise BodoLibNotImplementedException(
+            f"Series.{name}() is not supported for other of type {type(other)} yet."
+        )
+    if (
+        name
+        in (
+            "sub",
+            "rsub",
+        )
+        and self.dtype in allowed_types_map["str_default"]
+    ):
+        raise TypeError("Unsupported operand type(s) for -: 'str' and 'str'")
+    return gen_method(name, self.dtype)(self, other)
+
+
+def is_bodo_string_series(self):
+    """Returns True if self is a BodoSeries with dtype String."""
+    return (
+        isinstance(self, BodoSeries) and self.dtype in allowed_types_map["str_default"]
     )
 
 
