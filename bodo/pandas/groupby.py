@@ -271,7 +271,7 @@ class SeriesGroupBy:
             self._selection
             if self._selection is not None
             else list(filter(lambda col: col not in self._keys, self._obj.columns))
-        )
+        )  # pragma: no cover
 
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
