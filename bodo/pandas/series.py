@@ -577,7 +577,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             def map_wrapper(S):
                 return S.map(arg, na_action=na_action)
 
-            # TODO get data type of compiled func
             empty_series = get_scalar_udf_result_type(
                 self, "map", arg, na_action=na_action
             )
@@ -586,7 +585,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 self._plan, empty_series, map_wrapper, (), {}, is_method=False
             )
         else:
-            # TODO get data type of compiled func
             empty_series = get_scalar_udf_result_type(
                 self, "map", arg, na_action=na_action
             )
