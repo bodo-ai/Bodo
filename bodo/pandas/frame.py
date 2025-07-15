@@ -51,10 +51,10 @@ from bodo.pandas.plan import (
     LogicalOrder,
     LogicalParquetWrite,
     LogicalProjection,
-    PythonScalarFuncExpression,
     _get_df_python_func_plan,
     execute_plan,
     get_proj_expr_single,
+    is_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
 )
@@ -1265,36 +1265,23 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self._mgr._disable_collect = original_flag
 
 
-def _update_func_expr_source(
-    func_expr: LazyPlan, new_source_plan: LazyPlan, col_index_offset: int
-):
-    """Update source plan of PythonScalarFuncExpression and add an offset to its
-    input data column index.
-    """
-    # Previous input data column index
-    in_col_ind = func_expr.args[2][0]
-    n_source_cols = len(new_source_plan.empty_data.columns)
-    # Add Index columns of the new source plan as input
-    index_cols = tuple(
-        range(
-            n_source_cols,
-            n_source_cols + get_n_index_arrays(new_source_plan.empty_data.index),
-        )
-    )
-    expr = PythonScalarFuncExpression(
-        func_expr.empty_data,
-        new_source_plan,
-        func_expr.args[1],
-        (in_col_ind + col_index_offset,) + index_cols,
-    )
-    return expr
-
-
 def _add_proj_expr_to_plan(
-    df_plan: LazyPlan, value_plan: LazyPlan, key: str, replace_func_source=False
+    df_plan: LazyPlan,
+    value_plan: LogicalProjection,
+    key: str,
+    replace_func_source=False,
+    out_columns: list[str] | None = None,
 ):
     """Add a projection on top of dataframe plan that adds or replaces a column
     with output expression of value_plan (which is a single expression projection).
+
+    df_plan: the dataframe plan to add the column to.
+    value_plan: the value plan that contains the expression to be added as a column.
+    key: the name of the column to be added or replaced.
+    replace_func_source: if True, update the input column index of the function
+                         expression in value_plan to point to the source dataframe plan.
+    out_columns: if provided, only these columns will be included in the output plan
+                 (excludes key).
     """
     # Create column reference expressions for each column in the dataframe.
     in_empty_df = df_plan.empty_data
@@ -1310,8 +1297,8 @@ def _add_proj_expr_to_plan(
     # Get the function expression from the value plan to be added
     func_expr = get_proj_expr_single(value_plan)
 
-    if isinstance(func_expr, PythonScalarFuncExpression) and replace_func_source:
-        func_expr = _update_func_expr_source(func_expr, df_plan, ikey)
+    if replace_func_source:
+        func_expr = func_expr.update_func_expr_source(df_plan, ikey)
 
     # Update output column name
     func_expr = func_expr.replace_empty_data(
@@ -1319,9 +1306,13 @@ def _add_proj_expr_to_plan(
     )
 
     proj_exprs = _get_setitem_proj_exprs(
-        in_empty_df, df_plan, ikey, is_replace, func_expr
+        in_empty_df, df_plan, ikey, is_replace, func_expr, out_columns
     )
-    empty_data = df_plan.empty_data.copy()
+    empty_data = (
+        df_plan.empty_data.copy()
+        if out_columns is None
+        else df_plan.empty_data[out_columns].copy()
+    )
     empty_data[key] = value_plan.empty_data.copy()
     new_plan = LogicalProjection(
         empty_data,
@@ -1331,16 +1322,30 @@ def _add_proj_expr_to_plan(
     return new_plan
 
 
-def _get_setitem_proj_exprs(in_empty_df, df_plan, ikey, is_replace, func_expr):
+def _get_setitem_proj_exprs(
+    in_empty_df, df_plan, ikey, is_replace, func_expr, out_columns=None
+):
     """Create projection expressions for setting a column in a dataframe."""
     n_cols = len(in_empty_df.columns)
-    key_indices = [k for k in range(n_cols) if (not is_replace or k != ikey)]
-    data_cols = make_col_ref_exprs(key_indices, df_plan)
-    if is_replace:
-        data_cols.insert(ikey, func_expr)
-    else:
-        # New column should be at the end of data columns to match Pandas
+    data_cols = []
+    for k, col in enumerate(in_empty_df.columns):
+        if out_columns is not None and col not in out_columns:
+            continue
+        if is_replace and k == ikey:
+            data_cols.append(func_expr)
+        else:
+            data_cols.append(make_col_ref_exprs([k], df_plan)[0])
+
+    # New column should be at the end of data columns to match Pandas
+    # NOTE: output column name may be in source dataframe but not in projected source
+    # so skipped in the loop above but needs added here. Example:
+    # df2 = df[["B", "D"]]
+    # df2["A"] = df["A"] + df["C"]
+    if not is_replace or (
+        out_columns is not None and in_empty_df.columns[ikey] not in out_columns
+    ):
         data_cols.append(func_expr)
+
     index_cols = make_col_ref_exprs(
         range(n_cols, n_cols + get_n_index_arrays(in_empty_df.index)), df_plan
     )
@@ -1385,6 +1390,19 @@ def _get_set_column_plan(
     │    ────────────────────   │
     └───────────────────────────┘
     """
+
+    # Handle extra projection on source plan that only selects columns like:
+    # df2 = df1[["B", "C"]]
+    # df2["D"] = df1["B"].str.lower()
+    if (
+        is_single_projection(value_plan)
+        and is_colref_projection(df_plan)
+        and value_plan.source == df_plan.source
+    ):
+        out_columns = list(df_plan.empty_data.columns)
+        return _add_proj_expr_to_plan(
+            df_plan.source, value_plan, key, out_columns=out_columns
+        )
 
     # Handle stacked projections like bdf["b"] = bdf["c"].str.lower().str.strip()
     if (

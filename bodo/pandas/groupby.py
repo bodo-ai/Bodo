@@ -50,15 +50,31 @@ class DataFrameGroupBy:
         self._dropna = dropna
         self._selection = selection
 
+    @property
+    def selection_for_plan(self):
+        return (
+            self._selection
+            if self._selection is not None
+            else list(filter(lambda col: col not in self._keys, self._obj.columns))
+        )
+
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
         """
         Return a DataFrameGroupBy or SeriesGroupBy for the selected data columns.
         """
         if isinstance(key, str):
+            if key not in self._obj:
+                raise KeyError(f"Column not found: {key}")
             return SeriesGroupBy(
                 self._obj, self._keys, [key], self._as_index, self._dropna
             )
         elif isinstance(key, list) and all(isinstance(key_, str) for key_ in key):
+            invalid_keys = []
+            for k in key:
+                if k not in self._obj:
+                    invalid_keys.append(f"'{k}'")
+            if invalid_keys:
+                raise KeyError(f"Column not found: {', '.join(invalid_keys)}")
             return DataFrameGroupBy(
                 self._obj, self._keys, self._as_index, self._dropna, selection=key
             )
@@ -71,19 +87,25 @@ class DataFrameGroupBy:
     def __getattribute__(self, name: str, /) -> Any:
         try:
             return object.__getattribute__(self, name)
-        except AttributeError:
-            msg = (
-                f"DataFrameGroupBy.{name} is not "
-                "implemented in Bodo dataframe library yet. "
-                "Falling back to Pandas (may be slow or run out of memory)."
-            )
-            warnings.warn(BodoLibFallbackWarning(msg))
-            gb = pd.DataFrame(self._obj).groupby(
-                self._keys, as_index=self._as_index, dropna=self._dropna
-            )
-            if self._selection is not None:
-                gb = gb[self._selection]
-            return object.__getattribute__(gb, name)
+        except AttributeError as e:
+            if hasattr(pd.core.groupby.generic.DataFrameGroupBy, name):
+                msg = (
+                    f"DataFrameGroupBy.{name} is not "
+                    "implemented in Bodo dataframe library yet. "
+                    "Falling back to Pandas (may be slow or run out of memory)."
+                )
+                gb = pd.DataFrame(self._obj).groupby(
+                    self._keys, as_index=self._as_index, dropna=self._dropna
+                )
+                if self._selection is not None:
+                    gb = gb[self._selection]
+                warnings.warn(BodoLibFallbackWarning(msg))
+                return object.__getattribute__(gb, name)
+
+            if name in self._obj:
+                return self.__getitem__(name)
+
+            raise AttributeError(e)
 
     @check_args_fallback(supported="func")
     def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
@@ -243,6 +265,14 @@ class SeriesGroupBy:
         self._as_index = as_index
         self._dropna = dropna
 
+    @property
+    def selection_for_plan(self):
+        return (
+            self._selection
+            if self._selection is not None
+            else list(filter(lambda col: col not in self._keys, self._obj.columns))
+        )  # pragma: no cover
+
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
         try:
@@ -383,11 +413,7 @@ def _groupby_agg_plan(
     """Compute groupby.func() on the Series or DataFrame GroupBy object."""
     from bodo.pandas.base import _empty_like
 
-    grouped_selection = (
-        grouped._selection
-        if grouped._selection is not None
-        else list(filter(lambda col: col not in grouped._keys, grouped._obj.columns))
-    )
+    grouped_selection = grouped.selection_for_plan
 
     zero_size_df = _empty_like(grouped._obj)
     empty_data_pandas = zero_size_df.groupby(grouped._keys, as_index=grouped._as_index)[

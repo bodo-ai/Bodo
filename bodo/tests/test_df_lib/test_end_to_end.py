@@ -189,6 +189,36 @@ def test_read_parquet_series_len_shape(datapath):
     assert bodo_out.is_lazy_plan()
 
 
+def test_read_parquet_filter_projection(datapath):
+    """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
+    and filter column isn't used anywhere in the query.
+    """
+    path = datapath("dataframe_library/q6_sample.pq")
+
+    def impl(lineitem):
+        date1 = pd.Timestamp("1996-01-01")
+        sel = (lineitem.L_SHIPDATE >= date1) & (lineitem.L_DISCOUNT >= 0.08)
+        flineitem = lineitem[sel]
+        return flineitem.L_EXTENDEDPRICE
+
+    bodo_df = bd.read_parquet(path)
+    bodo_df["L_SHIPDATE"] = bd.to_datetime(bodo_df.L_SHIPDATE, format="%Y-%m-%d")
+    py_df = pd.read_parquet(path)
+    py_df["L_SHIPDATE"] = pd.to_datetime(py_df.L_SHIPDATE, format="%Y-%m-%d")
+
+    bodo_out = impl(bodo_df)
+    assert bodo_out.is_lazy_plan()
+    py_out = impl(py_df)
+
+    _test_equal(
+        bodo_out.copy(),
+        py_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
     df = pd.DataFrame(
@@ -215,6 +245,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
         # Already distributed DataFrame case
@@ -234,6 +265,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
+            reset_index=True,
         )
 
 
@@ -812,6 +844,35 @@ def test_set_df_column_const(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+def test_set_df_column_func_nested_arith(datapath, index_val):
+    """Test setting a dataframe column with nested functions inside an arithmetic operation."""
+    df = pd.DataFrame(
+        {
+            "A": [1.4, 2.1, 3.3],
+            "B": ["A1", "B23", "C345"],
+            "C": [1.1, 2.2, 3.3],
+            "D": [True, False, True],
+        }
+    )
+    df.index = index_val[: len(df)]
+
+    # New column
+    bdf = bd.from_pandas(df)
+    bdf["E"] = bdf.B.str.lower().str.len() + 1
+    assert bdf.is_lazy_plan()
+    pdf = df.copy()
+    pdf["E"] = pdf.B.str.lower().str.len() + 1
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Existing column
+    bdf = bd.from_pandas(df)
+    bdf["B"] = bdf.B.str.lower().str.len() + 1
+    assert bdf.is_lazy_plan()
+    pdf = df.copy()
+    pdf["B"] = pdf.B.str.lower().str.len() + 1
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+
 def test_set_df_column_arith(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe."""
     df = pd.DataFrame(
@@ -855,6 +916,80 @@ def test_set_df_column_arith(datapath, index_val):
     pdf["D"] = pdf["A"] / 2
     assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf, check_pandas_types=False)
+
+
+def test_set_df_column_extra_proj(datapath, index_val):
+    """Test setting a dataframe column with a Series function of the same dataframe to
+    a dataframe that has column projections on top of the source dataframe.
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+
+    # Single projection, new column
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C"]]
+    bdf2["D"] = bdf["A"] + bdf["C"]
+    pdf = df.copy()
+    pdf2 = pdf[["B", "C"]]
+    pdf2["D"] = pdf["A"] + pdf["C"]
+    assert bdf2.is_lazy_plan()
+    _test_equal(bdf2, pdf2, check_pandas_types=False)
+
+    # Multiple projections, new column
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C"]]
+    bdf2["D"] = bdf["B"].str.strip().str.lower()
+    pdf = df.copy()
+    pdf2 = pdf[["B", "C"]]
+    pdf2["D"] = pdf["B"].str.strip().str.lower()
+    assert bdf2.is_lazy_plan()
+    _test_equal(bdf2, pdf2, check_pandas_types=False)
+
+    # Single projection, existing column in source dataframe
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C"]]
+    bdf2["A"] = bdf["A"] + bdf["C"]
+    pdf = df.copy()
+    pdf2 = pdf[["B", "C"]]
+    pdf2["A"] = pdf["A"] + pdf["C"]
+    assert bdf2.is_lazy_plan()
+    _test_equal(bdf2, pdf2, check_pandas_types=False)
+
+    # Multiple projections, existing column in source dataframe
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C"]]
+    bdf2["A"] = bdf["B"].str.strip().str.lower()
+    pdf = df.copy()
+    pdf2 = pdf[["B", "C"]]
+    pdf2["A"] = pdf["B"].str.strip().str.lower()
+    assert bdf2.is_lazy_plan()
+    _test_equal(bdf2, pdf2, check_pandas_types=False)
+
+    # Single projection, existing column in projected dataframe
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C"]]
+    bdf2["B"] = bdf["A"] + bdf["C"]
+    pdf = df.copy()
+    pdf2 = pdf[["B", "C"]]
+    pdf2["B"] = pdf["A"] + pdf["C"]
+    assert bdf2.is_lazy_plan()
+    _test_equal(bdf2, pdf2, check_pandas_types=False)
+
+    # Multiple projections, existing column in projected dataframe
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C"]]
+    bdf2["B"] = bdf["B"].str.strip().str.lower()
+    pdf = df.copy()
+    pdf2 = pdf[["B", "C"]]
+    pdf2["B"] = pdf["B"].str.strip().str.lower()
+    assert bdf2.is_lazy_plan()
+    _test_equal(bdf2, pdf2, check_pandas_types=False)
 
 
 def test_parquet_read_partitioned(datapath):
@@ -1048,6 +1183,30 @@ def test_merge_non_equi_cond():
     _test_equal(
         bdf4.copy(),
         df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    df1.loc[0, "B"] = np.nan
+    bdf1 = bd.from_pandas(df1)
+
+    nan_df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    nan_bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+
+    nan_df4 = nan_df3[nan_df3.B < nan_df3.Dog]
+    nan_bdf4 = nan_bdf3[nan_bdf3.B < nan_bdf3.Dog]
+    # Make sure bdf3 is unevaluated at this point.
+    assert nan_bdf4.is_lazy_plan()
+
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
+    _test_equal(pre, 5)
+    _test_equal(post, 4)
+
+    _test_equal(
+        nan_bdf4.copy(),
+        nan_df4,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
@@ -1971,8 +2130,51 @@ def test_series_describe():
         _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
 
 
+def test_groupby_getattr_fallback_behavior():
+    import warnings
+
+    import pandas as pds
+
+    df = pds.DataFrame({"apply": [1], "B": [1], "C": [2]})
+    bdf = bd.from_pandas(df)
+
+    grouped = bdf.groupby("B")
+
+    # Accessing a column: should not raise a warning
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        _ = grouped.B
+    assert not record, f"Unexpected warning when accessing column: {record}"
+
+    # Accessing an implemented Pandas GroupBy method: should raise fallback warning
+    with pytest.warns(BodoLibFallbackWarning) as record:
+        _ = grouped.apply
+    assert len(record) == 1
+
+    # Accessing unknown attribute: should raise AttributeError
+    with pytest.raises(AttributeError):
+        _ = grouped.not_a_column
+
+
+def test_series_agg():
+    import pandas as pd
+
+    import bodo.pandas as bd
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+    bdf = bd.from_pandas(df)
+
+    bodo_out = bdf.A.aggregate("sum")
+    pd_out = df.A.aggregate("sum")
+    assert bodo_out == pd_out
+
+    bodo_out = bdf.A.aggregate(["min", "max", "count", "product"])
+    pd_out = df.A.aggregate(["min", "max", "count", "product"])
+    _test_equal(bodo_out, pd_out, check_pandas_types=False)
+
+
 def test_groupby_apply():
-    """Test for a groupby.aply from TPCH Q8."""
+    """Test for a groupby.apply from TPCH Q8."""
 
     df = pd.DataFrame(
         {
