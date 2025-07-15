@@ -51,7 +51,6 @@ from bodo.pandas.plan import (
     LogicalOrder,
     LogicalParquetWrite,
     LogicalProjection,
-    PythonScalarFuncExpression,
     _get_df_python_func_plan,
     execute_plan,
     get_proj_expr_single,
@@ -1265,33 +1264,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self._mgr._disable_collect = original_flag
 
 
-def _update_func_expr_source(
-    func_expr: PythonScalarFuncExpression,
-    new_source_plan: LazyPlan,
-    col_index_offset: int,
-):
-    """Update source plan of PythonScalarFuncExpression and add an offset to its
-    input data column index.
-    """
-    # Previous input data column index
-    in_col_ind = func_expr.args[2][0]
-    n_source_cols = len(new_source_plan.empty_data.columns)
-    # Add Index columns of the new source plan as input
-    index_cols = tuple(
-        range(
-            n_source_cols,
-            n_source_cols + get_n_index_arrays(new_source_plan.empty_data.index),
-        )
-    )
-    expr = PythonScalarFuncExpression(
-        func_expr.empty_data,
-        new_source_plan,
-        func_expr.args[1],
-        (in_col_ind + col_index_offset,) + index_cols,
-    )
-    return expr
-
-
 def _add_proj_expr_to_plan(
     df_plan: LazyPlan, value_plan: LazyPlan, key: str, replace_func_source=False
 ):
@@ -1312,8 +1284,8 @@ def _add_proj_expr_to_plan(
     # Get the function expression from the value plan to be added
     func_expr = get_proj_expr_single(value_plan)
 
-    if isinstance(func_expr, PythonScalarFuncExpression) and replace_func_source:
-        func_expr = _update_func_expr_source(func_expr, df_plan, ikey)
+    if replace_func_source:
+        func_expr = func_expr.update_func_expr_source(df_plan, ikey)
 
     # Update output column name
     func_expr = func_expr.replace_empty_data(

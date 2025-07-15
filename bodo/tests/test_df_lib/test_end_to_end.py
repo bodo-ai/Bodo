@@ -844,6 +844,35 @@ def test_set_df_column_const(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+def test_set_df_column_func_nested_arith(datapath, index_val):
+    """Test setting a dataframe column with nested functions inside an arithmetic operation."""
+    df = pd.DataFrame(
+        {
+            "A": [1.4, 2.1, 3.3],
+            "B": ["A1", "B23", "C345"],
+            "C": [1.1, 2.2, 3.3],
+            "D": [True, False, True],
+        }
+    )
+    df.index = index_val[: len(df)]
+
+    # New column
+    bdf = bd.from_pandas(df)
+    bdf["E"] = bdf.B.str.lower().str.len() + 1
+    assert bdf.is_lazy_plan()
+    pdf = df.copy()
+    pdf["E"] = pdf.B.str.lower().str.len() + 1
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Existing column
+    bdf = bd.from_pandas(df)
+    bdf["B"] = bdf.B.str.lower().str.len() + 1
+    assert bdf.is_lazy_plan()
+    pdf = df.copy()
+    pdf["B"] = pdf.B.str.lower().str.len() + 1
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+
 def test_set_df_column_arith(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe."""
     df = pd.DataFrame(
