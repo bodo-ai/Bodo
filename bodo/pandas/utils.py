@@ -849,11 +849,12 @@ def fallback_wrapper(self, attr):
                 pd_self = pd.Series(self)
 
                 # When self.dtype is pd.ArrowDtype(pa.timestamp("ns")), apply to_datetime elementwise.
-                if (
-                    isinstance(pd_self.dtype, pd.ArrowDtype)
-                    and pd_self.dtype.type == pd.Timestamp
+                if isinstance(self.dtype, pd.ArrowDtype) and pa.types.is_timestamp(
+                    self.dtype.pyarrow_dtype
                 ):
-                    converted = pd_self.map(lambda x: pd.to_datetime(x))
+                    unit = self.dtype.pyarrow_dtype.unit
+                    converted = pd_self.astype(f"datetime64[{unit}]")
+
                     # TODO: check if args[1:] is safe/appropriate for all cases.
                     return getattr(converted, attr.__name__)(*args[1:], **kwargs)
 
