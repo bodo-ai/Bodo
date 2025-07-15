@@ -25240,6 +25240,48 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#202575" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.7.5
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.7.5">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#new-features_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      🏎️ Performance Improvements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -25444,6 +25486,48 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#202575" class="md-nav__link">
+    <span class="md-ellipsis">
+      2025.7.5
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025.7.5">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#new-features_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✨ New Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      🏎️ Performance Improvements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -25607,6 +25691,27 @@
 <h3 id="dependency-upgrades_2">⚙️ Dependency Upgrades<a class="headerlink" href="#dependency-upgrades_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Removed maximum Python version restriction.</li>
+</ul>
+<h2 id="202575">2025.7.5<a class="headerlink" href="#202575" title="Permanent link">&para;</a></h2>
+<h3 id="new-features_3">✨ New Features<a class="headerlink" href="#new-features_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added support for Series methods including describe, agg, etc.</li>
+<li>Support setting output of Series.str.cat back into the dataframe as a new column</li>
+<li>Support filters on top of joins in plans that turn into non-equi joins</li>
+<li>Suppressed excessive fallback warnings</li>
+<li>Enabled column selection with Groupby getattr</li>
+</ul>
+<h3 id="performance-improvements">🏎️ Performance Improvements<a class="headerlink" href="#performance-improvements" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added cache flag to read_csv inside DataFrame Library.</li>
+<li>Improved performance of argument initialization inside of lazy plans.</li>
+<li>Adjusted Iceberg and Parquet reader parameters to use less memory.</li>
+</ul>
+<h3 id="bug-fixes_2">🐛 Bug Fixes<a class="headerlink" href="#bug-fixes_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Fixed merge output columns not created properly in some cases</li>
+<li>Fixed parquet read issue with filter columns not used anywhere else in the code</li>
+<li>Fixed Parquet read when Index metadata is missing</li>
 </ul>
 
 

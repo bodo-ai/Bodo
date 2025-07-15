@@ -30520,7 +30520,7 @@ the latest Bodo version on restart.</p>
 
 
 <h4 id="bodosdk.clients.organization.BodoOrganizationClient.create_aws_cloud_config" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">create_aws_cloud_config</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tf_backend_region</span><span class="p">,</span> <span class="n">role_arn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tf_bucket_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">account_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">access_key_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">secret_access_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">custom_tags</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">create_aws_cloud_config</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tf_backend_region</span><span class="p">,</span> <span class="n">role_arn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tf_bucket_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tf_dynamo_db_table_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">account_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">access_key_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">secret_access_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">custom_tags</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#bodosdk.clients.organization.BodoOrganizationClient.create_aws_cloud_config" class="headerlink" title="Permanent link">&para;</a></h4>
 
@@ -30591,6 +30591,20 @@ the latest Bodo version on restart.</p>
             <td>
               <div class="doc-md-description">
                 <p>Terraform bucket name.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>tf_dynamo_db_table_name</code></td>
+            <td>
+                  <code><autoref identifier="typing.Optional" optional hover>Optional</autoref>[<autoref identifier="str" optional>str</autoref>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Terraform dynamo db table name.</p>
               </div>
             </td>
             <td>
