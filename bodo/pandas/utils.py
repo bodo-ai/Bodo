@@ -839,12 +839,6 @@ def fallback_wrapper(self, attr):
 
             # In some cases, fallback fails and raises TypeError due to some operations being unsupported between PyArrow types.
             # Below logic processes deeper fallback that converts problematic PyArrow types to their Pandas equivalents.
-            warnings.warn(
-                BodoLibFallbackWarning(
-                    "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
-                )
-            )
-            # TODO: generalize this. Currently, this method is only used for BodoSeries.
             if isinstance(self, bodo.pandas.BodoSeries):
                 pd_self = pd.Series(self)
 
@@ -852,10 +846,14 @@ def fallback_wrapper(self, attr):
                 if isinstance(self.dtype, pd.ArrowDtype) and pa.types.is_timestamp(
                     self.dtype.pyarrow_dtype
                 ):
+                    warnings.warn(
+                        BodoLibFallbackWarning(
+                            "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
+                        )
+                    )
                     unit = self.dtype.pyarrow_dtype.unit
                     converted = pd_self.astype(f"datetime64[{unit}]")
 
-                    # TODO: check if args[1:] is safe/appropriate for all cases.
                     return getattr(converted, attr.__name__)(*args[1:], **kwargs)
 
             # Raise TypeError from initial call if self does not fall into any of the covered cases.

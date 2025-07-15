@@ -146,7 +146,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             and not name.startswith("_")
         ):
             msg = (
-                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                f"Series.{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
