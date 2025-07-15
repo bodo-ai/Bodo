@@ -21,8 +21,18 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
     // operators
     std::vector<int> selected_columns;
-    for (auto& ci : op.GetColumnIds()) {
-        selected_columns.push_back(ci.GetPrimaryIndex());
+
+    // DuckDB sets projection_ids when there are columns used in pushed down
+    // filters that are not used anywhere else in the query.
+    auto& column_ids = op.GetColumnIds();
+    if (!op.projection_ids.empty()) {
+        for (const auto& col : op.projection_ids) {
+            selected_columns.push_back(column_ids[col].GetPrimaryIndex());
+        }
+    } else {
+        for (auto& ci : column_ids) {
+            selected_columns.push_back(ci.GetPrimaryIndex());
+        }
     }
 
     auto physical_op =

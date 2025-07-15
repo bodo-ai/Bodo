@@ -189,6 +189,36 @@ def test_read_parquet_series_len_shape(datapath):
     assert bodo_out.is_lazy_plan()
 
 
+def test_read_parquet_filter_projection(datapath):
+    """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
+    and filter column isn't used anywhere in the query.
+    """
+    path = datapath("dataframe_library/q6_sample.pq")
+
+    def impl(lineitem):
+        date1 = pd.Timestamp("1996-01-01")
+        sel = (lineitem.L_SHIPDATE >= date1) & (lineitem.L_DISCOUNT >= 0.08)
+        flineitem = lineitem[sel]
+        return flineitem.L_EXTENDEDPRICE
+
+    bodo_df = bd.read_parquet(path)
+    bodo_df["L_SHIPDATE"] = bd.to_datetime(bodo_df.L_SHIPDATE, format="%Y-%m-%d")
+    py_df = pd.read_parquet(path)
+    py_df["L_SHIPDATE"] = pd.to_datetime(py_df.L_SHIPDATE, format="%Y-%m-%d")
+
+    bodo_out = impl(bodo_df)
+    assert bodo_out.is_lazy_plan()
+    py_out = impl(py_df)
+
+    _test_equal(
+        bodo_out.copy(),
+        py_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
     df = pd.DataFrame(
@@ -211,7 +241,11 @@ def test_write_parquet(index_val):
         # Read back to check
         py_out = pd.read_parquet(path)
         _test_equal(
-            py_out, df, check_pandas_types=False, sort_output=True, reset_index=True
+            py_out,
+            df,
+            check_pandas_types=False,
+            sort_output=True,
+            reset_index=True,
         )
 
         # Already distributed DataFrame case
@@ -227,7 +261,11 @@ def test_write_parquet(index_val):
         # Read back to check
         py_out = pd.read_parquet(path)
         _test_equal(
-            py_out, df, check_pandas_types=False, sort_output=True, reset_index=True
+            py_out,
+            df,
+            check_pandas_types=False,
+            sort_output=True,
+            reset_index=True,
         )
 
 
@@ -1042,6 +1080,30 @@ def test_merge_non_equi_cond():
     _test_equal(
         bdf4.copy(),
         df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    df1.loc[0, "B"] = np.nan
+    bdf1 = bd.from_pandas(df1)
+
+    nan_df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
+    nan_bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+
+    nan_df4 = nan_df3[nan_df3.B < nan_df3.Dog]
+    nan_bdf4 = nan_bdf3[nan_bdf3.B < nan_bdf3.Dog]
+    # Make sure bdf3 is unevaluated at this point.
+    assert nan_bdf4.is_lazy_plan()
+
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
+    _test_equal(pre, 5)
+    _test_equal(post, 4)
+
+    _test_equal(
+        nan_bdf4.copy(),
+        nan_df4,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
@@ -1965,8 +2027,51 @@ def test_series_describe():
         _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
 
 
+def test_groupby_getattr_fallback_behavior():
+    import warnings
+
+    import pandas as pds
+
+    df = pds.DataFrame({"apply": [1], "B": [1], "C": [2]})
+    bdf = bd.from_pandas(df)
+
+    grouped = bdf.groupby("B")
+
+    # Accessing a column: should not raise a warning
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        _ = grouped.B
+    assert not record, f"Unexpected warning when accessing column: {record}"
+
+    # Accessing an implemented Pandas GroupBy method: should raise fallback warning
+    with pytest.warns(BodoLibFallbackWarning) as record:
+        _ = grouped.apply
+    assert len(record) == 1
+
+    # Accessing unknown attribute: should raise AttributeError
+    with pytest.raises(AttributeError):
+        _ = grouped.not_a_column
+
+
+def test_series_agg():
+    import pandas as pd
+
+    import bodo.pandas as bd
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+    bdf = bd.from_pandas(df)
+
+    bodo_out = bdf.A.aggregate("sum")
+    pd_out = df.A.aggregate("sum")
+    assert bodo_out == pd_out
+
+    bodo_out = bdf.A.aggregate(["min", "max", "count", "product"])
+    pd_out = df.A.aggregate(["min", "max", "count", "product"])
+    _test_equal(bodo_out, pd_out, check_pandas_types=False)
+
+
 def test_groupby_apply():
-    """Test for a groupby.aply from TPCH Q8."""
+    """Test for a groupby.apply from TPCH Q8."""
 
     df = pd.DataFrame(
         {
