@@ -933,60 +933,60 @@ def test_set_df_column_extra_proj(datapath, index_val):
 
     # Single projection, new column
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["D"] = bdf["A"] + bdf["C"]
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["D"] = pdf["A"] + pdf["C"]
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Multiple projections, new column
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["D"] = bdf["B"].str.strip().str.lower()
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["D"] = pdf["B"].str.strip().str.lower()
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Single projection, existing column in source dataframe
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["A"] = bdf["A"] + bdf["C"]
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["A"] = pdf["A"] + pdf["C"]
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Multiple projections, existing column in source dataframe
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["A"] = bdf["B"].str.strip().str.lower()
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["A"] = pdf["B"].str.strip().str.lower()
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Single projection, existing column in projected dataframe
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["B"] = bdf["A"] + bdf["C"]
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["B"] = pdf["A"] + pdf["C"]
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Multiple projections, existing column in projected dataframe
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["B"] = bdf["B"].str.strip().str.lower()
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["B"] = pdf["B"].str.strip().str.lower()
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
