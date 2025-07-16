@@ -24,7 +24,7 @@ def run_bodo_benchmark(num_workers):
     bodo_workspace = BodoWorkspaceClient()
     benchmark_cluster = bodo_workspace.ClusterClient.create(
         name="Benchmark Bodo",
-        instance_type="r6i.16xlarge",
+        instance_type="c6i.16xlarge",
         workers_quantity=num_workers,
     )
     benchmark_cluster.wait_for_status(["RUNNING"])
