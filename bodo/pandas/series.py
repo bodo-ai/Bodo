@@ -114,16 +114,28 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 empty_data = _empty_like(self)
                 if bodo.dataframe_library_run_parallel:
                     nrows = len(self)
-                    self._source_plan = LogicalGetPandasReadParallel(
-                        empty_data,
+                    read_plan = LogicalGetPandasReadParallel(
+                        empty_data.to_frame(),
                         nrows,
                         LazyPlanDistributedArg(self),
                     )
                 else:
-                    self._source_plan = LogicalGetPandasReadSeq(
-                        empty_data,
+                    read_plan = LogicalGetPandasReadSeq(
+                        empty_data.to_frame(),
                         self,
                     )
+
+                # Make sure Series plans are always single expr projections for easier
+                # matching later.
+                self._source_plan = LogicalProjection(
+                    empty_data.to_frame(),
+                    read_plan,
+                    tuple(
+                        make_col_ref_exprs(
+                            range(1 + get_n_index_arrays(empty_data.index)), read_plan
+                        )
+                    ),
+                )
 
                 return self._source_plan
 

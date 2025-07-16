@@ -483,12 +483,8 @@ def getPlanStatistics(plan: LazyPlan):
 
 def get_proj_expr_single(proj: LazyPlan):
     """Get the single expression from a LogicalProjection node."""
-    if is_single_projection(proj):
-        return proj.exprs[0]
-    else:
-        if not proj.is_series:
-            raise Exception("Got a non-Series in get_proj_expr_single")
-        return make_col_ref_exprs([0], proj)[0]
+    assert is_single_projection(proj), "Expected single projection"
+    return proj.exprs[0]
 
 
 def get_single_proj_source_if_present(proj: LazyPlan):
@@ -541,7 +537,7 @@ class LazyPlanDistributedArg:
     Class to hold the arguments for a LazyPlan that are distributed on the workers.
     """
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame | pd.Series):
         self.df = df
         self.mgr = None
         self.res_id = None

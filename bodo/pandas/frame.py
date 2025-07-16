@@ -963,22 +963,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "only string and BodoSeries keys are supported"
             )
 
-        """ Create 0 length versions of the dataframe and the key and
-            simulate the operation to see the resulting type. """
+        # Create 0 length versions of the dataframe and the key and
+        # simulate the operation to see the resulting type.
         zero_size_self = _empty_like(self)
         if isinstance(key, BodoSeries):
-            """ This is a masking operation. """
-            key_plan = (
-                # TODO: error checking for key to be a projection on the same dataframe
-                # with a binary operator
-                get_proj_expr_single(key._plan)
-                if key._plan is not None
-                else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
-            )
+            # This is a masking operation.
+            # TODO: error checking for key to be a projection on the same dataframe
+            key_expr = get_proj_expr_single(key._plan)
             zero_size_key = _empty_like(key)
             empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
-                plan=LogicalFilter(empty_data, self._plan, key_plan),
+                plan=LogicalFilter(empty_data, self._plan, key_expr),
             )
         else:
             """ This is selecting one or more columns. Be a bit more
