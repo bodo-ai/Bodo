@@ -349,8 +349,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 return other.str.cat(self)
 
         # If other is an iterable, fall back to Pandas.
-        # TODO: strengthen this check.
-        elif isinstance(other, allowed_types_map["binop_scalar"]):
+        elif pd.api.types.is_scalar(other):
             if op == "__add__":
                 return self.add(other)
             if op == "__radd__":

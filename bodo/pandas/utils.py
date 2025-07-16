@@ -432,6 +432,10 @@ def run_func_on_table(cpp_table, result_type, in_args):
     # Arrow dtypes can be very slow for UDFs in Pandas:
     # https://github.com/pandas-dev/pandas/issues/61747
     # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
+    # Note: `add`, `sub`, `radd` and `rsub` do not use Arrow dtypes because
+    # Arrow does not support element-wise binary operations
+    # across most scalar types. Instead, fallback logic using Pandas semantics
+    # is used to ensure consistent behavior.
     use_arrow_dtypes = not (
         is_attr
         and func
@@ -851,9 +855,7 @@ def fallback_wrapper(self, attr):
                             "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
                         )
                     )
-                    unit = self.dtype.pyarrow_dtype.unit
-                    converted = pd_self.astype(f"datetime64[{unit}]")
-
+                    converted = pd_self.array._pa_array.to_pandas()
                     return getattr(converted, attr.__name__)(*args[1:], **kwargs)
 
             # Raise TypeError from initial call if self does not fall into any of the covered cases.
