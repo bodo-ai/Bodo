@@ -2205,3 +2205,81 @@ def test_groupby_apply():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_tpch_q01():
+    def tpch_q01(lineitem):
+        date = pd.Timestamp("1998-09-02")
+        lineitem_filtered = lineitem.loc[
+            :,
+            [
+                "L_QUANTITY",
+                "L_EXTENDEDPRICE",
+                "L_DISCOUNT",
+                "L_TAX",
+                "L_RETURNFLAG",
+                "L_LINESTATUS",
+                "L_SHIPDATE",
+                "L_ORDERKEY",
+            ],
+        ]
+        sel = lineitem_filtered.L_SHIPDATE <= date
+        lineitem_filtered = lineitem_filtered[sel]
+        lineitem_filtered["AVG_QTY"] = lineitem_filtered.L_QUANTITY
+        lineitem_filtered["AVG_PRICE"] = lineitem_filtered.L_EXTENDEDPRICE
+        lineitem_filtered["DISC_PRICE"] = lineitem_filtered.L_EXTENDEDPRICE * (
+            1 - lineitem_filtered.L_DISCOUNT
+        )
+        lineitem_filtered["CHARGE"] = (
+            lineitem_filtered.L_EXTENDEDPRICE
+            * (1 - lineitem_filtered.L_DISCOUNT)
+            * (1 + lineitem_filtered.L_TAX)
+        )
+        gb = lineitem_filtered.groupby(
+            ["L_RETURNFLAG", "L_LINESTATUS"], as_index=False
+        )[
+            "L_QUANTITY",
+            "L_EXTENDEDPRICE",
+            "DISC_PRICE",
+            "CHARGE",
+            "AVG_QTY",
+            "AVG_PRICE",
+            "L_DISCOUNT",
+            "L_ORDERKEY",
+        ]
+        total = gb.agg(
+            {
+                "L_QUANTITY": "sum",
+                "L_EXTENDEDPRICE": "sum",
+                "DISC_PRICE": "sum",
+                "CHARGE": "sum",
+                "AVG_QTY": "mean",
+                "AVG_PRICE": "mean",
+                "L_DISCOUNT": "mean",
+                "L_ORDERKEY": "count",
+            }
+        )
+        total = total.sort_values(["L_RETURNFLAG", "L_LINESTATUS"])
+        return total
+
+    data = {
+        "L_QUANTITY": [10, 20, 30],
+        "L_EXTENDEDPRICE": [100.0, 200.0, 300.0],
+        "L_DISCOUNT": [0.05, 0.1, 0.15],
+        "L_TAX": [0.07, 0.08, 0.09],
+        "L_RETURNFLAG": ["N", "R", "N"],
+        "L_LINESTATUS": ["O", "F", "O"],
+        "L_SHIPDATE": [
+            pd.Timestamp("1998-08-30"),
+            pd.Timestamp("1998-09-02"),
+            pd.Timestamp("1998-09-03"),
+        ],
+        "L_ORDERKEY": [1, 2, 3],
+    }
+    pd_item = pd.DataFrame(data)
+    bd_item = bd.from_pandas(pd_item)
+    pd_total = tpch_q01(pd_item)
+    bd_total = tpch_q01(bd_item)
+    assert bd_total.is_lazy_plan()
+
+    _test_equal(bd_total, pd_total, check_pandas_types=False)
