@@ -951,41 +951,37 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
+        import pyarrow as pa
 
         from bodo.pandas.base import _empty_like
-
-        # Only selecting columns or filtering with BodoSeries is supported
-        if not (
-            isinstance(key, (str, BodoSeries))
-            or (isinstance(key, list) and all(isinstance(k, str) for k in key))
-        ):
-            raise BodoLibNotImplementedException(
-                "only string and BodoSeries keys are supported"
-            )
 
         # Create 0 length versions of the dataframe and the key and
         # simulate the operation to see the resulting type.
         zero_size_self = _empty_like(self)
-        if isinstance(key, BodoSeries):
-            # This is a masking operation.
-            # TODO: error checking for key to be a projection on the same dataframe
+
+        # Filter operation
+        if isinstance(key, BodoSeries) and key._plan.pa_schema.types[0] == pa.bool_():
             key_expr = get_proj_expr_single(key._plan)
+            key_expr = key_expr.replace_source(self._plan)
+            if key_expr is None:
+                raise BodoLibNotImplementedException(
+                    "DataFrame filter expression must be on the same dataframe."
+                )
             zero_size_key = _empty_like(key)
             empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
                 plan=LogicalFilter(empty_data, self._plan, key_expr),
             )
-        else:
-            """ This is selecting one or more columns. Be a bit more
-                lenient than Pandas here which says that if you have
-                an iterable it has to be 2+ elements. We will allow
-                just one element. """
+        # Select one or more columns
+        elif isinstance(key, str) or (
+            isinstance(key, list) and all(isinstance(k, str) for k in key)
+        ):
             if isinstance(key, str):
                 key = [key]
                 output_series = True
             else:
                 output_series = False
-            assert isinstance(key, Iterable)
+
             key = list(key)
             # convert column name to index
             key_indices = [self.columns.get_loc(x) for x in key]
@@ -1008,6 +1004,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     exprs,
                 ),
             )
+
+        raise BodoLibNotImplementedException(
+            "DataFrame getitem: Only selecting columns or filtering with BodoSeries is supported."
+        )
 
     @check_args_fallback("none")
     def __setitem__(self, key, value) -> None:
