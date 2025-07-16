@@ -578,17 +578,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return _get_series_python_func_plan(
                 self._plan, empty_series, map_wrapper, (), {}, is_method=False
             )
-        except BodoError as e:
-            msg = (
-                "Could not compile user defined function, running on a small "
-                "sample to determine output types, this may hurt performance."
-                f"BodoError: {e}"
-            )
-            warnings.warn(BodoLibFallbackWarning(msg))
-
-            empty_series = get_scalar_udf_result_type(
-                self, "map", arg, na_action=na_action
-            )
+        except BodoError:
+            pass
 
         # Get output data type by running the UDF on a sample of the data.
         empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)

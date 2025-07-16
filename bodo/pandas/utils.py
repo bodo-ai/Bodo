@@ -739,7 +739,7 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
 
     # Prevent hangs from empty object arrays
     if method_name == "jit":
-        sample_sizes = (bodo.spawn.spawner.get_num_workers(),)
+        sample_sizes = (2 * bodo.spawn.spawner.get_num_workers(),)
 
     except_msg = ""
     for sample_size in sample_sizes:

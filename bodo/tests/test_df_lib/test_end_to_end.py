@@ -731,13 +731,56 @@ def test_series_map(datapath, index_val, na_action):
     df.index = index_val[: len(df)]
 
     def func(x):
-        return str(x)
+        return "A" if pd.isna(x) else "B"
 
     bdf = bd.from_pandas(df)
     out_pd = df.A.map(func, na_action=na_action)
     out_bodo = bdf.A.map(func, na_action=na_action)
     assert out_bodo.is_lazy_plan()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_series_map_non_jit(index_val):
+    """Test non-jittable UDFs in ser.map still work."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([None, None, 3, 7, 2] * 2, "Int64"),
+            "B": [None, None, "B1", "C1", "Abc"] * 2,
+            "C": pd.array([4, 5, 6, -1, 1] * 2, "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+
+    # Function with different return types,
+    # technically this function isn't allowed in Python mode
+    # either, but the branch is never executed due to the data
+    # recieved.
+    def func1(x):
+        if x > 10:
+            return "too-large"
+        else:
+            return x
+
+    def unknown_func(x):
+        return x + 10
+
+    # Calling a function that is not known to bodo.
+    def func2(x):
+        return unknown_func(x)
+
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf.A.map(func1)
+    pdf = df.copy()
+    pdf2 = pdf.A.map(func1)
+
+    _test_equal(pdf2, bdf2, check_pandas_types=False)
+
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf.A.map(func2)
+    pdf = df.copy()
+    pdf2 = pdf.A.map(func2)
+
+    _test_equal(pdf2, bdf2, check_pandas_types=False)
 
 
 def test_set_df_column(datapath, index_val):
