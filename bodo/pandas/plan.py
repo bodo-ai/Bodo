@@ -367,18 +367,28 @@ class ConstantExpression(Expression):
 class AggregateExpression(Expression):
     """Expression representing an aggregate function in the query plan."""
 
+    @property
+    def source(self):
+        """Return the source of the aggregate expression."""
+        return self.args[0]
+
     def replace_source(self, new_source: LazyPlan):
         # TODO: handle source replacement for aggregate expressions
-        if self.args[0] == new_source:
+        if self.source == new_source:
             return self
 
 
 class PythonScalarFuncExpression(Expression):
     """Expression representing a Python scalar function call in the query plan."""
 
+    @property
+    def source(self):
+        """Return the source of the expression."""
+        return self.args[0]
+
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
-        if self.args[0] != new_source_plan:
+        if self.source != new_source_plan:
             assert len(self.args[2]) == 1 + get_n_index_arrays(self.empty_data.index), (
                 "PythonScalarFuncExpression::update_func_expr_source: expected single input column"
             )
@@ -405,7 +415,7 @@ class PythonScalarFuncExpression(Expression):
 
     def replace_source(self, new_source: LazyPlan):
         # TODO: handle source replacement for PythonScalarFuncExpression
-        if self.args[0] == new_source:
+        if self.source == new_source:
             return self
 
 
@@ -420,6 +430,11 @@ class BinaryExpression(Expression):
         self.rhs = rhs
         self.op = op
         super().__init__(empty_data, lhs, rhs, op)
+
+    @property
+    def source(self):
+        """Return the source of the binary expression."""
+        return self.lhs.source if isinstance(self.lhs, Expression) else self.rhs.source
 
     def replace_source(self, new_source: LazyPlan):
         """Replace the source of the expression with a new source plan."""
@@ -462,6 +477,11 @@ class UnaryOpExpression(Expression):
         self.source_expr = source_expr
         self.op = op
         super().__init__(empty_data, source_expr, op)
+
+    @property
+    def source(self):
+        """Return the source of the unary expression."""
+        return self.source_expr.source
 
     def replace_source(self, new_source: LazyPlan):
         """Replace the source of the expression with a new source plan."""

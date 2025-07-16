@@ -41,6 +41,24 @@ def test_df_getitem_fallback_warning():
     with pytest.warns(BodoLibFallbackWarning):
         bdf[S]
 
+    # Arithmetic expression arguments with different source plans
+    bdf = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(pd.DataFrame({"A": [1, 2, 3]}))
+    with pytest.warns(BodoLibFallbackWarning):
+        (bdf.A + bdf2.A)
+
+    # Comparison expression arguments with different source plans
+    bdf = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(pd.DataFrame({"A": [1, 2, 3]}))
+    with pytest.warns(BodoLibFallbackWarning):
+        (bdf.A == bdf2.A)
+
+    # Conjunction expression arguments with different source plans
+    bdf = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(pd.DataFrame({"A": [1, 2, 3]}))
+    with pytest.warns(BodoLibFallbackWarning):
+        ((bdf.A == 1) & (bdf2.A == 1))
+
 
 def test_df_setitem_fallback_warning():
     """Make sure DataFrame.__setitem__() raises a warning when falling back to Pandas."""
