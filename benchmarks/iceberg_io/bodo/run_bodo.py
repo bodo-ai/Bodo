@@ -1,4 +1,4 @@
-"""This script runs the full PyIceberg benchmark on the Bodo Platform.
+"""This script runs the full Bodo benchmark on the Bodo Platform.
 First, ensure that you have bodosdk installed (pip install bodosdk), you will
 also need to have an account on the Bodo Platform and the following environment
 variables set:
@@ -9,17 +9,19 @@ Refer to the SDK guide for more details:
 
 https://docs.bodo.ai/latest/guides/using_bodo_platform/bodo_platform_sdk_guide/#installation
 
-NOTE: This script assumes that you have the file `copy_orders_pyiceberg.py`
+NOTE: This script assumes that you have the file `copy_orders_bodo.py`
 copied in your current workspace.
 
 usage:
     python run_bodo.py
 """
 
+import argparse
+
 from bodosdk import BodoWorkspaceClient
 
 
-def run_pyiceberg_benchmark():
+def run_bodo_benchmark(num_workers: int = 1):
     bodo_workspace = BodoWorkspaceClient()
 
     instance_roles = bodo_workspace.InstanceRoleClient.list(
@@ -31,9 +33,9 @@ def run_pyiceberg_benchmark():
     instance_role = bodo_workspace.InstanceRoleClient.get(instance_roles[0].id)
 
     benchmark_cluster = bodo_workspace.ClusterClient.create(
-        name="Benchmark PyIceberg",
+        name="Benchmark Bodo",
         instance_type="c6i.32xlarge",
-        workers_quantity=1,
+        workers_quantity=num_workers,
         instance_role=instance_role,
     )
     benchmark_cluster.wait_for_status(["RUNNING"])
@@ -43,7 +45,7 @@ def run_pyiceberg_benchmark():
         benchmark_job = benchmark_cluster.run_job(
             code_type="PYTHON",
             source={"type": "WORKSPACE", "path": "/"},
-            exec_file="copy_orders_pyiceberg.py",
+            exec_file="copy_orders_bodo.py",
         )
         print(benchmark_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 
@@ -53,7 +55,13 @@ def run_pyiceberg_benchmark():
 
 
 def main():
-    run_pyiceberg_benchmark()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--num_workers", type=int, default=1, help="Number of workers in cluster."
+    )
+    args = parser.parse_args()
+
+    run_bodo_benchmark(args.num_workers)
 
 
 if __name__ == "__main__":
