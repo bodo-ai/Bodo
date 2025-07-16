@@ -581,7 +581,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 return S.map(arg, na_action=na_action)
 
             try:
-                # TODO: extract type information from the dispatcher itself.
                 empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
             except BodoError as e:
                 empty_series = None

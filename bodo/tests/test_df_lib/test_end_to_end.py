@@ -768,15 +768,18 @@ def test_series_map_non_jit(index_val):
     def func2(x):
         return unknown_func(x)
 
+    warn_msg = "Compiling User Defined Function failed"
+
     bdf = bd.from_pandas(df)
-    bdf2 = bdf.A.map(func1)
+    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+        bdf2 = bdf.A.map(func1)
     pdf = df.copy()
     pdf2 = pdf.A.map(func1)
-
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
     bdf = bd.from_pandas(df)
-    bdf2 = bdf.A.map(func2)
+    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+        bdf2 = bdf.A.map(func2)
     pdf = df.copy()
     pdf2 = pdf.A.map(func2)
 
