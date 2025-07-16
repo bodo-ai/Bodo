@@ -449,7 +449,9 @@ class BinaryExpression(Expression):
             else self.rhs
         )
 
-        if new_lhs is None or new_rhs is None:
+        if (new_lhs is None and self.lhs is not None) or (
+            new_rhs is None and self.rhs is not None
+        ):
             return None
 
         out = self.__class__(self.empty_data, new_lhs, new_rhs, self.op)
