@@ -2205,3 +2205,38 @@ def test_groupby_apply():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_empty_duckdb_filter():
+    """Test for when duckdb generates an empty filter."""
+
+    lineitem = pd.DataFrame(
+        {
+            "L_QUANTITY": pd.array([5, 5, 5, 5, 5, 5, 5, 5, 5, 5], "Int32"),
+            "L_PARTKEY": pd.array([0, 0, 2, 0, 0, 2, 0, 0, 2, 0], "Int32"),
+        }
+    )
+
+    part = pd.DataFrame(
+        {
+            "P_PARTKEY": pd.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "Int32"),
+            "P_BRAND": pd.array([0, 0, 1, 2, 3, 0, 0, 1, 2, 3], "Int32"),
+        }
+    )
+
+    def impl(lineitem, part):
+        jn = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
+        jnsel = (jn.P_BRAND == 0) & (jn.L_QUANTITY >= 0) | (jn.P_BRAND == 2)
+        return jn[jnsel]
+
+    pd_out = impl(lineitem, part)
+    bodo_out = impl(bd.from_pandas(lineitem), bd.from_pandas(part))
+    assert bodo_out.is_lazy_plan()
+
+    _test_equal(
+        bodo_out,
+        pd_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
