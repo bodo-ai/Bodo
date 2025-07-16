@@ -63,7 +63,6 @@ from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     check_args_fallback,
-    fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
@@ -126,35 +125,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def __init__(self, *args, **kwargs):
         # No-op since already initialized by __new__
         pass
-
-    def __getattribute__(self, name: str):
-        """Custom attribute access that triggers a fallback warning for unsupported attributes."""
-
-        ignore_fallback_attrs = [
-            "dtypes",
-            "name",
-            "to_string",
-            "attrs",
-            "flags",
-            "iloc",
-        ]
-
-        cls = object.__getattribute__(self, "__class__")
-        base = cls.__mro__[0]
-
-        if (
-            name not in base.__dict__
-            and name not in ignore_fallback_attrs
-            and not name.startswith("_")
-        ):
-            msg = (
-                f"DataFrame.{name} is not implemented in Bodo Dataframe Library yet. "
-                "Falling back to Pandas (may be slow or run out of memory)."
-            )
-            warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(self, object.__getattribute__(self, name))
-
-        return object.__getattribute__(self, name)
 
     @property
     def loc(self):
