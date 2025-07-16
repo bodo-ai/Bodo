@@ -572,15 +572,24 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.utils import _get_empty_series_arrow
 
         # Get output data type by running the UDF on a sample of the data.
-        if os.environ.get("BODO_JIT_UDFS", "0") == "1":
+        if os.environ.get("BODO_JIT_UDFS", "1") == "1":
             print("Jitting the udf...")
 
-            @bodo.jit(cache=True, spawn=False, distributed=False)
+            @bodo.jit(cache=True)
             def map_wrapper(S):
                 return S.map(arg, na_action=na_action)
 
             try:
+                # Try compiling and infering dtypes with an empty Series.
                 empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
+                assert isinstance(empty_series.dtype, pd.ArrowDtype)
+                # Null output type could mean we failed to extract the type of the series
+                # from the output of jit on empty data, i.e. got "object".
+                # running on a sample of data in this case.
+                # TODO: extract type info from compiled function.
+                if pa.types.is_null(empty_series.dtype.pyarrow_dtype):
+                    empty_series = get_scalar_udf_result_type(self, "jit", map_wrapper)
+
                 return _get_series_python_func_plan(
                     self._plan, empty_series, map_wrapper, (), {}, is_method=False
                 )

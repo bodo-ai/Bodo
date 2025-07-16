@@ -766,7 +766,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
             # If apply just calls a builtin function we just return the type of that
             # function.
             ret_type = f_return_type
-
+        #  breakpoint()
         return signature(ret_type, (func,)).replace(pysig=pysig)
 
     @bound_function("series.map", no_unliteral=True)
