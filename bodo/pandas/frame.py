@@ -1327,24 +1327,27 @@ def _get_setitem_proj_exprs(
 ):
     """Create projection expressions for setting a column in a dataframe."""
     n_cols = len(in_empty_df.columns)
-    data_cols = []
-    for k, col in enumerate(in_empty_df.columns):
-        if out_columns is not None and col not in out_columns:
-            continue
-        if is_replace and k == ikey:
-            data_cols.append(func_expr)
-        else:
-            data_cols.append(make_col_ref_exprs([k], df_plan)[0])
 
-    # New column should be at the end of data columns to match Pandas
-    # NOTE: output column name may be in source dataframe but not in projected source
-    # so skipped in the loop above but needs added here. Example:
-    # df2 = df[["B", "D"]]
-    # df2["A"] = df["A"] + df["C"]
-    if not is_replace or (
-        out_columns is not None and in_empty_df.columns[ikey] not in out_columns
-    ):
-        data_cols.append(func_expr)
+    if out_columns is not None:
+        data_cols = []
+        for c in out_columns:
+            if is_replace and c == in_empty_df.columns[ikey]:
+                data_cols.append(func_expr)
+            else:
+                data_cols.append(
+                    make_col_ref_exprs([in_empty_df.columns.get_loc(c)], df_plan)[0]
+                )
+
+        if not is_replace or in_empty_df.columns[ikey] not in out_columns:
+            data_cols.append(func_expr)
+    else:
+        key_indices = [k for k in range(n_cols) if (not is_replace or k != ikey)]
+        data_cols = make_col_ref_exprs(key_indices, df_plan)
+        if is_replace:
+            data_cols.insert(ikey, func_expr)
+        else:
+            # New column should be at the end of data columns to match Pandas
+            data_cols.append(func_expr)
 
     index_cols = make_col_ref_exprs(
         range(n_cols, n_cols + get_n_index_arrays(in_empty_df.index)), df_plan
