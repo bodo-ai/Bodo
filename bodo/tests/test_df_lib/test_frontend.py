@@ -211,3 +211,26 @@ def test_single_fallback_warning_emitted():
         and "not implemented" in warning_msg
         and "Falling back to Pandas" in warning_msg
     ), f"Unexpected warning message: {warning_msg}"
+
+
+def test_execution_warning():
+    """Test that plan execution warning is correctly raised."""
+    import warnings
+
+    import bodo
+
+    df = pd.DataFrame({"A": ["2", "3"]})
+    bodo.dataframe_library_debug = 1
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        df = df.A.str.lower()
+
+    assert not w, f"Unexpected warning {w[0]}"
+    assert df.is_lazy_plan()
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        df.execute_plan()
+
+    assert len(w) == 1, "Failed to raise execution warning."
