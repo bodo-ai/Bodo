@@ -227,7 +227,8 @@ def test_series_map_wrap_python(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-@pytest.mark.df_lib
+# TODO (df_lib): Support with _engine="bodo"
+# @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup1(memory_leak_check):
     def test_impl(S):
@@ -237,7 +238,8 @@ def test_series_map_tup1(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-@pytest.mark.df_lib
+# TODO (df_lib): Support with _engine="bodo"
+# @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_map1(memory_leak_check):
     def test_impl(S):

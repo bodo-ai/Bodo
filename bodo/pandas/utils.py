@@ -723,8 +723,8 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
         Empty Series with the dtype matching the output of the UDF
         (or equivalent pyarrow dtype)
     """
-    assert method_name in {"map", "apply", "map_partitions", "jit"}, (
-        "expected method to be one of {'apply', 'map', 'map_partitions', 'jit'}"
+    assert method_name in {"map", "apply", "map_partitions"}, (
+        "expected method to be one of {'apply', 'map', 'map_partitions'}"
     )
 
     base_class = obj.__class__.__bases__[0]
@@ -737,14 +737,10 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
     # TODO: Tune sample sizes
     sample_sizes = (1, 4, 9, 25, 100)
 
-    # Prevent hangs from empty object arrays
-    if method_name == "jit":
-        sample_sizes = (2 * bodo.spawn.spawner.get_num_workers(),)
-
     except_msg = ""
     for sample_size in sample_sizes:
         df_sample = obj.head(sample_size).execute_plan()
-        pd_sample = df_sample if apply_method is None else base_class(df_sample)
+        pd_sample = base_class(df_sample)
         out_sample = (
             func(pd_sample, *args, **kwargs)
             if apply_method is None
