@@ -774,7 +774,7 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
 
     # map_partitions is not a pandas.DataFrame method.
     apply_method = None
-    if method_name != "map_partitions":
+    if method_name in ("map", "apply"):
         apply_method = getattr(base_class, method_name)
 
     # TODO: Tune sample sizes

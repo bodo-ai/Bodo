@@ -731,13 +731,59 @@ def test_series_map(datapath, index_val, na_action):
     df.index = index_val[: len(df)]
 
     def func(x):
-        return str(x)
+        return "A" if pd.isna(x) else "B"
 
     bdf = bd.from_pandas(df)
     out_pd = df.A.map(func, na_action=na_action)
     out_bodo = bdf.A.map(func, na_action=na_action)
     assert out_bodo.is_lazy_plan()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_series_map_non_jit(index_val):
+    """Test non-jittable UDFs in ser.map still work."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([None, None, 3, 7, 2] * 2, "Int64"),
+            "B": [None, None, "B1", "C1", "Abc"] * 2,
+            "C": pd.array([4, 5, 6, -1, 1] * 2, "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+
+    # Function with different return types,
+    # technically this function isn't allowed in Python mode
+    # either, but the branch is never executed due to the data
+    # recieved.
+    def func1(x):
+        if x > 10:
+            return "too-large"
+        else:
+            return x
+
+    def unknown_func(x):
+        return x + 10
+
+    # Calling a function that is not known to bodo.
+    def func2(x):
+        return unknown_func(x)
+
+    warn_msg = "Compiling User Defined Function failed"
+
+    bdf = bd.from_pandas(df)
+    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+        bdf2 = bdf.A.map(func1)
+    pdf = df.copy()
+    pdf2 = pdf.A.map(func1)
+    _test_equal(pdf2, bdf2, check_pandas_types=False)
+
+    bdf = bd.from_pandas(df)
+    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+        bdf2 = bdf.A.map(func2)
+    pdf = df.copy()
+    pdf2 = pdf.A.map(func2)
+
+    _test_equal(pdf2, bdf2, check_pandas_types=False)
 
 
 def test_set_df_column(datapath, index_val):
@@ -933,60 +979,60 @@ def test_set_df_column_extra_proj(datapath, index_val):
 
     # Single projection, new column
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["D"] = bdf["A"] + bdf["C"]
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["D"] = pdf["A"] + pdf["C"]
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Multiple projections, new column
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["D"] = bdf["B"].str.strip().str.lower()
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["D"] = pdf["B"].str.strip().str.lower()
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Single projection, existing column in source dataframe
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["A"] = bdf["A"] + bdf["C"]
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["A"] = pdf["A"] + pdf["C"]
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Multiple projections, existing column in source dataframe
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["A"] = bdf["B"].str.strip().str.lower()
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["A"] = pdf["B"].str.strip().str.lower()
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Single projection, existing column in projected dataframe
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["B"] = bdf["A"] + bdf["C"]
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["B"] = pdf["A"] + pdf["C"]
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
     # Multiple projections, existing column in projected dataframe
     bdf = bd.from_pandas(df)
-    bdf2 = bdf[["B", "C"]]
+    bdf2 = bdf[["C", "B"]]
     bdf2["B"] = bdf["B"].str.strip().str.lower()
     pdf = df.copy()
-    pdf2 = pdf[["B", "C"]]
+    pdf2 = pdf[["C", "B"]]
     pdf2["B"] = pdf["B"].str.strip().str.lower()
     assert bdf2.is_lazy_plan()
     _test_equal(bdf2, pdf2, check_pandas_types=False)

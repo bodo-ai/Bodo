@@ -1384,6 +1384,8 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_list_array_to_bodo(
                 std::static_pointer_cast<arrow::LargeListArray>(arrow_arr),
                 dicts_ref_arr, src_pool);
+        // convert 32-bit offset array to 64-bit offset array to match Bodo data
+        // layout
         case arrow::Type::LIST: {
             static_assert(OFFSET_BITWIDTH == 64);
             auto res = arrow::compute::Cast(

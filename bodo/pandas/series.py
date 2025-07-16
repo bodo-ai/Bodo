@@ -563,39 +563,53 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return BodoDatetimeProperties(self)
 
     @check_args_fallback(unsupported="none")
-    def map(self, arg, na_action=None):
+    def map(self, arg, na_action=None, _engine="bodo"):
         """
         Map values of Series according to an input mapping or function.
         """
-        import os
-
         from bodo.pandas.utils import _get_empty_series_arrow
 
-        # Get output data type by running the UDF on a sample of the data.
-        if os.environ.get("BODO_JIT_UDFS", "0") == "1":
-            print("Jitting the udf...")
+        if _engine not in ("bodo", "python"):
+            raise TypeError(
+                f"Series.map() got unsupported engine {_engine}, expected one of ('bodo', 'python')."
+            )
 
-            @bodo.jit(cache=True, spawn=False, distributed=False)
+        if _engine == "bodo":
+
+            @bodo.jit(cache=True)
             def map_wrapper(S):
                 return S.map(arg, na_action=na_action)
 
             try:
                 empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
+            except BodoError as e:
+                empty_series = None
+                error_msg = str(e)
+
+            assert empty_series is None or isinstance(empty_series.dtype, pd.ArrowDtype)
+
+            # Jit failed to determine dtypes, likely from gaps in our Arrow support.
+            if empty_series is not None and pa.types.is_null(
+                empty_series.dtype.pyarrow_dtype
+            ):
+                empty_series = None
+                error_msg = "Jit could not determine pyarrow return type from UDF."
+
+            if empty_series is not None:
                 return _get_series_python_func_plan(
                     self._plan, empty_series, map_wrapper, (), {}, is_method=False
                 )
-            except BodoError as e:
+            else:
                 msg = (
-                    "Could not compile user defined function, running on a small "
-                    "sample to determine output types, this may hurt performance."
-                    f"BodoError: {e}"
+                    "Compiling User Defined Function failed or encountered an unsupported result type:"
+                    f"{error_msg}"
+                    "Falling back to Python engine,"
+                    "Running UDF on a small sample of data to determine output types."
                 )
                 warnings.warn(BodoLibFallbackWarning(msg))
 
-                empty_series = get_scalar_udf_result_type(
-                    self, "map", arg, na_action=na_action
-                )
-
+        # _engine == "python"
+        # Get output data type by running the UDF on a sample of the data.
         empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
 
         return _get_series_python_func_plan(
