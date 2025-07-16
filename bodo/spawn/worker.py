@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Worker process to handle compiling and running python functions with
 Bodo - note that this module should only be run with MPI.Spawn and not invoked
 directly"""
@@ -45,9 +47,9 @@ DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 spawnerpid = None
 
 
-_recv_arg_return_t = (
-    tuple[pt.Any, ArgMetadata | None] | tuple["_recv_arg_return_t", ...]
-)
+_recv_arg_return_t = pt.Union[
+    tuple[pt.Any, pt.Union[ArgMetadata, None]], tuple["_recv_arg_return_t", ...]
+]
 
 
 def _recv_arg(
@@ -63,24 +65,21 @@ def _recv_arg(
         Any: received function argument
     """
     if isinstance(arg, ArgMetadata):
-        match arg:
-            case ArgMetadata.BROADCAST:
-                return (
-                    bodo.libs.distributed_api.bcast(
-                        None, root=0, comm=spawner_intercomm
-                    ),
-                    arg,
-                )
-            case ArgMetadata.SCATTER:
-                return (
-                    bodo.libs.distributed_api.scatterv(
-                        None, root=0, comm=spawner_intercomm
-                    ),
-                    arg,
-                )
-            case ArgMetadata.LAZY:
-                res_id = spawner_intercomm.bcast(None, root=0)
-                return (RESULT_REGISTRY[res_id], arg)
+        if arg == ArgMetadata.BROADCAST:
+            return (
+                bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm),
+                arg,
+            )
+        elif arg == ArgMetadata.SCATTER:
+            return (
+                bodo.libs.distributed_api.scatterv(
+                    None, root=0, comm=spawner_intercomm
+                ),
+                arg,
+            )
+        elif arg == ArgMetadata.LAZY:
+            res_id = spawner_intercomm.bcast(None, root=0)
+            return (RESULT_REGISTRY[res_id], arg)
 
     if isinstance(arg, BodoSQLContextMetadata):
         from bodosql import BodoSQLContext, TablePath
@@ -108,17 +107,17 @@ RESULT_REGISTRY: dict[str, pt.Any] = {}
 
 # Once >3.12 is our minimum version we can use the below instead
 # type is_distributed_t = bool + list[is_distributed_t] | tuple[is_distributed_t]
-is_distributed_t: pt.TypeAlias = (
-    bool | list["is_distributed_t"] | tuple["is_distributed_t"]
-)
+is_distributed_t = pt.Union[
+    bool, list["is_distributed_t"], tuple["is_distributed_t", ...]
+]
 
 
-distributed_return_metadata_t: pt.TypeAlias = (
-    LazyMetadata
-    | list["distributed_return_metadata_t"]
-    | dict[pt.Any, "distributed_return_metadata_t"]
-    | ExtensionArray
-)
+distributed_return_metadata_t = pt.Union[
+    LazyMetadata,
+    list["distributed_return_metadata_t"],
+    dict[pt.Any, "distributed_return_metadata_t"],
+    ExtensionArray,
+]
 
 
 def _build_index_data(
@@ -128,32 +127,33 @@ def _build_index_data(
     Construct distributed return metadata for the index of res if it has an index
     """
     if isinstance(res, (pd.DataFrame, pd.Series)):
-        match type(res.index):
-            case pd.Index:
-                # Convert index data to ArrowExtensionArray because we have a lazy ArrowExtensionArray
-                return _build_distributed_return_metadata(
-                    ArrowExtensionArray(pa.array(res.index._data)), logger
-                )
-            case pd.MultiIndex:
-                return _build_distributed_return_metadata(
-                    res.index.to_frame(index=False, allow_duplicates=True), logger
-                )
-            case pd.IntervalIndex:
-                return (
-                    _build_distributed_return_metadata(
-                        ArrowExtensionArray(pa.array(res.index.left)), logger
-                    ),
-                    _build_distributed_return_metadata(
-                        ArrowExtensionArray(pa.array(res.index.right)), logger
-                    ),
-                )
-            case pd.CategoricalIndex | pd.DatetimeIndex | pd.TimedeltaIndex:
-                return bodo.gatherv(res.index._data)
-            case pd.PeriodIndex:
-                # This is a hack since we can't unbox a numpy array created from res.index._data for PeriodIndex
-                # since we're missing a proper PeriodArray but it's fine since we'll replace this
-                # with lazy numpy soon
-                return bodo.gatherv(res.index)
+        if isinstance(res.index, pd.MultiIndex):
+            return _build_distributed_return_metadata(
+                res.index.to_frame(index=False, allow_duplicates=True), logger
+            )
+        elif isinstance(res.index, pd.IntervalIndex):
+            return (
+                _build_distributed_return_metadata(
+                    ArrowExtensionArray(pa.array(res.index.left)), logger
+                ),
+                _build_distributed_return_metadata(
+                    ArrowExtensionArray(pa.array(res.index.right)), logger
+                ),
+            )
+        elif isinstance(
+            res.index, (pd.CategoricalIndex, pd.DatetimeIndex, pd.TimedeltaIndex)
+        ):
+            return bodo.gatherv(res.index._data)
+        elif isinstance(res.index, pd.PeriodIndex):
+            # This is a hack since we can't unbox a numpy array created from res.index._data for PeriodIndex
+            # since we're missing a proper PeriodArray but it's fine since we'll replace this
+            # with lazy numpy soon
+            return bodo.gatherv(res.index)
+        elif isinstance(res.index, pd.Index):
+            # Convert index data to ArrowExtensionArray because we have a lazy ArrowExtensionArray
+            return _build_distributed_return_metadata(
+                ArrowExtensionArray(pa.array(res.index._data)), logger
+            )
 
     return None
 

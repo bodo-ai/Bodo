@@ -13,12 +13,16 @@ import pyarrow as pa
 from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
+from bodo.pandas.plan import (
+    AggregateExpression,
+    LogicalAggregate,
+    LogicalProjection,
+    make_col_ref_exprs,
+)
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
-    LazyPlan,
     check_args_fallback,
-    make_col_ref_exprs,
     wrap_plan,
 )
 
@@ -44,10 +48,14 @@ class DataFrameGroupBy:
         self._keys = keys
         self._as_index = as_index
         self._dropna = dropna
-        self._selection = (
-            selection
-            if selection is not None
-            else list(filter(lambda col: col not in keys, obj.columns))
+        self._selection = selection
+
+    @property
+    def selection_for_plan(self):
+        return (
+            self._selection
+            if self._selection is not None
+            else list(filter(lambda col: col not in self._keys, self._obj.columns))
         )
 
     def __getitem__(self, key) -> DataFrameGroupBy | SeriesGroupBy:
@@ -55,10 +63,18 @@ class DataFrameGroupBy:
         Return a DataFrameGroupBy or SeriesGroupBy for the selected data columns.
         """
         if isinstance(key, str):
+            if key not in self._obj:
+                raise KeyError(f"Column not found: {key}")
             return SeriesGroupBy(
                 self._obj, self._keys, [key], self._as_index, self._dropna
             )
         elif isinstance(key, list) and all(isinstance(key_, str) for key_ in key):
+            invalid_keys = []
+            for k in key:
+                if k not in self._obj:
+                    invalid_keys.append(f"'{k}'")
+            if invalid_keys:
+                raise KeyError(f"Column not found: {', '.join(invalid_keys)}")
             return DataFrameGroupBy(
                 self._obj, self._keys, self._as_index, self._dropna, selection=key
             )
@@ -71,19 +87,25 @@ class DataFrameGroupBy:
     def __getattribute__(self, name: str, /) -> Any:
         try:
             return object.__getattribute__(self, name)
-        except AttributeError:
-            msg = (
-                f"DataFrameGroupBy.{name} is not "
-                "implemented in Bodo dataframe library yet. "
-                "Falling back to Pandas (may be slow or run out of memory)."
-            )
-            warnings.warn(BodoLibFallbackWarning(msg))
-            gb = pd.DataFrame(self._obj).groupby(
-                self._keys, as_index=self._as_index, dropna=self._dropna
-            )
-            if self._selection is not None:
-                gb = gb[self._selection]
-            return object.__getattribute__(gb, name)
+        except AttributeError as e:
+            if hasattr(pd.core.groupby.generic.DataFrameGroupBy, name):
+                msg = (
+                    f"DataFrameGroupBy.{name} is not "
+                    "implemented in Bodo dataframe library yet. "
+                    "Falling back to Pandas (may be slow or run out of memory)."
+                )
+                gb = pd.DataFrame(self._obj).groupby(
+                    self._keys, as_index=self._as_index, dropna=self._dropna
+                )
+                if self._selection is not None:
+                    gb = gb[self._selection]
+                warnings.warn(BodoLibFallbackWarning(msg))
+                return object.__getattribute__(gb, name)
+
+            if name in self._obj:
+                return self.__getitem__(name)
+
+            raise AttributeError(e)
 
     @check_args_fallback(supported="func")
     def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
@@ -91,7 +113,9 @@ class DataFrameGroupBy:
 
     agg = aggregate
 
-    def _normalize_agg_func(self, func, kwargs: dict) -> list[tuple[str, str]]:
+    def _normalize_agg_func(
+        self, func, selection, kwargs: dict
+    ) -> list[tuple[str, str]]:
         """
         Convert func and kwargs into a list of (column, function) tuples.
         """
@@ -114,9 +138,7 @@ class DataFrameGroupBy:
             # for each input column (column names are a multi-index) i.e.:
             # ("A", "sum"), ("A", "count"), ("B", "sum), ("B", "count")
             normalized_func = [
-                (col, _get_aggfunc_str(func_))
-                for col in self._selection
-                for func_ in func
+                (col, _get_aggfunc_str(func_)) for col in selection for func_ in func
             ]
         else:
             func = _get_aggfunc_str(func)
@@ -125,13 +147,13 @@ class DataFrameGroupBy:
             if func == "size":
                 # Getting the size of each groups without any input column.
                 # e.g. df.groupby("B")[[]].size()
-                if len(self._selection) < 1:
+                if len(selection) < 1:
                     raise BodoLibNotImplementedException(
                         "GroupBy.size(): Aggregating without selected columns not supported yet."
                     )
-                normalized_func = [(self._selection[0], "size")]
+                normalized_func = [(selection[0], "size")]
             else:
-                normalized_func = [(col, func) for col in self._selection]
+                normalized_func = [(col, func) for col in selection]
 
         return normalized_func
 
@@ -243,6 +265,14 @@ class SeriesGroupBy:
         self._as_index = as_index
         self._dropna = dropna
 
+    @property
+    def selection_for_plan(self):
+        return (
+            self._selection
+            if self._selection is not None
+            else list(filter(lambda col: col not in self._keys, self._obj.columns))
+        )  # pragma: no cover
+
     @check_args_fallback(unsupported="none")
     def __getattribute__(self, name: str, /) -> Any:
         try:
@@ -263,11 +293,11 @@ class SeriesGroupBy:
 
     agg = aggregate
 
-    def _normalize_agg_func(self, func, kwargs):
+    def _normalize_agg_func(self, func, selection, kwargs):
         """
         Convert func and kwargs into a list of (column, function) tuples.
         """
-        col = self._selection[0]
+        col = selection[0]
 
         # list of (input column name, function) pairs
         normalized_func: list[tuple[str, str]] = []
@@ -383,18 +413,20 @@ def _groupby_agg_plan(
     """Compute groupby.func() on the Series or DataFrame GroupBy object."""
     from bodo.pandas.base import _empty_like
 
+    grouped_selection = grouped.selection_for_plan
+
     zero_size_df = _empty_like(grouped._obj)
     empty_data_pandas = zero_size_df.groupby(grouped._keys, as_index=grouped._as_index)[
-        grouped._selection[0]
+        grouped_selection[0]
         if isinstance(grouped, SeriesGroupBy)
-        else grouped._selection
+        else grouped_selection
     ].agg(func, *args, **kwargs)
 
-    func = grouped._normalize_agg_func(func, kwargs)
+    func = grouped._normalize_agg_func(func, grouped_selection, kwargs)
 
     # NOTE: assumes no key columns are being aggregated e.g:
     # df1.groupby("C", as_index=False)[["C"]].agg("sum")
-    if set(grouped._keys) & set(grouped._selection):
+    if set(grouped._keys) & set(grouped_selection):
         raise BodoLibNotImplementedException(
             "GroupBy.agg(): Aggregation on key columns not supported yet."
         )
@@ -407,8 +439,7 @@ def _groupby_agg_plan(
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
     exprs = [
-        LazyPlan(
-            "AggregateExpression",
+        AggregateExpression(
             empty_data.iloc[:, i]
             if isinstance(empty_data, pd.DataFrame)
             else empty_data,
@@ -423,8 +454,7 @@ def _groupby_agg_plan(
         ) in enumerate(func)
     ]
 
-    plan = LazyPlan(
-        "LogicalAggregate",
+    plan = LogicalAggregate(
         empty_data,
         grouped._obj._plan,
         key_indices,
@@ -438,8 +468,7 @@ def _groupby_agg_plan(
         col_indices += list(range(len(grouped._keys)))
 
         exprs = make_col_ref_exprs(col_indices, plan)
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             plan,
             exprs,

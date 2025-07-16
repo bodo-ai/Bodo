@@ -457,6 +457,10 @@ Refer to [`pandas.DataFrame.to_iceberg`](https://pandas.pydata.org/docs/dev/refe
 !!! warning
     This function is experimental in Pandas and may change in future releases.
 
+
+!!! note
+    This function assumes that the Iceberg namespace is already created in the catalog.
+
 <p class="api-header">Parameters</p>
 
 : __table_identifier: *str*:__ Table identifier to write

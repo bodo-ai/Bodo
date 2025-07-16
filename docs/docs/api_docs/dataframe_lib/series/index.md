@@ -91,6 +91,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ---
 
 ## Function application
+- [`bodo.pandas.BodoSeries.agg`][bodoseriesagg]
+- [`bodo.pandas.BodoSeries.aggregate`][bodoseriesaggregate]
 - [`bodo.pandas.BodoSeries.map`][bodoseriesmap]
 
 ---
@@ -305,3 +307,6 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 [bodoseriesdtcomponents]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.components.html
 [bodoseriesdtisocalendar]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.isocalendar.html
+
+[bodoseriesagg]: https://pandas.pydata.org/docs/reference/api/pandas.Series.agg.html
+[bodoseriesaggregate]: https://pandas.pydata.org/docs/reference/api/pandas.Series.aggregate.html

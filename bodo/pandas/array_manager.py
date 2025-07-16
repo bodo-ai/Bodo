@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """LazyArrayManager and LazySingleArrayManager classes for lazily loading data from workers in BodoSeries/DataFrames."""
 
 import typing as pt
@@ -87,59 +89,58 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
 
             new_axis0 = None
             # BSE-4099: Support other types of indexes
-            match type(head_axis0):
-                case pd.RangeIndex:
-                    new_axis0 = pd.RangeIndex(
-                        head_axis0.start,
-                        head_axis0.start + (head_axis0.step * nrows),
-                        head_axis0.step,
-                        name=head_axis0.name,
-                    )
-                case pd.Index:
-                    new_axis0 = pd.Index(index_data, name=head_axis0.name)
-                case pd.MultiIndex:
-                    new_axis0 = pd.MultiIndex.from_frame(
-                        index_data,
-                        sortorder=head_axis0.sortorder,
-                        names=head_axis0.names,
-                    )
-                case pd.IntervalIndex:
-                    assert index_data is not None
-                    new_axis0 = pd.IntervalIndex.from_arrays(
-                        index_data[0],
-                        index_data[1],
-                        head_axis0.closed,
-                        head_axis0.name,
-                        dtype=head_axis0.dtype,
-                    )
-                case pd.CategoricalIndex:
-                    assert index_data is not None
-                    new_axis0 = pd.CategoricalIndex(
-                        index_data,
-                        categories=head_axis0.categories,
-                        ordered=head_axis0.ordered,
-                        name=head_axis0.name,
-                    )
-                case pd.DatetimeIndex:
-                    assert index_data is not None
-                    new_axis0 = pd.DatetimeIndex(
-                        index_data,
-                        name=head_axis0.name,
-                        tz=head_axis0.tz,
-                        freq=head_axis0.freq,
-                    )
-                case pd.PeriodIndex:
-                    assert index_data is not None
-                    new_axis0 = index_data
-                case pd.TimedeltaIndex:
-                    assert index_data is not None
-                    new_axis0 = pd.TimedeltaIndex(
-                        index_data, name=head_axis0.name, unit=head_axis0.unit
-                    )
-                case _:
-                    raise ValueError(
-                        "{type(head_axis0)} is not supported in LazyArrayManager"
-                    )
+            if isinstance(head_axis0, pd.RangeIndex):
+                new_axis0 = pd.RangeIndex(
+                    head_axis0.start,
+                    head_axis0.start + (head_axis0.step * nrows),
+                    head_axis0.step,
+                    name=head_axis0.name,
+                )
+            elif isinstance(head_axis0, pd.MultiIndex):
+                new_axis0 = pd.MultiIndex.from_frame(
+                    index_data,
+                    sortorder=head_axis0.sortorder,
+                    names=head_axis0.names,
+                )
+            elif isinstance(head_axis0, pd.IntervalIndex):
+                assert index_data is not None
+                new_axis0 = pd.IntervalIndex.from_arrays(
+                    index_data[0],
+                    index_data[1],
+                    head_axis0.closed,
+                    head_axis0.name,
+                    dtype=head_axis0.dtype,
+                )
+            elif isinstance(head_axis0, pd.CategoricalIndex):
+                assert index_data is not None
+                new_axis0 = pd.CategoricalIndex(
+                    index_data,
+                    categories=head_axis0.categories,
+                    ordered=head_axis0.ordered,
+                    name=head_axis0.name,
+                )
+            elif isinstance(head_axis0, pd.DatetimeIndex):
+                assert index_data is not None
+                new_axis0 = pd.DatetimeIndex(
+                    index_data,
+                    name=head_axis0.name,
+                    tz=head_axis0.tz,
+                    freq=head_axis0.freq,
+                )
+            elif isinstance(head_axis0, pd.PeriodIndex):
+                assert index_data is not None
+                new_axis0 = index_data
+            elif isinstance(head_axis0, pd.TimedeltaIndex):
+                assert index_data is not None
+                new_axis0 = pd.TimedeltaIndex(
+                    index_data, name=head_axis0.name, unit=head_axis0.unit
+                )
+            elif isinstance(head_axis0, pd.Index):
+                new_axis0 = pd.Index(index_data, name=head_axis0.name)
+            else:
+                raise ValueError(
+                    f"{type(head_axis0)} is not supported in LazyArrayManager"
+                )
 
             self._axes = [
                 new_axis0,
@@ -241,7 +242,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         return type(self)(arrays, new_axes, verify_integrity=False)
 
     def execute_plan(self):
-        from bodo.pandas.utils import execute_plan
+        from bodo.pandas.plan import execute_plan
 
         data = execute_plan(self._plan)
         if isinstance(data, BodoLazyWrapper):
@@ -400,58 +401,56 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             head_axis = head._axes[0]
             new_axis = None
             # BSE-4099: Support other types of indexes
-            match type(head_axis):
-                case pd.RangeIndex:
-                    new_axis = pd.RangeIndex(
-                        head_axis.start,
-                        head_axis.start + (head_axis.step * nrows),
-                        head_axis.step,
-                        name=head_axis.name,
-                    )
-                case pd.Index:
-                    new_axis = pd.Index(index_data, name=head_axis.name)
-                case pd.MultiIndex:
-                    new_axis = pd.MultiIndex.from_frame(
-                        index_data, sortorder=head_axis.sortorder, names=head_axis.names
-                    )
-                case pd.IntervalIndex:
-                    assert index_data is not None
-                    new_axis = pd.IntervalIndex.from_arrays(
-                        index_data[0],
-                        index_data[1],
-                        head_axis.closed,
-                        head_axis.name,
-                        dtype=head_axis.dtype,
-                    )
-                case pd.CategoricalIndex:
-                    assert index_data is not None
-                    new_axis = pd.CategoricalIndex(
-                        index_data,
-                        categories=head_axis.categories,
-                        ordered=head_axis.ordered,
-                        name=head_axis.name,
-                    )
-                case pd.DatetimeIndex:
-                    assert index_data is not None
-                    new_axis = pd.DatetimeIndex(
-                        index_data,
-                        name=head_axis.name,
-                        tz=head_axis.tz,
-                        freq=head_axis.freq,
-                    )
-                case pd.PeriodIndex:
-                    assert index_data is not None
-                    new_axis = index_data
-                case pd.TimedeltaIndex:
-                    assert index_data is not None
-                    new_axis = pd.TimedeltaIndex(
-                        index_data, name=head_axis.name, unit=head_axis.unit
-                    )
-
-                case _:
-                    raise ValueError(
-                        "{type(head_axis)} is not supported in LazySingleArrayManager"
-                    )
+            if isinstance(head_axis, pd.RangeIndex):
+                new_axis = pd.RangeIndex(
+                    head_axis.start,
+                    head_axis.start + (head_axis.step * nrows),
+                    head_axis.step,
+                    name=head_axis.name,
+                )
+            elif isinstance(head_axis, pd.MultiIndex):
+                new_axis = pd.MultiIndex.from_frame(
+                    index_data, sortorder=head_axis.sortorder, names=head_axis.names
+                )
+            elif isinstance(head_axis, pd.IntervalIndex):
+                assert index_data is not None
+                new_axis = pd.IntervalIndex.from_arrays(
+                    index_data[0],
+                    index_data[1],
+                    head_axis.closed,
+                    head_axis.name,
+                    dtype=head_axis.dtype,
+                )
+            elif isinstance(head_axis, pd.CategoricalIndex):
+                assert index_data is not None
+                new_axis = pd.CategoricalIndex(
+                    index_data,
+                    categories=head_axis.categories,
+                    ordered=head_axis.ordered,
+                    name=head_axis.name,
+                )
+            elif isinstance(head_axis, pd.DatetimeIndex):
+                assert index_data is not None
+                new_axis = pd.DatetimeIndex(
+                    index_data,
+                    name=head_axis.name,
+                    tz=head_axis.tz,
+                    freq=head_axis.freq,
+                )
+            elif isinstance(head_axis, pd.PeriodIndex):
+                assert index_data is not None
+                new_axis = index_data
+            elif isinstance(head_axis, pd.TimedeltaIndex):
+                assert index_data is not None
+                new_axis = pd.TimedeltaIndex(
+                    index_data, name=head_axis.name, unit=head_axis.unit
+                )
+            elif isinstance(head_axis, pd.Index):
+                new_axis = pd.Index(index_data, name=head_axis.name)
+            else:
+                raise ValueError(
+                    f"{type(head_axis)} is not supported in LazySingleArrayManager"
+                )
             self._axes = [new_axis]
             self.arrays = None  # type: ignore This is can't be None when accessed because we overload __getattribute__
             _arrays = None
@@ -483,7 +482,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         return super().dtype
 
     def execute_plan(self):
-        from bodo.pandas.utils import execute_plan
+        from bodo.pandas.plan import execute_plan
 
         data = execute_plan(self._plan)
         if isinstance(data, BodoLazyWrapper):

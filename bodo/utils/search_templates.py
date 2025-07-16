@@ -4,6 +4,8 @@ for example: "Series.str.decode\n read_csv\n"
     usage: python -m bodo.utils.search_templates <path_to_apis>
 """
 
+from __future__ import annotations
+
 import sys
 import typing as pt
 import warnings

@@ -22,19 +22,27 @@ from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
 from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
-from bodo.pandas.utils import (
-    BodoLibFallbackWarning,
-    BodoLibNotImplementedException,
+from bodo.pandas.plan import (
+    AggregateExpression,
+    ArithOpExpression,
+    ColRefExpression,
+    ComparisonOpExpression,
+    ConjunctionOpExpression,
     LazyPlan,
     LazyPlanDistributedArg,
+    LogicalAggregate,
+    LogicalFilter,
+    LogicalGetPandasReadParallel,
+    LogicalGetPandasReadSeq,
+    LogicalLimit,
+    LogicalOperator,
+    LogicalOrder,
+    LogicalProjection,
+    PythonScalarFuncExpression,
+    UnaryOpExpression,
     _get_df_python_func_plan,
-    arrow_to_empty_df,
-    check_args_fallback,
     execute_plan,
-    get_lazy_single_manager_class,
-    get_n_index_arrays,
     get_proj_expr_single,
-    get_scalar_udf_result_type,
     get_single_proj_source_if_present,
     is_arith_expr,
     is_col_ref,
@@ -42,6 +50,16 @@ from bodo.pandas.utils import (
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
+)
+from bodo.pandas.utils import (
+    BodoLibFallbackWarning,
+    BodoLibNotImplementedException,
+    arrow_to_empty_df,
+    check_args_fallback,
+    fallback_wrapper,
+    get_lazy_single_manager_class,
+    get_n_index_arrays,
+    get_scalar_udf_result_type,
     wrap_plan,
 )
 from bodo.utils.typing import BodoError
@@ -95,27 +113,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
                 empty_data = _empty_like(self)
                 if bodo.dataframe_library_run_parallel:
-                    if getattr(self._mgr, "_md_result_id", None) is not None:
-                        # If the plan has been executed but the results are still
-                        # distributed then re-use those results as is.
-                        nrows = self._mgr._md_nrows
-                        res_id = self._mgr._md_result_id
-                        mgr = self._mgr
-                    else:
-                        # The data has been collected and is no longer distributed
-                        # so we need to re-distribute the results.
-                        nrows = len(self)
-                        mgr = bodo.spawn.spawner.get_spawner().scatter_data(self)
-                        res_id = mgr._md_result_id
-                    self._source_plan = LazyPlan(
-                        "LogicalGetPandasReadParallel",
+                    nrows = len(self)
+                    self._source_plan = LogicalGetPandasReadParallel(
                         empty_data,
                         nrows,
-                        LazyPlanDistributedArg(mgr, res_id),
+                        LazyPlanDistributedArg(self),
                     )
                 else:
-                    self._source_plan = LazyPlan(
-                        "LogicalGetPandasReadSeq",
+                    self._source_plan = LogicalGetPandasReadSeq(
                         empty_data,
                         self,
                     )
@@ -129,11 +134,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __getattribute__(self, name: str):
         """Custom attribute access that triggers a fallback warning for unsupported attributes."""
 
-        ignore_fallback_attrs = [
-            "dtype",
-            "name",
-            "to_string",
-        ]
+        ignore_fallback_attrs = ["dtype", "name", "to_string", "attrs", "flags"]
+
         cls = object.__getattribute__(self, "__class__")
         base = cls.__mro__[0]
 
@@ -147,7 +149,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return object.__getattribute__(self, name)
+            return fallback_wrapper(object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
@@ -172,8 +174,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan(
-            "ComparisonOpExpression",
+        expr = ComparisonOpExpression(
             empty_data,
             lhs,
             rhs,
@@ -184,8 +185,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
@@ -226,8 +226,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        expr = LazyPlan(
-            "ConjunctionOpExpression",
+        expr = ConjunctionOpExpression(
             empty_data,
             lhs,
             rhs,
@@ -238,8 +237,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
@@ -275,8 +273,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         assert isinstance(empty_data, pd.Series), "Series expected"
         source_expr = get_proj_expr_single(self._plan)
-        expr = LazyPlan(
-            "UnaryOpExpression",
+        expr = UnaryOpExpression(
             empty_data,
             source_expr,
             "__invert__",
@@ -286,8 +283,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
@@ -331,14 +327,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if reverse:
             lhs, rhs = rhs, lhs
 
-        expr = LazyPlan("ArithOpExpression", empty_data, lhs, rhs, op)
+        expr = ArithOpExpression(empty_data, lhs, rhs, op)
 
         key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
         plan_keys = get_single_proj_source_if_present(self._plan)
         key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
 
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_data,
             # Use the original table without the Series projection node.
             self._plan.args[0],
@@ -415,7 +410,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             # Drop the explicit integer Index generated from filtering RangeIndex (TODO: support RangeIndex properly).
             empty_data.reset_index(drop=True, inplace=True)
         return wrap_plan(
-            plan=LazyPlan("LogicalFilter", empty_data, self._plan, key_plan),
+            plan=LogicalFilter(empty_data, self._plan, key_plan),
         )
 
     @staticmethod
@@ -438,7 +433,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         lazy_metadata: LazyMetadata,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
-        plan: plan_optimizer.LogicalOperator | None = None,
+        plan: LogicalOperator | None = None,
     ) -> BodoSeries:
         """
         Create a BodoSeries from a lazy metadata object.
@@ -483,15 +478,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Get the shape of the series. Data is fetched from metadata if present, otherwise the data fetched from workers is used.
         """
-        from bodo.pandas.utils import count_plan
+        from bodo.pandas.plan import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return (count_plan(self),)
-            case ExecState.DISTRIBUTED:
-                return (self._mgr._md_nrows,)
-            case ExecState.COLLECTED:
-                return super().shape
+        if self._exec_state == ExecState.PLAN:
+            return (count_plan(self),)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return (self._mgr._md_nrows,)
+        if self._exec_state == ExecState.COLLECTED:
+            return super().shape
 
     def head(self, n: int = 5):
         """
@@ -511,8 +505,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             ):
                 from bodo.pandas.base import _empty_like
 
-                planLimit = LazyPlan(
-                    "LogicalLimit",
+                planLimit = LogicalLimit(
                     _empty_like(self),
                     self._plan,
                     n,
@@ -526,15 +519,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return self._head_s.head(n)
 
     def __len__(self):
-        from bodo.pandas.utils import count_plan
+        from bodo.pandas.plan import count_plan
 
-        match self._exec_state:
-            case ExecState.PLAN:
-                return count_plan(self)
-            case ExecState.DISTRIBUTED:
-                return self._mgr._md_nrows
-            case ExecState.COLLECTED:
-                return super().__len__()
+        if self._exec_state == ExecState.PLAN:
+            return count_plan(self)
+        if self._exec_state == ExecState.DISTRIBUTED:
+            return self._mgr._md_nrows
+        if self._exec_state == ExecState.COLLECTED:
+            return super().__len__()
 
     def __repr__(self):
         # Pandas repr implementation calls len() first which will execute an extra
@@ -573,7 +565,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback(unsupported="none")
     def map(self, arg, na_action=None):
         """
-        Apply function to elements in a Series
+        Map values of Series according to an input mapping or function.
         """
 
         # Get output data type by running the UDF on a sample of the data.
@@ -624,8 +616,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         zero_size_self = _empty_like(self)
 
         return wrap_plan(
-            plan=LazyPlan(
-                "LogicalOrder",
+            plan=LogicalOrder(
                 zero_size_self,
                 self._plan,
                 ascending,
@@ -639,13 +630,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def min(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
     ):
-        return _compute_series_reduce(self, "min")
+        return _compute_series_reduce(self, ["min"])[0]
 
     @check_args_fallback(unsupported="all")
     def max(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
     ):
-        return _compute_series_reduce(self, "max")
+        return _compute_series_reduce(self, ["max"])[0]
 
     @check_args_fallback(unsupported="all")
     def sum(
@@ -656,10 +647,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         min_count=0,
         **kwargs,
     ):
-        return _compute_series_reduce(self, "sum")
+        return _compute_series_reduce(self, ["sum"])[0]
 
     @check_args_fallback(unsupported="all")
-    def product(
+    def prod(
         self,
         axis: Axis | None = 0,
         skipna: bool = True,
@@ -667,11 +658,141 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         min_count=0,
         **kwargs,
     ):
-        return _compute_series_reduce(self, "product")
+        return _compute_series_reduce(self, ["product"])[0]
+
+    product = prod
 
     @check_args_fallback(unsupported="all")
     def count(self):
-        return _compute_series_reduce(self, "count")
+        return _compute_series_reduce(self, ["count"])[0]
+
+    @check_args_fallback(unsupported="all")
+    def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
+        """Returns sample mean."""
+        reduced = _compute_series_reduce(self, ["count", "sum"])
+        count, sum = reduced[0], reduced[1]
+        if count <= 0:
+            return pd.NA
+        return sum / count
+
+    @check_args_fallback(supported=["ddof"])
+    def std(self, axis=None, skipna=True, ddof=1, numeric_only=False, **kwargs):
+        """Returns sample standard deviation."""
+        reduced_self = _compute_series_reduce(self, ["count", "sum"])
+        count, sum = reduced_self[0], reduced_self[1]
+        if count <= 0 or count <= ddof:
+            return pd.NA
+        squared = self.map(lambda x: x * x)
+        squared_sum = _compute_series_reduce(squared, ["sum"])[0]
+        return ((squared_sum - (sum**2) / count) / (count - ddof)) ** 0.5
+
+    @check_args_fallback(unsupported="all")
+    def describe(self, percentiles=None, include=None, exclude=None):
+        """
+        Generates descriptive statistics.
+        Descriptive statistics include those that summarize the central tendency, dispersion and
+        shape of a dataset's distribution, excluding NaN values.
+        """
+        if not isinstance(self.dtype, pd.ArrowDtype):
+            raise BodoLibNotImplementedException(
+                "BodoSeries.describe() is not supported for non-Arrow dtypes."
+            )
+
+        pa_type = self.dtype.pyarrow_dtype
+
+        if pa.types.is_null(pa_type):
+            return pd.Series(
+                [0, 0, pd.NA, pd.NA],
+                index=["count", "unique", "top", "freq"],
+                name=self.name,
+            )
+
+        # TODO: Support describe() for non-numeric Series
+        if not (
+            pa.types.is_unsigned_integer(pa_type)
+            or pa.types.is_integer(pa_type)
+            or pa.types.is_floating(pa_type)
+        ):
+            raise BodoLibNotImplementedException(
+                "Series.describe() is not supported for non-numeric Series yet."
+            )
+
+        reduced_self = _compute_series_reduce(self, ["count", "min", "max", "sum"])
+        count, min, max, sum = (reduced_self[i] for i in range(4))
+
+        if count == 0:
+            return pd.Series(
+                [0] + [pd.NA] * 7,
+                index=[
+                    "count",
+                    "mean",
+                    "std",
+                    "min",
+                    "25%",
+                    "50%",
+                    "75%",
+                    "max",
+                ],
+                name=self.name,
+                dtype=pd.ArrowDtype(pa.float64()),
+            )
+
+        # Evaluate mean
+        mean_val = sum / count
+
+        # Evaluate std
+        squared = self.map(lambda x: x * x)
+        squared_sum = _compute_series_reduce(squared, ["sum"])[0]
+        std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
+
+        # TODO [BSE-4970]: implement Series.quantile
+        quantile = self.quantile([0.25, 0.5, 0.75])
+        result = [
+            count,
+            mean_val,
+            std_val,
+            min,
+            quantile[0.25],
+            quantile[0.5],
+            quantile[0.75],
+            max,
+        ]
+
+        return pd.Series(
+            result,
+            index=[
+                "count",
+                "mean",
+                "std",
+                "min",
+                "25%",
+                "50%",
+                "75%",
+                "max",
+            ],
+            name=self.name,
+        )
+
+    @property
+    def ndim(self) -> int:
+        return super().ndim
+
+    @check_args_fallback(supported=["func"])
+    def aggregate(self, func=None, axis=0, *args, **kwargs):
+        """Aggregate using one or more operations."""
+        if isinstance(func, list):
+            reduced = _compute_series_reduce(self, func)
+            return BodoSeries(reduced, index=func, name=self._name)
+
+        elif isinstance(func, str):
+            return _compute_series_reduce(self, [func])[0]
+
+        else:
+            raise BodoLibNotImplementedException(
+                "Series.aggregate() is not supported for the provided arguments yet."
+            )
+
+    agg = aggregate
 
 
 class BodoStringMethods:
@@ -728,7 +849,7 @@ class BodoStringMethods:
             )
 
         # Validates input series and others series are from same df, falls back to Pandas otherwise
-        base_plan = zip_series_plan(self._series, others)
+        base_plan, arg_inds = zip_series_plan(self._series, others)
         index = base_plan.empty_data.index
 
         new_metadata = pd.Series(
@@ -741,7 +862,7 @@ class BodoStringMethods:
             base_plan,
             new_metadata,
             "bodo.pandas.series._str_cat_helper",
-            (sep, na_rep),
+            (sep, na_rep, *arg_inds),
             {},
             is_method=False,
         )
@@ -858,8 +979,7 @@ class BodoStringMethods:
         )
 
         # Creates DataFrame with n_cols columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
+        df_plan = LogicalProjection(
             empty_data,
             series_out._plan,
             expr + index_col_refs,
@@ -890,7 +1010,14 @@ class BodoDatetimeProperties:
     def __init__(self, series):
         allowed_types = allowed_types_map["dt_default"]
         # Validates series type
-        if not (isinstance(series, BodoSeries) and series.dtype in allowed_types,):
+        # Allows duration[ns] type, timestamp any precision without timezone.
+        # TODO: timestamp with timezone, other duration types.
+        if not (
+            isinstance(series, BodoSeries)
+            and (
+                series.dtype in allowed_types or _is_pd_pa_timestamp_no_tz(series.dtype)
+            )
+        ):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
         self._series = series
         self._dtype = series.dtype
@@ -952,8 +1079,7 @@ class BodoDatetimeProperties:
         assert series_out.is_lazy_plan()
 
         # Creates DataFrame with 3 columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
+        df_plan = LogicalProjection(
             empty_data,
             series_out._plan,
             expr + index_col_refs,
@@ -1013,8 +1139,7 @@ class BodoDatetimeProperties:
         assert series_out.is_lazy_plan()
 
         # Creates DataFrame with 3 columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
+        df_plan = LogicalProjection(
             empty_data,
             series_out._plan,
             expr + index_col_refs,
@@ -1058,8 +1183,33 @@ class BodoDatetimeProperties:
         )
 
 
+def func_name_to_str(func_name):
+    """Converts built-in functions to string."""
+    if func_name in ("min", "max", "sum", "product", "prod", "count"):
+        return func_name
+    if func_name == sum:
+        return "sum"
+    if func_name == max:
+        return "max"
+    if func_name == min:
+        return "min"
+    raise BodoLibNotImplementedException(
+        f"{func_name}() not supported for BodoSeries reduction."
+    )
+
+
+def map_validate_reduce(func_names, pa_type):
+    """Maps validate_reduce to func_names list, returns resulting pyarrow schema."""
+    res = []
+    for idx in range(len(func_names)):
+        func_names[idx] = func_name_to_str(func_names[idx])
+        assigned_type = validate_reduce(func_names[idx], pa_type)
+        res.append(pa.field(f"{idx}", assigned_type))
+    return pa.schema(res)
+
+
 def validate_reduce(func_name, pa_type):
-    """Validates input Series to _compute_series_reduce, returns upcast input type if necessary, otherwise None."""
+    """Validates individual function name, returns upcast input type if necessary, otherwise original type."""
 
     if func_name in (
         "max",
@@ -1072,65 +1222,76 @@ def validate_reduce(func_name, pa_type):
             raise BodoLibNotImplementedException(
                 f"{func_name}() not implemented for {pa_type} type."
             )
-        return None
+        return pa_type
 
     elif func_name in (
         "sum",
         "product",
     ):
         if pa.types.is_unsigned_integer(pa_type):
-            return pd.ArrowDtype(pa.uint64())
+            return pa.uint64()
         elif pa.types.is_integer(pa_type):
-            return pd.ArrowDtype(pa.int64())
+            return pa.int64()
         elif pa.types.is_floating(pa_type):
-            return pd.ArrowDtype(pa.float64())
+            return pa.float64()
         else:
             raise BodoLibNotImplementedException(
-                f"{func_name}() not implemented for {pa_type} type."
+                f"{func_name}() not implemented for BodoSeries reduction."
             )
 
     elif func_name in ("count",):
-        return pd.ArrowDtype(pa.int64())
+        return pa.int64()
+    else:
+        raise BodoLibNotImplementedException(
+            f"{func_name}() not implemented for {pa_type} type."
+        )
 
 
-def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
-    """Compute a reduction function like min/max on a BodoSeries."""
+def generate_null_reduce(func_names):
+    """Generates a list that maps reduction operations to their default values."""
+    res = []
+    for func_name in func_names:
+        if func_name in ("max", "min"):
+            res.append(pd.NA)
+        elif func_name in ("sum", "count"):
+            res.append(0)
+        elif func_name == "product":
+            res.append(1)
+        else:
+            raise BodoLibNotImplementedException(f"{func_name}() not implemented.")
+    return res
 
-    from bodo.pandas.base import _empty_like
 
-    # TODO: support other functions like mean, etc.
-    assert func_name in ("min", "max", "sum", "product", "count"), (
-        f"Unsupported function {func_name} for series reduction."
-    )
+def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
+    """
+    Computes a list of reduction functions like ["min", "max"] on a BodoSeries.
+    Returns a list of equal length that stores reduction values of each function.
+    """
+
+    if not isinstance(bodo_series.dtype, pd.ArrowDtype):
+        raise BodoLibNotImplementedException()
 
     # Drop Index columns since not necessary for reduction output.
-    zero_size_self = _empty_like(bodo_series).reset_index(drop=True)
-    pa_type = zero_size_self.dtype.pyarrow_dtype
+    pa_type = bodo_series.dtype.pyarrow_dtype
 
-    # For null arrays, return default value
     if pa.types.is_null(pa_type):
-        if func_name == "sum":
-            return 0
-        if func_name == "product":
-            return 1
+        return generate_null_reduce(func_names)
 
-    # Check for supported types
-    if output_type := validate_reduce(func_name, pa_type):
-        zero_size_self = zero_size_self.astype(output_type)
+    new_arrow_schema = map_validate_reduce(func_names, pa_type)
+    zero_size_self = arrow_to_empty_df(new_arrow_schema)
 
     exprs = [
-        LazyPlan(
-            "AggregateExpression",
+        AggregateExpression(
             zero_size_self,
             bodo_series._plan,
             func_name,
             [0],
             True,  # dropna
         )
+        for func_name in func_names
     ]
 
-    plan = LazyPlan(
-        "LogicalAggregate",
+    plan = LogicalAggregate(
         zero_size_self,
         bodo_series._plan,
         [],
@@ -1138,12 +1299,17 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_name: str):
     )
     out_rank = execute_plan(plan)
 
-    # TODO: generalize if necessary
-    if func_name == "count":
-        func_name = "sum"
-
+    df = pd.DataFrame(out_rank)
+    res = []
     # TODO: use parallel reduction for slight improvement in very large scales
-    return getattr(pd.Series(out_rank), func_name)()
+    for i in range(len(df.columns)):
+        func_name = func_names[i]
+        reduced_val = getattr(
+            df[str(i)], "sum" if func_name == "count" else func_name
+        )()
+        res.append(reduced_val)
+    assert len(res) == len(func_names)
+    return res
 
 
 def _tz_localize_helper(s, tz, nonexistent):
@@ -1175,14 +1341,14 @@ def _components_helper(s):
     return pd.Series([df.iloc[i, :].tolist() for i in range(len(s))])
 
 
-def _str_cat_helper(df, sep, na_rep):
+def _str_cat_helper(df, sep, na_rep, left_idx=0, right_idx=1):
     """Concatenates df[idx] for idx in idx_pair, separated by sep."""
     if sep is None:
         sep = ""
 
     # df is a two-column DataFrame created in zip_series_plan().
-    lhs_col = df.iloc[:, 0]
-    rhs_col = df.iloc[:, 1]
+    lhs_col = df.iloc[:, left_idx]
+    rhs_col = df.iloc[:, right_idx]
 
     return lhs_col.str.cat(rhs_col, sep, na_rep)
 
@@ -1282,18 +1448,17 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
     if expr is None:
         idx = 1 if side == "right" else 0
         empty_data = arrow_to_empty_df(pa.schema([schema[idx]]))
-        return LazyPlan("ColRefExpression", empty_data, plan, (idx))
+        return ColRefExpression(empty_data, plan, idx)
     elif is_col_ref(expr):
         idx = expr.args[1]
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
-        return LazyPlan("ColRefExpression", empty_data, plan, (idx))
+        return ColRefExpression(empty_data, plan, idx)
     elif is_scalar_func(expr):
         idx = expr.args[2][0]
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
-        return LazyPlan(
-            "PythonScalarFuncExpression",
+        return PythonScalarFuncExpression(
             empty_data,
             plan,
             expr.args[1],
@@ -1318,17 +1483,29 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
 
     # Initializes index columns info.
     columns = lhs_list[0].empty_data.columns
-    n_index_arrays = get_n_index_arrays(lhs.index)
+    index = lhs_list[0].empty_data.index
+    n_index_arrays = get_n_index_arrays(index)
     n_cols = len(columns)
 
     default_schema = pa.field("default", pa.large_string())
     left_schema, right_schema = default_schema, default_schema
     left_empty_data, right_empty_data = None, None
-    index = lhs_list[0].empty_data.index
+    arg_inds = (0, 1)
+
+    # Shortcut for columns of same dataframe cases like df.A.str.cat(df.B) to avoid
+    # creating an extra projection (which causes issues in df setitem).
+    if (
+        len(lhs_list) == 2
+        and len(rhs_list) == 2
+        and isinstance(lhs_list[1].exprs[0], ColRefExpression)
+        and isinstance(rhs_list[1].exprs[0], ColRefExpression)
+    ):
+        arg_inds = (lhs_list[1].exprs[0].col_index, rhs_list[1].exprs[0].col_index)
+        return result, arg_inds
 
     # Pads shorter list with None values.
-    for i, (lhs_part, rhs_part) in enumerate(
-        itertools.zip_longest(lhs_list[1:], rhs_list[1:], fillvalue=None)
+    for lhs_part, rhs_part in itertools.zip_longest(
+        lhs_list[1:], rhs_list[1:], fillvalue=None
     ):
         # Create the plan for the shared part
         left_expr = None if not lhs_part else lhs_part.args[1][0]
@@ -1366,8 +1543,7 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
         empty_data = pd.concat([left_empty_data, right_empty_data])
         empty_data.index = index
 
-        result = LazyPlan(
-            "LogicalProjection",
+        result = LogicalProjection(
             empty_data,
             result,
             (
@@ -1382,7 +1558,7 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
             first = False
             n_cols = 2
 
-    return result
+    return result, arg_inds
 
 
 def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
@@ -1390,8 +1566,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
     Extracts indexed column values from list series and
     returns resulting scalar expression.
     """
-    return LazyPlan(
-        "PythonScalarFuncExpression",
+    return PythonScalarFuncExpression(
         empty_data,
         series_out._plan,
         (
@@ -1424,8 +1599,7 @@ def _get_series_python_func_plan(
     index_cols = range(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
-    expr = LazyPlan(
-        "PythonScalarFuncExpression",
+    expr = PythonScalarFuncExpression(
         empty_data,
         source_data,
         (
@@ -1440,8 +1614,7 @@ def _get_series_python_func_plan(
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
     return wrap_plan(
-        plan=LazyPlan(
-            "LogicalProjection",
+        plan=LogicalProjection(
             empty_data,
             source_data,
             (expr,) + index_col_refs,
@@ -1505,7 +1678,6 @@ def _split_internal(self, name, pat, n, expand, regex=None):
         is_method=False,
     )
 
-    # TODO: Implement Series.max()
     n_cols = length_series.max()
 
     n_index_arrays = get_n_index_arrays(index)
@@ -1526,8 +1698,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
     )
 
     # Creates DataFrame with n_cols columns
-    df_plan = LazyPlan(
-        "LogicalProjection",
+    df_plan = LogicalProjection(
         empty_data,
         series_out._plan,
         expr + index_col_refs,
@@ -1586,8 +1757,7 @@ def gen_partition(name):
         assert series_out.is_lazy_plan()
 
         # Creates DataFrame with 3 columns
-        df_plan = LazyPlan(
-            "LogicalProjection",
+        df_plan = LogicalProjection(
             empty_data,
             series_out._plan,
             expr + index_col_refs,
@@ -1682,6 +1852,15 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
 }
 
 
+def _is_pd_pa_timestamp_no_tz(dtype):
+    """True when dtype is Arrow extension type timestamp (without timezone)"""
+    return (
+        isinstance(dtype, pd.ArrowDtype)
+        and pa.types.is_timestamp(dtype.pyarrow_dtype)
+        and dtype.pyarrow_dtype.tz is None
+    )
+
+
 def validate_dtype(name, obj):
     """Validates dtype of input series for Series.<name> methods."""
     if "." not in name:
@@ -1696,8 +1875,8 @@ def validate_dtype(name, obj):
             raise AttributeError("Can only use .str accessor with string values!")
     if accessor == "dt":
         if dtype not in allowed_types_map.get(
-            name, [pd.ArrowDtype(pa.timestamp("ns")), pd.ArrowDtype(pa.duration("ns"))]
-        ):
+            name, [pd.ArrowDtype(pa.duration("ns"))]
+        ) and not _is_pd_pa_timestamp_no_tz(dtype):
             raise AttributeError("Can only use .dt accessor with datetimelike values!")
 
 

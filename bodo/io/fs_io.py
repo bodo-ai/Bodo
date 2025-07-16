@@ -2,6 +2,8 @@
 S3 & Hadoop file system supports, and file system dependent calls
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import typing as pt
@@ -514,7 +516,7 @@ def getfs(
     """
     # NOTE: add remote filesystems to REMOTE_FILESYSTEMS
     if (
-        protocol == "s3"
+        protocol in ("s3", "s3a")
         and storage_options
         and ("anon" not in storage_options or len(storage_options) > 1)
     ):
@@ -531,7 +533,7 @@ def getfs(
             **sopts,
         )
         return PyFileSystem(FSSpecHandler(s3_fs))
-    if protocol == "s3":
+    if protocol in ("s3", "s3a"):
         return (
             get_s3_fs_from_path(
                 fpath,
@@ -816,7 +818,7 @@ def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     # every file is in the same region
     if isinstance(s3_filepath, list):
         s3_filepath = s3_filepath[0]
-    if s3_filepath.startswith("s3://"):
+    if s3_filepath.startswith("s3://") or s3_filepath.startswith("s3a://"):
         bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
     return bucket_loc
 

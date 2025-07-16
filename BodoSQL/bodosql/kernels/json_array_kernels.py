@@ -2,6 +2,8 @@
 Implements BodoSQL array kernels related to JSON utilities
 """
 
+from __future__ import annotations
+
 import numba
 from numba.core import types
 from numba.extending import overload, register_jitable

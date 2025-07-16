@@ -2,6 +2,8 @@
 Tests for writing to Snowflake using Python APIs
 """
 
+from __future__ import annotations
+
 import datetime
 import io
 import os
@@ -265,8 +267,9 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
 
         # Use GET to fetch all uploaded files
         with TemporaryDirectory() as tmp_folder:
+            tmp_folder_path = tmp_folder.replace("\\", "/")
             get_stage_sql = (
-                f"GET @\"{stage_name}\" 'file://{tmp_folder.replace('\\', '/')}' "
+                f"GET @\"{stage_name}\" 'file://{tmp_folder_path}' "
                 f"/* tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
             )
             cursor.execute(get_stage_sql, _is_internal=True)
@@ -384,8 +387,9 @@ def test_snowflake_write_create_table_handle_exists():
         df_input = df_in.iloc[start:end]
         df_input.to_parquet(df_path)
 
+        df_path_path = df_path.replace("\\", "/")
         upload_put_sql = (
-            f"PUT 'file://{df_path.replace('\\', '/')}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
+            f"PUT 'file://{df_path_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
             f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
         )
         cursor.execute(upload_put_sql, _is_internal=True)
@@ -621,8 +625,9 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
 
         bodo.jit(distributed=False)(test_write)(df_input)
 
+        df_path_tmp = df_path.replace("\\", "/")
         upload_put_sql = (
-            f"PUT 'file://{df_path.replace('\\', '/')}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
+            f"PUT 'file://{df_path_tmp}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
             f"/* tests.test_sql.test_snowflake_write_execute_copy_into() */ "
         )
         cursor.execute(upload_put_sql, _is_internal=True)

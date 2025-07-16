@@ -1,9 +1,11 @@
 #include "_physical_conv.h"
 #include <stdexcept>
+#include <string>
 #include "_bodo_scan_function.h"
 
 #include "_bodo_write_function.h"
 #include "_util.h"
+#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "physical/aggregate.h"
 #include "physical/filter.h"
 #include "physical/join.h"
@@ -12,14 +14,25 @@
 #include "physical/reduce.h"
 #include "physical/sample.h"
 #include "physical/sort.h"
+#include "physical/union_all.h"
 #include "physical/write_parquet.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
     // operators
     std::vector<int> selected_columns;
-    for (auto& ci : op.GetColumnIds()) {
-        selected_columns.push_back(ci.GetPrimaryIndex());
+
+    // DuckDB sets projection_ids when there are columns used in pushed down
+    // filters that are not used anywhere else in the query.
+    auto& column_ids = op.GetColumnIds();
+    if (!op.projection_ids.empty()) {
+        for (const auto& col : op.projection_ids) {
+            selected_columns.push_back(column_ids[col].GetPrimaryIndex());
+        }
+    } else {
+        for (auto& ci : column_ids) {
+            selected_columns.push_back(ci.GetPrimaryIndex());
+        }
     }
 
     auto physical_op =
@@ -79,17 +92,25 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
     // Single column reduction like Series.max()
     if (op.groups.empty()) {
-        if (op.expressions.size() != 1 ||
-            op.expressions[0]->type !=
-                duckdb::ExpressionType::BOUND_AGGREGATE) {
-            throw std::runtime_error(
-                "LogicalAggregate with no groups must have exactly one "
-                "aggregate expression for reduction.");
+        for (const auto& expr : op.expressions) {
+            if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
+                throw std::runtime_error(
+                    "LogicalAggregate with no groups must have BOUND_AGGREGATE "
+                    "expression types for reduction.");
+            }
         }
-        auto& agg_expr =
-            op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
+        std::vector<std::string> function_names;
+        for (auto& expr : op.expressions) {
+            auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
+            function_names.emplace_back(agg_expr.function.name);
+        }
 
-        if (agg_expr.function.name == "count_star") {
+        if (function_names[0] == "count_star") {
+            if (op.expressions.size() != 1) {
+                throw std::runtime_error(
+                    "CountStar must have exactly one "
+                    "aggregate expression for reduction.");
+            }
             auto physical_op = std::make_shared<PhysicalCountStar>();
             // Finish the pipeline at this point so that Finalize can run
             // to reduce the number of collected rows to the desired amount.
@@ -102,16 +123,25 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                 std::make_shared<PipelineBuilder>(physical_op);
             return;
         }
-
-        // Extract bind_info
+        // bind_info in every expression stores the same schema for the entire
+        // list, formatted on the Python side; therefore we only extract
+        // bind_info of first element.
+        auto& agg_expr =
+            op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
         BodoAggFunctionData& bind_info =
             agg_expr.bind_info->Cast<BodoAggFunctionData>();
-
-        auto out_schema = bind_info.out_schema;
-        auto bodo_schema = bodo::Schema::FromArrowSchema(out_schema);
-
-        auto physical_op = std::make_shared<PhysicalReduce>(
-            bodo_schema, agg_expr.function.name);
+        auto bodo_schema = std::make_shared<bodo::Schema>();
+        auto col_schema = bind_info.out_schema;
+        auto bodo_col_schema = bodo::Schema::FromArrowSchema(col_schema);
+        for (size_t i = 0; i < bodo_col_schema->column_types.size(); i++) {
+            bodo_schema->append_column(
+                bodo_col_schema->column_types[i]->copy());
+            bodo_schema->column_names.push_back(std::to_string(i));
+        }
+        bodo_schema->metadata = std::make_shared<TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+        auto physical_op =
+            std::make_shared<PhysicalReduce>(bodo_schema, function_names);
         finished_pipelines.emplace_back(
             this->active_pipeline->Build(physical_op));
         this->active_pipeline = std::make_shared<PipelineBuilder>(physical_op);
@@ -147,8 +177,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
-    auto physical_join = std::make_shared<PhysicalJoin>(op, op.conditions);
-
     // Create pipelines for the build side of the join (right child)
     PhysicalPlanBuilder rhs_builder;
     rhs_builder.Visit(*op.children[1]);
@@ -156,6 +184,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
     std::vector<std::shared_ptr<Pipeline>> build_pipelines =
         std::move(rhs_builder.finished_pipelines);
+
+    // Create pipelines for the probe side of the join (left child)
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> probe_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    auto physical_join = std::make_shared<PhysicalJoin>(
+        op, op.conditions, build_table_schema, probe_table_schema);
+
     build_pipelines.push_back(
         rhs_builder.active_pipeline->Build(physical_join));
     // Build pipelines need to execute before probe pipeline (recursively
@@ -164,14 +201,74 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
                                     build_pipelines.begin(),
                                     build_pipelines.end());
 
-    // Create pipelines for the probe side of the join (left child)
-    this->Visit(*op.children[0]);
-    std::shared_ptr<bodo::Schema> probe_table_schema =
-        this->active_pipeline->getPrevOpOutputSchema();
-
-    physical_join->InitializeJoinState(build_table_schema, probe_table_schema);
-
     this->active_pipeline->AddOperator(physical_join);
+}
+
+/*
+ * arrowSchemeTypeEquals
+ *
+ * Used to compare two arrow schema for type equality.
+ * Can be used when schema may have differing column names
+ * and thus the regular schema equality test is too strict.
+ */
+bool arrowSchemaTypeEquals(const ::arrow::Schema& s1,
+                           const ::arrow::Schema& s2) {
+    if (s1.num_fields() != s2.num_fields())
+        return false;
+
+    for (int i = 0; i < s1.num_fields(); ++i) {
+        if (!s1.field(i)->type()->Equals(*s2.field(i)->type())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
+    if (op.type == duckdb::LogicalOperatorType::LOGICAL_UNION) {
+        // UNION ALL
+        if (op.setop_all) {
+            // Right-child will feed into a table.
+            PhysicalPlanBuilder rhs_builder;
+            rhs_builder.Visit(*op.children[1]);
+            std::shared_ptr<bodo::Schema> rhs_table_schema =
+                rhs_builder.active_pipeline->getPrevOpOutputSchema();
+            std::vector<std::shared_ptr<Pipeline>> build_pipelines =
+                std::move(rhs_builder.finished_pipelines);
+            ::arrow::Schema rhs_arrow = *(rhs_table_schema->ToArrowSchema());
+
+            auto physical_union_all =
+                std::make_shared<PhysicalUnionAll>(rhs_table_schema);
+            build_pipelines.push_back(
+                rhs_builder.active_pipeline->Build(physical_union_all));
+            this->finished_pipelines.insert(this->finished_pipelines.begin(),
+                                            build_pipelines.begin(),
+                                            build_pipelines.end());
+
+            // Left-child will feed into the same table.
+            this->Visit(*op.children[0]);
+            std::shared_ptr<bodo::Schema> lhs_table_schema =
+                this->active_pipeline->getPrevOpOutputSchema();
+            ::arrow::Schema lhs_arrow = *(lhs_table_schema->ToArrowSchema());
+            if (!arrowSchemaTypeEquals(rhs_arrow, lhs_arrow)) {
+                throw std::runtime_error(
+                    "PhysicalPlanBuilder::Visit(LogicalSetOperation lhs and "
+                    "rhs schemas not identical. " +
+                    lhs_arrow.ToString() + " versus " + rhs_arrow.ToString());
+            }
+
+            this->active_pipeline->AddOperator(physical_union_all);
+        } else {
+            throw std::runtime_error(
+                "PhysicalPlanBuilder::Visit(LogicalSetOperation non-all union "
+                "unsupported");
+        }
+    } else {
+        throw std::runtime_error(
+            "PhysicalPlanBuilder::Visit(LogicalSetOperation unsupported "
+            "logical operator type " +
+            std::to_string(static_cast<int>(op.type)));
+    }
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalSample& op) {

@@ -31,6 +31,17 @@ std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
 extractValue(const duckdb::Value &value);
 
 /**
+ * @brief Convert duckdb value to null var of right type.
+ *
+ * @param expr - the duckdb value to convert
+ * @return the C++ variant converted value
+ */
+std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
+             uint64_t, bool, std::string, float, double,
+             std::shared_ptr<arrow::Scalar>>
+getDefaultValueForDuckdbValueType(const duckdb::Value &value);
+
+/**
  * @brief Return a string representation of the column names in the Arrow schema
  * for printing purposes (e.g. plan prints).
  *
@@ -84,6 +95,16 @@ void initInputColumnMapping(std::vector<int64_t> &col_inds,
  */
 std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
     std::vector<duckdb::ColumnBinding> source_cols);
+
+/**
+ * @brief Create a map of column bindings to column indices in physical input
+ * table
+ *
+ * @param source_cols multiple sets of column bindings in source tables
+ * @return std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+ */
+std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> getColRefMap(
+    std::vector<std::vector<duckdb::ColumnBinding>> source_cols);
 
 /**
  * @brief Convert duckdb type to arrow type.
@@ -199,3 +220,23 @@ PyObject *duckdbFilterSetToPyicebergFilter(
  */
 std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
     const duckdb::Value &value);
+
+/**
+ * @brief Convert a DuckDB Value object to the corresponding arrow type
+ *
+ * @param value DuckDB Value object to convert
+ * @return std::shared_ptr<arrow::DataType> Arrow type of DuckDB value
+ */
+std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
+    const duckdb::Value &value);
+
+/**
+ * @brief Convert a raw pointer to a value of a given arrow type into an arrow
+ * Datum.
+ *
+ * @param raw_ptr pointer to the value to put into Datum
+ * @param type arrow type of the value
+ * @return arrow::Datum the converted value
+ */
+arrow::Datum ConvertToDatum(void *raw_ptr,
+                            std::shared_ptr<arrow::DataType> type);

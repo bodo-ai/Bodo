@@ -1,8 +1,8 @@
+from __future__ import annotations
+
 import functools
 import importlib
 import inspect
-import sys
-import traceback
 import warnings
 
 import pandas as pd
@@ -299,7 +299,7 @@ def check_args_fallback(
                         func.__qualname__,
                         unsupported_args,
                         unsupported_kwargs,
-                        args,
+                        (self, *args),
                         kwargs,
                         package_name=package_name,
                         fn_str=fn_str,
@@ -332,7 +332,7 @@ def check_args_fallback(
                             self._keys,
                             as_index=self._as_index,
                             dropna=self._dropna,
-                        )[self._selection]
+                        )[self.selection_for_plan]
                         base_class = self.__class__
                     elif self.__class__ == bodo.pandas.series.BodoStringMethods:
                         base_class = self._series.__class__.__bases__[0].str
@@ -348,216 +348,14 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
-                    return getattr(base_class, func.__name__)(self, *args, **kwargs)
+                    py_res = fallback_wrapper(getattr(base_class, func.__name__))(
+                        self, *args, **kwargs
+                    )
+                    return py_res
 
         return wrapper
 
     return decorator
-
-
-class LazyPlan:
-    """Easiest mode to use DuckDB is to generate isolated queries and try to minimize
-    node re-use issues due to the frequent use of unique_ptr.  This class should be
-    used when constructing all plans and holds them lazily.  On demand, generate_duckdb
-    can be used to convert to an isolated set of DuckDB objects for execution.
-    """
-
-    def __init__(self, plan_class, empty_data, *args, **kwargs):
-        self.plan_class = plan_class
-        self.args = args
-        self.kwargs = kwargs
-        assert isinstance(empty_data, (pd.DataFrame, pd.Series)), (
-            "LazyPlan: empty_data must be a DataFrame or Series"
-        )
-        self.is_series = isinstance(empty_data, pd.Series)
-        self.empty_data = empty_data
-        if self.is_series:
-            # None name doesn't round-trip to dataframe correctly so we use a dummy name
-            # that is replaced with None in wrap_plan
-            name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
-            self.empty_data = empty_data.to_frame(name=name)
-
-        if (pa_schema := kwargs.get("__pa_schema", None)) is None:
-            # Use the schema of the empty data to create the schema for the plan
-            # Passing in a separate schema is useful for some operators that need
-            # schema metadat like iceberg.
-            pa_schema = pa.Schema.from_pandas(self.empty_data)
-        else:
-            # We don't want this passing to the operator constructors
-            del kwargs["__pa_schema"]
-        self.pa_schema = pa_schema
-
-    def __str__(self):
-        args = self.args
-
-        # Avoid duplicated plan strings by omitting data_source.
-        if self.plan_class == "ColRefExpression":
-            col_index = args[1]
-            return f"ColRefExpression({col_index})"
-        elif self.plan_class == "PythonScalarFuncExpression":
-            func_name, col_indices = args[1][0], args[2]
-            return f"PythonScalarFuncExpression({func_name}, {col_indices})"
-
-        out = f"{self.plan_class}: \n"
-        args_str = ""
-        for arg in args:
-            if isinstance(arg, pd.DataFrame):
-                args_str += f"{arg.columns.tolist()}\n"
-            elif arg is not None:
-                args_str += f"{arg}\n"
-
-        for k, v in self.kwargs.items():
-            args_str += f"{k}: {v}\n"
-
-        out += "\n".join(
-            f"  {arg_line}"
-            for arg_line in args_str.split("\n")
-            if not arg_line.isspace()
-        )
-
-        return out
-
-    __repr__ = __str__
-
-    def generate_duckdb(self, cache=None):
-        from bodo.ext import plan_optimizer
-
-        # Sometimes the same LazyPlan object is encountered twice during the same
-        # query so  we use the cache dict to only convert it once.
-        if cache is None:
-            cache = {}
-        # If previously converted then use the last result.
-        # Don't cache expression nodes.
-        # TODO - Try to eliminate caching altogether since it seems to cause
-        # more problems than lack of caching.
-        if "Expression" not in self.plan_class and id(self) in cache:
-            return cache[id(self)]
-
-        def recursive_check(x):
-            """Recursively convert LazyPlans but return other types unmodified."""
-            if isinstance(x, LazyPlan):
-                return x.generate_duckdb(cache=cache)
-            elif isinstance(x, (tuple, list)):
-                return type(x)(recursive_check(i) for i in x)
-            else:
-                return x
-
-        # Convert any LazyPlan in the args or kwargs.
-        # We do this in reverse order because we expect the first arg to be
-        # the source of the plan and for the node being created to take
-        # ownership of that source.  If other args or kwargs reference that
-        # plan then if we process them after we have taken ownership then
-        # we will get nullptr exceptions.  So, process the args that don't
-        # claim ownership first (in the reverse direction) and finally
-        # process the first arg which we expect will take ownership.
-        kwargs = {k: recursive_check(v) for k, v in self.kwargs.items()}
-        args = [recursive_check(x) for x in reversed(self.args)]
-        args.reverse()
-
-        # Create real duckdb class.
-        ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args, **kwargs)
-        # Add to cache so we don't convert it again.
-        cache[id(self)] = ret
-        return ret
-
-
-def execute_plan(plan: LazyPlan):
-    """Execute a dataframe plan using Bodo's execution engine.
-
-    Args:
-        plan (LazyPlan): query plan to execute
-
-    Returns:
-        pd.DataFrame: output data
-    """
-    import bodo
-
-    def _exec_plan(plan):
-        import bodo
-        from bodo.ext import plan_optimizer
-
-        duckdb_plan = plan.generate_duckdb()
-
-        if (
-            bodo.dataframe_library_dump_plans
-            and bodo.libs.distributed_api.get_rank() == 0
-        ):
-            # Sometimes when an execution is triggered it isn't expected that
-            # an execution should happen at that point.  This traceback is
-            # useful to identify what is triggering the execution as it may be
-            # a bug or the usage of some Pandas API that calls a function that
-            # triggers execution.  This traceback can help fix the bug or
-            # select a different Pandas API or an internal Pandas function that
-            # bypasses the issue.
-            traceback.print_stack(file=sys.stdout)
-            print("")  # Print on new line during tests.
-            print("Unoptimized plan")
-            print(duckdb_plan.toString())
-
-        # Print the plan before optimization
-        if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
-            pre_optimize_graphviz = duckdb_plan.toGraphviz()
-            with open("pre_optimize" + str(id(plan)) + ".dot", "w") as f:
-                print(pre_optimize_graphviz, file=f)
-
-        optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
-
-        if (
-            bodo.dataframe_library_dump_plans
-            and bodo.libs.distributed_api.get_rank() == 0
-        ):
-            print("Optimized plan")
-            print(optimized_plan.toString())
-
-        # Print the plan after optimization
-        if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
-            post_optimize_graphviz = optimized_plan.toGraphviz()
-            with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
-                print(post_optimize_graphviz, file=f)
-
-        output_func = cpp_table_to_series if plan.is_series else cpp_table_to_df
-        return plan_optimizer.py_execute_plan(
-            optimized_plan, output_func, duckdb_plan.out_schema
-        )
-
-    if bodo.dataframe_library_run_parallel:
-        import bodo.spawn.spawner
-
-        return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
-
-    return _exec_plan(plan)
-
-
-def get_plan_cardinality(plan: LazyPlan):
-    """See if we can statically know the cardinality of the result of the plan.
-
-    Args:
-        plan (LazyPlan): query plan to get cardinality of.
-
-    Returns:
-        int (if cardinality is known) or None (if not known)
-    """
-
-    duckdb_plan = plan.generate_duckdb()
-    return duckdb_plan.getCardinality()
-
-
-def getPlanStatistics(plan: LazyPlan):
-    """Get statistics for a plan pre and post optimization.
-
-    Args:
-        plan (LazyPlan): query plan to get statistics for
-
-    Returns:
-        Number of nodes in the tree before and after optimization.
-    """
-    from bodo.ext import plan_optimizer
-
-    duckdb_plan = plan.generate_duckdb()
-    preOptNum = plan_optimizer.count_nodes(duckdb_plan)
-    optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
-    postOptNum = plan_optimizer.count_nodes(optimized_plan)
-    return preOptNum, postOptNum
 
 
 def get_n_index_arrays(index):
@@ -699,12 +497,8 @@ def wrap_plan(plan, res_id=None, nrows=None):
 
     from bodo.pandas.frame import BodoDataFrame
     from bodo.pandas.lazy_metadata import LazyMetadata
+    from bodo.pandas.plan import LazyPlan
     from bodo.pandas.series import BodoSeries
-    from bodo.pandas.utils import (
-        LazyPlan,
-        get_lazy_manager_class,
-        get_lazy_single_manager_class,
-    )
 
     assert isinstance(plan, LazyPlan), "wrap_plan: LazyPlan expected"
 
@@ -744,58 +538,6 @@ def wrap_plan(plan, res_id=None, nrows=None):
     return new_df
 
 
-def get_proj_expr_single(proj: LazyPlan):
-    """Get the single expression from a LogicalProjection node."""
-    if is_single_projection(proj):
-        return proj.args[1][0]
-    else:
-        if not proj.is_series:
-            raise Exception("Got a non-Series in get_proj_expr_single")
-        return make_col_ref_exprs([0], proj)[0]
-
-
-def get_single_proj_source_if_present(proj: LazyPlan):
-    """Get the single expression from a LogicalProjection node."""
-    if is_single_projection(proj):
-        return proj.args[0]
-    else:
-        if not proj.is_series:
-            raise Exception("Got a non-Series in get_single_proj_source_if_present")
-        return proj
-
-
-def is_single_projection(proj: LazyPlan):
-    """Return True if plan is a projection with a single expression"""
-    return (
-        isinstance(proj, LazyPlan)
-        and proj.plan_class == "LogicalProjection"
-        and len(proj.args[1]) == (get_n_index_arrays(proj.empty_data.index) + 1)
-    )
-
-
-def is_single_colref_projection(proj: LazyPlan):
-    """Return True if plan is a projection with a single expression that is a column reference"""
-    return (
-        is_single_projection(proj) and proj.args[1][0].plan_class == "ColRefExpression"
-    )
-
-
-def make_col_ref_exprs(key_indices, src_plan):
-    """Create column reference expressions for the given key indices for the input
-    source plan.
-    """
-
-    exprs = []
-    for k in key_indices:
-        # Using Arrow schema instead of zero_size_self.iloc to handle Index
-        # columns correctly.
-        empty_data = arrow_to_empty_df(pa.schema([src_plan.pa_schema[k]]))
-        p = LazyPlan("ColRefExpression", empty_data, src_plan, k)
-        exprs.append(p)
-
-    return exprs
-
-
 def _is_generated_index_name(name):
     """Check if the Index name is a generated name similar to PyArrow:
     https://github.com/apache/arrow/blob/5e9fce493f21098d616f08034bc233fcc529b3ad/python/pyarrow/pandas_compat.py#L1071
@@ -821,6 +563,10 @@ def _reconstruct_pandas_index(df, arrow_schema):
     for descr in arrow_schema.pandas_metadata.get("index_columns", []):
         if isinstance(descr, str):
             index_name = None if _is_generated_index_name(descr) else descr
+            # Index not found in table: matching Pyarrow's behavior, which treats
+            # missing index as RangeIndex.
+            if descr not in df:
+                continue
             index_level = df[descr]
             df = df.drop(columns=[descr])
         elif descr["kind"] == "range":
@@ -1031,62 +777,6 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
     )
 
 
-class LazyPlanDistributedArg:
-    """
-    Class to hold the arguments for a LazyPlan that are distributed on the workers.
-    """
-
-    def __init__(self, mgr, res_id: str):
-        self.mgr = mgr
-        self.res_id = res_id
-
-    def __reduce__(self):
-        """
-        This method is used to serialize the object for distribution.
-        We can't send the manager to the workers without triggering collection
-        so we just send the result ID instead.
-        """
-        return (str, (self.res_id,))
-
-
-def count_plan(self):
-    # See if we can get the cardinality statically.
-    static_cardinality = get_plan_cardinality(self._plan)
-    if static_cardinality is not None:
-        return static_cardinality
-
-    # Can't be known statically so create count plan on top of
-    # existing plan.
-    count_star_schema = pd.Series(dtype="uint64", name="count_star")
-    aggregate_plan = LazyPlan(
-        "LogicalAggregate",
-        count_star_schema,
-        self._plan,
-        [],
-        [
-            LazyPlan(
-                "AggregateExpression",
-                count_star_schema,
-                self._plan,
-                "count_star",
-                # Adding column 0 as input to avoid deleting all input by the optimizer
-                # TODO: avoid materializing the input column
-                [0],
-                False,  # dropna
-            )
-        ],
-    )
-    projection_plan = LazyPlan(
-        "LogicalProjection",
-        count_star_schema,
-        aggregate_plan,
-        make_col_ref_exprs([0], aggregate_plan),
-    )
-
-    data = execute_plan(projection_plan)
-    return data[0]
-
-
 def ensure_datetime64ns(df):
     """Convert datetime columns in a DataFrame to 'datetime64[ns]' dtype.
     Avoids datetime64[us] that is commonly used in Pandas but not supported in Bodo.
@@ -1113,48 +803,24 @@ def ensure_datetime64ns(df):
     return df
 
 
-def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=True):
-    """Create plan for calling some function or method on a DataFrame. Creates a
-    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
+def fallback_wrapper(attr):
     """
-    df_len = len(df_plan.empty_data.columns)
-    udf_arg = LazyPlan(
-        "PythonScalarFuncExpression",
-        empty_data,
-        df_plan,
-        (
-            func,
-            False,  # is_series
-            is_method,
-            args,
-            kwargs,
-        ),
-        tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
-    )
+    Wrap callable attributes with a warning silencer, unless they are known
+    accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
+    """
 
-    # Select Index columns explicitly for output
-    index_col_refs = tuple(
-        make_col_ref_exprs(
-            range(df_len, df_len + get_n_index_arrays(df_plan.empty_data.index)),
-            df_plan,
-        )
-    )
-    plan = LazyPlan(
-        "LogicalProjection",
-        empty_data,
-        df_plan,
-        (udf_arg,) + index_col_refs,
-    )
-    return wrap_plan(plan=plan)
+    # Avoid wrapping indexers & accessors
+    if (
+        callable(attr)
+        and not hasattr(attr, "__getitem__")
+        and not hasattr(attr, "__getattr__")
+    ):
 
+        def silenced_method(*args, **kwargs):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+                return attr(*args, **kwargs)
 
-def is_col_ref(expr):
-    return expr.plan_class == "ColRefExpression"
+        return silenced_method
 
-
-def is_scalar_func(expr):
-    return expr.plan_class == "PythonScalarFuncExpression"
-
-
-def is_arith_expr(expr):
-    return expr.plan_class == "ArithOpExpression"
+    return attr

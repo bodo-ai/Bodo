@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import os
-import typing as pt
 from pathlib import PureWindowsPath
 from urllib.parse import urlparse
 
@@ -12,15 +13,13 @@ def _map_wasb_to_abfs(scheme: str, netloc: str) -> tuple[str, str]:
     """
     Map wasb and wasbs to abfss and abfs. Leaves others as is
     """
-    match scheme:
-        case "wasb":
-            scheme = "abfs"
-            netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
-        case "wasbs":
-            scheme = "abfss"
-            netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
-        case _:
-            pass
+    if scheme == "wasb":
+        scheme = "abfs"
+        netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
+    elif scheme == "wasbs":
+        scheme = "abfss"
+        netloc = netloc.replace("blob.core.windows.net", "dfs.core.windows.net")
+
     return scheme, netloc
 
 
@@ -47,7 +46,6 @@ class BodoPyArrowFileIO(PyArrowFileIO):
     """
 
     @staticmethod
-    @pt.override
     def parse_location(location: str) -> tuple[str, str, str]:
         """Return the path without the scheme."""
 
@@ -74,7 +72,6 @@ class BodoPyArrowFileIO(PyArrowFileIO):
         else:
             return uri.scheme, uri.netloc, f"{uri.netloc}{uri.path}"
 
-    @pt.override
     def _initialize_fs(self, scheme: str, netloc: str | None = None) -> FileSystem:
         if netloc:
             scheme, netloc = _map_wasb_to_abfs(scheme, netloc)

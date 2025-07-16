@@ -1,5 +1,7 @@
 """Timestamp extension for Pandas Timestamp with timezone support."""
 
+from __future__ import annotations
+
 import calendar
 import datetime
 import operator

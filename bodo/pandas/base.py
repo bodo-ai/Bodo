@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import csv
 import importlib
 import typing as pt
@@ -12,11 +14,14 @@ import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
 from pandas._typing import (
+    Axis,
     CompressionOptions,
     CSVEngine,
     DtypeArg,
     DtypeBackend,
     FilePath,
+    Hashable,
+    HashableT,
     IndexLabel,
     ReadCsvBuffer,
     StorageOptions,
@@ -27,17 +32,26 @@ from pandas.io.parsers.readers import _c_parser_defaults
 
 import bodo.spawn.spawner  # noqa: F401
 from bodo.pandas.frame import BodoDataFrame
+from bodo.pandas.plan import (
+    LazyPlanDistributedArg,
+    LogicalGetIcebergRead,
+    LogicalGetPandasReadParallel,
+    LogicalGetPandasReadSeq,
+    LogicalGetParquetRead,
+    LogicalLimit,
+    LogicalProjection,
+    LogicalSetOperation,
+    NullExpression,
+    _get_df_python_func_plan,
+    make_col_ref_exprs,
+)
 from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
     BodoLibNotImplementedException,
-    LazyPlan,
-    LazyPlanDistributedArg,
-    _get_df_python_func_plan,
     arrow_to_empty_df,
     check_args_fallback,
     ensure_datetime64ns,
-    make_col_ref_exprs,
     wrap_plan,
 )
 from bodo.utils.utils import bodo_spawn_exec
@@ -68,16 +82,13 @@ def from_pandas(df):
 
     res_id = None
     if bodo.dataframe_library_run_parallel:
-        mgr = bodo.spawn.spawner.get_spawner().scatter_data(df)
-        res_id = mgr._md_result_id
-        plan = LazyPlan(
-            "LogicalGetPandasReadParallel",
+        plan = LogicalGetPandasReadParallel(
             empty_df,
             n_rows,
-            LazyPlanDistributedArg(mgr, res_id),
+            LazyPlanDistributedArg(df),
         )
     else:
-        plan = LazyPlan("LogicalGetPandasReadSeq", empty_df, df)
+        plan = LogicalGetPandasReadSeq(empty_df, df)
 
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
@@ -110,8 +121,7 @@ def read_parquet(
 
     empty_df = arrow_to_empty_df(arrow_schema)
 
-    plan = LazyPlan(
-        "LogicalGetParquetRead",
+    plan = LogicalGetParquetRead(
         empty_df,
         path,
         storage_options,
@@ -222,8 +232,7 @@ def read_iceberg(
         filter_selectivity_estimate = 0.2
         table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
 
-    plan = LazyPlan(
-        "LogicalGetIcebergRead",
+    plan = LogicalGetIcebergRead(
         empty_df,
         table_identifier,
         catalog_name,
@@ -236,7 +245,7 @@ def read_iceberg(
         pyiceberg_schema,
         snapshot_id if snapshot_id is not None else -1,
         table_len_estimate,
-        __pa_schema=arrow_schema,
+        arrow_schema=arrow_schema,
     )
 
     if selected_fields is not None:
@@ -245,16 +254,14 @@ def read_iceberg(
         }
         exprs = make_col_ref_exprs(col_idxs, plan)
         empty_df = empty_df[list(selected_fields)]
-        plan = LazyPlan(
-            "LogicalProjection",
+        plan = LogicalProjection(
             empty_df,
             plan,
             exprs,
         )
 
     if limit is not None:
-        plan = LazyPlan(
-            "LogicalLimit",
+        plan = LogicalLimit(
             empty_df,
             plan,
             limit,
@@ -263,19 +270,19 @@ def read_iceberg(
     return wrap_plan(plan=plan)
 
 
-def read_iceberg_table(table: "PyIcebergTable") -> BodoDataFrame:
+def read_iceberg_table(table: PyIcebergTable) -> BodoDataFrame:
     import pyiceberg.catalog
 
     # We can't scatter catalogs so we need to use properties instead so the workers can
     # create the catalog themselves.
     catalog_properties = table.catalog.properties
-    catalog_properties.update(
-        {
-            pyiceberg.catalog.PY_CATALOG_IMPL: table.catalog.__class__.__module__
-            + "."
-            + table.catalog.__class__.__name__,
-        }
-    )
+
+    # NOTE: catalog implementation and type cannot be set at the same time:
+    # https://github.com/ehsantn/iceberg-python/blob/cae24259aa7ea3923703f65b58da7ff5a67414ba/pyiceberg/catalog/__init__.py#L242
+    if pyiceberg.catalog.TYPE not in catalog_properties:
+        catalog_properties[pyiceberg.catalog.PY_CATALOG_IMPL] = (
+            table.catalog.__class__.__module__ + "." + table.catalog.__class__.__name__
+        )
 
     return read_iceberg(
         ".".join(table._identifier),
@@ -375,7 +382,7 @@ def read_csv(
         func_args.append(parse_dates)
     func += ")\n"
     csv_func = bodo_spawn_exec(func, {"pd": pd}, {}, __name__)
-    jit_csv_func = bodo.jit(csv_func)
+    jit_csv_func = bodo.jit(csv_func, cache=True)
     return jit_csv_func(filepath_or_buffer, *func_args)
 
 
@@ -443,6 +450,96 @@ def to_datetime(
         in_kwargs,
         is_method=False,
     )
+
+
+@check_args_fallback(unsupported="all")
+def concat(
+    objs: Iterable[BodoSeries | BodoDataFrame]
+    | Mapping[HashableT, BodoSeries | BodoDataFrame],
+    *,
+    axis: Axis = 0,
+    join: str = "outer",
+    ignore_index: bool = False,
+    keys: Iterable[Hashable] | None = None,
+    levels=None,
+    names: list[HashableT] | None = None,
+    verify_integrity: bool = False,
+    sort: bool = False,
+    copy: bool | None = None,
+) -> BodoDataFrame | BodoSeries:
+    if isinstance(objs, Mapping):
+        raise BodoLibNotImplementedException(
+            "concat does not current support objs of Mapping type"
+        )
+
+    if len(objs) == 0:
+        raise ValueError("No objects to concatenate")
+    elif len(objs) == 1:
+        return objs[0]
+
+    def concat_two(a, b):
+        """Process two dataframes or series to concat just two together."""
+        zero_size_a = _empty_like(a)
+        zero_size_b = _empty_like(b)
+
+        # Simulate operation in Pandas with empty entities.
+        empty_data = pd.concat(
+            [zero_size_a, zero_size_b],
+            axis=axis,
+            join=join,
+            ignore_index=ignore_index,
+            keys=keys,
+            levels=levels,
+            names=names,
+            sort=sort,
+            copy=copy,
+        )
+
+        if isinstance(empty_data, pd.DataFrame):
+
+            def get_mapping(new_schema, old_schema, plan):
+                """Create col ref expressions to do the reordering between
+                the old schema column order and the new one.
+                """
+                exprs = []
+                for field_idx, x in enumerate(new_schema):
+                    if x in old_schema:
+                        exprs.extend(make_col_ref_exprs([old_schema.index(x)], plan))
+                    else:
+                        exprs.append(NullExpression(new_schema, field_idx))
+                return exprs
+
+            # Create a reordering of the temp a_new_cols so that the columns are in
+            # the same order as the Pandas simulation on empty data.
+            a_plan = LogicalProjection(
+                empty_data,
+                a._plan,
+                get_mapping(empty_data, a.columns.tolist(), a._plan),
+            )
+            # Create a reordering of the temp b_new_cols so that the columns are in
+            # the same order as the Pandas simulation on empty data.
+            b_plan = LogicalProjection(
+                empty_data,
+                b._plan,
+                get_mapping(empty_data, b.columns.tolist(), b._plan),
+            )
+        else:
+            a_plan = a._plan
+            b_plan = b._plan
+
+        # DuckDB Union operator requires schema to already be matching.
+        planUnion = LogicalSetOperation(empty_data, a_plan, b_plan, "union all")
+
+        return wrap_plan(planUnion)
+
+    # High-level approach is to process two dataframes or series at a time.  If
+    # the programmer gave more than 2 then combine the 3rd with the result of
+    # first two, the 4th with the result of that and so on.
+    cur_res = concat_two(objs[0], objs[1])
+    for i in range(2, len(objs)):
+        cur_res = concat_two(cur_res, objs[i])
+
+    return cur_res
 
 
 def _validate_df_to_datetime(df):

@@ -131,9 +131,6 @@ def test_str_cat_fallback_not_bodo_series(fallback_df):
         _ = bdf["A"].str.cat(others=fallback_df["B"])
 
 
-@pytest.mark.skip(
-    reason="TODO: fix failure in this case: df['C'] = df.A.str.cat(others=df.B) "
-)
 def test_assignment_str_cat_lazy_plan():
     pdf = pd.DataFrame(
         {
@@ -143,11 +140,9 @@ def test_assignment_str_cat_lazy_plan():
     )
     bdf = bd.from_pandas(pdf)
 
-    bdf = bdf.A.str.cat(others=bdf.B)
+    bdf["C"] = bdf.A.str.cat(others=bdf.B)
     assert bdf.is_lazy_plan()
 
-    bdf["C"] = bdf
     pdf["C"] = pdf["A"].str.cat(others=pdf["B"])
 
-    assert bdf.is_lazy_plan()
     _test_equal(bdf.execute_plan(), pdf, check_pandas_types=False, check_names=False)

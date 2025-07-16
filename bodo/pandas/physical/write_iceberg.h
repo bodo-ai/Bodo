@@ -93,11 +93,17 @@ class PhysicalWriteIceberg : public PhysicalSink {
         // Gather iceberg_files_info from all ranks using MPI
         // Equivalent to all_infos = comm.gather(iceberg_files_info_py)
 
-        PyObject* mpi_module = PyImport_ImportModule("bodo.mpi4py.MPI");
-        if (!mpi_module) {
+        PyObject* mpi4py_module = PyImport_ImportModule("bodo.mpi4py");
+        if (!mpi4py_module) {
             throw std::runtime_error(
                 "PhysicalWriteIceberg::Finalize: Failed to import "
-                "bodo.mpi4py.MPI");
+                "bodo.mpi4py");
+        }
+        PyObject* mpi_module = PyObject_GetAttrString(mpi4py_module, "MPI");
+        if (!mpi_module) {
+            Py_DECREF(mpi4py_module);
+            throw std::runtime_error(
+                "PhysicalWriteIceberg::Finalize: Failed to get MPI module");
         }
 
         PyObject* comm_world = PyObject_GetAttrString(mpi_module, "COMM_WORLD");
@@ -123,6 +129,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
         Py_DECREF(args);
         Py_DECREF(gather_method);
         Py_DECREF(comm_world);
+        Py_DECREF(mpi4py_module);
         Py_DECREF(mpi_module);
 
         if (!all_infos) {
