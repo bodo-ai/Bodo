@@ -69,6 +69,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
         getColRefMap(source_cols);
 
+    // Duckdb can produce empty filters.
+    if (op.expressions.size() == 0) {
+        return;
+    }
+
     std::shared_ptr<PhysicalExpression> physExprTree =
         buildPhysicalExprTree(op.expressions[0], col_ref_map);
     for (size_t i = 1; i < op.expressions.size(); ++i) {
