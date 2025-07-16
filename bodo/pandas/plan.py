@@ -160,6 +160,11 @@ class Expression(LazyPlan):
         out.is_series = self.is_series
         return out
 
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        if self.source == new_source:
+            return self
+
 
 class LogicalProjection(LogicalOperator):
     """Logical operator for projecting columns and expressions."""
@@ -276,23 +281,96 @@ class ColRefExpression(Expression):
         self.col_index = col_index
         super().__init__(empty_data, source, col_index)
 
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        if self.source == new_source:
+            return self
+
+        # If the new source is a projection on the same source, we can just update the
+        # column index
+        if (
+            isinstance(new_source, LogicalProjection)
+            and new_source.source == self.source
+        ):
+            for i, expr in enumerate(new_source.exprs):
+                if (
+                    isinstance(expr, ColRefExpression)
+                    and expr.col_index == self.col_index
+                ):
+                    # Found the same column in the new projection
+                    out = ColRefExpression(self.empty_data, new_source, i)
+                    out.is_series = self.is_series
+                    return out
+
+        # Cannot replace source, return None to indicate failure
+        return None
+
 
 class NullExpression(Expression):
     """Expression representing a null value in the query plan."""
 
-    pass
+    def __init__(self, empty_data, source, field_idx):
+        # Source is kept only for frontend plan checking and not passed to backend.
+        self.empty_data = empty_data
+        self.source = source
+        self.field_idx = field_idx
+        super().__init__(empty_data, field_idx)
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        if self.source == new_source:
+            return self
+
+        # If the new source is a projection on the same source, we can just update the
+        # source
+        if (
+            isinstance(new_source, LogicalProjection)
+            and new_source.source == self.source
+        ):
+            out = NullExpression(self.empty_data, new_source, self.field_idx)
+            out.is_series = self.is_series
+            return out
+
+        # Cannot replace source, return None to indicate failure
+        return None
 
 
 class ConstantExpression(Expression):
     """Expression representing a constant value in the query plan."""
 
-    pass
+    def __init__(self, empty_data, source, value):
+        # Source is kept only for frontend plan checking and not passed to backend.
+        self.empty_data = empty_data
+        self.source = source
+        self.value = value
+        super().__init__(empty_data, value)
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        if self.source == new_source:
+            return self
+
+        # If the new source is a projection on the same source, we can just update the
+        # source
+        if (
+            isinstance(new_source, LogicalProjection)
+            and new_source.source == self.source
+        ):
+            out = ConstantExpression(self.empty_data, new_source, self.value)
+            out.is_series = self.is_series
+            return out
+
+        # Cannot replace source, return None to indicate failure
+        return None
 
 
 class AggregateExpression(Expression):
     """Expression representing an aggregate function in the query plan."""
 
-    pass
+    def replace_source(self, new_source: LazyPlan):
+        # TODO: handle source replacement for aggregate expressions
+        if self.args[0] == new_source:
+            return self
 
 
 class PythonScalarFuncExpression(Expression):
@@ -325,14 +403,52 @@ class PythonScalarFuncExpression(Expression):
             return expr
         return self
 
+    def replace_source(self, new_source: LazyPlan):
+        # TODO: handle source replacement for PythonScalarFuncExpression
+        if self.args[0] == new_source:
+            return self
 
-class ComparisonOpExpression(Expression):
+
+class BinaryExpression(Expression):
+    """Base class for binary expressions in the query plan, such as arithmetic and
+    comparison operations.
+    """
+
+    def __init__(self, empty_data, lhs, rhs, op):
+        self.empty_data = empty_data
+        self.lhs = lhs
+        self.rhs = rhs
+        self.op = op
+        super().__init__(empty_data, lhs, rhs, op)
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        new_lhs = (
+            self.lhs.replace_source(new_source)
+            if isinstance(self.lhs, Expression)
+            else self.lhs
+        )
+        new_rhs = (
+            self.rhs.replace_source(new_source)
+            if isinstance(self.rhs, Expression)
+            else self.rhs
+        )
+
+        if new_lhs is None or new_rhs is None:
+            return None
+
+        out = self.__class__(self.empty_data, new_lhs, new_rhs, self.op)
+        out.is_series = self.is_series
+        return out
+
+
+class ComparisonOpExpression(BinaryExpression):
     """Expression representing a comparison operation in the query plan."""
 
     pass
 
 
-class ConjunctionOpExpression(Expression):
+class ConjunctionOpExpression(BinaryExpression):
     """Expression representing a conjunction (AND) operation in the query plan."""
 
     pass
@@ -341,10 +457,24 @@ class ConjunctionOpExpression(Expression):
 class UnaryOpExpression(Expression):
     """Expression representing a unary operation (e.g. negation) in the query plan."""
 
-    pass
+    def __init__(self, empty_data, source_expr, op):
+        self.empty_data = empty_data
+        self.source_expr = source_expr
+        self.op = op
+        super().__init__(empty_data, source_expr, op)
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        new_source_expr = self.source_expr.replace_source(new_source)
+        if new_source_expr is None:
+            return None
+
+        out = UnaryOpExpression(self.empty_data, new_source_expr, self.op)
+        out.is_series = self.is_series
+        return out
 
 
-class ArithOpExpression(Expression):
+class ArithOpExpression(BinaryExpression):
     """Expression representing an arithmetic operation (e.g. addition, subtraction)
     in the query plan.
     """
@@ -652,3 +782,22 @@ def is_scalar_func(expr):
 
 def is_arith_expr(expr):
     return isinstance(expr, ArithOpExpression)
+
+
+def match_binop_expr_source_plans(lhs, rhs):
+    """Match the source plans of two binary expressions if possible.
+    Returns (None, None) if sources cannot be matched.
+    """
+    if not (isinstance(lhs, Expression) and isinstance(rhs, Expression)):
+        # No matching necessary
+        return lhs, rhs
+
+    new_lhs = lhs.replace_source(rhs.source)
+    if new_lhs is not None:
+        return new_lhs, rhs
+
+    new_rhs = rhs.replace_source(lhs.source)
+    if new_rhs is not None:
+        return lhs, new_rhs
+
+    return None, None

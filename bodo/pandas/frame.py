@@ -1054,6 +1054,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             const_expr = ConstantExpression(
                 # Dummy empty data for LazyPlan
                 empty_data,
+                self._plan,
                 value,
             )
             proj_exprs = _get_setitem_proj_exprs(

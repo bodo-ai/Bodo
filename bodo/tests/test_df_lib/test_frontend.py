@@ -29,6 +29,18 @@ def test_df_getitem_fallback_warning():
     with pytest.warns(BodoLibFallbackWarning):
         bdf[:]
 
+    # Non-bodo Series
+    bdf = bd.from_pandas(df)
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf[df.A > 1]
+
+    # Different expr source plan
+    bdf = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(df)
+    S = bdf2.A > 0
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf[S]
+
 
 def test_df_setitem_fallback_warning():
     """Make sure DataFrame.__setitem__() raises a warning when falling back to Pandas."""
