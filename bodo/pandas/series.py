@@ -129,7 +129,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 # Make sure Series plans are always single expr projections for easier
                 # matching later.
                 self._source_plan = LogicalProjection(
-                    empty_data.to_frame(),
+                    empty_data,
                     read_plan,
                     tuple(
                         make_col_ref_exprs(
