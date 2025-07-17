@@ -10,11 +10,7 @@ import bodo.pandas as pd
 
 
 @functools.lru_cache
-def load_lineitem(data_folder: str, use_bodo=True) -> pd.DataFrame:
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def load_lineitem(data_folder: str, pd=pd):
     print("Loading lineitem")
     data_path = data_folder + "/lineitem.parquet"
     df = pd.read_parquet(data_path)
@@ -26,11 +22,7 @@ def load_lineitem(data_folder: str, use_bodo=True) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_part(data_folder: str, use_bodo=True) -> pd.DataFrame:
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def load_part(data_folder: str, pd=pd):
     print("Loading part")
     data_path = data_folder + "/part.parquet"
     df = pd.read_parquet(data_path)
@@ -39,11 +31,7 @@ def load_part(data_folder: str, use_bodo=True) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_orders(data_folder: str, use_bodo=True) -> pd.DataFrame:
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def load_orders(data_folder: str, pd=pd):
     print("Loading orders")
     data_path = data_folder + "/orders.parquet"
     df = pd.read_parquet(data_path)
@@ -53,11 +41,7 @@ def load_orders(data_folder: str, use_bodo=True) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_customer(data_folder: str, use_bodo=True) -> pd.DataFrame:
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def load_customer(data_folder: str, pd=pd):
     print("Loading customer")
     data_path = data_folder + "/customer.parquet"
     df = pd.read_parquet(data_path)
@@ -66,11 +50,7 @@ def load_customer(data_folder: str, use_bodo=True) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_nation(data_folder: str, use_bodo=True) -> pd.DataFrame:
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def load_nation(data_folder: str, pd=pd):
     print("Loading nation")
     data_path = data_folder + "/nation.parquet"
     df = pd.read_parquet(data_path)
@@ -79,11 +59,7 @@ def load_nation(data_folder: str, use_bodo=True) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_region(data_folder: str, use_bodo=True) -> pd.DataFrame:
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def load_region(data_folder: str, pd=pd):
     print("Loading region")
     data_path = data_folder + "/region.parquet"
     df = pd.read_parquet(data_path)
@@ -92,11 +68,7 @@ def load_region(data_folder: str, use_bodo=True) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_supplier(data_folder: str, use_bodo=True) -> pd.DataFrame:
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def load_supplier(data_folder: str, pd=pd):
     print("Loading supplier")
     data_path = data_folder + "/supplier.parquet"
     df = pd.read_parquet(data_path)
@@ -105,11 +77,7 @@ def load_supplier(data_folder: str, use_bodo=True) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_partsupp(data_folder: str, use_bodo=True) -> pd.DataFrame:
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def load_partsupp(data_folder: str, pd=pd):
     print("Loading partsupp")
     data_path = data_folder + "/partsupp.parquet"
     df = pd.read_parquet(data_path)
@@ -137,11 +105,7 @@ def collect_datasets(func: Callable):
     return func
 
 
-def tpch_q01(lineitem, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q01(lineitem, pd=pd):
     date = pd.Timestamp("1998-09-02")
     lineitem_filtered = lineitem.loc[
         :,
@@ -196,11 +160,7 @@ def tpch_q01(lineitem, use_bodo=True):
     return total
 
 
-def tpch_q02(part, partsupp, supplier, nation, region, use_bodo=True):
-    if use_bodo:
-        pass
-    else:
-        pass
+def tpch_q02(part, partsupp, supplier, nation, region, pd=pd):
     nation_filtered = nation.loc[:, ["N_NATIONKEY", "N_NAME", "N_REGIONKEY"]]
     region_filtered = region[(region["R_NAME"] == "EUROPE")]
     region_filtered = region_filtered.loc[:, ["R_REGIONKEY"]]
@@ -305,11 +265,7 @@ def tpch_q02(part, partsupp, supplier, nation, region, use_bodo=True):
     return total
 
 
-def tpch_q03(lineitem, orders, customer, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q03(lineitem, orders, customer, pd=pd):
     date = pd.Timestamp("1995-03-04")
     lineitem_filtered = lineitem.loc[
         :, ["L_ORDERKEY", "L_EXTENDEDPRICE", "L_DISCOUNT", "L_SHIPDATE"]
@@ -338,11 +294,7 @@ def tpch_q03(lineitem, orders, customer, use_bodo=True):
     return res.head(10)
 
 
-def tpch_q04(lineitem, orders, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q04(lineitem, orders, pd=pd):
     date1 = pd.Timestamp("1993-11-01")
     date2 = pd.Timestamp("1993-08-01")
     lsel = lineitem.L_COMMITDATE < lineitem.L_RECEIPTDATE
@@ -358,11 +310,7 @@ def tpch_q04(lineitem, orders, use_bodo=True):
     return total
 
 
-def tpch_q05(lineitem, orders, customer, nation, region, supplier, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q05(lineitem, orders, customer, nation, region, supplier, pd=pd):
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     rsel = region.R_NAME == "ASIA"
@@ -382,11 +330,7 @@ def tpch_q05(lineitem, orders, customer, nation, region, supplier, use_bodo=True
     return total
 
 
-def tpch_q06(lineitem, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q06(lineitem, pd=pd):
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     lineitem_filtered = lineitem.loc[
@@ -404,11 +348,7 @@ def tpch_q06(lineitem, use_bodo=True):
     return total
 
 
-def tpch_q07(lineitem, supplier, orders, customer, nation, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q07(lineitem, supplier, orders, customer, nation, pd=pd):
     """This version is faster than q07_old. Keeping the old one for reference"""
     lineitem_filtered = lineitem[
         (lineitem["L_SHIPDATE"] >= pd.Timestamp("1995-01-01"))
@@ -495,11 +435,7 @@ def tpch_q07(lineitem, supplier, orders, customer, nation, use_bodo=True):
     return total
 
 
-def tpch_q08(part, lineitem, supplier, orders, customer, nation, region, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd=pd):
     part_filtered = part[(part["P_TYPE"] == "ECONOMY ANODIZED STEEL")]
     part_filtered = part_filtered.loc[:, ["P_PARTKEY"]]
     lineitem_filtered = lineitem.loc[:, ["L_PARTKEY", "L_SUPPKEY", "L_ORDERKEY"]]
@@ -561,11 +497,7 @@ def tpch_q08(part, lineitem, supplier, orders, customer, nation, region, use_bod
     return total
 
 
-def tpch_q09(lineitem, orders, part, nation, partsupp, supplier, use_bodo=True):
-    if use_bodo:
-        pass
-    else:
-        pass
+def tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd=pd):
     psel = part.P_NAME.str.contains("ghost")
     fpart = part[psel]
     jn1 = lineitem.merge(fpart, left_on="L_PARTKEY", right_on="P_PARTKEY")
@@ -584,11 +516,7 @@ def tpch_q09(lineitem, orders, part, nation, partsupp, supplier, use_bodo=True):
     return total
 
 
-def tpch_q10(lineitem, orders, customer, nation, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q10(lineitem, orders, customer, nation, pd=pd):
     date1 = pd.Timestamp("1994-11-01")
     date2 = pd.Timestamp("1995-02-01")
     osel = (orders.O_ORDERDATE >= date1) & (orders.O_ORDERDATE < date2)
@@ -616,11 +544,7 @@ def tpch_q10(lineitem, orders, customer, nation, use_bodo=True):
     return total.head(20)
 
 
-def tpch_q11(partsupp, supplier, nation, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q11(partsupp, supplier, nation, pd=pd):
     partsupp_filtered = partsupp.loc[:, ["PS_PARTKEY", "PS_SUPPKEY"]]
     partsupp_filtered["TOTAL_COST"] = (
         partsupp["PS_SUPPLYCOST"] * partsupp["PS_AVAILQTY"]
@@ -645,11 +569,7 @@ def tpch_q11(partsupp, supplier, nation, use_bodo=True):
     return total
 
 
-def tpch_q12(lineitem, orders, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q12(lineitem, orders, pd=pd):
     date1 = pd.Timestamp("1994-01-01")
     date2 = pd.Timestamp("1995-01-01")
     sel = (
@@ -676,11 +596,7 @@ def tpch_q12(lineitem, orders, use_bodo=True):
     print(total)
 
 
-def tpch_q13(customer, orders, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q13(customer, orders, pd=pd):
     customer_filtered = customer.loc[:, ["C_CUSTKEY"]]
     orders_filtered = orders[
         ~orders["O_COMMENT"].str.contains(r"special[\S|\s]*requests")
@@ -699,11 +615,7 @@ def tpch_q13(customer, orders, use_bodo=True):
     return total
 
 
-def tpch_q14(lineitem, part, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q14(lineitem, part, pd=pd):
     startDate = pd.Timestamp("1994-03-01")
     endDate = pd.Timestamp("1994-04-01")
     p_type_like = "PROMO"
@@ -721,11 +633,7 @@ def tpch_q14(lineitem, part, use_bodo=True):
     return total
 
 
-def tpch_q15(lineitem, supplier, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q15(lineitem, supplier, pd=pd):
     lineitem_filtered = lineitem[
         (lineitem["L_SHIPDATE"] >= pd.Timestamp("1996-01-01"))
         & (
@@ -754,11 +662,7 @@ def tpch_q15(lineitem, supplier, use_bodo=True):
     return total
 
 
-def tpch_q16(part, partsupp, supplier, use_bodo=True):
-    if use_bodo:
-        pass
-    else:
-        pass
+def tpch_q16(part, partsupp, supplier, pd=pd):
     part_filtered = part[
         (part["P_BRAND"] != "Brand#45")
         & (~part["P_TYPE"].str.contains("^MEDIUM POLISHED"))
@@ -791,11 +695,7 @@ def tpch_q16(part, partsupp, supplier, use_bodo=True):
     return total
 
 
-def tpch_q17(lineitem, part, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q17(lineitem, part, pd=pd):
     left = lineitem.loc[:, ["L_PARTKEY", "L_QUANTITY", "L_EXTENDEDPRICE"]]
     right = part[((part["P_BRAND"] == "Brand#23") & (part["P_CONTAINER"] == "MED BOX"))]
     right = right.loc[:, ["P_PARTKEY"]]
@@ -819,11 +719,7 @@ def tpch_q17(lineitem, part, use_bodo=True):
     return total
 
 
-def tpch_q18(lineitem, orders, customer, use_bodo=True):
-    if use_bodo:
-        pass
-    else:
-        pass
+def tpch_q18(lineitem, orders, customer, pd=pd):
     gb1 = lineitem.groupby("L_ORDERKEY", as_index=False, sort=False)["L_QUANTITY"].sum()
     fgb1 = gb1[gb1.L_QUANTITY > 300]
     jn1 = fgb1.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
@@ -837,11 +733,7 @@ def tpch_q18(lineitem, orders, customer, use_bodo=True):
     return total.head(100)
 
 
-def tpch_q19(lineitem, part, use_bodo=True):
-    if use_bodo:
-        pass
-    else:
-        pass
+def tpch_q19(lineitem, part, pd=pd):
     Brand31 = "Brand#31"
     Brand43 = "Brand#43"
     SMBOX = "SM BOX"
@@ -916,11 +808,7 @@ def tpch_q19(lineitem, part, use_bodo=True):
     return total
 
 
-def tpch_q20(lineitem, part, nation, partsupp, supplier, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q20(lineitem, part, nation, partsupp, supplier, pd=pd):
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     psel = part.P_NAME.str.startswith("azure")
@@ -947,11 +835,7 @@ def tpch_q20(lineitem, part, nation, partsupp, supplier, use_bodo=True):
     return total
 
 
-def tpch_q21(lineitem, orders, supplier, nation, use_bodo=True):
-    if use_bodo:
-        pass
-    else:
-        pass
+def tpch_q21(lineitem, orders, supplier, nation, pd=pd):
     lineitem_filtered = lineitem.loc[
         :, ["L_ORDERKEY", "L_SUPPKEY", "L_RECEIPTDATE", "L_COMMITDATE"]
     ]
@@ -1015,11 +899,7 @@ def tpch_q21(lineitem, orders, supplier, nation, use_bodo=True):
     return total
 
 
-def tpch_q22(customer, orders, use_bodo=True):
-    if use_bodo:
-        import bodo.pandas as pd
-    else:
-        import pandas as pd
+def tpch_q22(customer, orders, pd=pd):
     customer_filtered = customer.loc[:, ["C_ACCTBAL", "C_CUSTKEY"]]
     customer_filtered["CNTRYCODE"] = customer["C_PHONE"].str.slice(0, 2)
     customer_filtered = customer_filtered[
@@ -1054,7 +934,7 @@ def tpch_q22(customer, orders, use_bodo=True):
 
 @timethis
 @collect_datasets
-def q01(lineitem: pd.DataFrame):
+def q01(lineitem):
     print(tpch_q01(lineitem))
 
 
@@ -1085,7 +965,7 @@ def q05(lineitem, orders, customer, nation, region, supplier):
 @timethis
 @collect_datasets
 def q06(lineitem):
-    print(q06(lineitem))
+    print(tpch_q06(lineitem))
 
 
 @timethis
@@ -1238,5 +1118,5 @@ def main():
 
 
 if __name__ == "__main__":
-    print(f"Running TPC-H against bodo.pandas v{pd.__version__}")
+    print(f"Running TPC-H against pd v{pd.__version__}")
     main()

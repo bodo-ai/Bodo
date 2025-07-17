@@ -2401,42 +2401,42 @@ datapath = "bodo/tests/data/tpch-test_data/parquet"
 
 @pytest.fixture
 def lineitem():
-    return tpch.load_lineitem(datapath, use_bodo=False)
+    return tpch.load_lineitem(datapath, pd=pd)
 
 
 @pytest.fixture
 def part():
-    return tpch.load_part(datapath, use_bodo=False)
+    return tpch.load_part(datapath, pd=pd)
 
 
 @pytest.fixture
 def orders():
-    return tpch.load_orders(datapath, use_bodo=False)
+    return tpch.load_orders(datapath, pd=pd)
 
 
 @pytest.fixture
 def customer():
-    return tpch.load_customer(datapath, use_bodo=False)
+    return tpch.load_customer(datapath, pd=pd)
 
 
 @pytest.fixture
 def supplier():
-    return tpch.load_supplier(datapath, use_bodo=False)
+    return tpch.load_supplier(datapath, pd=pd)
 
 
 @pytest.fixture
 def nation():
-    return tpch.load_nation(datapath, use_bodo=False)
+    return tpch.load_nation(datapath, pd=pd)
 
 
 @pytest.fixture
 def region():
-    return tpch.load_region(datapath, use_bodo=False)
+    return tpch.load_region(datapath, pd=pd)
 
 
 @pytest.fixture
 def partsupp():
-    return tpch.load_partsupp(datapath, use_bodo=False)
+    return tpch.load_partsupp(datapath, pd=pd)
 
 
 @pytest.mark.parametrize(
@@ -2470,12 +2470,12 @@ def partsupp():
         # (tpch.tpch_q22, ["customer", "orders"], True),  # RuntimeError: PhysicalReduce::ConsumeBatch: Error in Arrow compute kernel NotImplemented: Function 'sum' has no kernel matching input ..
     ],
 )
-@pytest.mark.skip("Skipping TPCH query unit tests.")
+# @pytest.mark.skip("Skipping TPCH query unit tests.")
 def test_tpch_queries(query_func, required_fixtures, is_dataframe, request):
     pd_args = [request.getfixturevalue(name) for name in required_fixtures]
     bd_args = [bd.from_pandas(df) for df in pd_args]
 
-    pd_kwargs = {"use_bodo": False}
+    pd_kwargs = {"pd": pd}
     pd_result = query_func(*pd_args, **pd_kwargs)
     bd_result = query_func(*bd_args)
 
@@ -2487,4 +2487,4 @@ def test_tpch_queries(query_func, required_fixtures, is_dataframe, request):
         assert isinstance(pd_result, (int, float)) and isinstance(
             bd_result, (int, float)
         )
-        assert abs(pd_result - bd_result) < 1e-6
+        assert np.isclose(pd_result, bd_result)
