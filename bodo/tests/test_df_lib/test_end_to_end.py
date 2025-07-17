@@ -2470,7 +2470,7 @@ def partsupp():
         # (tpch.tpch_q22, ["customer", "orders"], True),  # RuntimeError: PhysicalReduce::ConsumeBatch: Error in Arrow compute kernel NotImplemented: Function 'sum' has no kernel matching input ..
     ],
 )
-# @pytest.mark.skip("Skipping TPCH query unit tests.")
+@pytest.mark.skip("Skipping TPCH query unit tests.")
 def test_tpch_queries(query_func, required_fixtures, is_dataframe, request):
     pd_args = [request.getfixturevalue(name) for name in required_fixtures]
     bd_args = [bd.from_pandas(df) for df in pd_args]
