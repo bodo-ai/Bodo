@@ -698,6 +698,7 @@ def test_apply(datapath, index_val):
         bdf = bd.from_pandas(df)
         out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
         out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
+        assert out_bodo.is_lazy_plan()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
@@ -749,17 +750,16 @@ def test_series_map(datapath, index_val, na_action):
 
 def test_set_df_column(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe."""
-    df = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, 3, 7], "Int64"),
-            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
-            "C": pd.array([4, 5, 6, -1], "Int64"),
-        }
-    )
-    df.index = index_val[: len(df)]
-    bdf = bd.from_pandas(df)
-
     with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array([1, 2, 3, 7], "Int64"),
+                "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+                "C": pd.array([4, 5, 6, -1], "Int64"),
+            }
+        )
+        df.index = index_val[: len(df)]
+        bdf = bd.from_pandas(df)
         # Single projection, new column
         bdf["D"] = bdf["B"].str.strip()
         pdf = df.copy()
