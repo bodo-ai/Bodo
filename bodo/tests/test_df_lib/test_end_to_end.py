@@ -686,15 +686,15 @@ def test_head(datapath):
 
 def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
-    df = pd.DataFrame(
-        {
-            "a": pd.array([1, 2, 3] * 10, "Int64"),
-            "b": pd.array([4, 5, 6] * 10, "Int64"),
-            "c": ["a", "b", "c"] * 10,
-        },
-        index=index_val[:30],
-    )
     with assert_executed_plan_count(1):
+        df = pd.DataFrame(
+            {
+                "a": pd.array([1, 2, 3] * 10, "Int64"),
+                "b": pd.array([4, 5, 6] * 10, "Int64"),
+                "c": ["a", "b", "c"] * 10,
+            },
+            index=index_val[:30],
+        )
         bdf = bd.from_pandas(df)
         out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
         out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
@@ -703,19 +703,19 @@ def test_apply(datapath, index_val):
 
 def test_chain_python_func(datapath, index_val):
     """Make sure chaining multiple Series functions that run in Python works"""
-    df = pd.DataFrame(
-        {
-            "A": pd.array([1, 2, 3, 7], "Int64"),
-            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
-            "C": pd.array([4, 5, 6, -1], "Int64"),
-        }
-    )
     with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array([1, 2, 3, 7], "Int64"),
+                "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+                "C": pd.array([4, 5, 6, -1], "Int64"),
+            }
+        )
         df.index = index_val[: len(df)]
         bdf = bd.from_pandas(df)
         out_pd = df.B.str.strip().str.lower()
         out_bodo = bdf.B.str.strip().str.lower()
-    assert out_bodo.is_lazy_plan()
+        assert out_bodo.is_lazy_plan()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
@@ -759,43 +759,52 @@ def test_set_df_column(datapath, index_val):
     df.index = index_val[: len(df)]
     bdf = bd.from_pandas(df)
 
-    # Single projection, new column
-    bdf["D"] = bdf["B"].str.strip()
-    pdf = df.copy()
-    pdf["D"] = pdf["B"].str.strip()
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        # Single projection, new column
+        bdf["D"] = bdf["B"].str.strip()
+        pdf = df.copy()
+        pdf["D"] = pdf["B"].str.strip()
+        assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf, check_pandas_types=False)
 
+    # with assert_executed_plan_count(0):
     # Single projection, existing column
-    bdf = bd.from_pandas(df)
-    bdf["B"] = bdf["B"].str.strip()
-    pdf = df.copy()
-    pdf["B"] = pdf["B"].str.strip()
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bdf["B"] = bdf["B"].str.strip()
+        pdf = df.copy()
+        pdf["B"] = pdf["B"].str.strip()
+        assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf, check_pandas_types=False)
 
+    # with assert_executed_plan_count(0):
     # Multiple projections, new column
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["B"].str.strip().map(lambda x: x + "1")
-    pdf = df.copy()
-    pdf["D"] = pdf["B"].str.strip().map(lambda x: x + "1")
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(1):
+        bdf = bd.from_pandas(df)
+        bdf["D"] = bdf["B"].str.strip().map(lambda x: x + "1")
+        pdf = df.copy()
+        pdf["D"] = pdf["B"].str.strip().map(lambda x: x + "1")
+        assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf, check_pandas_types=False)
 
+    # with assert_executed_plan_count(0):
     # Multiple projections, existing column
-    bdf = bd.from_pandas(df)
-    bdf["B"] = bdf["B"].str.strip().map(lambda x: x + "1")
-    pdf = df.copy()
-    pdf["B"] = pdf["B"].str.strip().map(lambda x: x + "1")
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(1):
+        bdf = bd.from_pandas(df)
+        bdf["B"] = bdf["B"].str.strip().map(lambda x: x + "1")
+        pdf = df.copy()
+        pdf["B"] = pdf["B"].str.strip().map(lambda x: x + "1")
+        assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf, check_pandas_types=False)
 
+    # with assert_executed_plan_count(0):
     # Trivial case: set a column to existing column
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["B"]
-    pdf = df.copy()
-    pdf["D"] = pdf["B"]
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bdf["D"] = bdf["B"]
+        pdf = df.copy()
+        pdf["D"] = pdf["B"]
+        assert bdf.is_lazy_plan()
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
