@@ -52,7 +52,7 @@ pytestmark = pytest_pandas
         ),
     ],
 )
-# TODO: reenable memory_leak_check
+# TODO: (df_lib) reenable memory_leak_check
 def test_series_map_dict_arg(S, d):
     """test passing dict mapper to Series.map()"""
 
@@ -228,7 +228,7 @@ def test_series_map_wrap_python(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO (df_lib): Support with _engine="bodo"
+# TODO (df_lib): Support with engine="bodo"
 # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup1(memory_leak_check):
@@ -239,7 +239,7 @@ def test_series_map_tup1(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO (df_lib): Support with _engine="bodo"
+# TODO (df_lib): Support with engine="bodo"
 # @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_tup_map1(memory_leak_check):
