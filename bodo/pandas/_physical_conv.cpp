@@ -85,7 +85,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
                 duckdb::ExpressionType::CONJUNCTION_AND));
     }
     std::shared_ptr<PhysicalFilter> physical_op =
-        std::make_shared<PhysicalFilter>(physExprTree, in_table_schema);
+        std::make_shared<PhysicalFilter>(op, physExprTree, in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
 }
 
