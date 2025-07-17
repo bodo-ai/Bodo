@@ -11,7 +11,11 @@ import pytest
 
 import bodo
 import bodo.pandas as bd
-from bodo.pandas.plan import LogicalGetPandasReadParallel, LogicalGetPandasReadSeq
+from bodo.pandas.plan import (
+    LogicalGetPandasReadParallel,
+    LogicalGetPandasReadSeq,
+    assert_executed_plan_count,
+)
 from bodo.pandas.utils import BodoLibFallbackWarning
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
@@ -690,9 +694,10 @@ def test_apply(datapath, index_val):
         },
         index=index_val[:30],
     )
-    bdf = bd.from_pandas(df)
-    out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
-    out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
+    with assert_executed_plan_count(1):
+        bdf = bd.from_pandas(df)
+        out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
+        out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
@@ -705,10 +710,11 @@ def test_chain_python_func(datapath, index_val):
             "C": pd.array([4, 5, 6, -1], "Int64"),
         }
     )
-    df.index = index_val[: len(df)]
-    bdf = bd.from_pandas(df)
-    out_pd = df.B.str.strip().str.lower()
-    out_bodo = bdf.B.str.strip().str.lower()
+    with assert_executed_plan_count(0):
+        df.index = index_val[: len(df)]
+        bdf = bd.from_pandas(df)
+        out_pd = df.B.str.strip().str.lower()
+        out_bodo = bdf.B.str.strip().str.lower()
     assert out_bodo.is_lazy_plan()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
