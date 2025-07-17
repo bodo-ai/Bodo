@@ -158,12 +158,6 @@ class BodoLibFallbackWarning(Warning):
     """
 
 
-class BodoPlanExecutionWarning(Warning):
-    """Warning raised in the Bodo library inside execute_plan() to inform
-    that a plan is executed at a certain point.
-    """
-
-
 def check_args_fallback(
     unsupported=None,
     supported=None,

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 import traceback
-import warnings
 
 import pandas as pd
 import pyarrow as pa
@@ -10,7 +9,6 @@ import pyarrow as pa
 import bodo
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
-    BodoPlanExecutionWarning,
     arrow_to_empty_df,
     cpp_table_to_df,
     cpp_table_to_series,
@@ -516,10 +514,6 @@ def execute_plan(plan: LazyPlan):
         pd.DataFrame: output data
     """
     import bodo
-
-    if bodo.dataframe_library_debug:
-        msg = f"Execution of the following plan is triggered: \n{plan}."
-        warnings.warn(BodoPlanExecutionWarning(msg))
 
     increment_exec_counter()
 
