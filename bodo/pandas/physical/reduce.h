@@ -62,7 +62,6 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
             if (iter == 0) {
                 output_scalars.push_back(out_scalar_batch);
             } else if (!out_scalar_batch->is_valid) {
-                std::cout << "out_scalar_batch not valid" << std::endl;
                 // If we get an empty batch which results in invalid
                 // arrow::Scalar result then just ignore it.
                 continue;
