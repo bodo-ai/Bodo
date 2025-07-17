@@ -215,7 +215,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             logical_join.GetColumnBindings().size()) {
             throw std::runtime_error(
                 "Join output schema has different number of columns than "
-                "LogicalFilter");
+                "LogicalComparisonJoin");
         }
     }
 
