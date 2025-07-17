@@ -269,7 +269,7 @@ def test_execution_warning():
 def test_execution_counter():
     """Test that plan execution warning is correctly raised."""
 
-    from bodo.pandas.utils import get_exec_counter, reset_exec_counter
+    from bodo.pandas.plan import get_exec_counter, reset_exec_counter
 
     df = bd.DataFrame({"A": ["2", "3"]})
     reset_exec_counter()
@@ -287,4 +287,3 @@ def test_execution_counter():
         plan.execute_plan()
 
     assert get_exec_counter() == 5, "Unexpected execution count."
-    reset_exec_counter()  # Might not be necessary

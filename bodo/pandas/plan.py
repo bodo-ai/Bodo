@@ -15,7 +15,6 @@ from bodo.pandas.utils import (
     cpp_table_to_df,
     cpp_table_to_series,
     get_n_index_arrays,
-    increment_exec_counter,
     wrap_plan,
 )
 
@@ -832,3 +831,21 @@ def match_binop_expr_source_plans(lhs, rhs):
         return lhs, new_rhs
 
     return None, None
+
+
+# Plan execution counter
+plan_exec_count = 0
+
+
+def increment_exec_counter():
+    global plan_exec_count
+    plan_exec_count += 1
+
+
+def get_exec_counter():
+    return plan_exec_count
+
+
+def reset_exec_counter():
+    global plan_exec_count
+    plan_exec_count = 0

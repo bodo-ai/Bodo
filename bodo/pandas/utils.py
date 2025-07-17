@@ -870,21 +870,3 @@ def fallback_wrapper(self, attr):
         return silenced_method
 
     return attr
-
-
-# Plan execution counter
-plan_exec_count = 0
-
-
-def increment_exec_counter():
-    global plan_exec_count
-    plan_exec_count += 1
-
-
-def get_exec_counter():
-    return plan_exec_count
-
-
-def reset_exec_counter():
-    global plan_exec_count
-    plan_exec_count = 0
