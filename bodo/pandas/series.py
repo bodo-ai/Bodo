@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import inspect
 import itertools
 import numbers
@@ -50,6 +51,7 @@ from bodo.pandas.plan import (
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
+    match_binop_expr_source_plans,
 )
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
@@ -114,16 +116,28 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 empty_data = _empty_like(self)
                 if bodo.dataframe_library_run_parallel:
                     nrows = len(self)
-                    self._source_plan = LogicalGetPandasReadParallel(
-                        empty_data,
+                    read_plan = LogicalGetPandasReadParallel(
+                        empty_data.to_frame(),
                         nrows,
                         LazyPlanDistributedArg(self),
                     )
                 else:
-                    self._source_plan = LogicalGetPandasReadSeq(
-                        empty_data,
+                    read_plan = LogicalGetPandasReadSeq(
+                        empty_data.to_frame(),
                         self,
                     )
+
+                # Make sure Series plans are always single expr projections for easier
+                # matching later.
+                self._source_plan = LogicalProjection(
+                    empty_data,
+                    read_plan,
+                    tuple(
+                        make_col_ref_exprs(
+                            range(1 + get_n_index_arrays(empty_data.index)), read_plan
+                        )
+                    ),
+                )
 
                 return self._source_plan
 
@@ -145,11 +159,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             and not name.startswith("_")
         ):
             msg = (
-                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                f"Series.{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(object.__getattribute__(self, name))
+            return fallback_wrapper(self, object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
@@ -174,6 +188,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
+        if lhs is None and rhs is None:
+            raise BodoLibNotImplementedException(
+                "binary operation arguments should have the same dataframe source."
+            )
         expr = ComparisonOpExpression(
             empty_data,
             lhs,
@@ -226,6 +245,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
+        if lhs is None and rhs is None:
+            raise BodoLibNotImplementedException(
+                "binary operation arguments should have the same dataframe source."
+            )
         expr = ConjunctionOpExpression(
             empty_data,
             lhs,
@@ -293,20 +317,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     def _arith_binop(self, other, op, reverse):
         """Called when a BodoSeries is element-wise arithmetically combined with a different entity (other)"""
-        from bodo.pandas.base import _empty_like
+        if is_numeric(other):
+            return self._numeric_binop(other, op, reverse)
 
-        if not (
-            (
-                isinstance(other, BodoSeries)
-                and isinstance(other.dtype, pd.ArrowDtype)
-                and pd.api.types.is_numeric_dtype(other.dtype)
-            )
-            or isinstance(other, numbers.Number)
-        ):
-            raise BodoLibNotImplementedException(
-                "'other' should be numeric BodoSeries or a numeric. "
-                f"Got {type(other).__name__} instead."
-            )
+        return self._non_numeric_binop(other, op, reverse)
+
+    def _numeric_binop(self, other, op, reverse):
+        """Handles op(self, other) when other is a numeric BodoSeries or scalar."""
+        from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
@@ -318,12 +336,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Compute schema of new series.
         empty_data = getattr(zero_size_self, op)(zero_size_other)
         assert isinstance(empty_data, pd.Series), (
-            "_arith_binop: empty_data is not a Series"
+            "_numeric_binop: empty_data is not a Series"
         )
 
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
+        if lhs is None and rhs is None:
+            raise BodoLibNotImplementedException(
+                "binary operation arguments should have the same dataframe source."
+            )
+
         if reverse:
             lhs, rhs = rhs, lhs
 
@@ -340,6 +364,34 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
+
+    def _non_numeric_binop(self, other, op, reverse):
+        """Handles op(self, other) when other is non-numeric (e.g., pd.DateOffset, str, etc.)."""
+        if (
+            is_bodo_string_series(self)
+            and is_bodo_string_series(other)
+            and op in ("__add__", "__radd__")
+        ):
+            if op == "__add__":
+                return self.str.cat(other)
+            if op == "__radd__":
+                return other.str.cat(self)
+
+        # If other is an iterable, fall back to Pandas.
+        elif pd.api.types.is_scalar(other):
+            if op == "__add__":
+                return self.add(other)
+            if op == "__radd__":
+                return self.radd(other)
+            if op == "__sub__":
+                return self.sub(other)
+            if op == "__rsub__":
+                return self.rsub(other)
+
+        raise BodoLibNotImplementedException(
+            f"BodoSeries.{op} is not supported between 'self' of dtype="
+            f"{self.dtype} and 'other' of type {type(other).__name__}."
+        )
 
     @check_args_fallback("all")
     def __add__(self, other):
@@ -561,6 +613,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @property
     def dt(self):
         return BodoDatetimeProperties(self)
+
+    @property
+    def T(self):
+        return self
 
     @check_args_fallback(unsupported="none")
     def map(self, arg, na_action=None):
@@ -793,6 +849,26 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
     agg = aggregate
+
+    @check_args_fallback(supported=["other"])
+    def add(self, other, level=None, fill_value=None, axis=0):
+        """Return Addition of series and other, element-wise (binary operator add)."""
+        return gen_arith(self, other, "add")
+
+    @check_args_fallback(supported=["other"])
+    def sub(self, other, level=None, fill_value=None, axis=0):
+        """Return Addition of series and other, element-wise (binary operator radd)."""
+        return gen_arith(self, other, "sub")
+
+    @check_args_fallback(supported=["other"])
+    def radd(self, other, level=None, fill_value=None, axis=0):
+        """Return Subtraction of series and other, element-wise (binary operator sub)."""
+        return gen_arith(self, other, "radd")
+
+    @check_args_fallback(supported=["other"])
+    def rsub(self, other, level=None, fill_value=None, axis=0):
+        """Return Subtraction of series and other, element-wise (binary operator rsub)."""
+        return gen_arith(self, other, "rsub")
 
 
 class BodoStringMethods:
@@ -1181,6 +1257,19 @@ class BodoDatetimeProperties:
             {},
             is_method=False,
         )
+
+
+def is_numeric(other):
+    """Returns whether other is a numeric BodoSeries/scalar."""
+    is_numeric_bodoseries = (
+        isinstance(other, BodoSeries)
+        and isinstance(other.dtype, pd.ArrowDtype)
+        and pd.api.types.is_numeric_dtype(other.dtype)
+    )
+    is_numeric_scalar = isinstance(other, numbers.Number) and not isinstance(
+        other, allowed_types_map["binop_dtlike"]
+    )
+    return is_numeric_bodoseries or is_numeric_scalar
 
 
 def func_name_to_str(func_name):
@@ -1861,6 +1950,37 @@ def _is_pd_pa_timestamp_no_tz(dtype):
     )
 
 
+def gen_arith(self, other, name):
+    """Generates Series.add/radd/sub/rsub."""
+    if isinstance(
+        other,
+        (
+            BodoSeries,
+            pd.Series,
+        ),
+    ):
+        raise BodoLibNotImplementedException(
+            f"Series.{name}() is not supported for other of type {type(other)} yet."
+        )
+    if (
+        name
+        in (
+            "sub",
+            "rsub",
+        )
+        and self.dtype in allowed_types_map["str_default"]
+    ):
+        raise TypeError("Unsupported operand type(s) for -: 'str' and 'str'")
+    return gen_method(name, self.dtype)(self, other)
+
+
+def is_bodo_string_series(self):
+    """Returns True if self is a BodoSeries with dtype String."""
+    return (
+        isinstance(self, BodoSeries) and self.dtype in allowed_types_map["str_default"]
+    )
+
+
 def validate_dtype(name, obj):
     """Validates dtype of input series for Series.<name> methods."""
     if "." not in name:
@@ -1870,7 +1990,7 @@ def validate_dtype(name, obj):
     accessor = name.split(".")[0]
     if accessor == "str":
         if dtype not in allowed_types_map.get(
-            name, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
+            name, (pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string()))
         ):
             raise AttributeError("Can only use .str accessor with string values!")
     if accessor == "dt":
@@ -2118,21 +2238,21 @@ dir_methods = [
 ]
 
 allowed_types_map = {
-    "str.decode": [
+    "str.decode": (
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.binary()),
         pd.ArrowDtype(pa.large_binary()),
-    ],
-    "str.join": [
+    ),
+    "str.join": (
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.list_(pa.string())),
         pd.ArrowDtype(pa.list_(pa.large_string())),
         pd.ArrowDtype(pa.large_list(pa.string())),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
-    ],
-    "str_default": [
+    ),
+    "str_default": (
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
@@ -2140,16 +2260,40 @@ allowed_types_map = {
         pd.ArrowDtype(pa.list_(pa.string())),
         pd.ArrowDtype(pa.large_binary()),
         pd.ArrowDtype(pa.binary()),
-    ],
-    "dt.round": [
-        pd.ArrowDtype(pa.timestamp("ns")),
-    ],
-    "dt_default": [
+    ),
+    "dt.round": (pd.ArrowDtype(pa.timestamp("ns")),),
+    "dt_default": (
         pd.ArrowDtype(pa.timestamp("ns")),
         pd.ArrowDtype(pa.date64()),
         pd.ArrowDtype(pa.time64("ns")),
         pd.ArrowDtype(pa.duration("ns")),
-    ],
+    ),
+    "binop_scalar": (
+        int,
+        float,
+        str,
+        bool,
+        pd.Timedelta,
+        pd.DateOffset,
+        datetime.timedelta,
+        datetime.datetime,
+        numpy.datetime64,
+        numpy.timedelta64,
+        numpy.int64,
+        numpy.float64,
+        numpy.bool_,
+    ),
+    "binop_dtlike": (
+        pd.Timedelta,
+        pd.DateOffset,
+        datetime.timedelta,
+        datetime.datetime,
+        numpy.datetime64,
+        numpy.timedelta64,
+        numpy.int64,
+        numpy.float64,
+        numpy.bool_,
+    ),
 }
 
 
