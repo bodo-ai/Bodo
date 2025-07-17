@@ -184,10 +184,6 @@ sql_plan_cache_loc = os.environ.get("BODO_SQL_PLAN_CACHE_DIR")
 # will fallback to Pandas.
 dataframe_library_enabled = os.environ.get("BODO_ENABLE_DATAFRAME_LIBRARY", "1") != "0"
 
-# Flag to enable bodo dataframe library debug mode, created as an equivalent of #ifdef DEBUG 
-# for ease of unit testing.
-dataframe_library_debug = os.environ.get("BODO_DATAFRAME_LIBRARY_DEBUG", "1") != "0"
-
 # Run tests utilizing check_func in dataframe library mode (replaces)
 # 'import pandas as pd' with 'import bodo.pandas as pd' when running the func.
 test_dataframe_library_enabled = os.environ.get("BODO_ENABLE_TEST_DATAFRAME_LIBRARY", "0") != "0"
