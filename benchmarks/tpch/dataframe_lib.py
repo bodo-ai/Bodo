@@ -1097,91 +1097,91 @@ def q07(lineitem, supplier, orders, customer, nation):
 @timethis
 @collect_datasets
 def q08(part, lineitem, supplier, orders, customer, nation, region):
-    return tpch_q08(part, lineitem, supplier, orders, customer, nation, region)
+    print(tpch_q08(part, lineitem, supplier, orders, customer, nation, region))
 
 
 @timethis
 @collect_datasets
 def q09(lineitem, orders, part, nation, partsupp, supplier):
-    return tpch_q09(lineitem, orders, part, nation, partsupp, supplier)
+    print(tpch_q09(lineitem, orders, part, nation, partsupp, supplier))
 
 
 @timethis
 @collect_datasets
 def q10(lineitem, orders, customer, nation):
-    return tpch_q10(lineitem, orders, customer, nation)
+    print(tpch_q10(lineitem, orders, customer, nation))
 
 
 @timethis
 @collect_datasets
 def q11(partsupp, supplier, nation):
-    return tpch_q11(partsupp, supplier, nation)
+    print(tpch_q11(partsupp, supplier, nation))
 
 
 @timethis
 @collect_datasets
 def q12(lineitem, orders):
-    return tpch_q12(lineitem, orders)
+    print(tpch_q12(lineitem, orders))
 
 
 @timethis
 @collect_datasets
 def q13(customer, orders):
-    return tpch_q13(customer, orders)
+    print(tpch_q13(customer, orders))
 
 
 @timethis
 @collect_datasets
 def q14(lineitem, part):
-    return tpch_q14(lineitem, part)
+    print(tpch_q14(lineitem, part))
 
 
 @timethis
 @collect_datasets
 def q15(lineitem, supplier):
-    return tpch_q15(lineitem, supplier)
+    print(tpch_q15(lineitem, supplier))
 
 
 @timethis
 @collect_datasets
 def q16(part, partsupp, supplier):
-    return tpch_q16(part, partsupp, supplier)
+    print(tpch_q16(part, partsupp, supplier))
 
 
 @timethis
 @collect_datasets
 def q17(lineitem, part):
-    return tpch_q17(lineitem, part)
+    print(tpch_q17(lineitem, part))
 
 
 @timethis
 @collect_datasets
 def q18(lineitem, orders, customer):
-    return tpch_q18(lineitem, orders, customer)
+    print(tpch_q18(lineitem, orders, customer))
 
 
 @timethis
 @collect_datasets
 def q19(lineitem, part):
-    return tpch_q19(lineitem, part)
+    print(tpch_q19(lineitem, part))
 
 
 @timethis
 @collect_datasets
 def q20(lineitem, part, nation, partsupp, supplier):
-    return tpch_q20(lineitem, part, nation, partsupp, supplier)
+    print(tpch_q20(lineitem, part, nation, partsupp, supplier))
 
 
 @timethis
 @collect_datasets
 def q21(lineitem, orders, supplier, nation):
-    return tpch_q21(lineitem, orders, supplier, nation)
+    print(tpch_q21(lineitem, orders, supplier, nation))
 
 
 @timethis
 @collect_datasets
 def q22(customer, orders):
-    return tpch_q22(customer, orders)
+    print(tpch_q22(customer, orders))
 
 
 def run_queries(
