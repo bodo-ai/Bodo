@@ -354,7 +354,7 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
-                    py_res = fallback_wrapper(getattr(base_class, func.__name__))(
+                    py_res = fallback_wrapper(self, getattr(base_class, func.__name__))(
                         self, *args, **kwargs
                     )
                     return py_res
@@ -438,7 +438,21 @@ def run_func_on_table(cpp_table, result_type, in_args):
     # Arrow dtypes can be very slow for UDFs in Pandas:
     # https://github.com/pandas-dev/pandas/issues/61747
     # TODO[BSE-4948]: Use Arrow dtypes when Bodo engine is specified
-    use_arrow_dtypes = not (is_attr and func == "apply")
+    # Note: `add`, `sub`, `radd` and `rsub` do not use Arrow dtypes because
+    # Arrow does not support element-wise binary operations
+    # across most scalar types. Instead, fallback logic using Pandas semantics
+    # is used to ensure consistent behavior.
+    use_arrow_dtypes = not (
+        is_attr
+        and func
+        in (
+            "apply",
+            "add",
+            "sub",
+            "radd",
+            "rsub",
+        )
+    )
     input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
 
     if is_series:
@@ -809,7 +823,8 @@ def ensure_datetime64ns(df):
     return df
 
 
-def fallback_wrapper(attr):
+# TODO: further generalize. Currently, this method is only used for BodoSeries.
+def fallback_wrapper(self, attr):
     """
     Wrap callable attributes with a warning silencer, unless they are known
     accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
@@ -823,9 +838,34 @@ def fallback_wrapper(attr):
     ):
 
         def silenced_method(*args, **kwargs):
+            msg = ""
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
-                return attr(*args, **kwargs)
+                try:
+                    return attr(*args, **kwargs)
+                except TypeError as e:
+                    msg = e
+                    pass
+
+            # In some cases, fallback fails and raises TypeError due to some operations being unsupported between PyArrow types.
+            # Below logic processes deeper fallback that converts problematic PyArrow types to their Pandas equivalents.
+            if isinstance(self, bodo.pandas.BodoSeries):
+                pd_self = pd.Series(self)
+
+                # When self.dtype is pd.ArrowDtype(pa.timestamp("ns")), apply to_datetime elementwise.
+                if isinstance(self.dtype, pd.ArrowDtype) and pa.types.is_timestamp(
+                    self.dtype.pyarrow_dtype
+                ):
+                    warnings.warn(
+                        BodoLibFallbackWarning(
+                            "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
+                        )
+                    )
+                    converted = pd_self.array._pa_array.to_pandas()
+                    return getattr(converted, attr.__name__)(*args[1:], **kwargs)
+
+            # Raise TypeError from initial call if self does not fall into any of the covered cases.
+            raise TypeError(msg)
 
         return silenced_method
 
