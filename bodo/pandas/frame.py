@@ -818,7 +818,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], df_arg, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["on", "left_on", "right_on"])
+    @check_args_fallback(supported=["on", "left_on", "right_on", "how"])
     def merge(
         self,
         right: BodoDataFrame | BodoSeries,
@@ -867,11 +867,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
 
+        join_type = _get_join_type_from_how(how)
         planComparisonJoin = LogicalComparisonJoin(
             empty_join_out,
             self._plan,
             right._plan,
-            plan_optimizer.CJoinType.INNER,
+            join_type,
             key_indices,
         )
 
@@ -1493,3 +1494,21 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_keys(right_on, right)
 
     return left_on, right_on
+
+
+def _get_join_type_from_how(how: str) -> plan_optimizer.CJoinType:
+    """Convert how string to DuckDB JoinType enum."""
+
+    if how == "inner":
+        return plan_optimizer.CJoinType.INNER
+    elif how == "left":
+        return plan_optimizer.CJoinType.LEFT
+    elif how == "right":
+        return plan_optimizer.CJoinType.RIGHT
+    elif how == "outer":
+        return plan_optimizer.CJoinType.OUTER
+    elif how == "cross":
+        # TODO: Implement cross join
+        return plan_optimizer.CJoinType.INNER
+    else:
+        raise ValueError(f"Invalid join type: {how}")
