@@ -1,3 +1,4 @@
+import datetime
 import operator
 import os
 import tempfile
@@ -1791,6 +1792,39 @@ def test_series_filter_series(datapath, file_path, op, mode):
     )
 
 
+def test_filter_source_matching():
+    """Test for matching expression source dataframes in filter"""
+
+    df = pd.DataFrame(
+        {
+            "A": [1.4, 2.1, 3.3],
+            "B": ["A", "B", "C"],
+            "C": [1.1, 2.2, 3.3],
+            "D": [True, False, True],
+        }
+    )
+
+    # Match series source
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C", "D"]]
+    bodo_out = bdf2[bdf.D]
+    df2 = df[["B", "C", "D"]].copy()
+    py_out = df2[df.D]
+    _test_equal(
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+
+    # Match expression source
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C", "D"]]
+    bodo_out = bdf2[(bdf.C > 2.0) & (bdf2.B != "B")]
+    df2 = df[["B", "C", "D"]].copy()
+    py_out = df2[(df.C > 2.0) & (df2.B != "B")]
+    _test_equal(
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+
+
 def test_rename(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
@@ -2280,3 +2314,156 @@ def test_empty_aggregate_batches():
         pd_out = impl(lineitem, part, test_range)
         bodo_out = impl(bd.from_pandas(lineitem), bd.from_pandas(part), test_range)
         assert np.isclose(bodo_out, pd_out, rtol=1e-6)
+
+
+def test_set_df_column_non_arith_binops():
+    """Test setting dataframe columns using BodoSeries non-arithmetic binary operations."""
+
+    df = pd.DataFrame(
+        {
+            "A": ["a", "b", "c", "d"],
+            "B": pd.date_range("2020-01-01", periods=4),  # datetime64[ns]
+            "C": pd.timedelta_range("1 day", periods=4),  # timedelta64[ns]
+        }
+    )
+
+    # String Series + String
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["A"] + "_suffix"
+    pdf = df.copy()
+    pdf["D"] = pdf["A"] + "_suffix"
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # String Series + String Series
+    bdf = bd.from_pandas(df)
+    bodo_out = bdf["A"] + bdf["A"]
+    pdf = df.copy()
+    pd_out = pdf["A"] + pdf["A"]
+    assert bodo_out.is_lazy_plan()
+    _test_equal(bodo_out, pd_out, check_pandas_types=False)
+
+    # Datetime Series + DateOffset
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["B"] + pd.DateOffset(
+        years=+25,
+        months=+5,
+        days=+12,
+        hours=+8,
+        minutes=+54,
+        seconds=+47,
+        microseconds=+282310,
+    )
+    pdf = df.copy()
+    pdf["D"] = pdf["B"] + pd.DateOffset(
+        years=+25,
+        months=+5,
+        days=+12,
+        hours=+8,
+        minutes=+54,
+        seconds=+47,
+        microseconds=+282310,
+    )
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Timedelta Series + Timedelta
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["C"] + pd.Timedelta(1, "d")
+    pdf = df.copy()
+    pdf["D"] = pdf["C"] + pd.Timedelta(1, "d")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Datetime Series + Timedelta
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["B"] + pd.Timedelta(1, "d")
+    pdf = df.copy()
+    pdf["D"] = pdf["B"] + pd.Timedelta(1, "d")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Datetime Series + datetime.timedelta
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["B"] + datetime.timedelta(days=2)
+    pdf = df.copy()
+    pdf["D"] = pdf["B"] + datetime.timedelta(days=2)
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Timedelta Series + datetime.timedelta
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["C"] + datetime.timedelta(hours=12)
+    pdf = df.copy()
+    pdf["D"] = pdf["C"] + datetime.timedelta(hours=12)
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # String Series + NumPy string scalar
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["A"] + np.str_("foo")
+    pdf = df.copy()
+    pdf["D"] = pdf["A"] + np.str_("foo")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # String + String Series
+    bdf = bd.from_pandas(df)
+    bdf["D"] = "prefix_" + bdf["A"]
+    pdf = df.copy()
+    pdf["D"] = "prefix_" + pdf["A"]
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Boolean Series + bool scalar
+    df_bool = pd.DataFrame({"A": [True, False, True, False]})
+    bdf = bd.from_pandas(df_bool)
+    bdf["D"] = bdf["A"] | True
+    pdf = df_bool.copy()
+    pdf["D"] = pdf["A"] | True
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Datetime Series + numpy.timedelta64
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["B"] + np.timedelta64(3, "D")
+    pdf = df.copy()
+    pdf["D"] = pdf["B"] + np.timedelta64(3, "D")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Timedelta Series + numpy.timedelta64
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["C"] + np.timedelta64(5, "h")
+    pdf = df.copy()
+    pdf["D"] = pdf["C"] + np.timedelta64(5, "h")
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+    # Integer Series + NumPy int
+    df_int = pd.DataFrame({"A": [1, 2, 3, 4]})
+    bdf = bd.from_pandas(df_int)
+    bdf["D"] = bdf["A"] + np.int64(5)
+    pdf = df_int.copy()
+    pdf["D"] = pdf["A"] + np.int64(5)
+    assert bdf.is_lazy_plan()
+    _test_equal(bdf, pdf)
+
+
+def test_fallback_wrapper_deep_fallback():
+    s = bd.Series(pd.date_range("20130101 09:10:12", periods=10, freq="MS"))
+
+    month_end = pd.offsets.MonthEnd()
+    month_end_series = pd.Series([month_end] * 10)
+    with pytest.warns(BodoLibFallbackWarning) as record:
+        _ = s + month_end_series
+
+    fallback_warnings = [
+        w for w in record if issubclass(w.category, BodoLibFallbackWarning)
+    ]
+    assert len(fallback_warnings) == 2
+
+    warning_msg = str(fallback_warnings[1].message)
+    assert "TypeError triggering deeper fallback" in warning_msg, (
+        f"Unexpected warning message: {warning_msg}"
+    )
