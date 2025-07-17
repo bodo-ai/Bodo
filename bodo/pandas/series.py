@@ -51,6 +51,7 @@ from bodo.pandas.plan import (
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
+    match_binop_expr_source_plans,
 )
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
@@ -115,16 +116,28 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 empty_data = _empty_like(self)
                 if bodo.dataframe_library_run_parallel:
                     nrows = len(self)
-                    self._source_plan = LogicalGetPandasReadParallel(
-                        empty_data,
+                    read_plan = LogicalGetPandasReadParallel(
+                        empty_data.to_frame(),
                         nrows,
                         LazyPlanDistributedArg(self),
                     )
                 else:
-                    self._source_plan = LogicalGetPandasReadSeq(
-                        empty_data,
+                    read_plan = LogicalGetPandasReadSeq(
+                        empty_data.to_frame(),
                         self,
                     )
+
+                # Make sure Series plans are always single expr projections for easier
+                # matching later.
+                self._source_plan = LogicalProjection(
+                    empty_data,
+                    read_plan,
+                    tuple(
+                        make_col_ref_exprs(
+                            range(1 + get_n_index_arrays(empty_data.index)), read_plan
+                        )
+                    ),
+                )
 
                 return self._source_plan
 
@@ -175,6 +188,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
+        if lhs is None and rhs is None:
+            raise BodoLibNotImplementedException(
+                "binary operation arguments should have the same dataframe source."
+            )
         expr = ComparisonOpExpression(
             empty_data,
             lhs,
@@ -227,6 +245,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
+        if lhs is None and rhs is None:
+            raise BodoLibNotImplementedException(
+                "binary operation arguments should have the same dataframe source."
+            )
         expr = ConjunctionOpExpression(
             empty_data,
             lhs,
@@ -319,6 +342,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
+        if lhs is None and rhs is None:
+            raise BodoLibNotImplementedException(
+                "binary operation arguments should have the same dataframe source."
+            )
+
         if reverse:
             lhs, rhs = rhs, lhs
 

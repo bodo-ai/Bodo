@@ -1792,6 +1792,39 @@ def test_series_filter_series(datapath, file_path, op, mode):
     )
 
 
+def test_filter_source_matching():
+    """Test for matching expression source dataframes in filter"""
+
+    df = pd.DataFrame(
+        {
+            "A": [1.4, 2.1, 3.3],
+            "B": ["A", "B", "C"],
+            "C": [1.1, 2.2, 3.3],
+            "D": [True, False, True],
+        }
+    )
+
+    # Match series source
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C", "D"]]
+    bodo_out = bdf2[bdf.D]
+    df2 = df[["B", "C", "D"]].copy()
+    py_out = df2[df.D]
+    _test_equal(
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+
+    # Match expression source
+    bdf = bd.from_pandas(df)
+    bdf2 = bdf[["B", "C", "D"]]
+    bodo_out = bdf2[(bdf.C > 2.0) & (bdf2.B != "B")]
+    df2 = df[["B", "C", "D"]].copy()
+    py_out = df2[(df.C > 2.0) & (df2.B != "B")]
+    _test_equal(
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+
+
 def test_rename(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     df = pd.DataFrame(
