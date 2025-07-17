@@ -2240,3 +2240,43 @@ def test_empty_duckdb_filter():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_empty_aggregate_batches():
+    """Test for when duckdb generates an empty filter."""
+
+    lineitem = pd.DataFrame(
+        {
+            "L_QUANTITY": pd.array(list(range(12000)), "Int32"),
+            "L_PARTKEY": pd.array([0, 1, 2, 0, 6, 2, 0, 8, 2, 0] * 1200, "Int32"),
+            "L_EXTENDEDPRICE": pd.array(
+                [5, 1, 2, 7, 6, 2, 9, 8, 2, 11] * 1200, "Float64"
+            ),
+            "L_DISCOUNT": pd.array(
+                [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] * 1200, "Float64"
+            ),
+        }
+    )
+
+    part = pd.DataFrame(
+        {
+            "P_PARTKEY": pd.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "Int32"),
+            "P_BRAND": pd.array([0, 0, 1, 2, 3, 0, 0, 1, 2, 3], "Int32"),
+        }
+    )
+
+    quantity_ranges = [(-1, -1), (0, 12000), (0, 2000), (2000, 4000), (9000, 12000)]
+    for test_range in quantity_ranges:
+
+        def impl(lineitem, part, test_range):
+            flineitem = lineitem[
+                (lineitem.L_QUANTITY >= test_range[0])
+                & (lineitem.L_QUANTITY < test_range[1])
+            ]
+            jn = flineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
+            jn["TMP"] = jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)
+            return jn.TMP.sum()
+
+        pd_out = impl(lineitem, part, test_range)
+        bodo_out = impl(bd.from_pandas(lineitem), bd.from_pandas(part), test_range)
+        assert np.isclose(bodo_out, pd_out, rtol=1e-6)
