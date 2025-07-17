@@ -2395,84 +2395,33 @@ def test_fallback_wrapper_deep_fallback():
 
 
 import benchmarks.tpch.dataframe_lib as tpch
+from benchmarks.tpch.dataframe_lib import _query_to_datasets, collect_datasets
 
 datapath = "bodo/tests/data/tpch-test_data/parquet"
 
 
-@pytest.fixture
-def lineitem():
-    return tpch.load_lineitem(datapath, pd=pd)
+def load_tpch_data(name, datapath):
+    if name == "lineitem":
+        return tpch.load_lineitem(datapath, pd=pd)
+    if name == "part":
+        return tpch.load_part(datapath, pd=pd)
+    if name == "orders":
+        return tpch.load_orders(datapath, pd=pd)
+    if name == "customer":
+        return tpch.load_customer(datapath, pd=pd)
+    if name == "supplier":
+        return tpch.load_supplier(datapath, pd=pd)
+    if name == "nation":
+        return tpch.load_nation(datapath, pd=pd)
+    if name == "region":
+        return tpch.load_region(datapath, pd=pd)
+    if name == "partsupp":
+        return tpch.load_partsupp(datapath, pd=pd)
+    raise KeyError("Invalid tpch data name {name}.")
 
 
-@pytest.fixture
-def part():
-    return tpch.load_part(datapath, pd=pd)
-
-
-@pytest.fixture
-def orders():
-    return tpch.load_orders(datapath, pd=pd)
-
-
-@pytest.fixture
-def customer():
-    return tpch.load_customer(datapath, pd=pd)
-
-
-@pytest.fixture
-def supplier():
-    return tpch.load_supplier(datapath, pd=pd)
-
-
-@pytest.fixture
-def nation():
-    return tpch.load_nation(datapath, pd=pd)
-
-
-@pytest.fixture
-def region():
-    return tpch.load_region(datapath, pd=pd)
-
-
-@pytest.fixture
-def partsupp():
-    return tpch.load_partsupp(datapath, pd=pd)
-
-
-@pytest.mark.parametrize(
-    "query_func, required_fixtures, is_dataframe",
-    [
-        (tpch.tpch_q01, ["lineitem"], True),
-        # (tpch.tpch_q02, ["part", "partsupp", "supplier", "nation", "region"], True),  # AssertionError
-        (tpch.tpch_q03, ["lineitem", "orders", "customer"], True),
-        # (tpch.tpch_q04, ["lineitem", "orders"], True),  # Missing L_COMMITDATE
-        # (tpch.tpch_q05, ["customer", "orders", "lineitem", "supplier", "nation", "region"], True),  # R_NAME issue
-        # (tpch.tpch_q06, ["lineitem"], False),  # Values are different
-        # (tpch.tpch_q07, ["customer", "orders", "lineitem", "supplier", "nation"], True),  # L_SHIPDATE KeyError
-        # (tpch.tpch_q08, ["part", "lineitem", "supplier", "orders", "customer", "nation", "region"], True),  # S_SUPPKEY KeyError
-        (
-            tpch.tpch_q09,
-            ["lineitem", "orders", "part", "nation", "partsupp", "supplier"],
-            True,
-        ),
-        (tpch.tpch_q10, ["lineitem", "orders", "customer", "nation"], True),
-        # (tpch.tpch_q11, ["partsupp", "supplier", "nation"], True),  # DataFrame mismatch
-        # (tpch.tpch_q12, ["lineitem", "orders"], True),
-        # (tpch.tpch_q13, ["customer", "orders"], True),  # is_lazy_plan error
-        # (tpch.tpch_q14, ["lineitem", "part"], False),  # float division by zero
-        # (tpch.tpch_q15, ["lineitem", "supplier"], True), # ValueError: Length mismatch: Expected axis has 0 elements, new values have 1 elements
-        # (tpch.tpch_q16, ["part", "partsupp", "supplier"], True),  # is_lazy_plan
-        # (tpch.tpch_q17, ["lineitem", "part"], True),  # dtype mismatch
-        (tpch.tpch_q18, ["lineitem", "orders", "customer"], True),
-        # (tpch.tpch_q19, ["lineitem", "part"], True),  # L_SHIPINSTRUCT missing
-        # (tpch.tpch_q20, ["lineitem", "part", "nation", "partsupp", "supplier"], True),  # is_lazy_plan
-        # (tpch.tpch_q21, ["lineitem", "orders", "supplier", "nation"], True),  # is_lazy_plan
-        # (tpch.tpch_q22, ["customer", "orders"], True),  # RuntimeError: PhysicalReduce::ConsumeBatch: Error in Arrow compute kernel NotImplemented: Function 'sum' has no kernel matching input ..
-    ],
-)
-# @pytest.mark.skip("Skipping TPCH query unit tests.")
-def test_tpch_queries(query_func, required_fixtures, is_dataframe, request):
-    pd_args = [request.getfixturevalue(name) for name in required_fixtures]
+def run_tpch_query_test(query_func, num, is_dataframe):
+    pd_args = [load_tpch_data(key, datapath) for key in _query_to_datasets[num]]
     bd_args = [bd.from_pandas(df) for df in pd_args]
 
     pd_kwargs = {"pd": pd}
@@ -2488,3 +2437,150 @@ def test_tpch_queries(query_func, required_fixtures, is_dataframe, request):
             bd_result, (int, float)
         )
         assert np.isclose(pd_result, bd_result)
+
+
+def test_tpch_q01():
+    collect_datasets(tpch.q01)
+    run_tpch_query_test(tpch.tpch_q01, 1, True)
+
+
+@pytest.mark.skip(reason="AssertionError: DataFrame are different")
+def test_tpch_q02():
+    collect_datasets(tpch.q02)
+    run_tpch_query_test(tpch.tpch_q02, 2, True)
+
+
+def test_tpch_q03():
+    collect_datasets(tpch.q03)
+    run_tpch_query_test(tpch.tpch_q03, 3, True)
+
+
+@pytest.mark.skip(reason="TypeError: a bytes-like object is required, not 'str'")
+def test_tpch_q04():
+    collect_datasets(tpch.q04)
+    run_tpch_query_test(tpch.tpch_q04, 4, True)
+
+
+def test_tpch_q05():
+    collect_datasets(tpch.q05)
+    run_tpch_query_test(tpch.tpch_q05, 5, True)
+
+
+@pytest.mark.skip(reason="assert np.isclose fails")
+def test_tpch_q06():
+    collect_datasets(tpch.q06)
+    run_tpch_query_test(tpch.tpch_q06, 6, False)
+
+
+def test_tpch_q07():
+    collect_datasets(tpch.q07)
+    run_tpch_query_test(tpch.tpch_q07, 7, True)
+
+
+@pytest.mark.skip(
+    reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
+)
+def test_tpch_q08():
+    collect_datasets(tpch.q08)
+    run_tpch_query_test(tpch.tpch_q08, 8, True)
+
+
+def test_tpch_q09():
+    collect_datasets(tpch.q09)
+    run_tpch_query_test(tpch.tpch_q09, 9, True)
+
+
+def test_tpch_q10():
+    collect_datasets(tpch.q10)
+    run_tpch_query_test(tpch.tpch_q10, 10, True)
+
+
+@pytest.mark.skip(reason="AssertionError: DataFrame are different")
+def test_tpch_q11():
+    collect_datasets(tpch.q11)
+    run_tpch_query_test(tpch.tpch_q11, 11, True)
+
+
+@pytest.mark.skip(
+    reason="AttributeError: 'NoneType' object has no attribute 'is_lazy_plan'"
+)
+def test_tpch_q12():
+    collect_datasets(tpch.q12)
+    run_tpch_query_test(tpch.tpch_q12, 12, True)
+
+
+@pytest.mark.skip(
+    reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
+)
+def test_tpch_q13():
+    collect_datasets(tpch.q13)
+    run_tpch_query_test(tpch.tpch_q13, 13, True)
+
+
+@pytest.mark.skip(reason="ZeroDivisionError: float division by zero")
+def test_tpch_q14():
+    collect_datasets(tpch.q14)
+    run_tpch_query_test(tpch.tpch_q14, 14, False)
+
+
+@pytest.mark.skip(reason="Length mismatch")
+def test_tpch_q15():
+    collect_datasets(tpch.q15)
+    run_tpch_query_test(tpch.tpch_q15, 15, True)
+
+
+@pytest.mark.skip(
+    reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
+)
+def test_tpch_q16():
+    collect_datasets(tpch.q16)
+    run_tpch_query_test(tpch.tpch_q16, 16, True)
+
+
+@pytest.mark.skip(
+    reason="AssertionError: DataFrame.iloc[:, 0] (column name='avg_yearly') are different"
+)
+def test_tpch_q17():
+    collect_datasets(tpch.q17)
+    run_tpch_query_test(tpch.tpch_q17, 17, True)
+
+
+def test_tpch_q18():
+    collect_datasets(tpch.q18)
+    run_tpch_query_test(tpch.tpch_q18, 18, True)
+
+
+@pytest.mark.skip(reason="Exception: Some ranks failed")
+def test_tpch_q19():
+    collect_datasets(tpch.q19)
+    run_tpch_query_test(tpch.tpch_q19, 19, True)
+
+
+@pytest.mark.skip(
+    reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
+)
+def test_tpch_q20():
+    collect_datasets(tpch.q20)
+    run_tpch_query_test(tpch.tpch_q20, 20, True)
+
+
+@pytest.mark.skip(
+    reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
+)
+def test_tpch_q21():
+    collect_datasets(tpch.q21)
+    run_tpch_query_test(tpch.tpch_q21, 21, True)
+
+
+@pytest.mark.skip(
+    reason="RuntimeError: PhysicalReduce::ConsumeBatch: Error in Arrow compute kernel NotImplemented: Function 'sum' has no kernel matching input"
+)
+def test_tpch_q22():
+    collect_datasets(tpch.q22)
+    run_tpch_query_test(tpch.tpch_q22, 22, True)
+
+
+@pytest.mark.skip(reason="Currently only a subset of queries run correctly.")
+def test_tpch_all():
+    for num in range(1, 23):
+        globals()[f"test_tpch_q{num:02d}"]()
