@@ -148,6 +148,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 f"{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
+            raise Exception
             warnings.warn(BodoLibFallbackWarning(msg))
             return fallback_wrapper(object.__getattribute__(self, name))
 
@@ -563,18 +564,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return BodoDatetimeProperties(self)
 
     @check_args_fallback(unsupported="none")
-    def map(self, arg, na_action=None, _engine="bodo"):
+    def map(self, arg, na_action=None, engine="bodo"):
         """
         Map values of Series according to an input mapping or function.
         """
         from bodo.pandas.utils import _get_empty_series_arrow
 
-        if _engine not in ("bodo", "python"):
+        if engine not in ("bodo", "python"):
             raise TypeError(
-                f"Series.map() got unsupported engine {_engine}, expected one of ('bodo', 'python')."
+                f"Series.map() got unsupported engine: {engine}, expected one of ('bodo', 'python')."
             )
 
-        if _engine == "bodo":
+        if engine == "bodo":
 
             @bodo.jit(cache=True)
             def map_wrapper(S):
@@ -608,7 +609,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 )
                 warnings.warn(BodoLibFallbackWarning(msg))
 
-        # _engine == "python"
+        # engine == "python"
         # Get output data type by running the UDF on a sample of the data.
         empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
 
