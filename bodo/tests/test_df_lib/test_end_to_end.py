@@ -1117,6 +1117,39 @@ def test_merge(how):
     )
 
 
+def test_merge_cross():
+    """Simple test for DataFrame merge with cross join."""
+    df1 = pd.DataFrame(
+        {
+            "B": ["a1", "b11", "c111", "d1111"],
+            "E": [1.1, 2.2, 3.3, 4.4],
+            "A": pd.array([2, 2, 3, 4], "Int64"),
+        },
+    )
+    df2 = pd.DataFrame(
+        {
+            "Cat": pd.array([2, 3, 8, 1], "Int64"),
+            "Dog": ["a1", "b222", "c33", "d444"],
+        },
+    )
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+
+    df3 = df1.merge(df2, how="cross")
+    bdf3 = bdf1.merge(bdf2, how="cross")
+    # Make sure bdf3 is unevaluated at this point.
+    assert bdf3.is_lazy_plan()
+
+    _test_equal(
+        bdf3.copy(),
+        df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
 def test_merge_switch_side():
     """Test merge with left table smaller than right table so DuckDB reorders the input
     tables to use the smaller table as build.
