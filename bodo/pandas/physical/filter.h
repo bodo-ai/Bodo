@@ -39,6 +39,8 @@ class PhysicalFilter : public PhysicalSourceSink {
                 "Filter output schema has different number of columns than "
                 "LogicalFilter");
         }
+        this->output_schema->metadata = std::make_shared<TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
     }
 
     virtual ~PhysicalFilter() = default;
@@ -82,7 +84,7 @@ class PhysicalFilter : public PhysicalSourceSink {
         }
         std::shared_ptr<table_info> out_table = std::make_shared<table_info>(
             out_cols, filtered_table->nrows(), output_schema->column_names,
-            input_batch->metadata);
+            output_schema->metadata);
 
         // Just propagate the FINISHED flag to other operators (like join) or
         // accept more input
