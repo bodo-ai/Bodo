@@ -1354,10 +1354,9 @@ def test_series_groupby(dropna, as_index):
 
     bdf1 = bd.from_pandas(df1)
     bdf2 = bdf1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
-    assert bdf2.is_lazy_plan()
-
     df2 = df1.groupby("A", as_index=as_index, dropna=dropna)["E"].sum()
 
+    assert bdf2.is_lazy_plan()
     _test_equal(bdf2, df2, sort_output=True, reset_index=True)
 
 

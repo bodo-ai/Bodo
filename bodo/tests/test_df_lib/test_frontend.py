@@ -246,21 +246,19 @@ def test_single_fallback_warning_emitted():
 def test_execution_counter():
     """Test that plan execution warning is correctly raised."""
 
-    from bodo.pandas.plan import get_exec_counter, reset_exec_counter
+    from bodo.pandas.plan import PlanExecutionCounter, assert_executed_plan_count
 
     df = bd.DataFrame({"A": ["2", "3"]})
-    reset_exec_counter()
-    assert get_exec_counter() == 0, "Execution plan counter not reset properly."
+    PlanExecutionCounter.reset()
+    assert PlanExecutionCounter.get() == 0, "Execution plan counter not reset properly."
 
     plans = []
 
-    for _ in range(5):
-        plans.append(df.A.str.lower())
+    with assert_executed_plan_count(0):
+        for _ in range(5):
+            plans.append(df.A.str.lower())
 
-    assert get_exec_counter() == 0, "Premature execution of LazyPlan."
-
-    for plan in plans:
-        assert plan.is_lazy_plan()
-        plan.execute_plan()
-
-    assert get_exec_counter() == 5, "Unexpected execution count."
+    with assert_executed_plan_count(5):
+        for plan in plans:
+            assert plan.is_lazy_plan()
+            plan.execute_plan()
