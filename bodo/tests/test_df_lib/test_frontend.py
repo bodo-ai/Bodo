@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 import bodo.pandas as bd
-from bodo.pandas.utils import BodoLibFallbackWarning
+from bodo.pandas.utils import BodoLibFallbackWarning, BodoPlanExecutionWarning
 
 
 def test_read_join_filter_proj(datapath):
@@ -250,6 +250,7 @@ def test_execution_warning():
     import bodo
 
     df = pd.DataFrame({"A": ["2", "3"]})
+    df = bd.from_pandas(df)
     bodo.dataframe_library_debug = 1
 
     with warnings.catch_warnings(record=True) as w:
@@ -259,8 +260,31 @@ def test_execution_warning():
     assert not w, f"Unexpected warning {w[0]}"
     assert df.is_lazy_plan()
 
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+    with pytest.warns(BodoPlanExecutionWarning) as record:
         df.execute_plan()
 
-    assert len(w) == 1, "Failed to raise execution warning."
+    assert len(record) == 1, "Failed to raise execution warning."
+
+
+def test_execution_counter():
+    """Test that plan execution warning is correctly raised."""
+
+    from bodo.pandas.utils import get_exec_counter, reset_exec_counter
+
+    df = bd.DataFrame({"A": ["2", "3"]})
+    reset_exec_counter()
+    assert get_exec_counter() == 0, "Execution plan counter not reset properly."
+
+    plans = []
+
+    for _ in range(5):
+        plans.append(df.A.str.lower())
+
+    assert get_exec_counter() == 0, "Premature execution of LazyPlan."
+
+    for plan in plans:
+        assert plan.is_lazy_plan()
+        plan.execute_plan()
+
+    assert get_exec_counter() == 5, "Unexpected execution count."
+    reset_exec_counter()  # Might not be necessary

@@ -15,6 +15,7 @@ from bodo.pandas.utils import (
     cpp_table_to_df,
     cpp_table_to_series,
     get_n_index_arrays,
+    increment_exec_counter,
     wrap_plan,
 )
 
@@ -520,6 +521,8 @@ def execute_plan(plan: LazyPlan):
     if bodo.dataframe_library_debug:
         msg = f"Execution of the following plan is triggered: \n{plan}."
         warnings.warn(BodoPlanExecutionWarning(msg))
+
+    increment_exec_counter()
 
     def _exec_plan(plan):
         import bodo
