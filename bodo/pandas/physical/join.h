@@ -26,6 +26,11 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         duckdb::vector<duckdb::ColumnBinding> right_bindings =
             logical_join.children[1]->GetColumnBindings();
 
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+            left_col_ref_map = getColRefMap(left_bindings);
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+            right_col_ref_map = getColRefMap(right_bindings);
+
         // Find left/right table columns that will be in the join output.
         // Similar to DuckDB:
         // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_hash_join.cpp#L58
@@ -73,8 +78,12 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                     cond.left->Cast<duckdb::BoundColumnRefExpression>();
                 auto& right_bce =
                     cond.right->Cast<duckdb::BoundColumnRefExpression>();
-                this->left_keys.push_back(left_bce.binding.column_index);
-                this->right_keys.push_back(right_bce.binding.column_index);
+                this->left_keys.push_back(
+                    left_col_ref_map[{left_bce.binding.table_index,
+                                      left_bce.binding.column_index}]);
+                this->right_keys.push_back(
+                    right_col_ref_map[{right_bce.binding.table_index,
+                                       right_bce.binding.column_index}]);
             }
         }
 
@@ -202,6 +211,12 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         // TODO[BSE-4820]: support joining on Indexes
         this->output_schema->metadata = std::make_shared<TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
+        if (this->output_schema->column_names.size() !=
+            logical_join.GetColumnBindings().size()) {
+            throw std::runtime_error(
+                "Join output schema has different number of columns than "
+                "LogicalComparisonJoin");
+        }
     }
 
     virtual ~PhysicalJoin() = default;
@@ -337,7 +352,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
      * output according to bindings
      */
     static void initOutputColumnMapping(std::vector<uint64_t>& col_inds,
-                                        std::vector<uint64_t>& keys,
+                                        const std::vector<uint64_t>& keys,
                                         uint64_t ncols,
                                         std::set<int64_t>& bound_inds) {
         // Map key column index to its position in keys vector
