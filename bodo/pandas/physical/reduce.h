@@ -66,7 +66,6 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
                 // arrow::Scalar result then just ignore it.
                 continue;
             } else if (!output_scalars[i]->is_valid) {
-                std::cout << "output_scalars[i] not valid" << std::endl;
                 // The last result can be null if there have been no rows
                 // seen thus far.  In which case, use the current result
                 // just on this batch as the result thus far.
