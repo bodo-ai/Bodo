@@ -768,8 +768,7 @@ def test_series_map_non_jit(index_val):
     def func2(x):
         return unknown_func(x)
 
-    warn_msg = "Compiling User Defined Function failed"
-
+    warn_msg = "Compiling user defined function failed "
     bdf = bd.from_pandas(df)
     with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
         bdf2 = bdf.A.map(func1)
