@@ -1083,27 +1083,28 @@ def test_project_after_filter(datapath):
     )
 
 
-def test_merge():
+@pytest.mark.parametrize("how", ["inner", "left", "right", "outer"])
+def test_merge(how):
     """Simple test for DataFrame merge."""
     df1 = pd.DataFrame(
         {
-            "B": ["a1", "b11", "c111"],
-            "E": [1.1, 2.2, 3.3],
-            "A": pd.array([2, 2, 3], "Int64"),
+            "B": ["a1", "b11", "c111", "d1111"],
+            "E": [1.1, 2.2, 3.3, 4.4],
+            "A": pd.array([2, 2, 3, 4], "Int64"),
         },
     )
     df2 = pd.DataFrame(
         {
-            "Cat": pd.array([2, 3, 8], "Int64"),
-            "Dog": ["a1", "b222", "c33"],
+            "Cat": pd.array([2, 3, 8, 1], "Int64"),
+            "Dog": ["a1", "b222", "c33", "d444"],
         },
     )
 
     bdf1 = bd.from_pandas(df1)
     bdf2 = bd.from_pandas(df2)
 
-    df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
-    bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+    df3 = df1.merge(df2, how=how, left_on=["A"], right_on=["Cat"])
+    bdf3 = bdf1.merge(bdf2, how=how, left_on=["A"], right_on=["Cat"])
     # Make sure bdf3 is unevaluated at this point.
     assert bdf3.is_lazy_plan()
 
