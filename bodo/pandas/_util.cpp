@@ -331,8 +331,14 @@ std::shared_ptr<table_info> runPythonScalarFunction(
     table_udf_t cfunc_ptr) {
     if (cfunc_ptr != nullptr) {
         std::cout << "calling cfunc " << std::endl;
-        table_info *out_table = cfunc_ptr(new table_info(*input_batch));
+        table_info *in_table = new table_info(*input_batch);
+        std::cout << in_table << std::endl;
+        table_info *out_table = cfunc_ptr(in_table);
         std::cout << "done calling cfunc got table " << out_table << std::endl;
+        std::cout << "out table columns: " << out_table->columns.size()
+                  << std::endl;
+        std::cout << "out table columns: " << out_table->columns[0]->length
+                  << std::endl;
 
         std::stringstream ss;
         DEBUG_PrintTable(ss, out_table);

@@ -660,12 +660,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 out_cpp_table = arr_info_list_to_table([out_arr])
                 return out_cpp_table
 
-            map_wrapper_ptr = ctypes.c_void_p(map_wrapper.address).value
+            decorator = bodo.cfunc(table_type(table_type))
 
             try:
-                # TODO: resolve return type of UDF
-                empty_series = self.head(0)
-                # empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
+                # Compile the Cfunc and run the cfunc to catch runtime errors.
+                map_cfunc = decorator(map_wrapper)
             except BodoError as e:
                 empty_series = None
                 error_msg = str(e)
@@ -679,6 +678,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 empty_series = None
                 error_msg = "Jit could not determine pyarrow return type from UDF."
 
+            map_wrapper_ptr = ctypes.c_void_p(map_cfunc.address).value
             if empty_series is not None:
                 return _get_series_python_func_plan(
                     self._plan, empty_series, map_wrapper_ptr, (), {}, type="cfunc"
