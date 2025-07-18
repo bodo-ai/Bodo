@@ -586,15 +586,20 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     // Create join node.
     auto comp_join =
         duckdb::make_uniq<duckdb::LogicalComparisonJoin>(join_type);
+
+    lhs_duck->ResolveOperatorTypes();
+    rhs_duck->ResolveOperatorTypes();
+
     // Create join condition.
-    duckdb::LogicalType cbtype(duckdb::LogicalTypeId::INTEGER);
     for (std::pair<int, int> cond_pair : cond_vec) {
         duckdb::JoinCondition cond;
         cond.comparison = duckdb::ExpressionType::COMPARE_EQUAL;
         cond.left = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            cbtype, lhs_duck->GetColumnBindings()[cond_pair.first]);
+            lhs_duck->types[cond_pair.first],
+            lhs_duck->GetColumnBindings()[cond_pair.first]);
         cond.right = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            cbtype, rhs_duck->GetColumnBindings()[cond_pair.second]);
+            rhs_duck->types[cond_pair.second],
+            rhs_duck->GetColumnBindings()[cond_pair.second]);
         // Add the join condition to the join node.
         comp_join->conditions.push_back(std::move(cond));
     }

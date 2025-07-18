@@ -818,7 +818,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], df_arg, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["on", "left_on", "right_on"])
+    @check_args_fallback(supported=["on", "left_on", "right_on", "how"])
     def merge(
         self,
         right: BodoDataFrame | BodoSeries,
@@ -837,7 +837,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         from bodo.pandas.base import _empty_like
 
         # Validates only on, left_on and right_on for now
-        left_on, right_on = validate_merge_spec(self, right, on, left_on, right_on)
+        is_cross = how == "cross"
+        left_on, right_on = validate_merge_spec(
+            self, right, on, left_on, right_on, is_cross
+        )
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
@@ -845,8 +848,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             zero_size_right,
             how=how,
             on=None,
-            left_on=left_on,
-            right_on=right_on,
+            left_on=None if is_cross else left_on,
+            right_on=None if is_cross else right_on,
             left_index=left_index,
             right_index=right_index,
             sort=sort,
@@ -867,11 +870,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
 
+        join_type = _get_join_type_from_how(how)
         planComparisonJoin = LogicalComparisonJoin(
             empty_join_out,
             self._plan,
             right._plan,
-            plan_optimizer.CJoinType.INNER,
+            join_type,
             key_indices,
         )
 
@@ -1450,7 +1454,7 @@ def maybe_make_list(obj):
     return obj
 
 
-def validate_merge_spec(left, right, on, left_on, right_on):
+def validate_merge_spec(left, right, on, left_on, right_on, is_cross):
     """Check on, left_on and right_on values for type correctness
     (currently only str, str list, str tuple, or None are supported)
     and matching number of elements. If failed to validate, raise error.
@@ -1459,6 +1463,13 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_on(on)
     validate_on(left_on)
     validate_on(right_on)
+
+    if is_cross:
+        if on is not None or left_on is not None or right_on is not None:
+            raise ValueError(
+                'Cannot specify "on", "left_on" or "right_on" for cross join.'
+            )
+        return [], []
 
     if on is None and left_on is None and right_on is None:
         # Join on common keys if keys not specified
@@ -1493,3 +1504,20 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_keys(right_on, right)
 
     return left_on, right_on
+
+
+def _get_join_type_from_how(how: str) -> plan_optimizer.CJoinType:
+    """Convert how string to DuckDB JoinType enum."""
+
+    if how == "inner":
+        return plan_optimizer.CJoinType.INNER
+    elif how == "left":
+        return plan_optimizer.CJoinType.LEFT
+    elif how == "right":
+        return plan_optimizer.CJoinType.RIGHT
+    elif how == "outer":
+        return plan_optimizer.CJoinType.OUTER
+    elif how == "cross":
+        return plan_optimizer.CJoinType.INNER
+    else:
+        raise ValueError(f"Invalid join type: {how}")
