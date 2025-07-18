@@ -131,7 +131,9 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
             Py_INCREF(args);
     }
     BodoPythonScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema)
-        : args(nullptr), out_schema(std::move(out_schema)), cfunc_ptr(0) {}
+        : args(nullptr),
+          out_schema(std::move(out_schema)),
+          cfunc_ptr(nullptr) {}
     ~BodoPythonScalarFunctionData() override {
         if (args)
             Py_DECREF(args);
