@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import traceback
+from contextlib import contextmanager
 
 import pandas as pd
 import pyarrow as pa
@@ -515,6 +516,8 @@ def execute_plan(plan: LazyPlan):
     """
     import bodo
 
+    PlanExecutionCounter.increment()
+
     def _exec_plan(plan):
         import bodo
         from bodo.ext import plan_optimizer
@@ -823,3 +826,27 @@ def match_binop_expr_source_plans(lhs, rhs):
         return lhs, new_rhs
 
     return None, None
+
+
+class PlanExecutionCounter:
+    count = 0
+
+    @classmethod
+    def increment(cls):
+        cls.count += 1
+
+    @classmethod
+    def reset(cls):
+        cls.count = 0
+
+    @classmethod
+    def get(cls):
+        return cls.count
+
+
+@contextmanager
+def assert_executed_plan_count(n: int):
+    start = PlanExecutionCounter.get()
+    yield
+    end = PlanExecutionCounter.get()
+    assert end - start == n, f"Expected {n} plan executions, but got {end - start}"
