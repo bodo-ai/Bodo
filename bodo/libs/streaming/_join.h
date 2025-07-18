@@ -840,6 +840,11 @@ class JoinState {
         const std::shared_ptr<table_info>& in_table,
         bool only_transpose_existing_on_key_cols = false);
 
+    /**
+     * @brief Returns whether this is a nested loop join or hash join.
+     */
+    bool IsNestedLoopJoin() const { return this->n_keys == 0; }
+
     // Operator ID.
     const int64_t op_id;
 

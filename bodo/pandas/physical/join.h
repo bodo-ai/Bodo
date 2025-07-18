@@ -296,7 +296,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
-        if (join_state_->n_keys == 0) {
+        if (join_state_->IsNestedLoopJoin()) {
             bool global_is_last = nested_loop_join_build_consume_batch(
                 (NestedLoopJoinState*)join_state_.get(), input_batch,
                 local_is_last);
@@ -346,7 +346,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
         bool request_input = true;
 
-        if (join_state_->n_keys == 0) {
+        if (join_state_->IsNestedLoopJoin()) {
             is_last = nested_loop_join_probe_consume_batch(
                 (NestedLoopJoinState*)join_state_.get(), input_batch,
                 build_kept_cols, probe_kept_cols, is_last);
