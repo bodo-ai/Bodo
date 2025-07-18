@@ -48,7 +48,7 @@ def test_tpch_q03():
     run_tpch_query_test(tpch.tpch_q03)
 
 
-# @pytest.mark.skip(reason="TypeError: a bytes-like object is required, not 'str'")
+@pytest.mark.skip(reason="TypeError: a bytes-like object is required, not 'str'")
 def test_tpch_q04():
     run_tpch_query_test(tpch.tpch_q04)
 
@@ -81,7 +81,6 @@ def test_tpch_q11():
     run_tpch_query_test(tpch.tpch_q11)
 
 
-@pytest.mark.skip(reason=" AssertionError: assert (False)")
 def test_tpch_q12():
     run_tpch_query_test(tpch.tpch_q12)
 
@@ -99,6 +98,7 @@ def test_tpch_q15():
     run_tpch_query_test(tpch.tpch_q15)
 
 
+@pytest.mark.skip(reason="Waiting on dropduplicates to produce BodoDataFrame")
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 

@@ -593,7 +593,7 @@ def tpch_q12(lineitem, orders, pd=pd):
     total = jn.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
     # total = total.reset_index()  # reset index to keep consistency with pandas
     total = total.sort_values("L_SHIPMODE")
-    print(total)
+    return total
 
 
 def tpch_q13(customer, orders, pd=pd):
