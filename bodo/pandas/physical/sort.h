@@ -89,10 +89,10 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
         // Establish table reordering so key are at beginning.
         bidirectionalColumnMapping(col_inds, inverse_col_inds, keys,
-                                   output_schema->ncols());
+                                   input_schema->ncols());
 
         std::shared_ptr<bodo::Schema> build_table_schema_reordered =
-            output_schema->Project(col_inds);
+            input_schema->Project(col_inds);
 
         if (limit == -1 && offset == -1) {
             stream_sorter = std::make_unique<StreamSortState>(
