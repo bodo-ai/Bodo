@@ -600,10 +600,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 )
             else:
                 msg = (
-                    "Compiling user defined function failed or encountered an unsupported result type."
-                    "Falling back to Python engine, which will"
-                    "run on a small sample of data to determine output types."
-                    "This may hurt performance:"
+                    "Series.map(): Compiling user defined function failed or "
+                    "encountered an unsupported result type. Falling back to "
+                    "Python engine. Add engine='python' to ignore this warning. "
+                    "Original error:"
                     f"{error_msg}."
                 )
                 warnings.warn(BodoLibFallbackWarning(msg))
