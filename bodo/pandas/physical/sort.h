@@ -16,8 +16,35 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     explicit PhysicalSort(duckdb::vector<duckdb::BoundOrderByNode>& orders,
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols,
-                          int64_t limit = -1, int64_t offset = -1)
-        : output_schema(input_schema), limit(limit), offset(offset) {
+                          int64_t limit, int64_t offset, unsigned node_cols,
+                          const std::vector<duckdb::idx_t>& projection_map = {})
+        : limit(limit), offset(offset) {
+        // Calculate the output schema.
+        this->output_schema = std::make_shared<bodo::Schema>();
+        if (projection_map.empty()) {
+            for (size_t i = 0; i < input_schema->ncols(); i++) {
+                this->kept_cols.push_back(i);
+            }
+        } else {
+            for (const auto& c : projection_map) {
+                this->kept_cols.push_back(c);
+            }
+        }
+        for (size_t i = 0; i < this->kept_cols.size(); i++) {
+            std::unique_ptr<bodo::DataType> col_type =
+                input_schema->column_types[this->kept_cols[i]]->copy();
+            this->output_schema->append_column(std::move(col_type));
+            this->output_schema->column_names.push_back(
+                input_schema->column_names[this->kept_cols[i]]);
+        }
+        if (this->kept_cols.size() != node_cols) {
+            throw std::runtime_error(
+                "Sort output schema has different number of columns than "
+                "LogicalOrder or LogicalTopN");
+        }
+        this->output_schema->metadata = std::make_shared<TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+
         std::vector<int64_t> ascending;
         std::vector<int64_t> na_last;
         std::vector<uint64_t> keys;
@@ -84,20 +111,15 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
                           std::vector<duckdb::ColumnBinding>& source_cols,
                           int64_t limit = -1, int64_t offset = -1)
         : PhysicalSort(logical_order.orders, input_schema, source_cols, limit,
-                       offset) {
-        if (!logical_order.projection_map.empty()) {
-            throw std::runtime_error(
-                "PhysicalSort from LogicalOrder with non-empty projection map "
-                "unimplemented.");
-        }
-    }
+                       offset, logical_order.GetColumnBindings().size(),
+                       logical_order.projection_map) {}
 
     explicit PhysicalSort(duckdb::LogicalTopN& logical_topn,
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols,
                           int64_t limit = -1, int64_t offset = -1)
         : PhysicalSort(logical_topn.orders, input_schema, source_cols, limit,
-                       offset) {}
+                       offset, logical_topn.GetColumnBindings().size()) {}
 
     virtual ~PhysicalSort() = default;
 
@@ -130,9 +152,24 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         auto sorted_res = stream_sorter->GetOutput();
-        return {ProjectTable(sorted_res.first, inverse_col_inds),
-                sorted_res.second ? OperatorResult::FINISHED
-                                  : OperatorResult::HAVE_MORE_OUTPUT};
+
+        // Undo column reordering for sorting.
+        std::shared_ptr<table_info> sorted_table =
+            ProjectTable(sorted_res.first, inverse_col_inds);
+
+        // Keep only the selected columns in desired order from
+        // projection_map.
+        std::vector<std::shared_ptr<array_info>> out_cols;
+        for (size_t i = 0; i < this->kept_cols.size(); i++) {
+            out_cols.emplace_back(sorted_table->columns[this->kept_cols[i]]);
+        }
+        std::shared_ptr<table_info> out_table = std::make_shared<table_info>(
+            out_cols, sorted_table->nrows(), output_schema->column_names,
+            output_schema->metadata);
+
+        return {out_table, sorted_res.second
+                               ? OperatorResult::FINISHED
+                               : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
     /**
@@ -166,7 +203,8 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
     std::vector<int64_t> col_inds;
     std::vector<int64_t> inverse_col_inds;
-    const std::shared_ptr<bodo::Schema> output_schema;
+    std::shared_ptr<bodo::Schema> output_schema;
     std::unique_ptr<StreamSortState> stream_sorter;
     const int64_t limit, offset;
+    std::vector<uint64_t> kept_cols;
 };
