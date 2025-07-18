@@ -825,7 +825,7 @@ def test_set_df_column(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
     # Multiple projections, new column
-    with assert_executed_plan_count(1):
+    with assert_executed_plan_count(0):
         bdf = bd.from_pandas(df)
         bdf["D"] = bdf["B"].str.strip().map(lambda x: x + "1")
         pdf = df.copy()
@@ -833,7 +833,7 @@ def test_set_df_column(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
     # Multiple projections, existing column
-    with assert_executed_plan_count(1):
+    with assert_executed_plan_count(0):
         bdf = bd.from_pandas(df)
         bdf["B"] = bdf["B"].str.strip().map(lambda x: x + "1")
         pdf = df.copy()
@@ -2025,7 +2025,7 @@ def test_series_min_max_unsupported_types():
 def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
     n_cols = 6
-    expected_executions = 3 if method == "std" else 1
+    expected_executions = 2 if method == "std" else 1
     with assert_executed_plan_count(n_cols * expected_executions):
         n = 10000
         df = pd.DataFrame(
@@ -2103,7 +2103,7 @@ def test_df_state_change():
     """Make sure dataframe state change doesn't lead to stale result id in plan
     execution"""
 
-    with assert_executed_plan_count(1):
+    with assert_executed_plan_count(0):
 
         @bodo.jit(spawn=True)
         def get_df(df):
@@ -2235,7 +2235,7 @@ def test_series_describe():
     bdf = bd.from_pandas(df)
     for c in df.columns:
         with assert_executed_plan_count(
-            0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 4
+            0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 3
         ):
             describe_pd = df[c].describe()
             describe_bodo = bdf[c].describe()
