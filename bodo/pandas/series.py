@@ -56,6 +56,7 @@ from bodo.pandas.plan import (
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
     fallback_wrapper,
@@ -619,11 +620,51 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return self
 
     @check_args_fallback(unsupported="none")
-    def map(self, arg, na_action=None):
+    def map(self, arg, na_action=None, engine="bodo"):
         """
         Map values of Series according to an input mapping or function.
         """
+        if engine not in ("bodo", "python"):
+            raise TypeError(
+                f"Series.map() got unsupported engine: {engine}, expected one of ('bodo', 'python')."
+            )
 
+        if engine == "bodo":
+
+            @bodo.jit(cache=True)
+            def map_wrapper(S):
+                return S.map(arg, na_action=na_action)
+
+            try:
+                empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
+            except BodoError as e:
+                empty_series = None
+                error_msg = str(e)
+
+            assert empty_series is None or isinstance(empty_series.dtype, pd.ArrowDtype)
+
+            # Jit failed to determine dtypes, likely from gaps in our Arrow support.
+            if empty_series is not None and pa.types.is_null(
+                empty_series.dtype.pyarrow_dtype
+            ):
+                empty_series = None
+                error_msg = "Jit could not determine pyarrow return type from UDF."
+
+            if empty_series is not None:
+                return _get_series_python_func_plan(
+                    self._plan, empty_series, map_wrapper, (), {}, is_method=False
+                )
+            else:
+                msg = (
+                    "Series.map(): Compiling user defined function failed or "
+                    "encountered an unsupported result type. Falling back to "
+                    "Python engine. Add engine='python' to ignore this warning. "
+                    "Original error: "
+                    f"{error_msg}."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+
+        # engine == "python"
         # Get output data type by running the UDF on a sample of the data.
         empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
 
