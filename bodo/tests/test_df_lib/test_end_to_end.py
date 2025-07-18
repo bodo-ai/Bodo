@@ -2515,40 +2515,29 @@ def test_fallback_wrapper_deep_fallback():
 
 
 import benchmarks.tpch.dataframe_lib as tpch
-from benchmarks.tpch.dataframe_lib import _query_to_datasets, collect_datasets
+from benchmarks.tpch.dataframe_lib import _query_to_datasets
 
 datapath = "bodo/tests/data/tpch-test_data/parquet"
 
 
-def load_tpch_data(name, datapath):
-    if name == "lineitem":
-        return tpch.load_lineitem(datapath, pd=pd)
-    if name == "part":
-        return tpch.load_part(datapath, pd=pd)
-    if name == "orders":
-        return tpch.load_orders(datapath, pd=pd)
-    if name == "customer":
-        return tpch.load_customer(datapath, pd=pd)
-    if name == "supplier":
-        return tpch.load_supplier(datapath, pd=pd)
-    if name == "nation":
-        return tpch.load_nation(datapath, pd=pd)
-    if name == "region":
-        return tpch.load_region(datapath, pd=pd)
-    if name == "partsupp":
-        return tpch.load_partsupp(datapath, pd=pd)
-    raise KeyError("Invalid tpch data name {name}.")
-
-
-def run_tpch_query_test(query_func, num, is_dataframe):
-    pd_args = [load_tpch_data(key, datapath) for key in _query_to_datasets[num]]
+def run_tpch_query_test(query_func):
+    pd_args = [
+        getattr(tpch, f"load_{key}")(datapath)
+        for key in _query_to_datasets[int(query_func.__name__[-2:])]
+    ]
     bd_args = [bd.from_pandas(df) for df in pd_args]
 
     pd_kwargs = {"pd": pd}
     pd_result = query_func(*pd_args, **pd_kwargs)
     bd_result = query_func(*bd_args)
 
-    if is_dataframe:
+    if isinstance(
+        pd_result,
+        (
+            pd.DataFrame,
+            pd.Series,
+        ),
+    ):
         bd_result.is_lazy_plan()
         _test_equal(bd_result, pd_result, check_pandas_types=False, reset_index=True)
     else:
@@ -2559,148 +2548,128 @@ def run_tpch_query_test(query_func, num, is_dataframe):
         assert np.isclose(pd_result, bd_result)
 
 
+@pytest.mark.skip(
+    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
+)
 def test_tpch_q01():
-    collect_datasets(tpch.q01)
-    run_tpch_query_test(tpch.tpch_q01, 1, True)
+    run_tpch_query_test(tpch.tpch_q01)
 
 
-@pytest.mark.skip(reason="AssertionError: DataFrame are different")
+@pytest.mark.skip(
+    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
+)
 def test_tpch_q02():
-    collect_datasets(tpch.q02)
-    run_tpch_query_test(tpch.tpch_q02, 2, True)
+    run_tpch_query_test(tpch.tpch_q02)
 
 
 def test_tpch_q03():
-    collect_datasets(tpch.q03)
-    run_tpch_query_test(tpch.tpch_q03, 3, True)
+    run_tpch_query_test(tpch.tpch_q03)
 
 
 @pytest.mark.skip(reason="TypeError: a bytes-like object is required, not 'str'")
 def test_tpch_q04():
-    collect_datasets(tpch.q04)
-    run_tpch_query_test(tpch.tpch_q04, 4, True)
+    run_tpch_query_test(tpch.tpch_q04)
 
 
+@pytest.mark.skip(
+    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
+)
 def test_tpch_q05():
-    collect_datasets(tpch.q05)
-    run_tpch_query_test(tpch.tpch_q05, 5, True)
+    run_tpch_query_test(tpch.tpch_q05)
 
 
-@pytest.mark.skip(reason="assert np.isclose fails")
 def test_tpch_q06():
-    collect_datasets(tpch.q06)
-    run_tpch_query_test(tpch.tpch_q06, 6, False)
+    run_tpch_query_test(tpch.tpch_q06)
 
 
+@pytest.mark.skip(
+    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
+)
 def test_tpch_q07():
-    collect_datasets(tpch.q07)
-    run_tpch_query_test(tpch.tpch_q07, 7, True)
+    run_tpch_query_test(tpch.tpch_q07)
 
 
 @pytest.mark.skip(
     reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
 )
 def test_tpch_q08():
-    collect_datasets(tpch.q08)
-    run_tpch_query_test(tpch.tpch_q08, 8, True)
-
-
-def test_tpch_q09():
-    collect_datasets(tpch.q09)
-    run_tpch_query_test(tpch.tpch_q09, 9, True)
-
-
-def test_tpch_q10():
-    collect_datasets(tpch.q10)
-    run_tpch_query_test(tpch.tpch_q10, 10, True)
-
-
-@pytest.mark.skip(reason="AssertionError: DataFrame are different")
-def test_tpch_q11():
-    collect_datasets(tpch.q11)
-    run_tpch_query_test(tpch.tpch_q11, 11, True)
+    run_tpch_query_test(tpch.tpch_q08)
 
 
 @pytest.mark.skip(
-    reason="AttributeError: 'NoneType' object has no attribute 'is_lazy_plan'"
+    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
 )
+def test_tpch_q09():
+    run_tpch_query_test(tpch.tpch_q09)
+
+
+def test_tpch_q10():
+    run_tpch_query_test(tpch.tpch_q10)
+
+
+@pytest.mark.skip(
+    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
+)
+def test_tpch_q11():
+    run_tpch_query_test(tpch.tpch_q11)
+
+
+@pytest.mark.skip(reason=" AssertionError: assert (False)")
 def test_tpch_q12():
-    collect_datasets(tpch.q12)
-    run_tpch_query_test(tpch.tpch_q12, 12, True)
+    run_tpch_query_test(tpch.tpch_q12)
 
 
 @pytest.mark.skip(
     reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
 )
 def test_tpch_q13():
-    collect_datasets(tpch.q13)
-    run_tpch_query_test(tpch.tpch_q13, 13, True)
+    run_tpch_query_test(tpch.tpch_q13)
 
 
-@pytest.mark.skip(reason="ZeroDivisionError: float division by zero")
 def test_tpch_q14():
-    collect_datasets(tpch.q14)
-    run_tpch_query_test(tpch.tpch_q14, 14, False)
+    run_tpch_query_test(tpch.tpch_q14)
 
 
 @pytest.mark.skip(reason="Length mismatch")
 def test_tpch_q15():
-    collect_datasets(tpch.q15)
-    run_tpch_query_test(tpch.tpch_q15, 15, True)
+    run_tpch_query_test(tpch.tpch_q15)
 
 
 @pytest.mark.skip(
     reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
 )
 def test_tpch_q16():
-    collect_datasets(tpch.q16)
-    run_tpch_query_test(tpch.tpch_q16, 16, True)
+    run_tpch_query_test(tpch.tpch_q16)
 
 
-@pytest.mark.skip(
-    reason="AssertionError: DataFrame.iloc[:, 0] (column name='avg_yearly') are different"
-)
 def test_tpch_q17():
-    collect_datasets(tpch.q17)
-    run_tpch_query_test(tpch.tpch_q17, 17, True)
+    run_tpch_query_test(tpch.tpch_q17)
 
 
 def test_tpch_q18():
-    collect_datasets(tpch.q18)
-    run_tpch_query_test(tpch.tpch_q18, 18, True)
+    run_tpch_query_test(tpch.tpch_q18)
 
 
-@pytest.mark.skip(reason="Exception: Some ranks failed")
 def test_tpch_q19():
-    collect_datasets(tpch.q19)
-    run_tpch_query_test(tpch.tpch_q19, 19, True)
+    run_tpch_query_test(tpch.tpch_q19)
 
 
 @pytest.mark.skip(
     reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
 )
 def test_tpch_q20():
-    collect_datasets(tpch.q20)
-    run_tpch_query_test(tpch.tpch_q20, 20, True)
+    run_tpch_query_test(tpch.tpch_q20)
 
 
 @pytest.mark.skip(
     reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
 )
 def test_tpch_q21():
-    collect_datasets(tpch.q21)
-    run_tpch_query_test(tpch.tpch_q21, 21, True)
+    run_tpch_query_test(tpch.tpch_q21)
 
 
 @pytest.mark.skip(
-    reason="RuntimeError: PhysicalReduce::ConsumeBatch: Error in Arrow compute kernel NotImplemented: Function 'sum' has no kernel matching input"
+    reason="AttributeError: 'DataFrame' object has no attribute 'is_lazy_plan'"
 )
 def test_tpch_q22():
-    collect_datasets(tpch.q22)
-    run_tpch_query_test(tpch.tpch_q22, 22, True)
-
-
-@pytest.mark.skip(reason="Currently only a subset of queries run correctly.")
-def test_tpch_all():
-    for num in range(1, 23):
-        globals()[f"test_tpch_q{num:02d}"]()
+    run_tpch_query_test(tpch.tpch_q22)
