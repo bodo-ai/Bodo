@@ -631,7 +631,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         if engine == "bodo":
 
-            @bodo.jit(cache=True)
+            @bodo.jit(cache=True, spawn=False, distributed=False)
             def map_wrapper(S):
                 return S.map(arg, na_action=na_action)
 

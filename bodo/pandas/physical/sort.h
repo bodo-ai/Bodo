@@ -13,12 +13,12 @@
  */
 class PhysicalSort : public PhysicalSource, public PhysicalSink {
    private:
-    explicit PhysicalSort(duckdb::vector<duckdb::BoundOrderByNode>& orders,
-                          std::shared_ptr<bodo::Schema> input_schema,
-                          std::vector<duckdb::ColumnBinding>& source_cols,
-                          int64_t limit, int64_t offset, unsigned node_cols,
-                          const std::vector<duckdb::idx_t>& projection_map = {})
-        : limit(limit), offset(offset) {
+    explicit PhysicalSort(
+        duckdb::vector<duckdb::BoundOrderByNode>& orders,
+        std::shared_ptr<bodo::Schema> input_schema,
+        std::vector<duckdb::ColumnBinding>& source_cols, int64_t limit,
+        int64_t offset, unsigned node_cols,
+        const std::vector<duckdb::idx_t>& projection_map = {}) {
         // Calculate the output schema.
         this->output_schema = std::make_shared<bodo::Schema>();
         if (projection_map.empty()) {
@@ -205,6 +205,5 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     std::vector<int64_t> inverse_col_inds;
     std::shared_ptr<bodo::Schema> output_schema;
     std::unique_ptr<StreamSortState> stream_sorter;
-    const int64_t limit, offset;
     std::vector<uint64_t> kept_cols;
 };
