@@ -2,16 +2,16 @@
 Tests dataframe library frontend (no triggering of execution).
 """
 
+import pandas as pd
 import pytest
 
-import bodo.pandas as pd
+import bodo.pandas as bd
 from bodo.pandas.utils import BodoLibFallbackWarning
 
 
-@pytest.mark.skip("disabled for release until merge is implemented")
 def test_read_join_filter_proj(datapath):
-    df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))
+    df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
     df3 = df1.merge(df2, on="A")
     df3 = df3[df3.A > 3]
     df3[["B", "C"]]
@@ -25,9 +25,39 @@ def test_df_getitem_fallback_warning():
             "B": ["A1", "B1", "C1"],
         },
     )
-    bdf = pd.from_pandas(df)
+    bdf = bd.from_pandas(df)
     with pytest.warns(BodoLibFallbackWarning):
         bdf[:]
+
+    # Non-bodo Series
+    bdf = bd.from_pandas(df)
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf[df.A > 1]
+
+    # Different expr source plan
+    bdf = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(df)
+    S = bdf2.A > 0
+    with pytest.warns(BodoLibFallbackWarning):
+        bdf[S]
+
+    # Arithmetic expression arguments with different source plans
+    bdf = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(pd.DataFrame({"A": [1, 2, 3]}))
+    with pytest.warns(BodoLibFallbackWarning):
+        (bdf.A + bdf2.A)
+
+    # Comparison expression arguments with different source plans
+    bdf = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(pd.DataFrame({"A": [1, 2, 3]}))
+    with pytest.warns(BodoLibFallbackWarning):
+        (bdf.A == bdf2.A)
+
+    # Conjunction expression arguments with different source plans
+    bdf = bd.from_pandas(df)
+    bdf2 = bd.from_pandas(pd.DataFrame({"A": [1, 2, 3]}))
+    with pytest.warns(BodoLibFallbackWarning):
+        ((bdf.A == 1) & (bdf2.A == 1))
 
 
 def test_df_setitem_fallback_warning():
@@ -37,7 +67,7 @@ def test_df_setitem_fallback_warning():
             "A": pd.array([1, 2, 3], "Int64"),
         },
     )
-    bdf = pd.from_pandas(df)
+    bdf = bd.from_pandas(df)
     with pytest.warns(BodoLibFallbackWarning):
         bdf[:] = 1
 
@@ -50,7 +80,7 @@ def test_df_apply_fallback_warning():
             "B": ["A1", "B1", "C1"],
         },
     )
-    bdf = pd.from_pandas(df)
+    bdf = bd.from_pandas(df)
     with pytest.warns(BodoLibFallbackWarning):
         bdf.apply(lambda a: pd.Series([1, 2]), axis=1)
 
@@ -65,7 +95,7 @@ def test_df_apply_bad_dtype_fallback_warning():
             "B": ["A1", "B1", "C1"] * 50,
         },
     )
-    bdf = pd.from_pandas(df)
+    bdf = bd.from_pandas(df)
     # All None Case
     with pytest.warns(BodoLibFallbackWarning):
         bdf.apply(lambda a: None, axis=1)
@@ -93,8 +123,8 @@ def test_merge_validation_checks():
         },
     )
 
-    bdf1 = pd.from_pandas(df1)
-    bdf2 = pd.from_pandas(df2)
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
 
     # Pandas merge should raise ValueError due to mismatched key lengths
     with pytest.raises(ValueError):
@@ -123,7 +153,7 @@ def test_merge_validation_checks():
         },
     )
 
-    bdf3 = pd.from_pandas(df3)
+    bdf3 = bd.from_pandas(df3)
 
     # Pandas passes checks when column names are multi-character strings
     df1.merge(df3, how="inner", left_on=("A",), right_on="cat")
@@ -162,7 +192,7 @@ def test_fallback_warning_on_unknown_attribute():
     import pandas as pds
 
     df = pds.DataFrame({"A": [1, 2, 3]})
-    bdf = pd.from_pandas(df)
+    bdf = bd.from_pandas(df)
 
     # Trigger __getattribute__ fallback by accessing an unsupported attribute
     with pytest.warns(
@@ -181,3 +211,64 @@ def test_fallback_warning_on_unknown_attribute():
         warnings.simplefilter("always")
         _ = bdf.A.dtype
     assert not record, f"Shouldn't raise warnings for this attribute: {record[0]}"
+
+
+def test_single_fallback_warning_emitted():
+    """Test that only the initial fallback warning is emitted when falling back to Pandas."""
+    import warnings
+
+    import pandas as pds
+
+    df = pds.DataFrame({"A": ["a", "b", "a", "c"]})
+    bdf = bd.from_pandas(df)
+
+    # pop(0) will fall back and may internally call other methods, but should only raise initial warning.
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        _ = bdf.A.pop(0)
+
+    fallback_warnings = [
+        w for w in record if issubclass(w.category, BodoLibFallbackWarning)
+    ]
+
+    assert len(fallback_warnings) == 1, (
+        f"Expected 1 fallback warning, got {len(fallback_warnings)}:\n{fallback_warnings}"
+    )
+
+    warning_msg = str(fallback_warnings[0].message)
+    assert (
+        "pop" in warning_msg
+        and "not implemented" in warning_msg
+        and "Falling back to Pandas" in warning_msg
+    ), f"Unexpected warning message: {warning_msg}"
+
+
+def test_execution_counter():
+    """Test execution counter, simulate application cases of execution counter to unit tests."""
+
+    from bodo.pandas.plan import PlanExecutionCounter, assert_executed_plan_count
+
+    df = bd.DataFrame({"A": ["2", "3"]})
+    PlanExecutionCounter.reset()
+    assert PlanExecutionCounter.get() == 0, "Execution plan counter not reset properly."
+
+    plans = []
+
+    with assert_executed_plan_count(0):
+        for _ in range(5):
+            plans.append(df.A.str.lower())
+
+    with assert_executed_plan_count(5):
+        for plan in plans:
+            assert plan.is_lazy_plan()
+            plan.execute_plan()
+
+    try:
+        with assert_executed_plan_count(1):
+            pass
+    except AssertionError as e:
+        assert (
+            str(e) == "Expected 1 plan executions, but got 0"
+        )  # Created an assertion but not the expected error message.
+    else:
+        assert False  # Shouldn't have created an assertion but didn't.

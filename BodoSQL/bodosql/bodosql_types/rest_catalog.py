@@ -2,6 +2,8 @@
 catalog contains all information needed to connect and use REST Iceberg catalog for organizing and modifying tables.
 """
 
+from __future__ import annotations
+
 import os
 
 import numba

@@ -2,6 +2,8 @@
 Common IR extension functions for connectors such as CSV, Parquet and JSON readers.
 """
 
+from __future__ import annotations
+
 import sys
 import typing as pt
 from abc import ABCMeta, abstractmethod
@@ -70,7 +72,7 @@ class Connector(ir.Stmt, metaclass=ABCMeta):
         """
         ...
 
-    def typeinfer_out_vars(self, typeinferer: "TypeInferer") -> None:
+    def typeinfer_out_vars(self, typeinferer: TypeInferer) -> None:
         """
         Set the typing constraints for the current connector node.
         This is used for showing type dependencies. As a result,
@@ -149,7 +151,7 @@ def connector_distributed_analysis(node: Connector, array_dists):
         array_dists[v.name] = out_dist
 
 
-def connector_typeinfer(node: Connector, typeinferer: "TypeInferer") -> None:
+def connector_typeinfer(node: Connector, typeinferer: TypeInferer) -> None:
     """
     Set the typing constraints for various connector nodes.
     See Connector.typeinfer_out_vars for more information.
@@ -175,13 +177,13 @@ class VarVisitor(FilterVisitor[bif.Filter]):
     def __init__(self, func: pt.Callable[[ir.Var], ir.Var]):
         self.func = func
 
-    def visit_scalar(self, scalar: "Scalar") -> "Filter":
+    def visit_scalar(self, scalar: Scalar) -> Filter:
         return bif.Scalar(self.func(scalar.val))
 
-    def visit_ref(self, ref: "Ref") -> "Filter":
+    def visit_ref(self, ref: Ref) -> Filter:
         return ref
 
-    def visit_op(self, filter: "Op") -> "Filter":
+    def visit_op(self, filter: Op) -> Filter:
         return bif.Op(filter.op, *[self.visit(arg) for arg in filter.args])
 
 
@@ -599,12 +601,12 @@ class ArrowFilterVisitor(FilterVisitor[VisitorOut]):
             rhs_typ,  # self.partition_names, self.source
         )
 
-    def visit_scalar(self, scalar: "Scalar") -> VisitorOut:
+    def visit_scalar(self, scalar: Scalar) -> VisitorOut:
         """Convert Scalar Values to Arrow Compute Expression String"""
         fname, ftype = self.unwrap_scalar(scalar)
         return f"ds.scalar({fname})", ftype
 
-    def visit_ref(self, ref: "Ref") -> VisitorOut:
+    def visit_ref(self, ref: Ref) -> VisitorOut:
         col_type = self.original_out_types[self.orig_colname_map[ref.val]]
 
         if self.source == "parquet" and ref.val in self.partition_names:
@@ -627,103 +629,103 @@ class ArrowFilterVisitor(FilterVisitor[VisitorOut]):
         ref_str = f"{{{ref.val}}}" if self.output_f_string else ref.val
         return f"ds.field('{ref_str}'){col_cast}", col_type
 
-    def visit_op(self, filter: "Op") -> VisitorOut:
-        match filter.op:
-            case "ALWAYS_TRUE":
-                return "ds.scalar(True)", types.bool_
-            case "ALWAYS_FALSE":
-                return "ds.scalar(False)", types.bool_
-            case "ALWAYS_NULL":
-                return "ds.scalar(None)", types.bool_
+    def visit_op(self, filter: Op) -> VisitorOut:
+        if filter.op == "ALWAYS_TRUE":
+            return "ds.scalar(True)", types.bool_
+        elif filter.op == "ALWAYS_FALSE":
+            return "ds.scalar(False)", types.bool_
+        elif filter.op == "ALWAYS_NULL":
+            return "ds.scalar(None)", types.bool_
 
-            # Logical Operators
-            case "NOT":
-                return f"~({self.visit(filter.args[0])[0]})", types.bool_
-            case "AND":
+        # Logical Operators
+        elif filter.op == "NOT":
+            return f"~({self.visit(filter.args[0])[0]})", types.bool_
+        elif filter.op == "AND":
+            return (
+                "(" + " & ".join(self.visit(arg)[0] for arg in filter.args) + ")",
+                types.bool_,
+            )
+        elif filter.op == "OR":
+            return (
+                "(" + " | ".join(self.visit(arg)[0] for arg in filter.args) + ")",
+                types.bool_,
+            )
+
+        # Unary Operators Specially Handled
+        elif filter.op == "IS_NULL":
+            return f"({self.visit(filter.args[0])[0]}.is_null())", types.bool_
+        elif filter.op == "IS_NOT_NULL":
+            return f"(~{self.visit(filter.args[0])[0]}.is_null())", types.bool_
+
+        # Binary Operators with Special Handling
+        elif filter.op == "IN":
+            col_code, col_type = self.visit(filter.args[0])
+            scalar_code, scalar_type = self.unwrap_scalar(filter.args[1])
+            col_cast, scalar_cast = determine_filter_cast(col_type, scalar_type)
+
+            # col_cast, scalar_cast = self.determine_filter_cast(
+            # Expected output for this format should look like
+            # ds.field('A').isin(filter_var)
+            return (
+                f"({col_code}{col_cast}.isin({scalar_code}{scalar_cast}))",
+                types.bool_,
+            )
+        elif filter.op == "case_insensitive_equality":
+            col_code, col_type = self.visit(filter.args[0])
+            scalar_code, scalar_type = self.unwrap_scalar(filter.args[1])
+            col_cast, scalar_cast = determine_filter_cast(col_type, scalar_type)
+
+            # case_insensitive_equality is just
+            # == with both inputs converted to lower case. This is used
+            # by ilike
+            return (
+                f"(pa.compute.ascii_lower({col_code}{col_cast}) == pa.compute.ascii_lower(ds.scalar({scalar_code}{scalar_cast}))",
+                types.bool_,
+            )
+
+        elif filter.op == "COALESCE":
+            col_code, col_type = self.visit(filter.args[0])
+            scalars = [self.visit(f) for f in filter.args[1:]]
+            col_cast, scalar_cast = determine_filter_cast(col_type, scalars[0][1])
+
+            scalar_codes = (f"{s[0]}{scalar_cast}" for s in scalars)
+            return (
+                f"pa.compute.coalesce({col_code}{col_cast}, {', '.join(scalar_codes)})",
+                col_type,
+            )
+
+        # Comparison Operators Syntax
+        elif filter.op in ["==", "!=", "<", "<=", ">", ">="]:
+            col_code, col_type = self.visit(filter.args[0])
+            scalar_code, scalar_type = self.visit(filter.args[1])
+            col_cast, scalar_cast = determine_filter_cast(col_type, scalar_type)
+
+            # Expected output for this format should like
+            # (ds.field('A') > ds.scalar(py_var))
+            return (
+                f"({col_code}{col_cast} {filter.op} {scalar_code}{scalar_cast})",
+                types.bool_,
+            )
+
+        # All Other Arrow Functions
+        else:
+            op = filter.op
+            func_name = supported_arrow_funcs_map[op.lower()]
+            col_expr, col_type = self.visit(filter.args[0])
+            scalar_args = [self.unwrap_scalar(f)[0] for f in filter.args[1:]]
+
+            # Handle if its case insensitive
+            all_args = [col_expr] + scalar_args
+            if op.startswith("case_insensitive_"):
                 return (
-                    "(" + " & ".join(self.visit(arg)[0] for arg in filter.args) + ")",
-                    types.bool_,
-                )
-            case "OR":
-                return (
-                    "(" + " | ".join(self.visit(arg)[0] for arg in filter.args) + ")",
-                    types.bool_,
-                )
-
-            # Unary Operators Specially Handled
-            case "IS_NULL":
-                return f"({self.visit(filter.args[0])[0]}.is_null())", types.bool_
-            case "IS_NOT_NULL":
-                return f"(~{self.visit(filter.args[0])[0]}.is_null())", types.bool_
-
-            # Binary Operators with Special Handling
-            case "IN":
-                col_code, col_type = self.visit(filter.args[0])
-                scalar_code, scalar_type = self.unwrap_scalar(filter.args[1])
-                col_cast, scalar_cast = determine_filter_cast(col_type, scalar_type)
-
-                # col_cast, scalar_cast = self.determine_filter_cast(
-                # Expected output for this format should look like
-                # ds.field('A').isin(filter_var)
-                return (
-                    f"({col_code}{col_cast}.isin({scalar_code}{scalar_cast}))",
-                    types.bool_,
-                )
-            case "case_insensitive_equality":
-                col_code, col_type = self.visit(filter.args[0])
-                scalar_code, scalar_type = self.unwrap_scalar(filter.args[1])
-                col_cast, scalar_cast = determine_filter_cast(col_type, scalar_type)
-
-                # case_insensitive_equality is just
-                # == with both inputs converted to lower case. This is used
-                # by ilike
-                return (
-                    f"(pa.compute.ascii_lower({col_code}{col_cast}) == pa.compute.ascii_lower(ds.scalar({scalar_code}{scalar_cast}))",
-                    types.bool_,
-                )
-
-            case "COALESCE":
-                col_code, col_type = self.visit(filter.args[0])
-                scalars = [self.visit(f) for f in filter.args[1:]]
-                col_cast, scalar_cast = determine_filter_cast(col_type, scalars[0][1])
-
-                scalar_codes = (f"{s[0]}{scalar_cast}" for s in scalars)
-                return (
-                    f"pa.compute.coalesce({col_code}{col_cast}, {', '.join(scalar_codes)})",
+                    f"(pa.compute.{func_name}({', '.join(all_args)}, ignore_case=True))",
                     col_type,
                 )
-
-            # Comparison Operators Syntax
-            case "==" | "!=" | "<" | "<=" | ">" | ">=":
-                col_code, col_type = self.visit(filter.args[0])
-                scalar_code, scalar_type = self.visit(filter.args[1])
-                col_cast, scalar_cast = determine_filter_cast(col_type, scalar_type)
-
-                # Expected output for this format should like
-                # (ds.field('A') > ds.scalar(py_var))
+            else:
                 return (
-                    f"({col_code}{col_cast} {filter.op} {scalar_code}{scalar_cast})",
-                    types.bool_,
+                    f"(pa.compute.{func_name}({', '.join(all_args)}))",
+                    col_type,
                 )
-
-            # All Other Arrow Functions
-            case op:
-                func_name = supported_arrow_funcs_map[op.lower()]
-                col_expr, col_type = self.visit(filter.args[0])
-                scalar_args = [self.unwrap_scalar(f)[0] for f in filter.args[1:]]
-
-                # Handle if its case insensitive
-                all_args = [col_expr] + scalar_args
-                if op.startswith("case_insensitive_"):
-                    return (
-                        f"(pa.compute.{func_name}({', '.join(all_args)}, ignore_case=True))",
-                        col_type,
-                    )
-                else:
-                    return (
-                        f"(pa.compute.{func_name}({', '.join(all_args)}))",
-                        col_type,
-                    )
 
 
 def generate_arrow_filters(

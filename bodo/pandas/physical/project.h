@@ -71,7 +71,7 @@ class PhysicalProjection : public PhysicalSourceSink {
 
                 std::unique_ptr<bodo::DataType> col_type =
                     arrow_type_to_bodo_data_type(
-                        convertDuckdbValueToArrowScalar(const_expr.value)->type)
+                        duckdbValueToArrowType(const_expr.value))
                         ->copy();
                 this->output_schema->append_column(std::move(col_type));
                 col_names.emplace_back(const_expr.value.ToString());
@@ -93,6 +93,18 @@ class PhysicalProjection : public PhysicalSourceSink {
                     col_names.emplace_back(input_schema->column_names[0]);
                 } else {
                     col_names.emplace_back("comp");
+                }
+            } else if (expr->type == duckdb::ExpressionType::CONJUNCTION_AND ||
+                       expr->type == duckdb::ExpressionType::CONJUNCTION_OR) {
+                std::unique_ptr<bodo::DataType> col_type =
+                    std::make_unique<bodo::DataType>(
+                        bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::CTypeEnum::_BOOL);
+                this->output_schema->append_column(std::move(col_type));
+                if (input_schema->column_names.size() > 0) {
+                    col_names.emplace_back(input_schema->column_names[0]);
+                } else {
+                    col_names.emplace_back("conjunction");
                 }
             } else {
                 throw std::runtime_error(

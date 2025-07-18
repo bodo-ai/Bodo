@@ -1,4 +1,4 @@
-"""This script runs the full Bodo benchmark on the Bodo Platform.
+"""This script runs the full PyIceberg benchmark on the Bodo Platform.
 First, ensure that you have bodosdk installed (pip install bodosdk), you will
 also need to have an account on the Bodo Platform and the following environment
 variables set:
@@ -19,7 +19,7 @@ usage:
 from bodosdk import BodoWorkspaceClient
 
 
-def run_bodo_benchmark():
+def run_pyiceberg_benchmark():
     bodo_workspace = BodoWorkspaceClient()
 
     instance_roles = bodo_workspace.InstanceRoleClient.list(
@@ -53,7 +53,7 @@ def run_bodo_benchmark():
 
 
 def main():
-    run_bodo_benchmark()
+    run_pyiceberg_benchmark()
 
 
 if __name__ == "__main__":

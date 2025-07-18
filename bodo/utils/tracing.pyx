@@ -5,15 +5,14 @@ import warnings
 
 import numpy as np
 
-from bodo.mpi4py.libmpi cimport (
+from bodo.utils.typing import BodoWarning
+
+from mpi4py.libmpi cimport (
     MPI_COMM_WORLD,
     MPI_Barrier,
     MPI_Comm_rank,
     MPI_Comm_size,
 )
-
-from bodo.utils.typing import BodoWarning
-
 
 # We don't want to expose these variables outside this module (cdef
 # variables can't be accessed directly from Python). Also, variables with

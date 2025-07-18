@@ -15,6 +15,10 @@ on:
         description: 'Bodo Version to Build'
         type: string
         required: true
+      python_version:
+        description: 'Python Version to build for'
+        type: string
+        required: true
 
 jobs:
   build_bodo_wheels:
@@ -48,7 +52,7 @@ jobs:
       # some of the envs is enough
       - name: Install Pixi for Compiler
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
-        uses: prefix-dev/setup-pixi@v0.8.8
+        uses: prefix-dev/setup-pixi@v0.8.11
         with:
           pixi-version: v0.40.2
           cache: true
@@ -59,6 +63,23 @@ jobs:
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
         run: |
           pixi global install sccache
+
+      - name: Calculate CIBW_BUILD (Unix)
+        if: runner.os != 'Windows'
+        env:
+          PYTHON_VERSION: ${{ inputs.python_version }}
+        run: |
+          CIBW_BUILD="cp$(echo $PYTHON_VERSION | sed 's/\.//')-*"
+          echo "CIBW_BUILD=$CIBW_BUILD" >> $GITHUB_ENV
+
+      - name: Calculate CIBW_BUILD (Windows)
+        if: runner.os == 'Windows'
+        env:
+          PYTHON_VERSION: ${{ inputs.python_version }}
+        shell: pwsh
+        run: |
+          $CIBW_BUILD = "cp$($env:PYTHON_VERSION -replace '\.', '')-*"
+          echo "CIBW_BUILD=$CIBW_BUILD" >> $env:GITHUB_ENV
 
       - name: Build Wheels
         run: ${{ contains(inputs.os, 'macos') && 'pipx' || 'python3 -m pipx' }} run cibuildwheel==2.22.0
@@ -84,16 +105,16 @@ jobs:
           # https://cibuildwheel.pypa.io/en/stable/options/#repair-wheel-command
           CIBW_BEFORE_BUILD_WINDOWS: >
             pip install delvewheel && 
-            if exist "{package}\bodo\mpi4py" rmdir /s /q "{package}\bodo\mpi4py" && 
+            if exist "{package}\bodo\mpi4py\_vendored_mpi4py" rmdir /s /q "{package}\bodo\mpi4py\_vendored_mpi4py" && 
             if exist "{package}\build" rmdir /s /q "{package}\build"
           CIBW_BEFORE_BUILD_MACOS: |
             # Delete mpi4py folder if it exists so correct version gets copied in
-            rm -r {package}/bodo/mpi4py || true
+            rm -r {package}/bodo/mpi4py/_vendored_mpi4py || true
             rm -rf {package}/build
             rm -f {package}/mpich.whl
           CIBW_BEFORE_BUILD_LINUX: |
             # Delete mpi4py folder if it exists so correct version gets copied in
-            rm -r {package}/bodo/mpi4py || true
+            rm -r {package}/bodo/mpi4py/_vendored_mpi4py || true
             rm -rf {package}/build
             rm -f {package}/mpich.whl
             # Install mpich for mpi.h needed by mpi4py
@@ -105,6 +126,7 @@ jobs:
             SCCACHE_REGION=us-east-2
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
+            BODO_VENDOR_MPI4PY=1
             BODO_WINDOWS_BUILD_TYPE="Release"
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_MACOS: >
@@ -115,6 +137,7 @@ jobs:
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
             MACOSX_DEPLOYMENT_TARGET=${{ inputs.name == 'macos-arm' && '12.0' || '11.0' }}
             BODO_VENDOR_MPICH=1
+            BODO_VENDOR_MPI4PY=1
             PATH=$HOME/.pixi/bin:$PATH
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos-win
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
@@ -127,6 +150,7 @@ jobs:
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
             BODO_VENDOR_MPICH=1
+            BODO_VENDOR_MPI4PY=1
             CONDA_PREFIX=""
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
             NO_HDF5=1
@@ -165,8 +189,9 @@ jobs:
             --exclude libs2n.so.1
             --plat manylinux_2_28_$(uname -m) {wheel} -w {dest_dir} &&
             python buildscripts/bodo/pip/manylinux/patch_libs_for_pip.py -p {dest_dir}
+          CIBW_BUILD: ${{ env.CIBW_BUILD }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ inputs.name }}
+          name: cibw-wheels-${{ inputs.name }}-${{ inputs.python_version }}
           path: ./wheelhouse/*.whl

@@ -10,7 +10,7 @@ import bodo.pandas as pd
 
 
 @functools.lru_cache
-def load_lineitem(data_folder: str) -> pd.DataFrame:
+def load_lineitem(data_folder: str, pd=pd):
     print("Loading lineitem")
     data_path = data_folder + "/lineitem.parquet"
     df = pd.read_parquet(data_path)
@@ -22,7 +22,7 @@ def load_lineitem(data_folder: str) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_part(data_folder: str) -> pd.DataFrame:
+def load_part(data_folder: str, pd=pd):
     print("Loading part")
     data_path = data_folder + "/part.parquet"
     df = pd.read_parquet(data_path)
@@ -31,7 +31,7 @@ def load_part(data_folder: str) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_orders(data_folder: str) -> pd.DataFrame:
+def load_orders(data_folder: str, pd=pd):
     print("Loading orders")
     data_path = data_folder + "/orders.parquet"
     df = pd.read_parquet(data_path)
@@ -41,7 +41,7 @@ def load_orders(data_folder: str) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_customer(data_folder: str) -> pd.DataFrame:
+def load_customer(data_folder: str, pd=pd):
     print("Loading customer")
     data_path = data_folder + "/customer.parquet"
     df = pd.read_parquet(data_path)
@@ -50,7 +50,7 @@ def load_customer(data_folder: str) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_nation(data_folder: str) -> pd.DataFrame:
+def load_nation(data_folder: str, pd=pd):
     print("Loading nation")
     data_path = data_folder + "/nation.parquet"
     df = pd.read_parquet(data_path)
@@ -59,7 +59,7 @@ def load_nation(data_folder: str) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_region(data_folder: str) -> pd.DataFrame:
+def load_region(data_folder: str, pd=pd):
     print("Loading region")
     data_path = data_folder + "/region.parquet"
     df = pd.read_parquet(data_path)
@@ -68,7 +68,7 @@ def load_region(data_folder: str) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_supplier(data_folder: str) -> pd.DataFrame:
+def load_supplier(data_folder: str, pd=pd):
     print("Loading supplier")
     data_path = data_folder + "/supplier.parquet"
     df = pd.read_parquet(data_path)
@@ -77,7 +77,7 @@ def load_supplier(data_folder: str) -> pd.DataFrame:
 
 
 @functools.lru_cache
-def load_partsupp(data_folder: str) -> pd.DataFrame:
+def load_partsupp(data_folder: str, pd=pd):
     print("Loading partsupp")
     data_path = data_folder + "/partsupp.parquet"
     df = pd.read_parquet(data_path)
@@ -105,9 +105,7 @@ def collect_datasets(func: Callable):
     return func
 
 
-@timethis
-@collect_datasets
-def q01(lineitem: pd.DataFrame):
+def tpch_q01(lineitem, pd=pd):
     date = pd.Timestamp("1998-09-02")
     lineitem_filtered = lineitem.loc[
         :,
@@ -135,14 +133,16 @@ def q01(lineitem: pd.DataFrame):
         * (1 + lineitem_filtered.L_TAX)
     )
     gb = lineitem_filtered.groupby(["L_RETURNFLAG", "L_LINESTATUS"], as_index=False)[
-        "L_QUANTITY",
-        "L_EXTENDEDPRICE",
-        "DISC_PRICE",
-        "CHARGE",
-        "AVG_QTY",
-        "AVG_PRICE",
-        "L_DISCOUNT",
-        "L_ORDERKEY",
+        [
+            "L_QUANTITY",
+            "L_EXTENDEDPRICE",
+            "DISC_PRICE",
+            "CHARGE",
+            "AVG_QTY",
+            "AVG_PRICE",
+            "L_DISCOUNT",
+            "L_ORDERKEY",
+        ]
     ]
     total = gb.agg(
         {
@@ -157,12 +157,10 @@ def q01(lineitem: pd.DataFrame):
         }
     )
     total = total.sort_values(["L_RETURNFLAG", "L_LINESTATUS"])
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q02(part, partsupp, supplier, nation, region):
+def tpch_q02(part, partsupp, supplier, nation, region, pd=pd):
     nation_filtered = nation.loc[:, ["N_NATIONKEY", "N_NAME", "N_REGIONKEY"]]
     region_filtered = region[(region["R_NAME"] == "EUROPE")]
     region_filtered = region_filtered.loc[:, ["R_REGIONKEY"]]
@@ -264,12 +262,10 @@ def q02(part, partsupp, supplier, nation, region):
         by=["S_ACCTBAL", "N_NAME", "S_NAME", "P_PARTKEY"],
         ascending=[False, True, True, True],
     )
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q03(lineitem, orders, customer):
+def tpch_q03(lineitem, orders, customer, pd=pd):
     date = pd.Timestamp("1995-03-04")
     lineitem_filtered = lineitem.loc[
         :, ["L_ORDERKEY", "L_EXTENDEDPRICE", "L_DISCOUNT", "L_SHIPDATE"]
@@ -295,12 +291,10 @@ def q03(lineitem, orders, customer):
         .sort_values(["TMP"], ascending=False)
     )
     res = total.loc[:, ["L_ORDERKEY", "TMP", "O_ORDERDATE", "O_SHIPPRIORITY"]]
-    print(res.head(10))
+    return res.head(10)
 
 
-@timethis
-@collect_datasets
-def q04(lineitem, orders):
+def tpch_q04(lineitem, orders, pd=pd):
     date1 = pd.Timestamp("1993-11-01")
     date2 = pd.Timestamp("1993-08-01")
     lsel = lineitem.L_COMMITDATE < lineitem.L_RECEIPTDATE
@@ -313,12 +307,10 @@ def q04(lineitem, orders):
         .count()
         .sort_values(["O_ORDERPRIORITY"])
     )
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q05(lineitem, orders, customer, nation, region, supplier):
+def tpch_q05(lineitem, orders, customer, nation, region, supplier, pd=pd):
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     rsel = region.R_NAME == "ASIA"
@@ -335,12 +327,10 @@ def q05(lineitem, orders, customer, nation, region, supplier):
     jn5["TMP"] = jn5.L_EXTENDEDPRICE * (1.0 - jn5.L_DISCOUNT)
     gb = jn5.groupby("N_NAME", as_index=False, sort=False)["TMP"].sum()
     total = gb.sort_values("TMP", ascending=False)
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q06(lineitem):
+def tpch_q06(lineitem, pd=pd):
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     lineitem_filtered = lineitem.loc[
@@ -355,12 +345,10 @@ def q06(lineitem):
     )
     flineitem = lineitem_filtered[sel]
     total = (flineitem.L_EXTENDEDPRICE * flineitem.L_DISCOUNT).sum()
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q07(lineitem, supplier, orders, customer, nation):
+def tpch_q07(lineitem, supplier, orders, customer, nation, pd=pd):
     """This version is faster than q07_old. Keeping the old one for reference"""
     lineitem_filtered = lineitem[
         (lineitem["L_SHIPDATE"] >= pd.Timestamp("1995-01-01"))
@@ -444,12 +432,10 @@ def q07(lineitem, supplier, orders, customer, nation):
     total = total.sort_values(
         by=["SUPP_NATION", "CUST_NATION", "L_YEAR"], ascending=[True, True, True]
     )
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q08(part, lineitem, supplier, orders, customer, nation, region):
+def tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd=pd):
     part_filtered = part[(part["P_TYPE"] == "ECONOMY ANODIZED STEEL")]
     part_filtered = part_filtered.loc[:, ["P_PARTKEY"]]
     lineitem_filtered = lineitem.loc[:, ["L_PARTKEY", "L_SUPPKEY", "L_ORDERKEY"]]
@@ -508,12 +494,10 @@ def q08(part, lineitem, supplier, orders, customer, nation, region):
     total = total.groupby("O_YEAR", as_index=False).apply(udf)
     total.columns = ["O_YEAR", "MKT_SHARE"]
     total = total.sort_values(by=["O_YEAR"], ascending=[True])
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q09(lineitem, orders, part, nation, partsupp, supplier):
+def tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd=pd):
     psel = part.P_NAME.str.contains("ghost")
     fpart = part[psel]
     jn1 = lineitem.merge(fpart, left_on="L_PARTKEY", right_on="P_PARTKEY")
@@ -529,12 +513,10 @@ def q09(lineitem, orders, part, nation, partsupp, supplier):
     jn5["O_YEAR"] = jn5.O_ORDERDATE.dt.year
     gb = jn5.groupby(["N_NAME", "O_YEAR"], as_index=False, sort=False)["TMP"].sum()
     total = gb.sort_values(["N_NAME", "O_YEAR"], ascending=[True, False])
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q10(lineitem, orders, customer, nation):
+def tpch_q10(lineitem, orders, customer, nation, pd=pd):
     date1 = pd.Timestamp("1994-11-01")
     date2 = pd.Timestamp("1995-02-01")
     osel = (orders.O_ORDERDATE >= date1) & (orders.O_ORDERDATE < date2)
@@ -559,12 +541,10 @@ def q10(lineitem, orders, customer, nation):
         sort=False,
     )["TMP"].sum()
     total = gb.sort_values("TMP", ascending=False)
-    print(total.head(20))
+    return total.head(20)
 
 
-@timethis
-@collect_datasets
-def q11(partsupp, supplier, nation):
+def tpch_q11(partsupp, supplier, nation, pd=pd):
     partsupp_filtered = partsupp.loc[:, ["PS_PARTKEY", "PS_SUPPKEY"]]
     partsupp_filtered["TOTAL_COST"] = (
         partsupp["PS_SUPPLYCOST"] * partsupp["PS_AVAILQTY"]
@@ -586,12 +566,10 @@ def q11(partsupp, supplier, nation):
     )
     total = total[total["VALUE"] > sum_val]
     total = total.sort_values("VALUE", ascending=False)
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q12(lineitem, orders):
+def tpch_q12(lineitem, orders, pd=pd):
     date1 = pd.Timestamp("1994-01-01")
     date2 = pd.Timestamp("1995-01-01")
     sel = (
@@ -615,12 +593,10 @@ def q12(lineitem, orders):
     total = jn.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
     # total = total.reset_index()  # reset index to keep consistency with pandas
     total = total.sort_values("L_SHIPMODE")
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q13(customer, orders):
+def tpch_q13(customer, orders, pd=pd):
     customer_filtered = customer.loc[:, ["C_CUSTKEY"]]
     orders_filtered = orders[
         ~orders["O_COMMENT"].str.contains(r"special[\S|\s]*requests")
@@ -636,12 +612,10 @@ def q13(customer, orders):
     total = count_df.groupby(["C_COUNT"], as_index=False, sort=False).size()
     total.columns = ["C_COUNT", "CUSTDIST"]
     total = total.sort_values(by=["CUSTDIST", "C_COUNT"], ascending=[False, False])
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q14(lineitem, part):
+def tpch_q14(lineitem, part, pd=pd):
     startDate = pd.Timestamp("1994-03-01")
     endDate = pd.Timestamp("1994-04-01")
     p_type_like = "PROMO"
@@ -656,12 +630,10 @@ def q14(lineitem, part):
     jn = flineitem.merge(part_filtered, left_on="L_PARTKEY", right_on="P_PARTKEY")
     jn["TMP"] = jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)
     total = jn[jn.P_TYPE.str.startswith(p_type_like)].TMP.sum() * 100 / jn.TMP.sum()
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q15(lineitem, supplier):
+def tpch_q15(lineitem, supplier, pd=pd):
     lineitem_filtered = lineitem[
         (lineitem["L_SHIPDATE"] >= pd.Timestamp("1996-01-01"))
         & (
@@ -687,12 +659,10 @@ def q15(lineitem, supplier):
     total = total.loc[
         :, ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE", "TOTAL_REVENUE"]
     ]
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q16(part, partsupp, supplier):
+def tpch_q16(part, partsupp, supplier, pd=pd):
     part_filtered = part[
         (part["P_BRAND"] != "Brand#45")
         & (~part["P_TYPE"].str.contains("^MEDIUM POLISHED"))
@@ -722,12 +692,10 @@ def q16(part, partsupp, supplier):
         by=["SUPPLIER_CNT", "P_BRAND", "P_TYPE", "P_SIZE"],
         ascending=[False, True, True, True],
     )
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q17(lineitem, part):
+def tpch_q17(lineitem, part, pd=pd):
     left = lineitem.loc[:, ["L_PARTKEY", "L_QUANTITY", "L_EXTENDEDPRICE"]]
     right = part[((part["P_BRAND"] == "Brand#23") & (part["P_CONTAINER"] == "MED BOX"))]
     right = right.loc[:, ["P_PARTKEY"]]
@@ -748,12 +716,10 @@ def q17(lineitem, part):
     )
     total = total[total["L_QUANTITY"] < total["avg"]]
     total = pd.DataFrame({"avg_yearly": [total["L_EXTENDEDPRICE"].sum() / 7.0]})
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q18(lineitem, orders, customer):
+def tpch_q18(lineitem, orders, customer, pd=pd):
     gb1 = lineitem.groupby("L_ORDERKEY", as_index=False, sort=False)["L_QUANTITY"].sum()
     fgb1 = gb1[gb1.L_QUANTITY > 300]
     jn1 = fgb1.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
@@ -764,12 +730,10 @@ def q18(lineitem, orders, customer):
         sort=False,
     )["L_QUANTITY"].sum()
     total = gb2.sort_values(["O_TOTALPRICE", "O_ORDERDATE"], ascending=[False, True])
-    print(total.head(100))
+    return total.head(100)
 
 
-@timethis
-@collect_datasets
-def q19(lineitem, part):
+def tpch_q19(lineitem, part, pd=pd):
     Brand31 = "Brand#31"
     Brand43 = "Brand#43"
     SMBOX = "SM BOX"
@@ -841,12 +805,10 @@ def q19(lineitem, part):
     )
     jn = jn[jnsel]
     total = (jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)).sum()
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q20(lineitem, part, nation, partsupp, supplier):
+def tpch_q20(lineitem, part, nation, partsupp, supplier, pd=pd):
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     psel = part.P_NAME.str.startswith("azure")
@@ -870,12 +832,10 @@ def q20(lineitem, part, nation, partsupp, supplier):
     jn4 = fnation.merge(jn3, left_on="N_NATIONKEY", right_on="S_NATIONKEY")
     jn4 = jn4.loc[:, ["S_NAME", "S_ADDRESS"]]
     total = jn4.sort_values("S_NAME").drop_duplicates()
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q21(lineitem, orders, supplier, nation):
+def tpch_q21(lineitem, orders, supplier, nation, pd=pd):
     lineitem_filtered = lineitem.loc[
         :, ["L_ORDERKEY", "L_SUPPKEY", "L_RECEIPTDATE", "L_COMMITDATE"]
     ]
@@ -936,12 +896,10 @@ def q21(lineitem, orders, supplier, nation):
     total = total.groupby("S_NAME", as_index=False, sort=False).size()
     total.columns = ["S_NAME", "NUMWAIT"]
     total = total.sort_values(by=["NUMWAIT", "S_NAME"], ascending=[False, True])
-    print(total)
+    return total
 
 
-@timethis
-@collect_datasets
-def q22(customer, orders):
+def tpch_q22(customer, orders, pd=pd):
     customer_filtered = customer.loc[:, ["C_ACCTBAL", "C_CUSTKEY"]]
     customer_filtered["CNTRYCODE"] = customer["C_PHONE"].str.slice(0, 2)
     customer_filtered = customer_filtered[
@@ -971,7 +929,139 @@ def q22(customer, orders):
     )
     total = agg1.merge(agg2, on="CNTRYCODE", how="inner")
     total = total.sort_values(by=["CNTRYCODE"], ascending=[True])
-    print(total)
+    return total
+
+
+@timethis
+@collect_datasets
+def q01(lineitem):
+    print(tpch_q01(lineitem))
+
+
+@timethis
+@collect_datasets
+def q02(part, partsupp, supplier, nation, region):
+    print(tpch_q02(part, partsupp, supplier, nation, region))
+
+
+@timethis
+@collect_datasets
+def q03(lineitem, orders, customer):
+    print(tpch_q03(lineitem, orders, customer))
+
+
+@timethis
+@collect_datasets
+def q04(lineitem, orders):
+    print(tpch_q04(lineitem, orders))
+
+
+@timethis
+@collect_datasets
+def q05(lineitem, orders, customer, nation, region, supplier):
+    print(tpch_q05(lineitem, orders, customer, nation, region, supplier))
+
+
+@timethis
+@collect_datasets
+def q06(lineitem):
+    print(tpch_q06(lineitem))
+
+
+@timethis
+@collect_datasets
+def q07(lineitem, supplier, orders, customer, nation):
+    print(tpch_q07(lineitem, supplier, orders, customer, nation))
+
+
+@timethis
+@collect_datasets
+def q08(part, lineitem, supplier, orders, customer, nation, region):
+    print(tpch_q08(part, lineitem, supplier, orders, customer, nation, region))
+
+
+@timethis
+@collect_datasets
+def q09(lineitem, orders, part, nation, partsupp, supplier):
+    print(tpch_q09(lineitem, orders, part, nation, partsupp, supplier))
+
+
+@timethis
+@collect_datasets
+def q10(lineitem, orders, customer, nation):
+    print(tpch_q10(lineitem, orders, customer, nation))
+
+
+@timethis
+@collect_datasets
+def q11(partsupp, supplier, nation):
+    print(tpch_q11(partsupp, supplier, nation))
+
+
+@timethis
+@collect_datasets
+def q12(lineitem, orders):
+    print(tpch_q12(lineitem, orders))
+
+
+@timethis
+@collect_datasets
+def q13(customer, orders):
+    print(tpch_q13(customer, orders))
+
+
+@timethis
+@collect_datasets
+def q14(lineitem, part):
+    print(tpch_q14(lineitem, part))
+
+
+@timethis
+@collect_datasets
+def q15(lineitem, supplier):
+    print(tpch_q15(lineitem, supplier))
+
+
+@timethis
+@collect_datasets
+def q16(part, partsupp, supplier):
+    print(tpch_q16(part, partsupp, supplier))
+
+
+@timethis
+@collect_datasets
+def q17(lineitem, part):
+    print(tpch_q17(lineitem, part))
+
+
+@timethis
+@collect_datasets
+def q18(lineitem, orders, customer):
+    print(tpch_q18(lineitem, orders, customer))
+
+
+@timethis
+@collect_datasets
+def q19(lineitem, part):
+    print(tpch_q19(lineitem, part))
+
+
+@timethis
+@collect_datasets
+def q20(lineitem, part, nation, partsupp, supplier):
+    print(tpch_q20(lineitem, part, nation, partsupp, supplier))
+
+
+@timethis
+@collect_datasets
+def q21(lineitem, orders, supplier, nation):
+    print(tpch_q21(lineitem, orders, supplier, nation))
+
+
+@timethis
+@collect_datasets
+def q22(customer, orders):
+    print(tpch_q22(customer, orders))
 
 
 def run_queries(
@@ -1028,5 +1118,5 @@ def main():
 
 
 if __name__ == "__main__":
-    print(f"Running TPC-H against bodo.pandas v{pd.__version__}")
+    print(f"Running TPC-H against pd v{pd.__version__}")
     main()
