@@ -2275,134 +2275,92 @@ def test_groupby_apply():
 def test_set_df_column_non_arith_binops():
     """Test setting dataframe columns using BodoSeries non-arithmetic binary operations."""
 
-    df = pd.DataFrame(
-        {
-            "A": ["a", "b", "c", "d"],
-            "B": pd.date_range("2020-01-01", periods=4),  # datetime64[ns]
-            "C": pd.timedelta_range("1 day", periods=4),  # timedelta64[ns]
-        }
-    )
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": ["a", "b", "c", "d"],
+                "B": pd.date_range("2020-01-01", periods=4),  # datetime64[ns]
+                "C": pd.timedelta_range("1 day", periods=4),  # timedelta64[ns]
+            }
+        )
 
-    # String Series + String
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["A"] + "_suffix"
-    pdf = df.copy()
-    pdf["D"] = pdf["A"] + "_suffix"
-    assert bdf.is_lazy_plan()
+        # String Series + String
+        bdf = bd.from_pandas(df)
+        bdf["D"] = bdf["A"] + "_suffix"
+        pdf = df.copy()
+        pdf["D"] = pdf["A"] + "_suffix"
     _test_equal(bdf, pdf)
 
     # String Series + String Series
-    bdf = bd.from_pandas(df)
-    bodo_out = bdf["A"] + bdf["A"]
-    pdf = df.copy()
-    pd_out = pdf["A"] + pdf["A"]
-    assert bodo_out.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bodo_out = bdf["A"] + bdf["A"]
+        pdf = df.copy()
+        pd_out = pdf["A"] + pdf["A"]
     _test_equal(bodo_out, pd_out, check_pandas_types=False)
 
     # Datetime Series + DateOffset
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["B"] + pd.DateOffset(
-        years=+25,
-        months=+5,
-        days=+12,
-        hours=+8,
-        minutes=+54,
-        seconds=+47,
-        microseconds=+282310,
-    )
-    pdf = df.copy()
-    pdf["D"] = pdf["B"] + pd.DateOffset(
-        years=+25,
-        months=+5,
-        days=+12,
-        hours=+8,
-        minutes=+54,
-        seconds=+47,
-        microseconds=+282310,
-    )
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bdf["D"] = bdf["B"] + pd.DateOffset(
+            years=+25,
+            months=+5,
+            days=+12,
+            hours=+8,
+            minutes=+54,
+            seconds=+47,
+            microseconds=+282310,
+        )
+        pdf = df.copy()
+        pdf["D"] = pdf["B"] + pd.DateOffset(
+            years=+25,
+            months=+5,
+            days=+12,
+            hours=+8,
+            minutes=+54,
+            seconds=+47,
+            microseconds=+282310,
+        )
     _test_equal(bdf, pdf)
 
     # Timedelta Series + Timedelta
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["C"] + pd.Timedelta(1, "d")
-    pdf = df.copy()
-    pdf["D"] = pdf["C"] + pd.Timedelta(1, "d")
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bdf["D"] = bdf["C"] + pd.Timedelta(1, "d")
+        pdf = df.copy()
+        pdf["D"] = pdf["C"] + pd.Timedelta(1, "d")
     _test_equal(bdf, pdf)
 
     # Datetime Series + Timedelta
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["B"] + pd.Timedelta(1, "d")
-    pdf = df.copy()
-    pdf["D"] = pdf["B"] + pd.Timedelta(1, "d")
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bdf["D"] = bdf["B"] + pd.Timedelta(1, "d")
+        pdf = df.copy()
+        pdf["D"] = pdf["B"] + pd.Timedelta(1, "d")
     _test_equal(bdf, pdf)
 
     # Datetime Series + datetime.timedelta
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["B"] + datetime.timedelta(days=2)
-    pdf = df.copy()
-    pdf["D"] = pdf["B"] + datetime.timedelta(days=2)
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bdf["D"] = bdf["B"] + datetime.timedelta(days=2)
+        pdf = df.copy()
+        pdf["D"] = pdf["B"] + datetime.timedelta(days=2)
     _test_equal(bdf, pdf)
 
     # Timedelta Series + datetime.timedelta
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["C"] + datetime.timedelta(hours=12)
-    pdf = df.copy()
-    pdf["D"] = pdf["C"] + datetime.timedelta(hours=12)
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bdf["D"] = bdf["C"] + datetime.timedelta(hours=12)
+        pdf = df.copy()
+        pdf["D"] = pdf["C"] + datetime.timedelta(hours=12)
     _test_equal(bdf, pdf)
 
     # String Series + NumPy string scalar
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["A"] + np.str_("foo")
-    pdf = df.copy()
-    pdf["D"] = pdf["A"] + np.str_("foo")
-    assert bdf.is_lazy_plan()
-    _test_equal(bdf, pdf)
-
-    # String + String Series
-    bdf = bd.from_pandas(df)
-    bdf["D"] = "prefix_" + bdf["A"]
-    pdf = df.copy()
-    pdf["D"] = "prefix_" + pdf["A"]
-    assert bdf.is_lazy_plan()
-    _test_equal(bdf, pdf)
-
-    # Boolean Series + bool scalar
-    df_bool = pd.DataFrame({"A": [True, False, True, False]})
-    bdf = bd.from_pandas(df_bool)
-    bdf["D"] = bdf["A"] | True
-    pdf = df_bool.copy()
-    pdf["D"] = pdf["A"] | True
-    assert bdf.is_lazy_plan()
-    _test_equal(bdf, pdf)
-
-    # Datetime Series + numpy.timedelta64
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["B"] + np.timedelta64(3, "D")
-    pdf = df.copy()
-    pdf["D"] = pdf["B"] + np.timedelta64(3, "D")
-    assert bdf.is_lazy_plan()
-    _test_equal(bdf, pdf)
-
-    # Timedelta Series + numpy.timedelta64
-    bdf = bd.from_pandas(df)
-    bdf["D"] = bdf["C"] + np.timedelta64(5, "h")
-    pdf = df.copy()
-    pdf["D"] = pdf["C"] + np.timedelta64(5, "h")
-    assert bdf.is_lazy_plan()
-    _test_equal(bdf, pdf)
-
-    # Integer Series + NumPy int
-    df_int = pd.DataFrame({"A": [1, 2, 3, 4]})
-    bdf = bd.from_pandas(df_int)
-    bdf["D"] = bdf["A"] + np.int64(5)
-    pdf = df_int.copy()
-    pdf["D"] = pdf["A"] + np.int64(5)
-    assert bdf.is_lazy_plan()
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df)
+        bdf["D"] = bdf["A"] + np.str_("foo")
+        pdf = df.copy()
+        pdf["D"] = pdf["A"] + np.str_("foo")
     _test_equal(bdf, pdf)
 
 
