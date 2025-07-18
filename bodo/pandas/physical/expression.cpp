@@ -506,7 +506,8 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
 
     // Actually run the UDF.
     std::shared_ptr<table_info> udf_output =
-        runPythonScalarFunction(udf_input, result_type, scalar_func_data.args);
+        runPythonScalarFunction(udf_input, result_type, scalar_func_data.args,
+                                scalar_func_data.cfunc_ptr);
     return std::make_shared<ArrayExprResult>(udf_output->columns[0],
                                              udf_output->column_names[0]);
 }

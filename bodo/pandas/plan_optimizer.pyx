@@ -309,7 +309,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
-    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices) except +
+    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices, int64_t cfunc_ptr) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
@@ -565,9 +565,15 @@ cdef class PythonScalarFuncExpression(Expression):
     """Wrapper around DuckDB's BoundFunctionExpression for running Python functions.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, object args, vector[int] input_column_indices):
+    def __cinit__(self,
+        object out_schema,
+        LogicalOperator source,
+        object args,
+        vector[int] input_column_indices,
+        int64_t cfunc_ptr):
         self.out_schema = out_schema
-        self.c_expression = make_python_scalar_func_expr(source.c_logical_operator, out_schema, args, input_column_indices)
+        self.c_expression = make_python_scalar_func_expr(
+            source.c_logical_operator, out_schema, args, input_column_indices, cfunc_ptr)
 
     def __str__(self):
         return f"PythonScalarFuncExpression({self.out_schema})"

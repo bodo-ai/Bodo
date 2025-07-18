@@ -130,7 +130,8 @@ std::vector<int> get_projection_pushed_down_columns(
  */
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns);
+    PyObject *args, const std::vector<int> &selected_columns,
+    int64_t cfunc_ptr);
 
 /**
  * @brief Create an expression for a NULL value of given type.

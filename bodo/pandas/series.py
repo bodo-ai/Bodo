@@ -54,7 +54,6 @@ from bodo.pandas.plan import (
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
-    _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
     fallback_wrapper,
@@ -574,13 +573,25 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if engine == "bodo":
+            import ctypes
 
-            @bodo.jit(cache=True)
-            def map_wrapper(S):
-                return S.map(arg, na_action=na_action)
+            from numba import cfunc, types
+
+            # @bodo.jit(cache=True)
+            # def map_wrapper(S):
+            #     return S.map(arg, na_action=na_action)
+
+            # sig: table_info_ptr(table_info_ptr)
+            @cfunc(types.voidptr(types.voidptr))
+            def map_wrapper(cpp_table_ptr):
+                return cpp_table_ptr
+
+            map_wrapper_ptr = ctypes.c_void_p(map_wrapper.address).value
 
             try:
-                empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
+                # TODO: resolve return type of UDF
+                empty_series = self.head(0)
+                # empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
             except BodoError as e:
                 empty_series = None
                 error_msg = str(e)
@@ -596,7 +607,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
             if empty_series is not None:
                 return _get_series_python_func_plan(
-                    self._plan, empty_series, map_wrapper, (), {}, is_method=False
+                    self._plan, empty_series, map_wrapper_ptr, (), {}, type="cfunc"
                 )
             else:
                 msg = (
@@ -1622,11 +1633,12 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
 
 
 def _get_series_python_func_plan(
-    series_proj, empty_data, func_name, args, kwargs, is_method=True
+    series_proj, empty_data, func_name, args, kwargs, is_method=True, type=""
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
+
     # Optimize out trivial df["col"] projections to simplify plans
     if is_single_colref_projection(series_proj):
         source_data = series_proj.args[0]
@@ -1651,6 +1663,7 @@ def _get_series_python_func_plan(
             kwargs,  # kwargs
         ),
         (col_index,) + tuple(index_cols),
+        func_name if type == "cfunc" else 0,  # cfunc ptr
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))

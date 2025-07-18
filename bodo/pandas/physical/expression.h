@@ -820,4 +820,5 @@ class PhysicalUDFExpression : public PhysicalExpression {
    protected:
     BodoPythonScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
+    int64_t cfunc_ptr;
 };

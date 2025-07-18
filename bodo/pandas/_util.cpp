@@ -324,44 +324,50 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
     }
 }
 
+typedef int64_t (*udf_t)(int64_t);
+
 std::shared_ptr<table_info> runPythonScalarFunction(
     std::shared_ptr<table_info> input_batch,
-    const std::shared_ptr<arrow::DataType> &result_type, PyObject *args) {
+    const std::shared_ptr<arrow::DataType> &result_type, PyObject *args,
+    int64_t cfunc_ptr) {
     // Call bodo.pandas.utils.run_apply_udf() to run the UDF
 
     // Import the bodo.pandas.utils module
-    PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
-    if (!bodo_module) {
-        PyErr_Print();
-        throw std::runtime_error("Failed to import bodo.pandas.utils module");
-    }
+    // PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+    // if (!bodo_module) {
+    //     PyErr_Print();
+    //     throw std::runtime_error("Failed to import bodo.pandas.utils
+    //     module");
+    // }
 
     // Call the run_apply_udf() with the table_info pointer and UDF function
-    PyObject *result_type_py(arrow::py::wrap_data_type(result_type));
-    PyObject *result = PyObject_CallMethod(
-        bodo_module, "run_func_on_table", "LOO",
-        reinterpret_cast<int64_t>(new table_info(*input_batch)), result_type_py,
-        args);
-    if (!result) {
-        PyErr_Print();
-        Py_DECREF(bodo_module);
-        throw std::runtime_error("Error calling run_apply_udf");
-    }
+    // PyObject *result_type_py(arrow::py::wrap_data_type(result_type));
+    // PyObject *result = PyObject_CallMethod(
+    //     bodo_module, "run_func_on_table", "LOO",
+    //     reinterpret_cast<int64_t>(new table_info(*input_batch)),
+    //     result_type_py, args);
+    // if (!result) {
+    //     PyErr_Print();
+    //     Py_DECREF(bodo_module);
+    //     throw std::runtime_error("Error calling run_apply_udf");
+    // }
 
-    // Result should be a pointer to a C++ table_info
-    if (!PyLong_Check(result)) {
-        Py_DECREF(result);
-        Py_DECREF(bodo_module);
-        throw std::runtime_error("Expected an integer from run_apply_udf");
-    }
+    // // Result should be a pointer to a C++ table_info
+    // if (!PyLong_Check(result)) {
+    //     Py_DECREF(result);
+    //     Py_DECREF(bodo_module);
+    //     throw std::runtime_error("Expected an integer from run_apply_udf");
+    // }
 
-    int64_t table_info_ptr = PyLong_AsLongLong(result);
+    // int64_t table_info_ptr = PyLong_AsLongLong(result);
+    int64_t table_info_ptr = reinterpret_cast<udf_t>(cfunc_ptr)(
+        reinterpret_cast<int64_t>(new table_info(*input_batch)));
 
     std::shared_ptr<table_info> out_batch(
         reinterpret_cast<table_info *>(table_info_ptr));
 
-    Py_DECREF(bodo_module);
-    Py_DECREF(result);
+    // Py_DECREF(bodo_module);
+    // Py_DECREF(result);
 
     return out_batch;
 }
