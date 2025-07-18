@@ -840,6 +840,11 @@ class JoinState {
         const std::shared_ptr<table_info>& in_table,
         bool only_transpose_existing_on_key_cols = false);
 
+    /**
+     * @brief Returns whether this is a nested loop join or hash join.
+     */
+    bool IsNestedLoopJoin() const { return this->n_keys == 0; }
+
     // Operator ID.
     const int64_t op_id;
 
@@ -1417,6 +1422,19 @@ class NestedLoopJoinState : public JoinState {
     void ReportBuildStageMetrics(std::vector<MetricBase>& metrics_out) override;
     void ReportProbeStageMetrics(std::vector<MetricBase>& metrics_out) override;
 };
+
+/**
+ * @brief consume build table batch in streaming nested loop join
+ * Design doc:
+ * https://bodo.atlassian.net/wiki/spaces/B/pages/1373896721/Vectorized+Nested+Loop+Join+Design
+ *
+ * @param join_state join state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch
+ */
+bool nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
+                                          std::shared_ptr<table_info> in_table,
+                                          bool is_last);
 
 /**
  * @brief Python wrapper to consume build table batch in nested loop join

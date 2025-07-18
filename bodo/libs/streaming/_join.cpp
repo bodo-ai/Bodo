@@ -4016,7 +4016,7 @@ bool join_build_consume_batch_py_entry(JoinState* join_state_,
 
     join_state_->metrics.build_input_row_count += in_table->nrows();
     // nested loop join is required if there are no equality keys
-    if (join_state_->n_keys == 0) {
+    if (join_state_->IsNestedLoopJoin()) {
         is_last = nested_loop_join_build_consume_batch_py_entry(
             (NestedLoopJoinState*)join_state_, in_table, is_last);
     } else {
@@ -4085,7 +4085,7 @@ table_info* join_probe_consume_batch_py_entry(
         join_state_->metrics.probe_input_row_count += input_table->nrows();
 
         // nested loop join is required if there are no equality keys
-        if (join_state_->n_keys == 0) {
+        if (join_state_->IsNestedLoopJoin()) {
             is_last = nested_loop_join_probe_consume_batch(
                 (NestedLoopJoinState*)join_state_, std::move(input_table),
                 std::move(build_kept_cols), std::move(probe_kept_cols),
@@ -4259,7 +4259,7 @@ bool runtime_join_filter_py_entry(JoinState* join_state_, table_info* in_table_,
                    bodo_array_type::NULLABLE_INT_BOOL &&
                row_bitmask_arr->dtype == Bodo_CTypes::_BOOL);
 
-        if (join_state_->n_keys == 0) {
+        if (join_state_->IsNestedLoopJoin()) {
             // Filters are only supported for equi hash joins.
             return applied_any_filter;
         } else {
@@ -4290,7 +4290,7 @@ bool runtime_join_filter_py_entry(JoinState* join_state_, table_info* in_table_,
  */
 void delete_join_state(JoinState* join_state_) {
     // nested loop join is required if there are no equality keys
-    if (join_state_->n_keys == 0) {
+    if (join_state_->IsNestedLoopJoin()) {
         NestedLoopJoinState* join_state = (NestedLoopJoinState*)join_state_;
         delete join_state;
     } else {
