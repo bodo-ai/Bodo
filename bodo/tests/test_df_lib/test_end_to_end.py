@@ -744,13 +744,58 @@ def test_series_map(datapath, index_val, na_action):
     df.index = index_val[: len(df)]
 
     def func(x):
-        return str(x)
+        return "A" if pd.isna(x) else "B"
 
     bdf = bd.from_pandas(df)
     out_pd = df.A.map(func, na_action=na_action)
     out_bodo = bdf.A.map(func, na_action=na_action)
     assert out_bodo.is_lazy_plan()
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_series_map_non_jit(index_val):
+    """Test non-jittable UDFs in ser.map still work."""
+    df = pd.DataFrame(
+        {
+            "A": pd.array([None, None, 3, 7, 2] * 2, "Int64"),
+            "B": [None, None, "B1", "C1", "Abc"] * 2,
+            "C": pd.array([4, 5, 6, -1, 1] * 2, "Int64"),
+        }
+    )
+    df.index = index_val[: len(df)]
+
+    # Function with different return types,
+    # technically this function isn't allowed in Python mode
+    # either, but the branch is never executed due to the data
+    # recieved.
+    def func1(x):
+        if x > 10:
+            return "too-large"
+        else:
+            return x
+
+    def unknown_func(x):
+        return x + 10
+
+    # Calling a function that is not known to bodo.
+    def func2(x):
+        return unknown_func(x)
+
+    warn_msg = "Compiling user defined function failed "
+    bdf = bd.from_pandas(df)
+    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+        bdf2 = bdf.A.map(func1)
+    pdf = df.copy()
+    pdf2 = pdf.A.map(func1)
+    _test_equal(pdf2, bdf2, check_pandas_types=False)
+
+    bdf = bd.from_pandas(df)
+    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+        bdf2 = bdf.A.map(func2)
+    pdf = df.copy()
+    pdf2 = pdf.A.map(func2)
+
+    _test_equal(pdf2, bdf2, check_pandas_types=False)
 
 
 def test_set_df_column(datapath, index_val):
@@ -2270,6 +2315,81 @@ def test_groupby_apply():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_empty_duckdb_filter():
+    """Test for when duckdb generates an empty filter."""
+
+    lineitem = pd.DataFrame(
+        {
+            "L_QUANTITY": pd.array([5, 5, 5, 5, 5, 5, 5, 5, 5, 5], "Int32"),
+            "L_PARTKEY": pd.array([0, 0, 2, 0, 0, 2, 0, 0, 2, 0], "Int32"),
+        }
+    )
+
+    part = pd.DataFrame(
+        {
+            "P_PARTKEY": pd.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "Int32"),
+            "P_BRAND": pd.array([0, 0, 1, 2, 3, 0, 0, 1, 2, 3], "Int32"),
+        }
+    )
+
+    def impl(lineitem, part):
+        jn = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
+        jnsel = (jn.P_BRAND == 0) & (jn.L_QUANTITY >= 0) | (jn.P_BRAND == 2)
+        return jn[jnsel]
+
+    pd_out = impl(lineitem, part)
+    bodo_out = impl(bd.from_pandas(lineitem), bd.from_pandas(part))
+    assert bodo_out.is_lazy_plan()
+
+    _test_equal(
+        bodo_out,
+        pd_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_empty_aggregate_batches():
+    """Test for when duckdb generates an empty filter."""
+
+    lineitem = pd.DataFrame(
+        {
+            "L_QUANTITY": pd.array(list(range(12000)), "Int32"),
+            "L_PARTKEY": pd.array([0, 1, 2, 0, 6, 2, 0, 8, 2, 0] * 1200, "Int32"),
+            "L_EXTENDEDPRICE": pd.array(
+                [5, 1, 2, 7, 6, 2, 9, 8, 2, 11] * 1200, "Float64"
+            ),
+            "L_DISCOUNT": pd.array(
+                [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] * 1200, "Float64"
+            ),
+        }
+    )
+
+    part = pd.DataFrame(
+        {
+            "P_PARTKEY": pd.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "Int32"),
+            "P_BRAND": pd.array([0, 0, 1, 2, 3, 0, 0, 1, 2, 3], "Int32"),
+        }
+    )
+
+    quantity_ranges = [(-1, -1), (0, 12000), (0, 2000), (2000, 4000), (9000, 12000)]
+    for test_range in quantity_ranges:
+
+        def impl(lineitem, part, test_range):
+            flineitem = lineitem[
+                (lineitem.L_QUANTITY >= test_range[0])
+                & (lineitem.L_QUANTITY < test_range[1])
+            ]
+            jn = flineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
+            jn["TMP"] = jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)
+            return jn.TMP.sum()
+
+        pd_out = impl(lineitem, part, test_range)
+        bodo_out = impl(bd.from_pandas(lineitem), bd.from_pandas(part), test_range)
+        assert np.isclose(bodo_out, pd_out, rtol=1e-6)
 
 
 def test_set_df_column_non_arith_binops():

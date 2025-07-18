@@ -55,7 +55,7 @@ class PipelineBuilder {
 
    public:
     explicit PipelineBuilder(std::shared_ptr<PhysicalSource> _source)
-        : source(std::move(_source)) {};
+        : source(std::move(_source)) {}
 
     // Add a physical operator to the pipeline
     void AddOperator(std::shared_ptr<PhysicalSourceSink> op) {

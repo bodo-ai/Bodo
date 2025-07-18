@@ -84,7 +84,13 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
                           std::vector<duckdb::ColumnBinding>& source_cols,
                           int64_t limit = -1, int64_t offset = -1)
         : PhysicalSort(logical_order.orders, input_schema, source_cols, limit,
-                       offset) {}
+                       offset) {
+        if (!logical_order.projection_map.empty()) {
+            throw std::runtime_error(
+                "PhysicalSort from LogicalOrder with non-empty projection map "
+                "unimplemented.");
+        }
+    }
 
     explicit PhysicalSort(duckdb::LogicalTopN& logical_topn,
                           std::shared_ptr<bodo::Schema> input_schema,
