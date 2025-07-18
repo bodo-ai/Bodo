@@ -540,7 +540,7 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     PyObject *args, const std::vector<int> &selected_columns,
-    int64_t cfunc_ptr) {
+    table_udf_t cfunc_ptr) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);

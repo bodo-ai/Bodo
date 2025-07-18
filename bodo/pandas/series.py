@@ -631,16 +631,34 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if engine == "bodo":
             import ctypes
 
-            from numba import cfunc, types
+            from bodo.hiframes.pd_index_ext import init_range_index
+            from bodo.hiframes.pd_series_ext import get_series_data, init_series
+            from bodo.libs.array import (
+                arr_info_list_to_table,
+                array_from_cpp_table,
+                array_to_info,
+                delete_table,
+                table_type,
+            )
 
-            # @bodo.jit(cache=True)
-            # def map_wrapper(S):
-            #     return S.map(arg, na_action=na_action)
+            empty_series = self.head(0)
 
-            # sig: table_info_ptr(table_info_ptr)
-            @cfunc(types.voidptr(types.voidptr))
-            def map_wrapper(cpp_table_ptr):
-                return cpp_table_ptr
+            @bodo.cfunc(table_type(table_type))
+            def map_wrapper(in_cpp_table):
+                # Convert cpp_table to SeriesType
+                series_arr_type = get_series_data(empty_series)
+                series_data = array_from_cpp_table(in_cpp_table, 0, series_arr_type)
+                index = init_range_index(0, len(series_data), 1, None)
+                series = init_series(series_data, index)
+                delete_table(in_cpp_table)
+
+                # Apply map on Series
+                out_series = series.map(arg, na_action=na_action)
+
+                # Convert output series to cpp table
+                out_arr = array_to_info(get_series_data(out_series))
+                out_cpp_table = arr_info_list_to_table([out_arr])
+                return out_cpp_table
 
             map_wrapper_ptr = ctypes.c_void_p(map_wrapper.address).value
 

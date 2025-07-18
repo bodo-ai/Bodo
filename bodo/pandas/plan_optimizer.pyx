@@ -9,7 +9,7 @@ from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 from libcpp cimport bool as c_bool
 import operator
-from libc.stdint cimport int64_t, uint64_t
+from libc.stdint cimport int64_t, uint64_t, uintptr_t
 import pandas as pd
 import pyarrow.parquet as pq
 
@@ -297,6 +297,9 @@ cdef extern from "duckdb/planner/operator/logical_copy_to_file.hpp" namespace "d
     cdef cppclass CLogicalCopyToFile" duckdb::LogicalCopyToFile"(CLogicalOperator):
         pass
 
+cdef extern from "_util.h":
+    cdef struct table_info
+    ctypedef table_info *(*table_udf_t)(table_info *)
 
 cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows) except +
@@ -309,7 +312,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
-    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices, int64_t cfunc_ptr) except +
+    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices, table_udf_t cfunc_ptr) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
@@ -570,7 +573,9 @@ cdef class PythonScalarFuncExpression(Expression):
         LogicalOperator source,
         object args,
         vector[int] input_column_indices,
-        int64_t cfunc_ptr):
+        uintptr_t cfunc_addr):
+        cdef table_udf_t cfunc_ptr = <table_udf_t>cfunc_addr
+
         self.out_schema = out_schema
         self.c_expression = make_python_scalar_func_expr(
             source.c_logical_operator, out_schema, args, input_column_indices, cfunc_ptr)

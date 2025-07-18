@@ -19,6 +19,8 @@
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/table_filter.hpp"
 
+typedef table_info *(*table_udf_t)(table_info *);
+
 /**
  * @brief Convert duckdb value to C++ variant.
  *
@@ -123,7 +125,7 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     BodoPythonScalarFunctionData(PyObject *args,
                                  std::shared_ptr<arrow::Schema> out_schema,
-                                 int64_t cfunc_ptr)
+                                 table_udf_t cfunc_ptr)
         : args(args), out_schema(std::move(out_schema)), cfunc_ptr(cfunc_ptr) {
         if (args)
             Py_INCREF(args);
@@ -148,6 +150,7 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
             Py_XDECREF(args);
             args = other.args;
             out_schema = other.out_schema;
+            cfunc_ptr = other.cfunc_ptr;
         }
         return *this;
     }
@@ -164,7 +167,7 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
 
     PyObject *args;  // If present then a UDF.
     std::shared_ptr<arrow::Schema> out_schema;
-    int64_t cfunc_ptr;
+    table_udf_t cfunc_ptr;
 };
 
 /**
@@ -204,7 +207,7 @@ struct BodoAggFunctionData : public duckdb::FunctionData {
 std::shared_ptr<table_info> runPythonScalarFunction(
     std::shared_ptr<table_info> input_batch,
     const std::shared_ptr<arrow::DataType> &result_type, PyObject *args,
-    int64_t cfunc_ptr);
+    table_udf_t cfunc_ptr);
 
 /**
  * @brief Convert duckdb table filters to pyiceberg expressions.
