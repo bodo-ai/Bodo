@@ -414,6 +414,38 @@ def _jit(signature_or_function=None, pipeline_class=None, **options):
     return numba_jit
 
 
+def cfunc(signature_or_function=None, pipeline_class=None, **options):
+    _init_extensions()
+
+    # set nopython by default
+    if "nopython" not in options:
+        options["nopython"] = True
+
+    # options['parallel'] = True
+    options["parallel"] = {
+        "comprehension": True,
+        "setitem": False,  # FIXME: support parallel setitem
+        # setting the new inplace_binop option to False until it is tested and handled
+        # TODO: evaluate and enable
+        "inplace_binop": False,
+        "reduction": True,
+        "numpy": True,
+        # parallelizing stencils is not supported yet
+        "stencil": False,
+        "fusion": True,
+    }
+
+    pipeline_class = (
+        bodo.compiler.BodoCompilerSeq if pipeline_class is None else pipeline_class
+    )
+
+    numba_cfunc = numba.cfunc(
+        signature_or_function, pipeline_class=pipeline_class, **options
+    )
+
+    return numba_cfunc
+
+
 def _init_extensions():
     """initialize Numba extensions for supported packages that are imported.
     This reduces Bodo import time since we don't have to try to import unused packages.

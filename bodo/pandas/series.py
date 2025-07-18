@@ -56,7 +56,6 @@ from bodo.pandas.plan import (
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
-    _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
     fallback_wrapper,
@@ -630,13 +629,42 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if engine == "bodo":
+            import ctypes
 
-            @bodo.jit(cache=True)
-            def map_wrapper(S):
-                return S.map(arg, na_action=na_action)
+            from bodo.hiframes.pd_index_ext import init_range_index
+            from bodo.hiframes.pd_series_ext import get_series_data, init_series
+            from bodo.libs.array import (
+                arr_info_list_to_table,
+                array_from_cpp_table,
+                array_to_info,
+                delete_table,
+                table_type,
+            )
+
+            empty_series = self.head(0)
+
+            @bodo.cfunc(table_type(table_type))
+            def map_wrapper(in_cpp_table):
+                # Convert cpp_table to SeriesType
+                series_arr_type = get_series_data(empty_series)
+                series_data = array_from_cpp_table(in_cpp_table, 0, series_arr_type)
+                index = init_range_index(0, len(series_data), 1, None)
+                series = init_series(series_data, index)
+                delete_table(in_cpp_table)
+
+                # Apply map on Series
+                out_series = series.map(arg, na_action=na_action)
+
+                # Convert output series to cpp table
+                out_arr = array_to_info(get_series_data(out_series))
+                out_cpp_table = arr_info_list_to_table([out_arr])
+                return out_cpp_table
+
+            decorator = bodo.cfunc(table_type(table_type))
 
             try:
-                empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
+                # Compile the Cfunc and run the cfunc to catch runtime errors.
+                map_cfunc = decorator(map_wrapper)
             except BodoError as e:
                 empty_series = None
                 error_msg = str(e)
@@ -650,9 +678,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 empty_series = None
                 error_msg = "Jit could not determine pyarrow return type from UDF."
 
+            map_wrapper_ptr = ctypes.c_void_p(map_cfunc.address).value
             if empty_series is not None:
                 return _get_series_python_func_plan(
-                    self._plan, empty_series, map_wrapper, (), {}, is_method=False
+                    self._plan, empty_series, map_wrapper_ptr, (), {}, type="cfunc"
                 )
             else:
                 msg = (
@@ -1711,11 +1740,12 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
 
 
 def _get_series_python_func_plan(
-    series_proj, empty_data, func_name, args, kwargs, is_method=True
+    series_proj, empty_data, func_name, args, kwargs, is_method=True, type=""
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
+
     # Optimize out trivial df["col"] projections to simplify plans
     if is_single_colref_projection(series_proj):
         source_data = series_proj.args[0]
@@ -1740,6 +1770,7 @@ def _get_series_python_func_plan(
             kwargs,  # kwargs
         ),
         (col_index,) + tuple(index_cols),
+        func_name if type == "cfunc" else 0,  # cfunc ptr
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
