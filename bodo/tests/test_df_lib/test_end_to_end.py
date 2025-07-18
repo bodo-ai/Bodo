@@ -825,7 +825,7 @@ def test_set_df_column(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
     # Multiple projections, new column
-    with assert_executed_plan_count(1):
+    with assert_executed_plan_count(0):
         bdf = bd.from_pandas(df)
         bdf["D"] = bdf["B"].str.strip().map(lambda x: x + "1")
         pdf = df.copy()
@@ -833,7 +833,7 @@ def test_set_df_column(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
     # Multiple projections, existing column
-    with assert_executed_plan_count(1):
+    with assert_executed_plan_count(0):
         bdf = bd.from_pandas(df)
         bdf["B"] = bdf["B"].str.strip().map(lambda x: x + "1")
         pdf = df.copy()
@@ -1140,7 +1140,8 @@ def test_project_after_filter(datapath):
     )
 
 
-def test_merge():
+@pytest.mark.parametrize("how", ["inner", "left", "right", "outer"])
+def test_merge(how):
     """Simple test for DataFrame merge."""
 
     # Make sure bdf3 is unevaluated in the process.
@@ -1158,12 +1159,43 @@ def test_merge():
                 "Dog": ["a1", "b222", "c33"],
             },
         )
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+
+        df3 = df1.merge(df2, how=how, left_on=["A"], right_on=["Cat"])
+        bdf3 = bdf1.merge(bdf2, how=how, left_on=["A"], right_on=["Cat"])
+
+    _test_equal(
+        bdf3.copy(),
+        df3,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_merge_cross():
+    """Simple test for DataFrame merge with cross join."""
+    with assert_executed_plan_count(0):
+        df1 = pd.DataFrame(
+            {
+                "B": ["a1", "b11", "c111", "d1111"],
+                "E": [1.1, 2.2, 3.3, 4.4],
+                "A": pd.array([2, 2, 3, 4], "Int64"),
+            },
+        )
+        df2 = pd.DataFrame(
+            {
+                "Cat": pd.array([2, 3, 8, 1], "Int64"),
+                "Dog": ["a1", "b222", "c33", "d444"],
+            },
+        )
 
         bdf1 = bd.from_pandas(df1)
         bdf2 = bd.from_pandas(df2)
 
-        df3 = df1.merge(df2, how="inner", left_on=["A"], right_on=["Cat"])
-        bdf3 = bdf1.merge(bdf2, how="inner", left_on=["A"], right_on=["Cat"])
+        df3 = df1.merge(df2, how="cross")
+        bdf3 = bdf1.merge(bdf2, how="cross")
 
     _test_equal(
         bdf3.copy(),
@@ -2025,7 +2057,7 @@ def test_series_min_max_unsupported_types():
 def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
     n_cols = 6
-    expected_executions = 3 if method == "std" else 1
+    expected_executions = 2 if method == "std" else 1
     with assert_executed_plan_count(n_cols * expected_executions):
         n = 10000
         df = pd.DataFrame(
@@ -2103,7 +2135,7 @@ def test_df_state_change():
     """Make sure dataframe state change doesn't lead to stale result id in plan
     execution"""
 
-    with assert_executed_plan_count(1):
+    with assert_executed_plan_count(0):
 
         @bodo.jit(spawn=True)
         def get_df(df):
@@ -2235,7 +2267,7 @@ def test_series_describe():
     bdf = bd.from_pandas(df)
     for c in df.columns:
         with assert_executed_plan_count(
-            0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 4
+            0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 3
         ):
             describe_pd = df[c].describe()
             describe_bodo = bdf[c].describe()

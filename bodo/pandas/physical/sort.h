@@ -17,7 +17,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols,
                           int64_t limit = -1, int64_t offset = -1)
-        : output_schema(input_schema), limit(limit), offset(offset) {
+        : output_schema(input_schema) {
         std::vector<int64_t> ascending;
         std::vector<int64_t> na_last;
         std::vector<uint64_t> keys;
@@ -168,5 +168,4 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     std::vector<int64_t> inverse_col_inds;
     const std::shared_ptr<bodo::Schema> output_schema;
     std::unique_ptr<StreamSortState> stream_sorter;
-    const int64_t limit, offset;
 };
