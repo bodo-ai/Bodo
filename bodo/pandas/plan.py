@@ -846,10 +846,7 @@ class PlanExecutionCounter:
 
 @contextmanager
 def assert_executed_plan_count(n: int):
-    try:
-        start = PlanExecutionCounter.get()
-        yield
-        end = PlanExecutionCounter.get()
-        assert end - start == n, f"Expected {n} plan executions, but got {end - start}"
-    finally:
-        PlanExecutionCounter.reset()
+    start = PlanExecutionCounter.get()
+    yield
+    end = PlanExecutionCounter.get()
+    assert end - start == n, f"Expected {n} plan executions, but got {end - start}"

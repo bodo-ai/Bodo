@@ -244,7 +244,7 @@ def test_single_fallback_warning_emitted():
 
 
 def test_execution_counter():
-    """Test that plan execution warning is correctly raised."""
+    """Test execution counter, simulate application cases of execution counter to unit tests."""
 
     from bodo.pandas.plan import PlanExecutionCounter, assert_executed_plan_count
 
@@ -262,3 +262,13 @@ def test_execution_counter():
         for plan in plans:
             assert plan.is_lazy_plan()
             plan.execute_plan()
+
+    try:
+        with assert_executed_plan_count(1):
+            pass
+    except AssertionError as e:
+        assert (
+            str(e) == "Expected 1 plan executions, but got 0"
+        )  # Created an assertion but not the expected error message.
+    else:
+        assert False  # Shouldn't have created an assertion but didn't.
