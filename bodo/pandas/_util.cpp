@@ -6,6 +6,7 @@
 #include <arrow/result.h>
 #include <arrow/scalar.h>
 #include <iostream>
+#include <sstream>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
@@ -330,20 +331,12 @@ std::shared_ptr<table_info> runPythonScalarFunction(
     const std::shared_ptr<arrow::DataType> &result_type, PyObject *args,
     table_udf_t cfunc_ptr) {
     if (cfunc_ptr != nullptr) {
-        std::cout << "calling cfunc " << std::endl;
         table_info *in_table = new table_info(*input_batch);
-        std::cout << in_table << std::endl;
         table_info *out_table = cfunc_ptr(in_table);
-        std::cout << "done calling cfunc got table " << out_table << std::endl;
-        std::cout << "out table columns: " << out_table->columns.size()
-                  << std::endl;
-        std::cout << "out table columns: " << out_table->columns[0]->length
-                  << std::endl;
-
-        std::stringstream ss;
-        DEBUG_PrintTable(ss, out_table);
 
         std::shared_ptr<table_info> out_batch(out_table);
+        out_batch->column_names = input_batch->column_names;
+        out_batch->metadata = input_batch->metadata;
 
         return out_batch;
     }
