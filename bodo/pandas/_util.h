@@ -2,6 +2,8 @@
 
 #include <Python.h>
 #include <arrow/api.h>
+#include <object.h>
+#include <pytypedefs.h>
 #include <cstdint>
 #include <map>
 #include <variant>
@@ -125,25 +127,27 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     BodoPythonScalarFunctionData(PyObject *args,
                                  std::shared_ptr<arrow::Schema> out_schema,
-                                 table_udf_t cfunc_ptr)
-        : args(args), out_schema(std::move(out_schema)), cfunc_ptr(cfunc_ptr) {
+                                 PyObject *cfunc)
+        : args(args), out_schema(std::move(out_schema)), cfunc(cfunc) {
         if (args)
             Py_INCREF(args);
+        if (cfunc)
+            Py_INCREF(cfunc);
     }
     BodoPythonScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema)
-        : args(nullptr),
-          out_schema(std::move(out_schema)),
-          cfunc_ptr(nullptr) {}
+        : args(nullptr), out_schema(std::move(out_schema)), cfunc(nullptr) {}
     ~BodoPythonScalarFunctionData() override {
         if (args)
             Py_DECREF(args);
+        if (cfunc)
+            Py_DECREF(cfunc);
     }
     BodoPythonScalarFunctionData(const BodoPythonScalarFunctionData &other)
-        : args(other.args),
-          out_schema(other.out_schema),
-          cfunc_ptr(other.cfunc_ptr) {
+        : args(other.args), out_schema(other.out_schema), cfunc(other.cfunc) {
         if (args)
             Py_INCREF(args);
+        if (cfunc)
+            Py_INCREF(cfunc);
     }
     BodoPythonScalarFunctionData &operator=(
         const BodoPythonScalarFunctionData &other) {
@@ -152,7 +156,9 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
             Py_XDECREF(args);
             args = other.args;
             out_schema = other.out_schema;
-            cfunc_ptr = other.cfunc_ptr;
+            Py_XINCREF(other.cfunc);
+            Py_XDECREF(cfunc);
+            cfunc = other.cfunc;
         }
         return *this;
     }
@@ -160,16 +166,16 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     bool Equals(const FunctionData &other_p) const override {
         const BodoPythonScalarFunctionData &other =
             other_p.Cast<BodoPythonScalarFunctionData>();
-        return (other.args == this->args && other.cfunc_ptr == this->cfunc_ptr);
+        return (other.args == this->args && other.cfunc == this->cfunc);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
         return duckdb::make_uniq<BodoPythonScalarFunctionData>(
-            this->args, out_schema, cfunc_ptr);
+            this->args, out_schema, cfunc);
     }
 
     PyObject *args;  // If present then a UDF.
     std::shared_ptr<arrow::Schema> out_schema;
-    table_udf_t cfunc_ptr;
+    PyObject *cfunc;
 };
 
 /**

@@ -539,8 +539,7 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
 
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns,
-    table_udf_t cfunc_ptr) {
+    PyObject *args, const std::vector<int> &selected_columns, PyObject *cfunc) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
@@ -556,7 +555,7 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
         "bodo_udf", source->types, out_type, RunFunction);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoPythonScalarFunctionData>(args, out_schema,
-                                                        cfunc_ptr);
+                                                        cfunc);
 
     std::vector<duckdb::ColumnBinding> source_cols =
         source->GetColumnBindings();

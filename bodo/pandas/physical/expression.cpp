@@ -1,4 +1,5 @@
 #include "expression.h"
+#include <iostream>
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr) {
@@ -505,9 +506,8 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
         child_results, column_names, input_batch->metadata);
 
     // Actually run the UDF.
-    std::shared_ptr<table_info> udf_output =
-        runPythonScalarFunction(udf_input, result_type, scalar_func_data.args,
-                                scalar_func_data.cfunc_ptr);
+    std::shared_ptr<table_info> udf_output = runPythonScalarFunction(
+        udf_input, result_type, scalar_func_data.args, this->cfunc_ptr);
     return std::make_shared<ArrayExprResult>(udf_output->columns[0],
                                              udf_output->column_names[0]);
 }

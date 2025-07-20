@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ctypes
 import datetime
 import inspect
 import itertools
@@ -704,10 +703,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
             if empty_series is not None:
                 # Compile the cfunc and get pointer
-                map_cfunc = cfunc_deco(map_cfunc_wrapper)
-                map_wrapper_ptr = ctypes.c_void_p(map_cfunc.address).value
                 return _get_series_python_func_plan(
-                    self._plan, empty_series, map_wrapper_ptr, (), {}, type="cfunc"
+                    self._plan,
+                    empty_series,
+                    (map_cfunc_wrapper, cfunc_deco),
+                    (),
+                    {},
+                    type="cfunc",
                 )
             else:
                 msg = (
@@ -1766,7 +1768,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
 
 
 def _get_series_python_func_plan(
-    series_proj, empty_data, func_name, args, kwargs, is_method=True, type=""
+    series_proj, empty_data, func, args, kwargs, is_method=True, type=""
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
@@ -1789,14 +1791,14 @@ def _get_series_python_func_plan(
         empty_data,
         source_data,
         (
-            func_name,
+            func,
             True,  # is_series
             is_method,  # is_method
             args,  # args
             kwargs,  # kwargs
         ),
         (col_index,) + tuple(index_cols),
-        func_name if type == "cfunc" else 0,  # cfunc ptr
+        func if type == "cfunc" else None,  # cfunc ptr
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
