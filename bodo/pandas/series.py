@@ -1646,10 +1646,7 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return PythonScalarFuncExpression(
-            empty_data,
-            plan,
-            expr.args[1],
-            (idx,) + tuple(index_cols),
+            empty_data, plan, expr.args[1], (idx,) + tuple(index_cols), expr.cfunc
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -1764,6 +1761,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
             {},  # kwargs
         ),
         (0,) + index_cols,
+        None,  # cfunc
     )
 
 
