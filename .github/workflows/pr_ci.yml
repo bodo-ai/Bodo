@@ -158,10 +158,14 @@ jobs:
 
   # 5) Collect and combine any results from runs
   collect-results:
-    needs: [pr-ci]
+    needs:
+      - pr-ci
+      - spawn-ci
+      - df-lib-ci
+      - java-ci
     name: Collect Results
     runs-on: ubuntu-latest
-    if: success() || failure()
+    if: always()
     steps:
       - name: Setup Python
         uses: actions/setup-python@v5
