@@ -338,6 +338,7 @@ cdef extern from "_plan.h" nogil:
     cdef object cpp_table_to_pyarrow_array(int64_t cpp_table) except +
     cdef c_string cpp_table_get_first_field_name(int64_t cpp_table) except +
     cdef object cpp_table_to_pyarrow(int64_t cpp_table, c_bool delete_cpp_table) except +
+    cdef void cpp_table_delete(int64_t cpp_table) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -898,10 +899,13 @@ cpdef cpp_table_to_arrow(cpp_table, delete_cpp_table=True):
     return cpp_table_to_pyarrow(cpp_table, delete_cpp_table)
 
 
-cpdef cpp_table_to_arrow_array(cpp_table):
+cpdef cpp_table_to_arrow_array(cpp_table, delete_cpp_table=True):
     """Convert the first column of C++ table to Arrow array and column name.
     """
-    return cpp_table_to_pyarrow_array(cpp_table), cpp_table_get_first_field_name(cpp_table).decode()
+    out = cpp_table_to_pyarrow_array(cpp_table), cpp_table_get_first_field_name(cpp_table).decode()
+    if delete_cpp_table:
+        cpp_table_delete(cpp_table)
+    return out
 
 
 cpdef py_optimize_plan(object plan):

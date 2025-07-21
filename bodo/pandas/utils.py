@@ -113,7 +113,7 @@ def cpp_table_to_series(
         as_df = cpp_table_to_df(cpp_table, arrow_schema, use_arrow_dtypes, delete_input)
         return as_df.iloc[:, 0]
 
-    arrow_arr, name = plan_optimizer.cpp_table_to_arrow_array(cpp_table)
+    arrow_arr, name = plan_optimizer.cpp_table_to_arrow_array(cpp_table, delete_input)
     arrow_type = arrow_arr.type if arrow_schema is None else arrow_schema[0].type
 
     return _arrow_array_to_pd(arrow_arr, arrow_type, use_arrow_dtypes, name=name)

@@ -492,3 +492,10 @@ PyObject *cpp_table_to_pyarrow_array(int64_t cpp_table);
  * @return std::string name of the first field
  */
 std::string cpp_table_get_first_field_name(int64_t cpp_table);
+
+/**
+ * @brief Delete a Bodo C++ table pointer.
+ *
+ * @param cpp_table C++ table pointer cast to int64_t
+ */
+void cpp_table_delete(int64_t cpp_table);

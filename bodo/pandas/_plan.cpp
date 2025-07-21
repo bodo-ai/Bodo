@@ -1205,5 +1205,10 @@ std::string cpp_table_get_first_field_name(int64_t cpp_table) {
     return (table->column_names.size() > 0) ? table->column_names[0] : "";
 }
 
+void cpp_table_delete(int64_t cpp_table) {
+    table_info *table = reinterpret_cast<table_info *>(cpp_table);
+    delete table;
+}
+
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN
