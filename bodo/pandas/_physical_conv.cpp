@@ -15,14 +15,23 @@
 #include "physical/sample.h"
 #include "physical/sort.h"
 #include "physical/union_all.h"
-#include "physical/write_parquet.h"
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
     // operators
     std::vector<int> selected_columns;
-    for (auto& ci : op.GetColumnIds()) {
-        selected_columns.push_back(ci.GetPrimaryIndex());
+
+    // DuckDB sets projection_ids when there are columns used in pushed down
+    // filters that are not used anywhere else in the query.
+    auto& column_ids = op.GetColumnIds();
+    if (!op.projection_ids.empty()) {
+        for (const auto& col : op.projection_ids) {
+            selected_columns.push_back(column_ids[col].GetPrimaryIndex());
+        }
+    } else {
+        for (auto& ci : column_ids) {
+            selected_columns.push_back(ci.GetPrimaryIndex());
+        }
     }
 
     auto physical_op =
@@ -59,6 +68,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
         getColRefMap(source_cols);
 
+    // Duckdb can produce empty filters.
+    if (op.expressions.size() == 0) {
+        return;
+    }
+
     std::shared_ptr<PhysicalExpression> physExprTree =
         buildPhysicalExprTree(op.expressions[0], col_ref_map);
     for (size_t i = 1; i < op.expressions.size(); ++i) {
@@ -70,7 +84,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
                 duckdb::ExpressionType::CONJUNCTION_AND));
     }
     std::shared_ptr<PhysicalFilter> physical_op =
-        std::make_shared<PhysicalFilter>(physExprTree, in_table_schema);
+        std::make_shared<PhysicalFilter>(op, physExprTree, in_table_schema);
     this->active_pipeline->AddOperator(physical_op);
 }
 
@@ -182,6 +196,36 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
 
     auto physical_join = std::make_shared<PhysicalJoin>(
         op, op.conditions, build_table_schema, probe_table_schema);
+
+    build_pipelines.push_back(
+        rhs_builder.active_pipeline->Build(physical_join));
+    // Build pipelines need to execute before probe pipeline (recursively
+    // handles multiple joins)
+    this->finished_pipelines.insert(this->finished_pipelines.begin(),
+                                    build_pipelines.begin(),
+                                    build_pipelines.end());
+
+    this->active_pipeline->AddOperator(physical_join);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
+    // Same as LogicalComparisonJoin, but without conditions.
+
+    // Create pipelines for the build side of the join (right child)
+    PhysicalPlanBuilder rhs_builder;
+    rhs_builder.Visit(*op.children[1]);
+    std::shared_ptr<bodo::Schema> build_table_schema =
+        rhs_builder.active_pipeline->getPrevOpOutputSchema();
+    std::vector<std::shared_ptr<Pipeline>> build_pipelines =
+        std::move(rhs_builder.finished_pipelines);
+
+    // Create pipelines for the probe side of the join (left child)
+    this->Visit(*op.children[0]);
+    std::shared_ptr<bodo::Schema> probe_table_schema =
+        this->active_pipeline->getPrevOpOutputSchema();
+
+    auto physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
+                                                        probe_table_schema);
 
     build_pipelines.push_back(
         rhs_builder.active_pipeline->Build(physical_join));

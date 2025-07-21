@@ -258,7 +258,6 @@ cdef extern from "duckdb/common/enums/join_type.hpp" namespace "duckdb" nogil:
 
 cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalOperator):
-        CLogicalComparisonJoin(CJoinType join_type)
         CJoinType join_type
 
 cdef extern from "duckdb/planner/operator/logical_set_operation.hpp" namespace "duckdb" nogil:

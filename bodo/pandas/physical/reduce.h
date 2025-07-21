@@ -61,6 +61,15 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
             // Update reduction result
             if (iter == 0) {
                 output_scalars.push_back(out_scalar_batch);
+            } else if (!out_scalar_batch->is_valid) {
+                // If we get an empty batch which results in invalid
+                // arrow::Scalar result then just ignore it.
+                continue;
+            } else if (!output_scalars[i]->is_valid) {
+                // The last result can be null if there have been no rows
+                // seen thus far.  In which case, use the current result
+                // just on this batch as the result thus far.
+                output_scalars[i] = out_scalar_batch;
             } else {
                 arrow::Result<arrow::Datum> cmp_res_scalar =
                     arrow::compute::CallFunction(

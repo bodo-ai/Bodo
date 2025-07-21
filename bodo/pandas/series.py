@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import inspect
 import itertools
 import numbers
@@ -50,10 +51,12 @@ from bodo.pandas.plan import (
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
+    match_binop_expr_source_plans,
 )
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
     fallback_wrapper,
@@ -114,16 +117,28 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 empty_data = _empty_like(self)
                 if bodo.dataframe_library_run_parallel:
                     nrows = len(self)
-                    self._source_plan = LogicalGetPandasReadParallel(
-                        empty_data,
+                    read_plan = LogicalGetPandasReadParallel(
+                        empty_data.to_frame(),
                         nrows,
                         LazyPlanDistributedArg(self),
                     )
                 else:
-                    self._source_plan = LogicalGetPandasReadSeq(
-                        empty_data,
+                    read_plan = LogicalGetPandasReadSeq(
+                        empty_data.to_frame(),
                         self,
                     )
+
+                # Make sure Series plans are always single expr projections for easier
+                # matching later.
+                self._source_plan = LogicalProjection(
+                    empty_data,
+                    read_plan,
+                    tuple(
+                        make_col_ref_exprs(
+                            range(1 + get_n_index_arrays(empty_data.index)), read_plan
+                        )
+                    ),
+                )
 
                 return self._source_plan
 
@@ -145,11 +160,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             and not name.startswith("_")
         ):
             msg = (
-                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                f"Series.{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(object.__getattribute__(self, name))
+            return fallback_wrapper(self, object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
@@ -174,6 +189,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
+        if lhs is None and rhs is None:
+            raise BodoLibNotImplementedException(
+                "binary operation arguments should have the same dataframe source."
+            )
         expr = ComparisonOpExpression(
             empty_data,
             lhs,
@@ -226,6 +246,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
+        if lhs is None and rhs is None:
+            raise BodoLibNotImplementedException(
+                "binary operation arguments should have the same dataframe source."
+            )
         expr = ConjunctionOpExpression(
             empty_data,
             lhs,
@@ -293,20 +318,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     def _arith_binop(self, other, op, reverse):
         """Called when a BodoSeries is element-wise arithmetically combined with a different entity (other)"""
-        from bodo.pandas.base import _empty_like
+        if is_numeric(other):
+            return self._numeric_binop(other, op, reverse)
 
-        if not (
-            (
-                isinstance(other, BodoSeries)
-                and isinstance(other.dtype, pd.ArrowDtype)
-                and pd.api.types.is_numeric_dtype(other.dtype)
-            )
-            or isinstance(other, numbers.Number)
-        ):
-            raise BodoLibNotImplementedException(
-                "'other' should be numeric BodoSeries or a numeric. "
-                f"Got {type(other).__name__} instead."
-            )
+        return self._non_numeric_binop(other, op, reverse)
+
+    def _numeric_binop(self, other, op, reverse):
+        """Handles op(self, other) when other is a numeric BodoSeries or scalar."""
+        from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
@@ -318,12 +337,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Compute schema of new series.
         empty_data = getattr(zero_size_self, op)(zero_size_other)
         assert isinstance(empty_data, pd.Series), (
-            "_arith_binop: empty_data is not a Series"
+            "_numeric_binop: empty_data is not a Series"
         )
 
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
+        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
+        if lhs is None and rhs is None:
+            raise BodoLibNotImplementedException(
+                "binary operation arguments should have the same dataframe source."
+            )
+
         if reverse:
             lhs, rhs = rhs, lhs
 
@@ -340,6 +365,34 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
+
+    def _non_numeric_binop(self, other, op, reverse):
+        """Handles op(self, other) when other is non-numeric (e.g., pd.DateOffset, str, etc.)."""
+        if (
+            is_bodo_string_series(self)
+            and is_bodo_string_series(other)
+            and op in ("__add__", "__radd__")
+        ):
+            if op == "__add__":
+                return self.str.cat(other)
+            if op == "__radd__":
+                return other.str.cat(self)
+
+        # If other is an iterable, fall back to Pandas.
+        elif pd.api.types.is_scalar(other):
+            if op == "__add__":
+                return self.add(other)
+            if op == "__radd__":
+                return self.radd(other)
+            if op == "__sub__":
+                return self.sub(other)
+            if op == "__rsub__":
+                return self.rsub(other)
+
+        raise BodoLibNotImplementedException(
+            f"BodoSeries.{op} is not supported between 'self' of dtype="
+            f"{self.dtype} and 'other' of type {type(other).__name__}."
+        )
 
     @check_args_fallback("all")
     def __add__(self, other):
@@ -562,12 +615,56 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def dt(self):
         return BodoDatetimeProperties(self)
 
+    @property
+    def T(self):
+        return self
+
     @check_args_fallback(unsupported="none")
-    def map(self, arg, na_action=None):
+    def map(self, arg, na_action=None, engine="bodo"):
         """
         Map values of Series according to an input mapping or function.
         """
+        if engine not in ("bodo", "python"):
+            raise TypeError(
+                f"Series.map() got unsupported engine: {engine}, expected one of ('bodo', 'python')."
+            )
 
+        if engine == "bodo":
+
+            @bodo.jit(cache=True, spawn=False, distributed=False)
+            def map_wrapper(S):
+                return S.map(arg, na_action=na_action)
+
+            try:
+                empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
+            except BodoError as e:
+                empty_series = None
+                error_msg = str(e)
+
+            assert empty_series is None or isinstance(empty_series.dtype, pd.ArrowDtype)
+
+            # Jit failed to determine dtypes, likely from gaps in our Arrow support.
+            if empty_series is not None and pa.types.is_null(
+                empty_series.dtype.pyarrow_dtype
+            ):
+                empty_series = None
+                error_msg = "Jit could not determine pyarrow return type from UDF."
+
+            if empty_series is not None:
+                return _get_series_python_func_plan(
+                    self._plan, empty_series, map_wrapper, (), {}, is_method=False
+                )
+            else:
+                msg = (
+                    "Series.map(): Compiling user defined function failed or "
+                    "encountered an unsupported result type. Falling back to "
+                    "Python engine. Add engine='python' to ignore this warning. "
+                    "Original error: "
+                    f"{error_msg}."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+
+        # engine == "python"
         # Get output data type by running the UDF on a sample of the data.
         empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
 
@@ -794,6 +891,26 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     agg = aggregate
 
+    @check_args_fallback(supported=["other"])
+    def add(self, other, level=None, fill_value=None, axis=0):
+        """Return Addition of series and other, element-wise (binary operator add)."""
+        return gen_arith(self, other, "add")
+
+    @check_args_fallback(supported=["other"])
+    def sub(self, other, level=None, fill_value=None, axis=0):
+        """Return Addition of series and other, element-wise (binary operator radd)."""
+        return gen_arith(self, other, "sub")
+
+    @check_args_fallback(supported=["other"])
+    def radd(self, other, level=None, fill_value=None, axis=0):
+        """Return Subtraction of series and other, element-wise (binary operator sub)."""
+        return gen_arith(self, other, "radd")
+
+    @check_args_fallback(supported=["other"])
+    def rsub(self, other, level=None, fill_value=None, axis=0):
+        """Return Subtraction of series and other, element-wise (binary operator rsub)."""
+        return gen_arith(self, other, "rsub")
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
@@ -849,7 +966,7 @@ class BodoStringMethods:
             )
 
         # Validates input series and others series are from same df, falls back to Pandas otherwise
-        base_plan = zip_series_plan(self._series, others)
+        base_plan, arg_inds = zip_series_plan(self._series, others)
         index = base_plan.empty_data.index
 
         new_metadata = pd.Series(
@@ -862,7 +979,7 @@ class BodoStringMethods:
             base_plan,
             new_metadata,
             "bodo.pandas.series._str_cat_helper",
-            (sep, na_rep),
+            (sep, na_rep, *arg_inds),
             {},
             is_method=False,
         )
@@ -1010,7 +1127,14 @@ class BodoDatetimeProperties:
     def __init__(self, series):
         allowed_types = allowed_types_map["dt_default"]
         # Validates series type
-        if not (isinstance(series, BodoSeries) and series.dtype in allowed_types):
+        # Allows duration[ns] type, timestamp any precision without timezone.
+        # TODO: timestamp with timezone, other duration types.
+        if not (
+            isinstance(series, BodoSeries)
+            and (
+                series.dtype in allowed_types or _is_pd_pa_timestamp_no_tz(series.dtype)
+            )
+        ):
             raise AttributeError("Can only use .dt accessor with datetimelike values")
         self._series = series
         self._dtype = series.dtype
@@ -1176,6 +1300,19 @@ class BodoDatetimeProperties:
         )
 
 
+def is_numeric(other):
+    """Returns whether other is a numeric BodoSeries/scalar."""
+    is_numeric_bodoseries = (
+        isinstance(other, BodoSeries)
+        and isinstance(other.dtype, pd.ArrowDtype)
+        and pd.api.types.is_numeric_dtype(other.dtype)
+    )
+    is_numeric_scalar = isinstance(other, numbers.Number) and not isinstance(
+        other, allowed_types_map["binop_dtlike"]
+    )
+    return is_numeric_bodoseries or is_numeric_scalar
+
+
 def func_name_to_str(func_name):
     """Converts built-in functions to string."""
     if func_name in ("min", "max", "sum", "product", "prod", "count"):
@@ -1334,14 +1471,14 @@ def _components_helper(s):
     return pd.Series([df.iloc[i, :].tolist() for i in range(len(s))])
 
 
-def _str_cat_helper(df, sep, na_rep):
+def _str_cat_helper(df, sep, na_rep, left_idx=0, right_idx=1):
     """Concatenates df[idx] for idx in idx_pair, separated by sep."""
     if sep is None:
         sep = ""
 
     # df is a two-column DataFrame created in zip_series_plan().
-    lhs_col = df.iloc[:, 0]
-    rhs_col = df.iloc[:, 1]
+    lhs_col = df.iloc[:, left_idx]
+    rhs_col = df.iloc[:, right_idx]
 
     return lhs_col.str.cat(rhs_col, sep, na_rep)
 
@@ -1441,12 +1578,12 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
     if expr is None:
         idx = 1 if side == "right" else 0
         empty_data = arrow_to_empty_df(pa.schema([schema[idx]]))
-        return ColRefExpression(empty_data, plan, (idx))
+        return ColRefExpression(empty_data, plan, idx)
     elif is_col_ref(expr):
         idx = expr.args[1]
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
-        return ColRefExpression(empty_data, plan, (idx))
+        return ColRefExpression(empty_data, plan, idx)
     elif is_scalar_func(expr):
         idx = expr.args[2][0]
         idx = get_new_idx(idx, first, side)
@@ -1476,17 +1613,29 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
 
     # Initializes index columns info.
     columns = lhs_list[0].empty_data.columns
-    n_index_arrays = get_n_index_arrays(lhs.index)
+    index = lhs_list[0].empty_data.index
+    n_index_arrays = get_n_index_arrays(index)
     n_cols = len(columns)
 
     default_schema = pa.field("default", pa.large_string())
     left_schema, right_schema = default_schema, default_schema
     left_empty_data, right_empty_data = None, None
-    index = lhs_list[0].empty_data.index
+    arg_inds = (0, 1)
+
+    # Shortcut for columns of same dataframe cases like df.A.str.cat(df.B) to avoid
+    # creating an extra projection (which causes issues in df setitem).
+    if (
+        len(lhs_list) == 2
+        and len(rhs_list) == 2
+        and isinstance(lhs_list[1].exprs[0], ColRefExpression)
+        and isinstance(rhs_list[1].exprs[0], ColRefExpression)
+    ):
+        arg_inds = (lhs_list[1].exprs[0].col_index, rhs_list[1].exprs[0].col_index)
+        return result, arg_inds
 
     # Pads shorter list with None values.
-    for i, (lhs_part, rhs_part) in enumerate(
-        itertools.zip_longest(lhs_list[1:], rhs_list[1:], fillvalue=None)
+    for lhs_part, rhs_part in itertools.zip_longest(
+        lhs_list[1:], rhs_list[1:], fillvalue=None
     ):
         # Create the plan for the shared part
         left_expr = None if not lhs_part else lhs_part.args[1][0]
@@ -1539,7 +1688,7 @@ def zip_series_plan(lhs, rhs) -> BodoSeries:
             first = False
             n_cols = 2
 
-    return result
+    return result, arg_inds
 
 
 def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
@@ -1833,6 +1982,46 @@ sig_map: dict[str, list[tuple[str, inspect._ParameterKind, tuple[pt.Any, ...]]]]
 }
 
 
+def _is_pd_pa_timestamp_no_tz(dtype):
+    """True when dtype is Arrow extension type timestamp (without timezone)"""
+    return (
+        isinstance(dtype, pd.ArrowDtype)
+        and pa.types.is_timestamp(dtype.pyarrow_dtype)
+        and dtype.pyarrow_dtype.tz is None
+    )
+
+
+def gen_arith(self, other, name):
+    """Generates Series.add/radd/sub/rsub."""
+    if isinstance(
+        other,
+        (
+            BodoSeries,
+            pd.Series,
+        ),
+    ):
+        raise BodoLibNotImplementedException(
+            f"Series.{name}() is not supported for other of type {type(other)} yet."
+        )
+    if (
+        name
+        in (
+            "sub",
+            "rsub",
+        )
+        and self.dtype in allowed_types_map["str_default"]
+    ):
+        raise TypeError("Unsupported operand type(s) for -: 'str' and 'str'")
+    return gen_method(name, self.dtype)(self, other)
+
+
+def is_bodo_string_series(self):
+    """Returns True if self is a BodoSeries with dtype String."""
+    return (
+        isinstance(self, BodoSeries) and self.dtype in allowed_types_map["str_default"]
+    )
+
+
 def validate_dtype(name, obj):
     """Validates dtype of input series for Series.<name> methods."""
     if "." not in name:
@@ -1842,13 +2031,13 @@ def validate_dtype(name, obj):
     accessor = name.split(".")[0]
     if accessor == "str":
         if dtype not in allowed_types_map.get(
-            name, [pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string())]
+            name, (pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string()))
         ):
             raise AttributeError("Can only use .str accessor with string values!")
     if accessor == "dt":
         if dtype not in allowed_types_map.get(
-            name, [pd.ArrowDtype(pa.timestamp("ns")), pd.ArrowDtype(pa.duration("ns"))]
-        ):
+            name, [pd.ArrowDtype(pa.duration("ns"))]
+        ) and not _is_pd_pa_timestamp_no_tz(dtype):
             raise AttributeError("Can only use .dt accessor with datetimelike values!")
 
 
@@ -2090,21 +2279,21 @@ dir_methods = [
 ]
 
 allowed_types_map = {
-    "str.decode": [
+    "str.decode": (
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.binary()),
         pd.ArrowDtype(pa.large_binary()),
-    ],
-    "str.join": [
+    ),
+    "str.join": (
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.list_(pa.string())),
         pd.ArrowDtype(pa.list_(pa.large_string())),
         pd.ArrowDtype(pa.large_list(pa.string())),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
-    ],
-    "str_default": [
+    ),
+    "str_default": (
         pd.ArrowDtype(pa.large_string()),
         pd.ArrowDtype(pa.string()),
         pd.ArrowDtype(pa.large_list(pa.large_string())),
@@ -2112,16 +2301,40 @@ allowed_types_map = {
         pd.ArrowDtype(pa.list_(pa.string())),
         pd.ArrowDtype(pa.large_binary()),
         pd.ArrowDtype(pa.binary()),
-    ],
-    "dt.round": [
-        pd.ArrowDtype(pa.timestamp("ns")),
-    ],
-    "dt_default": [
+    ),
+    "dt.round": (pd.ArrowDtype(pa.timestamp("ns")),),
+    "dt_default": (
         pd.ArrowDtype(pa.timestamp("ns")),
         pd.ArrowDtype(pa.date64()),
         pd.ArrowDtype(pa.time64("ns")),
         pd.ArrowDtype(pa.duration("ns")),
-    ],
+    ),
+    "binop_scalar": (
+        int,
+        float,
+        str,
+        bool,
+        pd.Timedelta,
+        pd.DateOffset,
+        datetime.timedelta,
+        datetime.datetime,
+        numpy.datetime64,
+        numpy.timedelta64,
+        numpy.int64,
+        numpy.float64,
+        numpy.bool_,
+    ),
+    "binop_dtlike": (
+        pd.Timedelta,
+        pd.DateOffset,
+        datetime.timedelta,
+        datetime.datetime,
+        numpy.datetime64,
+        numpy.timedelta64,
+        numpy.int64,
+        numpy.float64,
+        numpy.bool_,
+    ),
 }
 
 

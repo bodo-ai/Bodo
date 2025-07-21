@@ -87,7 +87,7 @@ jobs:
           # we need to fetch the entire history
           fetch-depth: 0
 
-      - uses: prefix-dev/setup-pixi@v0.8.8
+      - uses: prefix-dev/setup-pixi@v0.8.11
         with:
           pixi-version: v0.40.2
           cache: true

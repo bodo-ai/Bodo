@@ -12,9 +12,36 @@
  */
 class PhysicalFilter : public PhysicalSourceSink {
    public:
-    explicit PhysicalFilter(std::shared_ptr<PhysicalExpression> expr,
+    explicit PhysicalFilter(duckdb::LogicalFilter& logical_filter,
+                            std::shared_ptr<PhysicalExpression> expr,
                             std::shared_ptr<bodo::Schema> input_schema)
-        : expression(expr), output_schema(input_schema) {}
+        : expression(expr) {
+        this->output_schema = std::make_shared<bodo::Schema>();
+        if (logical_filter.projection_map.empty()) {
+            for (size_t i = 0; i < input_schema->ncols(); i++) {
+                this->kept_cols.push_back(i);
+            }
+        } else {
+            for (const auto& c : logical_filter.projection_map) {
+                this->kept_cols.push_back(c);
+            }
+        }
+        for (size_t i = 0; i < this->kept_cols.size(); i++) {
+            std::unique_ptr<bodo::DataType> col_type =
+                input_schema->column_types[this->kept_cols[i]]->copy();
+            this->output_schema->append_column(std::move(col_type));
+            this->output_schema->column_names.push_back(
+                input_schema->column_names[this->kept_cols[i]]);
+        }
+        if (this->kept_cols.size() !=
+            logical_filter.GetColumnBindings().size()) {
+            throw std::runtime_error(
+                "Filter output schema has different number of columns than "
+                "LogicalFilter");
+        }
+        this->output_schema->metadata = std::make_shared<TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+    }
 
     virtual ~PhysicalFilter() = default;
 
@@ -48,8 +75,16 @@ class PhysicalFilter : public PhysicalSourceSink {
         }
 
         // Apply the bitmask to the input_batch to do row filtering.
-        std::shared_ptr<table_info> out_table =
+        std::shared_ptr<table_info> filtered_table =
             RetrieveTable(input_batch, bitmask);
+
+        std::vector<std::shared_ptr<array_info>> out_cols;
+        for (size_t i = 0; i < this->kept_cols.size(); i++) {
+            out_cols.emplace_back(filtered_table->columns[this->kept_cols[i]]);
+        }
+        std::shared_ptr<table_info> out_table = std::make_shared<table_info>(
+            out_cols, filtered_table->nrows(), output_schema->column_names,
+            output_schema->metadata);
 
         // Just propagate the FINISHED flag to other operators (like join) or
         // accept more input
@@ -70,5 +105,6 @@ class PhysicalFilter : public PhysicalSourceSink {
 
    private:
     std::shared_ptr<PhysicalExpression> expression;
-    const std::shared_ptr<bodo::Schema> output_schema;
+    std::shared_ptr<bodo::Schema> output_schema;
+    std::vector<uint64_t> kept_cols;
 };

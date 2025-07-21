@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import traceback
+from contextlib import contextmanager
 
 import pandas as pd
 import pyarrow as pa
@@ -144,6 +145,27 @@ class Expression(LazyPlan):
     def __init__(self, empty_data, *args):
         super().__init__(self.__class__.__name__, empty_data, *args)
 
+    def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
+        """Update the source and column index of function expressions, which could be
+        nested inside this expression."""
+        new_args = [
+            arg.update_func_expr_source(new_source_plan, col_index_offset)
+            if isinstance(arg, Expression)
+            else arg
+            for arg in self.args
+        ]
+        out = self.__class__(
+            self.empty_data,
+            *new_args,
+        )
+        out.is_series = self.is_series
+        return out
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        if self.source == new_source:
+            return self
+
 
 class LogicalProjection(LogicalOperator):
     """Logical operator for projecting columns and expressions."""
@@ -255,40 +277,196 @@ class LogicalIcebergWrite(LogicalOperator):
 class ColRefExpression(Expression):
     """Expression representing a column reference in the query plan."""
 
-    pass
+    def __init__(self, empty_data, source, col_index):
+        self.source = source
+        self.col_index = col_index
+        super().__init__(empty_data, source, col_index)
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        if self.source == new_source:
+            return self
+
+        # If the new source is a projection on the same source, we can just update the
+        # column index
+        if (
+            isinstance(new_source, LogicalProjection)
+            and new_source.source == self.source
+        ):
+            for i, expr in enumerate(new_source.exprs):
+                if (
+                    isinstance(expr, ColRefExpression)
+                    and expr.col_index == self.col_index
+                ):
+                    # Found the same column in the new projection
+                    out = ColRefExpression(self.empty_data, new_source, i)
+                    out.is_series = self.is_series
+                    return out
+
+        # Cannot replace source, return None to indicate failure
+        return None
 
 
 class NullExpression(Expression):
     """Expression representing a null value in the query plan."""
 
-    pass
+    def __init__(self, empty_data, source, field_idx):
+        # Source is kept only for frontend plan checking and not passed to backend.
+        self.empty_data = empty_data
+        self.source = source
+        self.field_idx = field_idx
+        super().__init__(empty_data, field_idx)
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        if self.source == new_source:
+            return self
+
+        # If the new source is a projection on the same source, we can just update the
+        # source
+        if (
+            isinstance(new_source, LogicalProjection)
+            and new_source.source == self.source
+        ):
+            out = NullExpression(self.empty_data, new_source, self.field_idx)
+            out.is_series = self.is_series
+            return out
+
+        # Cannot replace source, return None to indicate failure
+        return None
 
 
 class ConstantExpression(Expression):
     """Expression representing a constant value in the query plan."""
 
-    pass
+    def __init__(self, empty_data, source, value):
+        # Source is kept only for frontend plan checking and not passed to backend.
+        self.empty_data = empty_data
+        self.source = source
+        self.value = value
+        super().__init__(empty_data, value)
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        if self.source == new_source:
+            return self
+
+        # If the new source is a projection on the same source, we can just update the
+        # source
+        if (
+            isinstance(new_source, LogicalProjection)
+            and new_source.source == self.source
+        ):
+            out = ConstantExpression(self.empty_data, new_source, self.value)
+            out.is_series = self.is_series
+            return out
+
+        # Cannot replace source, return None to indicate failure
+        return None
 
 
 class AggregateExpression(Expression):
     """Expression representing an aggregate function in the query plan."""
 
-    pass
+    @property
+    def source(self):
+        """Return the source of the aggregate expression."""
+        return self.args[0]
+
+    def replace_source(self, new_source: LazyPlan):
+        # TODO: handle source replacement for aggregate expressions
+        if self.source == new_source:
+            return self
 
 
 class PythonScalarFuncExpression(Expression):
     """Expression representing a Python scalar function call in the query plan."""
 
-    pass
+    @property
+    def source(self):
+        """Return the source of the expression."""
+        return self.args[0]
+
+    def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
+        """Update the source and column index of the function expression."""
+        if self.source != new_source_plan:
+            assert len(self.args[2]) == 1 + get_n_index_arrays(self.empty_data.index), (
+                "PythonScalarFuncExpression::update_func_expr_source: expected single input column"
+            )
+            # Previous input data column index
+            in_col_ind = self.args[2][0]
+            n_source_cols = len(new_source_plan.empty_data.columns)
+            # Add Index columns of the new source plan as input
+            index_cols = tuple(
+                range(
+                    n_source_cols,
+                    n_source_cols
+                    + get_n_index_arrays(new_source_plan.empty_data.index),
+                )
+            )
+            expr = PythonScalarFuncExpression(
+                self.empty_data,
+                new_source_plan,
+                self.args[1],
+                (in_col_ind + col_index_offset,) + index_cols,
+            )
+            expr.is_series = self.is_series
+            return expr
+        return self
+
+    def replace_source(self, new_source: LazyPlan):
+        # TODO: handle source replacement for PythonScalarFuncExpression
+        if self.source == new_source:
+            return self
 
 
-class ComparisonOpExpression(Expression):
+class BinaryExpression(Expression):
+    """Base class for binary expressions in the query plan, such as arithmetic and
+    comparison operations.
+    """
+
+    def __init__(self, empty_data, lhs, rhs, op):
+        self.empty_data = empty_data
+        self.lhs = lhs
+        self.rhs = rhs
+        self.op = op
+        super().__init__(empty_data, lhs, rhs, op)
+
+    @property
+    def source(self):
+        """Return the source of the binary expression."""
+        return self.lhs.source if isinstance(self.lhs, Expression) else self.rhs.source
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        new_lhs = (
+            self.lhs.replace_source(new_source)
+            if isinstance(self.lhs, Expression)
+            else self.lhs
+        )
+        new_rhs = (
+            self.rhs.replace_source(new_source)
+            if isinstance(self.rhs, Expression)
+            else self.rhs
+        )
+
+        if (new_lhs is None and self.lhs is not None) or (
+            new_rhs is None and self.rhs is not None
+        ):
+            return None
+
+        out = self.__class__(self.empty_data, new_lhs, new_rhs, self.op)
+        out.is_series = self.is_series
+        return out
+
+
+class ComparisonOpExpression(BinaryExpression):
     """Expression representing a comparison operation in the query plan."""
 
     pass
 
 
-class ConjunctionOpExpression(Expression):
+class ConjunctionOpExpression(BinaryExpression):
     """Expression representing a conjunction (AND) operation in the query plan."""
 
     pass
@@ -297,10 +475,29 @@ class ConjunctionOpExpression(Expression):
 class UnaryOpExpression(Expression):
     """Expression representing a unary operation (e.g. negation) in the query plan."""
 
-    pass
+    def __init__(self, empty_data, source_expr, op):
+        self.empty_data = empty_data
+        self.source_expr = source_expr
+        self.op = op
+        super().__init__(empty_data, source_expr, op)
+
+    @property
+    def source(self):
+        """Return the source of the unary expression."""
+        return self.source_expr.source
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        new_source_expr = self.source_expr.replace_source(new_source)
+        if new_source_expr is None:
+            return None
+
+        out = UnaryOpExpression(self.empty_data, new_source_expr, self.op)
+        out.is_series = self.is_series
+        return out
 
 
-class ArithOpExpression(Expression):
+class ArithOpExpression(BinaryExpression):
     """Expression representing an arithmetic operation (e.g. addition, subtraction)
     in the query plan.
     """
@@ -319,6 +516,8 @@ def execute_plan(plan: LazyPlan):
     """
     import bodo
 
+    PlanExecutionCounter.increment()
+
     def _exec_plan(plan):
         import bodo
         from bodo.ext import plan_optimizer
@@ -329,15 +528,6 @@ def execute_plan(plan: LazyPlan):
             bodo.dataframe_library_dump_plans
             and bodo.libs.distributed_api.get_rank() == 0
         ):
-            # Sometimes when an execution is triggered it isn't expected that
-            # an execution should happen at that point.  This traceback is
-            # useful to identify what is triggering the execution as it may be
-            # a bug or the usage of some Pandas API that calls a function that
-            # triggers execution.  This traceback can help fix the bug or
-            # select a different Pandas API or an internal Pandas function that
-            # bypasses the issue.
-            traceback.print_stack(file=sys.stdout)
-            print("")  # Print on new line during tests.
             print("Unoptimized plan")
             print(duckdb_plan.toString())
 
@@ -375,23 +565,41 @@ def execute_plan(plan: LazyPlan):
         for a in plan.args:
             _init_lazy_distributed_arg(a)
 
+        if bodo.dataframe_library_dump_plans:
+            # Sometimes when an execution is triggered it isn't expected that
+            # an execution should happen at that point.  This traceback is
+            # useful to identify what is triggering the execution as it may be
+            # a bug or the usage of some Pandas API that calls a function that
+            # triggers execution.  This traceback can help fix the bug or
+            # select a different Pandas API or an internal Pandas function that
+            # bypasses the issue.
+            traceback.print_stack(file=sys.stdout)
+            print("")  # Print on new line during tests.
+
         return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
 
     return _exec_plan(plan)
 
 
-def _init_lazy_distributed_arg(arg):
+def _init_lazy_distributed_arg(arg, visited_plans=None):
     """Initialize the LazyPlanDistributedArg objects for the given plan argument that
     may need scattering data to workers before execution.
     Has to be called right before plan execution since the dataframe state
     may change (distributed to collected) and the result ID may not be valid anymore.
     """
+    if visited_plans is None:
+        # Keep track of visited LazyPlans to prevent extra checks.
+        visited_plans = set()
+
     if isinstance(arg, LazyPlan):
+        if id(arg) in visited_plans:
+            return
+        visited_plans.add(id(arg))
         for a in arg.args:
-            _init_lazy_distributed_arg(a)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, (tuple, list)):
         for a in arg:
-            _init_lazy_distributed_arg(a)
+            _init_lazy_distributed_arg(a, visited_plans=visited_plans)
     elif isinstance(arg, LazyPlanDistributedArg):
         arg.init()
 
@@ -430,12 +638,8 @@ def getPlanStatistics(plan: LazyPlan):
 
 def get_proj_expr_single(proj: LazyPlan):
     """Get the single expression from a LogicalProjection node."""
-    if is_single_projection(proj):
-        return proj.exprs[0]
-    else:
-        if not proj.is_series:
-            raise Exception("Got a non-Series in get_proj_expr_single")
-        return make_col_ref_exprs([0], proj)[0]
+    assert is_single_projection(proj), "Expected single projection"
+    return proj.exprs[0]
 
 
 def get_single_proj_source_if_present(proj: LazyPlan):
@@ -460,6 +664,13 @@ def is_single_colref_projection(proj: LazyPlan):
     return is_single_projection(proj) and isinstance(proj.exprs[0], ColRefExpression)
 
 
+def is_colref_projection(proj: LazyPlan):
+    """Return True if plan is a projection with all expressions being column references"""
+    return isinstance(proj, LogicalProjection) and all(
+        isinstance(expr, ColRefExpression) for expr in proj.exprs
+    )
+
+
 def make_col_ref_exprs(key_indices, src_plan):
     """Create column reference expressions for the given key indices for the input
     source plan.
@@ -481,7 +692,7 @@ class LazyPlanDistributedArg:
     Class to hold the arguments for a LazyPlan that are distributed on the workers.
     """
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame | pd.Series):
         self.df = df
         self.mgr = None
         self.res_id = None
@@ -596,3 +807,46 @@ def is_scalar_func(expr):
 
 def is_arith_expr(expr):
     return isinstance(expr, ArithOpExpression)
+
+
+def match_binop_expr_source_plans(lhs, rhs):
+    """Match the source plans of two binary expressions if possible.
+    Returns (None, None) if sources cannot be matched.
+    """
+    if not (isinstance(lhs, Expression) and isinstance(rhs, Expression)):
+        # No matching necessary
+        return lhs, rhs
+
+    new_lhs = lhs.replace_source(rhs.source)
+    if new_lhs is not None:
+        return new_lhs, rhs
+
+    new_rhs = rhs.replace_source(lhs.source)
+    if new_rhs is not None:
+        return lhs, new_rhs
+
+    return None, None
+
+
+class PlanExecutionCounter:
+    count = 0
+
+    @classmethod
+    def increment(cls):
+        cls.count += 1
+
+    @classmethod
+    def reset(cls):
+        cls.count = 0
+
+    @classmethod
+    def get(cls):
+        return cls.count
+
+
+@contextmanager
+def assert_executed_plan_count(n: int):
+    start = PlanExecutionCounter.get()
+    yield
+    end = PlanExecutionCounter.get()
+    assert end - start == n, f"Expected {n} plan executions, but got {end - start}"

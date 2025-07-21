@@ -6,6 +6,14 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 	 DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of 
 	 the Bodo DataFrame Library for more info.
 
+## Binary operator functions
+- [`bodo.pandas.BodoSeries.add`][bodoseriesadd]
+- [`bodo.pandas.BodoSeries.sub`][bodoseriessub]
+- [`bodo.pandas.BodoSeries.radd`][bodoseriesradd]
+- [`bodo.pandas.BodoSeries.rsub`][bodoseriesrsub]
+
+---
+
 ## Computations / descriptive stats
 - [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
 - [`bodo.pandas.BodoSeries.clip`][bodoseriesclip]
@@ -13,10 +21,13 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 !!! note
     For the following reduction methods, only default parameters are currently supported.
 - [`bodo.pandas.BodoSeries.count`][bodoseriescount]
+- [`bodo.pandas.BodoSeries.describe`][bodoseriesdescribe]
 - [`bodo.pandas.BodoSeries.max`][bodoseriesmax]
+- [`bodo.pandas.BodoSeries.mean`][bodoseriesmean]
 - [`bodo.pandas.BodoSeries.min`][bodoseriesmin]
 - [`bodo.pandas.BodoSeries.product`][bodoseriesproduct]
 - [`bodo.pandas.BodoSeries.sum`][bodoseriessum]
+- [`bodo.pandas.BodoSeries.std`][bodoseriessum]
 
 ---
 
@@ -91,6 +102,8 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ---
 
 ## Function application
+- [`bodo.pandas.BodoSeries.agg`][bodoseriesagg]
+- [`bodo.pandas.BodoSeries.aggregate`][bodoseriesaggregate]
 - [`bodo.pandas.BodoSeries.map`][bodoseriesmap]
 
 ---
@@ -305,3 +318,16 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 [bodoseriesdtcomponents]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.components.html
 [bodoseriesdtisocalendar]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.isocalendar.html
+
+[bodoseriesagg]: https://pandas.pydata.org/docs/reference/api/pandas.Series.agg.html
+[bodoseriesaggregate]: https://pandas.pydata.org/docs/reference/api/pandas.Series.aggregate.html
+
+[bodoseriesdescribe]: https://pandas.pydata.org/docs/reference/api/pandas.Series.describe.html
+[bodoseriesmean]: https://pandas.pydata.org/docs/reference/api/pandas.Series.mean.html
+[bodoseriesstd]: https://pandas.pydata.org/docs/reference/api/pandas.Series.std.html
+
+
+[bodoseriesadd]: https://pandas.pydata.org/docs/reference/api/pandas.Series.add.html
+[bodoseriessub]: https://pandas.pydata.org/docs/reference/api/pandas.Series.sub.html
+[bodoseriesradd]: https://pandas.pydata.org/docs/reference/api/pandas.Series.radd.html
+[bodoseriesrsub]: https://pandas.pydata.org/docs/reference/api/pandas.Series.rsub.html

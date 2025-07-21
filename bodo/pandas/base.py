@@ -382,7 +382,7 @@ def read_csv(
         func_args.append(parse_dates)
     func += ")\n"
     csv_func = bodo_spawn_exec(func, {"pd": pd}, {}, __name__)
-    jit_csv_func = bodo.jit(csv_func)
+    jit_csv_func = bodo.jit(csv_func, cache=True)
     return jit_csv_func(filepath_or_buffer, *func_args)
 
 
@@ -506,7 +506,7 @@ def concat(
                     if x in old_schema:
                         exprs.extend(make_col_ref_exprs([old_schema.index(x)], plan))
                     else:
-                        exprs.append(NullExpression(new_schema, field_idx))
+                        exprs.append(NullExpression(new_schema, plan, field_idx))
                 return exprs
 
             # Create a reordering of the temp a_new_cols so that the columns are in
