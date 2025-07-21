@@ -1,7 +1,6 @@
 #include <Python.h>
 #include <datetime.h>
 #include <iostream>
-#include <memory>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <arrow/api.h>
@@ -155,6 +154,7 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // an offset of 16 bytes for int64 arrays (and n_items=2).
     // We use pointer arithmetic to get the offset since not explicitly stored
     // in Numpy struct.
+
     std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
         (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
 

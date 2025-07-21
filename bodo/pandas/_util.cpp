@@ -5,9 +5,6 @@
 #include <arrow/python/pyarrow.h>
 #include <arrow/result.h>
 #include <arrow/scalar.h>
-#include <iostream>
-#include <sstream>
-#include <stdexcept>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
 #include "duckdb/planner/filter/conjunction_filter.hpp"

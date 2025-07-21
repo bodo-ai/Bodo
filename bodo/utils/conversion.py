@@ -105,9 +105,8 @@ class CoerceToNdarrayInfer(AbstractTemplate):
             return signature(arr_typ, *folded_args).replace(pysig=pysig)
 
         if isinstance(data, types.Array):
-            if (
-                not is_overload_none(use_nullable_array)
-                and isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
+            if not is_overload_none(use_nullable_array) and (
+                isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
                 or data.dtype == bodo.timedelta64ns
             ):
                 if data.dtype == types.bool_:
