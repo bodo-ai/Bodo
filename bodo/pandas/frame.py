@@ -1124,7 +1124,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     len(self._info_axis), key, *self._sanitize_column(head_val)
                 )
             else:
-                super().__setitem__(key, head_val)
+                loc = self._info_axis.get_loc(key)
+                self._iset_item_mgr(loc, *self._sanitize_column(head_val))
 
     @check_args_fallback(supported=["func", "axis", "args"])
     def apply(
