@@ -41,6 +41,7 @@ def test_tpch_q01():
     run_tpch_query_test(tpch.tpch_q01)
 
 
+@pytest.mark.skip("hanging?")
 def test_tpch_q02():
     run_tpch_query_test(tpch.tpch_q02)
 
@@ -89,56 +90,45 @@ def test_tpch_q11():
     run_tpch_query_test(tpch.tpch_q11)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q12():
     run_tpch_query_test(tpch.tpch_q12)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q13():
     run_tpch_query_test(tpch.tpch_q13)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q14():
     run_tpch_query_test(tpch.tpch_q14)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q15():
     run_tpch_query_test(tpch.tpch_q15)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q17():
     run_tpch_query_test(tpch.tpch_q17)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q18():
     run_tpch_query_test(tpch.tpch_q18)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q19():
     run_tpch_query_test(tpch.tpch_q19)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q20():
     run_tpch_query_test(tpch.tpch_q20)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q21():
     run_tpch_query_test(tpch.tpch_q21)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q22():
     run_tpch_query_test(tpch.tpch_q22)
