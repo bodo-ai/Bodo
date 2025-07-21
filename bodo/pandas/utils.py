@@ -101,19 +101,20 @@ def cpp_table_to_series(
     """Convert a C++ table (table_info) to a pandas Series."""
     from bodo.ext import plan_optimizer
 
-    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
-
-    if arrow_schema is None:
-        arrow_schema = arrow_table.schema
-
-    # We need to preserve Index for query output (see execute_plan)
+    # We need to preserve Index for query output which provides arrow_schema also
+    # (see execute_plan)
     if not ignore_index and schema_has_index_arrays(arrow_schema):
         as_df = cpp_table_to_df(cpp_table, arrow_schema, use_arrow_dtypes)
         return as_df.iloc[:, 0]
 
+    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
+
     assert len(arrow_table.columns) == 1, (
         f"cpp_table_to_series: Expected 1 column, got {len(arrow_table.columns)}"
     )
+
+    if arrow_schema is None:
+        arrow_schema = arrow_table.schema
 
     arr = _arrow_to_pd_array(
         arrow_table.columns[0], arrow_schema[0].type, use_arrow_dtypes
