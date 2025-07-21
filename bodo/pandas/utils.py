@@ -691,7 +691,8 @@ def arrow_table_to_pandas(arrow_table, arrow_schema=None, use_arrow_dtypes=True)
         {
             i: _arrow_to_pd_array(arrow_table.columns[i], field.type, use_arrow_dtypes)
             for i, field in enumerate(arrow_schema)
-        }
+        },
+        copy=False,
     )
     # Set column names separately to handle duplicate names ("field.name:" in a
     # dictionary would replace duplicated values)
