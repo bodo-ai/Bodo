@@ -209,6 +209,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             name not in base.__dict__
             and name not in ignore_fallback_attrs
             and not name.startswith("_")
+            and hasattr(pd.DataFrame, name)
         ):
             msg = (
                 f"{name} is not implemented in Bodo Dataframe Library yet. "
