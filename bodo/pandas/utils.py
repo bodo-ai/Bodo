@@ -57,19 +57,66 @@ def get_lazy_single_manager_class() -> type[
     )
 
 
-def cpp_table_to_df(cpp_table, arrow_schema=None, use_arrow_dtypes=True):
+def schema_has_index_arrays(arrow_schema: pa.Schema) -> bool:
+    """Return True if the Arrow schema has index arrays, False otherwise
+    (RangeIndex case).
+
+    Args:
+        arrow_schema (pa.Schema): The Arrow schema to check.
+
+    Returns:
+        bool: True if the schema has index arrays, False otherwise.
+    """
+
+    if arrow_schema.pandas_metadata is None:
+        return False
+
+    for descr in arrow_schema.pandas_metadata.get("index_columns", []):
+        if isinstance(descr, str):
+            if descr not in arrow_schema.names:
+                # Index not found in table: matching Pyarrow's behavior, which treats
+                # missing index as RangeIndex.
+                continue
+            return True
+        elif descr["kind"] == "range":
+            continue
+        else:
+            raise ValueError(f"Unrecognized index kind: {descr['kind']}")
+
+    return False
+
+
+def cpp_table_to_df(
+    cpp_table, arrow_schema=None, use_arrow_dtypes=True, delete_input=True
+):
     """Convert a C++ table (table_info) to a pandas DataFrame."""
     from bodo.ext import plan_optimizer
 
-    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
+    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table, delete_input)
     df = arrow_table_to_pandas(arrow_table, arrow_schema, use_arrow_dtypes)
     return df
 
 
-def cpp_table_to_series(cpp_table, arrow_schema):
+def cpp_table_to_series(
+    cpp_table,
+    arrow_schema=None,
+    use_arrow_dtypes=True,
+    ignore_index=False,
+    delete_input=True,
+):
     """Convert a C++ table (table_info) to a pandas Series."""
-    as_df = cpp_table_to_df(cpp_table, arrow_schema)
-    return as_df.iloc[:, 0]
+    from bodo.ext import plan_optimizer
+
+    # We need to preserve Index for query output case (which provides arrow_schema also,
+    # see execute_plan)
+    if not ignore_index and schema_has_index_arrays(arrow_schema):
+        as_df = cpp_table_to_df(cpp_table, arrow_schema, use_arrow_dtypes, delete_input)
+        return as_df.iloc[:, 0]
+
+    arrow_arr, name = plan_optimizer.cpp_table_to_arrow_array(cpp_table, delete_input)
+    arrow_type = arrow_arr.type if arrow_schema is None else arrow_schema[0].type
+
+    return _arrow_array_to_pd(arrow_arr, arrow_type, use_arrow_dtypes, name=name)
 
 
 @functools.lru_cache
@@ -426,7 +473,10 @@ def _get_function_from_path(path_str: str):
 def run_func_on_table(cpp_table, result_type, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
+    NOTE: needs to free cpp_table after use.
     """
+    from bodo.ext import plan_optimizer
+
     func, is_series, is_attr, args, kwargs = in_args
 
     # Arrow dtypes can be very slow for UDFs in Pandas:
@@ -447,11 +497,18 @@ def run_func_on_table(cpp_table, result_type, in_args):
             "rsub",
         )
     )
-    input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
 
     if is_series:
-        assert input.shape[1] == 1, "run_func_on_table: single column expected"
-        input = input.iloc[:, 0]
+        # NOTE: Assuming Series operations ignore Indexes.
+        # delete_input=False since cpp_table is needed for output below
+        input = cpp_table_to_series(
+            cpp_table,
+            use_arrow_dtypes=use_arrow_dtypes,
+            ignore_index=True,
+            delete_input=False,
+        )
+    else:
+        input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
 
     if isinstance(func, str) and is_attr:
         func_path_str = func
@@ -472,11 +529,20 @@ def run_func_on_table(cpp_table, result_type, in_args):
     # astype can fail in some cases when input is empty
     if len(out):
         # TODO: verify this is correct for all possible result_type's
-        out_df = pd.DataFrame({"OUT": out.astype(pd.ArrowDtype(result_type))})
+        if out.dtype != pd.ArrowDtype(result_type):
+            out = out.astype(pd.ArrowDtype(result_type))
     else:
-        out_df = pd.DataFrame({"OUT": _empty_pd_array(result_type)})
+        out = pd.Series(_empty_pd_array(result_type), index=out.index, name=out.name)
 
-    return df_to_cpp_table(out_df)
+    if out.name is None:
+        out.name = "OUT"
+
+    if is_series:
+        return plan_optimizer.arrow_array_to_cpp_table(
+            out.array._pa_array.combine_chunks(), str(out.name), cpp_table
+        )
+    else:
+        return df_to_cpp_table(pd.DataFrame({out.name: out}))
 
 
 def _del_func(x):
@@ -650,7 +716,7 @@ def _fix_struct_arr_names(arr, pa_type):
     )
 
 
-def _arrow_to_pd_array(arrow_array, pa_type, use_arrow_dtypes=True):
+def _arrow_array_to_pd(arrow_array, pa_type, use_arrow_dtypes=True, name=None):
     """Convert a PyArrow array to a pandas array with the specified Arrow type."""
 
     # Our type inference may fail for some object columns so use the proper Arrow type
@@ -667,9 +733,14 @@ def _arrow_to_pd_array(arrow_array, pa_type, use_arrow_dtypes=True):
         arrow_array = arrow_array.cast(pa_type)
 
     if use_arrow_dtypes:
-        return pd.array(arrow_array, dtype=pd.ArrowDtype(pa_type))
+        return pd.Series(
+            arrow_array, dtype=pd.ArrowDtype(pa_type), name=name, copy=False
+        )
 
-    return arrow_array.to_pandas()
+    out = arrow_array.to_pandas()
+    if name:
+        out.name = name
+    return out
 
 
 def arrow_table_to_pandas(arrow_table, arrow_schema=None, use_arrow_dtypes=True):
@@ -689,9 +760,10 @@ def arrow_table_to_pandas(arrow_table, arrow_schema=None, use_arrow_dtypes=True)
 
     df = pd.DataFrame(
         {
-            i: _arrow_to_pd_array(arrow_table.columns[i], field.type, use_arrow_dtypes)
+            i: _arrow_array_to_pd(arrow_table.columns[i], field.type, use_arrow_dtypes)
             for i, field in enumerate(arrow_schema)
-        }
+        },
+        copy=False,
     )
     # Set column names separately to handle duplicate names ("field.name:" in a
     # dictionary would replace duplicated values)
