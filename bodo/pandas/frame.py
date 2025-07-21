@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typing as pt
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Hashable, Iterable, Sequence
 from contextlib import contextmanager
 
 import pandas as pd
@@ -12,6 +12,7 @@ if pt.TYPE_CHECKING:
     from pandas._typing import (
         AnyArrayLike,
         Axis,
+        DropKeep,
         FilePath,
         IgnoreRaise,
         IndexLabel,
@@ -1249,6 +1250,28 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 na_position,
                 cols,
                 self._plan.pa_schema,
+            ),
+        )
+
+    @check_args_fallback("none")
+    def drop_duplicates(
+        self,
+        subset: Hashable | Sequence[Hashable] | None = None,
+        *,
+        keep: DropKeep = "first",
+        inplace: bool = False,
+        ignore_index: bool = False,
+    ) -> BodoDataFrame | None:
+        from bodo.pandas.base import _empty_like
+
+        zero_size_self = _empty_like(self)
+        exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
+        return wrap_plan(
+            plan=LazyPlan(
+                "LogicalDistinct",
+                zero_size_self,
+                self._plan,
+                exprs,
             ),
         )
 

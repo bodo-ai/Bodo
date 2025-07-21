@@ -87,10 +87,11 @@ def test_from_pandas(datapath, index_val):
 
 def test_read_parquet(datapath):
     """Very simple test to read a parquet file for sanity checking."""
-    path = datapath("example_no_index.parquet")
+    with assert_executed_plan_count(0):
+        path = datapath("example_no_index.parquet")
 
-    bodo_out = bd.read_parquet(path)
-    py_out = pd.read_parquet(path)
+        bodo_out = bd.read_parquet(path)
+        py_out = pd.read_parquet(path)
 
     _test_equal(
         bodo_out,
@@ -108,12 +109,11 @@ def test_read_parquet(datapath):
 )
 def test_read_parquet_projection_pushdown(datapath, file_path):
     """Make sure basic projection pushdown works for Parquet read end to end."""
-    path = datapath(file_path)
+    with assert_executed_plan_count(0):
+        path = datapath(file_path)
 
-    bodo_out = bd.read_parquet(path)[["three", "four"]]
-    py_out = pd.read_parquet(path)[["three", "four"]]
-
-    assert bodo_out.is_lazy_plan()
+        bodo_out = bd.read_parquet(path)[["three", "four"]]
+        py_out = pd.read_parquet(path)[["three", "four"]]
 
     _test_equal(
         bodo_out,
@@ -157,63 +157,59 @@ def test_read_parquet_index(df: pd.DataFrame, index_val):
 
 def test_read_parquet_len_shape(datapath):
     """Test length/shape after read parquet is correct"""
-    path = datapath("example_no_index.parquet")
+    with assert_executed_plan_count(0):
+        path = datapath("example_no_index.parquet")
 
-    bodo_out = bd.read_parquet(path)
-    py_out = pd.read_parquet(path)
+        bodo_out = bd.read_parquet(path)
+        py_out = pd.read_parquet(path)
 
-    assert len(bodo_out) == len(py_out)
-    # len directly on parquet file doesn't require plan execution
-    assert bodo_out.is_lazy_plan()
+        # len directly on parquet file doesn't require plan execution
+        assert len(bodo_out) == len(py_out)
 
-    # create a new lazy DF
-    bodo_out2 = bd.read_parquet(path)
+        # create a new lazy DF
+        bodo_out2 = bd.read_parquet(path)
 
-    # test shape
-    assert bodo_out2.shape == py_out.shape
-    # shape directly on parquet file doesn't require plan execution
-    assert bodo_out2.is_lazy_plan()
+        # test shape: shape directly on parquet file doesn't require plan execution
+        assert bodo_out2.shape == py_out.shape
 
 
 def test_read_parquet_series_len_shape(datapath):
     """Test length/shape after read parquet is correct"""
-    path = datapath("dataframe_library/df1.parquet")
+    with assert_executed_plan_count(0):
+        path = datapath("dataframe_library/df1.parquet")
 
-    bodo_out = bd.read_parquet(path)
-    bodo_out = bodo_out["A"]
-    py_out = pd.read_parquet(path)
-    py_out = py_out["A"]
+        bodo_out = bd.read_parquet(path)
+        bodo_out = bodo_out["A"]
+        py_out = pd.read_parquet(path)
+        py_out = py_out["A"]
 
-    assert len(bodo_out) == len(py_out)
-    # len directly on parquet file doesn't require plan execution
-    assert bodo_out.is_lazy_plan()
+        # len directly on parquet file doesn't require plan execution
+        assert len(bodo_out) == len(py_out)
 
-    # test shape
-    assert bodo_out.shape == py_out.shape
-    # shape directly on parquet file doesn't require plan execution
-    assert bodo_out.is_lazy_plan()
+        # test shape: shape directly on parquet file doesn't require plan execution
+        assert bodo_out.shape == py_out.shape
 
 
 def test_read_parquet_filter_projection(datapath):
     """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
     and filter column isn't used anywhere in the query.
     """
-    path = datapath("dataframe_library/q6_sample.pq")
+    with assert_executed_plan_count(0):
+        path = datapath("dataframe_library/q6_sample.pq")
 
-    def impl(lineitem):
-        date1 = pd.Timestamp("1996-01-01")
-        sel = (lineitem.L_SHIPDATE >= date1) & (lineitem.L_DISCOUNT >= 0.08)
-        flineitem = lineitem[sel]
-        return flineitem.L_EXTENDEDPRICE
+        def impl(lineitem):
+            date1 = pd.Timestamp("1996-01-01")
+            sel = (lineitem.L_SHIPDATE >= date1) & (lineitem.L_DISCOUNT >= 0.08)
+            flineitem = lineitem[sel]
+            return flineitem.L_EXTENDEDPRICE
 
-    bodo_df = bd.read_parquet(path)
-    bodo_df["L_SHIPDATE"] = bd.to_datetime(bodo_df.L_SHIPDATE, format="%Y-%m-%d")
-    py_df = pd.read_parquet(path)
-    py_df["L_SHIPDATE"] = pd.to_datetime(py_df.L_SHIPDATE, format="%Y-%m-%d")
+        bodo_df = bd.read_parquet(path)
+        bodo_df["L_SHIPDATE"] = bd.to_datetime(bodo_df.L_SHIPDATE, format="%Y-%m-%d")
+        py_df = pd.read_parquet(path)
+        py_df["L_SHIPDATE"] = pd.to_datetime(py_df.L_SHIPDATE, format="%Y-%m-%d")
 
-    bodo_out = impl(bodo_df)
-    assert bodo_out.is_lazy_plan()
-    py_out = impl(py_df)
+        bodo_out = impl(bodo_df)
+        py_out = impl(py_df)
 
     _test_equal(
         bodo_out.copy(),
