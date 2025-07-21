@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 
 import benchmarks.tpch.dataframe_lib as tpch
 import bodo.pandas as bd
@@ -48,7 +47,6 @@ def test_tpch_q03():
     run_tpch_query_test(tpch.tpch_q03)
 
 
-@pytest.mark.skip(reason="TypeError: a bytes-like object is required, not 'str'")
 def test_tpch_q04():
     run_tpch_query_test(tpch.tpch_q04)
 
@@ -93,7 +91,6 @@ def test_tpch_q14():
     run_tpch_query_test(tpch.tpch_q14)
 
 
-@pytest.mark.skip(reason="Length mismatch")
 def test_tpch_q15():
     run_tpch_query_test(tpch.tpch_q15)
 
