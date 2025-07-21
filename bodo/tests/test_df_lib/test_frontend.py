@@ -241,3 +241,34 @@ def test_single_fallback_warning_emitted():
         and "not implemented" in warning_msg
         and "Falling back to Pandas" in warning_msg
     ), f"Unexpected warning message: {warning_msg}"
+
+
+def test_execution_counter():
+    """Test execution counter, simulate application cases of execution counter to unit tests."""
+
+    from bodo.pandas.plan import PlanExecutionCounter, assert_executed_plan_count
+
+    df = bd.DataFrame({"A": ["2", "3"]})
+    PlanExecutionCounter.reset()
+    assert PlanExecutionCounter.get() == 0, "Execution plan counter not reset properly."
+
+    plans = []
+
+    with assert_executed_plan_count(0):
+        for _ in range(5):
+            plans.append(df.A.str.lower())
+
+    with assert_executed_plan_count(5):
+        for plan in plans:
+            assert plan.is_lazy_plan()
+            plan.execute_plan()
+
+    try:
+        with assert_executed_plan_count(1):
+            pass
+    except AssertionError as e:
+        assert (
+            str(e) == "Expected 1 plan executions, but got 0"
+        )  # Created an assertion but not the expected error message.
+    else:
+        assert False  # Shouldn't have created an assertion but didn't.
