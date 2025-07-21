@@ -6,6 +6,7 @@
 #include <Python.h>
 #include <arrow/type.h>
 #include <fmt/format.h>
+#include <cstdint>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/function/function.hpp"
@@ -451,9 +452,43 @@ int planCountNodes(std::unique_ptr<duckdb::LogicalOperator> &op);
 int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table);
 
 /**
+ * @brief Convert a PyArrow array to a C++ table pointer with column names and
+ * metadata set properly.
+ * Uses in_cpp_table for appending Index arrays if any and pandas metadata.
+ * Deletes in_cpp_table after use.
+ *
+ * @param arrow_array input Arrow array object
+ * @param name column name
+ * @param in_cpp_table C++ table pointer cast to int64_t
+ * @return int64_t C++ table pointer cast to int64_t
+ */
+int64_t pyarrow_array_to_cpp_table(PyObject *arrow_array, std::string name,
+                                   int64_t in_cpp_table);
+
+/**
  * @brief convert a Bodo C++ table pointer to a PyArrow table object.
  *
  * @param cpp_table C++ table pointer cast to int64_t
+ * @param delete_cpp_table whether to delete the C++ table after conversion
  * @return PyObject* PyArrow table object
  */
-PyObject *cpp_table_to_pyarrow(int64_t cpp_table);
+PyObject *cpp_table_to_pyarrow(int64_t cpp_table, bool delete_cpp_table = true);
+
+/**
+ * @brief Convert the first column of a Bodo C++ table to a PyArrow array
+ * object. NOTE: does not delete the C++ table.
+ *
+ * @param cpp_table C++ table pointer cast to int64_t
+ * @return PyObject* PyArrow array object
+ */
+PyObject *cpp_table_to_pyarrow_array(int64_t cpp_table);
+
+/**
+ * @brief Get the name of the first field in a Bodo C++ table.
+ * Returns an empty string if the table has no column names.
+ * NOTE: does not delete the C++ table.
+ *
+ * @param cpp_table C++ table pointer cast to int64_t
+ * @return std::string name of the first field
+ */
+std::string cpp_table_get_first_field_name(int64_t cpp_table);

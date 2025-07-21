@@ -86,40 +86,38 @@ def schema_has_index_arrays(arrow_schema: pa.Schema) -> bool:
     return False
 
 
-def cpp_table_to_df(cpp_table, arrow_schema=None, use_arrow_dtypes=True):
+def cpp_table_to_df(
+    cpp_table, arrow_schema=None, use_arrow_dtypes=True, delete_input=True
+):
     """Convert a C++ table (table_info) to a pandas DataFrame."""
     from bodo.ext import plan_optimizer
 
-    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
+    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table, delete_input)
     df = arrow_table_to_pandas(arrow_table, arrow_schema, use_arrow_dtypes)
     return df
 
 
 def cpp_table_to_series(
-    cpp_table, arrow_schema=None, use_arrow_dtypes=True, ignore_index=False
+    cpp_table,
+    arrow_schema=None,
+    use_arrow_dtypes=True,
+    ignore_index=False,
+    delete_input=True,
 ):
     """Convert a C++ table (table_info) to a pandas Series."""
     from bodo.ext import plan_optimizer
 
-    # We need to preserve Index for query output which provides arrow_schema also
-    # (see execute_plan)
+    # We need to preserve Index for query output case (which provides arrow_schema also,
+    # see execute_plan)
     if not ignore_index and schema_has_index_arrays(arrow_schema):
-        as_df = cpp_table_to_df(cpp_table, arrow_schema, use_arrow_dtypes)
+        as_df = cpp_table_to_df(cpp_table, arrow_schema, use_arrow_dtypes, delete_input)
         return as_df.iloc[:, 0]
 
-    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
+    arrow_arr, name = plan_optimizer.cpp_table_to_arrow_array(cpp_table)
+    arrow_type = arrow_arr.type if arrow_schema is None else arrow_schema[0].type
 
-    assert len(arrow_table.columns) >= 1, (
-        f"cpp_table_to_series: Expected 1 or more columns, got {len(arrow_table.columns)}"
-    )
-
-    if arrow_schema is None:
-        arrow_schema = arrow_table.schema
-
-    arr = _arrow_to_pd_array(
-        arrow_table.columns[0], arrow_schema[0].type, use_arrow_dtypes
-    )
-    return pd.Series(arr, name=arrow_schema[0].name)
+    arr = _arrow_to_pd_array(arrow_arr, arrow_type, use_arrow_dtypes)
+    return pd.Series(arr, name=name)
 
 
 @functools.lru_cache
@@ -476,7 +474,10 @@ def _get_function_from_path(path_str: str):
 def run_func_on_table(cpp_table, result_type, in_args):
     """Run a user-defined function (UDF) on a DataFrame created from C++ table and
     return the result as a C++ table and column names.
+    NOTE: needs to free cpp_table after use.
     """
+    from bodo.ext import plan_optimizer
+
     func, is_series, is_attr, args, kwargs = in_args
 
     # Arrow dtypes can be very slow for UDFs in Pandas:
@@ -499,9 +500,13 @@ def run_func_on_table(cpp_table, result_type, in_args):
     )
 
     if is_series:
-        # NOTE: Assuming Series operations ignore Indexes
+        # NOTE: Assuming Series operations ignore Indexes.
+        # delete_input=False since cpp_table is needed for output below
         input = cpp_table_to_series(
-            cpp_table, use_arrow_dtypes=use_arrow_dtypes, ignore_index=True
+            cpp_table,
+            use_arrow_dtypes=use_arrow_dtypes,
+            ignore_index=True,
+            delete_input=False,
         )
     else:
         input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
@@ -525,11 +530,20 @@ def run_func_on_table(cpp_table, result_type, in_args):
     # astype can fail in some cases when input is empty
     if len(out):
         # TODO: verify this is correct for all possible result_type's
-        out_df = pd.DataFrame({"OUT": out.astype(pd.ArrowDtype(result_type))})
+        if out.dtype != pd.ArrowDtype(result_type):
+            out = out.astype(pd.ArrowDtype(result_type))
     else:
-        out_df = pd.DataFrame({"OUT": _empty_pd_array(result_type)})
+        out = _empty_pd_array(result_type)
 
-    return df_to_cpp_table(out_df)
+    if out.name is None:
+        out.name = "OUT"
+
+    if is_series:
+        return plan_optimizer.arrow_array_to_cpp_table(
+            out.array._pa_array.combine_chunks(), str(out.name), cpp_table
+        )
+    else:
+        return df_to_cpp_table(pd.DataFrame({out.name: out}))
 
 
 def _del_func(x):
