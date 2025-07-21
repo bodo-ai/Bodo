@@ -1153,7 +1153,7 @@ int64_t pyarrow_array_to_cpp_table(PyObject *arrow_array, std::string name,
         arrow_array_to_bodo(array, nullptr)};
 
     // Add Index arrays if any
-    for (int64_t i = 1; i < in_table->ncols(); i++) {
+    for (size_t i = 1; i < in_table->ncols(); i++) {
         out_arrs.push_back(in_table->columns[i]);
     }
 
