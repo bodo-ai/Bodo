@@ -98,7 +98,6 @@ def test_tpch_q15():
     run_tpch_query_test(tpch.tpch_q15)
 
 
-@pytest.mark.skip(reason="Waiting on dropduplicates to produce BodoDataFrame")
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
