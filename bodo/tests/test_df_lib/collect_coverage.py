@@ -2,6 +2,8 @@ import csv
 import os
 import warnings
 
+import pandas
+
 import bodo.pandas as pd
 import bodo.utils.pandas_coverage_tracking as tracker
 from bodo.pandas.utils import BodoLibFallbackWarning
@@ -15,7 +17,9 @@ def get_sample(name):
         if name.startswith("Series.str"):
             return pd.Series([""])
         if name.startswith("Series.dt"):
-            return pd.Series(pd.date_range("20010827 01:08:27", periods=1, freq="MS"))
+            return pd.Series(
+                pandas.date_range("20010827 01:08:27", periods=1, freq="MS")
+            )
         return pd.Series([])
 
     elif name.startswith("DataFrame."):
@@ -43,7 +47,6 @@ def get_prefix(attr):
 
 def collect(key):
     coverage = []
-    count = 0
     url = urls[key]
     for attr in tracker.get_pandas_apis_from_url(url):
         link = (
@@ -79,8 +82,6 @@ def collect(key):
             ]
             if fallback_warnings:
                 supported = "NO"
-        if supported == "YES":
-            count += 1
         coverage.append([attr, supported, link])
     return coverage
 

@@ -195,8 +195,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """Custom attribute access that triggers a fallback warning for unsupported attributes."""
 
         ignore_fallback_attrs = [
-            "dtype",
-            "name",
+            "dtypes",
             "to_string",
             "attrs",
             "flags",
