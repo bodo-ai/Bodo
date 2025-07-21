@@ -109,8 +109,8 @@ def cpp_table_to_series(
 
     arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
 
-    assert len(arrow_table.columns) == 1, (
-        f"cpp_table_to_series: Expected 1 column, got {len(arrow_table.columns)}"
+    assert len(arrow_table.columns) >= 1, (
+        f"cpp_table_to_series: Expected 1 or more columns, got {len(arrow_table.columns)}"
     )
 
     if arrow_schema is None:
