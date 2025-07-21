@@ -57,6 +57,35 @@ def get_lazy_single_manager_class() -> type[
     )
 
 
+def schema_has_index_arrays(arrow_schema: pa.Schema) -> bool:
+    """Return True if the Arrow schema has index arrays, False otherwise
+    (RangeIndex case).
+
+    Args:
+        arrow_schema (pa.Schema): The Arrow schema to check.
+
+    Returns:
+        bool: True if the schema has index arrays, False otherwise.
+    """
+
+    if arrow_schema.pandas_metadata is None:
+        return False
+
+    for descr in arrow_schema.pandas_metadata.get("index_columns", []):
+        if isinstance(descr, str):
+            if descr not in arrow_schema.names:
+                # Index not found in table: matching Pyarrow's behavior, which treats
+                # missing index as RangeIndex.
+                continue
+            return True
+        elif descr["kind"] == "range":
+            continue
+        else:
+            raise ValueError(f"Unrecognized index kind: {descr['kind']}")
+
+    return False
+
+
 def cpp_table_to_df(cpp_table, arrow_schema=None, use_arrow_dtypes=True):
     """Convert a C++ table (table_info) to a pandas DataFrame."""
     from bodo.ext import plan_optimizer
@@ -66,10 +95,30 @@ def cpp_table_to_df(cpp_table, arrow_schema=None, use_arrow_dtypes=True):
     return df
 
 
-def cpp_table_to_series(cpp_table, arrow_schema):
+def cpp_table_to_series(
+    cpp_table, arrow_schema=None, use_arrow_dtypes=True, ignore_index=False
+):
     """Convert a C++ table (table_info) to a pandas Series."""
-    as_df = cpp_table_to_df(cpp_table, arrow_schema)
-    return as_df.iloc[:, 0]
+    from bodo.ext import plan_optimizer
+
+    arrow_table = plan_optimizer.cpp_table_to_arrow(cpp_table)
+
+    if arrow_schema is None:
+        arrow_schema = arrow_table.schema
+
+    # We need to preserve Index for query output (see execute_plan)
+    if not ignore_index and schema_has_index_arrays(arrow_schema):
+        as_df = cpp_table_to_df(cpp_table, arrow_schema, use_arrow_dtypes)
+        return as_df.iloc[:, 0]
+
+    assert len(arrow_table.columns) == 1, (
+        f"cpp_table_to_series: Expected 1 column, got {len(arrow_table.columns)}"
+    )
+
+    arr = _arrow_to_pd_array(
+        arrow_table.columns[0], arrow_schema[0].type, use_arrow_dtypes
+    )
+    return pd.Series(arr, name=arrow_schema[0].name)
 
 
 @functools.lru_cache
@@ -447,11 +496,14 @@ def run_func_on_table(cpp_table, result_type, in_args):
             "rsub",
         )
     )
-    input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
 
     if is_series:
-        assert input.shape[1] == 1, "run_func_on_table: single column expected"
-        input = input.iloc[:, 0]
+        # NOTE: Assuming Series operations ignore Indexes
+        input = cpp_table_to_series(
+            cpp_table, use_arrow_dtypes=use_arrow_dtypes, ignore_index=True
+        )
+    else:
+        input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
 
     if isinstance(func, str) and is_attr:
         func_path_str = func
