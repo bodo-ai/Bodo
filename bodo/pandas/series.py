@@ -22,7 +22,7 @@ import bodo
 import bodo.decorators
 from bodo.ext import plan_optimizer
 from bodo.hiframes.pd_index_ext import init_range_index
-from bodo.hiframes.pd_series_ext import get_series_data, init_series
+from bodo.hiframes.pd_series_ext import init_series
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_from_cpp_table,
@@ -89,24 +89,24 @@ def series_to_cpp_table(series_type):
 
 
 @numba.njit
-def cpp_table_to_series(in_cpp_table, series_type):
-    series_arr_type = get_series_data(series_type)
+def cpp_table_to_series(in_cpp_table, series_arr_type):
     series_data = array_from_cpp_table(in_cpp_table, 0, series_arr_type)
     index = init_range_index(0, len(series_data), 1, None)
-    series = init_series(series_data, index)
+    out_series = init_series(series_data, index)
     delete_table(in_cpp_table)
-    return series
+    return out_series
 
 
 def get_map_jit_wrappers(empty_series, arg, na_action):
     """Returns a jitted map wrapper, cfunc wrapper, and decorator for cfunc"""
+    arr_type = bodo.typeof(empty_series).data
 
     @bodo.jit(cache=True, spawn=False, distributed=False)
     def map_wrapper_inner(series):
         return series.map(arg, na_action=na_action)
 
     def map_wrapper(in_cpp_table):
-        series = cpp_table_to_series(in_cpp_table, empty_series)
+        series = cpp_table_to_series(in_cpp_table, arr_type)
         out_series = map_wrapper_inner(series)
         out_cpp_table = series_to_cpp_table(out_series)
         return out_cpp_table
