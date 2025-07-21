@@ -819,7 +819,18 @@ def overload_coerce_to_array(
 
     # series
     if isinstance(data, SeriesType):
-        if not is_overload_none(use_nullable_array) and not is_nullable_type(data.data):
+        if not is_overload_none(use_nullable_array) and (
+            not is_nullable_type(data.data)
+            or isinstance(
+                data.data,
+                (
+                    ArrayItemArrayType,
+                    bodo.TupleArrayType,
+                    bodo.StructArrayType,
+                    bodo.MapArrayType,
+                ),
+            )
+        ):
 
             def impl_series_to_nullable(
                 data,
@@ -842,6 +853,117 @@ def overload_coerce_to_array(
             scalar_to_arr_len=None,
             dict_encode=True: bodo.hiframes.pd_series_ext.get_series_data(data)
         )  # pragma: no cover
+
+    # Convert inner types to nullable
+    if isinstance(data, ArrayItemArrayType) and not is_overload_none(
+        use_nullable_array
+    ):
+
+        def impl_array_item_array_to_nullable(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+            dict_encode=True,
+        ):  # pragma: no cover
+            new_inner_data = bodo.utils.conversion.coerce_to_array(
+                bodo.libs.array_item_arr_ext.get_data(data), use_nullable_array=True
+            )
+            new_data = bodo.libs.array_item_arr_ext.init_array_item_array(
+                bodo.libs.array_item_arr_ext.get_n_arrays(data),
+                new_inner_data,
+                bodo.libs.array_item_arr_ext.get_offsets(data),
+                bodo.libs.array_item_arr_ext.get_null_bitmap(data),
+            )
+            return new_data
+
+        return impl_array_item_array_to_nullable
+
+    if isinstance(data, bodo.StructArrayType) and not is_overload_none(
+        use_nullable_array
+    ):
+        n_fields = len(data.data)
+        field_names = data.names
+
+        if n_fields == 0:
+            return (
+                lambda data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+                dict_encode=True: data
+            )
+
+        func_text = (
+            "def bodo_impl_struct_array_to_nullable("
+            "    data,"
+            "    error_on_nonarray=True,"
+            "    use_nullable_array=None,"
+            "    scalar_to_arr_len=None,"
+            "    dict_encode=True"
+            "):\n"
+        )
+        func_text += "  inner_data_arrs = bodo.libs.struct_arr_ext.get_data(data)\n"
+
+        for i in range(n_fields):
+            func_text += (
+                f"  new_inner_data_arr_{i} = bodo.utils.conversion.coerce_to_array("
+                f"inner_data_arrs[{i}], use_nullable_array=True)\n"
+            )
+
+        new_data_tuple_str = "({},)".format(
+            ", ".join([f"new_inner_data_arr_{i}" for i in range(n_fields)])
+        )
+        field_names_tuple_str = "({},)".format(
+            ", ".join([f"'{f}'" for f in field_names])
+        )
+
+        func_text += (
+            f"  new_data = bodo.libs.struct_arr_ext.init_struct_arr("
+            f"{n_fields},"
+            f"{new_data_tuple_str},"
+            "bodo.libs.struct_arr_ext.get_null_bitmap(data),"
+            f"{field_names_tuple_str}"
+            ")\n"
+        )
+
+        func_text += "  return new_data"
+
+        return bodo.utils.utils.bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
+
+    if isinstance(data, bodo.TupleArrayType) and not is_overload_none(
+        use_nullable_array
+    ):
+
+        def impl_tuple_array_to_nullable(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+            dict_encode=True,
+        ):  # pragma: no cover
+            new_data = bodo.utils.conversion.coerce_to_array(
+                data._data, use_nullable_array=True
+            )
+            return bodo.libs.tuple_arr_ext.init_tuple_arr(new_data)
+
+        return impl_tuple_array_to_nullable
+
+    if isinstance(data, bodo.MapArrayType) and not is_overload_none(use_nullable_array):
+
+        def impl_map_array_to_nullable(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+            dict_encode=True,
+        ):  # pragma: no cover
+            new_data = bodo.utils.conversion.coerce_to_array(
+                data._data, use_nullable_array=True
+            )
+            return bodo.libs.map_arr_ext.init_map_arr(new_data)
+
+        return impl_map_array_to_nullable
 
     # string/binary/categorical Index
     if isinstance(data, (StringIndexType, BinaryIndexType, CategoricalIndexType)):

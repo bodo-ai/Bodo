@@ -91,6 +91,7 @@ def series_to_cpp_table(series_type):
 @numba.njit
 def cpp_table_to_series(in_cpp_table, series_arr_type):
     series_data = array_from_cpp_table(in_cpp_table, 0, series_arr_type)
+    # TODO: Add option to also convert index
     index = init_range_index(0, len(series_data), 1, None)
     out_series = init_series(series_data, index)
     delete_table(in_cpp_table)
