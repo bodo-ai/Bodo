@@ -9,7 +9,7 @@ from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 from libcpp cimport bool as c_bool
 import operator
-from libc.stdint cimport int64_t, uint64_t, uintptr_t
+from libc.stdint cimport int64_t, uint64_t
 import pandas as pd
 import pyarrow.parquet as pq
 

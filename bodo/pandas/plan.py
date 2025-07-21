@@ -389,7 +389,7 @@ class PythonScalarFuncExpression(Expression):
 
     @property
     def is_cfunc(self):
-        """Return the source of the expression."""
+        """Returns whether the scalar function is a cfunc."""
         return self.args[3]
 
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):

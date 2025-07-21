@@ -2,8 +2,6 @@
 
 #include <Python.h>
 #include <arrow/api.h>
-#include <object.h>
-#include <pytypedefs.h>
 #include <cstdint>
 #include <map>
 #include <variant>

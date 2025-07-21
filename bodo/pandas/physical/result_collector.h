@@ -2,7 +2,6 @@
 
 #include "../libs/_table_builder.h"
 
-#include <iostream>
 #include "physical/operator.h"
 
 class PhysicalResultCollector : public PhysicalSink {
