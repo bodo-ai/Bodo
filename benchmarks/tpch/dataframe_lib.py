@@ -1118,5 +1118,5 @@ def main():
 
 
 if __name__ == "__main__":
-    print(f"Running TPC-H against pd v{pd.__version__}")
+    print(f"Running TPC-H against bodo.pandas v{pd.__version__}")
     main()
