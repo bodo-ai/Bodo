@@ -9,7 +9,7 @@ import bodo.utils.pandas_coverage_tracking as tracker
 from bodo.pandas.utils import BodoLibFallbackWarning
 
 urls = tracker.PANDAS_URLS
-output_path = "bodo_compat_report.csv"
+output_path = "bodo_coverage_report.csv"
 
 
 def get_sample(name):
@@ -21,7 +21,6 @@ def get_sample(name):
                 pandas.date_range("20010827 01:08:27", periods=1, freq="MS")
             )
         return pd.Series([])
-
     elif name.startswith("DataFrame."):
         return pd.DataFrame({"A": []})
     elif name.startswith("DataFrameGroupBy."):
@@ -86,20 +85,23 @@ def collect(key):
     return coverage
 
 
-res = {}
-for key in urls:
-    res[key] = globals()["collect"](key)
+if __name__ == "__main__":
+    res = {}
+    assert os.environ["BODO_PANDAS_FALLBACK"] == "0", (
+        "Execute script with command >> BODO_PANDAS_FALLBACK=0 Python3 path-to-file/collect_coverage.py"
+    )
+    for key in urls:
+        res[key] = globals()["collect"](key)
 
+    with open(output_path, "w", newline="") as tsvfile:
+        writer = csv.writer(tsvfile, delimiter="\t")
+        writer.writerow(["Category", "Method", "Supported", "Link"])
 
-with open(output_path, "w", newline="") as tsvfile:
-    writer = csv.writer(tsvfile, delimiter="\t")
-    writer.writerow(["Category", "Method", "Supported", "Link"])
+        for key in res:
+            infolist = res[key]
+            if not infolist:
+                continue
+            for entry in infolist:
+                writer.writerow([key, entry[0], entry[1], entry[2]])
 
-    for key in res:
-        infolist = res[key]
-        if not infolist:
-            continue
-        for entry in infolist:
-            writer.writerow([key, entry[0], entry[1], entry[2]])
-
-print(f"Compatibility report written to: {os.path.abspath(output_path)}")
+    print(f"Compatibility report written to: {os.path.abspath(output_path)}")
