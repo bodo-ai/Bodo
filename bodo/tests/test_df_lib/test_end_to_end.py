@@ -302,20 +302,21 @@ def test_projection(datapath):
 )
 def test_filter_pushdown(datapath, file_path, op):
     """Test for filter with filter pushdown into read parquet."""
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    # Make sure bodo_df2 is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    bodo_df1 = bd.read_parquet(datapath(file_path))
-    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
+        bodo_df1 = bd.read_parquet(datapath(file_path))
+        bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
-    # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2.is_lazy_plan()
+        pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
 
-    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
-    py_df1 = pd.read_parquet(datapath(file_path))
-    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
+    with assert_executed_plan_count(0):
+        py_df1 = pd.read_parquet(datapath(file_path))
+        py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
@@ -341,23 +342,22 @@ def test_filter_pushdown(datapath, file_path, op):
 )
 def test_filter_distributed(datapath, file_path, op):
     """Very simple test for filter for sanity checking."""
-    bodo_df1 = bd.read_parquet(datapath(file_path))
-    py_df1 = pd.read_parquet(datapath(file_path))
+    # Make sure bodo_df2 is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path))
 
-    @bodo.jit(spawn=True)
-    def f(df):
-        return df
+        @bodo.jit(spawn=True)
+        def f(df):
+            return df
 
-    # Force plan to execute but keep distributed.
-    f(bodo_df1)
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    with assert_executed_plan_count(1):
+        # Force plan to execute but keep distributed.
+        f(bodo_df1)
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
-
-    # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2.is_lazy_plan()
-
-    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
+        bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
+        py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     _test_equal(
         bodo_df2.copy(),
@@ -373,8 +373,9 @@ def test_filter_distributed(datapath, file_path, op):
 )
 def test_filter(datapath, op):
     """Test for standalone filter."""
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
 
     # Force read parquet node to execute.
     _test_equal(
@@ -385,14 +386,11 @@ def test_filter(datapath, op):
         reset_index=True,
     )
 
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-
-    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
-
-    # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2.is_lazy_plan()
-
-    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
+    # Make sure bodo_df2 is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+        bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
+        py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     _test_equal(
         bodo_df2.copy(),
@@ -1801,25 +1799,26 @@ def test_series_filter_pushdown(datapath, file_path, op):
 )
 def test_series_filter_distributed(datapath, file_path, op):
     """Very simple test for series filter for sanity checking."""
-    bodo_df1 = bd.read_parquet(datapath(file_path))
-    py_df1 = pd.read_parquet(datapath(file_path))
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path))
 
-    @bodo.jit(spawn=True)
-    def f(df):
-        return df
+        @bodo.jit(spawn=True)
+        def f(df):
+            return df
 
-    # Force plan to execute but keep distributed.
-    f(bodo_df1)
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    with assert_executed_plan_count(1):
+        # Force plan to execute but keep distributed.
+        f(bodo_df1)
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    bodo_series_a = bodo_df1["A"]
-    bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+    # Make sure bodo_filter_a is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        bodo_series_a = bodo_df1["A"]
+        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
 
-    # Make sure bodo_filter_a is unevaluated at this point.
-    assert bodo_filter_a.is_lazy_plan()
-
-    py_series_a = py_df1["A"]
-    py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+        py_series_a = py_df1["A"]
+        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
 
     _test_equal(
         bodo_filter_a,
@@ -1845,29 +1844,28 @@ def test_series_filter_distributed(datapath, file_path, op):
 @pytest.mark.parametrize("mode", [0, 1, 2])
 def test_series_filter_series(datapath, file_path, op, mode):
     """Very simple test for series filter for sanity checking."""
-    bodo_df1 = bd.read_parquet(datapath(file_path))
-    py_df1 = pd.read_parquet(datapath(file_path))
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path))
 
-    @bodo.jit(spawn=True)
-    def f(df):
-        return df
+        @bodo.jit(spawn=True)
+        def f(df):
+            return df
 
-    # Force plan to execute but keep distributed.
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    with assert_executed_plan_count(0 if mode == 0 else 1):
+        # Force plan to execute but keep distributed.
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+        bodo_series_a = bodo_df1["A"]
+        if mode == 1:
+            f(bodo_series_a)
+        elif mode == 2:
+            bodo_series_a._mgr._collect()
 
-    bodo_series_a = bodo_df1["A"]
-    if mode == 1:
-        f(bodo_series_a)
-    elif mode == 2:
-        bodo_series_a._mgr._collect()
-
-    bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
-
-    # Make sure bodo_filter_a is unevaluated at this point.
-    assert bodo_filter_a.is_lazy_plan()
-
-    py_series_a = py_df1["A"]
-    py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+    # Make sure bodo_filter_a is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+        py_series_a = py_df1["A"]
+        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
 
     _test_equal(
         bodo_filter_a,
