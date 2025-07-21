@@ -414,7 +414,8 @@ def _jit(signature_or_function=None, pipeline_class=None, **options):
     return numba_jit
 
 
-def cfunc(signature_or_function=None, pipeline_class=None, **options):
+def _cfunc(signature_or_function=None, pipeline_class=None, **options):
+    """Internal wrapper for Cfunc for UDFs in DataFrame Library."""
     _init_extensions()
 
     # set nopython by default

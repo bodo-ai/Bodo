@@ -387,7 +387,7 @@ class PythonScalarFuncExpression(Expression):
         return self.args[0]
 
     @property
-    def cfunc(self):
+    def is_cfunc(self):
         """Return the source of the expression."""
         return self.args[3]
 
@@ -413,7 +413,7 @@ class PythonScalarFuncExpression(Expression):
                 new_source_plan,
                 self.args[1],
                 (in_col_ind + col_index_offset,) + index_cols,
-                self.cfunc,
+                self.is_cfunc,
             )
             expr.is_series = self.is_series
             return expr
@@ -783,7 +783,7 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
             kwargs,
         ),
         tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
-        None,  # cfunc
+        False,  # is_cfunc
     )
 
     # Select Index columns explicitly for output

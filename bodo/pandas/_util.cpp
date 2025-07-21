@@ -7,6 +7,7 @@
 #include <arrow/scalar.h>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
@@ -328,20 +329,7 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
 
 std::shared_ptr<table_info> runPythonScalarFunction(
     std::shared_ptr<table_info> input_batch,
-    const std::shared_ptr<arrow::DataType> &result_type, PyObject *args,
-    table_udf_t cfunc_ptr) {
-    if (cfunc_ptr != nullptr) {
-        table_info *in_table = new table_info(*input_batch);
-        table_info *out_table = cfunc_ptr(in_table);
-
-        std::shared_ptr<table_info> out_batch(out_table);
-        out_batch->column_names = input_batch->column_names;
-        out_batch->metadata = input_batch->metadata;
-
-        return out_batch;
-    }
-    // Call bodo.pandas.utils.run_apply_udf() to run the UDF
-
+    const std::shared_ptr<arrow::DataType> &result_type, PyObject *args) {
     // Import the bodo.pandas.utils module
     PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
     if (!bodo_module) {
@@ -375,6 +363,22 @@ std::shared_ptr<table_info> runPythonScalarFunction(
 
     Py_DECREF(bodo_module);
     Py_DECREF(result);
+
+    return out_batch;
+}
+
+std::shared_ptr<table_info> runCfuncScalarFunction(
+    std::shared_ptr<table_info> input_batch, table_udf_t cfunc_ptr) {
+    table_info *in_table = new table_info(*input_batch);
+    table_info *out_table = cfunc_ptr(in_table);
+
+    if (!out_table) {
+        throw std::runtime_error("Error executing cfunc.");
+    }
+
+    std::shared_ptr<table_info> out_batch(out_table);
+    out_batch->column_names = input_batch->column_names;
+    out_batch->metadata = input_batch->metadata;
 
     return out_batch;
 }

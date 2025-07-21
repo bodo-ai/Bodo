@@ -799,7 +799,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
         : PhysicalExpression(children),
           scalar_func_data(_scalar_func_data),
           result_type(_result_type) {
-        if (scalar_func_data.cfunc != Py_None) {
+        if (scalar_func_data.is_cfunc) {
             PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
 
             if (!bodo_module) {
@@ -809,7 +809,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
             }
 
             PyObject *result = PyObject_CallMethod(bodo_module, "compile_cfunc",
-                                                   "O", scalar_func_data.cfunc);
+                                                   "O", scalar_func_data.args);
             if (!result) {
                 PyErr_Print();
                 Py_DECREF(bodo_module);

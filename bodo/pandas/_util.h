@@ -127,27 +127,23 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     BodoPythonScalarFunctionData(PyObject *args,
                                  std::shared_ptr<arrow::Schema> out_schema,
-                                 PyObject *cfunc)
-        : args(args), out_schema(std::move(out_schema)), cfunc(cfunc) {
+                                 bool is_cfunc)
+        : args(args), out_schema(std::move(out_schema)), is_cfunc(is_cfunc) {
         if (args)
             Py_INCREF(args);
-        if (cfunc)
-            Py_INCREF(cfunc);
     }
     BodoPythonScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema)
-        : args(nullptr), out_schema(std::move(out_schema)), cfunc(nullptr) {}
+        : args(nullptr), out_schema(std::move(out_schema)), is_cfunc(false) {}
     ~BodoPythonScalarFunctionData() override {
         if (args)
             Py_DECREF(args);
-        if (cfunc)
-            Py_DECREF(cfunc);
     }
     BodoPythonScalarFunctionData(const BodoPythonScalarFunctionData &other)
-        : args(other.args), out_schema(other.out_schema), cfunc(other.cfunc) {
+        : args(other.args),
+          out_schema(other.out_schema),
+          is_cfunc(other.is_cfunc) {
         if (args)
             Py_INCREF(args);
-        if (cfunc)
-            Py_INCREF(cfunc);
     }
     BodoPythonScalarFunctionData &operator=(
         const BodoPythonScalarFunctionData &other) {
@@ -156,9 +152,7 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
             Py_XDECREF(args);
             args = other.args;
             out_schema = other.out_schema;
-            Py_XINCREF(other.cfunc);
-            Py_XDECREF(cfunc);
-            cfunc = other.cfunc;
+            is_cfunc = other.is_cfunc;
         }
         return *this;
     }
@@ -166,16 +160,16 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     bool Equals(const FunctionData &other_p) const override {
         const BodoPythonScalarFunctionData &other =
             other_p.Cast<BodoPythonScalarFunctionData>();
-        return (other.args == this->args && other.cfunc == this->cfunc);
+        return (other.args == this->args && other.is_cfunc == this->is_cfunc);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
         return duckdb::make_uniq<BodoPythonScalarFunctionData>(
-            this->args, out_schema, cfunc);
+            this->args, out_schema, is_cfunc);
     }
 
     PyObject *args;  // If present then a UDF.
     std::shared_ptr<arrow::Schema> out_schema;
-    PyObject *cfunc;
+    bool is_cfunc;
 };
 
 /**
@@ -214,8 +208,18 @@ struct BodoAggFunctionData : public duckdb::FunctionData {
  */
 std::shared_ptr<table_info> runPythonScalarFunction(
     std::shared_ptr<table_info> input_batch,
-    const std::shared_ptr<arrow::DataType> &result_type, PyObject *args,
-    table_udf_t cfunc_ptr);
+    const std::shared_ptr<arrow::DataType> &result_type, PyObject *args);
+
+/**
+ * @brief Run a cfunc scalar function on the input batch and return the
+ * output table (single data column plus Index columns).
+ *
+ * @param input_batch input table batch
+ * @param cfunc_ptr Pointer to the Cfunc to execute on the input batch.
+ * @return std::shared_ptr<table_info> output table from the Python function
+ */
+std::shared_ptr<table_info> runCfuncScalarFunction(
+    std::shared_ptr<table_info> input_batch, table_udf_t cfunc_ptr);
 
 /**
  * @brief Convert duckdb table filters to pyiceberg expressions.

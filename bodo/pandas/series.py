@@ -19,6 +19,7 @@ from pandas._typing import (
 )
 
 import bodo
+import bodo.decorators
 from bodo.ext import plan_optimizer
 from bodo.hiframes.pd_index_ext import init_range_index
 from bodo.hiframes.pd_series_ext import get_series_data, init_series
@@ -113,7 +114,7 @@ def get_map_jit_wrappers(empty_series, arg, na_action):
     return (
         map_wrapper_inner,
         map_wrapper,
-        bodo.cfunc(table_type(table_type), cache=True),
+        bodo.decorators._cfunc(table_type(table_type), cache=True),
     )
 
 
@@ -706,10 +707,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 return _get_series_python_func_plan(
                     self._plan,
                     empty_series,
-                    (map_cfunc_wrapper, cfunc_deco),
+                    map_cfunc_wrapper,
                     (),
                     {},
-                    type="cfunc",
+                    cfunc_decorator=cfunc_deco,
                 )
             else:
                 msg = (
@@ -1646,7 +1647,7 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return PythonScalarFuncExpression(
-            empty_data, plan, expr.args[1], (idx,) + tuple(index_cols), expr.cfunc
+            empty_data, plan, expr.args[1], (idx,) + tuple(index_cols), expr.is_cfunc
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -1761,12 +1762,12 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
             {},  # kwargs
         ),
         (0,) + index_cols,
-        None,  # cfunc
+        False,  # is_cfunc
     )
 
 
 def _get_series_python_func_plan(
-    series_proj, empty_data, func, args, kwargs, is_method=True, type=""
+    series_proj, empty_data, func, args, kwargs, is_method=True, cfunc_decorator=None
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
@@ -1785,18 +1786,22 @@ def _get_series_python_func_plan(
     index_cols = range(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
-    expr = PythonScalarFuncExpression(
-        empty_data,
-        source_data,
-        (
+
+    if cfunc_decorator:
+        func_args = (func, cfunc_decorator)
+        is_cfunc = True
+    else:
+        func_args = (
             func,
             True,  # is_series
             is_method,  # is_method
             args,  # args
             kwargs,  # kwargs
-        ),
-        (col_index,) + tuple(index_cols),
-        func if type == "cfunc" else None,  # cfunc ptr
+        )
+        is_cfunc = False
+
+    expr = PythonScalarFuncExpression(
+        empty_data, source_data, func_args, (col_index,) + tuple(index_cols), is_cfunc
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))

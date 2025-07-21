@@ -127,12 +127,12 @@ std::vector<int> get_projection_pushed_down_columns(
  * @param args arguments to the UDF
  * @param selected_columns column indices for input table columns to pass to the
  * UDF
+ * @param is_cfunc Whether to compile and run func as a cfunc
  * @return duckdb::unique_ptr<duckdb::Expression> Expression node for UDF
  */
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns,
-    PyObject *cfunc_ptr);
+    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc);
 
 /**
  * @brief Create an expression for a NULL value of given type.

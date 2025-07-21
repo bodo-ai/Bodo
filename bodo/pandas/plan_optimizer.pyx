@@ -297,10 +297,6 @@ cdef extern from "duckdb/planner/operator/logical_copy_to_file.hpp" namespace "d
     cdef cppclass CLogicalCopyToFile" duckdb::LogicalCopyToFile"(CLogicalOperator):
         pass
 
-cdef extern from "_util.h":
-    cdef struct table_info
-    ctypedef table_info *(*table_udf_t)(table_info *)
-
 cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
@@ -312,7 +308,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
-    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices, object cfunc) except +
+    cdef unique_ptr[CExpression] make_python_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices, c_bool is_cfunc) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
@@ -573,11 +569,11 @@ cdef class PythonScalarFuncExpression(Expression):
         LogicalOperator source,
         object args,
         vector[int] input_column_indices,
-        object cfunc):
+        c_bool is_cfunc):
 
         self.out_schema = out_schema
         self.c_expression = make_python_scalar_func_expr(
-            source.c_logical_operator, out_schema, args, input_column_indices, cfunc)
+            source.c_logical_operator, out_schema, args, input_column_indices, is_cfunc)
 
     def __str__(self):
         return f"PythonScalarFuncExpression({self.out_schema})"
