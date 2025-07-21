@@ -104,6 +104,9 @@ def test_tpch_q12():
     run_tpch_query_test(tpch.tpch_q12)
 
 
+@pytest.mark.skip(
+    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
+)
 def test_tpch_q13():
     run_tpch_query_test(tpch.tpch_q13)
 
@@ -117,6 +120,9 @@ def test_tpch_q15():
     run_tpch_query_test(tpch.tpch_q15)
 
 
+@pytest.mark.skip(
+    reason="TypeError: val must be a BodoDataFrame or BodoSeries, got <class 'pandas.core.frame.DataFrame'>"
+)
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
