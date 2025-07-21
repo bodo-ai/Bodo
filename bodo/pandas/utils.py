@@ -532,7 +532,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
         if out.dtype != pd.ArrowDtype(result_type):
             out = out.astype(pd.ArrowDtype(result_type))
     else:
-        out = _empty_pd_array(result_type)
+        out = pd.Series(_empty_pd_array(result_type), index=out.index, name=out.name)
 
     if out.name is None:
         out.name = "OUT"
