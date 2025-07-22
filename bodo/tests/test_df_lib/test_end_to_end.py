@@ -2545,6 +2545,7 @@ def test_drop_duplicates():
                 "B": pd.array([2, 3, 4, 5] * 50, "Float64"),
             }
         )
+        df.loc[99, "B"] = np.nan
         bdf = bd.from_pandas(df).drop_duplicates()
         pdf = df.copy().drop_duplicates()
     _test_equal(

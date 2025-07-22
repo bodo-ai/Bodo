@@ -140,7 +140,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
             get_streaming_batch_size(), true, -1, -1, -1, false, std::nullopt,
-            /*use_sql_rules*/ false, /* pandas_drop_na_*/ true);
+            /*use_sql_rules*/ false, /* pandas_drop_na_*/ false);
     }
 
     virtual ~PhysicalAggregate() = default;
