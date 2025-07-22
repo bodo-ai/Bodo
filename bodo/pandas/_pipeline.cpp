@@ -1,4 +1,5 @@
 #include "_pipeline.h"
+#include <string>
 
 #include "physical/result_collector.h"
 
@@ -129,11 +130,23 @@ void Pipeline::Execute() {
     // Finalize
     start = bodo_cpp_clock::now();
     source->Finalize();
+    timings[source->ToString() + " Finalize"] +=
+    std::chrono::duration_cast<std::chrono::microseconds>(
+        bodo_cpp_clock::now() - start)
+        .count();
+    int idx = 0;
     for (auto& op : between_ops) {
+        start = bodo_cpp_clock::now();
         op->Finalize();
+        timings[std::to_string(idx) + " " + op->ToString() + " Finalize"] +=
+            std::chrono::duration_cast<std::chrono::microseconds>(
+            bodo_cpp_clock::now() - start)
+            .count();
+        idx++;
     }
+    start = bodo_cpp_clock::now();
     sink->Finalize();
-    timings["Finalize"] +=
+    timings[sink->ToString() + " Finalize"] +=
         std::chrono::duration_cast<std::chrono::microseconds>(
             bodo_cpp_clock::now() - start)
             .count();
@@ -146,11 +159,15 @@ void Pipeline::Execute() {
         << std::endl;
     std::vector<std::string> name_order;
     name_order.push_back(source->ToString());
+    name_order.push_back(source->ToString()+ " Finalize");
     for (size_t i = 0; i < between_ops.size(); ++i) {
         name_order.push_back(std::to_string(i) + " " +
                              between_ops[i]->ToString());
+        // name_order.push_back(std::to_string(i) + " " +
+        //                      between_ops[i]->ToString() + " Finalize");
     }
     name_order.push_back(sink->ToString());
+    name_order.push_back(sink->ToString()+ " Finalize");
     for (const auto& name : name_order) {
         std::cout << name << " => " << (timings[name] / 1000000.0) << std::endl;
     }
