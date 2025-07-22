@@ -7,7 +7,7 @@ requires = [
     # Build Libraries
     "numpy>=1.24",
     "pyarrow>=19.0,<19.1",
-    "mpi4py>=4.0,<4.1",
+    "mpi4py",
     "pip"
 ]
 build-backend = "scikit_build_core.build"
@@ -94,9 +94,6 @@ wheel.exclude = [
     "bodo/transforms/**/*.pyc",
     "bodo/tests/*",
 ]
-
-[tool.scikit-build.cmake.define]
-MPICH_VERSION = "4.1.3"
 
 # When building for Conda, set different
 # arguments for CMake
@@ -191,7 +188,7 @@ manylinux-x86_64-image = "quay.io/pypa/manylinux_2_28_x86_64:latest"
 manylinux-aarch64-image = "quay.io/pypa/manylinux_2_28_aarch64:latest"
 test-command = """
 set -exo pipefail
-BODO_NUM_WORKERS=2 python {project}/buildscripts/bodo/pip/test.py
+BODO_NUM_WORKERS=2 mpiexec -n 1 python {project}/buildscripts/bodo/pip/test.py
 
 # Check that only expected libs are included in the wheel
 LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libbrotli.*|libcrypt|libidn2|liblber-2|libpcre2|libpsl|libsasl2|libselinux|libssh|libunistring|libldap-2)-.*\\.so(\\.[0-9]+)*"
@@ -208,7 +205,7 @@ done
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
 set -exo pipefail
-BODO_NUM_WORKERS=2 python {project}/buildscripts/bodo/pip/test.py
+BODO_NUM_WORKERS=2 mpiexec -n 1 python {project}/buildscripts/bodo/pip/test.py
 
 # Check that only expected libs are included in the wheel
 LIB_WHITELIST="^(libc\\+\\+|libcom_err|libcrypto|libcurl|libgssapi_krb5|libhdf5|libk5crypto|libkrb5support|libkrb5|libnghttp2|libssh2|libssl|libsz|libzstd|libz|libaws-.*)(\\.[0-9]+)*\\.dylib$"

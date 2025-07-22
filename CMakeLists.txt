@@ -319,27 +319,8 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 endif()
 
-# Vendor MPICH
-if(DEFINED ENV{BODO_VENDOR_MPICH})
-  # NOTE: The new mpich wheels have library dependencies that are not available during the build
-  #       process and cause errors for wheel repair.
-  # TODO [BSE-4934]: Use mpi4py 4.1 as dependency and avoid vendoring mpi4py and MPICH.
-  message(STATUS "Downloading Bodo's previous version to vendor MPICH")
-  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download bodo==2025.6 --python-version=3.12 --no-deps --default-timeout=100)
-  execute_process(COMMAND unzip "bodo-*.whl" "bodo*.data/*" -d mpich-tmp-extract-dir)
-  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/bodo-*.data/data/*")
-  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
-    FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
-  file(GLOB MPICH_WHEEL "bodo-*.whl")
-  file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
-  message(STATUS "Moved MPICH to ${SKBUILD_DATA_DIR}")
-
-  set(MPI_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
-  set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
-else()
-  set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
-  set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
-endif()
+set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
+set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
 
 # MPI implementation (Intel or MPICH)
 if (WIN32)
@@ -349,20 +330,6 @@ else()
 endif()
 
 cmake_print_variables(MPI_INCLUDE_DIR)
-
-# Vendor MPI4Py
-if(DEFINED ENV{BODO_VENDOR_MPI4PY} AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
-  message(STATUS "Copying MPI4Py to Source Directory")
-  # Extract the location of the site-packages directory containing mpi4py
-  execute_process(
-    COMMAND "${PYTHON_EXECUTABLE}" -c "import mpi4py; print(mpi4py.__path__[0])"
-    OUTPUT_VARIABLE MPI4PY_PACKAGE_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-  file(GLOB MPI4PY_CONTENTS "${MPI4PY_PACKAGE_DIR}/*")
-  file(COPY ${MPI4PY_CONTENTS} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py")
-  file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py/_vendored_mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/mpi4py/")
-endif()
 
 # Find PyArrow Include and Lib Directory
 # TODO: Use Arrow Directories from Conda Instead if Available

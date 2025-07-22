@@ -134,7 +134,7 @@ setuptools_scm = ">=8"
 cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py
-mpi4py = ">=4.0,<4.1"
+mpi4py = "*"
 
 # Build C++ Deps
 # Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
@@ -237,9 +237,9 @@ httpie = "*"
 # Restricted to match Intel MPI. Upgrade with IMPI.
 # Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-mpich = { version = "4.1.*", build = "h*" }
+mpich = "*"
 [feature.local-mpi.target.linux.dependencies]
-mpich = { version = "4.1.*", build = "h*" }
+mpich = "*"
 
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
@@ -249,7 +249,7 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
+dependencies = { mpich = { version = "*", build = "external_4", channel = "conda-forge/label/broken" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
