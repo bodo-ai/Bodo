@@ -188,6 +188,12 @@ class LogicalAggregate(LogicalOperator):
     pass
 
 
+class LogicalDistinct(LogicalOperator):
+    """Logical operator for distinct rows."""
+
+    pass
+
+
 class LogicalComparisonJoin(LogicalOperator):
     """Logical operator for comparison-based joins."""
 

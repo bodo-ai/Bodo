@@ -2533,3 +2533,25 @@ def test_fallback_wrapper_deep_fallback():
     assert "TypeError triggering deeper fallback" in warning_msg, (
         f"Unexpected warning message: {warning_msg}"
     )
+
+
+def test_drop_duplicates():
+    """Test for drop_duplicates API."""
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array([0, 1] * 100, "Int32"),
+                "B": pd.array([2, 3, 4, 5] * 50, "Float64"),
+            }
+        )
+        df.loc[99, "B"] = np.nan
+        bdf = bd.from_pandas(df).drop_duplicates()
+        pdf = df.copy().drop_duplicates()
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )

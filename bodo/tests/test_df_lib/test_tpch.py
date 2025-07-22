@@ -36,16 +36,10 @@ def run_tpch_query_test(query_func):
         assert np.isclose(pd_result, bd_result)
 
 
-@pytest.mark.skip(
-    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
-)
 def test_tpch_q01():
     run_tpch_query_test(tpch.tpch_q01)
 
 
-@pytest.mark.skip(
-    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
-)
 def test_tpch_q02():
     run_tpch_query_test(tpch.tpch_q02)
 
@@ -54,14 +48,11 @@ def test_tpch_q03():
     run_tpch_query_test(tpch.tpch_q03)
 
 
-@pytest.mark.skip(reason="TypeError: a bytes-like object is required, not 'str'")
+@pytest.mark.skip("hanging?")
 def test_tpch_q04():
     run_tpch_query_test(tpch.tpch_q04)
 
 
-@pytest.mark.skip(
-    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
-)
 def test_tpch_q05():
     run_tpch_query_test(tpch.tpch_q05)
 
@@ -70,9 +61,6 @@ def test_tpch_q06():
     run_tpch_query_test(tpch.tpch_q06)
 
 
-@pytest.mark.skip(
-    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
-)
 def test_tpch_q07():
     run_tpch_query_test(tpch.tpch_q07)
 
@@ -81,9 +69,7 @@ def test_tpch_q08():
     run_tpch_query_test(tpch.tpch_q08)
 
 
-@pytest.mark.skip(
-    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
-)
+# @pytest.mark.skip("hanging?")
 def test_tpch_q09():
     run_tpch_query_test(tpch.tpch_q09)
 
@@ -92,14 +78,10 @@ def test_tpch_q10():
     run_tpch_query_test(tpch.tpch_q10)
 
 
-@pytest.mark.skip(
-    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
-)
 def test_tpch_q11():
     run_tpch_query_test(tpch.tpch_q11)
 
 
-@pytest.mark.skip(reason=" AssertionError: assert (False)")
 def test_tpch_q12():
     run_tpch_query_test(tpch.tpch_q12)
 
@@ -115,14 +97,12 @@ def test_tpch_q14():
     run_tpch_query_test(tpch.tpch_q14)
 
 
-@pytest.mark.skip(reason="Length mismatch")
+@pytest.mark.skip("Length mismatch")
 def test_tpch_q15():
     run_tpch_query_test(tpch.tpch_q15)
 
 
-@pytest.mark.skip(
-    reason="TypeError: val must be a BodoDataFrame or BodoSeries, got <class 'pandas.core.frame.DataFrame'>"
-)
+@pytest.mark.skip("Hanging?")
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
@@ -147,5 +127,6 @@ def test_tpch_q21():
     run_tpch_query_test(tpch.tpch_q21)
 
 
+@pytest.mark.skip("hanging?")
 def test_tpch_q22():
     run_tpch_query_test(tpch.tpch_q22)
