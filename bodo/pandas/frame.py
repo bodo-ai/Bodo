@@ -818,7 +818,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             func, [], df_arg, *args, **kwargs
         )
 
-    @check_args_fallback(supported=["on", "left_on", "right_on"])
+    @check_args_fallback(supported=["on", "left_on", "right_on", "how"])
     def merge(
         self,
         right: BodoDataFrame | BodoSeries,
@@ -837,7 +837,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         from bodo.pandas.base import _empty_like
 
         # Validates only on, left_on and right_on for now
-        left_on, right_on = validate_merge_spec(self, right, on, left_on, right_on)
+        is_cross = how == "cross"
+        left_on, right_on = validate_merge_spec(
+            self, right, on, left_on, right_on, is_cross
+        )
 
         zero_size_self = _empty_like(self)
         zero_size_right = _empty_like(right)
@@ -845,8 +848,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             zero_size_right,
             how=how,
             on=None,
-            left_on=left_on,
-            right_on=right_on,
+            left_on=None if is_cross else left_on,
+            right_on=None if is_cross else right_on,
             left_index=left_index,
             right_index=right_index,
             sort=sort,
@@ -867,11 +870,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             c + str(i) for i, c in enumerate(empty_join_out.columns)
         ]
 
+        join_type = _get_join_type_from_how(how)
         planComparisonJoin = LogicalComparisonJoin(
             empty_join_out,
             self._plan,
             right._plan,
-            plan_optimizer.CJoinType.INNER,
+            join_type,
             key_indices,
         )
 
@@ -951,46 +955,37 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
+        import pyarrow as pa
 
         from bodo.pandas.base import _empty_like
 
-        # Only selecting columns or filtering with BodoSeries is supported
-        if not (
-            isinstance(key, (str, BodoSeries))
-            or (isinstance(key, list) and all(isinstance(k, str) for k in key))
-        ):
-            raise BodoLibNotImplementedException(
-                "only string and BodoSeries keys are supported"
-            )
-
-        """ Create 0 length versions of the dataframe and the key and
-            simulate the operation to see the resulting type. """
+        # Create 0 length versions of the dataframe and the key and
+        # simulate the operation to see the resulting type.
         zero_size_self = _empty_like(self)
-        if isinstance(key, BodoSeries):
-            """ This is a masking operation. """
-            key_plan = (
-                # TODO: error checking for key to be a projection on the same dataframe
-                # with a binary operator
-                get_proj_expr_single(key._plan)
-                if key._plan is not None
-                else plan_optimizer.LogicalGetSeriesRead(key._mgr._md_result_id)
-            )
+
+        # Filter operation
+        if isinstance(key, BodoSeries) and key._plan.pa_schema.types[0] == pa.bool_():
+            key_expr = get_proj_expr_single(key._plan)
+            key_expr = key_expr.replace_source(self._plan)
+            if key_expr is None:
+                raise BodoLibNotImplementedException(
+                    "DataFrame filter expression must be on the same dataframe."
+                )
             zero_size_key = _empty_like(key)
             empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
-                plan=LogicalFilter(empty_data, self._plan, key_plan),
+                plan=LogicalFilter(empty_data, self._plan, key_expr),
             )
-        else:
-            """ This is selecting one or more columns. Be a bit more
-                lenient than Pandas here which says that if you have
-                an iterable it has to be 2+ elements. We will allow
-                just one element. """
+        # Select one or more columns
+        elif isinstance(key, str) or (
+            isinstance(key, list) and all(isinstance(k, str) for k in key)
+        ):
             if isinstance(key, str):
                 key = [key]
                 output_series = True
             else:
                 output_series = False
-            assert isinstance(key, Iterable)
+
             key = list(key)
             # convert column name to index
             key_indices = [self.columns.get_loc(x) for x in key]
@@ -1013,6 +1008,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     exprs,
                 ),
             )
+
+        raise BodoLibNotImplementedException(
+            "DataFrame getitem: Only selecting columns or filtering with BodoSeries is supported."
+        )
 
     @check_args_fallback("none")
     def __setitem__(self, key, value) -> None:
@@ -1059,6 +1058,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             const_expr = ConstantExpression(
                 # Dummy empty data for LazyPlan
                 empty_data,
+                self._plan,
                 value,
             )
             proj_exprs = _get_setitem_proj_exprs(
@@ -1454,7 +1454,7 @@ def maybe_make_list(obj):
     return obj
 
 
-def validate_merge_spec(left, right, on, left_on, right_on):
+def validate_merge_spec(left, right, on, left_on, right_on, is_cross):
     """Check on, left_on and right_on values for type correctness
     (currently only str, str list, str tuple, or None are supported)
     and matching number of elements. If failed to validate, raise error.
@@ -1463,6 +1463,13 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_on(on)
     validate_on(left_on)
     validate_on(right_on)
+
+    if is_cross:
+        if on is not None or left_on is not None or right_on is not None:
+            raise ValueError(
+                'Cannot specify "on", "left_on" or "right_on" for cross join.'
+            )
+        return [], []
 
     if on is None and left_on is None and right_on is None:
         # Join on common keys if keys not specified
@@ -1497,3 +1504,20 @@ def validate_merge_spec(left, right, on, left_on, right_on):
     validate_keys(right_on, right)
 
     return left_on, right_on
+
+
+def _get_join_type_from_how(how: str) -> plan_optimizer.CJoinType:
+    """Convert how string to DuckDB JoinType enum."""
+
+    if how == "inner":
+        return plan_optimizer.CJoinType.INNER
+    elif how == "left":
+        return plan_optimizer.CJoinType.LEFT
+    elif how == "right":
+        return plan_optimizer.CJoinType.RIGHT
+    elif how == "outer":
+        return plan_optimizer.CJoinType.OUTER
+    elif how == "cross":
+        return plan_optimizer.CJoinType.INNER
+    else:
+        raise ValueError(f"Invalid join type: {how}")
