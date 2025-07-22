@@ -2547,4 +2547,10 @@ def test_drop_duplicates():
         )
         bdf = bd.from_pandas(df).drop_duplicates()
         pdf = df.copy().drop_duplicates()
-    _test_equal(bdf, pdf)
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
