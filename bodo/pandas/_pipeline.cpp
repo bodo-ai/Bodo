@@ -141,25 +141,23 @@ void Pipeline::Execute() {
     int myrank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-    if (myrank == 0) {
-        std::cout
-            << "------------------------Pipeline timing------------------------"
-            << std::endl;
-        std::vector<std::string> name_order;
-        name_order.push_back(source->ToString());
-        for (size_t i = 0; i < between_ops.size(); ++i) {
-            name_order.push_back(std::to_string(i) + " " +
-                                 between_ops[i]->ToString());
-        }
-        name_order.push_back(sink->ToString());
-        for (const auto& name : name_order) {
-            std::cout << name << " => " << (timings[name] / 1000000.0)
-                      << std::endl;
-        }
-        std::cout
-            << "--------------------End Pipeline timing------------------------"
-            << std::endl;
+    std::cout
+        << "------------------------Pipeline timing------------------------"
+        << std::endl;
+    std::vector<std::string> name_order;
+    name_order.push_back(source->ToString());
+    for (size_t i = 0; i < between_ops.size(); ++i) {
+        name_order.push_back(std::to_string(i) + " " +
+                             between_ops[i]->ToString());
     }
+    name_order.push_back(sink->ToString());
+    for (const auto& name : name_order) {
+        std::cout << name << " => " << (timings[name] / 1000000.0) << std::endl;
+    }
+    std::cout
+        << "--------------------End Pipeline timing------------------------"
+        << std::endl;
+
     executed = true;
 }
 
