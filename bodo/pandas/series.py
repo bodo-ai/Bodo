@@ -2167,8 +2167,10 @@ series_str_methods = [
 
 # Maps Series.dt accessors to return types
 dt_accessors = [
-    # idx = 0: Series(Int)
+    # idx = 0: Series(Int64)
     (
+        # NOTE: These methods are int32 for regular types in Pandas but int64 for
+        # ArrowDtype as of Pandas 2.3.
         [
             "year",
             "month",
@@ -2186,6 +2188,12 @@ dt_accessors = [
             "daysinmonth",
             "days_in_month",
             "quarter",
+        ],
+        pd.ArrowDtype(pa.int64()),
+    ),
+    # idx = 0: Series(Int32)
+    (
+        [
             "days",
             "seconds",
             "microseconds",
