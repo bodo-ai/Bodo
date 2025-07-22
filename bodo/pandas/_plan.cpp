@@ -586,15 +586,20 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     // Create join node.
     auto comp_join =
         duckdb::make_uniq<duckdb::LogicalComparisonJoin>(join_type);
+
+    lhs_duck->ResolveOperatorTypes();
+    rhs_duck->ResolveOperatorTypes();
+
     // Create join condition.
-    duckdb::LogicalType cbtype(duckdb::LogicalTypeId::INTEGER);
     for (std::pair<int, int> cond_pair : cond_vec) {
         duckdb::JoinCondition cond;
         cond.comparison = duckdb::ExpressionType::COMPARE_EQUAL;
         cond.left = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            cbtype, lhs_duck->GetColumnBindings()[cond_pair.first]);
+            lhs_duck->types[cond_pair.first],
+            lhs_duck->GetColumnBindings()[cond_pair.first]);
         cond.right = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            cbtype, rhs_duck->GetColumnBindings()[cond_pair.second]);
+            rhs_duck->types[cond_pair.second],
+            rhs_duck->GetColumnBindings()[cond_pair.second]);
         // Add the join condition to the join node.
         comp_join->conditions.push_back(std::move(cond));
     }
@@ -1136,11 +1141,73 @@ int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table) {
     return reinterpret_cast<int64_t>(new table_info(*out_table));
 }
 
-PyObject *cpp_table_to_pyarrow(int64_t cpp_table) {
-    std::shared_ptr<table_info> table =
-        std::shared_ptr<table_info>(reinterpret_cast<table_info *>(cpp_table));
-    std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(table);
+int64_t pyarrow_array_to_cpp_table(PyObject *arrow_array, std::string name,
+                                   int64_t in_cpp_table) {
+    // Unwrap Arrow array from Python object
+    std::shared_ptr<arrow::Array> array =
+        arrow::py::unwrap_array(arrow_array).ValueOrDie();
+    std::shared_ptr<table_info> in_table = std::shared_ptr<table_info>(
+        reinterpret_cast<table_info *>(in_cpp_table));
+
+    std::vector<std::shared_ptr<array_info>> out_arrs = {
+        arrow_array_to_bodo(array, nullptr)};
+
+    // Add Index arrays if any
+    for (size_t i = 1; i < in_table->ncols(); i++) {
+        out_arrs.push_back(in_table->columns[i]);
+    }
+
+    std::shared_ptr<table_info> out_table =
+        std::make_shared<table_info>(out_arrs);
+
+    out_table->column_names = {name};
+
+    // Add Index column names if any
+    if (in_table->column_names.size() > 1) {
+        out_table->column_names.insert(out_table->column_names.end(),
+                                       in_table->column_names.begin() + 1,
+                                       in_table->column_names.end());
+    }
+    out_table->metadata = in_table->metadata;
+
+    return reinterpret_cast<int64_t>(new table_info(*out_table));
+}
+
+PyObject *cpp_table_to_pyarrow(int64_t cpp_table, bool delete_cpp_table) {
+    table_info *table = reinterpret_cast<table_info *>(cpp_table);
+    std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
+        std::shared_ptr<table_info>(new table_info(*table)));
+    if (delete_cpp_table) {
+        delete table;
+    }
     return arrow::py::wrap_table(arrow_table);
+}
+
+PyObject *cpp_table_to_pyarrow_array(int64_t cpp_table) {
+    table_info *table = reinterpret_cast<table_info *>(cpp_table);
+    if (table->ncols() == 0) {
+        throw std::runtime_error(
+            "cpp_table_to_pyarrow_array expects a table with more than one "
+            "column");
+    }
+    std::shared_ptr<array_info> array = table->columns[0];
+    std::shared_ptr<arrow::Array> arrow_array = to_arrow(array);
+    return arrow::py::wrap_array(arrow_array);
+}
+
+std::string cpp_table_get_first_field_name(int64_t cpp_table) {
+    table_info *table = reinterpret_cast<table_info *>(cpp_table);
+    if (table->ncols() == 0) {
+        throw std::runtime_error(
+            "cpp_table_get_first_field_name expects a table with more than one "
+            "column");
+    }
+    return (table->column_names.size() > 0) ? table->column_names[0] : "";
+}
+
+void cpp_table_delete(int64_t cpp_table) {
+    table_info *table = reinterpret_cast<table_info *>(cpp_table);
+    delete table;
 }
 
 #undef CHECK_ARROW
