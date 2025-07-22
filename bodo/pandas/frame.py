@@ -193,6 +193,35 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
             return self._source_plan[1]
 
+    def __getattribute__(self, name: str):
+        """Custom attribute access that triggers a fallback warning for unsupported attributes."""
+
+        ignore_fallback_attrs = [
+            "dtypes",
+            "to_string",
+            "attrs",
+            "flags",
+            "columns",
+        ]
+
+        cls = object.__getattribute__(self, "__class__")
+        base = cls.__mro__[0]
+
+        if (
+            name not in base.__dict__
+            and name not in ignore_fallback_attrs
+            and not name.startswith("_")
+            and hasattr(pd.DataFrame, name)
+        ):
+            msg = (
+                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            warnings.warn(BodoLibFallbackWarning(msg))
+            return object.__getattribute__(self, name)
+
+        return object.__getattribute__(self, name)
+
     @staticmethod
     def from_lazy_mgr(
         lazy_mgr: LazyArrayManager | LazyBlockManager,
