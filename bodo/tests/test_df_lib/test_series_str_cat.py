@@ -133,17 +133,16 @@ def test_str_cat_fallback_not_bodo_series(fallback_df):
 
 
 def test_assignment_str_cat_lazy_plan():
-    pdf = pd.DataFrame(
-        {
-            "A": [None, "A", "B ", "  C", "D", "E"],
-            "B": [None, "1", "1", "2", "2", "3"],
-        }
-    )
-    bdf = bd.from_pandas(pdf)
+    with assert_executed_plan_count(0):
+        pdf = pd.DataFrame(
+            {
+                "A": [None, "A", "B ", "  C", "D", "E"],
+                "B": [None, "1", "1", "2", "2", "3"],
+            }
+        )
+        bdf = bd.from_pandas(pdf)
 
-    bdf["C"] = bdf.A.str.cat(others=bdf.B)
-    assert bdf.is_lazy_plan()
-
-    pdf["C"] = pdf["A"].str.cat(others=pdf["B"])
+        bdf["C"] = bdf.A.str.cat(others=bdf.B)
+        pdf["C"] = pdf["A"].str.cat(others=pdf["B"])
 
     _test_equal(bdf.execute_plan(), pdf, check_pandas_types=False, check_names=False)
