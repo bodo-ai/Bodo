@@ -52,7 +52,7 @@ requirements:
     - hdf5 * *mpi_impi_*        # [win]
     - h5py
     # Necessary to prevent hangs on Macos
-    - mpich 4.1.*               # [not win]
+    - mpich 4.*                 # [not win]
     - impi-devel                # [win64]
     # Corresponding dependency is automatically added in reqs/run.
     - aws-sdk-cpp
