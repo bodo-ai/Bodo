@@ -149,7 +149,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def __getattribute__(self, name: str):
         """Custom attribute access that triggers a fallback warning for unsupported attributes."""
 
-        ignore_fallback_attrs = ["dtype", "name", "to_string", "attrs", "flags"]
+        ignore_fallback_attrs = [
+            "dtype",
+            "dtypes",
+            "name",
+            "to_string",
+            "attrs",
+            "flags",
+        ]
 
         cls = object.__getattribute__(self, "__class__")
         base = cls.__mro__[0]

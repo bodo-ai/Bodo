@@ -1,3 +1,25 @@
+"""
+This script scans a list of predefined Pandas API documentation URLs (from `bodo.utils.pandas_coverage_tracking`)
+and determines whether each API is currently supported by Bodo's Pandas backend.
+
+For each API:
+- It instantiates a minimal sample object (e.g., Series, DataFrame) based on the API category.
+- It attempts to access the attribute or method.
+- It monitors for `BodoLibFallbackWarning` warnings or exceptions to infer support status.
+- It generates a tab-separated report listing:
+    - API category
+    - Full method or attribute name
+    - Whether it is supported ("YES" or "NO")
+    - Link to the Pandas documentation
+
+Usage:
+    Run the script with the environment variable `BODO_PANDAS_FALLBACK=0` to prevent silent fallbacks:
+        BODO_PANDAS_FALLBACK=0 python3 collect_coverage.py
+
+Output:
+    A TSV file named `bodo_coverage_report.csv` (with tab delimiter) summarizing support status for all tested APIs.
+"""
+
 import csv
 import os
 import warnings
@@ -54,8 +76,6 @@ def collect(key):
             else f"https://pandas.pydata.org/docs/reference/api/pandas.{attr}.html"
         )
         prefix, body = get_prefix(attr)
-        if body.startswith("_") or body.startswith("__"):
-            continue
         if prefix not in [
             "Series.",
             "DataFrame.",
@@ -87,6 +107,9 @@ def collect(key):
 
 if __name__ == "__main__":
     res = {}
+    # The script catches both warnings and exceptions to tell if a method is not supported.
+    # Ideally it would be best to only watch for warnings, but due to silent fallbacks of top-level methods
+    # we turn off BODO_PANDAS_FALLBACK and catch exceptions raised for unsupported methods.
     assert os.environ["BODO_PANDAS_FALLBACK"] == "0", (
         "Execute script with command >> BODO_PANDAS_FALLBACK=0 Python3 path-to-file/collect_coverage.py"
     )
