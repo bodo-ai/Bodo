@@ -77,6 +77,19 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     PyObject *out_schema_py);
 
 /**
+ * @brief Creates a LogicalDistinct node.
+ *
+ * @param source - the data source to do distinct on
+ * @param select_vec - vector of column indices to be distinct
+ * @param out_schema_py - the schema of data coming out of the distinct
+ * @return duckdb::unique_ptr<duckdb::LogicalDistinct> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalDistinct> make_distinct(
+    std::unique_ptr<duckdb::LogicalOperator> &source,
+    std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
+    PyObject *out_schema_py);
+
+/**
  * @brief Creates a LogicalOrder node.
  *
  * @param source - the data source to order
