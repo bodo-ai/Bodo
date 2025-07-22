@@ -65,7 +65,7 @@ requirements:
     - fsspec >=2021.09
     - pyarrow =19.0
     - numba >=0.60
-    - mpich 4.1.*   # [not win]
+    - mpich 4.*   # [not win]
     - requests
     - zstd
     - cloudpickle >=3.0
