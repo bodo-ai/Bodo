@@ -339,7 +339,11 @@ cdef extern from "_plan.h" nogil:
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
     cdef int64_t pyarrow_to_cpp_table(object arrow_table) except +
-    cdef object cpp_table_to_pyarrow(int64_t cpp_table) except +
+    cdef int64_t pyarrow_array_to_cpp_table(object arrow_array, c_string name, int64_t in_cpp_table) except +
+    cdef object cpp_table_to_pyarrow_array(int64_t cpp_table) except +
+    cdef c_string cpp_table_get_first_field_name(int64_t cpp_table) except +
+    cdef object cpp_table_to_pyarrow(int64_t cpp_table, c_bool delete_cpp_table) except +
+    cdef void cpp_table_delete(int64_t cpp_table) except +
 
 
 def join_type_to_string(CJoinType join_type):
@@ -908,10 +912,28 @@ cpdef arrow_to_cpp_table(arrow_table):
     return pyarrow_to_cpp_table(arrow_table)
 
 
-cpdef cpp_table_to_arrow(cpp_table):
+cpdef arrow_array_to_cpp_table(object arr, str name, in_cpp_table):
+    """Convert an Arrow array to a C++ table pointer with column names and
+    metadata set properly.
+    Uses in_cpp_table for appending Index arrays if any and pandas metadata.
+    Deletes in_cpp_table after use.
+    """
+    return pyarrow_array_to_cpp_table(arr, name.encode(), in_cpp_table)
+
+
+cpdef cpp_table_to_arrow(cpp_table, delete_cpp_table=True):
     """Convert a C++ table pointer to Arrow table.
     """
-    return cpp_table_to_pyarrow(cpp_table)
+    return cpp_table_to_pyarrow(cpp_table, delete_cpp_table)
+
+
+cpdef cpp_table_to_arrow_array(cpp_table, delete_cpp_table=True):
+    """Convert the first column of C++ table to Arrow array and column name.
+    """
+    out = cpp_table_to_pyarrow_array(cpp_table), cpp_table_get_first_field_name(cpp_table).decode()
+    if delete_cpp_table:
+        cpp_table_delete(cpp_table)
+    return out
 
 
 cpdef py_optimize_plan(object plan):
