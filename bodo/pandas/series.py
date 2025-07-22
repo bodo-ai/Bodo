@@ -911,10 +911,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Return Subtraction of series and other, element-wise (binary operator rsub)."""
         return gen_arith(self, other, "rsub")
 
-    @property
-    def ndim(self) -> int:
-        return super().ndim
-
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""

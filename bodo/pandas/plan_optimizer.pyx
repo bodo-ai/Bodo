@@ -484,7 +484,7 @@ cdef class LogicalDistinct(LogicalOperator):
         return f"LogicalDistinct({self.out_schema})"
 
     def getCardinality(self):
-        return self.sources[0].getCardinality()
+        return None
 
 
 cdef class LogicalAggregate(LogicalOperator):

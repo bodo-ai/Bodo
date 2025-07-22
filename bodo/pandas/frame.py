@@ -44,6 +44,7 @@ from bodo.pandas.plan import (
     LazyPlan,
     LazyPlanDistributedArg,
     LogicalComparisonJoin,
+    LogicalDistinct,
     LogicalFilter,
     LogicalGetPandasReadParallel,
     LogicalGetPandasReadSeq,
@@ -1254,7 +1255,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             ),
         )
 
-    @check_args_fallback("none")
+    @check_args_fallback(supported="none")
     def drop_duplicates(
         self,
         subset: Hashable | Sequence[Hashable] | None = None,
@@ -1268,8 +1269,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         zero_size_self = _empty_like(self)
         exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
         return wrap_plan(
-            plan=LazyPlan(
-                "LogicalDistinct",
+            plan=LogicalDistinct(
                 zero_size_self,
                 self._plan,
                 exprs,

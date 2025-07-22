@@ -397,6 +397,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalDistinct& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
+    if (op.order_by) {
+        throw std::runtime_error(
+            "LogicalDistinct node with order_by field not supported");
+    }
+
     // Regular groupby aggregation with groups and expressions.
     auto physical_agg =
         std::make_shared<PhysicalAggregate>(in_table_schema, op);
