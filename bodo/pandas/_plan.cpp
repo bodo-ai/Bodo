@@ -558,7 +558,9 @@ std::vector<int> get_projection_pushed_down_columns(
  *
  */
 static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
-                        duckdb::Vector &result) {}
+                        duckdb::Vector &result) {
+    throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
+}
 
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
