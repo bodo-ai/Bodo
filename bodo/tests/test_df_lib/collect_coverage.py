@@ -9,7 +9,7 @@ For each API:
 - It generates a tab-separated report listing:
     - API category
     - Full method or attribute name
-    - Whether it is supported ("YES" or "NO")
+    - Whether it is supported (Boolean)
     - Link to the Pandas documentation
 
 Usage:
@@ -83,16 +83,16 @@ def collect(key):
             "SeriesGroupBy.",
             "",
         ]:
-            coverage.append([attr, "NO", link])
+            coverage.append([attr, False, link])
             continue
         sample = get_sample(attr)
         name = body
-        supported = "NO"
+        supported = False
         with warnings.catch_warnings(record=True) as record:
             warnings.simplefilter("always")
             try:
                 recursive_getattr(sample, name)
-                supported = "YES"
+                supported = True
             except Exception:
                 pass
         if record:
@@ -100,7 +100,7 @@ def collect(key):
                 w for w in record if issubclass(w.category, BodoLibFallbackWarning)
             ]
             if fallback_warnings:
-                supported = "NO"
+                supported = False
         coverage.append([attr, supported, link])
     return coverage
 
