@@ -24,9 +24,9 @@ jobs:
     outputs:
       # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
       # contains is case-insensitive
-      run_tests: ${{ (!contains(steps.check_msg.outputs.commit_message, '[docs]') && contains(steps.check_msg.outputs.commit_message, '[run ci]')) || github.event_name == 'workflow_dispatch' }}
+      run_tests: ${{ (steps.changes.outputs.not_docs && contains(steps.check_msg.outputs.commit_message, '[run ci]')) || github.event_name == 'workflow_dispatch' }}
       run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests || github.event_name == 'workflow_dispatch' }}
-      docs: ${{ contains(steps.check_msg.outputs.commit_message, '[docs]') }}
+      docs: ${{ !steps.changes.outputs.not_docs }}
 
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +41,11 @@ jobs:
           filters: |
             bodosql_customer_tests:
               - 'BodoSQL/calcite_sql/**'
+            not_docs:
+              - '!docs/**'
+              - '!.github/**'
+              - '!**/*.md'
+              - '**'
 
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v4
