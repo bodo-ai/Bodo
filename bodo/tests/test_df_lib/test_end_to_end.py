@@ -87,10 +87,11 @@ def test_from_pandas(datapath, index_val):
 
 def test_read_parquet(datapath):
     """Very simple test to read a parquet file for sanity checking."""
-    path = datapath("example_no_index.parquet")
+    with assert_executed_plan_count(0):
+        path = datapath("example_no_index.parquet")
 
-    bodo_out = bd.read_parquet(path)
-    py_out = pd.read_parquet(path)
+        bodo_out = bd.read_parquet(path)
+        py_out = pd.read_parquet(path)
 
     _test_equal(
         bodo_out,
@@ -108,12 +109,11 @@ def test_read_parquet(datapath):
 )
 def test_read_parquet_projection_pushdown(datapath, file_path):
     """Make sure basic projection pushdown works for Parquet read end to end."""
-    path = datapath(file_path)
+    with assert_executed_plan_count(0):
+        path = datapath(file_path)
 
-    bodo_out = bd.read_parquet(path)[["three", "four"]]
-    py_out = pd.read_parquet(path)[["three", "four"]]
-
-    assert bodo_out.is_lazy_plan()
+        bodo_out = bd.read_parquet(path)[["three", "four"]]
+        py_out = pd.read_parquet(path)[["three", "four"]]
 
     _test_equal(
         bodo_out,
@@ -157,63 +157,59 @@ def test_read_parquet_index(df: pd.DataFrame, index_val):
 
 def test_read_parquet_len_shape(datapath):
     """Test length/shape after read parquet is correct"""
-    path = datapath("example_no_index.parquet")
+    with assert_executed_plan_count(0):
+        path = datapath("example_no_index.parquet")
 
-    bodo_out = bd.read_parquet(path)
-    py_out = pd.read_parquet(path)
+        bodo_out = bd.read_parquet(path)
+        py_out = pd.read_parquet(path)
 
-    assert len(bodo_out) == len(py_out)
-    # len directly on parquet file doesn't require plan execution
-    assert bodo_out.is_lazy_plan()
+        # len directly on parquet file doesn't require plan execution
+        assert len(bodo_out) == len(py_out)
 
-    # create a new lazy DF
-    bodo_out2 = bd.read_parquet(path)
+        # create a new lazy DF
+        bodo_out2 = bd.read_parquet(path)
 
-    # test shape
-    assert bodo_out2.shape == py_out.shape
-    # shape directly on parquet file doesn't require plan execution
-    assert bodo_out2.is_lazy_plan()
+        # test shape: shape directly on parquet file doesn't require plan execution
+        assert bodo_out2.shape == py_out.shape
 
 
 def test_read_parquet_series_len_shape(datapath):
     """Test length/shape after read parquet is correct"""
-    path = datapath("dataframe_library/df1.parquet")
+    with assert_executed_plan_count(0):
+        path = datapath("dataframe_library/df1.parquet")
 
-    bodo_out = bd.read_parquet(path)
-    bodo_out = bodo_out["A"]
-    py_out = pd.read_parquet(path)
-    py_out = py_out["A"]
+        bodo_out = bd.read_parquet(path)
+        bodo_out = bodo_out["A"]
+        py_out = pd.read_parquet(path)
+        py_out = py_out["A"]
 
-    assert len(bodo_out) == len(py_out)
-    # len directly on parquet file doesn't require plan execution
-    assert bodo_out.is_lazy_plan()
+        # len directly on parquet file doesn't require plan execution
+        assert len(bodo_out) == len(py_out)
 
-    # test shape
-    assert bodo_out.shape == py_out.shape
-    # shape directly on parquet file doesn't require plan execution
-    assert bodo_out.is_lazy_plan()
+        # test shape: shape directly on parquet file doesn't require plan execution
+        assert bodo_out.shape == py_out.shape
 
 
 def test_read_parquet_filter_projection(datapath):
     """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
     and filter column isn't used anywhere in the query.
     """
-    path = datapath("dataframe_library/q6_sample.pq")
+    with assert_executed_plan_count(0):
+        path = datapath("dataframe_library/q6_sample.pq")
 
-    def impl(lineitem):
-        date1 = pd.Timestamp("1996-01-01")
-        sel = (lineitem.L_SHIPDATE >= date1) & (lineitem.L_DISCOUNT >= 0.08)
-        flineitem = lineitem[sel]
-        return flineitem.L_EXTENDEDPRICE
+        def impl(lineitem):
+            date1 = pd.Timestamp("1996-01-01")
+            sel = (lineitem.L_SHIPDATE >= date1) & (lineitem.L_DISCOUNT >= 0.08)
+            flineitem = lineitem[sel]
+            return flineitem.L_EXTENDEDPRICE
 
-    bodo_df = bd.read_parquet(path)
-    bodo_df["L_SHIPDATE"] = bd.to_datetime(bodo_df.L_SHIPDATE, format="%Y-%m-%d")
-    py_df = pd.read_parquet(path)
-    py_df["L_SHIPDATE"] = pd.to_datetime(py_df.L_SHIPDATE, format="%Y-%m-%d")
+        bodo_df = bd.read_parquet(path)
+        bodo_df["L_SHIPDATE"] = bd.to_datetime(bodo_df.L_SHIPDATE, format="%Y-%m-%d")
+        py_df = pd.read_parquet(path)
+        py_df["L_SHIPDATE"] = pd.to_datetime(py_df.L_SHIPDATE, format="%Y-%m-%d")
 
-    bodo_out = impl(bodo_df)
-    assert bodo_out.is_lazy_plan()
-    py_out = impl(py_df)
+        bodo_out = impl(bodo_df)
+        py_out = impl(py_df)
 
     _test_equal(
         bodo_out.copy(),
@@ -306,20 +302,21 @@ def test_projection(datapath):
 )
 def test_filter_pushdown(datapath, file_path, op):
     """Test for filter with filter pushdown into read parquet."""
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    # Make sure bodo_df2 is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    bodo_df1 = bd.read_parquet(datapath(file_path))
-    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
-
-    # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2.is_lazy_plan()
+        bodo_df1 = bd.read_parquet(datapath(file_path))
+        bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
     pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
+
     _test_equal(pre, 2)
     _test_equal(post, 1)
 
-    py_df1 = pd.read_parquet(datapath(file_path))
-    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
+    with assert_executed_plan_count(0):
+        py_df1 = pd.read_parquet(datapath(file_path))
+        py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
@@ -345,23 +342,22 @@ def test_filter_pushdown(datapath, file_path, op):
 )
 def test_filter_distributed(datapath, file_path, op):
     """Very simple test for filter for sanity checking."""
-    bodo_df1 = bd.read_parquet(datapath(file_path))
-    py_df1 = pd.read_parquet(datapath(file_path))
+    # Make sure bodo_df2 is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path))
 
-    @bodo.jit(spawn=True)
-    def f(df):
-        return df
+        @bodo.jit(spawn=True)
+        def f(df):
+            return df
 
-    # Force plan to execute but keep distributed.
-    f(bodo_df1)
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    with assert_executed_plan_count(1):
+        # Force plan to execute but keep distributed.
+        f(bodo_df1)
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
-
-    # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2.is_lazy_plan()
-
-    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
+        bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
+        py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     _test_equal(
         bodo_df2.copy(),
@@ -377,8 +373,9 @@ def test_filter_distributed(datapath, file_path, op):
 )
 def test_filter(datapath, op):
     """Test for standalone filter."""
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
 
     # Force read parquet node to execute.
     _test_equal(
@@ -389,14 +386,11 @@ def test_filter(datapath, op):
         reset_index=True,
     )
 
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-
-    bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
-
-    # Make sure bodo_df2 is unevaluated at this point.
-    assert bodo_df2.is_lazy_plan()
-
-    py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
+    # Make sure bodo_df2 is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+        bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
+        py_df2 = py_df1[eval(f"py_df1.A {op_str} 20")]
 
     _test_equal(
         bodo_df2.copy(),
@@ -507,8 +501,7 @@ def test_filter_string_pushdown(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[bodo_df1.B == "gamma"]
 
-    with assert_executed_plan_count(0):
-        pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
 
     _test_equal(pre, 2)
     _test_equal(post, 1)
@@ -570,7 +563,7 @@ def test_filter_datetime_pushdown(datapath, op):
             eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")
         ]
 
-        pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
 
     _test_equal(pre, 2)
     _test_equal(post, 1)
@@ -632,7 +625,7 @@ def test_head_pushdown(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1.head(3)
 
-        pre, post = bd.plan.getPlanStatistics(bodo_df2._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._plan)
 
     _test_equal(pre, 2)
     _test_equal(post, 1)
@@ -1266,8 +1259,8 @@ def test_merge_non_equi_cond():
         df4 = df3[df3.B < df3.Dog]
         bdf4 = bdf3[bdf3.B < bdf3.Dog]
 
-        # Make sure filter node gets pushed into join.
-        pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
 
     _test_equal(pre, 5)
     _test_equal(post, 4)
@@ -1291,8 +1284,8 @@ def test_merge_non_equi_cond():
         nan_df4 = nan_df3[nan_df3.B < nan_df3.Dog]
         nan_bdf4 = nan_bdf3[nan_bdf3.B < nan_bdf3.Dog]
 
-        # Make sure filter node gets pushed into join.
-        pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
 
     _test_equal(pre, 5)
     _test_equal(post, 4)
@@ -1773,7 +1766,8 @@ def test_series_filter_pushdown(datapath, file_path, op):
         bodo_series_a = bodo_df1["A"]
         bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
 
-        pre, post = bd.plan.getPlanStatistics(bodo_filter_a._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_filter_a._mgr._plan)
+
     _test_equal(pre, 3)
     _test_equal(post, 2)
 
@@ -1805,25 +1799,26 @@ def test_series_filter_pushdown(datapath, file_path, op):
 )
 def test_series_filter_distributed(datapath, file_path, op):
     """Very simple test for series filter for sanity checking."""
-    bodo_df1 = bd.read_parquet(datapath(file_path))
-    py_df1 = pd.read_parquet(datapath(file_path))
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path))
 
-    @bodo.jit(spawn=True)
-    def f(df):
-        return df
+        @bodo.jit(spawn=True)
+        def f(df):
+            return df
 
-    # Force plan to execute but keep distributed.
-    f(bodo_df1)
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    with assert_executed_plan_count(1):
+        # Force plan to execute but keep distributed.
+        f(bodo_df1)
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
 
-    bodo_series_a = bodo_df1["A"]
-    bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+    # Make sure bodo_filter_a is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        bodo_series_a = bodo_df1["A"]
+        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
 
-    # Make sure bodo_filter_a is unevaluated at this point.
-    assert bodo_filter_a.is_lazy_plan()
-
-    py_series_a = py_df1["A"]
-    py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+        py_series_a = py_df1["A"]
+        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
 
     _test_equal(
         bodo_filter_a,
@@ -1849,29 +1844,28 @@ def test_series_filter_distributed(datapath, file_path, op):
 @pytest.mark.parametrize("mode", [0, 1, 2])
 def test_series_filter_series(datapath, file_path, op, mode):
     """Very simple test for series filter for sanity checking."""
-    bodo_df1 = bd.read_parquet(datapath(file_path))
-    py_df1 = pd.read_parquet(datapath(file_path))
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath(file_path))
+        py_df1 = pd.read_parquet(datapath(file_path))
 
-    @bodo.jit(spawn=True)
-    def f(df):
-        return df
+        @bodo.jit(spawn=True)
+        def f(df):
+            return df
 
-    # Force plan to execute but keep distributed.
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    with assert_executed_plan_count(0 if mode == 0 else 1):
+        # Force plan to execute but keep distributed.
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+        bodo_series_a = bodo_df1["A"]
+        if mode == 1:
+            f(bodo_series_a)
+        elif mode == 2:
+            bodo_series_a._mgr._collect()
 
-    bodo_series_a = bodo_df1["A"]
-    if mode == 1:
-        f(bodo_series_a)
-    elif mode == 2:
-        bodo_series_a._mgr._collect()
-
-    bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
-
-    # Make sure bodo_filter_a is unevaluated at this point.
-    assert bodo_filter_a.is_lazy_plan()
-
-    py_series_a = py_df1["A"]
-    py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+    # Make sure bodo_filter_a is unevaluated in the process.
+    with assert_executed_plan_count(0):
+        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+        py_series_a = py_df1["A"]
+        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
 
     _test_equal(
         bodo_filter_a,

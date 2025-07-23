@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 import bodo.pandas as bd
+from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import _test_equal
 
 
@@ -15,16 +16,16 @@ def _generate_series_accessor_test(name, df, accessor):
         cols = bdf.columns
 
         for col in cols:
-            pd_obj = getattr(df, col)
-            bodo_obj = getattr(bdf, col)
+            with assert_executed_plan_count(0):
+                pd_obj = getattr(df, col)
+                bodo_obj = getattr(bdf, col)
 
-            pd_obj = getattr(pd_obj, accessor)
-            bodo_obj = getattr(bodo_obj, accessor)
+                pd_obj = getattr(pd_obj, accessor)
+                bodo_obj = getattr(bodo_obj, accessor)
 
-            pd_accessor = getattr(pd_obj, name)
-            bodo_accessor = getattr(bodo_obj, name)
+                pd_accessor = getattr(pd_obj, name)
+                bodo_accessor = getattr(bodo_obj, name)
 
-            assert bodo_accessor.is_lazy_plan()
             """
             Exception case handler: some methods return values that trivially differ from Pandas. 
             In these cases, we compare the Bodo output with the reference outputs in the expected_results list. 
@@ -79,9 +80,14 @@ def _generate_series_test(name, df, arg_sets, accessor=None):
             except Exception:
                 pd_error = True
             try:
-                out_bodo = bodo_func(*args, **kwargs)
-                assert out_bodo.is_lazy_plan()
-                out_bodo.execute_plan()
+                # split/rsplit with expand=True is the single case where plan execution happens once.
+                is_split_expand = (
+                    name in ("split", "rsplit") and kwargs.get("expand", False) == True
+                )
+                with assert_executed_plan_count(1 if is_split_expand else 0):
+                    out_bodo = bodo_func(*args, **kwargs)
+                with assert_executed_plan_count(1):
+                    out_bodo.execute_plan()
             except Exception:
                 bodo_error = True
 
