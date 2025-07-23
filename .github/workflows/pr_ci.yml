@@ -158,42 +158,40 @@ jobs:
 
   # 5) Collect and combine any results from runs
   collect-results:
-    needs:
-      - pr-ci
-      - spawn-ci
-      - df-lib-ci
-      - java-ci
+    needs: [pr-ci]
     name: Collect Results
     runs-on: ubuntu-latest
-    if: always()
+    if: success() || failure()
     steps:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: 3.13
-
+      # Get all source code for mapping coverage to LOC
       - uses: actions/checkout@v4
         with:
+          # Disable shallow clones for better coverage reporting
           fetch-depth: 0
-
+      # Download timing and coverage info
       - name: Download Timings
         uses: actions/download-artifact@v4
         with:
           merge-multiple: true
 
+      # Merging
       - name: Merge Files
         run: |
           set -exo pipefail
           mkdir outputs
           python -m pip install pytest-split coverage pytest-cov
 
+          # -S to sort by key, -s to read as arrays, 'add' to merge
           jq -S -s 'add' test_dur_bodo_*.json > outputs/test_dur_bodo.json
           jq -S -s 'add' test_dur_bodosql_*.json > outputs/test_dur_bodosql.json
 
-          echo "Slowest Bodo Tests:"
+          printf "Slowest Bodo Tests"  
           slowest-tests --durations-path outputs/test_dur_bodo.json -c 20
-
-          echo "Slowest BodoSQL Tests:"
+          printf "Slowest BodoSQL Tests"
           slowest-tests --durations-path outputs/test_dur_bodosql.json -c 20
 
           coverage combine .coverage_*
@@ -220,6 +218,16 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+      # Notify GitHub Checks
+      # If any test runs failed, this step should fail
+      # This step failing will block the PR from being merged
+      - name: Check Test Runs
+        if: ${{ needs.pr-ci.result != 'success' }}
+        run: exit 1
+
+  # Notify GitHub Checks
+  # If any test runs failed, this step should fail
+  # This step failing will block the PR from being merged
   status-check:
     name: Status Check
     if: always()
