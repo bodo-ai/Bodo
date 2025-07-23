@@ -2500,7 +2500,7 @@ def test_set_df_column_non_arith_binops():
     _test_equal(bdf, pdf)
 
     # Timedelta Series + datetime.timedelta
-    with assert_executed_plan_count(7):
+    with assert_executed_plan_count(0):
         bdf = bd.from_pandas(df)
         bdf["D"] = bdf["C"] + datetime.timedelta(hours=12)
         pdf = df.copy()

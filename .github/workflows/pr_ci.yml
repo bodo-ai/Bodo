@@ -218,9 +218,6 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      # Notify GitHub Checks
-      # If any test runs failed, this step should fail
-      # This step failing will block the PR from being merged
       - name: Check Test Runs
         if: ${{ needs.pr-ci.result != 'success' }}
         run: exit 1
@@ -228,6 +225,7 @@ jobs:
   # Notify GitHub Checks
   # If any test runs failed, this step should fail
   # This step failing will block the PR from being merged
+  # Referenced blogpost: https://emmer.dev/blog/skippable-github-status-checks-aren-t-really-required/
   status-check:
     name: Status Check
     if: always()
