@@ -2507,8 +2507,6 @@ def test_set_df_column_non_arith_binops():
         pdf["D"] = pdf["C"] + datetime.timedelta(hours=12)
     _test_equal(bdf, pdf)
 
-    print("Hi")
-
     # String Series + NumPy string scalar
     with assert_executed_plan_count(0):
         bdf = bd.from_pandas(df)
