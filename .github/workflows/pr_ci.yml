@@ -41,7 +41,14 @@ jobs:
           filters: |
             bodosql_customer_tests:
               - 'BodoSQL/calcite_sql/**'
+            docs_only:
+              - 'docs/**'
+              - '**/*.md'
+              - '**/*.rst'
+              - '**/*.txt'
+              - '**/*.yml'
             not_docs:
+              - '**'
               - '!docs/**'
               - '!**/*.md'
               - '!**/*.rst'
