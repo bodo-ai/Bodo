@@ -7,4 +7,3 @@ hide:
   - path
   - header
 ---
-
