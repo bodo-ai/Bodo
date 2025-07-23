@@ -232,7 +232,7 @@ jobs:
     name: Status Check
     if: always()
     needs:
-      - pr-ci
+      - collect-results
       - df-lib-ci
     runs-on: ubuntu-latest
     steps:
