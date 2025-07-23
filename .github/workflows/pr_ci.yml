@@ -46,6 +46,7 @@ jobs:
               - '!docs/**'
               - '!**/*.md'
               - '!**/*.rst'
+              - '!**/*.yml'
 
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v4
