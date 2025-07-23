@@ -27,6 +27,7 @@ jobs:
       run_tests: ${{ (steps.changes.outputs.not_docs && contains(steps.check_msg.outputs.commit_message, '[run ci]')) || github.event_name == 'workflow_dispatch' }}
       run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests || github.event_name == 'workflow_dispatch' }}
       not_docs: ${{ steps.changes.outputs.not_docs }}
+      skip_flag: ${{ contains(steps.check_msg.outputs.commit_message, '[skip]') }}
 
     steps:
       - uses: actions/checkout@v4
@@ -238,11 +239,11 @@ jobs:
       - validate
     runs-on: ubuntu-latest
     steps:
-      # Allows skipping if docs == true
+      # Allows skipping if only docs files were changed, or [skip] flag was set.
       - name: Skip check for docs-only PR
-        if: ${{ needs.validate.outputs.not_docs != 'true' }}
+        if: ${{ (needs.validate.outputs.not_docs != 'true') || (needs.validate.outputs.skip_flag == 'true') }}
         run: echo "Docs-only PR, skipping status enforcement."
-      # Require all checks to pass when docs != true
+      # Otherwise, requires all checks to pass.
       - name: Fail if needed jobs failed or were skipped
         if: ${{ needs.validate.outputs.not_docs == 'true' }}
         uses: re-actors/alls-green@release/v1
