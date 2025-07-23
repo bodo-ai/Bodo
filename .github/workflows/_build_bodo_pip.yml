@@ -118,7 +118,8 @@ jobs:
             rm -rf {package}/build
             rm -f {package}/mpich.whl
             # Install mpich for mpi.h needed by mpi4py
-            pip install mpich --default-timeout=100
+            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
+            pip install mpich=="$MPICH_VERSION" --default-timeout=100
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
@@ -134,6 +135,7 @@ jobs:
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
             MACOSX_DEPLOYMENT_TARGET=${{ inputs.name == 'macos-arm' && '12.0' || '11.0' }}
+            BODO_VENDOR_MPICH=1
             PATH=$HOME/.pixi/bin:$PATH
             CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos-win
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
@@ -145,6 +147,7 @@ jobs:
             SCCACHE_REGION=us-east-2
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
+            BODO_VENDOR_MPICH=1
             CONDA_PREFIX=""
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
             NO_HDF5=1

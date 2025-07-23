@@ -319,8 +319,27 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 endif()
 
-set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
-set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
+# Vendor MPICH
+if(DEFINED ENV{BODO_VENDOR_MPICH})
+  # NOTE: The new mpich wheels have library dependencies that are not available during the build
+  #       process and cause errors for wheel repair.
+  # TODO [BSE-4934]: Use mpi4py 4.1 as dependency and avoid vendoring mpi4py and MPICH.
+  message(STATUS "Downloading MPICH")
+  execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i https://pypi.anaconda.org/mpi4py/simple --default-timeout=100)
+  execute_process(COMMAND unzip "mpich-*.whl" "mpich*.data/*" -d mpich-tmp-extract-dir)
+  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
+  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN
+    FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
+  file(GLOB MPICH_WHEEL "mpich-*.whl")
+  file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
+  message(STATUS "Moved MPICH to ${SKBUILD_DATA_DIR}")
+
+  set(MPI_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
+  set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
+else()
+  set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
+  set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
+endif()
 
 # MPI implementation (Intel or MPICH)
 if (WIN32)

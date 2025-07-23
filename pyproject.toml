@@ -47,6 +47,7 @@ dependencies = [
     "cloudpickle>=3.0",
     "psutil",
     "impi-rt; sys_platform == 'win32'",
+    # "mpich; sys_platform != 'win32'",
 ]
 
 [project.urls]
@@ -94,6 +95,9 @@ wheel.exclude = [
     "bodo/transforms/**/*.pyc",
     "bodo/tests/*",
 ]
+
+[tool.scikit-build.cmake.define]
+MPICH_VERSION = "4.3.1"
 
 # When building for Conda, set different
 # arguments for CMake
