@@ -7,6 +7,3 @@ hide:
   - path
   - header
 ---
-
-
-Good

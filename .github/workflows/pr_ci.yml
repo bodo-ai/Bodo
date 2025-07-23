@@ -50,7 +50,6 @@ jobs:
             md:
               - '**/*.md'
               - '**/*.rst'
-              - '**'
 
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v4
