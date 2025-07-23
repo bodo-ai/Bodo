@@ -41,15 +41,15 @@ jobs:
           filters: |
             bodosql_customer_tests:
               - 'BodoSQL/calcite_sql/**'
-            not_docs:
-              - '!docs/**'
-            not_docdocs:
-              - '!docs/docs/**'
-            not_git:
-              - '!.github/**'
-            not_md:
-              - '!**/*.md'
-              - '!**/*.rst'
+            docs:
+              - 'docs/**'
+            docdocs:
+              - 'docs/docs/**'
+            git:
+              - '.github/**'
+            md:
+              - '**/*.md'
+              - '**/*.rst'
               - '**'
 
       # Fetch the PR branch for the commit history
