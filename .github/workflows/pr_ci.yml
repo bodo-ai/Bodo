@@ -245,7 +245,7 @@ jobs:
         run: echo "Docs-only PR, skipping status enforcement."
       # Otherwise, requires all checks to pass.
       - name: Fail if needed jobs failed or were skipped
-        if: ${{ needs.validate.outputs.not_docs == 'true' }}
+        if: ${{ (needs.validate.outputs.not_docs == 'true') && (needs.validate.outputs.skip_flag != 'true') }}
         uses: re-actors/alls-green@release/v1
         with:
           jobs: ${{ toJSON(needs) }}
