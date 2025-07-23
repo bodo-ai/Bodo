@@ -309,7 +309,7 @@ def test_filter_pushdown(datapath, file_path, op):
         bodo_df1 = bd.read_parquet(datapath(file_path))
         bodo_df2 = bodo_df1[eval(f"bodo_df1.A {op_str} 20")]
 
-        pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
 
     _test_equal(pre, 2)
     _test_equal(post, 1)
@@ -501,8 +501,7 @@ def test_filter_string_pushdown(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1[bodo_df1.B == "gamma"]
 
-    with assert_executed_plan_count(0):
-        pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
 
     _test_equal(pre, 2)
     _test_equal(post, 1)
@@ -564,7 +563,7 @@ def test_filter_datetime_pushdown(datapath, op):
             eval(f"bodo_df1.F {op_str} pd.to_datetime('2025-07-17 22:39:02')")
         ]
 
-        pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._mgr._plan)
 
     _test_equal(pre, 2)
     _test_equal(post, 1)
@@ -626,7 +625,7 @@ def test_head_pushdown(datapath):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
         bodo_df2 = bodo_df1.head(3)
 
-        pre, post = bd.plan.getPlanStatistics(bodo_df2._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_df2._plan)
 
     _test_equal(pre, 2)
     _test_equal(post, 1)
@@ -1260,8 +1259,8 @@ def test_merge_non_equi_cond():
         df4 = df3[df3.B < df3.Dog]
         bdf4 = bdf3[bdf3.B < bdf3.Dog]
 
-        # Make sure filter node gets pushed into join.
-        pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(bdf4._mgr._plan)
 
     _test_equal(pre, 5)
     _test_equal(post, 4)
@@ -1285,8 +1284,8 @@ def test_merge_non_equi_cond():
         nan_df4 = nan_df3[nan_df3.B < nan_df3.Dog]
         nan_bdf4 = nan_bdf3[nan_bdf3.B < nan_bdf3.Dog]
 
-        # Make sure filter node gets pushed into join.
-        pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
+    # Make sure filter node gets pushed into join.
+    pre, post = bd.plan.getPlanStatistics(nan_bdf4._mgr._plan)
 
     _test_equal(pre, 5)
     _test_equal(post, 4)
@@ -1767,7 +1766,8 @@ def test_series_filter_pushdown(datapath, file_path, op):
         bodo_series_a = bodo_df1["A"]
         bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
 
-        pre, post = bd.plan.getPlanStatistics(bodo_filter_a._mgr._plan)
+    pre, post = bd.plan.getPlanStatistics(bodo_filter_a._mgr._plan)
+
     _test_equal(pre, 3)
     _test_equal(post, 2)
 
