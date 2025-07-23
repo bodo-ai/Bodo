@@ -26,6 +26,7 @@ jobs:
       # contains is case-insensitive
       run_tests: ${{ contains(steps.check_msg.outputs.commit_message, '[run ci]') || github.event_name == 'workflow_dispatch' }}
       run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests || github.event_name == 'workflow_dispatch' }}
+      docs: ${{ contains(steps.check_msg.outputs.commit_message, '[docs]') }}
 
     steps:
       - uses: actions/checkout@v4
@@ -232,8 +233,16 @@ jobs:
     needs:
       - collect-results
       - df-lib-ci
+      - validate
     runs-on: ubuntu-latest
     steps:
-      - uses: re-actors/alls-green@release/v1
+      # Allows skipping if docs == true
+      - name: Skip check for docs-only PR
+        if: ${{ needs.validate.outputs.docs == 'true' }}
+        run: echo "Docs-only PR, skipping status enforcement."
+      # Require all checks to pass when docs != true
+      - name: Fail if needed jobs failed or were skipped
+        if: ${{ needs.validate.outputs.docs != 'true' }}
+        uses: re-actors/alls-green@release/v1
         with:
           jobs: ${{ toJSON(needs) }}
