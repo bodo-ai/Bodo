@@ -43,6 +43,8 @@ jobs:
               - 'BodoSQL/calcite_sql/**'
             non_docs:
               - '!docs/**'
+            non_yml:
+              - '!**/*.yml'
 
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v4
