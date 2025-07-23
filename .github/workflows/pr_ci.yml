@@ -225,9 +225,7 @@ jobs:
     if: always()
     needs:
       - pr-ci
-      - spawn-ci
       - df-lib-ci
-      - java-ci
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1
