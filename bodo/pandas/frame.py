@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typing as pt
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Hashable, Iterable, Sequence
 from contextlib import contextmanager
 
 import pandas as pd
@@ -12,6 +12,7 @@ if pt.TYPE_CHECKING:
     from pandas._typing import (
         AnyArrayLike,
         Axis,
+        DropKeep,
         FilePath,
         IgnoreRaise,
         IndexLabel,
@@ -43,6 +44,7 @@ from bodo.pandas.plan import (
     LazyPlan,
     LazyPlanDistributedArg,
     LogicalComparisonJoin,
+    LogicalDistinct,
     LogicalFilter,
     LogicalGetPandasReadParallel,
     LogicalGetPandasReadSeq,
@@ -190,6 +192,35 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
 
             return self._source_plan[1]
+
+    def __getattribute__(self, name: str):
+        """Custom attribute access that triggers a fallback warning for unsupported attributes."""
+
+        ignore_fallback_attrs = [
+            "dtypes",
+            "to_string",
+            "attrs",
+            "flags",
+            "columns",
+        ]
+
+        cls = object.__getattribute__(self, "__class__")
+        base = cls.__mro__[0]
+
+        if (
+            name not in base.__dict__
+            and name not in ignore_fallback_attrs
+            and not name.startswith("_")
+            and hasattr(pd.DataFrame, name)
+        ):
+            msg = (
+                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            warnings.warn(BodoLibFallbackWarning(msg))
+            return object.__getattribute__(self, name)
+
+        return object.__getattribute__(self, name)
 
     @staticmethod
     def from_lazy_mgr(
@@ -1123,7 +1154,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     len(self._info_axis), key, *self._sanitize_column(head_val)
                 )
             else:
-                super().__setitem__(key, head_val)
+                loc = self._info_axis.get_loc(key)
+                self._iset_item_mgr(loc, *self._sanitize_column(head_val))
 
     @check_args_fallback(supported=["func", "axis", "args"])
     def apply(
@@ -1249,6 +1281,27 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 na_position,
                 cols,
                 self._plan.pa_schema,
+            ),
+        )
+
+    @check_args_fallback(supported="none")
+    def drop_duplicates(
+        self,
+        subset: Hashable | Sequence[Hashable] | None = None,
+        *,
+        keep: DropKeep = "first",
+        inplace: bool = False,
+        ignore_index: bool = False,
+    ) -> BodoDataFrame | None:
+        from bodo.pandas.base import _empty_like
+
+        zero_size_self = _empty_like(self)
+        exprs = make_col_ref_exprs(list(range(len(zero_size_self.columns))), self._plan)
+        return wrap_plan(
+            plan=LogicalDistinct(
+                zero_size_self,
+                self._plan,
+                exprs,
             ),
         )
 

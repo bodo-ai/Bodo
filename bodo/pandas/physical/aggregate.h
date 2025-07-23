@@ -26,31 +26,10 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
 
-        this->initKeys(col_ref_map, op.groups);
-
-        uint64_t ncols = in_table_schema->ncols();
-        initInputColumnMapping(this->input_col_inds, this->keys, ncols);
-
-        std::shared_ptr<bodo::Schema> in_table_schema_reordered =
-            in_table_schema->Project(this->input_col_inds);
-
-        std::vector<bool> cols_to_keep_vec(ncols, true);
-
-        // Add keys to output schema
-        this->output_schema = std::make_shared<bodo::Schema>();
-        for (size_t i = 0; i < this->keys.size(); i++) {
-            this->output_schema->append_column(
-                in_table_schema_reordered->column_types[i]->copy());
-            if (in_table_schema_reordered->column_names.size() > 0) {
-                this->output_schema->column_names.push_back(
-                    in_table_schema_reordered->column_names[i]);
-            } else {
-                this->output_schema->column_names.push_back("key_" +
-                                                            std::to_string(i));
-            }
-        }
-        this->output_schema->metadata = std::make_shared<TableMetadata>(
-            std::vector<std::string>({}), std::vector<std::string>({}));
+        std::shared_ptr<bodo::Schema> in_table_schema_reordered;
+        std::vector<bool> cols_to_keep_vec;
+        this->initKeysAndSchema(col_ref_map, op.groups, in_table_schema,
+                                in_table_schema_reordered, cols_to_keep_vec);
 
         std::vector<int32_t> ftypes;
         // Create input data column indices (only single data column for now)
@@ -73,8 +52,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             }
             auto& colref =
                 agg_expr.children[0]->Cast<duckdb::BoundColumnRefExpression>();
-            size_t col_idx = col_ref_map[{colref.binding.table_index,
-                                          colref.binding.column_index}];
+            size_t col_idx = col_ref_map.at(
+                {colref.binding.table_index, colref.binding.column_index});
 
             size_t reorder_col_idx =
                 std::find(this->input_col_inds.begin(),
@@ -136,6 +115,34 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value());
     }
 
+    explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
+                               duckdb::LogicalDistinct& op) {
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+            getColRefMap(op.children[0]->GetColumnBindings());
+
+        std::shared_ptr<bodo::Schema> in_table_schema_reordered;
+        std::vector<bool> cols_to_keep_vec;
+        this->initKeysAndSchema(col_ref_map, op.distinct_targets,
+                                in_table_schema, in_table_schema_reordered,
+                                cols_to_keep_vec);
+
+        std::vector<int32_t> ftypes;
+        // Create input data column indices (only single data column for now)
+        std::vector<int32_t> f_in_cols;
+
+        // Offsets for the input data columns, which are trivial since we have a
+        // single data column
+        std::vector<int32_t> f_in_offsets(f_in_cols.size() + 1);
+        std::iota(f_in_offsets.begin(), f_in_offsets.end(), 0);
+
+        this->groupby_state = std::make_unique<GroupbyState>(
+            std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
+            std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
+            std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
+            get_streaming_batch_size(), true, -1, -1, -1, false, std::nullopt,
+            /*use_sql_rules*/ false, /* pandas_drop_na_*/ false);
+    }
+
     virtual ~PhysicalAggregate() = default;
 
     void Finalize() override {}
@@ -191,14 +198,19 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
    private:
     /**
-     * @brief Initialize the key column indices for the groupby operation.
+     * @brief Initialize the key column indices for the groupby operation
+     *        and the output schema.
      *
      * @param col_ref_map Mapping of column references to indices.
      * @param groups List of group expressions.
      */
-    void initKeys(
-        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map,
-        const duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& groups) {
+    void initKeysAndSchema(
+        const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
+            col_ref_map,
+        const duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& groups,
+        const std::shared_ptr<bodo::Schema>& in_table_schema,
+        std::shared_ptr<bodo::Schema>& in_table_schema_reordered,
+        std::vector<bool>& cols_to_keep_vec) {
         for (const auto& expr : groups) {
             if (expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
                 throw std::runtime_error(
@@ -206,9 +218,33 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                     expr->ToString());
             }
             auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
-            this->keys.push_back(col_ref_map[{colref.binding.table_index,
-                                              colref.binding.column_index}]);
+            this->keys.push_back(col_ref_map.at(
+                {colref.binding.table_index, colref.binding.column_index}));
         }
+
+        uint64_t ncols = in_table_schema->ncols();
+        initInputColumnMapping(this->input_col_inds, this->keys, ncols);
+
+        in_table_schema_reordered =
+            in_table_schema->Project(this->input_col_inds);
+
+        cols_to_keep_vec = std::vector<bool>(ncols, true);
+
+        // Add keys to output schema
+        this->output_schema = std::make_shared<bodo::Schema>();
+        for (size_t i = 0; i < this->keys.size(); i++) {
+            this->output_schema->append_column(
+                in_table_schema_reordered->column_types[i]->copy());
+            if (in_table_schema_reordered->column_names.size() > 0) {
+                this->output_schema->column_names.push_back(
+                    in_table_schema_reordered->column_names[i]);
+            } else {
+                this->output_schema->column_names.push_back("key_" +
+                                                            std::to_string(i));
+            }
+        }
+        this->output_schema->metadata = std::make_shared<TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
     }
 
     std::shared_ptr<GroupbyState> groupby_state;

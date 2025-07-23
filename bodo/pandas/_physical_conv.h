@@ -29,6 +29,7 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalSample& op);
     void Visit(duckdb::LogicalSetOperation& op);
     void Visit(duckdb::LogicalCopyToFile& op);
+    void Visit(duckdb::LogicalDistinct& op);
 
     void Visit(duckdb::LogicalOperator& op) {
         if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
@@ -59,6 +60,8 @@ class PhysicalPlanBuilder {
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE) {
             Visit(op.Cast<duckdb::LogicalCopyToFile>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_DISTINCT) {
+            Visit(op.Cast<duckdb::LogicalDistinct>());
         } else {
             throw std::runtime_error(
                 "PhysicalPlanBuilder::Visit unsupported logical operator "
