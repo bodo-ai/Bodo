@@ -42,7 +42,15 @@ jobs:
             bodosql_customer_tests:
               - 'BodoSQL/calcite_sql/**'
             not_docs:
-              - '!**/**/*.md'
+              - '!docs/**'
+            not_docdocs:
+              - '!docs/docs/**'
+            not_git:
+              - '!.github/**'
+            not_md:
+              - '!**/*.md'
+              - '!**/*.rst'
+              - '**'
 
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v4
