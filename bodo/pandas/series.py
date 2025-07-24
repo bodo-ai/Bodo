@@ -32,6 +32,7 @@ from bodo.pandas.plan import (
     LazyPlan,
     LazyPlanDistributedArg,
     LogicalAggregate,
+    LogicalComparisonJoin,
     LogicalFilter,
     LogicalGetPandasReadParallel,
     LogicalGetPandasReadSeq,
@@ -918,6 +919,56 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def rsub(self, other, level=None, fill_value=None, axis=0):
         """Return Subtraction of series and other, element-wise (binary operator rsub)."""
         return gen_arith(self, other, "rsub")
+
+    @check_args_fallback(unsupported="none")
+    def isin(self, values):
+        """
+        Whether elements in Series are contained in `values`.
+
+        Return a boolean Series showing whether each element in the Series
+        matches an element in the passed sequence of `values` exactly.
+        """
+        from bodo.pandas.base import _empty_like
+
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.bool_()),
+            name=self.name,
+            index=self.head(0).index,
+        )
+
+        if isinstance(values, BodoSeries):
+            empty_left = _empty_like(self)
+            # Mark column is after the left columns in DuckDB, see:
+            # https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/planner/operator/logical_join.cpp#L20
+            empty_join_out = pd.concat(
+                [empty_left, pd.Series([], dtype=pd.ArrowDtype(pa.bool_()))], axis=1
+            )
+            empty_join_out.index = empty_left.index
+            planComparisonJoin = LogicalComparisonJoin(
+                empty_join_out,
+                self._plan,
+                values._plan,
+                plan_optimizer.CJoinType.MARK,
+                [(0, 0)],
+            )
+
+            # Can't use make_col_ref_exprs since output type is not in input schema
+            empty_col_data = arrow_to_empty_df(pa.schema([pa.bool_()]))
+            n_indices = get_n_index_arrays(new_metadata.index)
+            mark_col = ColRefExpression(
+                empty_col_data, planComparisonJoin, n_indices + 1
+            )
+
+            # Ignore data column of left side, only Index columns and mark column
+            col_indices = list(range(1, n_indices + 1))
+            exprs = make_col_ref_exprs(col_indices, planComparisonJoin)
+            proj_plan = LogicalProjection(
+                new_metadata,
+                planComparisonJoin,
+                [mark_col] + exprs,
+            )
+
+            return wrap_plan(proj_plan)
 
 
 class BodoStringMethods:
@@ -2268,7 +2319,6 @@ dir_methods = [
     # idx = 0: Series(Boolean)
     (
         [
-            "isin",
             "notnull",
             "isnull",
             "isna",
