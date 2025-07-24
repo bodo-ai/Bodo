@@ -134,9 +134,11 @@ class PhysicalProjection : public PhysicalSourceSink {
     void Finalize() override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             // TODO: Use a proper operator ID
-            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));
     }
 

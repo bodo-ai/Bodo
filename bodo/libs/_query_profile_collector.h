@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -226,7 +227,7 @@ class QueryProfileCollector {
     void Finalize(int64_t verbose_level = 0);
 
     // Getters for testing
-    std::unordered_map<pipeline_id_t, std::pair<uint64_t, uint64_t>>&
+    std::map<pipeline_id_t, std::pair<uint64_t, uint64_t>>&
     GetPipelineStartEndTimestamps() {
         return pipeline_start_end_timestamps;
     }
@@ -249,7 +250,7 @@ class QueryProfileCollector {
     int tracing_level = 1;
 
     // Map the pipeline ID to its start and end timestamps
-    std::unordered_map<pipeline_id_t, std::pair<uint64_t, uint64_t>>
+    std::map<pipeline_id_t, std::pair<uint64_t, uint64_t>>
         pipeline_start_end_timestamps;
 
     // Map the pipeline ID to the number of iterations
@@ -270,7 +271,7 @@ class QueryProfileCollector {
         operator_stage_metrics;
 
     // Get a map from all seen operators ids to the largest observed stage
-    std::unordered_map<operator_id_t, stage_id_t> CollectSeenOperators();
+    std::map<operator_id_t, stage_id_t> CollectSeenOperators();
 
     // Generate report JSON for all pipelines
     boost::json::object PipelinesToJson();

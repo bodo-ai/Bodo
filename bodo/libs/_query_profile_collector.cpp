@@ -199,9 +199,9 @@ static std::optional<boost::json::object> metric_to_json(MetricBase& metric) {
 }
 
 auto QueryProfileCollector::CollectSeenOperators()
-    -> std::unordered_map<operator_id_t, stage_id_t> {
+    -> std::map<operator_id_t, stage_id_t> {
     // Map all seen operators to the max stage value seen
-    std::unordered_map<operator_id_t, stage_id_t> seen_operator_stages;
+    std::map<operator_id_t, stage_id_t> seen_operator_stages;
     // Helper lambda to update the seen operator stages
     auto UpdateSeenOperatorStages = [&](operator_stage_t op_stage) {
         operator_id_t op_id = op_stage.operator_id;
