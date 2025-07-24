@@ -2600,3 +2600,48 @@ def test_df_reset_index():
         sort_output=True,
         reset_index=False,
     )
+
+
+def test_series_reset_index():
+    """Test for Series reset_index API."""
+
+    with assert_executed_plan_count(0):
+        s = pd.Series([1, 2, 3, 4], index=["A", "B", "C", "D"], name="Bodo")
+        bds = bd.Series(s).reset_index()
+        pds = s.reset_index()
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+    with assert_executed_plan_count(0):
+        bds = bd.Series(s).reset_index(name="Inc")
+        pds = s.reset_index(name="Inc")
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+    with assert_executed_plan_count(0):
+        multi_array = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
+        multi_idx = pd.MultiIndex.from_arrays(multi_array)
+        s = pd.Series([1, 2, 3, 4], index=multi_idx, name="Pitt")
+        bds = bd.Series(s).reset_index(name="Penn")
+        pds = s.reset_index(name="Penn")
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+    with assert_executed_plan_count(0):
+        bds = bd.Series(s).reset_index(drop=True)
+        pds = s.reset_index(drop=True)
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
