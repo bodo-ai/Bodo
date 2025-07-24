@@ -3693,11 +3693,11 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         }
         std::shared_ptr<array_info> mark_arr = alloc_nullable_array_no_nulls(
             in_table->nrows(), Bodo_CTypes::_BOOL);
-        bool* mark_data =
-            mark_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, bool>();
-        memset(mark_data, 0, in_table->nrows() * sizeof(bool));
+        uint8_t* mark_data =
+            mark_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
+        memset(mark_data, 0, in_table->nrows() * sizeof(uint8_t));
         for (const auto& idx : probe_idxs) {
-            mark_data[idx] = true;
+            SetBitTo(mark_data, idx, true);
         }
         out_arrs.push_back(mark_arr);
         if (in_table->column_names.size() > 0) {
