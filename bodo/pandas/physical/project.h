@@ -15,7 +15,6 @@
 struct PhysicalProjectionMetrics {
     using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
-    using blob_t = MetricBase::BlobValue;
     stat_t output_row_count = 0;
     stat_t n_exprs = 0;
 
