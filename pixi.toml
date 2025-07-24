@@ -12,7 +12,9 @@ azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group =
 platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
 # Pip C++ Deps
-pip-cpp-macos-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip" }
+pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip" }
+pip-cpp-macos = { features = ["rcpp", "pip"], no-default-feature = true, solve-group = "pip" }
+
 
 # Build Commands
 [tasks.build-bodo]
