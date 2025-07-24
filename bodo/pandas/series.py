@@ -970,6 +970,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
             return wrap_plan(proj_plan)
 
+        # It's just a map function if 'values' is not a BodoSeries
+        return _get_series_python_func_plan(
+            self._plan, new_metadata, "isin", (values,), {}
+        )
+
 
 class BodoStringMethods:
     """Support Series.str string processing methods same as Pandas."""
