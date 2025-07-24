@@ -3,15 +3,25 @@
 #include <arrow/type.h>
 #include <utility>
 #include "../../libs/_bodo_to_arrow.h"
+#include "../../libs/_query_profile_collector.h"
 #include "../_util.h"
-#include "../libs/_array_utils.h"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
-#include "duckdb/planner/logical_operator.hpp"
 #include "expression.h"
 #include "operator.h"
+
+struct PhysicalProjectionMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    using blob_t = MetricBase::BlobValue;
+    stat_t output_row_count = 0;
+    stat_t n_exprs = 0;
+
+    time_t init_time = 0;
+    time_t expr_eval_time = 0;
+};
 
 /**
  * @brief Physical node for projection.
@@ -23,6 +33,7 @@ class PhysicalProjection : public PhysicalSourceSink {
         std::vector<duckdb::ColumnBinding>& source_cols,
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
         std::shared_ptr<bodo::Schema> input_schema) {
+        time_pt start_init_time = start_timer();
         // Map of column bindings to column indices in physical input table
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(source_cols);
@@ -115,11 +126,20 @@ class PhysicalProjection : public PhysicalSourceSink {
         }
         this->output_schema->column_names = col_names;
         this->output_schema->metadata = input_schema->metadata;
+        this->metrics.init_time = end_timer(start_init_time);
+        this->metrics.n_exprs = this->physical_exprs.size();
     }
 
     virtual ~PhysicalProjection() = default;
 
-    void Finalize() override {}
+    void Finalize() override {
+        std::vector<MetricBase> metrics_out;
+        this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            // TODO: Use a proper operator ID
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            std::move(metrics_out));
+    }
 
     /**
      * @brief Do projection.
@@ -133,6 +153,7 @@ class PhysicalProjection : public PhysicalSourceSink {
         OperatorResult prev_op_result) override {
         std::vector<std::shared_ptr<array_info>> out_cols;
 
+        time_pt start_process_exprs = start_timer();
         for (auto& phys_expr : this->physical_exprs) {
             std::shared_ptr<ExprResult> phys_res =
                 phys_expr->ProcessBatch(input_batch);
@@ -144,6 +165,7 @@ class PhysicalProjection : public PhysicalSourceSink {
             }
             out_cols.emplace_back(res_as_array->result);
         }
+        this->metrics.expr_eval_time += end_timer(start_process_exprs);
 
         uint64_t out_size =
             out_cols.size() > 0 ? out_cols[0]->length : input_batch->nrows();
@@ -155,6 +177,8 @@ class PhysicalProjection : public PhysicalSourceSink {
         std::shared_ptr<table_info> out_table_info =
             std::make_shared<table_info>(out_cols, out_size, col_names,
                                          input_batch->metadata);
+
+        this->metrics.output_row_count += out_size;
 
         // Just propagate the FINISHED flag to other operators (like join) or
         // accept more input
@@ -171,4 +195,15 @@ class PhysicalProjection : public PhysicalSourceSink {
     std::shared_ptr<bodo::Schema> output_schema;
     std::vector<std::string> col_names;
     std::vector<std::shared_ptr<PhysicalExpression>> physical_exprs;
+    PhysicalProjectionMetrics metrics;
+    void ReportMetrics(std::vector<MetricBase>& metrics_out) {
+        metrics_out.reserve(4);
+        metrics_out.emplace_back(
+            StatMetric("output_row_count", this->metrics.output_row_count));
+        metrics_out.emplace_back(StatMetric("n_exprs", this->metrics.n_exprs));
+        metrics_out.emplace_back(
+            TimerMetric("init_time", this->metrics.init_time));
+        metrics_out.emplace_back(
+            TimerMetric("expr_eval_time", this->metrics.expr_eval_time));
+    }
 };
