@@ -11,6 +11,7 @@ from collections.abc import Callable, Hashable
 import numpy
 import pandas as pd
 import pyarrow as pa
+from pandas._libs import lib
 from pandas._typing import (
     Axis,
     SortKind,
@@ -918,6 +919,61 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def rsub(self, other, level=None, fill_value=None, axis=0):
         """Return Subtraction of series and other, element-wise (binary operator rsub)."""
         return gen_arith(self, other, "rsub")
+
+    @check_args_fallback(supported=["drop", "name"])
+    def reset_index(
+        self,
+        level=None,
+        *,
+        drop=False,
+        name=lib.no_default,
+        inplace=False,
+        allow_duplicates=False,
+    ):
+        index = self._plan.empty_data.index
+        index_size = get_n_index_arrays(index)
+        col_names = []
+        if isinstance(index, pd.MultiIndex):
+            for i in range(len(index.names)):
+                col_name = index.names[i]
+                col_names.append(col_name if col_name is not None else f"level_{i}")
+        elif isinstance(index, pd.Index):
+            col_names.append(index.name if index.name is not None else "index")
+        elif isinstance(index, pd.RangeIndex):
+            col_names = "index"
+        else:
+            raise TypeError(f"Invalid index type: {type(index)}")
+
+        index_cols = (
+            make_col_ref_exprs(range(1, 1 + index_size), self._plan) if not drop else []
+        )
+        empty_data = None
+        if drop:
+            empty_data = pd.Series(
+                dtype=self.dtype,
+                name=self.name,
+                index=pd.RangeIndex(0),
+            )
+        else:
+            empty_data = self._plan.empty_data.copy()
+            empty_data = empty_data.rename(
+                columns={"A": name if name is not lib.no_default else self.name}
+            )
+            empty_data.index = pd.RangeIndex(0)
+            for i in range(index_size):
+                empty_data.insert(i, col_names[i], index_cols[i].empty_data.copy())
+
+        # TODO: is copy needed here?
+        # empty_data = self._plan.empty_data.copy()
+        exprs = make_col_ref_exprs((0,), self._plan)
+
+        new_plan = LogicalProjection(
+            empty_data,
+            self._plan,
+            index_cols + exprs,
+        )
+
+        return wrap_plan(new_plan)
 
 
 class BodoStringMethods:

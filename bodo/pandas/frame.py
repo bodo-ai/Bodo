@@ -1321,7 +1321,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         finally:
             self._mgr._disable_collect = original_flag
 
-    @check_args_fallback(supported=["drop"])
+    @check_args_fallback(supported=["drop", "names"])
     def reset_index(
         self,
         level=None,
@@ -1341,30 +1341,34 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         out_columns = self._head_df.columns
         n_cols = len(out_columns)
 
-        data_cols = []
+        index = self._head_df.index
+        index_size = get_n_index_arrays(index)
 
+        if names is None:
+            if isinstance(index, pd.MultiIndex):
+                for i in range(len(index.names)):
+                    name = index.names[i]
+                    names.append(name if name is not None else f"level_{i}")
+            elif isinstance(index, pd.Index):
+                names.append(index.name if index.name is not None else "index")
+            elif isinstance(index, pd.RangeIndex):
+                names = "index"
+            else:
+                raise TypeError(f"Invalid index type: {type(index)}")
+
+        names = maybe_make_list(names)
+
+        data_cols = []
         # TODO: which to use?
         # data_cols = [make_col_ref_exprs([i], self._plan)[0] for i in range(n_cols)]
         for c in out_columns:
             data_cols.append(
                 make_col_ref_exprs([self._head_df.columns.get_loc(c)], self._plan)[0]
             )
-        index = self._head_df.index
-        index_size = get_n_index_arrays(index)
-        names = []
 
-        if isinstance(index, pd.MultiIndex):
-            for i in range(len(index.names)):
-                name = index.names[i]
-                names.append(name if name is not None else f"level_{i}")
-        elif isinstance(index, pd.Index):
-            names.append(index.name if index.name is not None else "index")
-        elif isinstance(index, pd.RangeIndex):
-            names = ["index"]
-
-        self._head_df.index = pd.RangeIndex(0)
-
+        # TODO: is copy needed here?
         empty_data = self._plan.empty_data.copy()
+        empty_data.index = pd.RangeIndex(0)
 
         index_cols = (
             make_col_ref_exprs(range(n_cols, n_cols + index_size), self._plan)
