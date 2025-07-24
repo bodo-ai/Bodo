@@ -1052,7 +1052,8 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                      bool probe_table_outer_, bool force_broadcast_,
                      cond_expr_fn_t cond_func_, bool build_parallel_,
                      bool probe_parallel_, int64_t output_batch_size_,
-                     int64_t sync_iter_, int64_t op_id_, bool is_na_equal_)
+                     int64_t sync_iter_, int64_t op_id_, bool is_na_equal_,
+                     bool is_mark_join_)
     : build_table_schema(build_table_schema_),
       probe_table_schema(probe_table_schema_),
       n_keys(n_keys_),
@@ -1061,6 +1062,7 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
       probe_table_outer(probe_table_outer_),
       force_broadcast(force_broadcast_),
       is_na_equal(is_na_equal_),
+      is_mark_join(is_mark_join_),
       build_parallel(build_parallel_),
       probe_parallel(probe_parallel_),
       output_batch_size(output_batch_size_),
@@ -1152,6 +1154,18 @@ void JoinState::InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
         }
         out_schema->append_column(std::move(col_type));
         dict_builders.push_back(this->probe_table_dict_builders[i_col]);
+    }
+
+    // Add the mark output column if this is a mark join.
+    if (this->is_mark_join) {
+        if (!build_kept_cols.empty()) {
+            throw std::runtime_error(
+                "JoinState::InitOutputBuffer: Mark join should not output "
+                "build table columns.");
+        }
+        out_schema->append_column(std::make_unique<bodo::DataType>(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::_BOOL));
+        dict_builders.push_back(nullptr);
     }
 
     for (uint64_t i_col : build_kept_cols) {
@@ -1255,11 +1269,13 @@ HashJoinState::HashJoinState(
     bool build_table_outer_, bool probe_table_outer_, bool force_broadcast_,
     cond_expr_fn_t cond_func_, bool build_parallel_, bool probe_parallel_,
     int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
-    int64_t op_pool_size_bytes, size_t max_partition_depth_, bool is_na_equal_)
+    int64_t op_pool_size_bytes, size_t max_partition_depth_, bool is_na_equal_,
+    bool is_mark_join_)
     : JoinState(build_table_schema_, probe_table_schema_, n_keys_,
                 build_table_outer_, probe_table_outer_, force_broadcast_,
                 cond_func_, build_parallel_, probe_parallel_,
-                output_batch_size_, sync_iter_, op_id_, is_na_equal_),
+                output_batch_size_, sync_iter_, op_id_, is_na_equal_,
+                is_mark_join_),
       // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -3664,9 +3680,39 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     batch_hashes_join.reset();
 
     // Insert output rows into the output buffer:
-    join_state->output_buffer->AppendJoinOutput(
-        active_partition->build_table_buffer->data_table, std::move(in_table),
-        build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
+    if (join_state->is_mark_join) {
+        // Add the mark column to probe table and append to output buffer.
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        std::vector<std::string> col_names;
+        out_arrs.reserve(probe_kept_cols.size() + 1);
+        for (const auto& c : probe_kept_cols) {
+            out_arrs.emplace_back(in_table->columns[c]);
+            if (in_table->column_names.size() > 0) {
+                col_names.push_back(in_table->column_names[c]);
+            }
+        }
+        std::shared_ptr<array_info> mark_arr = alloc_nullable_array_no_nulls(
+            in_table->nrows(), Bodo_CTypes::_BOOL);
+        bool* mark_data =
+            mark_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, bool>();
+        memset(mark_data, 0, in_table->nrows() * sizeof(bool));
+        for (const auto& idx : probe_idxs) {
+            mark_data[idx] = true;
+        }
+        out_arrs.push_back(mark_arr);
+        if (in_table->column_names.size() > 0) {
+            col_names.push_back("");
+        }
+        std::shared_ptr<table_info> mark_table = std::make_shared<table_info>(
+            out_arrs, in_table->nrows(), col_names, in_table->metadata);
+
+        join_state->output_buffer->AppendBatch(mark_table);
+    } else {
+        join_state->output_buffer->AppendJoinOutput(
+            active_partition->build_table_buffer->data_table,
+            std::move(in_table), build_idxs, probe_idxs, build_kept_cols,
+            probe_kept_cols);
+    }
     build_idxs.clear();
     probe_idxs.clear();
 

@@ -704,6 +704,8 @@ class JoinState {
     const bool force_broadcast;
     // Matches Pandas behavior by treating NA values as equal.
     const bool is_na_equal;
+    // Mark join is used for Series.isin in dataframe library
+    const bool is_mark_join;
     // Note: This isn't constant because we may change it
     // via broadcast decisions.
     bool build_parallel;
@@ -777,7 +779,7 @@ class JoinState {
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
               int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
-              bool is_na_equal_ = false);
+              bool is_na_equal_ = false, bool is_mark_join_ = false);
 
     virtual ~JoinState() {}
 
@@ -978,7 +980,7 @@ class HashJoinState : public JoinState {
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
                   size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH,
-                  bool is_na_equal_ = false);
+                  bool is_na_equal_ = false, bool is_mark_join_ = false);
 
     ~HashJoinState() { MPI_Comm_free(&this->shuffle_comm); }
 
