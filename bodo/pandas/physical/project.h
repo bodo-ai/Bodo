@@ -140,6 +140,9 @@ class PhysicalProjection : public PhysicalSourceSink {
             // TODO: Use a proper operator ID
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            this->metrics.output_row_count);
     }
 
     /**
@@ -198,9 +201,6 @@ class PhysicalProjection : public PhysicalSourceSink {
     std::vector<std::shared_ptr<PhysicalExpression>> physical_exprs;
     PhysicalProjectionMetrics metrics;
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {
-        metrics_out.reserve(4);
-        metrics_out.emplace_back(
-            StatMetric("output_row_count", this->metrics.output_row_count));
         metrics_out.emplace_back(StatMetric("n_exprs", this->metrics.n_exprs));
         metrics_out.emplace_back(
             TimerMetric("init_time", this->metrics.init_time));
