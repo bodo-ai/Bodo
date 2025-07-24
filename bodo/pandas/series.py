@@ -938,6 +938,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         if isinstance(values, BodoSeries):
             empty_left = _empty_like(self)
+            empty_left.name = None
             # Mark column is after the left columns in DuckDB, see:
             # https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/planner/operator/logical_join.cpp#L20
             empty_join_out = pd.concat(
@@ -953,7 +954,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
             # Can't use make_col_ref_exprs since output type is not in input schema
-            empty_col_data = arrow_to_empty_df(pa.schema([pa.bool_()]))
+            empty_col_data = arrow_to_empty_df(
+                pa.schema([pa.field("mark", pa.bool_())])
+            )
             n_indices = get_n_index_arrays(new_metadata.index)
             mark_col = ColRefExpression(
                 empty_col_data, planComparisonJoin, n_indices + 1
