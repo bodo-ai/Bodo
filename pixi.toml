@@ -133,7 +133,7 @@ setuptools = ">=64"
 setuptools_scm = ">=8"
 cython = ">=3.0"
 scikit-build-core = "*"
-# Copied into bodo/mpi4py
+# Copied into bodo/mpi4py (pip only)
 mpi4py = ">=4.0,<4.1"
 
 # Build C++ Deps
@@ -237,9 +237,12 @@ httpie = "*"
 # Restricted to match Intel MPI. Upgrade with IMPI.
 # Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-mpich = { version = "4.1.*", build = "h*" }
+# Version 4.3.1 (build number 100 and 101) have a bug
+# Where spawn cannot be launched without mpiexec.
+# TODO(scott): Relax this constraint once new versions are released.
+mpich = { version = "==4.3.1", build = "h*102" }
 [feature.local-mpi.target.linux.dependencies]
-mpich = { version = "4.1.*", build = "h*" }
+mpich = { version = "==4.3.1", build = "h*102" }
 
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
@@ -249,7 +252,7 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
+dependencies = { mpich = { version = "==4.3.1", build = "external_*" } }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
