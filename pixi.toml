@@ -12,7 +12,9 @@ azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group =
 platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
 # Pip C++ Deps
-pip-cpp-macos-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip" }
+pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
+pip-cpp-macos = { features = ["rcpp", "local-mpi-mac-pip", "pip"], no-default-feature = true, solve-group = "pip-mac" }
+
 
 # Build Commands
 [tasks.build-bodo]
@@ -237,15 +239,14 @@ httpie = "*"
 # Restricted to match Intel MPI. Upgrade with IMPI.
 # Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-# Version 4.3.1 (build number 100 and 101) have a bug
-# Where spawn cannot be launched without mpiexec.
-# TODO(scott): Relax this constraint once new versions are released.
 mpich = { version = "==4.3.1", build = "h*102" }
 [feature.local-mpi.target.linux.dependencies]
 mpich = { version = "==4.3.1", build = "h*102" }
-
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
+
+[feature.local-mpi-mac-pip.target.osx.dependencies]
+mpich = { version = "4.1.*", build = "h*102" }
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
