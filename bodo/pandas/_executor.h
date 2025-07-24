@@ -3,6 +3,7 @@
 #pragma once
 
 #include <Python.h>
+#include "../libs/_query_profile_collector.h"
 #include "_physical_conv.h"
 #include "_pipeline.h"
 #include "duckdb/planner/logical_operator.hpp"
@@ -40,19 +41,23 @@ class Executor {
         // Pipelines generation ensures that pipelines are in the right
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).
+        QueryProfileCollector::Default().Init();
 #ifdef DEBUG_PIPELINE
         std::cout << "ExecutePipelines with " << pipelines.size()
                   << " pipelines." << std::endl;
 #endif
         for (size_t i = 0; i < pipelines.size(); ++i) {
+            QueryProfileCollector::Default().StartPipeline(i);
 #ifdef DEBUG_PIPELINE
             std::cout << "Before execute pipeline " << i << std::endl;
 #endif
-            pipelines[i]->Execute();
+            uint64_t batches_processed = pipelines[i]->Execute();
 #ifdef DEBUG_PIPELINE
             std::cout << "After execute pipeline " << i << std::endl;
 #endif
+            QueryProfileCollector::Default().EndPipeline(i, batches_processed);
         }
+        QueryProfileCollector::Default().Finalize(1);
         return pipelines.back()->GetResult();
     }
 };

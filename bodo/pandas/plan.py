@@ -512,6 +512,10 @@ class ArithOpExpression(BinaryExpression):
     pass
 
 
+total_init_lazy = 0
+total_execute_plan = 0
+
+
 def execute_plan(plan: LazyPlan):
     """Execute a dataframe plan using Bodo's execution engine.
 
@@ -585,9 +589,10 @@ def execute_plan(plan: LazyPlan):
         # to workers before execution.
         for a in plan.args:
             _init_lazy_distributed_arg(a)
-        print(
-            "profile_time _init_lazy_distributed_arg", time.perf_counter() - start_time
-        )
+        init_time = time.perf_counter() - start_time
+        global total_init_lazy
+        total_init_lazy += init_time
+        print("profile_time _init_lazy_distributed_arg", init_time)
 
         if bodo.dataframe_library_dump_plans:
             # Sometimes when an execution is triggered it isn't expected that
@@ -602,7 +607,10 @@ def execute_plan(plan: LazyPlan):
 
         start_time = time.perf_counter()
         ret = bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
-        print("profile_time total_execute_plan", time.perf_counter() - start_time)
+        exec_time = time.perf_counter() - start_time
+        global total_execute_plan
+        total_execute_plan += exec_time
+        print("profile_time total_execute_plan", exec_time)
         return ret
 
     return _exec_plan(plan)

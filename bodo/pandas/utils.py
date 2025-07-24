@@ -215,8 +215,13 @@ def report_times():
     import bodo
 
     if bodo.libs.distributed_api.get_rank() == 0:
-        print("profile_time atexit top_time", top_time)
-        print("profile_time atexit method_time", method_time)
+        print("profile_time atexit total_top_time", top_time)
+        print("profile_time atexit total_method_time", method_time)
+        print("profile_time atexit total_init_lazy", bodo.pandas.plan.total_init_lazy)
+        print(
+            "profile_time atexit total_execute_plan",
+            bodo.pandas.plan.total_execute_plan,
+        )
 
 
 atexit.register(report_times)
