@@ -55,7 +55,7 @@ requirements:
     # Some version/build numbers have a bug
     # that prevents programs from calling spawn.
     - mpich ==4.3.1             # [not win]
-    - mpich * *_102
+    - mpich * *_102             # [not win]
     - impi-devel                # [win]
     # Corresponding dependency is automatically added in reqs/run.
     - aws-sdk-cpp
