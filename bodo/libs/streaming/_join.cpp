@@ -3681,32 +3681,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 
     // Insert output rows into the output buffer:
     if (join_state->is_mark_join) {
-        // Add the mark column to probe table and append to output buffer.
-        std::vector<std::shared_ptr<array_info>> out_arrs;
-        std::vector<std::string> col_names;
-        out_arrs.reserve(probe_kept_cols.size() + 1);
-        for (const auto& c : probe_kept_cols) {
-            out_arrs.emplace_back(in_table->columns[c]);
-            if (in_table->column_names.size() > 0) {
-                col_names.push_back(in_table->column_names[c]);
-            }
-        }
-        std::shared_ptr<array_info> mark_arr = alloc_nullable_array_no_nulls(
-            in_table->nrows(), Bodo_CTypes::_BOOL);
-        uint8_t* mark_data =
-            mark_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
-        memset(mark_data, 0, in_table->nrows() * sizeof(uint8_t));
-        for (const auto& idx : probe_idxs) {
-            SetBitTo(mark_data, idx, true);
-        }
-        out_arrs.push_back(mark_arr);
-        if (in_table->column_names.size() > 0) {
-            col_names.push_back("");
-        }
-        std::shared_ptr<table_info> mark_table = std::make_shared<table_info>(
-            out_arrs, in_table->nrows(), col_names, in_table->metadata);
-
-        join_state->output_buffer->AppendBatch(mark_table);
+        join_state->output_buffer->AppendMarkJoinOutput(
+            std::move(in_table), probe_idxs, probe_kept_cols);
     } else {
         join_state->output_buffer->AppendJoinOutput(
             active_partition->build_table_buffer->data_table,
