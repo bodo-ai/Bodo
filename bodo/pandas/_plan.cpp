@@ -558,7 +558,9 @@ std::vector<int> get_projection_pushed_down_columns(
  *
  */
 static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
-                        duckdb::Vector &result) {}
+                        duckdb::Vector &result) {
+    throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
+}
 
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
@@ -575,7 +577,10 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
 
     // Create ScalarFunction for UDF
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
-        "bodo_udf", source->types, out_type, RunFunction);
+        "bodo_udf", source->types, out_type, RunFunction, nullptr, nullptr,
+        nullptr, nullptr, duckdb::LogicalTypeId::INVALID,
+        duckdb::FunctionStability::VOLATILE,
+        duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoPythonScalarFunctionData>(args, out_schema);
 
