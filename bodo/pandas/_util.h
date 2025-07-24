@@ -201,9 +201,10 @@ struct BodoAggFunctionData : public duckdb::FunctionData {
  * @param args Python arguments for the function
  * @return std::shared_ptr<table_info> output table from the Python function
  */
-std::shared_ptr<table_info> runPythonScalarFunction(
-    std::shared_ptr<table_info> input_batch,
-    const std::shared_ptr<arrow::DataType> &result_type, PyObject *args);
+std::tuple<std::shared_ptr<table_info>, int64_t, int64_t, int64_t>
+runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
+                        const std::shared_ptr<arrow::DataType> &result_type,
+                        PyObject *args);
 
 /**
  * @brief Convert duckdb table filters to pyiceberg expressions.

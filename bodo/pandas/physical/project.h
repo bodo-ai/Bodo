@@ -206,5 +206,8 @@ class PhysicalProjection : public PhysicalSourceSink {
             TimerMetric("init_time", this->metrics.init_time));
         metrics_out.emplace_back(
             TimerMetric("expr_eval_time", this->metrics.expr_eval_time));
+        for (auto& expr : this->physical_exprs) {
+            expr->ReportMetrics(metrics_out);
+        }
     }
 };

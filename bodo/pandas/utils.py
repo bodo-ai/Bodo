@@ -515,7 +515,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
     return the result as a C++ table and column names.
     NOTE: needs to free cpp_table after use.
     """
-    start_time = time.perf_counter()
+    time.perf_counter()
     from bodo.ext import plan_optimizer
 
     func, is_series, is_attr, args, kwargs = in_args
@@ -539,6 +539,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
         )
     )
 
+    cpp_to_py_start = time.perf_counter_ns()
     if is_series:
         # NOTE: Assuming Series operations ignore Indexes.
         # delete_input=False since cpp_table is needed for output below
@@ -550,10 +551,9 @@ def run_func_on_table(cpp_table, result_type, in_args):
         )
     else:
         input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
+    cpp_to_py = time.perf_counter_ns() - cpp_to_py_start
 
-    print("run_func_on_table prepare ", 1000000 * (time.perf_counter() - start_time))
-    start_time = time.perf_counter()
-
+    udf_time_start = time.perf_counter_ns()
     if isinstance(func, str) and is_attr:
         func_path_str = func
         func = input
@@ -569,9 +569,9 @@ def run_func_on_table(cpp_table, result_type, in_args):
         out = func(input, *args, **kwargs)
     else:
         out = func(input, *args, **kwargs)
-    print("run_func_on_table call ", 1000000 * (time.perf_counter() - start_time))
+    udf_time = time.perf_counter_ns() - udf_time_start
 
-    start_time = time.perf_counter()
+    time.perf_counter()
     # astype can fail in some cases when input is empty
     if len(out):
         # TODO: verify this is correct for all possible result_type's
@@ -583,14 +583,15 @@ def run_func_on_table(cpp_table, result_type, in_args):
     if out.name is None:
         out.name = "OUT"
 
+    py_to_cpp_start = time.perf_counter_ns()
     if is_series:
-        ret = plan_optimizer.arrow_array_to_cpp_table(
+        out_ptr = plan_optimizer.arrow_array_to_cpp_table(
             out.array._pa_array.combine_chunks(), str(out.name), cpp_table
         )
     else:
-        ret = df_to_cpp_table(pd.DataFrame({out.name: out}))
-    print("run_func_on_table finish ", 1000000 * (time.perf_counter() - start_time))
-    return ret
+        out_ptr = df_to_cpp_table(pd.DataFrame({out.name: out}))
+    py_to_cpp = time.perf_counter_ns() - py_to_cpp_start
+    return out_ptr, cpp_to_py, udf_time, py_to_cpp
 
 
 def _del_func(x):
