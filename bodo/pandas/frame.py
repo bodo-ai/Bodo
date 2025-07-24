@@ -1334,9 +1334,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         names=None,
     ):
         """
-        Generate a new DataFrame or Series with the index reset.
-        This is useful when the index needs to be treated as a column, or when the index is meaningless and
-        needs to be reset to the default before another operation.
+        Reset the index, or a level of it.
+        Reset the index of the DataFrame, and use the default one instead.
+        If the DataFrame has a MultiIndex, this method can remove one or more levels.
         """
         out_columns = self._head_df.columns
         n_cols = len(out_columns)
@@ -1345,6 +1345,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         index_size = get_n_index_arrays(index)
 
         if names is None:
+            names = []
             if isinstance(index, pd.MultiIndex):
                 for i in range(len(index.names)):
                     name = index.names[i]

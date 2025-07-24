@@ -930,6 +930,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         inplace=False,
         allow_duplicates=False,
     ):
+        """
+        Generate a new DataFrame or Series with the index reset.
+        This is useful when the index needs to be treated as a column, or when the index is meaningless and
+        needs to be reset to the default before another operation.
+        """
         index = self._plan.empty_data.index
         index_size = get_n_index_arrays(index)
         col_names = []
