@@ -202,6 +202,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             "attrs",
             "flags",
             "columns",
+            "ndim",
+            "axes",
+            "iloc",
+            "empty",
         ]
 
         cls = object.__getattribute__(self, "__class__")
@@ -1316,6 +1320,68 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             yield
         finally:
             self._mgr._disable_collect = original_flag
+
+    @check_args_fallback(supported=["drop"])
+    def reset_index(
+        self,
+        level=None,
+        *,
+        drop=False,
+        inplace=False,
+        col_level=0,
+        col_fill="",
+        allow_duplicates=lib.no_default,
+        names=None,
+    ):
+        """
+        Generate a new DataFrame or Series with the index reset.
+        This is useful when the index needs to be treated as a column, or when the index is meaningless and
+        needs to be reset to the default before another operation.
+        """
+        out_columns = self._head_df.columns
+        n_cols = len(out_columns)
+
+        data_cols = []
+
+        # TODO: which to use?
+        # data_cols = [make_col_ref_exprs([i], self._plan)[0] for i in range(n_cols)]
+        for c in out_columns:
+            data_cols.append(
+                make_col_ref_exprs([self._head_df.columns.get_loc(c)], self._plan)[0]
+            )
+        index = self._head_df.index
+        index_size = get_n_index_arrays(index)
+        names = []
+
+        if isinstance(index, pd.MultiIndex):
+            for i in range(len(index.names)):
+                name = index.names[i]
+                names.append(name if name is not None else f"level_{i}")
+        elif isinstance(index, pd.Index):
+            names.append(index.name if index.name is not None else "index")
+        elif isinstance(index, pd.RangeIndex):
+            names = ["index"]
+
+        self._head_df.index = pd.RangeIndex(0)
+
+        empty_data = self._plan.empty_data.copy()
+
+        index_cols = (
+            make_col_ref_exprs(range(n_cols, n_cols + index_size), self._plan)
+            if not drop
+            else []
+        )
+        if not drop:
+            for i in range(index_size):
+                empty_data.insert(i, names[i], index_cols[i].empty_data.copy())
+
+        new_plan = LogicalProjection(
+            empty_data,
+            self._plan,
+            index_cols + data_cols,
+        )
+
+        return wrap_plan(new_plan)
 
 
 def _add_proj_expr_to_plan(
