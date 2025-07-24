@@ -1367,7 +1367,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 make_col_ref_exprs([self._head_df.columns.get_loc(c)], self._plan)[0]
             )
 
-        # TODO: is copy needed here?
         empty_data = self._plan.empty_data.copy()
         empty_data.index = pd.RangeIndex(0)
 

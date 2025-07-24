@@ -961,17 +961,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
         else:
             empty_data = self._plan.empty_data.copy()
-            empty_data = empty_data.rename(
-                columns={"A": name if name is not lib.no_default else self.name}
+            old_col_name = empty_data.columns[0]
+            new_col_name = (
+                name
+                if name is not lib.no_default
+                else (self.name if self.name is not None else "0")
             )
+            empty_data = empty_data.rename(columns={old_col_name: new_col_name})
             empty_data.index = pd.RangeIndex(0)
             for i in range(index_size):
                 empty_data.insert(i, col_names[i], index_cols[i].empty_data.copy())
 
-        # TODO: is copy needed here?
-        # empty_data = self._plan.empty_data.copy()
         exprs = make_col_ref_exprs((0,), self._plan)
-
         new_plan = LogicalProjection(
             empty_data,
             self._plan,
