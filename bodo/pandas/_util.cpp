@@ -367,7 +367,7 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
         throw std::runtime_error(
             "Expected an integer for table_info pointer from run_apply_udf");
     }
-    int64_t table_info_ptr = PyLong_AsLongLong(result);
+    int64_t table_info_ptr = PyLong_AsLongLong(output_table_info);
 
     std::shared_ptr<table_info> out_batch(
         reinterpret_cast<table_info *>(table_info_ptr));
