@@ -13,7 +13,7 @@ platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group =
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
-pip-cpp-macos = { features = ["rcpp", "local-mpi-mac-pip", "pip"], no-default-feature = true, solve-group = "pip-mac" }
+pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
 
 # Build Commands
@@ -61,7 +61,6 @@ build = { depends-on = ["build-bodo", "build-bodosql", "build-iceberg"] }
 b = { depends-on = ["build"] }              # Alias for build
 # Additional
 clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash buildscripts/clean.sh" }
-
 
 [system-requirements]
 macos = "12.0"
@@ -244,9 +243,6 @@ mpich = { version = "==4.3.1", build = "h*102" }
 mpich = { version = "==4.3.1", build = "h*102" }
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
-
-[feature.local-mpi-mac-pip.target.osx.dependencies]
-mpich = { version = "4.1.*", build = "h*102" }
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
