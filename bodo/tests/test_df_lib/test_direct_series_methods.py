@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+from test_end_to_end import index_val  # noqa
 from test_series_generator import _generate_series_test
 
 import bodo.pandas as bd
