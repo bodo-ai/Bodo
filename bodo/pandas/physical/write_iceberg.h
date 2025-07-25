@@ -166,6 +166,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(-1, 1),
             std::move(metrics_out));
+        // Write doesn't produce rows
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(-1, 1), 0);
     }
