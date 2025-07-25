@@ -57,7 +57,7 @@ class Executor {
 #endif
             QueryProfileCollector::Default().EndPipeline(i, batches_processed);
         }
-        QueryProfileCollector::Default().Finalize(1);
+        QueryProfileCollector::Default().Finalize(0);
         return pipelines.back()->GetResult();
     }
 };
