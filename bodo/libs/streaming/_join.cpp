@@ -91,7 +91,7 @@ JoinPartition::JoinPartition(
     const std::shared_ptr<::arrow::MemoryManager> op_mm_,
     bodo::OperatorScratchPool* op_scratch_pool_,
     const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_,
-    bool is_na_equal_)
+    bool is_na_equal_, bool is_mark_join_)
     : build_table_schema(build_table_schema_),
       probe_table_schema(probe_table_schema_),
       build_table_dict_builders(build_table_dict_builders_),
@@ -112,6 +112,7 @@ JoinPartition::JoinPartition(
       build_table_matched(op_scratch_pool_),
       dummy_probe_table(alloc_table(probe_table_schema_)),
       is_na_equal(is_na_equal_),
+      is_mark_join(is_mark_join_),
       num_top_bits(num_top_bits_),
       top_bitmask(top_bitmask_),
       build_table_outer(build_table_outer_),
@@ -221,14 +222,15 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders,
         is_active, this->metrics, this->op_pool, this->op_mm,
-        this->op_scratch_pool, this->op_scratch_mm, this->is_na_equal);
+        this->op_scratch_pool, this->op_scratch_mm, this->is_na_equal,
+        this->is_mark_join);
     std::shared_ptr<JoinPartition> new_part2 = std::make_shared<JoinPartition>(
         this->num_top_bits + 1, (this->top_bitmask << 1) + 1,
         this->build_table_schema, this->probe_table_schema, this->n_keys,
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders, false,
         this->metrics, this->op_pool, this->op_mm, this->op_scratch_pool,
-        this->op_scratch_mm, this->is_na_equal);
+        this->op_scratch_mm, this->is_na_equal, this->is_mark_join);
 
     std::vector<bool> append_partition1;
     if (is_active) {
@@ -739,7 +741,7 @@ inline void produce_probe_output(
     const std::shared_ptr<table_info>& probe_table,
     const std::vector<uint64_t>& build_kept_cols,
     const std::vector<uint64_t>& probe_kept_cols,
-    HashJoinMetrics::time_t& append_time) {
+    HashJoinMetrics::time_t& append_time, bool is_mark_join = false) {
     const int64_t group_id = group_ids[i_row - batch_start_row];
 
     // -1 means ignore row (e.g. shouldn't be processed on this rank)
@@ -794,9 +796,9 @@ inline void produce_probe_output(
         // Produce output in a chunked builder periodically to avoid OOM
         if (build_idxs.size() >= static_cast<size_t>(STREAMING_BATCH_SIZE)) {
             time_pt start_append = start_timer();
-            output_buffer->AppendJoinOutput(build_table, probe_table,
-                                            build_idxs, probe_idxs,
-                                            build_kept_cols, probe_kept_cols);
+            output_buffer->AppendJoinOutput(
+                build_table, probe_table, build_idxs, probe_idxs,
+                build_kept_cols, probe_kept_cols, is_mark_join);
             append_time += end_timer(start_append);
             build_idxs.clear();
             probe_idxs.clear();
@@ -931,7 +933,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
                 probe_col_ptrs, build_null_bitmaps, probe_null_bitmaps,
                 output_buffer, this->build_table_buffer->data_table,
                 this->probe_table, build_kept_cols, probe_kept_cols,
-                append_time);
+                append_time, this->is_mark_join);
         }
         this->metrics.produce_probe_out_idxs_time +=
             end_timer(start_produce_probe) - append_time;
@@ -939,7 +941,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
 
         output_buffer->AppendJoinOutput(
             this->build_table_buffer->data_table, this->probe_table, build_idxs,
-            probe_idxs, build_kept_cols, probe_kept_cols);
+            probe_idxs, build_kept_cols, probe_kept_cols, this->is_mark_join);
         build_idxs.clear();
         probe_idxs.clear();
 
@@ -957,9 +959,10 @@ void JoinPartition::FinalizeProbeForInactivePartition(
         this->metrics.build_outer_output_idx_time +=
             end_timer(start_build_outer);
 
-        output_buffer->AppendJoinOutput(
-            this->build_table_buffer->data_table, this->dummy_probe_table,
-            build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
+        output_buffer->AppendJoinOutput(this->build_table_buffer->data_table,
+                                        this->dummy_probe_table, build_idxs,
+                                        probe_idxs, build_kept_cols,
+                                        probe_kept_cols, this->is_mark_join);
         build_idxs.clear();
         probe_idxs.clear();
     }
@@ -1352,7 +1355,8 @@ HashJoinState::HashJoinState(
         build_table_outer_, probe_table_outer_, this->build_table_dict_builders,
         this->probe_table_dict_builders,
         /*is_active*/ true, this->metrics, this->op_pool.get(), this->op_mm,
-        this->op_scratch_pool.get(), this->op_scratch_mm, this->is_na_equal));
+        this->op_scratch_pool.get(), this->op_scratch_mm, this->is_na_equal,
+        this->is_mark_join));
 
     this->global_bloom_filter = create_bloom_filter();
 
@@ -1533,7 +1537,8 @@ void HashJoinState::ResetPartitions() {
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders,
         /*is_active*/ true, this->metrics, this->op_pool.get(), this->op_mm,
-        this->op_scratch_pool.get(), this->op_scratch_mm, this->is_na_equal));
+        this->op_scratch_pool.get(), this->op_scratch_mm, this->is_na_equal,
+        this->is_mark_join));
 }
 
 void HashJoinState::AppendBuildBatchHelper(
@@ -1721,7 +1726,8 @@ void HashJoinState::InitOutputBuffer(
             probe_idxs.resize(n_rows, -1);
             this->output_buffer->AppendJoinOutput(
                 build_na_table_chunk, this->dummy_probe_table, build_idxs,
-                probe_idxs, build_kept_cols, probe_kept_cols);
+                probe_idxs, build_kept_cols, probe_kept_cols,
+                this->is_mark_join);
             // We don't need to clear probe_idxs since in the next iteration
             // we will just resize it (and contents don't need to be
             // changed).
@@ -3649,7 +3655,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             probe_table_info_ptrs, build_col_ptrs, probe_col_ptrs,
             build_null_bitmaps, probe_null_bitmaps, join_state->output_buffer,
             active_partition->build_table_buffer->data_table, in_table,
-            build_kept_cols, probe_kept_cols, append_time);
+            build_kept_cols, probe_kept_cols, append_time,
+            join_state->is_mark_join);
     }
     join_state->metrics.produce_probe_out_idxs_time +=
         end_timer(start_produce_probe) - append_time;
@@ -3680,15 +3687,10 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     batch_hashes_join.reset();
 
     // Insert output rows into the output buffer:
-    if (join_state->is_mark_join) {
-        join_state->output_buffer->AppendMarkJoinOutput(
-            std::move(in_table), probe_idxs, probe_kept_cols);
-    } else {
-        join_state->output_buffer->AppendJoinOutput(
-            active_partition->build_table_buffer->data_table,
-            std::move(in_table), build_idxs, probe_idxs, build_kept_cols,
-            probe_kept_cols);
-    }
+    join_state->output_buffer->AppendJoinOutput(
+        active_partition->build_table_buffer->data_table, std::move(in_table),
+        build_idxs, probe_idxs, build_kept_cols, probe_kept_cols,
+        join_state->is_mark_join);
     build_idxs.clear();
     probe_idxs.clear();
 
@@ -3791,7 +3793,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                             probe_null_bitmaps, join_state->output_buffer,
                             active_partition->build_table_buffer->data_table,
                             new_data, build_kept_cols, probe_kept_cols,
-                            append_time);
+                            append_time, join_state->is_mark_join);
                     }
                     join_state->metrics.produce_probe_out_idxs_time +=
                         end_timer(start_produce_probe) - append_time;
@@ -3830,7 +3832,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                             probe_null_bitmaps, join_state->output_buffer,
                             active_partition->build_table_buffer->data_table,
                             new_data, build_kept_cols, probe_kept_cols,
-                            append_time);
+                            append_time, join_state->is_mark_join);
                     }
                     join_state->metrics.produce_probe_out_idxs_time +=
                         end_timer(start_produce_probe) - append_time;
@@ -3846,7 +3848,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 
                 join_state->output_buffer->AppendJoinOutput(
                     active_partition->build_table_buffer->data_table, new_data,
-                    build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
+                    build_idxs, probe_idxs, build_kept_cols, probe_kept_cols,
+                    join_state->is_mark_join);
                 build_idxs.clear();
                 probe_idxs.clear();
             }
@@ -3912,7 +3915,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             join_state->output_buffer->AppendJoinOutput(
                 active_partition->build_table_buffer->data_table,
                 join_state->dummy_probe_table, build_idxs, probe_idxs,
-                build_kept_cols, probe_kept_cols);
+                build_kept_cols, probe_kept_cols, join_state->is_mark_join);
             build_idxs.clear();
             probe_idxs.clear();
         }

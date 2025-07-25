@@ -284,7 +284,7 @@ class JoinPartition {
         const std::shared_ptr<::arrow::MemoryManager> op_mm_,
         bodo::OperatorScratchPool* op_scratch_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_,
-        bool is_na_equal_ = false);
+        bool is_na_equal_ = false, bool is_mark_join_ = false);
 
     // The types of the columns in the build table and probe tables.
     const std::shared_ptr<bodo::Schema> build_table_schema;
@@ -399,6 +399,7 @@ class JoinPartition {
 
     // Matches Pandas behavior by treating NA values as equal.
     const bool is_na_equal;
+    const bool is_mark_join;
 
     /// @brief Get number of bits in the 'top_bitmask'.
     size_t get_num_top_bits() const { return this->num_top_bits; }

@@ -1,5 +1,37 @@
 import pandas as pd
+import pytest
 from test_series_generator import _generate_series_test
+
+import bodo.pandas as bd
+from bodo.pandas.plan import assert_executed_plan_count
+from bodo.tests.utils import _test_equal
+
+
+@pytest.mark.parametrize("use_index1", [True, False])
+@pytest.mark.parametrize("use_index2", [True, False])
+def test_series_isin(index_val, use_index1, use_index2):
+    S1 = pd.Series([1, 2, 3, 4, 5] * 3)
+    S2 = pd.Series([2, 8, 8, 1, 3, 11] * 4)
+    if use_index1:
+        S1.index = index_val[: len(S1)]
+
+    if use_index2:
+        S2.index = index_val[: len(S2)]
+
+    py_out = S2.isin(S1)
+
+    with assert_executed_plan_count(0):
+        bdf1 = bd.from_pandas(pd.DataFrame({"A": S1}))
+        bdf2 = bd.from_pandas(pd.DataFrame({"B": S2}))
+
+        bd_out = bdf2["B"].isin(bdf1["A"])
+
+    _test_equal(
+        bd_out.copy(),
+        py_out,
+        check_pandas_types=False,
+        sort_output=True,
+    )
 
 
 def _install_series_direct_tests():

@@ -1242,7 +1242,37 @@ void AbstractChunkedTableBuilder::AppendJoinOutput(
     const std::span<const int64_t> build_idxs,
     const std::span<const int64_t> probe_idxs,
     const std::vector<uint64_t>& build_kept_cols,
-    const std::vector<uint64_t>& probe_kept_cols) {
+    const std::vector<uint64_t>& probe_kept_cols, bool is_mark_join) {
+    if (is_mark_join) {
+        // Add the mark column to probe table and append to output buffer.
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        std::vector<std::string> col_names;
+        out_arrs.reserve(probe_kept_cols.size() + 1);
+        for (const auto& c : probe_kept_cols) {
+            out_arrs.emplace_back(probe_table->columns[c]);
+            if (probe_table->column_names.size() > 0) {
+                col_names.push_back(probe_table->column_names[c]);
+            }
+        }
+        std::shared_ptr<array_info> mark_arr = alloc_nullable_array_no_nulls(
+            probe_table->nrows(), Bodo_CTypes::_BOOL);
+        uint8_t* mark_data =
+            mark_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
+        memset(mark_data, 0, probe_table->nrows() * sizeof(uint8_t));
+        for (const auto& idx : probe_idxs) {
+            SetBitTo(mark_data, idx, true);
+        }
+        out_arrs.push_back(mark_arr);
+        if (probe_table->column_names.size() > 0) {
+            col_names.push_back("");
+        }
+        std::shared_ptr<table_info> mark_table = std::make_shared<table_info>(
+            out_arrs, probe_table->nrows(), col_names, probe_table->metadata);
+
+        this->AppendBatch(mark_table);
+        return;
+    }
+
     if (build_idxs.size() != probe_idxs.size()) {
         throw std::runtime_error(
             "AbstractChunkedTableBuilder::AppendJoinOutput: Length of "
@@ -1679,38 +1709,6 @@ void AbstractChunkedTableBuilder::AppendJoinOutput(
 
 #undef NUM_ROWS_CAN_APPEND_COL
 #undef APPEND_ROWS_COL
-}
-
-void AbstractChunkedTableBuilder::AppendMarkJoinOutput(
-    std::shared_ptr<table_info> probe_table,
-    const std::span<const int64_t> probe_idxs,
-    const std::vector<uint64_t>& probe_kept_cols) {
-    // Add the mark column to probe table and append to output buffer.
-    std::vector<std::shared_ptr<array_info>> out_arrs;
-    std::vector<std::string> col_names;
-    out_arrs.reserve(probe_kept_cols.size() + 1);
-    for (const auto& c : probe_kept_cols) {
-        out_arrs.emplace_back(probe_table->columns[c]);
-        if (probe_table->column_names.size() > 0) {
-            col_names.push_back(probe_table->column_names[c]);
-        }
-    }
-    std::shared_ptr<array_info> mark_arr =
-        alloc_nullable_array_no_nulls(probe_table->nrows(), Bodo_CTypes::_BOOL);
-    uint8_t* mark_data =
-        mark_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
-    memset(mark_data, 0, probe_table->nrows() * sizeof(uint8_t));
-    for (const auto& idx : probe_idxs) {
-        SetBitTo(mark_data, idx, true);
-    }
-    out_arrs.push_back(mark_arr);
-    if (probe_table->column_names.size() > 0) {
-        col_names.push_back("");
-    }
-    std::shared_ptr<table_info> mark_table = std::make_shared<table_info>(
-        out_arrs, probe_table->nrows(), col_names, probe_table->metadata);
-
-    this->AppendBatch(mark_table);
 }
 
 void AbstractChunkedTableBuilder::Finalize(bool shrink_to_fit) {

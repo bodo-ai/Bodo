@@ -2189,15 +2189,14 @@ def test_series_concat(datapath):
 
 
 def test_isin(datapath):
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
-    bodo_df3 = (bodo_df1["D"] + 100).isin(bodo_df2["E"])
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
+        bodo_df3 = (bodo_df1["D"] + 100).isin(bodo_df2["E"])
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))
-    py_df3 = (py_df1["D"] + 100).isin(py_df2["E"])
-
-    assert bodo_df3.is_lazy_plan()
+        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))
+        py_df3 = (py_df1["D"] + 100).isin(py_df2["E"])
 
     _test_equal(
         bodo_df3,

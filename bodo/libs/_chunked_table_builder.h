@@ -1327,25 +1327,16 @@ class AbstractChunkedTableBuilder {
      * @param probe_idxs Corresponding indices from the probe table.
      * @param build_kept_cols Indices of the columns from the build table.
      * @param probe_kept_cols Indices of the columns from the probe table.
+     * @param is_mark_join If true, this is a mark join and we only append
+     * the probe table rows and mark column.
      */
     void AppendJoinOutput(std::shared_ptr<table_info> build_table,
                           std::shared_ptr<table_info> probe_table,
                           const std::span<const int64_t> build_idxs,
                           const std::span<const int64_t> probe_idxs,
                           const std::vector<uint64_t>& build_kept_cols,
-                          const std::vector<uint64_t>& probe_kept_cols);
-
-    /**
-     * @brief Similar to AppendJoinOutput, but specifically for
-     * Mark Join output.
-     *
-     * @param probe_table Probe/Right table to insert rows from.
-     * @param probe_idxs Corresponding indices from the probe table.
-     * @param probe_kept_cols Indices of the columns from the probe table.
-     */
-    void AppendMarkJoinOutput(std::shared_ptr<table_info> probe_table,
-                              const std::span<const int64_t> probe_idxs,
-                              const std::vector<uint64_t>& probe_kept_cols);
+                          const std::vector<uint64_t>& probe_kept_cols,
+                          bool is_mark_join = false);
 
     /**
      * @brief Finalize this chunked table. This will finalize
