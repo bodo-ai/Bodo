@@ -798,7 +798,8 @@ class PhysicalUDFExpression : public PhysicalExpression {
         const std::shared_ptr<arrow::DataType> &_result_type)
         : PhysicalExpression(children),
           scalar_func_data(_scalar_func_data),
-          result_type(_result_type) {
+          result_type(_result_type),
+          cfunc_ptr(nullptr) {
         if (scalar_func_data.is_cfunc) {
             PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
 
