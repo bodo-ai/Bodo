@@ -125,7 +125,5 @@ class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
                     metrics_out, fmt::format("dict_builder_{}", i));
             }
         }
-
-        // No metrics to report for union all
     }
 };
