@@ -1,6 +1,8 @@
 #!/bin/sh
 set -euo pipefail
 
+MPICH_VERSION=4.3.1
+
 # URLs
 MPICH_TARBALL="mpich-${MPICH_VERSION}.tar.gz"
 MPICH_URL="https://www.mpich.org/static/downloads/${MPICH_VERSION}/${MPICH_TARBALL}"
