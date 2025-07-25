@@ -135,10 +135,14 @@ class PhysicalWriteParquet : public PhysicalSink {
     PhysicalWriteParquetMetrics metrics;
 
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {
-        metrics_out.push_back(
-            TimerMetric("init_time", this->metrics.init_time));
-        metrics_out.push_back(
-            TimerMetric("write_time", this->metrics.write_time));
+        metrics_out.emplace_back(
+            StatMetric("max_buffer_size", this->metrics.max_buffer_size));
+        metrics_out.emplace_back(
+            StatMetric("n_files_written", this->metrics.n_files_written));
+        metrics_out.emplace_back(
+            TimerMetric("accumulate_time", this->metrics.accumulate_time));
+        metrics_out.emplace_back(
+            TimerMetric("file_write_time", this->metrics.file_write_time));
 
         // Add the dict builder metrics if they exist
         for (size_t i = 0; i < this->dict_builders.size(); ++i) {
