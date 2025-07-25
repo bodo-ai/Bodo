@@ -2691,8 +2691,8 @@ def test_series_reset_index():
     )
 
 
-def test_series_io_reset_index_compute():
-    """Test a full pipeline for reset_index."""
+def test_series_reset_index_compute():
+    """Test Series.reset_index in between computation."""
 
     df = pd.DataFrame(
         {
@@ -2714,6 +2714,99 @@ def test_series_io_reset_index_compute():
     _test_equal(
         bds,
         pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+
+
+def test_series_reset_index_pipeline():
+    """Test reading from CSV, groupby + sum, reset_index, and more computes."""
+
+    df = pd.DataFrame(
+        {
+            "category": ["A", "B", "A", "C", "B", "A", "C"],
+            "value": [10, 20, 10, 30, 40, 50, 60],
+            "timestamp": pd.date_range(start="2025-01-01", periods=7, freq="D"),
+        }
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_path = os.path.join(tmpdir, "sample_data.csv")
+
+        df.to_csv(csv_path, index=False)
+
+        with assert_executed_plan_count(0):
+            bdf = bd.read_csv(csv_path)
+            pdf = pd.read_csv(csv_path)
+            bds = bdf.groupby("category")["value"].sum().reset_index()
+            pds = pdf.groupby("category")["value"].sum().reset_index()
+
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+
+    long_array = [
+        [1, 1, 2],
+        ["red", "blue", "green"],
+    ]
+
+    long_index = pd.MultiIndex.from_arrays(long_array, names=["Number", "Color"])
+
+    with assert_executed_plan_count(0):
+        bds.index = long_index
+        pds.index = long_index
+
+        bds = bds.map(lambda x: x * 3)
+        pds = pds.map(lambda x: x * 3)
+
+        bds["tip"] = bds["value"] / 10 + 5
+        pds["tip"] = pds["value"] / 10 + 5
+
+        bds = bds.reset_index(level=[0])
+        pds = pds.reset_index(level=[0])
+
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+
+
+def test_dataframe_reset_index_pipeline():
+    """Test reading CSV, setting MultiIndex, resetting index, and computing."""
+
+    df = pd.DataFrame(
+        {
+            "Number": [1, 1, 2, 2],
+            "Color": ["red", "blue", "red", "blue"],
+            "value": [10, 20, 30, 40],
+        }
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_path = os.path.join(tmpdir, "multiindex_data.csv")
+        df.to_csv(csv_path, index=False)
+
+        with assert_executed_plan_count(0):
+            bdf = bd.read_csv(csv_path)
+            pdf = pd.read_csv(csv_path)
+
+            bdf = bdf.set_index(["Number", "Color"])
+            pdf = pdf.set_index(["Number", "Color"])
+
+            bdf["double"] = bdf["value"] * 2
+            pdf["double"] = pdf["value"] * 2
+
+            bdf = bdf.reset_index(level="Color")
+            pdf = pdf.reset_index(level="Color")
+
+    _test_equal(
+        bdf,
+        pdf,
         check_pandas_types=False,
         reset_index=False,
     )
