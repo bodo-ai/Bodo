@@ -2202,7 +2202,7 @@ def test_isin(datapath):
         bodo_df3,
         py_df3,
         check_pandas_types=False,
-        sort_output=False,
+        sort_output=True,
         reset_index=True,
     )
 

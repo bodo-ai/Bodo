@@ -33,6 +33,7 @@ from bodo.pandas.plan import (
     LazyPlanDistributedArg,
     LogicalAggregate,
     LogicalComparisonJoin,
+    LogicalDistinct,
     LogicalFilter,
     LogicalGetPandasReadParallel,
     LogicalGetPandasReadSeq,
@@ -937,6 +938,27 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
 
         if isinstance(values, BodoSeries):
+            # Drop duplicate values in 'values' to avoid unnecessary work
+            zero_size_values = _empty_like(values)
+            if not isinstance(zero_size_values.index, pd.RangeIndex):
+                # Drop Index arrays since distinct backend does not support non-key
+                # columns yet.
+                zero_size_values = zero_size_values.reset_index(drop=True)
+                exprs = make_col_ref_exprs([0], values._plan)
+                distinct_input_plan = LogicalProjection(
+                    zero_size_values,
+                    values._plan,
+                    exprs,
+                )
+            else:
+                distinct_input_plan = values._plan
+            exprs = make_col_ref_exprs([0], distinct_input_plan)
+            values_plan = LogicalDistinct(
+                zero_size_values,
+                distinct_input_plan,
+                exprs,
+            )
+
             empty_left = _empty_like(self)
             empty_left.name = None
             # Mark column is after the left columns in DuckDB, see:
@@ -948,7 +970,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             planComparisonJoin = LogicalComparisonJoin(
                 empty_join_out,
                 self._plan,
-                values._plan,
+                values_plan,
                 plan_optimizer.CJoinType.MARK,
                 [(0, 0)],
             )
