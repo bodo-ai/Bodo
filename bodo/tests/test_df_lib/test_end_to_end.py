@@ -2549,3 +2549,59 @@ def test_drop_duplicates():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_uncompilable_map():
+    """Test for maps that can't be compiled."""
+
+    with assert_executed_plan_count(1):
+        df = pd.DataFrame(
+            {
+                "A": pd.array([0, 1] * 100, "Int32"),
+            }
+        )
+
+        def uncompilable(x):
+            # Numba can't compile functions containing imports.
+            return x
+
+        bdf = bd.from_pandas(df)
+        pdf = df.copy()
+
+        bdf["B"] = bdf["A"].map(uncompilable)
+        pdf["B"] = pdf["A"].map(uncompilable)
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_numba_map():
+    """Test for maps that can't be compiled."""
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array([0, 1] * 100, "Int32"),
+            }
+        )
+
+        @numba.njit
+        def already_compiled(x):
+            return x
+
+        bdf = bd.from_pandas(df)
+        pdf = df.copy()
+
+        bdf["B"] = bdf["A"].map(already_compiled)
+        pdf["B"] = pdf["A"].map(already_compiled)
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
