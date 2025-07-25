@@ -4,7 +4,16 @@
 #include <memory>
 #include <utility>
 #include "../libs/_array_utils.h"
+
 #include "operator.h"
+
+struct PhysicalSampleMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    stat_t output_row_count = 0;
+
+    time_t sample_time = 0;
+};
 
 /**
  * @brief Physical node for sampling.
@@ -18,7 +27,17 @@ class PhysicalSample : public PhysicalSourceSink {
 
     virtual ~PhysicalSample() = default;
 
-    void Finalize() override {}
+    void Finalize() override {
+        std::vector<MetricBase> metrics_out;
+        metrics_out.emplace_back(
+            TimerMetric("sample_time", this->metrics.sample_time));
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            std::move(metrics_out));
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            this->metrics.output_row_count);
+    }
 
     /**
      * @brief Do limit.
@@ -30,6 +49,7 @@ class PhysicalSample : public PhysicalSourceSink {
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) override {
+        time_pt start_sample_time = start_timer();
         uint64_t select_this_time = stochasticRound(input_batch->nrows());
 
         // Perhaps we should randomly select rather than just
@@ -40,6 +60,8 @@ class PhysicalSample : public PhysicalSourceSink {
         }
         std::shared_ptr<table_info> out_table_info =
             RetrieveTable(input_batch, rowInds);
+        this->metrics.output_row_count += out_table_info->nrows();
+        this->metrics.sample_time += end_timer(start_sample_time);
         return {out_table_info, OperatorResult::NEED_MORE_INPUT};
     }
 
@@ -50,6 +72,7 @@ class PhysicalSample : public PhysicalSourceSink {
    private:
     const float percentage;
     const std::shared_ptr<bodo::Schema> output_schema;
+    PhysicalSampleMetrics metrics;
 
     uint64_t stochasticRound(uint64_t nrows) {
         double scaled = nrows * percentage;
