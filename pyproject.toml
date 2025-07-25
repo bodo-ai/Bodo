@@ -47,6 +47,7 @@ dependencies = [
     "cloudpickle>=3.0",
     "psutil",
     "impi-rt; sys_platform == 'win32'",
+    "mpi4py>=4.0'"
 ]
 
 [project.urls]
