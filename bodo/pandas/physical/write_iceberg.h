@@ -4,12 +4,22 @@
 
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/python/api.h>
-#include "../../io/arrow_compat.h"
 #include "../../io/iceberg_parquet_write.h"
-#include "../../libs/_bodo_to_arrow.h"
 #include "../../libs/streaming/_shuffle.h"
 #include "_bodo_write_function.h"
 #include "physical/operator.h"
+
+struct PhysicalWriteIcebergMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+
+    stat_t max_buffer_size = 0;
+    stat_t n_files_written = 0;
+
+    time_t accumulate_time = 0;
+    time_t file_write_time = 0;
+    time_t finalize_time = 0;
+};
 
 class PhysicalWriteIceberg : public PhysicalSink {
    public:
@@ -56,9 +66,13 @@ class PhysicalWriteIceberg : public PhysicalSink {
         }
 
         // ===== Part 1: Accumulate batch in writer and compute total size =====
+        time_pt start_accumulate_time = start_timer();
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
         int64_t buffer_nbytes =
             table_local_memory_size(buffer->data_table, true);
+        this->metrics.accumulate_time += end_timer(start_accumulate_time);
+        this->metrics.max_buffer_size =
+            std::max(this->metrics.max_buffer_size, buffer_nbytes);
 
         // Sync is_last flag
         bool is_last = prev_op_result == OperatorResult::FINISHED;
@@ -66,6 +80,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
             is_last_state.get(), static_cast<int32_t>(is_last)));
 
         // === Part 2: Write Parquet file if file size threshold is exceeded ===
+        time_pt start_file_write_time = start_timer();
         if (is_last || buffer_nbytes >= this->max_pq_chunksize) {
             std::shared_ptr<table_info> data = buffer->data_table;
 
@@ -75,10 +90,12 @@ class PhysicalWriteIceberg : public PhysicalSink {
                     partition_tuples, sort_tuples, compression.c_str(), false,
                     bucket_region.c_str(), -1, iceberg_schema_str.c_str(),
                     iceberg_files_info_py, iceberg_schema, fs, nullptr);
+                this->metrics.n_files_written++;
             }
             // Reset the buffer for the next batch
             buffer->Reset();
         }
+        this->metrics.file_write_time += end_timer(start_file_write_time);
 
         if (is_last) {
             finished = true;
@@ -93,6 +110,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
         // Gather iceberg_files_info from all ranks using MPI
         // Equivalent to all_infos = comm.gather(iceberg_files_info_py)
 
+        time_pt start_finalize_time = start_timer();
         PyObject* mpi4py_module = PyImport_ImportModule("bodo.mpi4py");
         if (!mpi4py_module) {
             throw std::runtime_error(
@@ -137,9 +155,19 @@ class PhysicalWriteIceberg : public PhysicalSink {
                 "PhysicalWriteIceberg::Finalize: Iceberg write: MPI gather "
                 "operation failed");
         }
+        this->metrics.finalize_time = end_timer(start_finalize_time);
 
         // NOTE: PyTuple_SetItem stole the reference to iceberg_files_info_py
         iceberg_files_info_py = all_infos;
+
+        // Report metrics
+        std::vector<MetricBase> metrics_out;
+        this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            std::move(metrics_out));
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1), 0);
     }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
@@ -167,4 +195,21 @@ class PhysicalWriteIceberg : public PhysicalSink {
     const std::shared_ptr<IsLastState> is_last_state;
     bool finished = false;
     int64_t iter = 0;
+    PhysicalWriteIcebergMetrics metrics;
+
+    void ReportMetrics(std::vector<MetricBase>& metrics_out) {
+        metrics_out.push_back(
+            TimerMetric("init_time", this->metrics.init_time));
+        metrics_out.push_back(
+            TimerMetric("write_time", this->metrics.write_time));
+
+        // Add the dict builder metrics if they exist
+        for (size_t i = 0; i < this->dict_builders.size(); ++i) {
+            auto dict_builder = this->dict_builders[i];
+            if (dict_builder) {
+                dict_builder->GetMetrics().add_to_metrics(
+                    metrics_out, fmt::format("dict_builder_{}", i));
+            }
+        }
+    }
 };
