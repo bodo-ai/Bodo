@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fmt/format.h>
 #include <memory>
 #include <utility>
 #include "../libs/_table_builder.h"
@@ -113,6 +114,17 @@ class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
             this->collected_rows ? this->collected_rows->builder->append_time
                                  : MetricBase::TimerValue(0);
         metrics_out.push_back(TimerMetric("append_time", append_time));
+
+        // Add the dict builder metrics if they exist
+        for (size_t i = 0; i < this->output_schema->ncols(); ++i) {
+            auto dict_builder = this->collected_rows
+                                    ? this->collected_rows->dict_builders[i]
+                                    : nullptr;
+            if (dict_builder) {
+                dict_builder->GetMetrics().add_to_metrics(
+                    metrics_out, fmt::format("dict_builder_{}", i));
+            }
+        }
 
         // No metrics to report for union all
     }
