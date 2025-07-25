@@ -932,7 +932,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         new_metadata = pd.Series(
             dtype=pd.ArrowDtype(pa.bool_()),
-            name=self.name,
+            name=None,
             index=self.head(0).index,
         )
 
