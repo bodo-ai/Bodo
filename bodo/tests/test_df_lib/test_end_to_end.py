@@ -2689,3 +2689,31 @@ def test_series_reset_index():
         check_pandas_types=False,
         reset_index=False,
     )
+
+
+def test_series_io_reset_index_compute():
+    """Test a full pipeline for reset_index."""
+
+    df = pd.DataFrame(
+        {
+            "City": ["Pittsburgh", "Boston", "New York", "Seattle"],
+            "Score": [92, 85, 88, 90],
+        }
+    ).set_index("City")
+
+    with assert_executed_plan_count(0):
+        s = df["Score"]
+        bds = bd.Series(s)
+        s = s.map(lambda x: x * 3)
+        bds = bds.map(lambda x: x * 3)
+        bds = bds.reset_index()
+        bds["Decremented"] = bds["Score"] - 20
+        pds = s.reset_index()
+        pds["Decremented"] = pds["Score"] - 20
+
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
