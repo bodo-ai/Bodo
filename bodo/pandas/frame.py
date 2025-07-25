@@ -59,6 +59,8 @@ from bodo.pandas.plan import (
     is_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
+    maybe_make_list,
+    reset_index,
 )
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
@@ -1338,54 +1340,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         Reset the index of the DataFrame, and use the default one instead.
         If the DataFrame has a MultiIndex, this method can remove one or more levels.
         """
-        out_columns = self._head_df.columns
-        n_cols = len(out_columns)
-
-        index = self._head_df.index
-        index_size = get_n_index_arrays(index)
-
-        if names is None:
-            names = []
-            if isinstance(index, pd.MultiIndex):
-                for i in range(len(index.names)):
-                    name = index.names[i]
-                    names.append(name if name is not None else f"level_{i}")
-            elif isinstance(index, pd.Index):
-                names.append(index.name if index.name is not None else "index")
-            elif isinstance(index, pd.RangeIndex):
-                names = "index"
-            else:
-                raise TypeError(f"Invalid index type: {type(index)}")
-
-        names = maybe_make_list(names)
-
-        data_cols = []
-        # TODO: which to use?
-        # data_cols = [make_col_ref_exprs([i], self._plan)[0] for i in range(n_cols)]
-        for c in out_columns:
-            data_cols.append(
-                make_col_ref_exprs([self._head_df.columns.get_loc(c)], self._plan)[0]
-            )
-
-        empty_data = self._plan.empty_data.copy()
-        empty_data.index = pd.RangeIndex(0)
-
-        index_cols = (
-            make_col_ref_exprs(range(n_cols, n_cols + index_size), self._plan)
-            if not drop
-            else []
-        )
-        if not drop:
-            for i in range(index_size):
-                empty_data.insert(i, names[i], index_cols[i].empty_data.copy())
-
-        new_plan = LogicalProjection(
-            empty_data,
-            self._plan,
-            index_cols + data_cols,
-        )
-
-        return wrap_plan(new_plan)
+        return reset_index(self, drop, names=names)
 
 
 def _add_proj_expr_to_plan(
@@ -1566,15 +1521,6 @@ def validate_keys(keys, df):
             f"merge(): invalid key {key_diff} for on/left_on/right_on\n"
             f"merge supports only valid column names {df.columns}"
         )
-
-
-def maybe_make_list(obj):
-    """If string input, turn into singleton list"""
-    if obj is None:
-        return []
-    elif not isinstance(obj, (tuple, list)):
-        return [obj]
-    return obj
 
 
 def validate_merge_spec(left, right, on, left_on, right_on, is_cross):

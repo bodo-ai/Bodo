@@ -889,7 +889,7 @@ def ensure_datetime64ns(df):
     return df
 
 
-# TODO: further generalize. Currently, this method is only used for BodoSeries.
+# TODO: further generalize. Currently, this method is only used for BodoSeries and BodoDataFrame.
 def fallback_wrapper(self, attr):
     """
     Wrap callable attributes with a warning silencer, unless they are known

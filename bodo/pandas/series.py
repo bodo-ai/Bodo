@@ -53,6 +53,7 @@ from bodo.pandas.plan import (
     is_single_projection,
     make_col_ref_exprs,
     match_binop_expr_source_plans,
+    reset_index,
 )
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
@@ -935,51 +936,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         This is useful when the index needs to be treated as a column, or when the index is meaningless and
         needs to be reset to the default before another operation.
         """
-        index = self._plan.empty_data.index
-        index_size = get_n_index_arrays(index)
-        col_names = []
-        if isinstance(index, pd.MultiIndex):
-            for i in range(len(index.names)):
-                col_name = index.names[i]
-                col_names.append(col_name if col_name is not None else f"level_{i}")
-        elif isinstance(index, pd.Index):
-            col_names.append(index.name if index.name is not None else "index")
-        elif isinstance(index, pd.RangeIndex):
-            col_names = "index"
-        else:
-            raise TypeError(f"Invalid index type: {type(index)}")
-
-        index_cols = (
-            make_col_ref_exprs(range(1, 1 + index_size), self._plan) if not drop else []
-        )
-        empty_data = None
-        if drop:
-            empty_data = pd.Series(
-                dtype=self.dtype,
-                name=self.name,
-                index=pd.RangeIndex(0),
-            )
-        else:
-            empty_data = self._plan.empty_data.copy()
-            old_col_name = empty_data.columns[0]
-            new_col_name = (
-                name
-                if name is not lib.no_default
-                else (self.name if self.name is not None else "0")
-            )
-            empty_data = empty_data.rename(columns={old_col_name: new_col_name})
-            empty_data.index = pd.RangeIndex(0)
-            for i in range(index_size):
-                empty_data.insert(i, col_names[i], index_cols[i].empty_data.copy())
-
-        exprs = make_col_ref_exprs((0,), self._plan)
-        new_plan = LogicalProjection(
-            empty_data,
-            self._plan,
-            index_cols + exprs,
-        )
-
-        return wrap_plan(new_plan)
+        return reset_index(self, drop=drop, name=name)
 
 
 class BodoStringMethods:
