@@ -324,9 +324,10 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
     }
 }
 
-std::shared_ptr<table_info> runPythonScalarFunction(
-    std::shared_ptr<table_info> input_batch,
-    const std::shared_ptr<arrow::DataType> &result_type, PyObject *args) {
+std::tuple<std::shared_ptr<table_info>, int64_t, int64_t, int64_t>
+runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
+                        const std::shared_ptr<arrow::DataType> &result_type,
+                        PyObject *args) {
     // Call bodo.pandas.utils.run_apply_udf() to run the UDF
 
     // Import the bodo.pandas.utils module
@@ -347,23 +348,64 @@ std::shared_ptr<table_info> runPythonScalarFunction(
         Py_DECREF(bodo_module);
         throw std::runtime_error("Error calling run_apply_udf");
     }
-
-    // Result should be a pointer to a C++ table_info
-    if (!PyLong_Check(result)) {
+    // Result should be a tuple with 4 elements:
+    // 1. Output table_info pointer
+    // 2. Time taken to convert C++ to Python
+    // 3. Time taken to run the UDF
+    // 4. Time taken to convert Python back to C++
+    if (!PyTuple_Check(result) || PyTuple_Size(result) != 4) {
         Py_DECREF(result);
         Py_DECREF(bodo_module);
-        throw std::runtime_error("Expected an integer from run_apply_udf");
+        throw std::runtime_error(
+            "Expected a tuple of 4 elements from run_apply_udf");
     }
-
-    int64_t table_info_ptr = PyLong_AsLongLong(result);
+    // Extract the output table_info pointer
+    PyObject *output_table_info = PyTuple_GetItem(result, 0);
+    if (!PyLong_Check(output_table_info)) {
+        Py_DECREF(result);
+        Py_DECREF(bodo_module);
+        throw std::runtime_error(
+            "Expected an integer for table_info pointer from run_apply_udf");
+    }
+    int64_t table_info_ptr = PyLong_AsLongLong(output_table_info);
 
     std::shared_ptr<table_info> out_batch(
         reinterpret_cast<table_info *>(table_info_ptr));
 
+    // Extract the time taken to convert C++ to Python
+    PyObject *cpp_to_py_time = PyTuple_GetItem(result, 1);
+    if (!PyLong_Check(cpp_to_py_time)) {
+        Py_DECREF(result);
+        Py_DECREF(bodo_module);
+        throw std::runtime_error(
+            "Expected an integer for cpp_to_py_time from run_apply_udf");
+    }
+    int64_t cpp_to_py_time_val = PyLong_AsLongLong(cpp_to_py_time);
+
+    // Extract the time taken to run the UDF
+    PyObject *udf_execution_time = PyTuple_GetItem(result, 2);
+    if (!PyLong_Check(udf_execution_time)) {
+        Py_DECREF(result);
+        Py_DECREF(bodo_module);
+        throw std::runtime_error(
+            "Expected an integer for udf_execution_time from run_apply_udf");
+    }
+    int64_t udf_execution_time_val = PyLong_AsLongLong(udf_execution_time);
+    // Extract the time taken to convert Python back to C++
+    PyObject *py_to_cpp_time = PyTuple_GetItem(result, 3);
+    if (!PyLong_Check(py_to_cpp_time)) {
+        Py_DECREF(result);
+        Py_DECREF(bodo_module);
+        throw std::runtime_error(
+            "Expected an integer for py_to_cpp_time from run_apply_udf");
+    }
+    int64_t py_to_cpp_time_val = PyLong_AsLongLong(py_to_cpp_time);
+
     Py_DECREF(bodo_module);
     Py_DECREF(result);
 
-    return out_batch;
+    return {out_batch, cpp_to_py_time_val, udf_execution_time_val,
+            py_to_cpp_time_val};
 }
 
 std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
