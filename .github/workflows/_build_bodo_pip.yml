@@ -121,7 +121,9 @@ jobs:
             rm -r {package}/bodo/mpi4py/_vendored_mpi4py || true
             rm -rf {package}/build
             rm -f {package}/mpich.whl
-            # Install mpich for mpi.h needed by mpi4py
+            # Install mpich for mpi.h 
+            pip install mpich=="$MPICH_VERSION" --default-timeout=100
+            # Install mpich for wheel
             MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
             MPICH_INSTALL_DIR=/tmp/mpich-install
             chmod +x ./buildscripts/bodo/pip/build-mpich-from-source/
