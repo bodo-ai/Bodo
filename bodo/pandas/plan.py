@@ -836,7 +836,7 @@ def match_binop_expr_source_plans(lhs, rhs):
 
 
 def maybe_make_list(obj):
-    """If string input, turn into singleton list"""
+    """If non-iterable input, turn into singleton list"""
     if obj is None:
         return []
     elif not isinstance(obj, (tuple, list)):
