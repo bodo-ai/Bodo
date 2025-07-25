@@ -187,7 +187,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             // TODO: support forcing broadcast by the planner
             false, join_func, true, true, get_streaming_batch_size(), -1,
             //  TODO: support query profiling
-            -1, -1, JOIN_MAX_PARTITION_DEPTH, /*is_na_equal*/ true);
+            PhysicalSink::getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
+            /*is_na_equal*/ true);
 
         this->initOutputSchema(build_table_schema_reordered,
                                probe_table_schema_reordered,
@@ -284,7 +285,10 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
     virtual ~PhysicalJoin() = default;
 
-    void Finalize() override {}
+    void Finalize() override {
+        QueryProfileCollector::Default().SubmitOperatorName(
+            PhysicalSink::getOpId(), PhysicalSink::ToString());
+    }
 
     /**
      * @brief process input tables to build side of join (populate the hash

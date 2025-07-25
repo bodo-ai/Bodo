@@ -536,7 +536,7 @@ def execute_plan(plan: LazyPlan):
         if bodo.libs.distributed_api.get_rank() == 0:
             start_time = time.perf_counter()
         duckdb_plan = plan.generate_duckdb()
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
             print("profile_time gen", time.perf_counter() - start_time)
 
         if (
@@ -555,7 +555,7 @@ def execute_plan(plan: LazyPlan):
         if bodo.libs.distributed_api.get_rank() == 0:
             start_time = time.perf_counter()
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
             print("profile_time opt", time.perf_counter() - start_time)
 
         if (
@@ -577,7 +577,7 @@ def execute_plan(plan: LazyPlan):
         ret = plan_optimizer.py_execute_plan(
             optimized_plan, output_func, duckdb_plan.out_schema
         )
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
             print("profile_time execute", time.perf_counter() - start_time)
         return ret
 
@@ -592,7 +592,8 @@ def execute_plan(plan: LazyPlan):
         init_time = time.perf_counter() - start_time
         global total_init_lazy
         total_init_lazy += init_time
-        print("profile_time _init_lazy_distributed_arg", init_time)
+        if bodo.dataframe_library_profile:
+            print("profile_time _init_lazy_distributed_arg", init_time)
 
         if bodo.dataframe_library_dump_plans:
             # Sometimes when an execution is triggered it isn't expected that
@@ -610,7 +611,8 @@ def execute_plan(plan: LazyPlan):
         exec_time = time.perf_counter() - start_time
         global total_execute_plan
         total_execute_plan += exec_time
-        print("profile_time total_execute_plan", exec_time)
+        if bodo.dataframe_library_profile:
+            print("profile_time total_execute_plan", exec_time)
         return ret
 
     return _exec_plan(plan)

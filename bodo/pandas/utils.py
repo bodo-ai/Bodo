@@ -212,8 +212,6 @@ method_time = 0
 
 
 def report_times():
-    import bodo
-
     if bodo.libs.distributed_api.get_rank() == 0:
         print("profile_time atexit total_top_time", top_time)
         print("profile_time atexit total_method_time", method_time)
@@ -224,7 +222,8 @@ def report_times():
         )
 
 
-atexit.register(report_times)
+if bodo.dataframe_library_profile:
+    atexit.register(report_times)
 
 
 def check_args_fallback(
@@ -346,11 +345,12 @@ def check_args_fallback(
                             ret = func(*args, **kwargs)
                             global top_time
                             time_this_call = time.perf_counter() - start_time
-                            print(
-                                "profile_time top_level",
-                                func.__qualname__,
-                                time_this_call,
-                            )
+                            if bodo.dataframe_library_profile:
+                                print(
+                                    "profile_time top_level",
+                                    func.__qualname__,
+                                    time_this_call,
+                                )
                             top_time += time_this_call
                             return ret
                         except BodoLibNotImplementedException as e:
@@ -392,9 +392,12 @@ def check_args_fallback(
                             ret = func(self, *args, **kwargs)
                             global method_time
                             time_this_call = time.perf_counter() - start_time
-                            print(
-                                "profile_time method", func.__qualname__, time_this_call
-                            )
+                            if bodo.dataframe_library_profile:
+                                print(
+                                    "profile_time method",
+                                    func.__qualname__,
+                                    time_this_call,
+                                )
                             method_time += time_this_call
                             return ret
                         except BodoLibNotImplementedException as e:

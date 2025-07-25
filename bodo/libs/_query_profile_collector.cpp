@@ -269,8 +269,6 @@ boost::json::object QueryProfileCollector::OperatorToJson(
     operator_id_t op_id, stage_id_t max_stage) {
     boost::json::object op_output;
     auto name_iter = operator_names.find(op_id);
-    std::cout << "OperatorToJson " << op_id << " "
-              << (name_iter != operator_names.end()) << std::endl;
     if (name_iter != operator_names.end()) {
         op_output["name"] = name_iter->second;
     }
