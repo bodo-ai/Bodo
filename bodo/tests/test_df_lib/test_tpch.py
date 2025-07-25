@@ -48,7 +48,6 @@ def test_tpch_q03():
     run_tpch_query_test(tpch.tpch_q03)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q04():
     run_tpch_query_test(tpch.tpch_q04)
 
