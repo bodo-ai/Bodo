@@ -13,7 +13,7 @@ platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group =
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
-pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
+pip-cpp-macos = { features = ["rcpp", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
 
 # Build Commands
