@@ -1242,7 +1242,8 @@ void AbstractChunkedTableBuilder::AppendJoinOutput(
     const std::span<const int64_t> build_idxs,
     const std::span<const int64_t> probe_idxs,
     const std::vector<uint64_t>& build_kept_cols,
-    const std::vector<uint64_t>& probe_kept_cols, bool is_mark_join) {
+    const std::vector<uint64_t>& probe_kept_cols, bool is_mark_join,
+    std::shared_ptr<std::vector<bool>> mark_output_rows) {
     if (is_mark_join) {
         // Add the mark column to probe table and append to output buffer.
         std::vector<std::shared_ptr<array_info>> out_arrs;
@@ -1269,7 +1270,16 @@ void AbstractChunkedTableBuilder::AppendJoinOutput(
         std::shared_ptr<table_info> mark_table = std::make_shared<table_info>(
             out_arrs, probe_table->nrows(), col_names, probe_table->metadata);
 
-        this->AppendBatch(mark_table);
+        if (mark_output_rows) {
+            if (mark_output_rows->size() != probe_table->nrows()) {
+                throw std::runtime_error(
+                    "AbstractChunkedTableBuilder::AppendJoinOutput: "
+                    "mark_output_rows size does not match probe_table nrows!");
+            }
+            this->AppendBatch(mark_table, *mark_output_rows);
+        } else {
+            this->AppendBatch(mark_table);
+        }
         return;
     }
 

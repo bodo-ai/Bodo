@@ -794,7 +794,9 @@ inline void produce_probe_output(
         probe_idxs.push_back(i_row);
 
         // Produce output in a chunked builder periodically to avoid OOM
-        if (build_idxs.size() >= static_cast<size_t>(STREAMING_BATCH_SIZE)) {
+        // (not used in mark join case to avoid appending duplicate output rows)
+        if (build_idxs.size() >= static_cast<size_t>(STREAMING_BATCH_SIZE) &&
+            !is_mark_join) {
             time_pt start_append = start_timer();
             output_buffer->AppendJoinOutput(
                 build_table, probe_table, build_idxs, probe_idxs,
@@ -3598,6 +3600,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     std::vector<bool> append_to_probe_shuffle_buffer(in_table->nrows(), false);
     std::vector<bool> append_to_probe_inactive_partition(in_table->nrows(),
                                                          false);
+    std::shared_ptr<std::vector<bool>> append_to_mark_output = nullptr;
+
     time_pt start_ht_probe = start_timer();
     group_ids.resize(in_table->nrows());
     const auto& active_partition_ht =
@@ -3675,6 +3679,16 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             in_table, append_to_probe_shuffle_buffer);
     }
 
+    if (join_state->is_mark_join) {
+        append_to_mark_output =
+            std::make_shared<std::vector<bool>>(in_table->nrows());
+        for (size_t i = 0; i < in_table->nrows(); i++) {
+            (*append_to_mark_output)[i] =
+                !(append_to_probe_inactive_partition[i] ||
+                  append_to_probe_shuffle_buffer[i]);
+        }
+    }
+
     append_to_probe_inactive_partition.clear();
     append_to_probe_shuffle_buffer.clear();
 
@@ -3690,7 +3704,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     join_state->output_buffer->AppendJoinOutput(
         active_partition->build_table_buffer->data_table, std::move(in_table),
         build_idxs, probe_idxs, build_kept_cols, probe_kept_cols,
-        join_state->is_mark_join);
+        join_state->is_mark_join, append_to_mark_output);
     build_idxs.clear();
     probe_idxs.clear();
 
@@ -3742,6 +3756,11 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                 // offset to the row when indexing into the hashtable
                 active_partition->probe_table_hashes_offset = batch_start_row;
                 join_state->metrics.num_processed_probe_table_rows += nrows;
+
+                if (join_state->is_mark_join) {
+                    append_to_mark_output->clear();
+                    append_to_mark_output->resize(nrows, true);
+                }
 
                 if (join_state->partitions.size() > 1) {
                     // NOTE: Partition hashes need to be consistent across
@@ -3803,6 +3822,12 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                         append_to_probe_inactive_partition,
                         /*in_table_start_offset*/ batch_start_row,
                         /*table_nrows*/ nrows);
+                    if (join_state->is_mark_join) {
+                        for (size_t i = 0; i < nrows; i++) {
+                            (*append_to_mark_output)[i] =
+                                !append_to_probe_inactive_partition[i];
+                        }
+                    }
                     // Reset the bit-vector. This is important for correctness.
                     append_to_probe_inactive_partition.clear();
                 } else {
@@ -3849,7 +3874,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                 join_state->output_buffer->AppendJoinOutput(
                     active_partition->build_table_buffer->data_table, new_data,
                     build_idxs, probe_idxs, build_kept_cols, probe_kept_cols,
-                    join_state->is_mark_join);
+                    join_state->is_mark_join, append_to_mark_output);
                 build_idxs.clear();
                 probe_idxs.clear();
             }
