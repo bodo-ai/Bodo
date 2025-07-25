@@ -27,6 +27,7 @@ def test_series_isin(index_val, use_index1, use_index2):
 
         bd_out = bdf2["B"].isin(bdf1["A"])
 
+    bd_out.name = None  # Drop name to match pandas output
     _test_equal(
         bd_out.copy(),
         py_out,
