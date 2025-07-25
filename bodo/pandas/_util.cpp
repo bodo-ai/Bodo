@@ -382,6 +382,35 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
     std::shared_ptr<table_info> out_batch(
         reinterpret_cast<table_info *>(table_info_ptr));
 
+    // Extract the time taken to convert C++ to Python
+    PyObject *cpp_to_py_time = PyTuple_GetItem(result, 1);
+    if (!PyLong_Check(cpp_to_py_time)) {
+        Py_DECREF(result);
+        Py_DECREF(bodo_module);
+        throw std::runtime_error(
+            "Expected an integer for cpp_to_py_time from run_apply_udf");
+    }
+    int64_t cpp_to_py_time_val = PyLong_AsLongLong(cpp_to_py_time);
+
+    // Extract the time taken to run the UDF
+    PyObject *udf_execution_time = PyTuple_GetItem(result, 2);
+    if (!PyLong_Check(udf_execution_time)) {
+        Py_DECREF(result);
+        Py_DECREF(bodo_module);
+        throw std::runtime_error(
+            "Expected an integer for udf_execution_time from run_apply_udf");
+    }
+    int64_t udf_execution_time_val = PyLong_AsLongLong(udf_execution_time);
+    // Extract the time taken to convert Python back to C++
+    PyObject *py_to_cpp_time = PyTuple_GetItem(result, 3);
+    if (!PyLong_Check(py_to_cpp_time)) {
+        Py_DECREF(result);
+        Py_DECREF(bodo_module);
+        throw std::runtime_error(
+            "Expected an integer for py_to_cpp_time from run_apply_udf");
+    }
+    int64_t py_to_cpp_time_val = PyLong_AsLongLong(py_to_cpp_time);
+
     Py_DECREF(bodo_module);
     Py_DECREF(result);
 
