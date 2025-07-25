@@ -2600,11 +2600,32 @@ def test_df_reset_index():
         sort_output=True,
         reset_index=False,
     )
+    with assert_executed_plan_count(0):
+        long_array = [
+            [0, 0, 0, 0],
+            [1, 1, 2, 2],
+            ["red", "blue", "red", "blue"],
+            ["Pitt", "Pitt", "CMU", "CMU"],
+        ]
+        long_index = pd.MultiIndex.from_arrays(
+            long_array, names=["Rank", "B", "A", "School"]
+        )
+        pds = pd.DataFrame({"C": [1, 2, 3, 4]}, index=long_index)
+        bd.from_pandas(pds).reset_index(level=[0, 1])
+        pds = pds.reset_index(level=[0, 1])
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=False,
+    )
 
 
 def test_series_reset_index():
     """Test for Series reset_index API."""
 
+    # Tests basic Series.reset_index
     with assert_executed_plan_count(0):
         s = pd.Series([1, 2, 3, 4], index=["A", "B", "C", "D"], name="Bodo")
         bds = bd.Series(s).reset_index()
@@ -2615,6 +2636,7 @@ def test_series_reset_index():
         check_pandas_types=False,
         reset_index=False,
     )
+    # Tests basic Series.reset_index with name arg
     with assert_executed_plan_count(0):
         bds = bd.Series(s).reset_index(name="Inc")
         pds = s.reset_index(name="Inc")
@@ -2624,6 +2646,7 @@ def test_series_reset_index():
         check_pandas_types=False,
         reset_index=False,
     )
+    # Tests Series.reset_index with MultiIndex
     with assert_executed_plan_count(0):
         multi_array = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
         multi_idx = pd.MultiIndex.from_arrays(multi_array)
@@ -2636,9 +2659,30 @@ def test_series_reset_index():
         check_pandas_types=False,
         reset_index=False,
     )
+    # Tests Series.reset_index with drop=True
     with assert_executed_plan_count(0):
         bds = bd.Series(s).reset_index(drop=True)
         pds = s.reset_index(drop=True)
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+    # Tests level argument
+    with assert_executed_plan_count(0):
+        long_array = [
+            [0, 0, 0, 0],
+            [1, 1, 2, 2],
+            ["red", "blue", "red", "blue"],
+            ["Pitt", "Pitt", "CMU", "CMU"],
+        ]
+        long_index = pd.MultiIndex.from_arrays(
+            long_array, names=["Rank", "B", "A", "School"]
+        )
+        pds = pd.Series([1, 2, 3, 4], index=long_index, name="Happy")
+        bds = bd.Series(pds).reset_index(level=[0, 1])
+        pds = pds.reset_index(level=[0, 1])
     _test_equal(
         bds,
         pds,

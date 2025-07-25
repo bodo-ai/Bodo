@@ -89,8 +89,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return super().__new__(cls, *args, **kwargs)
 
         S = pd.Series(*args, **kwargs)
-        df = pd.DataFrame({"A": S})
-        bodo_S = bodo.pandas.base.from_pandas(df)["A"]
+        df = pd.DataFrame({f"{S.name}": S})
+        bodo_S = bodo.pandas.base.from_pandas(df)[f"{S.name}"]
         bodo_S._name = S.name
         return bodo_S
 
@@ -921,7 +921,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Return Subtraction of series and other, element-wise (binary operator rsub)."""
         return gen_arith(self, other, "rsub")
 
-    @check_args_fallback(supported=["drop", "name"])
+    @check_args_fallback(supported=["drop", "name", "level"])
     def reset_index(
         self,
         level=None,
@@ -936,7 +936,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         This is useful when the index needs to be treated as a column, or when the index is meaningless and
         needs to be reset to the default before another operation.
         """
-        return reset_index(self, drop=drop, name=name)
+        return reset_index(self, drop, level, name=name)
 
 
 class BodoStringMethods:

@@ -844,7 +844,7 @@ def maybe_make_list(obj):
     return obj
 
 
-def reset_index(self, drop, name=None, names=None):
+def reset_index(self, drop, level, name=None, names=None):
     """Index resetter used by BodoSeries and BodoDataFrame."""
     is_series = isinstance(self, bodo.pandas.BodoSeries)
     assert is_series or isinstance(self, bodo.pandas.BodoDataFrame), (
@@ -852,7 +852,8 @@ def reset_index(self, drop, name=None, names=None):
     )
 
     index = self._plan.empty_data.index
-    index_size = get_n_index_arrays(index)
+    levelset = set(maybe_make_list(level))
+    new_index = pd.RangeIndex(0) if not level else index.droplevel(level)
 
     col_names = []
     if names is None:
@@ -861,7 +862,8 @@ def reset_index(self, drop, name=None, names=None):
         elif isinstance(index, pd.MultiIndex):
             for i in range(len(index.names)):
                 col_name = index.names[i]
-                col_names.append(col_name if col_name is not None else f"level_{i}")
+                if not level or (i in levelset or col_name in levelset):
+                    col_names.append(col_name if col_name is not None else f"level_{i}")
         elif isinstance(index, pd.Index):
             col_names.append(index.name if index.name is not None else "index")
         else:
@@ -870,11 +872,8 @@ def reset_index(self, drop, name=None, names=None):
         col_names = maybe_make_list(names) if not is_series else names
 
     n_cols = 1 if is_series else len(self._plan.empty_data.columns)
-    index_cols = (
-        make_col_ref_exprs(range(n_cols, n_cols + index_size), self._plan)
-        if not drop
-        else []
-    )
+    index_size = get_n_index_arrays(index)
+    index_cols, remaining_cols = [], []
 
     data_cols = make_col_ref_exprs(range(n_cols), self._plan)
     empty_data = None
@@ -884,11 +883,11 @@ def reset_index(self, drop, name=None, names=None):
         empty_data = pd.Series(
             dtype=self.dtype,
             name=self.name,
-            index=pd.RangeIndex(0),
+            index=new_index,
         )
     else:
         empty_data = self._plan.empty_data.copy()
-        empty_data.index = pd.RangeIndex(0)
+        empty_data.index = new_index
 
         # Series.reset_index supports `name` field to enable renaming of the Series data column.
         if is_series:
@@ -902,13 +901,25 @@ def reset_index(self, drop, name=None, names=None):
 
         # If drop=False, append index column names to the front of the resulting Dataframe.
         if not drop:
-            for i in range(index_size):
-                empty_data.insert(i, col_names[i], index_cols[i].empty_data.copy())
+            drop_index = range(n_cols, n_cols + index_size)
+            preserve_index = []
+            if level:
+                drop_index = []
+                for i, name in enumerate(index.names):
+                    if name in levelset or i in levelset:
+                        drop_index.append(n_cols + i)
+                    else:
+                        preserve_index.append(n_cols + i)
+
+            index_cols = make_col_ref_exprs(drop_index, self._plan)
+            for i in range(len(drop_index)):
+                empty_data.insert(i, col_names[i], index_cols[i].empty_data)
+            remaining_cols = make_col_ref_exprs(preserve_index, self._plan)
 
     new_plan = LogicalProjection(
         empty_data,
         self._plan,
-        index_cols + data_cols,
+        index_cols + data_cols + remaining_cols,
     )
 
     return wrap_plan(new_plan)

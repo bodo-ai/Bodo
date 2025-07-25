@@ -1323,7 +1323,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         finally:
             self._mgr._disable_collect = original_flag
 
-    @check_args_fallback(supported=["drop", "names"])
+    @check_args_fallback(supported=["drop", "names", "level"])
     def reset_index(
         self,
         level=None,
@@ -1340,7 +1340,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         Reset the index of the DataFrame, and use the default one instead.
         If the DataFrame has a MultiIndex, this method can remove one or more levels.
         """
-        return reset_index(self, drop, names=names)
+        return reset_index(self, drop, level, names=names)
 
 
 def _add_proj_expr_to_plan(
