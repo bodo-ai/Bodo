@@ -1,4 +1,6 @@
 #include "expression.h"
+#include <iostream>
+#include "_util.h"
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr) {
@@ -507,12 +509,19 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
 
     start = bodo_cpp_clock::now();
     // Actually run the UDF.
-    auto [udf_output, cpp_to_py_time, udf_time, py_to_cpp_time] =
-        runPythonScalarFunction(udf_input, result_type, scalar_func_data.args);
-    // Update the metrics.
-    this->metrics.cpp_to_py_time += cpp_to_py_time;
-    this->metrics.udf_execution_time += udf_time;
-    this->metrics.py_to_cpp_time += py_to_cpp_time;
+    std::shared_ptr<table_info> udf_output;
+    if (cfunc_ptr) {
+        udf_output = runCfuncScalarFunction(udf_input, cfunc_ptr);
+    } else {
+        auto [udf_output, cpp_to_py_time, udf_time, py_to_cpp_time] =
+            runPythonScalarFunction(udf_input, result_type,
+                                    scalar_func_data.args);
+        // Update the metrics.
+        this->metrics.cpp_to_py_time += cpp_to_py_time;
+        this->metrics.udf_execution_time += udf_time;
+        this->metrics.py_to_cpp_time += py_to_cpp_time;
+    }
+
     return std::make_shared<ArrayExprResult>(udf_output->columns[0],
                                              udf_output->column_names[0]);
 }

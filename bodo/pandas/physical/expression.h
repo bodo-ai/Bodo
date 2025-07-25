@@ -806,7 +806,40 @@ class PhysicalUDFExpression : public PhysicalExpression {
         const std::shared_ptr<arrow::DataType> &_result_type)
         : PhysicalExpression(children),
           scalar_func_data(_scalar_func_data),
-          result_type(_result_type) {}
+          result_type(_result_type),
+          cfunc_ptr(nullptr) {
+        if (scalar_func_data.is_cfunc) {
+            PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+
+            if (!bodo_module) {
+                PyErr_Print();
+                throw std::runtime_error(
+                    "Failed to import bodo.pandas.utils module");
+            }
+
+            PyObject *result = PyObject_CallMethod(bodo_module, "compile_cfunc",
+                                                   "O", scalar_func_data.args);
+            if (!result) {
+                PyErr_Print();
+                Py_DECREF(bodo_module);
+                throw std::runtime_error("Error calling compile_cfunc");
+            }
+
+            // Result should be a pointer to a C++ table_info
+            if (!PyLong_Check(result)) {
+                Py_DECREF(result);
+                Py_DECREF(bodo_module);
+                throw std::runtime_error(
+                    "Expected an integer from compile_cfunc");
+            }
+
+            this->cfunc_ptr =
+                reinterpret_cast<table_udf_t>(PyLong_AsLongLong(result));
+
+            Py_DECREF(bodo_module);
+            Py_DECREF(result);
+        }
+    }
 
     virtual ~PhysicalUDFExpression() = default;
 
@@ -839,4 +872,5 @@ class PhysicalUDFExpression : public PhysicalExpression {
     BodoPythonScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalUDFExpressionMetrics metrics;
+    table_udf_t cfunc_ptr;
 };

@@ -394,6 +394,11 @@ class PythonScalarFuncExpression(Expression):
         """Return the source of the expression."""
         return self.args[0]
 
+    @property
+    def is_cfunc(self):
+        """Returns whether the scalar function is a cfunc."""
+        return self.args[3]
+
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
         if self.source != new_source_plan:
@@ -416,6 +421,7 @@ class PythonScalarFuncExpression(Expression):
                 new_source_plan,
                 self.args[1],
                 (in_col_ind + col_index_offset,) + index_cols,
+                self.is_cfunc,
             )
             expr.is_series = self.is_series
             return expr
@@ -817,6 +823,7 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
             kwargs,
         ),
         tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
+        False,  # is_cfunc
     )
 
     # Select Index columns explicitly for output

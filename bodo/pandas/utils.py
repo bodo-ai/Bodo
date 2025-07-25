@@ -915,6 +915,16 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
     )
 
 
+def compile_cfunc(func, decorator):
+    """Util for to compiling a cfunc and getting a pointer
+    to the C callback (called once on each worker per cfunc).
+    """
+    import ctypes
+
+    cfunc = decorator(func)
+    return ctypes.c_void_p(cfunc.address).value
+
+
 def ensure_datetime64ns(df):
     """Convert datetime columns in a DataFrame to 'datetime64[ns]' dtype.
     Avoids datetime64[us] that is commonly used in Pandas but not supported in Bodo.

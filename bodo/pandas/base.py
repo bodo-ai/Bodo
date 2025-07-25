@@ -60,19 +60,6 @@ if pt.TYPE_CHECKING:
     from pyiceberg.table import Table as PyIcebergTable
 
 
-def _cast_timestamp_dtypes(pa_schema):
-    """Returns a new pa_schema with timestamp types cast to ns."""
-    for name in pa_schema.names:
-        idxs = pa_schema.get_all_field_indices(name)
-        for idx in idxs:
-            field = pa_schema.field(idx)
-            if pa.types.is_timestamp(field.type):
-                new_field = pa.field(field.name, pa.timestamp("ns"))
-                pa_schema = pa_schema.set(idx, new_field)
-
-    return pa_schema
-
-
 def from_pandas(df):
     """Convert a Pandas DataFrame to a BodoDataFrame."""
 
@@ -90,8 +77,6 @@ def from_pandas(df):
 
     # TODO [BSE-4788]: Refactor with convert_to_arrow_dtypes util
     pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
-    pa_schema = _cast_timestamp_dtypes(pa_schema)
-
     empty_df = arrow_to_empty_df(pa_schema)
     n_rows = len(df)
 
@@ -133,7 +118,6 @@ def read_parquet(
         "hive" if use_hive else None,
     )
     arrow_schema = pq_dataset.schema
-    arrow_schema = _cast_timestamp_dtypes(arrow_schema)
 
     empty_df = arrow_to_empty_df(arrow_schema)
 

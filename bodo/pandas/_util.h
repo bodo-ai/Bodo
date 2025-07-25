@@ -22,6 +22,7 @@
 #include "duckdb/planner/table_filter.hpp"
 
 using bodo_cpp_clock = std::chrono::steady_clock;
+typedef table_info *(*table_udf_t)(table_info *);
 
 /**
  * @brief Convert duckdb value to C++ variant.
@@ -126,19 +127,22 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
  */
 struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     BodoPythonScalarFunctionData(PyObject *args,
-                                 std::shared_ptr<arrow::Schema> out_schema)
-        : args(args), out_schema(std::move(out_schema)) {
+                                 std::shared_ptr<arrow::Schema> out_schema,
+                                 bool is_cfunc)
+        : args(args), out_schema(std::move(out_schema)), is_cfunc(is_cfunc) {
         if (args)
             Py_INCREF(args);
     }
     BodoPythonScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema)
-        : args(nullptr), out_schema(std::move(out_schema)) {}
+        : args(nullptr), out_schema(std::move(out_schema)), is_cfunc(false) {}
     ~BodoPythonScalarFunctionData() override {
         if (args)
             Py_DECREF(args);
     }
     BodoPythonScalarFunctionData(const BodoPythonScalarFunctionData &other)
-        : args(other.args), out_schema(other.out_schema) {
+        : args(other.args),
+          out_schema(other.out_schema),
+          is_cfunc(other.is_cfunc) {
         if (args)
             Py_INCREF(args);
     }
@@ -149,6 +153,7 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
             Py_XDECREF(args);
             args = other.args;
             out_schema = other.out_schema;
+            is_cfunc = other.is_cfunc;
         }
         return *this;
     }
@@ -156,15 +161,16 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
     bool Equals(const FunctionData &other_p) const override {
         const BodoPythonScalarFunctionData &other =
             other_p.Cast<BodoPythonScalarFunctionData>();
-        return (other.args == this->args);
+        return (other.args == this->args && other.is_cfunc == this->is_cfunc);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoPythonScalarFunctionData>(this->args,
-                                                               out_schema);
+        return duckdb::make_uniq<BodoPythonScalarFunctionData>(
+            this->args, out_schema, is_cfunc);
     }
 
     PyObject *args;  // If present then a UDF.
     std::shared_ptr<arrow::Schema> out_schema;
+    bool is_cfunc;
 };
 
 /**
@@ -205,6 +211,17 @@ std::tuple<std::shared_ptr<table_info>, int64_t, int64_t, int64_t>
 runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
                         const std::shared_ptr<arrow::DataType> &result_type,
                         PyObject *args);
+
+/**
+ * @brief Run a cfunc scalar function on the input batch and return the
+ * output table (single data column plus Index columns).
+ *
+ * @param input_batch input table batch
+ * @param cfunc_ptr Pointer to the Cfunc to execute on the input batch.
+ * @return std::shared_ptr<table_info> output table from the Python function
+ */
+std::shared_ptr<table_info> runCfuncScalarFunction(
+    std::shared_ptr<table_info> input_batch, table_udf_t cfunc_ptr);
 
 /**
  * @brief Convert duckdb table filters to pyiceberg expressions.
