@@ -114,8 +114,7 @@ uint64_t Pipeline::Execute() {
     // Finalize
     source->Finalize();
 
-    for (size_t idx = 0; idx < between_ops.size(); ++idx) {
-        auto& op = between_ops[idx];
+    for (auto& op : between_ops) {
         op->Finalize();
     }
     sink->Finalize();

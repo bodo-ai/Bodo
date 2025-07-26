@@ -488,7 +488,6 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
     std::vector<std::shared_ptr<array_info>> child_results;
     std::vector<std::string> column_names;
 
-    bodo_cpp_clock::time_point start;
     // All the sources of the UDF will be separate projections.
     // Create each one of them here.
     for (const auto& child : children) {
@@ -507,7 +506,6 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
     std::shared_ptr<table_info> udf_input = std::make_shared<table_info>(
         child_results, column_names, input_batch->metadata);
 
-    start = bodo_cpp_clock::now();
     // Actually run the UDF.
     std::shared_ptr<table_info> udf_output;
     if (cfunc_ptr) {
