@@ -636,6 +636,14 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     comp_join->children.push_back(std::move(lhs_duck));
     comp_join->children.push_back(std::move(rhs_duck));
 
+    // Generate a table index for mark column output similar to DuckDB:
+    // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/planner/binder/query_node/plan_subquery.cpp#L160
+    if (join_type == duckdb::JoinType::MARK) {
+        auto binder = get_duckdb_binder();
+        auto mark_index = binder.get()->GenerateTableIndex();
+        comp_join->mark_index = mark_index;
+    }
+
     return comp_join;
 }
 
