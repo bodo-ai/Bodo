@@ -39,7 +39,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         duckdb::vector<duckdb::JoinCondition>& conditions,
         const std::shared_ptr<bodo::Schema> build_table_schema,
         const std::shared_ptr<bodo::Schema> probe_table_schema)
-        : has_non_equi_cond(false) {
+        : has_non_equi_cond(false),
+          is_mark_join(logical_join.join_type == duckdb::JoinType::MARK) {
         duckdb::vector<duckdb::ColumnBinding> left_bindings =
             logical_join.children[0]->GetColumnBindings();
         duckdb::vector<duckdb::ColumnBinding> right_bindings =
@@ -65,15 +66,18 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             }
         }
 
-        if (logical_join.right_projection_map.empty()) {
-            for (duckdb::idx_t i = 0;
-                 i < logical_join.children[1]->GetColumnBindings().size();
-                 i++) {
-                this->bound_right_inds.insert(i);
-            }
-        } else {
-            for (const auto& c : logical_join.right_projection_map) {
-                this->bound_right_inds.insert(c);
+        // Mark join does not output the build table columns
+        if (!this->is_mark_join) {
+            if (logical_join.right_projection_map.empty()) {
+                for (duckdb::idx_t i = 0;
+                     i < logical_join.children[1]->GetColumnBindings().size();
+                     i++) {
+                    this->bound_right_inds.insert(i);
+                }
+            } else {
+                for (const auto& c : logical_join.right_projection_map) {
+                    this->bound_right_inds.insert(c);
+                }
             }
         }
 
@@ -188,7 +192,7 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
             false, join_func, true, true, get_streaming_batch_size(), -1,
             //  TODO: support query profiling
             PhysicalSink::getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
-            /*is_na_equal*/ true);
+            /*is_na_equal*/ true, is_mark_join);
 
         this->initOutputSchema(build_table_schema_reordered,
                                probe_table_schema_reordered,
@@ -228,6 +232,17 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                 probe_table_schema_reordered->column_names[i_col]);
         }
 
+        // Add the mark output column if this is a mark join.
+        if (this->is_mark_join) {
+            if (!build_kept_cols.empty()) {
+                throw std::runtime_error(
+                    "Mark join should not output build table columns.");
+            }
+            output_schema->append_column(std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::_BOOL));
+            col_names.push_back("");
+        }
+
         for (uint64_t i_col : build_kept_cols) {
             std::unique_ptr<bodo::DataType> col_type =
                 build_table_schema_reordered->column_types[i_col]->copy();
@@ -253,6 +268,11 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
                 "Join output schema has different number of columns than "
                 "LogicalComparisonJoin");
         }
+
+        // See
+        // https://github.com/bodo-ai/Bodo/blob/546cb5a45f5bc8e3922f5060e7f778cc744a0930/bodo/libs/streaming/_join.cpp#L4062
+        this->join_state_->InitOutputBuffer(this->build_kept_cols,
+                                            this->probe_kept_cols);
     }
 
     /**
@@ -343,10 +363,6 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
         if (has_non_equi_cond) {
             PhysicalExpression::cur_join_expr = physExprTree.get();
         }
-        // See
-        // https://github.com/bodo-ai/Bodo/blob/546cb5a45f5bc8e3922f5060e7f778cc744a0930/bodo/libs/streaming/_join.cpp#L4062
-        this->join_state_->InitOutputBuffer(this->build_kept_cols,
-                                            this->probe_kept_cols);
 
         bool request_input = true;
 
@@ -507,6 +523,8 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
     bool has_non_equi_cond;
     std::shared_ptr<PhysicalExpression> physExprTree;
+
+    bool is_mark_join = false;
 };
 
 #undef CONSUME_PROBE_BATCH
