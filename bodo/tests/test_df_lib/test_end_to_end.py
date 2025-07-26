@@ -2589,6 +2589,9 @@ def test_uncompilable_map():
 
         def uncompilable(x):
             # Numba can't compile functions containing imports.
+            import operator
+
+            operator.add
             return x
 
         bdf = bd.from_pandas(df)
