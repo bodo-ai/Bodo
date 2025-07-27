@@ -509,7 +509,9 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
     // Actually run the UDF.
     std::shared_ptr<table_info> udf_output;
     if (cfunc_ptr) {
+        time_pt start_init_time = start_timer();
         udf_output = runCfuncScalarFunction(udf_input, cfunc_ptr);
+        this->metrics.udf_execution_time += end_timer(start_init_time);
     } else {
         auto [out_temp, cpp_to_py_time, udf_time, py_to_cpp_time] =
             runPythonScalarFunction(udf_input, result_type,
