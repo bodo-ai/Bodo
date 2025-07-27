@@ -6,7 +6,7 @@ Map values of a BodoSeries according to a mapping.
 
 If `arg` is a function, bodo.jit will be applied to `arg`.  If this JIT compilation fails for any
 reason, the mapping function will be run as a normal Python function.  If the compilation succeeds,
-the JITted function will be used for the map and the overheads associated with running Python code
+the JIT compiled function will be used for the map and the overheads associated with running Python code
 from within the execution pipeline are avoided.
 
 !!! note
