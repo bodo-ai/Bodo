@@ -574,7 +574,6 @@ def run_func_on_table(cpp_table, result_type, in_args):
         out = func(input, *args, **kwargs)
     udf_time = time.perf_counter_ns() - udf_time_start
 
-    time.perf_counter()
     # astype can fail in some cases when input is empty
     if len(out):
         # TODO: verify this is correct for all possible result_type's
