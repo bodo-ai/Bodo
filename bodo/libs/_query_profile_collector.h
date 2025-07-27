@@ -227,6 +227,8 @@ class QueryProfileCollector {
     void Finalize(int64_t verbose_level = 0);
 
     // Getters for testing
+    // Using an ordered map so that pipeline stages info gets dumped
+    // into the output files in the normal sequential order.
     std::map<pipeline_id_t, std::pair<uint64_t, uint64_t>>&
     GetPipelineStartEndTimestamps() {
         return pipeline_start_end_timestamps;
@@ -250,6 +252,8 @@ class QueryProfileCollector {
     int tracing_level = 1;
 
     // Map the pipeline ID to its start and end timestamps
+    // Using an ordered map so that pipeline stages info gets dumped
+    // into the output files in the normal sequential order.
     std::map<pipeline_id_t, std::pair<uint64_t, uint64_t>>
         pipeline_start_end_timestamps;
 
@@ -271,6 +275,9 @@ class QueryProfileCollector {
         operator_stage_metrics;
 
     // Get a map from all seen operators ids to the largest observed stage
+    // Using an ordered map so that operators, which are allocated with
+    // monotonically increasing ids, are dumped into the output files in
+    // the order the operators are executed.
     std::map<operator_id_t, stage_id_t> CollectSeenOperators();
 
     // Generate report JSON for all pipelines
