@@ -4,14 +4,23 @@ BodoSeries.map(arg, na_action=None) -> BodoSeries
 ```
 Map values of a BodoSeries according to a mapping.
 
-!!! note
-    Calling `BodoSeries.map` will immediately execute a plan to generate a small sample of the BodoSeries
-    and then call `pandas.Series.map` on the sample to infer output types
-    before proceeding with lazy evaluation.
+If `arg` is a function, bodo.jit will be applied to `arg`.  If this JIT compilation fails for any
+reason, the mapping function will be run as a normal Python function.  If the compilation succeeds,
+the JITted function will be used for the map and the overheads associated with running Python code
+from within the execution pipeline are avoided.
 
+!!! note
+    Calling `BodoSeries.map` will immediately execute a plan if this JIT compilation fails to
+    generate a small sample of the BodoSeries and then call `pandas.Series.map` on the sample to
+    infer output types before proceeding with lazy evaluation.
+
+!!! note
+    Functions passed to `arg` (whether explicitly wrapper with a JIT decorator or not) may not
+    use Numba's `with objmode` context.  Doing so will result in a runtime exception.
+    
 <p class="api-header">Parameters</p>
 
-: __arg : *function, collections.abc.Mapping subclass or Series*:__ Mapping correspondence.
+: __arg : *function, collections.abc.Mapping subclass or Series*:__ Mapping correspondence.  *function* may be a Python function or a dispatcher generated through numba.jit or bodo.jit.
 
 : __na_actions : *{None, ‘ignore’}, default None*:__ If 'ignore' then NaN values will be propagated without passing them to the mapping correspondence.
 
