@@ -2609,7 +2609,7 @@ def test_uncompilable_map():
 
 
 def test_numba_map():
-    """Test for maps that can't be compiled."""
+    """Test for maps with already jit annotated functions."""
 
     with assert_executed_plan_count(0):
         df = pd.DataFrame(
