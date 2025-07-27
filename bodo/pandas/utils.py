@@ -518,7 +518,6 @@ def run_func_on_table(cpp_table, result_type, in_args):
     return the result as a C++ table and column names.
     NOTE: needs to free cpp_table after use.
     """
-    time.perf_counter()
     from bodo.ext import plan_optimizer
 
     func, is_series, is_attr, args, kwargs = in_args
@@ -574,7 +573,6 @@ def run_func_on_table(cpp_table, result_type, in_args):
         out = func(input, *args, **kwargs)
     udf_time = time.perf_counter_ns() - udf_time_start
 
-    time.perf_counter()
     # astype can fail in some cases when input is empty
     if len(out):
         # TODO: verify this is correct for all possible result_type's
