@@ -825,7 +825,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
                 throw std::runtime_error("Error calling compile_cfunc");
             }
 
-            // Result should be a pointer to a C++ table_info
+            // Result should be a function pointer
             if (!PyLong_Check(result)) {
                 Py_DECREF(result);
                 Py_DECREF(bodo_module);
