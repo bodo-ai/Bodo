@@ -206,6 +206,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             "attrs",
             "flags",
             "columns",
+            "ndim",
+            "axes",
+            "iloc",
+            "empty",
         ]
 
         cls = object.__getattribute__(self, "__class__")
