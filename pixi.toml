@@ -89,11 +89,8 @@ scipy = "*"
 scikit-learn = ">=1.4"
 matplotlib ="*"
 # IO
-# PR CI doesn't work for boto3/botocore 1.39.8
-# (Python cannot import class named ScopedEnvTokenProvider from botocore)
-# but passes in other environments with the same versions.
-# TODO: reenable 1.39.8 and remove restriction.
-boto3 = ">=1.35.74,<1.39.8"
+# Polaris (installed via pip) requires botocore <1.39
+boto3 = ">=1.35.74,<1.39"
 botocore = "*"
 # Min bound is necessary. Otherwise s3fs will occasionally install v0.4.2
 # Due to s3fs pinning aiobotocore and not regularly updating
