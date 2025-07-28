@@ -198,7 +198,17 @@ class LogicalDistinct(LogicalOperator):
 class LogicalComparisonJoin(LogicalOperator):
     """Logical operator for comparison-based joins."""
 
-    pass
+    @property
+    def left_plan(self):
+        return self.args[0]
+
+    @property
+    def right_plan(self):
+        return self.args[1]
+
+    @property
+    def join_type(self):
+        return self.args[2]
 
 
 class LogicalSetOperation(LogicalOperator):

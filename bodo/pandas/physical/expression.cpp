@@ -505,8 +505,12 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
         child_results, column_names, input_batch->metadata);
 
     // Actually run the UDF.
-    std::shared_ptr<table_info> udf_output =
+    auto [udf_output, cpp_to_py_time, udf_time, py_to_cpp_time] =
         runPythonScalarFunction(udf_input, result_type, scalar_func_data.args);
+    // Update the metrics.
+    this->metrics.cpp_to_py_time += cpp_to_py_time;
+    this->metrics.udf_execution_time += udf_time;
+    this->metrics.py_to_cpp_time += py_to_cpp_time;
     return std::make_shared<ArrayExprResult>(udf_output->columns[0],
                                              udf_output->column_names[0]);
 }

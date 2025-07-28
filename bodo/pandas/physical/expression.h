@@ -107,6 +107,8 @@ class PhysicalExpression {
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
         int64_t left_index, int64_t right_index) = 0;
 
+    virtual void ReportMetrics(std::vector<MetricBase> &metrics_out) {};
+
    protected:
     std::vector<std::shared_ptr<PhysicalExpression>> children;
 };
@@ -786,6 +788,12 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
     bool no_scalars = false);
 
+struct PhysicalUDFExpressionMetrics {
+    using timer_t = MetricBase::TimerValue;
+    timer_t cpp_to_py_time = 0;
+    timer_t udf_execution_time = 0;
+    timer_t py_to_cpp_time = 0;
+};
 /**
  * @brief Physical expression tree node type for UDF.
  *
@@ -806,18 +814,29 @@ class PhysicalUDFExpression : public PhysicalExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch);
+    std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch) override;
 
-    virtual arrow::Datum join_expr_internal(
-        array_info **left_table, array_info **right_table, void **left_data,
-        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+    arrow::Datum join_expr_internal(array_info **left_table,
+                                    array_info **right_table, void **left_data,
+                                    void **right_data, void **left_null_bitmap,
+                                    void **right_null_bitmap,
+                                    int64_t left_index,
+                                    int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalUDFExpression::join_expr_internal unimplemented ");
+    }
+    void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
+        metrics_out.push_back(
+            TimerMetric("run_func_cpp_to_py_time", metrics.cpp_to_py_time));
+        metrics_out.push_back(TimerMetric("run_func_udf_execution_time",
+                                          metrics.udf_execution_time));
+        metrics_out.push_back(
+            TimerMetric("run_func_py_to_cpp_time", metrics.py_to_cpp_time));
     }
 
    protected:
     BodoPythonScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
+    PhysicalUDFExpressionMetrics metrics;
 };

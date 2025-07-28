@@ -1,12 +1,16 @@
 #pragma once
 
+#include <fmt/format.h>
 #include <memory>
 #include <utility>
-#include "../../libs/streaming/_join.h"
-#include "../libs/_array_utils.h"
-#include "../libs/_distributed.h"
 #include "../libs/_table_builder.h"
 #include "operator.h"
+
+struct PhysicalUnionAllMetrics {
+    using timer_t = MetricBase::TimerValue;
+    using stat_t = MetricBase::StatValue;
+    stat_t output_row_count = 0;
+};
 
 /**
  * @brief Physical node for union all.
@@ -19,7 +23,16 @@ class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
 
     virtual ~PhysicalUnionAll() = default;
 
-    void Finalize() override {}
+    void Finalize() override {
+        std::vector<MetricBase> metrics_out;
+        this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            std::move(metrics_out));
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(-1, 2),
+            this->metrics.output_row_count);
+    }
 
     /**
      * @brief Do union all.
@@ -43,7 +56,7 @@ class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    std::variant<std::shared_ptr<table_info>, PyObject *> GetResult() override {
         // Union all should be between pipelines and act alternatively as a sink
         // then source but there should never be the need to ask for the result
         // all in one go.
@@ -63,6 +76,7 @@ class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
         }
         if (collected_rows && !collected_rows->builder->empty()) {
             auto next_batch = collected_rows->builder->PopChunk(true);
+            this->metrics.output_row_count += std::get<0>(next_batch)->nrows();
             return {std::get<0>(next_batch),
                     //(prev_op_result == OperatorResult::FINISHED &&
                     // collected_rows->builder->empty())
@@ -74,6 +88,7 @@ class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
                 input_batch = first_processed_batch;
                 first_processed_batch = nullptr;
             }
+            this->metrics.output_row_count += input_batch->nrows();
             return {input_batch, prev_op_result == OperatorResult::FINISHED
                                      ? OperatorResult::FINISHED
                                      : OperatorResult::NEED_MORE_INPUT};
@@ -93,4 +108,22 @@ class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
     std::shared_ptr<table_info> first_processed_batch;
     const std::shared_ptr<bodo::Schema> output_schema;
+    PhysicalUnionAllMetrics metrics;
+    void ReportMetrics(std::vector<MetricBase> &metrics_out) {
+        MetricBase::TimerValue append_time =
+            this->collected_rows ? this->collected_rows->builder->append_time
+                                 : MetricBase::TimerValue(0);
+        metrics_out.push_back(TimerMetric("append_time", append_time));
+
+        // Add the dict builder metrics if they exist
+        for (size_t i = 0; i < this->output_schema->ncols(); ++i) {
+            auto dict_builder = this->collected_rows
+                                    ? this->collected_rows->dict_builders[i]
+                                    : nullptr;
+            if (dict_builder) {
+                dict_builder->GetMetrics().add_to_metrics(
+                    metrics_out, fmt::format("dict_builder_{}", i));
+            }
+        }
+    }
 };

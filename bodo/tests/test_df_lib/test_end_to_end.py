@@ -1910,6 +1910,34 @@ def test_filter_source_matching():
     )
 
 
+def test_filter_series_isin():
+    """Test dataframe filter with isin case"""
+    with assert_executed_plan_count(0):
+        df1 = pd.DataFrame(
+            {
+                "A": [1.4, 2.1, 3.3],
+                "B": ["A", "B", "C"],
+                "C": [1, 2, 3],
+                "D": [True, False, True],
+            }
+        )
+        df2 = pd.DataFrame(
+            {
+                "A": ["A", "B", "C", "D"],
+                "B": [11, 2, 2, 4],
+            }
+        )
+
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bodo_out = bdf1[bdf1.C.isin(bdf2.B)]
+        py_out = df1[df1.C.isin(df2.B)]
+
+    _test_equal(
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+
+
 def test_rename(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     with assert_executed_plan_count(0):
@@ -2188,23 +2216,21 @@ def test_series_concat(datapath):
     )
 
 
-@pytest.mark.skip("disabled due to submit_func_to_workers: already running")
 def test_isin(datapath):
-    bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
-    bodo_df3 = (bodo_df1["D"] + 100).isin(bodo_df2["E"])
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_df2 = bd.read_parquet(datapath("dataframe_library/df2.parquet"))
+        bodo_df3 = (bodo_df1["D"] + 100).isin(bodo_df2["E"])
 
-    py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
-    py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))
-    py_df3 = (py_df1["D"] + 100).isin(py_df2["E"])
-
-    assert bodo_df3.is_lazy_plan()
+        py_df1 = pd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        py_df2 = pd.read_parquet(datapath("dataframe_library/df2.parquet"))
+        py_df3 = (py_df1["D"] + 100).isin(py_df2["E"])
 
     _test_equal(
         bodo_df3,
         py_df3,
         check_pandas_types=False,
-        sort_output=False,
+        sort_output=True,
         reset_index=True,
     )
 

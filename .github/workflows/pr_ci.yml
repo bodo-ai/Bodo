@@ -24,8 +24,10 @@ jobs:
     outputs:
       # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
       # contains is case-insensitive
-      run_tests: ${{ contains(steps.check_msg.outputs.commit_message, '[run ci]') || github.event_name == 'workflow_dispatch' }}
+      run_tests: ${{ (steps.changes.outputs.not_docs && contains(steps.check_msg.outputs.commit_message, '[run ci]')) || github.event_name == 'workflow_dispatch' }}
       run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests || github.event_name == 'workflow_dispatch' }}
+      not_docs: ${{ steps.changes.outputs.not_docs }}
+      skip_flag: ${{ contains(steps.check_msg.outputs.commit_message, '[skip]') }}
 
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +42,8 @@ jobs:
           filters: |
             bodosql_customer_tests:
               - 'BodoSQL/calcite_sql/**'
+            not_docs:
+              - '!docs/**'
 
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v4
@@ -218,9 +222,30 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      # Notify GitHub Checks
-      # If any test runs failed, this step should fail
-      # This step failing will block the PR from being merged
       - name: Check Test Runs
         if: ${{ needs.pr-ci.result != 'success' }}
         run: exit 1
+
+  # Notify GitHub Checks
+  # If any test runs failed, this step should fail
+  # This step failing will block the PR from being merged
+  # Referenced blogpost: https://emmer.dev/blog/skippable-github-status-checks-aren-t-really-required/
+  status-check:
+    name: Status Check
+    if: always()
+    needs:
+      - collect-results
+      - df-lib-ci
+      - validate
+    runs-on: ubuntu-latest
+    steps:
+      # Allows skipping if only docs files were changed, or [skip] flag was set.
+      - name: Skip check for docs-only PR
+        if: ${{ (needs.validate.outputs.not_docs != 'true') || (needs.validate.outputs.skip_flag == 'true') }}
+        run: echo "Docs-only PR, skipping status enforcement."
+      # Otherwise, requires all checks to pass.
+      - name: Fail if needed jobs failed or were skipped
+        if: ${{ (needs.validate.outputs.not_docs == 'true') && (needs.validate.outputs.skip_flag != 'true') }}
+        uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}

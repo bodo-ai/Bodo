@@ -8,6 +8,17 @@
 #include "_bodo_write_function.h"
 #include "physical/operator.h"
 
+struct PhysicalWriteParquetMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+
+    stat_t max_buffer_size = 0;
+    stat_t n_files_written = 0;
+
+    time_t accumulate_time = 0;
+    time_t file_write_time = 0;
+};
+
 class PhysicalWriteParquet : public PhysicalSink {
    public:
     explicit PhysicalWriteParquet(std::shared_ptr<bodo::Schema> in_schema,
@@ -44,9 +55,13 @@ class PhysicalWriteParquet : public PhysicalSink {
         }
 
         // ===== Part 1: Accumulate batch in writer and compute total size =====
+        time_pt start_accumulate = start_timer();
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
         int64_t buffer_nbytes =
             table_local_memory_size(buffer->data_table, true);
+        this->metrics.accumulate_time += end_timer(start_accumulate);
+        this->metrics.max_buffer_size =
+            std::max(this->metrics.max_buffer_size, buffer_nbytes);
 
         // Sync is_last flag
         bool is_last = prev_op_result == OperatorResult::FINISHED;
@@ -54,6 +69,7 @@ class PhysicalWriteParquet : public PhysicalSink {
             is_last_state.get(), static_cast<int32_t>(is_last)));
 
         // === Part 2: Write Parquet file if file size threshold is exceeded ===
+        time_pt start_write = start_timer();
         if (is_last || buffer_nbytes >= this->chunk_size) {
             std::shared_ptr<table_info> data = buffer->data_table;
 
@@ -75,6 +91,7 @@ class PhysicalWriteParquet : public PhysicalSink {
             // Reset the buffer for the next batch
             buffer->Reset();
         }
+        this->metrics.file_write_time += end_timer(start_write);
 
         if (is_last) {
             finished = true;
@@ -85,7 +102,16 @@ class PhysicalWriteParquet : public PhysicalSink {
                        : OperatorResult::NEED_MORE_INPUT;
     }
 
-    void Finalize() override {}
+    void Finalize() override {
+        std::vector<MetricBase> metrics_out;
+        this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            std::move(metrics_out));
+        // Write doesn't produce rows
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1), 0);
+    }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         return std::shared_ptr<table_info>(nullptr);
@@ -105,6 +131,28 @@ class PhysicalWriteParquet : public PhysicalSink {
     bool finished = false;
     const int64_t chunk_size = get_parquet_chunk_size();
     int64_t iter = 0;
+
+    PhysicalWriteParquetMetrics metrics;
+
+    void ReportMetrics(std::vector<MetricBase>& metrics_out) {
+        metrics_out.emplace_back(
+            StatMetric("max_buffer_size", this->metrics.max_buffer_size));
+        metrics_out.emplace_back(
+            StatMetric("n_files_written", this->metrics.n_files_written));
+        metrics_out.emplace_back(
+            TimerMetric("accumulate_time", this->metrics.accumulate_time));
+        metrics_out.emplace_back(
+            TimerMetric("file_write_time", this->metrics.file_write_time));
+
+        // Add the dict builder metrics if they exist
+        for (size_t i = 0; i < this->dict_builders.size(); ++i) {
+            auto dict_builder = this->dict_builders[i];
+            if (dict_builder) {
+                dict_builder->GetMetrics().add_to_metrics(
+                    metrics_out, fmt::format("dict_builder_{}", i));
+            }
+        }
+    }
 
     // Generate a Parquet file name prefix for each iteration in such a way that
     // iteration file names are lexicographically sorted. This allows the data

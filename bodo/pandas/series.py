@@ -33,6 +33,8 @@ from bodo.pandas.plan import (
     LazyPlan,
     LazyPlanDistributedArg,
     LogicalAggregate,
+    LogicalComparisonJoin,
+    LogicalDistinct,
     LogicalFilter,
     LogicalGetPandasReadParallel,
     LogicalGetPandasReadSeq,
@@ -920,6 +922,85 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def rsub(self, other, level=None, fill_value=None, axis=0):
         """Return Subtraction of series and other, element-wise (binary operator rsub)."""
         return gen_arith(self, other, "rsub")
+
+    @check_args_fallback(unsupported="none")
+    def isin(self, values):
+        """
+        Whether elements in Series are contained in `values`.
+
+        Return a boolean Series showing whether each element in the Series
+        matches an element in the passed sequence of `values` exactly.
+        """
+        from bodo.pandas.base import _empty_like
+
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(pa.bool_()),
+            name=self.name,
+            index=self.head(0).index,
+        )
+
+        if isinstance(values, BodoSeries):
+            # Drop duplicate values in 'values' to avoid unnecessary work
+            zero_size_values = _empty_like(values)
+            if not isinstance(zero_size_values.index, pd.RangeIndex):
+                # Drop Index arrays since distinct backend does not support non-key
+                # columns yet.
+                zero_size_values = zero_size_values.reset_index(drop=True)
+                exprs = make_col_ref_exprs([0], values._plan)
+                distinct_input_plan = LogicalProjection(
+                    zero_size_values,
+                    values._plan,
+                    exprs,
+                )
+            else:
+                distinct_input_plan = values._plan
+            exprs = make_col_ref_exprs([0], distinct_input_plan)
+            values_plan = LogicalDistinct(
+                zero_size_values,
+                distinct_input_plan,
+                exprs,
+            )
+
+            empty_left = _empty_like(self)
+            empty_left.name = None
+            # Mark column is after the left columns in DuckDB, see:
+            # https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/planner/operator/logical_join.cpp#L20
+            empty_join_out = pd.concat(
+                [empty_left, pd.Series([], dtype=pd.ArrowDtype(pa.bool_()))], axis=1
+            )
+            empty_join_out.index = empty_left.index
+            planComparisonJoin = LogicalComparisonJoin(
+                empty_join_out,
+                self._plan,
+                values_plan,
+                plan_optimizer.CJoinType.MARK,
+                [(0, 0)],
+            )
+
+            # Can't use make_col_ref_exprs since output type is not in input schema
+            empty_col_data = arrow_to_empty_df(
+                pa.schema([pa.field("mark", pa.bool_())])
+            )
+            n_indices = get_n_index_arrays(new_metadata.index)
+            mark_col = ColRefExpression(
+                empty_col_data, planComparisonJoin, n_indices + 1
+            )
+
+            # Ignore data column of left side, only Index columns and mark column
+            col_indices = list(range(1, n_indices + 1))
+            exprs = make_col_ref_exprs(col_indices, planComparisonJoin)
+            proj_plan = LogicalProjection(
+                new_metadata,
+                planComparisonJoin,
+                [mark_col] + exprs,
+            )
+
+            return wrap_plan(proj_plan)
+
+        # It's just a map function if 'values' is not a BodoSeries
+        return _get_series_python_func_plan(
+            self._plan, new_metadata, "isin", (values,), {}
+        )
 
     @check_args_fallback(supported=["drop", "name", "level"])
     def reset_index(
@@ -2287,7 +2368,6 @@ dir_methods = [
     # idx = 0: Series(Boolean)
     (
         [
-            "isin",
             "notnull",
             "isnull",
             "isna",
