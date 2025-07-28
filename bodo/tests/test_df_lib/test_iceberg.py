@@ -670,7 +670,7 @@ def test_write_s3_tables_location():
         catalog.purge_table(table_id)
 
 
-def test_rename():
+def test_read_iceberg_rename():
     location = "arn:aws:s3tables:us-east-2:427443013497:bucket/tpch"
     region = "us-east-2"
     catalog_properties = {
