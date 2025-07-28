@@ -245,9 +245,9 @@ mpich = { version = "==4.3.1", build = "h*102" }
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
 
-# Newest mpich wheels availible via pip have bug that prevents calling spawn,
-# this version has to match the pip wheel for compatibility with mpi4py.
-# (since we build mpi4py using this version).
+# Newest mpich wheels availible via pip have a bug that prevents calling spawn,
+# the pixi version has to match the pip wheel for compatibility with mpi4py
+# (since we build mpi4py against this version).
 [feature.local-mpi-mac-pip.target.osx.dependencies]
 mpich = { version = "4.1.*", build = "h*102" }
 
