@@ -668,3 +668,41 @@ def test_write_s3_tables_location():
     finally:
         # Clean up the table after the test
         catalog.purge_table(table_id)
+
+
+def test_read_iceberg_rename():
+    location = "arn:aws:s3tables:us-east-2:427443013497:bucket/tpch"
+    region = "us-east-2"
+    catalog_properties = {
+        S3TABLES_TABLE_BUCKET_ARN: location,
+        S3TABLES_REGION: region,
+    }
+    catalog = S3TablesCatalog(None, **catalog_properties)
+    table = catalog.load_table("sf1000.nation")
+
+    pdf = table.scan().to_pandas()
+    pdf = pdf.rename(
+        columns={
+            "N_NATIONKEY": "NATIONKEY",
+            "N_NAME": "NAME",
+            "N_REGIONKEY": "N_REGIONKEY",
+            "N_COMMENT": "COMMENT",
+        }
+    )
+    bdf = bpd.read_iceberg_table(table)
+    bdf = bdf.rename(
+        columns={
+            "N_NATIONKEY": "NATIONKEY",
+            "N_NAME": "NAME",
+            "N_REGIONKEY": "N_REGIONKEY",
+            "N_COMMENT": "COMMENT",
+        }
+    )
+
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )

@@ -60,6 +60,8 @@ from bodo.pandas.plan import (
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
+    maybe_make_list,
+    reset_index,
 )
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
@@ -203,6 +205,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             "attrs",
             "flags",
             "columns",
+            "ndim",
+            "axes",
+            "iloc",
+            "empty",
         ]
 
         cls = object.__getattribute__(self, "__class__")
@@ -1322,6 +1328,25 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         finally:
             self._mgr._disable_collect = original_flag
 
+    @check_args_fallback(supported=["drop", "names", "level"])
+    def reset_index(
+        self,
+        level=None,
+        *,
+        drop=False,
+        inplace=False,
+        col_level=0,
+        col_fill="",
+        allow_duplicates=lib.no_default,
+        names=None,
+    ):
+        """
+        Reset the index, or a level of it.
+        Reset the index of the DataFrame, and use the default one instead.
+        If the DataFrame has a MultiIndex, this method can remove one or more levels.
+        """
+        return reset_index(self, drop, level, names=names)
+
 
 def _add_proj_expr_to_plan(
     df_plan: LazyPlan,
@@ -1543,15 +1568,6 @@ def validate_keys(keys, df):
             f"merge(): invalid key {key_diff} for on/left_on/right_on\n"
             f"merge supports only valid column names {df.columns}"
         )
-
-
-def maybe_make_list(obj):
-    """If string input, turn into singleton list"""
-    if obj is None:
-        return []
-    elif not isinstance(obj, (tuple, list)):
-        return [obj]
-    return obj
 
 
 def validate_merge_spec(left, right, on, left_on, right_on, is_cross):

@@ -7,6 +7,7 @@ from contextlib import contextmanager
 
 import pandas as pd
 import pyarrow as pa
+from pandas._libs import lib
 
 import bodo
 from bodo.pandas.utils import (
@@ -880,6 +881,96 @@ def match_binop_expr_source_plans(lhs, rhs):
         return lhs, new_rhs
 
     return None, None
+
+
+def maybe_make_list(obj):
+    """If non-iterable input, turn into singleton list"""
+    if obj is None:
+        return []
+    elif not isinstance(obj, (tuple, list)):
+        return [obj]
+    return obj
+
+
+def reset_index(self, drop, level, name=None, names=None):
+    """Index resetter used by BodoSeries and BodoDataFrame."""
+    is_series = isinstance(self, bodo.pandas.BodoSeries)
+    assert is_series or isinstance(self, bodo.pandas.BodoDataFrame), (
+        "reset_index() should take in either a BodoSeries or a BodoDataFrame."
+    )
+
+    index = self._plan.empty_data.index
+    levelset = set(maybe_make_list(level))
+    new_index = pd.RangeIndex(0) if not level else index.droplevel(level)
+
+    col_names = []
+    if names is None:
+        if isinstance(index, pd.RangeIndex):
+            col_names = "index"
+        elif isinstance(index, pd.MultiIndex):
+            for i in range(len(index.names)):
+                col_name = index.names[i]
+                if not level or (i in levelset or col_name in levelset):
+                    col_names.append(col_name if col_name is not None else f"level_{i}")
+        elif isinstance(index, pd.Index):
+            col_names.append(index.name if index.name is not None else "index")
+        else:
+            raise TypeError(f"Invalid index type: {type(index)}")
+    else:
+        col_names = maybe_make_list(names) if not is_series else names
+
+    n_cols = 1 if is_series else len(self._plan.empty_data.columns)
+    index_size = get_n_index_arrays(index)
+    index_cols, remaining_cols = [], []
+
+    data_cols = make_col_ref_exprs(range(n_cols), self._plan)
+    empty_data = None
+
+    # Series.reset_index with drop=True does not require extra columns or renaming.
+    if is_series and drop:
+        empty_data = pd.Series(
+            dtype=self.dtype,
+            name=self.name,
+            index=new_index,
+        )
+    else:
+        empty_data = self._plan.empty_data.copy()
+        empty_data.index = new_index
+
+        # Series.reset_index supports `name` field to enable renaming of the Series data column.
+        if is_series:
+            old_col_name = empty_data.columns[0]
+            new_col_name = (
+                name
+                if name is not lib.no_default
+                else (self.name if self.name is not None else "0")
+            )
+            empty_data = empty_data.rename(columns={old_col_name: new_col_name})
+
+        # If drop=False, append index column names to the front of the resulting Dataframe.
+        if not drop:
+            drop_index = range(n_cols, n_cols + index_size)
+            preserve_index = []
+            if level:
+                drop_index = []
+                for i, name in enumerate(index.names):
+                    if name in levelset or i in levelset:
+                        drop_index.append(n_cols + i)
+                    else:
+                        preserve_index.append(n_cols + i)
+
+            index_cols = make_col_ref_exprs(drop_index, self._plan)
+            for i in range(len(drop_index)):
+                empty_data.insert(i, col_names[i], index_cols[i].empty_data)
+            remaining_cols = make_col_ref_exprs(preserve_index, self._plan)
+
+    new_plan = LogicalProjection(
+        empty_data,
+        self._plan,
+        index_cols + data_cols + remaining_cols,
+    )
+
+    return wrap_plan(new_plan)
 
 
 class PlanExecutionCounter:

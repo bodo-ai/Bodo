@@ -2634,3 +2634,263 @@ def test_numba_map():
         sort_output=True,
         reset_index=True,
     )
+=======
+def test_df_reset_index():
+    """Test for DataFrame reset_index API."""
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {"A": [1, 2, 3]}, index=pd.Index(["a", "b", "c"], name="Chris")
+        )
+        bdf = bd.from_pandas(df).reset_index()
+        pdf = df.reset_index()
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=False,
+    )
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df).reset_index(drop=True)
+        pdf = df.reset_index(drop=True)
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=False,
+    )
+    with assert_executed_plan_count(0):
+        multi_array = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
+        multi_idx = pd.MultiIndex.from_arrays(multi_array)
+        df = pd.DataFrame({"A": [1, 2, 3, 4]}, index=multi_idx)
+        bdf = bd.from_pandas(df).reset_index()
+        pdf = df.reset_index()
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=False,
+    )
+    with assert_executed_plan_count(0):
+        bdf = bd.from_pandas(df).reset_index(names=["numbers", "colors"])
+        pdf = df.reset_index(names=["numbers", "colors"])
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=False,
+    )
+    with assert_executed_plan_count(0):
+        long_array = [
+            [0, 0, 0, 0],
+            [1, 1, 2, 2],
+            ["red", "blue", "red", "blue"],
+            ["Pitt", "Pitt", "CMU", "CMU"],
+        ]
+        long_index = pd.MultiIndex.from_arrays(
+            long_array, names=["Rank", "B", "A", "School"]
+        )
+        pds = pd.DataFrame({"C": [1, 2, 3, 4]}, index=long_index)
+        bd.from_pandas(pds).reset_index(level=[0, 1])
+        pds = pds.reset_index(level=[0, 1])
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=False,
+    )
+
+
+def test_series_reset_index():
+    """Test for Series reset_index API."""
+
+    # Tests basic Series.reset_index
+    with assert_executed_plan_count(0):
+        s = pd.Series([1, 2, 3, 4], index=["A", "B", "C", "D"], name="Bodo")
+        bds = bd.Series(s).reset_index()
+        pds = s.reset_index()
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+    # Tests basic Series.reset_index with name arg
+    with assert_executed_plan_count(0):
+        bds = bd.Series(s).reset_index(name="Inc")
+        pds = s.reset_index(name="Inc")
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+    # Tests Series.reset_index with MultiIndex
+    with assert_executed_plan_count(0):
+        multi_array = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
+        multi_idx = pd.MultiIndex.from_arrays(multi_array)
+        s = pd.Series([1, 2, 3, 4], index=multi_idx, name="Pitt")
+        bds = bd.Series(s).reset_index(name="Penn")
+        pds = s.reset_index(name="Penn")
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+    # Tests Series.reset_index with drop=True
+    with assert_executed_plan_count(0):
+        bds = bd.Series(s).reset_index(drop=True)
+        pds = s.reset_index(drop=True)
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+    # Tests level argument
+    with assert_executed_plan_count(0):
+        long_array = [
+            [0, 0, 0, 0],
+            [1, 1, 2, 2],
+            ["red", "blue", "red", "blue"],
+            ["Pitt", "Pitt", "CMU", "CMU"],
+        ]
+        long_index = pd.MultiIndex.from_arrays(
+            long_array, names=["Rank", "B", "A", "School"]
+        )
+        pds = pd.Series([1, 2, 3, 4], index=long_index, name="Happy")
+        bds = bd.Series(pds).reset_index(level=[0, 1])
+        pds = pds.reset_index(level=[0, 1])
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+
+
+def test_series_reset_index_compute():
+    """Test Series.reset_index in between computation."""
+
+    df = pd.DataFrame(
+        {
+            "City": ["Pittsburgh", "Boston", "New York", "Seattle"],
+            "Score": [92, 85, 88, 90],
+        }
+    ).set_index("City")
+
+    with assert_executed_plan_count(0):
+        s = df["Score"]
+        bds = bd.Series(s)
+        s = s.map(lambda x: x * 3)
+        bds = bds.map(lambda x: x * 3)
+        bds = bds.reset_index()
+        bds["Decremented"] = bds["Score"] - 20
+        pds = s.reset_index()
+        pds["Decremented"] = pds["Score"] - 20
+
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+
+
+def test_series_reset_index_pipeline():
+    """Test reading from CSV, groupby + sum, reset_index, and more computes."""
+
+    df = pd.DataFrame(
+        {
+            "category": ["A", "B", "A", "C", "B", "A", "C"],
+            "value": [10, 20, 10, 30, 40, 50, 60],
+            "timestamp": pd.date_range(start="2025-01-01", periods=7, freq="D"),
+        }
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_path = os.path.join(tmpdir, "sample_data.csv")
+
+        df.to_csv(csv_path, index=False)
+
+        with assert_executed_plan_count(0):
+            bdf = bd.read_csv(csv_path)
+            pdf = pd.read_csv(csv_path)
+            bds = bdf.groupby("category")["value"].sum().reset_index()
+            pds = pdf.groupby("category")["value"].sum().reset_index()
+
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+
+    long_array = [
+        [1, 1, 2],
+        ["red", "blue", "green"],
+    ]
+
+    long_index = pd.MultiIndex.from_arrays(long_array, names=["Number", "Color"])
+
+    with assert_executed_plan_count(0):
+        bds.index = long_index
+        pds.index = long_index
+
+        bds = bds.map(lambda x: x * 3)
+        pds = pds.map(lambda x: x * 3)
+
+        bds["tip"] = bds["value"] / 10 + 5
+        pds["tip"] = pds["value"] / 10 + 5
+
+        bds = bds.reset_index(level=[0])
+        pds = pds.reset_index(level=[0])
+
+    _test_equal(
+        bds,
+        pds,
+        check_pandas_types=False,
+        reset_index=False,
+    )
+
+
+def test_dataframe_reset_index_pipeline():
+    """Test reading CSV, setting MultiIndex, resetting index, and computing."""
+
+    df = pd.DataFrame(
+        {
+            "Number": [1, 1, 2, 2],
+            "Color": ["red", "blue", "red", "blue"],
+            "value": [10, 20, 30, 40],
+        }
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_path = os.path.join(tmpdir, "multiindex_data.csv")
+        df.to_csv(csv_path, index=False)
+
+        with assert_executed_plan_count(0):
+            bdf = bd.read_csv(csv_path)
+            pdf = pd.read_csv(csv_path)
+
+            bdf = bdf.set_index(["Number", "Color"])
+            pdf = pdf.set_index(["Number", "Color"])
+
+            bdf["double"] = bdf["value"] * 2
+            pdf["double"] = pdf["value"] * 2
+
+            bdf = bdf.reset_index(level="Color")
+            pdf = pdf.reset_index(level="Color")
+
+    _test_equal(
+        bdf,
+        pdf,
+        check_pandas_types=False,
+        reset_index=False,
+    )
