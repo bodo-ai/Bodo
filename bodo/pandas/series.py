@@ -11,6 +11,7 @@ from collections.abc import Callable, Hashable
 import numpy
 import pandas as pd
 import pyarrow as pa
+from pandas._libs import lib
 from pandas._typing import (
     Axis,
     SortKind,
@@ -54,6 +55,7 @@ from bodo.pandas.plan import (
     is_single_projection,
     make_col_ref_exprs,
     match_binop_expr_source_plans,
+    reset_index,
 )
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
@@ -89,8 +91,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return super().__new__(cls, *args, **kwargs)
 
         S = pd.Series(*args, **kwargs)
-        df = pd.DataFrame({"A": S})
-        bodo_S = bodo.pandas.base.from_pandas(df)["A"]
+        df = pd.DataFrame({f"{S.name}": S})
+        bodo_S = bodo.pandas.base.from_pandas(df)[f"{S.name}"]
         bodo_S._name = S.name
         return bodo_S
 
@@ -999,6 +1001,23 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return _get_series_python_func_plan(
             self._plan, new_metadata, "isin", (values,), {}
         )
+
+    @check_args_fallback(supported=["drop", "name", "level"])
+    def reset_index(
+        self,
+        level=None,
+        *,
+        drop=False,
+        name=lib.no_default,
+        inplace=False,
+        allow_duplicates=False,
+    ):
+        """
+        Generate a new DataFrame or Series with the index reset.
+        This is useful when the index needs to be treated as a column, or when the index is meaningless and
+        needs to be reset to the default before another operation.
+        """
+        return reset_index(self, drop, level, name=name)
 
 
 class BodoStringMethods:

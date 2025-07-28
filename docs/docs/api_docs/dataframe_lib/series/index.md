@@ -120,6 +120,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ## Reindexing / Selection / Label manipulation
 - [`bodo.pandas.BodoSeries.head`][bodoserieshead]
 - [`bodo.pandas.BodoSeries.isin`][bodoseriesisin]
+- [`bodo.pandas.BodoSeries.reset_index`][bodoseriesresetindex]
 
 ---
 
@@ -331,3 +332,5 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriessub]: https://pandas.pydata.org/docs/reference/api/pandas.Series.sub.html
 [bodoseriesradd]: https://pandas.pydata.org/docs/reference/api/pandas.Series.radd.html
 [bodoseriesrsub]: https://pandas.pydata.org/docs/reference/api/pandas.Series.rsub.html
+
+[bodoseriesresetindex]: https://pandas.pydata.org/docs/reference/api/pandas.Series.reset_index.html
