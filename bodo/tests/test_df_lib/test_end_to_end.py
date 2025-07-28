@@ -2634,7 +2634,8 @@ def test_numba_map():
         sort_output=True,
         reset_index=True,
     )
-=======
+
+
 def test_df_reset_index():
     """Test for DataFrame reset_index API."""
 
