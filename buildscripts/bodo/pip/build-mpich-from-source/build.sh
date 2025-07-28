@@ -16,14 +16,17 @@ echo "BUILD_DIR: $BUILD_DIR"
 echo "MPICH_INSTALL_DIR: $MPICH_INSTALL_DIR"
 
 cd "$BUILD_DIR"
+
+echo "Applying patch to mpiexec"
+git apply ../buildscripts/bodo/pip/build-mpich-from-source/patch-singleton-init.patch
+
 ./configure \
     --prefix="${MPICH_INSTALL_DIR}" \
     --disable-fortran \
     --disable-cxx \
     --disable-doc \
     --disable-dependency-tracking \
-    --disable-static \
-    --disable-hwloc
+    --disable-static
 
 make
 
