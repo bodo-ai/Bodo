@@ -111,22 +111,27 @@ jobs:
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py/_vendored_mpi4py || true
             rm -rf {package}/build
-            rm -f {package}/mpich.whl
+            # Install mpich from source
+            MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
+            MPICH_INSTALL_DIR=/tmp/mpich-install
+            chmod +x buildscripts/bodo/pip/build-mpich-from-source/build.sh
+            ./buildscripts/bodo/pip/build-mpich-from-source/build.sh
           CIBW_BEFORE_BUILD_LINUX: |
             # Delete mpi4py folder if it exists so correct version gets copied in
             rm -r {package}/bodo/mpi4py/_vendored_mpi4py || true
             rm -rf {package}/build
             rm -f {package}/mpich.whl
-            # Install mpich for mpi.h needed by mpi4py
+            # Install mpich for wheel
             MPICH_VERSION=$(/opt/python/cp312-cp312/bin/python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["scikit-build"]["cmake"]["define"]["MPICH_VERSION"])')
-            pip install mpich=="$MPICH_VERSION" --default-timeout=100
+            MPICH_INSTALL_DIR=/tmp/mpich-install
+            chmod +x ./buildscripts/bodo/pip/build-mpich-from-source/
+            ./buildscripts/bodo/pip/build-mpich-from-source/build.sh
           CIBW_ENVIRONMENT_WINDOWS: >
             DISABLE_CCACHE=1
             SCCACHE_BUCKET=engine-codebuild-cache
             SCCACHE_REGION=us-east-2
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-            BODO_VENDOR_MPI4PY=1
             BODO_WINDOWS_BUILD_TYPE="Release"
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_MACOS: >
@@ -136,10 +141,9 @@ jobs:
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
             MACOSX_DEPLOYMENT_TARGET=${{ inputs.name == 'macos-arm' && '12.0' || '11.0' }}
-            BODO_VENDOR_MPICH=1
-            BODO_VENDOR_MPI4PY=1
+            MPICH_INSTALL_DIR=/tmp/mpich-install
             PATH=$HOME/.pixi/bin:$PATH
-            CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos-win
+            CONDA_PREFIX=$(pwd)/.pixi/envs/pip-cpp-macos
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
           CIBW_ENVIRONMENT_LINUX: >
             PATH=$HOME/.pixi/bin/:$PATH
@@ -149,8 +153,7 @@ jobs:
             SCCACHE_REGION=us-east-2
             SCCACHE_S3_USE_SSL=true
             SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-            BODO_VENDOR_MPICH=1
-            BODO_VENDOR_MPI4PY=1
+            MPICH_INSTALL_DIR=/tmp/mpich-install
             CONDA_PREFIX=""
             SETUPTOOLS_SCM_PRETEND_VERSION=${{ inputs.bodo_version }}
             NO_HDF5=1
@@ -163,8 +166,7 @@ jobs:
             sccache --show-stats &&
             delvewheel repair --exclude impi.dll --exclude msmpi.dll
             --exclude arrow.dll --exclude arrow_acero.dll --exclude arrow_dataset.dll --exclude arrow_python.dll
-            --exclude parquet.dll -v -w {dest_dir} {wheel} && 
-            python buildscripts/bodo/pip/windows/patch_bodo_for_pip.py -p {dest_dir}
+            --exclude parquet.dll -v -w {dest_dir} {wheel} 
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
             sccache --show-stats &&
             delocate-wheel --ignore-missing-dependencies --sanitize-rpaths
