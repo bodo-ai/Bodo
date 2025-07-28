@@ -22,7 +22,8 @@ cd "$BUILD_DIR"
     --disable-cxx \
     --disable-doc \
     --disable-dependency-tracking \
-    --disable-static
+    --disable-static \
+    --disable-hwloc
 
 make
 
