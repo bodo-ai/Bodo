@@ -39,7 +39,7 @@ requirements:
     - make
     - ninja
     - numba >=0.60
-    - mpi4py >=4.0
+    - mpi4py >=4.0,<4.1
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24
