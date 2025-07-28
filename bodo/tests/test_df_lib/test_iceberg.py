@@ -681,9 +681,23 @@ def test_rename():
     table = catalog.load_table("sf1000.nation")
 
     pdf = table.scan().to_pandas()
-    # pdf = pdf.rename(columns={'N_NATIONKEY': 'NATIONKEY', 'N_NAME': 'NAME', 'N_REGIONKEY': 'N_REGIONKEY', 'N_COMMENT': 'COMMENT'})
+    pdf = pdf.rename(
+        columns={
+            "N_NATIONKEY": "NATIONKEY",
+            "N_NAME": "NAME",
+            "N_REGIONKEY": "N_REGIONKEY",
+            "N_COMMENT": "COMMENT",
+        }
+    )
     bdf = bpd.read_iceberg_table(table)
-    # bdf = bdf.rename(columns={'N_NATIONKEY': 'NATIONKEY', 'N_NAME': 'NAME', 'N_REGIONKEY': 'N_REGIONKEY', 'N_COMMENT': 'COMMENT'})
+    bdf = bdf.rename(
+        columns={
+            "N_NATIONKEY": "NATIONKEY",
+            "N_NAME": "NAME",
+            "N_REGIONKEY": "N_REGIONKEY",
+            "N_COMMENT": "COMMENT",
+        }
+    )
 
     _test_equal(
         bdf,

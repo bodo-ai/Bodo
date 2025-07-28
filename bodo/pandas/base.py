@@ -252,13 +252,17 @@ def read_iceberg(
         col_idxs = {
             arrow_schema.get_field_index(field_name) for field_name in selected_fields
         }
-        exprs = make_col_ref_exprs(col_idxs, plan)
         empty_df = empty_df[list(selected_fields)]
-        plan = LogicalProjection(
-            empty_df,
-            plan,
-            exprs,
-        )
+    else:
+        # Adds logical projection layer to enable rename.
+        col_idxs = range(len(empty_df.columns))
+
+    exprs = make_col_ref_exprs(col_idxs, plan)
+    plan = LogicalProjection(
+        empty_df,
+        plan,
+        exprs,
+    )
 
     if limit is not None:
         plan = LogicalLimit(
