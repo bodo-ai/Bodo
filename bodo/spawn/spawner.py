@@ -3,7 +3,6 @@ from __future__ import annotations
 """Spawner-worker compilation implementation"""
 
 import atexit
-import contextlib
 import inspect
 import itertools
 import linecache
