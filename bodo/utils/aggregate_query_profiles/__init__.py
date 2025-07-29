@@ -113,8 +113,9 @@ def aggregate_operator_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
         stage_ids = assert_keys_consistent([report[op] for report in reports])
         op_name = op
         if stage_ids[0] == "name":
+            # Add operator name e.g. "PhysicalProjection 2"
             op_name = reports[0][op][stage_ids.pop(0)] + f" {op}"
-            op_name = re.sub("^\d*", "", op_name)
+            op_name = re.sub(r"^\d*", "", op_name)
 
         for stage in stage_ids:
             agg_stage = {}
