@@ -63,6 +63,23 @@ env_var_prefix = (
 )
 
 
+@contextlib.contextmanager
+def no_stdin():
+    """Temporarily close stdin and execute a block of code"""
+    # Save a refence to the original stdin
+    stdin_dup = os.dup(0)
+    # Close stdin
+    os.close(0)
+    # open /dev/null as fd 0
+    nullfd = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(nullfd, 0)
+    try:
+        yield
+    finally:
+        # Restore the saved fd
+        os.dup2(stdin_dup, 0)
+
+
 def get_num_workers():
     """Returns the number of workers to spawn.
 
@@ -71,12 +88,13 @@ def get_num_workers():
     Else, fallback to spawning as
     many workers as there are physical cores on this machine."""
     n_pes = 2
-    if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
-        n_pes = int(n_pes_env)
-    elif universe_size := MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE):
-        n_pes = universe_size
-    elif cpu_count := psutil.cpu_count(logical=False):
-        n_pes = cpu_count
+    with no_stdin():
+        if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
+            n_pes = int(n_pes_env)
+        elif universe_size := MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE):
+            n_pes = universe_size
+        elif cpu_count := psutil.cpu_count(logical=False):
+            n_pes = cpu_count
     return n_pes
 
 
@@ -115,22 +133,31 @@ class Spawner:
         errcodes = [0] * n_pes
         t0 = time.monotonic()
 
-        command, args = self._get_spawn_command_args()
+        # MPI_Spawn (using MPICH) will spawn a Hydra process for each rank which
+        # then spawns the command provided below. Hydra handles STDIN by calling
+        # poll on fd 0, and then forwarding input to the first local process.
+        # However, if the spawner was NOT run with mpiexec, then Hydra will fail to
+        # forward STDIN for the worker and kill the spawner. The worker does not
+        # need STDIN, so we instead close STDIN before spawning the Hydra process,
+        # and then restore STDIN afterwards. This is necessary for environments where
+        # interactivity is needed, e.g. ipython/python REPL.
+        with no_stdin():
+            command, args = self._get_spawn_command_args()
 
-        # run python with -u to prevent STDOUT from buffering
-        self.worker_intercomm = self.comm_world.Spawn(
-            # get the same python executable that is currently running
-            command,
-            args,
-            n_pes,
-            MPI.INFO_NULL,
-            0,
-            errcodes,
-        )
+            # run python with -u to prevent STDOUT from buffering
+            self.worker_intercomm = self.comm_world.Spawn(
+                # get the same python executable that is currently running
+                command,
+                args,
+                n_pes,
+                MPI.INFO_NULL,
+                0,
+                errcodes,
+            )
 
-        # Send PID of spawner to worker
-        self.worker_intercomm.bcast(os.getpid(), self.bcast_root)
-        self.worker_intercomm.send(socket.gethostname(), dest=0)
+            # Send PID of spawner to worker
+            self.worker_intercomm.bcast(os.getpid(), self.bcast_root)
+            self.worker_intercomm.send(socket.gethostname(), dest=0)
         debug_msg(
             self.logger, f"Spawned {n_pes} workers in {(time.monotonic() - t0):0.4f}s"
         )
