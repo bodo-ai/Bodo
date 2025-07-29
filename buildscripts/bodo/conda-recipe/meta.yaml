@@ -54,7 +54,7 @@ requirements:
     # Necessary to prevent hangs on Macos
     # Some version/build numbers have a bug
     # that prevents programs from calling spawn.
-    - mpich >=4,!=4.3.1*_100,!=4.3.1*_101  # [not win]
+    - mpich >=4.1,!=4.3.1*_100,!=4.3.1*_101  # [not win]
     - impi-devel # [win64]
     # Corresponding dependency is automatically added in reqs/run.
     - aws-sdk-cpp
@@ -67,7 +67,7 @@ requirements:
     - fsspec >=2021.09
     - pyarrow =19.0
     - numba >=0.60
-    - mpich >=4,!=4.3.1*_100,!=4.3.1*_101  # [not win]
+    - mpich >=4.1,!=4.3.1*_100,!=4.3.1*_101  # [not win]
     - requests
     - zstd
     - cloudpickle >=3.0
