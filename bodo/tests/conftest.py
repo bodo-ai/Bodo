@@ -211,6 +211,9 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodo_30of30,
     ]
 
+    # DataFrame library NP=2
+    azure_df_2p_markers = [pytest.mark.bodo_df_1of2, pytest.mark.bodo_df_2of2]
+
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
@@ -226,19 +229,25 @@ def pytest_collection_modifyitems(items):
     # hash below, and then the limit can be updated to 2**(8 * num_bytes).
     assert len(azure_1p_markers) < 128, "Need more bytes from hash to distribute tests"
     assert len(azure_2p_markers) < 128, "Need more bytes from hash to distribute tests"
+    assert len(azure_df_2p_markers) < 128, (
+        "Need more bytes from hash to distribute tests"
+    )
     for item in items:
         hash_ = get_last_byte_of_test_hash(item)
         # Divide the tests evenly so long tests don't end up in 1 group
         azure_1p_marker = azure_1p_markers[hash_ % len(azure_1p_markers)]
         azure_2p_marker = azure_2p_markers[hash_ % len(azure_2p_markers)]
+        azure_df_2p_marker = azure_df_2p_markers[hash_ % len(azure_df_2p_markers)]
         # All of the test_s3.py tests must be on the same rank because they
         # haven't been refactored to remove cross-test dependencies.
         testfile = item_file_name(item)
         if "test_s3.py" in testfile:
             azure_1p_marker = azure_1p_markers[0]
             azure_2p_marker = azure_2p_markers[0]
+            azure_df_2p_marker = azure_df_2p_markers[0]
         item.add_marker(azure_1p_marker)
         item.add_marker(azure_2p_marker)
+        item.add_marker(azure_df_2p_marker)
 
 
 def group_from_hash(testname, num_groups):
