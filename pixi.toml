@@ -250,7 +250,7 @@ impi-devel = "*"
 # the pixi version has to match the pip wheel for compatibility with mpi4py
 # (since we build mpi4py against this version).
 [feature.local-mpi-mac-pip.target.osx.dependencies]
-mpich = { version = "4.1.*", build = "h*102" }
+mpich = { version = "4.1.*" }
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
