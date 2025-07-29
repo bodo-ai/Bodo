@@ -11,6 +11,7 @@
 #include "physical/join.h"
 #include "physical/limit.h"
 #include "physical/project.h"
+#include "physical/quantile.h"
 #include "physical/reduce.h"
 #include "physical/sample.h"
 #include "physical/sort.h"
@@ -123,6 +124,36 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             // The same operator will exist in both pipelines.  The sink of the
             // previous pipeline and the source of the next one.
             // We record the pipeline dependency between these two pipelines.
+            this->active_pipeline =
+                std::make_shared<PipelineBuilder>(physical_op);
+            return;
+        }
+        if (function_names[0].starts_with("quantile")) {
+            auto& agg_expr =
+                op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
+            BodoAggFunctionData& bind_info =
+                agg_expr.bind_info->Cast<BodoAggFunctionData>();
+            auto bodo_schema = std::make_shared<bodo::Schema>();
+            auto col_schema = bind_info.out_schema;
+            auto bodo_col_schema = bodo::Schema::FromArrowSchema(col_schema);
+            for (size_t i = 0; i < bodo_col_schema->column_types.size(); i++) {
+                bodo_schema->append_column(
+                    bodo_col_schema->column_types[i]->copy());
+                bodo_schema->column_names.push_back(std::to_string(i));
+            }
+            bodo_schema->metadata = std::make_shared<TableMetadata>(
+                std::vector<std::string>({}), std::vector<std::string>({}));
+
+            // TODO: do preprocessing and validations as necessary.
+            // TODO: decide if out_schema is necessary in this case.
+            std::vector<float> quantiles{};
+            for (auto it : function_names) {
+                quantiles.push_back(std::stod(it.substr(9)));
+            }
+            auto physical_op =
+                std::make_shared<PhysicalQuantile>(bodo_schema, quantiles);
+            finished_pipelines.emplace_back(
+                this->active_pipeline->Build(physical_op));
             this->active_pipeline =
                 std::make_shared<PipelineBuilder>(physical_op);
             return;
