@@ -51,10 +51,12 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
+                                                       1),
             std::move(metrics_out));
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
+                                                       1),
             this->metrics.output_row_count);
     }
 

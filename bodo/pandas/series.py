@@ -8,6 +8,7 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
 
+import numba
 import numpy
 import pandas as pd
 import pyarrow as pa
@@ -19,7 +20,17 @@ from pandas._typing import (
 )
 
 import bodo
+import bodo.decorators
 from bodo.ext import plan_optimizer
+from bodo.hiframes.pd_index_ext import init_range_index
+from bodo.hiframes.pd_series_ext import init_series
+from bodo.libs.array import (
+    arr_info_list_to_table,
+    array_from_cpp_table,
+    array_to_info,
+    delete_table,
+    table_type,
+)
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
@@ -69,7 +80,47 @@ from bodo.pandas.utils import (
     get_scalar_udf_result_type,
     wrap_plan,
 )
+from bodo.utils.conversion import coerce_to_array
 from bodo.utils.typing import BodoError
+
+
+@numba.njit
+def series_to_cpp_table(series_type):
+    out_arr = coerce_to_array(series_type, use_nullable_array=True)
+    out_info = array_to_info(out_arr)
+    out_cpp_table = arr_info_list_to_table([out_info])
+    return out_cpp_table
+
+
+@numba.njit
+def cpp_table_to_series(in_cpp_table, series_arr_type):
+    series_data = array_from_cpp_table(in_cpp_table, 0, series_arr_type)
+    # TODO: Add option to also convert index
+    index = init_range_index(0, len(series_data), 1, None)
+    out_series = init_series(series_data, index)
+    delete_table(in_cpp_table)
+    return out_series
+
+
+def get_map_jit_wrappers(empty_series, arg, na_action):
+    """Returns a jitted map wrapper, cfunc wrapper, and decorator for cfunc"""
+    arr_type = bodo.typeof(empty_series).data
+
+    @bodo.jit(cache=True, spawn=False, distributed=False)
+    def map_wrapper_inner(series):
+        return series.map(arg, na_action=na_action)
+
+    def map_wrapper(in_cpp_table):
+        series = cpp_table_to_series(in_cpp_table, arr_type)
+        out_series = map_wrapper_inner(series)
+        out_cpp_table = series_to_cpp_table(out_series)
+        return out_cpp_table
+
+    return (
+        map_wrapper_inner,
+        map_wrapper,
+        bodo.decorators._cfunc(table_type(table_type), cache=True),
+    )
 
 
 class BodoSeries(pd.Series, BodoLazyWrapper):
@@ -642,13 +693,15 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if engine == "bodo":
+            empty_series = self.head(0)
 
-            @bodo.jit(cache=True, spawn=False, distributed=False)
-            def map_wrapper(S):
-                return S.map(arg, na_action=na_action)
+            map_jit_wrapper, map_cfunc_wrapper, cfunc_deco = get_map_jit_wrappers(
+                empty_series, arg, na_action
+            )
 
             try:
-                empty_series = _get_empty_series_arrow(map_wrapper(self.head(0)))
+                # Compile map inner wrapper, get the output type
+                empty_series = _get_empty_series_arrow(map_jit_wrapper(empty_series))
             except BodoError as e:
                 empty_series = None
                 error_msg = str(e)
@@ -663,8 +716,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 error_msg = "Jit could not determine pyarrow return type from UDF."
 
             if empty_series is not None:
+                # Compile the cfunc and get pointer
                 return _get_series_python_func_plan(
-                    self._plan, empty_series, map_wrapper, (), {}, is_method=False
+                    self._plan,
+                    empty_series,
+                    map_cfunc_wrapper,
+                    (),
+                    {},
+                    cfunc_decorator=cfunc_deco,
                 )
             else:
                 msg = (
@@ -1697,10 +1756,7 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return PythonScalarFuncExpression(
-            empty_data,
-            plan,
-            expr.args[1],
-            (idx,) + tuple(index_cols),
+            empty_data, plan, expr.args[1], (idx,) + tuple(index_cols), expr.is_cfunc
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -1815,15 +1871,17 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
             {},  # kwargs
         ),
         (0,) + index_cols,
+        False,  # is_cfunc
     )
 
 
 def _get_series_python_func_plan(
-    series_proj, empty_data, func_name, args, kwargs, is_method=True
+    series_proj, empty_data, func, args, kwargs, is_method=True, cfunc_decorator=None
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
+
     # Optimize out trivial df["col"] projections to simplify plans
     if is_single_colref_projection(series_proj):
         source_data = series_proj.args[0]
@@ -1837,17 +1895,22 @@ def _get_series_python_func_plan(
     index_cols = range(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
-    expr = PythonScalarFuncExpression(
-        empty_data,
-        source_data,
-        (
-            func_name,
+
+    if cfunc_decorator:
+        func_args = (func, cfunc_decorator)
+        is_cfunc = True
+    else:
+        func_args = (
+            func,
             True,  # is_series
             is_method,  # is_method
             args,  # args
             kwargs,  # kwargs
-        ),
-        (col_index,) + tuple(index_cols),
+        )
+        is_cfunc = False
+
+    expr = PythonScalarFuncExpression(
+        empty_data, source_data, func_args, (col_index,) + tuple(index_cols), is_cfunc
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))

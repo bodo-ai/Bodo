@@ -389,6 +389,22 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
             py_to_cpp_time_val};
 }
 
+std::shared_ptr<table_info> runCfuncScalarFunction(
+    std::shared_ptr<table_info> input_batch, table_udf_t cfunc_ptr) {
+    table_info *in_table = new table_info(*input_batch);
+    table_info *out_table = cfunc_ptr(in_table);
+
+    if (!out_table) {
+        throw std::runtime_error("Error executing cfunc.");
+    }
+
+    std::shared_ptr<table_info> out_batch(out_table);
+    out_batch->column_names = input_batch->column_names;
+    out_batch->metadata = input_batch->metadata;
+
+    return out_batch;
+}
+
 std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
     const duckdb::Value &value) {
     arrow::Result<std::shared_ptr<arrow::Scalar>> scalar_res = std::visit(

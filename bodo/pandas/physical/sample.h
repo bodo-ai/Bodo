@@ -32,10 +32,10 @@ class PhysicalSample : public PhysicalSourceSink {
         metrics_out.emplace_back(
             TimerMetric("sample_time", this->metrics.sample_time));
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.output_row_count);
     }
 

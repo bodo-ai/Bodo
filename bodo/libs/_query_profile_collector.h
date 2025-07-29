@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -211,6 +212,7 @@ class QueryProfileCollector {
                                       uint64_t output_row_count);
     void SubmitOperatorStageTime(operator_stage_t op_stage, int64_t time);
     int64_t GetOperatorDuration(operator_id_t operator_id);
+    void SubmitOperatorName(operator_id_t operator_id, const std::string& name);
 
     /**
      * @brief This is only required by C++ at this point since
@@ -225,7 +227,9 @@ class QueryProfileCollector {
     void Finalize(int64_t verbose_level = 0);
 
     // Getters for testing
-    std::unordered_map<pipeline_id_t, std::pair<uint64_t, uint64_t>>&
+    // Using an ordered map so that pipeline stages info gets dumped
+    // into the output files in the normal sequential order.
+    std::map<pipeline_id_t, std::pair<uint64_t, uint64_t>>&
     GetPipelineStartEndTimestamps() {
         return pipeline_start_end_timestamps;
     }
@@ -248,7 +252,9 @@ class QueryProfileCollector {
     int tracing_level = 1;
 
     // Map the pipeline ID to its start and end timestamps
-    std::unordered_map<pipeline_id_t, std::pair<uint64_t, uint64_t>>
+    // Using an ordered map so that pipeline stages info gets dumped
+    // into the output files in the normal sequential order.
+    std::map<pipeline_id_t, std::pair<uint64_t, uint64_t>>
         pipeline_start_end_timestamps;
 
     // Map the pipeline ID to the number of iterations
@@ -256,6 +262,9 @@ class QueryProfileCollector {
 
     // Map the operator stage ID to its start and end timestamps
     std::unordered_map<operator_stage_t, int64_t> operator_stage_times;
+
+    // Map the operator ID to its name
+    std::unordered_map<operator_id_t, std::string> operator_names;
 
     // Output Row Counts
     std::unordered_map<operator_stage_t, uint64_t>
@@ -266,7 +275,10 @@ class QueryProfileCollector {
         operator_stage_metrics;
 
     // Get a map from all seen operators ids to the largest observed stage
-    std::unordered_map<operator_id_t, stage_id_t> CollectSeenOperators();
+    // Using an ordered map so that operators, which are allocated with
+    // monotonically increasing ids, are dumped into the output files in
+    // the order the operators are executed.
+    std::map<operator_id_t, stage_id_t> CollectSeenOperators();
 
     // Generate report JSON for all pipelines
     boost::json::object PipelinesToJson();
