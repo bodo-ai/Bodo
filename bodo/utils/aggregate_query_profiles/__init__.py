@@ -3,6 +3,7 @@ profile"""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import numpy as np
@@ -110,6 +111,11 @@ def aggregate_operator_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
     for op in op_ids:
         agg_op = {}
         stage_ids = assert_keys_consistent([report[op] for report in reports])
+        op_name = op
+        if stage_ids[0] == "name":
+            op_name = reports[0][op][stage_ids.pop(0)] + f" {op}"
+            op_name = re.sub("^\d*", "", op_name)
+
         for stage in stage_ids:
             agg_stage = {}
             keys = set(
@@ -183,7 +189,8 @@ def aggregate_operator_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
 
                 agg_stage["metrics"] = metrics_res
             agg_op[stage] = agg_stage
-        res[op] = agg_op
+        res[op_name] = agg_op
+
     return res
 
 
