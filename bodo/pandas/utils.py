@@ -584,7 +584,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
     if out.name is None:
         out.name = "OUT"
 
-    py_to_cpp_start = time.perf_counter()
+    py_to_cpp_start = time.perf_counter_ns()
     if is_series:
         out_ptr = plan_optimizer.arrow_array_to_cpp_table(
             out.array._pa_array.combine_chunks(), str(out.name), cpp_table
