@@ -2,10 +2,20 @@
 
 #include <memory>
 #include <utility>
+#include "../../libs/_query_profile_collector.h"
 #include "../libs/_array_utils.h"
 #include "expression.h"
 #include "operator.h"
 
+struct PhysicalFilterMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+
+    stat_t output_row_count = 0;
+    stat_t input_row_count = 0;
+    time_t expr_eval_time = 0;
+    time_t filtering_time = 0;
+};
 /**
  * @brief Physical node for filter.
  *
@@ -45,7 +55,16 @@ class PhysicalFilter : public PhysicalSourceSink {
 
     virtual ~PhysicalFilter() = default;
 
-    void Finalize() override {}
+    void Finalize() override {
+        std::vector<MetricBase> metrics_out;
+        this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            std::move(metrics_out));
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            this->metrics.output_row_count);
+    }
 
     /**
      * @brief The logic for filtering input batches.
@@ -56,6 +75,8 @@ class PhysicalFilter : public PhysicalSourceSink {
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) override {
+        this->metrics.input_row_count += input_batch->nrows();
+        time_pt start_expr_eval = start_timer();
         // Evaluate the Physical expression tree with the given input batch.
         std::shared_ptr<ExprResult> expr_output =
             expression->ProcessBatch(input_batch);
@@ -73,7 +94,9 @@ class PhysicalFilter : public PhysicalSourceSink {
                 "Filter expression tree did not result in a boolean array " +
                 std::to_string(static_cast<int>(bitmask->dtype)));
         }
+        this->metrics.expr_eval_time += end_timer(start_expr_eval);
 
+        time_pt start_filtering = start_timer();
         // Apply the bitmask to the input_batch to do row filtering.
         std::shared_ptr<table_info> filtered_table =
             RetrieveTable(input_batch, bitmask);
@@ -85,6 +108,9 @@ class PhysicalFilter : public PhysicalSourceSink {
         std::shared_ptr<table_info> out_table = std::make_shared<table_info>(
             out_cols, filtered_table->nrows(), output_schema->column_names,
             output_schema->metadata);
+        this->metrics.filtering_time += end_timer(start_filtering);
+
+        this->metrics.output_row_count += out_table->nrows();
 
         // Just propagate the FINISHED flag to other operators (like join) or
         // accept more input
@@ -107,4 +133,16 @@ class PhysicalFilter : public PhysicalSourceSink {
     std::shared_ptr<PhysicalExpression> expression;
     std::shared_ptr<bodo::Schema> output_schema;
     std::vector<uint64_t> kept_cols;
+    PhysicalFilterMetrics metrics;
+    void ReportMetrics(std::vector<MetricBase>& metrics_out) {
+        metrics_out.reserve(3);
+        metrics_out.emplace_back(
+            TimerMetric("expr_eval_time", this->metrics.expr_eval_time));
+        metrics_out.emplace_back(
+            TimerMetric("filtering_time", this->metrics.filtering_time));
+        MetricBase::BlobValue selectivity_value(
+            std::to_string(static_cast<double>(this->metrics.output_row_count) /
+                           static_cast<double>(this->metrics.input_row_count)));
+        metrics_out.emplace_back(BlobMetric("selectivity", selectivity_value));
+    }
 };

@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <utility>
 #include "../libs/_bodo_to_arrow.h"
+#include "../libs/_query_profile_collector.h"
 #include "operator.h"
 
 #undef CHECK_ARROW
@@ -20,6 +21,15 @@
 enum class ReductionType {
     COMPARISON,
     AGGREGATION,
+};
+
+struct PhysicalReduceMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    stat_t output_row_count = 0;
+
+    time_t consume_time = 0;
+    time_t produce_time = 0;
 };
 
 /**
@@ -37,10 +47,20 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalReduce() = default;
 
-    void Finalize() override {}
+    void Finalize() override {
+        std::vector<MetricBase> metrics_out;
+        this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            std::move(metrics_out));
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(-1, 1),
+            this->metrics.output_row_count);
+    }
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        time_pt start_consume_time = start_timer();
         // Convert to Arrow array
         arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
         std::shared_ptr<arrow::Array> in_arrow_array = bodo_array_to_arrow(
@@ -93,6 +113,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         }
 
         iter++;
+        this->metrics.consume_time += end_timer(start_consume_time);
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
@@ -108,6 +129,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
+        time_pt start_produce_time = start_timer();
         // Create a vector of Arrow arrays from output_scalars
         std::vector<std::shared_ptr<arrow::Array>> arrow_arrays;
         for (const auto& output_scalar : output_scalars) {
@@ -124,6 +146,8 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         }
         std::shared_ptr<table_info> next_batch =
             std::make_shared<table_info>(bodo_arrays);
+        this->metrics.output_row_count += next_batch->nrows();
+        this->metrics.produce_time += end_timer(start_produce_time);
 
         return {next_batch, OperatorResult::FINISHED};
     }
@@ -195,4 +219,11 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
 
     int64_t iter = 0;
     std::vector<std::shared_ptr<arrow::Scalar>> output_scalars;
+    PhysicalReduceMetrics metrics;
+    void ReportMetrics(std::vector<MetricBase>& metrics_out) {
+        metrics_out.emplace_back(
+            TimerMetric("consume_time", this->metrics.consume_time));
+        metrics_out.emplace_back(
+            TimerMetric("produce_time", this->metrics.produce_time));
+    }
 };

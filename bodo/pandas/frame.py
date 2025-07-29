@@ -57,14 +57,18 @@ from bodo.pandas.plan import (
     execute_plan,
     get_proj_expr_single,
     is_colref_projection,
+    is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
+    maybe_make_list,
+    reset_index,
 )
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     check_args_fallback,
+    fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
@@ -202,6 +206,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             "attrs",
             "flags",
             "columns",
+            "ndim",
+            "axes",
+            "iloc",
+            "empty",
         ]
 
         cls = object.__getattribute__(self, "__class__")
@@ -218,7 +226,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return object.__getattribute__(self, name)
+            return fallback_wrapper(self, object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
@@ -996,6 +1004,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         # Filter operation
         if isinstance(key, BodoSeries) and key._plan.pa_schema.types[0] == pa.bool_():
+            # Pattern match df1[df1.A.isin(df2.B)] case which is a semi-join
+            if (out_plan := get_isin_filter_plan(self._plan, key._plan)) is not None:
+                return wrap_plan(out_plan)
+
             key_expr = get_proj_expr_single(key._plan)
             key_expr = key_expr.replace_source(self._plan)
             if key_expr is None:
@@ -1317,6 +1329,25 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         finally:
             self._mgr._disable_collect = original_flag
 
+    @check_args_fallback(supported=["drop", "names", "level"])
+    def reset_index(
+        self,
+        level=None,
+        *,
+        drop=False,
+        inplace=False,
+        col_level=0,
+        col_fill="",
+        allow_duplicates=lib.no_default,
+        names=None,
+    ):
+        """
+        Reset the index, or a level of it.
+        Reset the index of the DataFrame, and use the default one instead.
+        If the DataFrame has a MultiIndex, this method can remove one or more levels.
+        """
+        return reset_index(self, drop, level, names=names)
+
 
 def _add_proj_expr_to_plan(
     df_plan: LazyPlan,
@@ -1476,6 +1507,48 @@ def _get_set_column_plan(
     return _add_proj_expr_to_plan(df_plan, value_plan, key)
 
 
+def get_isin_filter_plan(source_plan: LazyPlan, key_plan: LazyPlan) -> LazyPlan | None:
+    """
+    Pattern match df1[df1.A.isin(df2.B)] case and return a semi-join plan to implement
+    it. Returns None if the plan pattern does not match.
+    """
+    # Match df1.A.isin(df2.B) case which is a mark join generated in our Series.isin()
+    if not (
+        is_single_colref_projection(key_plan)
+        and isinstance(key_plan.source, LogicalComparisonJoin)
+        and key_plan.source.join_type == plan_optimizer.CJoinType.MARK
+        and is_single_colref_projection(key_plan.source.left_plan)
+        and key_plan.source.left_plan.source == source_plan
+    ):
+        return None
+
+    left_key_ind = key_plan.source.left_plan.exprs[0].col_index
+    planComparisonJoin = LogicalComparisonJoin(
+        source_plan.empty_data,
+        source_plan,
+        key_plan.source.right_plan,
+        plan_optimizer.CJoinType.INNER,
+        [(left_key_ind, 0)],
+    )
+
+    # Ignore right column in output
+    exprs = make_col_ref_exprs(
+        list(
+            range(
+                len(source_plan.empty_data.columns)
+                + get_n_index_arrays(source_plan.empty_data.index)
+            )
+        ),
+        planComparisonJoin,
+    )
+    proj_plan = LogicalProjection(
+        source_plan.empty_data,
+        planComparisonJoin,
+        exprs,
+    )
+    return proj_plan
+
+
 def validate_on(val):
     """Validates single on-value"""
     if val is not None:
@@ -1496,15 +1569,6 @@ def validate_keys(keys, df):
             f"merge(): invalid key {key_diff} for on/left_on/right_on\n"
             f"merge supports only valid column names {df.columns}"
         )
-
-
-def maybe_make_list(obj):
-    """If string input, turn into singleton list"""
-    if obj is None:
-        return []
-    elif not isinstance(obj, (tuple, list)):
-        return [obj]
-    return obj
 
 
 def validate_merge_spec(left, right, on, left_on, right_on, is_cross):
