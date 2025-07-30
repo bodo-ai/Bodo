@@ -2836,3 +2836,33 @@ def test_dataframe_reset_index_pipeline():
         check_pandas_types=False,
         reset_index=False,
     )
+
+
+# TODO: test scalar quantiles like s.quantile(0.8)
+@pytest.mark.parametrize("quantiles", [[0.25, 0.5, 0.75, 0.9]])
+def test_kll_quantile_accuracy(quantiles):
+    """Tests that approximate quantiles using KLL fall within expected error bounds."""
+
+    def kll_error_bounds(q, k=200, pmf=False):
+        eps = 1.0 / np.sqrt(k) * (1.7 if pmf else 1.33)
+        return max(0.0, q - eps), min(1.0, q + eps)
+
+    # TODO: create a fixture with various dtypes and values including empty Series.
+    s = pd.Series([1, 2, 2, 2, 2, 3, 4, 4, 10, 3, 3, 3, 3, 3])
+    approx_quantiles = s.quantile(quantiles)
+
+    sorted_values = np.sort(s.values)
+    n = len(sorted_values)
+
+    for q, approx in zip(quantiles, approx_quantiles):
+        lo, hi = kll_error_bounds(q, k=200, pmf=False)
+
+        lo_idx = int(np.floor(lo * (n - 1)))
+        hi_idx = int(np.ceil(hi * (n - 1)))
+
+        true_low = sorted_values[lo_idx]
+        true_high = sorted_values[hi_idx]
+
+        assert true_low <= approx <= true_high, (
+            f"Quantile {q} estimate {approx} not within [{true_low}, {true_high}]"
+        )

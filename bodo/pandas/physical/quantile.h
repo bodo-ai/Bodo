@@ -12,7 +12,7 @@
 #include "operator.h"
 #include "physical/expression.h"
 
-using KLLDoubleSketch = datasketches::kll_sketch<double>;
+using KLLFloatSketch = datasketches::kll_sketch<float>;
 
 #undef CHECK_ARROW
 #define CHECK_ARROW(expr, msg)                                             \
@@ -29,7 +29,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
         uint16_t k = datasketches::kll_constants::DEFAULT_K)
         : out_schema(out_schema),
           quantiles(quantiles),
-          sketch(std::make_shared<KLLDoubleSketch>(k)) {}
+          sketch(std::make_shared<KLLFloatSketch>(k)) {}
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
@@ -47,15 +47,26 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                         "Error getting scalar from Arrow array");
             auto scalar = elem_result.ValueOrDie();
             if (scalar->is_valid) {
-                // Downcast to DoubleScalar and extract value
-                auto double_scalar =
-                    std::dynamic_pointer_cast<arrow::DoubleScalar>(scalar);
-                if (!double_scalar) {
-                    throw std::runtime_error(
-                        "Expected DoubleScalar in KLL input");
+                // Cast to FloatScalar and extract value
+                auto float_scalar =
+                    std::dynamic_pointer_cast<arrow::FloatScalar>(scalar);
+                if (!float_scalar) {
+                    auto casted_result = arrow::compute::Cast(
+                        scalar, arrow::float32(),
+                        arrow::compute::CastOptions::Safe(),
+                        bodo::default_buffer_exec_context());
+                    CHECK_ARROW(casted_result.status(),
+                                "Failed to cast scalar to float");
+                    auto casted_scalar = casted_result.ValueOrDie().scalar();
+                    float_scalar =
+                        std::dynamic_pointer_cast<arrow::FloatScalar>(
+                            casted_scalar);
+                    if (!float_scalar) {
+                        throw std::runtime_error(
+                            "Expected FloatScalar after cast");
+                    }
                 }
-                // printf("Updating with %f\n", double_scalar->value);
-                sketch->update(double_scalar->value);
+                sketch->update(float_scalar->value);
             }
         }
 
@@ -101,21 +112,21 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                               displs.data(), MPI_BYTE, 0, MPI_COMM_WORLD),
                   "quantile.h::Finalize(): MPI error on MPI_Gatherv:");
 
+        // TODO: consider possible optimization of merging and querying sketches
+        // across ranks.
         if (rank == 0) {
-            auto merged_sketch = datasketches::kll_sketch<double>();
+            auto merged_sketch = KLLFloatSketch();
             for (int i = 0; i < size; i++) {
                 auto start = all_bytes.data() + displs[i];
-                auto other = datasketches::kll_sketch<double>::deserialize(
-                    start, recv_counts[i]);
+                auto other = KLLFloatSketch::deserialize(start, recv_counts[i]);
                 merged_sketch.merge(std::move(other));
             }
 
-            // Replace local sketch with merged version
             *sketch = std::move(merged_sketch);
 
             std::vector<std::shared_ptr<array_info>> results{};
             for (auto it : quantiles) {
-                double qval = sketch->get_quantile(it);
+                float qval = sketch->get_quantile(it);
                 auto arrow_scalar = arrow::MakeScalar(qval);
                 auto arr = ScalarToArrowArray(arrow_scalar);
                 auto bodo_arr =
@@ -124,6 +135,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             }
             final_result = std::make_shared<table_info>(results);
         } else {
+            // Produce empty result for rank != 0
             final_result = std::make_shared<table_info>(
                 std::vector<std::shared_ptr<array_info>>{});
         }
@@ -143,6 +155,6 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
    private:
     std::shared_ptr<bodo::Schema> out_schema;
     const std::vector<float> quantiles;
-    std::shared_ptr<KLLDoubleSketch> sketch;
+    std::shared_ptr<KLLFloatSketch> sketch;
     std::shared_ptr<table_info> final_result;
 };
