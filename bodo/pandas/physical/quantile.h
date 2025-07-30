@@ -41,7 +41,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             false, /*downcast_time_ns_to_us*/
             bodo::default_buffer_memory_manager());
 
-        for (size_t i = 0; i < in_arrow_array->length(); i++) {
+        for (auto i = 0; i < in_arrow_array->length(); i++) {
             auto elem_result = in_arrow_array->GetScalar(i);
             CHECK_ARROW(elem_result.status(),
                         "Error getting scalar from Arrow array");
