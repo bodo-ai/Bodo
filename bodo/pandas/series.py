@@ -1075,7 +1075,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         for i in range(len(cols)):
             res.append(df[cols[i]][0])
 
-        return BodoSeries(res, index=index, dtype=pd.ArrowDtype(pa.float64()))
+        return BodoSeries(
+            res, index=index, dtype=pd.ArrowDtype(pa.float64()), name=self.name
+        )
 
 
 class BodoStringMethods:
