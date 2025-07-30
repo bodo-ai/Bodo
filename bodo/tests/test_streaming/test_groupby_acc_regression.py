@@ -52,7 +52,7 @@ from bodo.utils.typing import ColNamesMetaType, MetaType
 pytestmark = pytest_perf_regression
 
 # Codegen change: turn verbose mode on
-bodo.set_verbose_level(2)
+# bodo.set_verbose_level(2)
 
 global_2 = MetaType((0, 1, 2, 3, 4))
 global_3 = MetaType((0, 1, 2, 3))
