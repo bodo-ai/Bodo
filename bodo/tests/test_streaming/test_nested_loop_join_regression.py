@@ -73,9 +73,6 @@ from bodo.utils.typing import ColNamesMetaType, MetaType
 # Skip for all CI
 pytestmark = pytest_perf_regression
 
-# Codegen change: turn verbose mode on
-bodo.set_verbose_level(2)
-
 # Codegen change
 # @param: number of rows
 num_rows = 10000
@@ -978,7 +975,7 @@ def test_pure_nested_loop_join(build_outer, probe_outer):
     [(False, False), (False, True), (True, False), (True, True)],
 )
 # pure cross join without condition
-def test_nested_loop_join_unbalanced(build_outer, probe_outer):
+def test_nested_loop_join_unbalanced(build_outer, probe_outer, verbose_mode_on):
     # Reset the global variables as per the parametrized inputs
     global global_build_outer, global_probe_outer
     global_build_outer = build_outer
