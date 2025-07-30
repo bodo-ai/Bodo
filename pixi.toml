@@ -89,8 +89,7 @@ scipy = "*"
 scikit-learn = ">=1.4"
 matplotlib ="*"
 # IO
-# Polaris (installed via pip) requires botocore <1.39
-boto3 = ">=1.35.74,<1.39"
+boto3 = ">=1.35.74"
 botocore = "*"
 # Min bound is necessary. Otherwise s3fs will occasionally install v0.4.2
 # Due to s3fs pinning aiobotocore and not regularly updating
@@ -138,6 +137,8 @@ cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py (pip only)
 mpi4py = ">=4.0,<4.1"
+# Polaris (installed via pip) requires boto3/botocore <1.39
+boto3 = "<1.39"
 
 # Build C++ Deps
 # Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
@@ -257,7 +258,8 @@ channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-# Note: newer external mpich builds are incompatible with Intel MPI.
+# Note: newer MPICH versions (>=4.2.0) implement the MPI 4.1 specification which is currently incompatible
+# with i-mpi on the platform. TODO: Update platform MPI.
 dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
 
 # Feature pip
