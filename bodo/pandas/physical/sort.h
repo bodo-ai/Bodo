@@ -96,12 +96,14 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
         if (limit == -1 && offset == -1) {
             stream_sorter = std::make_unique<StreamSortState>(
-                -1, keys.size(), std::move(ascending), std::move(na_last),
-                build_table_schema_reordered, /*parallel*/ true);
+                PhysicalSink::getOpId(), keys.size(), std::move(ascending),
+                std::move(na_last), build_table_schema_reordered,
+                /*parallel*/ true);
         } else {
             stream_sorter = std::make_unique<StreamSortLimitOffsetState>(
-                -1, keys.size(), std::move(ascending), std::move(na_last),
-                build_table_schema_reordered, /*parallel*/ true, limit, offset);
+                PhysicalSink::getOpId(), keys.size(), std::move(ascending),
+                std::move(na_last), build_table_schema_reordered,
+                /*parallel*/ true, limit, offset);
         }
     }
 
@@ -123,7 +125,11 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalSort() = default;
 
-    void Finalize() override { stream_sorter->FinalizeBuild(); }
+    void Finalize() override {
+        QueryProfileCollector::Default().SubmitOperatorName(
+            PhysicalSink::getOpId(), PhysicalSink::ToString());
+        stream_sorter->FinalizeBuild();
+    }
 
     /**
      * @brief process input tables to sort

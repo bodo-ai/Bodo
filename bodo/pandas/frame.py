@@ -68,6 +68,7 @@ from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     check_args_fallback,
+    fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
@@ -225,7 +226,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return object.__getattribute__(self, name)
+            return fallback_wrapper(self, object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 

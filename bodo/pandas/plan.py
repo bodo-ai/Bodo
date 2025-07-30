@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import traceback
 from contextlib import contextmanager
 
@@ -404,6 +405,11 @@ class PythonScalarFuncExpression(Expression):
         """Return the source of the expression."""
         return self.args[0]
 
+    @property
+    def is_cfunc(self):
+        """Returns whether the scalar function is a cfunc."""
+        return self.args[3]
+
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
         if self.source != new_source_plan:
@@ -426,6 +432,7 @@ class PythonScalarFuncExpression(Expression):
                 new_source_plan,
                 self.args[1],
                 (in_col_ind + col_index_offset,) + index_cols,
+                self.is_cfunc,
             )
             expr.is_series = self.is_series
             return expr
@@ -522,6 +529,10 @@ class ArithOpExpression(BinaryExpression):
     pass
 
 
+total_init_lazy = 0
+total_execute_plan = 0
+
+
 def execute_plan(plan: LazyPlan):
     """Execute a dataframe plan using Bodo's execution engine.
 
@@ -539,7 +550,11 @@ def execute_plan(plan: LazyPlan):
         import bodo
         from bodo.ext import plan_optimizer
 
+        if bodo.libs.distributed_api.get_rank() == 0:
+            start_time = time.perf_counter()
         duckdb_plan = plan.generate_duckdb()
+        if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
+            print("profile_time gen", time.perf_counter() - start_time)
 
         if (
             bodo.dataframe_library_dump_plans
@@ -554,7 +569,11 @@ def execute_plan(plan: LazyPlan):
             with open("pre_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(pre_optimize_graphviz, file=f)
 
+        if bodo.libs.distributed_api.get_rank() == 0:
+            start_time = time.perf_counter()
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
+        if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
+            print("profile_time opt", time.perf_counter() - start_time)
 
         if (
             bodo.dataframe_library_dump_plans
@@ -570,17 +589,28 @@ def execute_plan(plan: LazyPlan):
                 print(post_optimize_graphviz, file=f)
 
         output_func = cpp_table_to_series if plan.is_series else cpp_table_to_df
-        return plan_optimizer.py_execute_plan(
+        if bodo.libs.distributed_api.get_rank() == 0:
+            start_time = time.perf_counter()
+        ret = plan_optimizer.py_execute_plan(
             optimized_plan, output_func, duckdb_plan.out_schema
         )
+        if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
+            print("profile_time execute", time.perf_counter() - start_time)
+        return ret
 
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner
 
+        start_time = time.perf_counter()
         # Initialize LazyPlanDistributedArg objects that may need scattering data
         # to workers before execution.
         for a in plan.args:
             _init_lazy_distributed_arg(a)
+        init_time = time.perf_counter() - start_time
+        global total_init_lazy
+        total_init_lazy += init_time
+        if bodo.dataframe_library_profile:
+            print("profile_time _init_lazy_distributed_arg", init_time)
 
         if bodo.dataframe_library_dump_plans:
             # Sometimes when an execution is triggered it isn't expected that
@@ -593,7 +623,14 @@ def execute_plan(plan: LazyPlan):
             traceback.print_stack(file=sys.stdout)
             print("")  # Print on new line during tests.
 
-        return bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
+        start_time = time.perf_counter()
+        ret = bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan)
+        exec_time = time.perf_counter() - start_time
+        global total_execute_plan
+        total_execute_plan += exec_time
+        if bodo.dataframe_library_profile:
+            print("profile_time total_execute_plan", exec_time)
+        return ret
 
     return _exec_plan(plan)
 
@@ -797,6 +834,7 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
             kwargs,
         ),
         tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
+        False,  # is_cfunc
     )
 
     # Select Index columns explicitly for output

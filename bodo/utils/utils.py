@@ -397,8 +397,18 @@ def cprint(*s):  # pragma: no cover
 @infer_global(cprint)
 class CprintInfer(AbstractTemplate):  # pragma: no cover
     def generic(self, args, kws):
+        from bodo.utils.typing import is_overload_constant_str
+
         assert not kws
-        return signature(types.none, *unliteral_all(args))
+        return signature(
+            types.none,
+            *tuple(
+                a if is_overload_constant_str(a) else types.unliteral(a) for a in args
+            ),
+        )
+
+
+CprintInfer._no_unliteral = True
 
 
 typ_to_format = {
@@ -414,10 +424,15 @@ typ_to_format = {
 
 @lower_builtin(cprint, types.VarArg(types.Any))
 def cprint_lower(context, builder, sig, args):  # pragma: no cover
+    from bodo.utils.typing import get_overload_const_str, is_overload_constant_str
+
     for i, val in enumerate(args):
         typ = sig.args[i]
         if isinstance(typ, types.ArrayCTypes):
             cgutils.printf(builder, "%p ", val)
+            continue
+        if is_overload_constant_str(typ):
+            cgutils.printf(builder, get_overload_const_str(typ))
             continue
         format_str = typ_to_format[typ]
         cgutils.printf(builder, f"%{format_str} ", val)
