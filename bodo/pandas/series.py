@@ -877,7 +877,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 name=self.name,
             )
 
-        # TODO: Support describe() for non-numeric Series
         if not (
             pa.types.is_unsigned_integer(pa_type)
             or pa.types.is_integer(pa_type)
@@ -912,10 +911,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Evaluate std
         squared = self.map(lambda x: x * x, na_action="ignore")
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
-        # TODO: count == 1 case
+
         std_val = (
             ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
-            if count > 1
+            if count != 1
             else pd.NA
         )
 
@@ -1162,7 +1161,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         for i in range(len(cols)):
             res.append(df[cols[i]][0])
 
-        return BodoSeries(res, index=index, dtype=pd.ArrowDtype(pa.float64()))
+        return BodoSeries(
+            res, index=index, dtype=pd.ArrowDtype(pa.float64()), name=self.name
+        )
 
 
 class BodoStringMethods:

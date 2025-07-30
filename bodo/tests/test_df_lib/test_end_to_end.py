@@ -2946,7 +2946,7 @@ def test_dataframe_reset_index_pipeline():
     )
 
 
-@pytest.mark.parametrize("quantiles", [[0.25, 0.5, 0.75, 0.9]])
+@pytest.mark.parametrize("quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1]])
 def test_series_quantile(quantiles):
     """Tests that approximate quantiles using KLL fall within expected error bounds."""
 
@@ -2960,6 +2960,7 @@ def test_series_quantile(quantiles):
             "B": [0.5, 1.5, 2.5] * 30 + [5.5] * 10,
             "C": list(range(100)),
             "D": [100, 200, 300] * 30 + [None] * 10,
+            "E": [1] + [100] * 98 + [1000],
         }
     )
 
@@ -3055,3 +3056,21 @@ def test_series_quantile_empty():
         bodo_quantile = bds.quantile(0.5)
 
     assert np.isnan(pd_quantile) and bodo_quantile is pd.NA
+
+
+def test_series_quantile_tails():
+    """Tests that querying quantiles at tail ends return exact values."""
+
+    df = pd.DataFrame({"A": [1] + [100] * 98 + [1000], "B": [1, 2, 3, 4, 5] * 20})
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(1):
+        out_bd = bdf["A"].quantile([0, 1])
+        out_pd = df["A"].quantile([0, 1])
+
+    _test_equal(
+        out_bd,
+        out_pd,
+        check_pandas_types=False,
+        reset_index=True,
+    )
