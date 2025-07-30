@@ -56,6 +56,7 @@ from bodo.pandas.plan import (
     make_col_ref_exprs,
     match_binop_expr_source_plans,
     maybe_make_list,
+    nonnumeric_describe,
     reset_index,
 )
 from bodo.pandas.utils import (
@@ -823,9 +824,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             or pa.types.is_integer(pa_type)
             or pa.types.is_floating(pa_type)
         ):
-            raise BodoLibNotImplementedException(
-                "Series.describe() is not supported for non-numeric Series yet."
-            )
+            return nonnumeric_describe(self)
 
         reduced_self = _compute_series_reduce(self, ["count", "min", "max", "sum"])
         count, min, max, sum = (reduced_self[i] for i in range(4))
