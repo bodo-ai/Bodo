@@ -1,6 +1,7 @@
 #include "_bodo_write_function.h"
 #include "physical/write_iceberg.h"
 #include "physical/write_parquet.h"
+#include "physical/write_s3_vectors.h"
 
 std::shared_ptr<PhysicalSink> ParquetWriteFunctionData::CreatePhysicalOperator(
     std::shared_ptr<bodo::Schema> in_table_schema) {
