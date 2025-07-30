@@ -57,7 +57,7 @@ jobs:
           pixi-version: v0.40.2
           cache: true
           cache-write: ${{ github.event_name == 'schedule'}}
-          environments: 'pip-cpp-macos-win'
+          environments: ${{ contains(inputs.os, 'macos') && 'pip-cpp-macos' || 'pip-cpp-win' }}
           activate-environment: true
       - name: Install Pixi Global Tools
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
