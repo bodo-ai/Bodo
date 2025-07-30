@@ -145,6 +145,12 @@ void QueryProfileCollector::SubmitOperatorStageTime(operator_stage_t op_stage,
     operator_stage_times[op_stage] = time;
 }
 
+void QueryProfileCollector::SubmitOperatorName(operator_id_t operator_id,
+                                               const std::string& name) {
+    DISABLE_IF_TRACING_DISABLED;
+    operator_names[operator_id] = name;
+}
+
 int64_t QueryProfileCollector::GetOperatorDuration(operator_id_t operator_id) {
     int64_t total_time = 0;
     for (auto [op_stage, time] : operator_stage_times) {
@@ -193,9 +199,9 @@ static std::optional<boost::json::object> metric_to_json(MetricBase& metric) {
 }
 
 auto QueryProfileCollector::CollectSeenOperators()
-    -> std::unordered_map<operator_id_t, stage_id_t> {
+    -> std::map<operator_id_t, stage_id_t> {
     // Map all seen operators to the max stage value seen
-    std::unordered_map<operator_id_t, stage_id_t> seen_operator_stages;
+    std::map<operator_id_t, stage_id_t> seen_operator_stages;
     // Helper lambda to update the seen operator stages
     auto UpdateSeenOperatorStages = [&](operator_stage_t op_stage) {
         operator_id_t op_id = op_stage.operator_id;
@@ -262,6 +268,10 @@ boost::json::object QueryProfileCollector::OperatorStageToJson(
 boost::json::object QueryProfileCollector::OperatorToJson(
     operator_id_t op_id, stage_id_t max_stage) {
     boost::json::object op_output;
+    auto name_iter = operator_names.find(op_id);
+    if (name_iter != operator_names.end()) {
+        op_output["name"] = name_iter->second;
+    }
     for (stage_id_t stage_id = 0; stage_id <= max_stage; stage_id++) {
         boost::json::object stage_report =
             OperatorStageToJson(MakeOperatorStageID(op_id, stage_id));

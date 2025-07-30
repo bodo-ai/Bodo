@@ -76,13 +76,16 @@ bool Pipeline::midPipelineExecute(unsigned idx,
     }
 }
 
-void Pipeline::Execute() {
+uint64_t Pipeline::Execute() {
     // TODO: Do we need an explicit Init phase to measure initialization time
     // outside of the time spend in constructors?
 
+    uint64_t batches_processed = 0;
     bool finished = false;
     while (!finished) {
         std::shared_ptr<table_info> batch;
+
+        batches_processed++;
 
 #ifdef DEBUG_PIPELINE
         std::cout << "Pipeline::Execute before ProduceBatch "
@@ -110,12 +113,14 @@ void Pipeline::Execute() {
 
     // Finalize
     source->Finalize();
+
     for (auto& op : between_ops) {
         op->Finalize();
     }
     sink->Finalize();
 
     executed = true;
+    return batches_processed;
 }
 
 std::variant<std::shared_ptr<table_info>, PyObject*> Pipeline::GetResult() {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import functools
 import importlib
 import inspect
@@ -206,6 +207,25 @@ class BodoLibFallbackWarning(Warning):
     """
 
 
+top_time = 0
+method_time = 0
+
+
+def report_times():
+    if bodo.libs.distributed_api.get_rank() == 0:
+        print("profile_time atexit total_top_time", top_time)
+        print("profile_time atexit total_method_time", method_time)
+        print("profile_time atexit total_init_lazy", bodo.pandas.plan.total_init_lazy)
+        print(
+            "profile_time atexit total_execute_plan",
+            bodo.pandas.plan.total_execute_plan,
+        )
+
+
+if bodo.dataframe_library_profile:
+    atexit.register(report_times)
+
+
 def check_args_fallback(
     unsupported=None,
     supported=None,
@@ -321,7 +341,18 @@ def check_args_fallback(
                     except_msg = ""
                     if not error:
                         try:
-                            return func(*args, **kwargs)
+                            start_time = time.perf_counter()
+                            ret = func(*args, **kwargs)
+                            global top_time
+                            time_this_call = time.perf_counter() - start_time
+                            if bodo.dataframe_library_profile:
+                                print(
+                                    "profile_time top_level",
+                                    func.__qualname__,
+                                    time_this_call,
+                                )
+                            top_time += time_this_call
+                            return ret
                         except BodoLibNotImplementedException as e:
                             # Fall back to Pandas below
                             except_msg = str(e)
@@ -357,7 +388,18 @@ def check_args_fallback(
                     except_msg = ""
                     if not error:
                         try:
-                            return func(self, *args, **kwargs)
+                            start_time = time.perf_counter()
+                            ret = func(self, *args, **kwargs)
+                            global method_time
+                            time_this_call = time.perf_counter() - start_time
+                            if bodo.dataframe_library_profile:
+                                print(
+                                    "profile_time method",
+                                    func.__qualname__,
+                                    time_this_call,
+                                )
+                            method_time += time_this_call
+                            return ret
                         except BodoLibNotImplementedException as e:
                             # Fall back to Pandas below
                             except_msg = str(e)
@@ -869,6 +911,16 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
     raise BodoLibNotImplementedException(
         f"could not infer the output type of user defined function{except_msg}."
     )
+
+
+def compile_cfunc(func, decorator):
+    """Util for to compiling a cfunc and getting a pointer
+    to the C callback (called once on each worker per cfunc).
+    """
+    import ctypes
+
+    cfunc = decorator(func)
+    return ctypes.c_void_p(cfunc.address).value
 
 
 def ensure_datetime64ns(df):

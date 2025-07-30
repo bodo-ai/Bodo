@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "../libs/_bodo_common.h"
+#include "../libs/_query_profile_collector.h"
 
 /// Specifies physical operator types in the execution pipeline:
 // 1. Source means the first operator of the pipeline that only produces batchs
@@ -38,6 +39,8 @@ enum class OperatorResult : uint8_t {
  */
 class PhysicalOperator {
    public:
+    PhysicalOperator() : op_id(next_op_id++) {}
+
     virtual OperatorType operator_type() const = 0;
 
     bool is_source() const { return operator_type() != OperatorType::SINK; }
@@ -51,6 +54,12 @@ class PhysicalOperator {
     virtual std::string ToString() {
         return typeid(*this).name();  // returns mangled name
     }
+
+    int64_t getOpId() const { return op_id; }
+
+   protected:
+    int64_t op_id;
+    static int64_t next_op_id;
 };
 
 class PhysicalSource : public PhysicalOperator {

@@ -196,6 +196,9 @@ dataframe_library_run_parallel = os.environ.get("BODO_DATAFRAME_LIBRARY_RUN_PARA
 # optimized plans to the screen.
 dataframe_library_dump_plans = os.environ.get("BODO_DATAFRAME_LIBRARY_DUMP_PLANS", "0") != "0"
 
+# If enabled (non-zero), profiles the dataframe library.
+dataframe_library_profile = os.environ.get("BODO_DATAFRAME_LIBRARY_PROFILE", "0") != "0"
+
 # -------------------------- End DataFrame Library Config --------------------------
 
 bodo_use_native_type_inference = (

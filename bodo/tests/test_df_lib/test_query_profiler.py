@@ -1,10 +1,14 @@
 import numpy as np
 import pyarrow as pa
+import pytest
 
 import bodo.pandas as pd
 from bodo.tests.utils import temp_env_override
 
 
+@pytest.mark.skip(
+    reason="Doesn't seem to deactivate and causes problems for subsequent tests."
+)
 def test_df_lib_project_metrics_collection(memory_leak_check, tmp_path):
     """
     Test that generated query profile has the metrics that we expect

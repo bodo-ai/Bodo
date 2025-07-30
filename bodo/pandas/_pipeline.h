@@ -3,11 +3,12 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include "_util.h"
 
 #include "physical/operator.h"
 
-// #define DEBUG_PIPELINE  // enable and build to print debug info on the
-// pipeline
+// enable and build to print debug info on the pipeline
+// #define DEBUG_PIPELINE
 #ifdef DEBUG_PIPELINE
 #include <iostream>
 #endif
@@ -39,8 +40,9 @@ class Pipeline {
    public:
     /**
      * @brief Execute the pipeline and return the result (placeholder for now).
+     * @return - number of batches processed
      */
-    void Execute();
+    uint64_t Execute();
 
     /// @brief Get the final result. Result collector returns table_info,
     // Parquet write returns null table_info pointer, and Iceberg write
