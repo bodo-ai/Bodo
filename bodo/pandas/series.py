@@ -855,8 +855,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
         std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
 
-        # TODO [BSE-4970]: implement Series.quantile
-        quantile = self.quantile([0.25, 0.5, 0.75])
+        # TODO [BSE-4977]: full describe support, fix describe to use Bodo quantile
+        quantile = super().quantile([0.25, 0.5, 0.75])
         result = [
             count,
             mean_val,
