@@ -25,6 +25,7 @@ import pytest
 from numba.core.runtime import rtsys
 
 import bodo
+import bodo.user_logging
 import bodo.utils.allocation_tracking
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
@@ -914,3 +915,10 @@ def tmp_abfs_path(abfs_fs):
             abfs_fs.rm(f"engine-unit-tests-tmp-blob/{folder_name}", recursive=True)
 
     cleanup()
+
+
+@pytest.fixture(scope="module")
+def verbose_mode_on():
+    bodo.set_verbose_level(2)
+    yield
+    bodo.user_logging.restore_default_bodo_verbose_level()

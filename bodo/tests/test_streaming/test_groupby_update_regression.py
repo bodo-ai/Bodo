@@ -51,9 +51,6 @@ from bodo.utils.typing import ColNamesMetaType, MetaType
 # Skip for all CI
 pytestmark = pytest_perf_regression
 
-# Codegen change: turn verbose mode on
-bodo.set_verbose_level(2)
-
 global_2 = MetaType((0, 1, 2))
 global_3 = MetaType((1, 2))
 global_1 = MetaType((0,))
@@ -195,7 +192,7 @@ def impl(conn_str):  # Codegen change: add conn_str
 
 # Codegen change: call the function
 @pytest_mark_snowflake
-def test_simple_groupby_update():
+def test_simple_groupby_update(verbose_mode_on):
     # Get snowflake connection string from environment variables
     # (SF_USERNAME and SF_PASSWORD).
     # Use SF10 since that has sufficient data and compute,
