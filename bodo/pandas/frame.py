@@ -53,6 +53,7 @@ from bodo.pandas.plan import (
     LogicalOrder,
     LogicalParquetWrite,
     LogicalProjection,
+    LogicalS3VectorsWrite,
     _get_df_python_func_plan,
     execute_plan,
     get_proj_expr_single,
@@ -575,6 +576,29 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         if not success:
             raise BodoError("Iceberg write failed.")
+
+    @check_args_fallback(unsupported="none")
+    def to_s3_vectors(
+        self,
+        vector_bucket_name: str,
+        index_name: str,
+    ) -> None:
+        """
+        Write the DataFrame to S3 Vectors storage.
+        """
+        from bodo.pandas.base import _empty_like
+
+        # https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-getting-started.html
+
+        # TODO: schema check
+
+        write_plan = LogicalS3VectorsWrite(
+            _empty_like(self),
+            self._plan,
+            vector_bucket_name,
+            index_name,
+        )
+        execute_plan(write_plan)
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):

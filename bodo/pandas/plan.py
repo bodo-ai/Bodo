@@ -292,6 +292,22 @@ class LogicalIcebergWrite(LogicalOperator):
     pass
 
 
+class LogicalS3VectorsWrite(LogicalOperator):
+    """Logical operator for writing data to S3 Vectors."""
+
+    def __init__(
+        self,
+        empty_data,
+        source,
+        vector_bucket_name,
+        index_name,
+    ):
+        self.source = source
+        self.vector_bucket_name = vector_bucket_name
+        self.index_name = index_name
+        super().__init__(empty_data, source, vector_bucket_name, index_name)
+
+
 class ColRefExpression(Expression):
     """Expression representing a column reference in the query plan."""
 
