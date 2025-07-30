@@ -1028,6 +1028,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             raise BodoLibNotImplementedException()
 
         is_list = isinstance(q, list)
+        q = maybe_make_list(q)
 
         index = [str(val) for val in q] if is_list else []
 
@@ -1037,13 +1038,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if pa.types.is_null(pa_type):
             return (
                 BodoSeries(
-                    [pd.NA] * len(q), index=index, dtype=pd.ArrowDtype(pa.float32())
+                    [pd.NA] * len(q), index=index, dtype=pd.ArrowDtype(pa.float64())
                 )
                 if is_list
                 else pd.NA
             )
 
-        new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float32()) for val in q])
+        new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])
         zero_size_self = arrow_to_empty_df(new_arrow_schema)
 
         exprs = [
@@ -1054,7 +1055,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 [0],
                 True,  # dropna
             )
-            for func_name in [f"quantile_{val}" for val in maybe_make_list(q)]
+            for func_name in [f"quantile_{val}" for val in q]
         ]
 
         plan = LogicalAggregate(
@@ -1074,7 +1075,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         for i in range(len(cols)):
             res.append(df[cols[i]][0])
 
-        return BodoSeries(res, index=index, dtype=pd.ArrowDtype(pa.float32()))
+        return BodoSeries(res, index=index, dtype=pd.ArrowDtype(pa.float64()))
 
 
 class BodoStringMethods:

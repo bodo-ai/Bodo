@@ -146,7 +146,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
             // TODO: do preprocessing and validations as necessary.
             // TODO: decide if out_schema is necessary in this case.
-            std::vector<float> quantiles{};
+            std::vector<double> quantiles{};
             for (auto it : function_names) {
                 quantiles.push_back(std::stod(it.substr(9)));
             }
