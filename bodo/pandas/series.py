@@ -855,16 +855,39 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
         std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
 
-        # TODO [BSE-4970]: implement Series.quantile
-        quantile = self.quantile([0.25, 0.5, 0.75])
+        # Evaluate quantiles
+        q = [0.25, 0.5, 0.75]
+        new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])
+        zero_size_self = arrow_to_empty_df(new_arrow_schema)
+
+        exprs = [
+            AggregateExpression(
+                zero_size_self,
+                self._plan,
+                func_name,
+                [0],
+                True,  # dropna
+            )
+            for func_name in [f"quantile_{val}" for val in q]
+        ]
+
+        plan = LogicalAggregate(
+            zero_size_self,
+            self._plan,
+            [],
+            exprs,
+        )
+        out_rank = execute_plan(plan)
+        quantile_df = pd.DataFrame(out_rank)
+
         result = [
             count,
             mean_val,
             std_val,
             min,
-            quantile[0.25],
-            quantile[0.5],
-            quantile[0.75],
+            quantile_df["0.25"][0],
+            quantile_df["0.5"][0],
+            quantile_df["0.75"][0],
             max,
         ]
 
