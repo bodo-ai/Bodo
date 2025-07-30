@@ -904,14 +904,20 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 name=self.name,
                 dtype=pd.ArrowDtype(pa.float64()),
             )
+        count = float(count)  # Float cast to match Pandas behavior
 
         # Evaluate mean
         mean_val = sum / count
 
         # Evaluate std
-        squared = self.map(lambda x: x * x)
+        squared = self.map(lambda x: x * x, na_action="ignore")
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
-        std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
+        # TODO: count == 1 case
+        std_val = (
+            ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
+            if count > 1
+            else pd.NA
+        )
 
         # Evaluate quantiles
         q = [0.25, 0.5, 0.75]

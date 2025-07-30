@@ -998,22 +998,25 @@ def assert_executed_plan_count(n: int):
 
 
 def nonnumeric_describe(series):
+    """Computes non-numeric series.describe() using DataFrameGroupBy."""
+
     plan = series._plan
+
     plan.is_series = False
     plan.empty_data.columns = pd.Index(["A"])
     df = wrap_plan(plan)
 
     df.columns = pd.Index(["None"])
     df["B"] = df["None"]
-
     gb = df.groupby("None")
-    gb_size = gb.agg("size")
 
-    count_val = gb_size.sum()
+    gb_size = gb.agg("size")  # Plan execution
+    count_val = gb_size.sum()  # Plan execution
     unique_val = len(gb_size)
 
-    top_val = gb_size.sort_values(ascending=False).index[0]
-    freq_val = gb_size.sort_values(ascending=False).iloc[0]
+    gb_sorted = gb_size.sort_values(ascending=False)
+    top_val = gb_sorted.index[0]
+    freq_val = gb_sorted.iloc[0]  # Plan execution
 
     return bodo.pandas.BodoSeries(
         [f"{count_val}", f"{unique_val}", f"{top_val}", f"{freq_val}"],

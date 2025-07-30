@@ -2271,8 +2271,13 @@ def test_loc(datapath):
     )
 
 
-def test_series_describe():
-    """Basic test for Series describe."""
+def test_series_describe_numeric():
+    """Test for Series describe, using approximate bounds for quantiles."""
+
+    def kll_error_bounds(q, k=200, pmf=False):
+        eps = 1.0 / np.sqrt(k) * (1.7 if pmf else 1.33)
+        return max(0.0, q - eps), min(1.0, q + eps)
+
     n = 10000
     df = pd.DataFrame(
         {
@@ -2281,6 +2286,7 @@ def test_series_describe():
             "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
             "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
             "E": [None] * n,
+            "F": list(range(n - 1)) + [None],
         }
     )
 
@@ -2290,6 +2296,49 @@ def test_series_describe():
             0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 3
         ):
             describe_pd = df[c].describe()
+            describe_bodo = bdf[c].describe()
+
+        # For quantile columns, check approximate bounds instead of strict equality
+        for q in [0.25, 0.5, 0.75]:
+            if q in describe_bodo.index:
+                approx = describe_bodo.loc[q]
+                true_vals = sorted(x for x in df[c].dropna().values.tolist())
+                if not true_vals:
+                    continue
+                nvals = len(true_vals)
+                lo, hi = kll_error_bounds(q, k=200, pmf=False)
+                lo_idx = int(np.floor(lo * (nvals - 1)))
+                hi_idx = int(np.ceil(hi * (nvals - 1)))
+                true_low = true_vals[lo_idx]
+                true_high = true_vals[hi_idx]
+                assert true_low <= approx <= true_high, (
+                    f"{c} quantile {q} estimate {approx} "
+                    f"not within [{true_low}, {true_high}]"
+                )
+
+        # For all other stats (count, mean, std, min, max), keep exact check
+        _test_equal(
+            describe_pd.drop(index=["25%", "50%", "75%"], errors="ignore"),
+            describe_bodo.drop(index=["25%", "50%", "75%"], errors="ignore"),
+            check_pandas_types=False,
+        )
+
+
+def test_series_describe_nonnumeric():
+    """Basic test for Series describe with string data."""
+    df = pd.DataFrame(
+        {
+            "A": ["apple", "banana", "apple", "cherry", "banana", "banana", "apple"],
+            "B": ["apple"] * 3 + ["APPLE"] * 2 + [None] * 2,
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+    for c in df.columns:
+        with assert_executed_plan_count(3):
+            # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
+            # Applying map(str) to pandas output is a workaround to enable_test_equal to compare values of differing dtypes.
+            describe_pd = df[c].describe().map(str)
             describe_bodo = bdf[c].describe()
         _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
 
