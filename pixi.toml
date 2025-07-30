@@ -137,8 +137,6 @@ cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py (pip only)
 mpi4py = ">=4.0,<4.1"
-# Polaris (installed via pip) requires boto3/botocore <1.39
-boto3 = "<1.39"
 
 # Build C++ Deps
 # Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
@@ -159,6 +157,8 @@ matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
+# Polaris (installed via pip) requires boto3/botocore <1.39
+boto3 = "<1.39"
 
 # Documentation Testing
 beautifulsoup4 = "*"
