@@ -11,3 +11,9 @@ std::shared_ptr<PhysicalSink> IcebergWriteFunctionData::CreatePhysicalOperator(
     std::shared_ptr<bodo::Schema> in_table_schema) {
     return std::make_shared<PhysicalWriteIceberg>(in_table_schema, *this);
 }
+
+std::shared_ptr<PhysicalSink>
+S3VectorsWriteFunctionData::CreatePhysicalOperator(
+    std::shared_ptr<bodo::Schema> in_table_schema) {
+    return std::make_shared<PhysicalWriteS3Vectors>(in_table_schema, *this);
+}

@@ -139,3 +139,34 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
     std::shared_ptr<arrow::Schema> iceberg_schema;
     std::shared_ptr<arrow::fs::FileSystem> fs;
 };
+
+/**
+ * @brief Data for writing S3 Vectors
+ *
+ */
+struct S3VectorsWriteFunctionData : public BodoWriteFunctionData {
+    S3VectorsWriteFunctionData(std::string vector_bucket_name,
+                               std::string index_name)
+        : vector_bucket_name(std::move(vector_bucket_name)),
+          index_name(std::move(index_name)) {}
+
+    ~S3VectorsWriteFunctionData() override = default;
+
+    bool Equals(const FunctionData &other_p) const override {
+        const S3VectorsWriteFunctionData &other =
+            other_p.Cast<S3VectorsWriteFunctionData>();
+        return (other.vector_bucket_name == this->vector_bucket_name &&
+                other.index_name == this->index_name);
+    }
+
+    duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
+        return duckdb::make_uniq<S3VectorsWriteFunctionData>(
+            this->vector_bucket_name, this->index_name);
+    }
+
+    std::shared_ptr<PhysicalSink> CreatePhysicalOperator(
+        std::shared_ptr<bodo::Schema> in_table_schema) override;
+
+    std::string vector_bucket_name;
+    std::string index_name;
+};
