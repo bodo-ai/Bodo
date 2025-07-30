@@ -2838,7 +2838,6 @@ def test_dataframe_reset_index_pipeline():
     )
 
 
-# TODO: test scalar quantiles like s.quantile(0.8)
 @pytest.mark.parametrize("quantiles", [[0.25, 0.5, 0.75, 0.9]])
 def test_series_quantile(quantiles):
     """Tests that approximate quantiles using KLL fall within expected error bounds."""
