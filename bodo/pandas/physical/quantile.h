@@ -77,12 +77,6 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
-        // No intermediate output; quantile result only after Finalize
-        return {final_result, OperatorResult::FINISHED};
-    }
-    virtual ~PhysicalQuantile() = default;
-
-    void Finalize() override {
         int rank, size;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -142,13 +136,15 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             final_result = std::make_shared<table_info>(
                 std::vector<std::shared_ptr<array_info>>{});
         }
+        return {final_result, OperatorResult::FINISHED};
     }
 
+    virtual ~PhysicalQuantile() = default;
+
+    void Finalize() override {}
+
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
-        if (!final_result) {
-            throw std::runtime_error("GetResult called before Finalize");
-        }
-        return final_result;
+        throw std::runtime_error("GetResult called on a quantile node.");
     }
 
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
