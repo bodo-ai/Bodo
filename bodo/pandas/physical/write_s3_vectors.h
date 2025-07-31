@@ -11,7 +11,9 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
         std::shared_ptr<bodo::Schema> in_bodo_schema,
         S3VectorsWriteFunctionData& bind_data)
         : vector_bucket_name(std::move(bind_data.vector_bucket_name)),
-          index_name(std::move(bind_data.index_name)) {}
+          index_name(std::move(bind_data.index_name)),
+          is_last_state(std::make_shared<IsLastState>()),
+          finished(false) {}
 
     virtual ~PhysicalWriteS3Vectors() = default;
 
