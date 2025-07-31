@@ -576,7 +576,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
             state_wrapper_state = args[0]
 
             def state_wrapper(x):
-                # Call the user-prrovided row_fn function passing the init_state
+                # Call the user-provided row_fn function passing the init_state
                 # and the row x from the table.
                 return state_wrapper_func(state_wrapper_state, x)
 

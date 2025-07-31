@@ -378,12 +378,17 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
         // New tuple will be the 5 tuple with the 4th element being yet another
         // new tuple with init_state followed by the other original args in
         // func_args.
+        // The original data structure can be thought of as the following:
+        // (a, b, c, (init_state_fn, row_fn, na_state), d)
+        // The code below creates new tuples and looks like the following:
+        // (a, b, c, (init_state, row_fn, na_state), d)
         for (int i = 0; i < PyTuple_Size(args); ++i) {
             // The args part of func_args.
             if (i == 3) {
                 // Create new tuple replacing init_func with init_state.
                 PyObject *new_args_in_func_args =
                     PyTuple_New(PyTuple_Size(args_in_func_args));
+                Py_INCREF(init_state);
                 // Put init_state into the tuple.
                 PyTuple_SetItem(new_args_in_func_args, 0, init_state);
                 // Copy other original args to the new tuple.
@@ -404,6 +409,7 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
             bodo_module, "run_func_on_table", "LOO",
             reinterpret_cast<int64_t>(new table_info(*input_batch)),
             result_type_py, new_tuple);
+        Py_DECREF(new_tuple);
     } else {
         result = PyObject_CallMethod(
             bodo_module, "run_func_on_table", "LOO",

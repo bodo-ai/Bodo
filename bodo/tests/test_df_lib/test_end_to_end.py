@@ -2907,7 +2907,8 @@ def test_map_with_state():
     a = pd.Series(list(range(20)))
     ba = bd.Series(a)
     res = a.map(lambda x: "bodo" + str(x + 7))
-    bres = ba.map_with_state(init_state, per_row)
+    with assert_executed_plan_count(1):
+        bres = ba.map_with_state(init_state, per_row)
 
     _test_equal(
         bres,
@@ -2917,9 +2918,10 @@ def test_map_with_state():
         check_names=False,
     )
 
-    bres = ba.map_with_state(
-        init_state, per_row, output_type=pd.Series(dtype="string[pyarrow]")
-    )
+    with assert_executed_plan_count(0):
+        bres = ba.map_with_state(
+            init_state, per_row, output_type=pd.Series(dtype="string[pyarrow]")
+        )
 
     _test_equal(
         bres,
