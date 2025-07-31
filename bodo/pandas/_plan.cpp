@@ -564,7 +564,8 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
 
 duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc) {
+    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
+    bool has_state) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
@@ -583,7 +584,7 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
         duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoPythonScalarFunctionData>(args, out_schema,
-                                                        is_cfunc);
+                                                        is_cfunc, has_state);
 
     std::vector<duckdb::ColumnBinding> source_cols =
         source->GetColumnBindings();

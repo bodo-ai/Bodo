@@ -1944,9 +1944,6 @@ def to_nullable_type(t):
         if isinstance(t.dtype, types.Float):
             return bodo.libs.float_arr_ext.FloatingArrayType(t.dtype)
 
-        if t.dtype == bodo.timedelta64ns:
-            return bodo.timedelta_array_type
-
     if isinstance(t, bodo.ArrayItemArrayType):
         return bodo.ArrayItemArrayType(to_nullable_type(t.dtype))
 
