@@ -77,6 +77,17 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
+        return {final_result, OperatorResult::FINISHED};
+    }
+
+    virtual ~PhysicalQuantile() = default;
+
+    void Finalize() override {
+        if (collected) {
+            return;
+        }
+        // Toggle collected flag to prevent multiple collections
+        collected = true;
         int rank, size;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -106,8 +117,6 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                               displs.data(), MPI_BYTE, 0, MPI_COMM_WORLD),
                   "quantile.h::Finalize(): MPI error on MPI_Gatherv:");
 
-        // TODO: consider possible optimization of merging and querying sketches
-        // across ranks.
         if (rank == 0) {
             auto merged_sketch = KLLDoubleSketch();
             for (int i = 0; i < size; i++) {
@@ -146,12 +155,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             final_result = std::make_shared<table_info>(
                 std::vector<std::shared_ptr<array_info>>{});
         }
-        return {final_result, OperatorResult::FINISHED};
     }
-
-    virtual ~PhysicalQuantile() = default;
-
-    void Finalize() override {}
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         throw std::runtime_error("GetResult called on a quantile node.");
@@ -166,4 +170,5 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
     const std::vector<double> quantiles;
     std::shared_ptr<KLLDoubleSketch> sketch;
     std::shared_ptr<table_info> final_result;
+    bool collected{false};
 };
