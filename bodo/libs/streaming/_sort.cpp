@@ -1021,6 +1021,7 @@ std::shared_ptr<table_info> ReservoirSamplingState::Finalize() {
 uint64_t StreamSortState::GetBudget() const {
     int64_t budget = OperatorComptroller::Default()->GetOperatorBudget(op_id);
     if (budget == -1) {
+        std::cout << "setting budget to size of memory pool" << std::endl;
         return static_cast<uint64_t>(
             bodo::BufferPool::Default()->get_memory_size_bytes() *
             SORT_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL);
