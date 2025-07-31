@@ -3008,11 +3008,28 @@ def test_series_quantile_empty():
 
     assert np.isnan(pd_quantile) and bodo_quantile is pd.NA
 
+    pds = pd.Series([1, 2, 3])
+    pds = pds[pds > 4]
+    bds = bd.Series([1, 2, 3])
+    bds = bds[bds > 4]
+
+    with assert_executed_plan_count(1):
+        pd_quantile = pds.quantile([0, 0.2, 0.5, 0.8, 1])
+        bodo_quantile = bds.quantile([0, 0.2, 0.5, 0.8, 1])
+
+    _test_equal(
+        bodo_quantile,
+        pd_quantile,
+        check_pandas_types=False,
+        reset_index=True,
+        check_names=False,
+    )
+
 
 def test_series_quantile_tails():
     """Tests that querying quantiles at tail ends return exact values."""
 
-    df = pd.DataFrame({"A": [1] + [100] * 98 + [1000], "B": [1, 2, 3, 4, 5] * 20})
+    df = pd.DataFrame({"A": [1] + [100] * 98 + [1000], "B": list(range(100))})
     bdf = bd.from_pandas(df)
 
     with assert_executed_plan_count(1):
@@ -3024,4 +3041,21 @@ def test_series_quantile_tails():
         out_pd,
         check_pandas_types=False,
         reset_index=True,
+    )
+
+
+def test_series_quantile_singleton():
+    pds = pd.Series([100])
+    bds = bd.Series([100])
+
+    with assert_executed_plan_count(1):
+        out_bd = bds.quantile([0, 0.2, 0.6, 0.89, 1])
+        out_pd = pds.quantile([0, 0.2, 0.6, 0.89, 1])
+
+    _test_equal(
+        out_bd,
+        out_pd,
+        check_pandas_types=False,
+        reset_index=True,
+        check_names=False,
     )

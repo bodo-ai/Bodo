@@ -121,9 +121,19 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
             std::vector<std::shared_ptr<array_info>> results{};
             for (auto it : quantiles) {
-                double qval = (!sketch->is_empty())
-                                  ? sketch->get_quantile(it)
-                                  : std::numeric_limits<double>::quiet_NaN();
+                double qval;
+                if (!sketch->is_empty()) {
+                    // For queries q=0.0 and q=1.0, return exact min/max values
+                    if (it == 0.0) {
+                        qval = sketch->get_min_item();
+                    } else if (it == 1.0) {
+                        qval = sketch->get_max_item();
+                    } else {
+                        qval = sketch->get_quantile(it);
+                    }
+                } else {
+                    qval = std::numeric_limits<double>::quiet_NaN();
+                }
                 auto arrow_scalar = arrow::MakeScalar(qval);
                 auto arr = ScalarToArrowArray(arrow_scalar);
                 auto bodo_arr =
