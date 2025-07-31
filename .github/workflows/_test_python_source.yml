@@ -64,7 +64,9 @@ jobs:
             role-duration-seconds: 10800
         - name: Install Extra Test dependencies
           # This isn't published on pypi so no good way to list it as a dependency
-          run: pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+          run: |
+              pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+              pip install transformers
 
         # Run Tests
         - name: Run Tests
