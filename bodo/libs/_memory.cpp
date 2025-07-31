@@ -1260,6 +1260,12 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         // If available memory is less than needed, handle it based
         // on spilling config and buffer pool options.
         if (aligned_size > bytes_available_in_mem) {
+            std::cout << "[DEBUG] Allocate: Spilling because size of availible "
+                         "memory "
+                      << this->stats_.curr_bytes_in_memory
+                      << " plus incoming allocation " << aligned_size
+                      << " is greater than availible memory "
+                      << this->memory_size_bytes_ << std::endl;
             CHECK_ARROW_MEM_RET(
                 this->evict_handler(aligned_size - bytes_available_in_mem,
                                     "Allocate"),
@@ -1361,6 +1367,12 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         // If available memory is less than needed, handle it based
         // on spilling config and buffer pool options.
         if (size_class_bytes > bytes_available_in_mem) {
+            std::cout << "[DEBUG] Allocate: Spilling because size of availible "
+                         "memory "
+                      << this->stats_.curr_bytes_in_memory
+                      << " plus incoming allocation " << aligned_size
+                      << " is greater than availible memory "
+                      << this->memory_size_bytes_ << std::endl;
             int64_t rem_bytes = size_class_bytes - bytes_available_in_mem;
             CHECK_ARROW_MEM_RET(this->evict_handler(/*bytes*/ rem_bytes,
                                                     /*caller*/ "Allocate"),
