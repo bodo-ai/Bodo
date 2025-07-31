@@ -406,18 +406,35 @@ class PythonScalarFuncExpression(Expression):
         return self.args[0]
 
     @property
+    def func_args(self):
+        """Return the arguments to the func."""
+        return self.args[1]
+
+    @property
+    def input_column_indices(self):
+        """Return the columns relevant to the expression."""
+        return self.args[2]
+
+    @property
     def is_cfunc(self):
         """Returns whether the scalar function is a cfunc."""
         return self.args[3]
 
+    @property
+    def has_state(self):
+        """Returns whether the scalar function has separate init state."""
+        return self.args[4]
+
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
         if self.source != new_source_plan:
-            assert len(self.args[2]) == 1 + get_n_index_arrays(self.empty_data.index), (
+            assert len(self.input_column_indices) == 1 + get_n_index_arrays(
+                self.empty_data.index
+            ), (
                 "PythonScalarFuncExpression::update_func_expr_source: expected single input column"
             )
             # Previous input data column index
-            in_col_ind = self.args[2][0]
+            in_col_ind = self.input_column_indices[0]
             n_source_cols = len(new_source_plan.empty_data.columns)
             # Add Index columns of the new source plan as input
             index_cols = tuple(
@@ -430,7 +447,7 @@ class PythonScalarFuncExpression(Expression):
             expr = PythonScalarFuncExpression(
                 self.empty_data,
                 new_source_plan,
-                self.args[1],
+                self.func_args,
                 (in_col_ind + col_index_offset,) + index_cols,
                 self.is_cfunc,
             )

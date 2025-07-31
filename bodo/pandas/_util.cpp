@@ -327,7 +327,7 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
 std::tuple<std::shared_ptr<table_info>, int64_t, int64_t, int64_t>
 runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
                         const std::shared_ptr<arrow::DataType> &result_type,
-                        PyObject *args) {
+                        PyObject *args, bool has_state, PyObject *&init_state) {
     // Call bodo.pandas.utils.run_apply_udf() to run the UDF
 
     // Import the bodo.pandas.utils module
@@ -339,10 +339,68 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
 
     // Call the run_apply_udf() with the table_info pointer and UDF function
     PyObject *result_type_py(arrow::py::wrap_data_type(result_type));
-    PyObject *result = PyObject_CallMethod(
-        bodo_module, "run_func_on_table", "LOO",
-        reinterpret_cast<int64_t>(new table_info(*input_batch)), result_type_py,
-        args);
+    PyObject *result;
+    if (has_state) {
+        // Validate input
+        if (!PyTuple_Check(args) || PyTuple_Size(args) != 5) {
+            throw std::runtime_error("Expected a 5-tuple");
+        }
+        PyObject *args_in_func_args = PyTuple_GetItem(args, 3);  // borrowed ref
+        if (!PyTuple_Check(args_in_func_args) ||
+            PyTuple_Size(args_in_func_args) < 2) {
+            throw std::runtime_error("args_in_func_args should be 2+-tuple");
+        }
+
+        if (init_state == nullptr) {
+            // Extract first tuple element and verify it's callable
+            PyObject *init_func =
+                PyTuple_GetItem(args_in_func_args, 0);  // borrwed ref
+            if (!init_func || !PyCallable_Check(init_func)) {
+                throw std::runtime_error("First element is not a callable");
+            }
+            Py_INCREF(init_func);  // bump to own a reference
+
+            // Call the initialization function.
+            init_state = PyObject_CallObject(init_func, nullptr);
+            Py_DECREF(init_func);  // drop our extra ref to func
+            if (!init_state) {
+                throw std::runtime_error("Initilization function failed");
+            }
+        }
+
+        PyObject *new_tuple =
+            PyTuple_New(PyTuple_Size(args));  // returns a new reference
+        if (!new_tuple) {
+            throw std::runtime_error("New tuple creation failed");
+        }
+
+        // New tuple will be the init_state followed by the other original args.
+        for (int i = 0; i < PyTuple_Size(args); ++i) {
+            if (i == 3) {
+                PyObject *new_args_in_func_args =
+                    PyTuple_New(PyTuple_Size(args_in_func_args));
+                PyTuple_SetItem(new_args_in_func_args, 0, init_state);
+                for (int j = 1; j < PyTuple_Size(args_in_func_args); ++j) {
+                    PyTuple_SetItem(new_args_in_func_args, j,
+                                    PyTuple_GetItem(args_in_func_args, j));
+                }
+                PyTuple_SetItem(new_tuple, i, new_args_in_func_args);
+                continue;
+            }
+            PyObject *tup_elem = PyTuple_GetItem(args, i);  // borrowed ref
+            Py_INCREF(tup_elem);
+            PyTuple_SetItem(new_tuple, i, tup_elem);
+        }
+        result = PyObject_CallMethod(
+            bodo_module, "run_func_on_table", "LOO",
+            reinterpret_cast<int64_t>(new table_info(*input_batch)),
+            result_type_py, new_tuple);
+    } else {
+        result = PyObject_CallMethod(
+            bodo_module, "run_func_on_table", "LOO",
+            reinterpret_cast<int64_t>(new table_info(*input_batch)),
+            result_type_py, args);
+    }
     if (!result) {
         PyErr_Print();
         Py_DECREF(bodo_module);
