@@ -77,6 +77,17 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
+        return {final_result, OperatorResult::FINISHED};
+    }
+
+    virtual ~PhysicalQuantile() = default;
+
+    void Finalize() override {
+        if (collected) {
+            return;
+        }
+        // Toggle collected flag to prevent multiple collections
+        collected = true;
         int rank, size;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -106,8 +117,6 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                               displs.data(), MPI_BYTE, 0, MPI_COMM_WORLD),
                   "quantile.h::Finalize(): MPI error on MPI_Gatherv:");
 
-        // TODO: consider possible optimization of merging and querying sketches
-        // across ranks.
         if (rank == 0) {
             auto merged_sketch = KLLDoubleSketch();
             for (int i = 0; i < size; i++) {
@@ -121,9 +130,19 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
             std::vector<std::shared_ptr<array_info>> results{};
             for (auto it : quantiles) {
-                double qval = (!sketch->is_empty())
-                                  ? sketch->get_quantile(it)
-                                  : std::numeric_limits<double>::quiet_NaN();
+                double qval;
+                if (!sketch->is_empty()) {
+                    // For queries q=0.0 and q=1.0, return exact min/max values
+                    if (it == 0.0) {
+                        qval = sketch->get_min_item();
+                    } else if (it == 1.0) {
+                        qval = sketch->get_max_item();
+                    } else {
+                        qval = sketch->get_quantile(it);
+                    }
+                } else {
+                    qval = std::numeric_limits<double>::quiet_NaN();
+                }
                 auto arrow_scalar = arrow::MakeScalar(qval);
                 auto arr = ScalarToArrowArray(arrow_scalar);
                 auto bodo_arr =
@@ -136,12 +155,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             final_result = std::make_shared<table_info>(
                 std::vector<std::shared_ptr<array_info>>{});
         }
-        return {final_result, OperatorResult::FINISHED};
     }
-
-    virtual ~PhysicalQuantile() = default;
-
-    void Finalize() override {}
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         throw std::runtime_error("GetResult called on a quantile node.");
@@ -156,4 +170,5 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
     const std::vector<double> quantiles;
     std::shared_ptr<KLLDoubleSketch> sketch;
     std::shared_ptr<table_info> final_result;
+    bool collected{false};
 };
