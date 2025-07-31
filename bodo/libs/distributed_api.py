@@ -4564,11 +4564,10 @@ def bcast_impl(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
 node_ranks = None
 
 
-def get_host_ranks():  # pragma: no cover
+def get_host_ranks(comm: MPI.Comm = MPI.COMM_WORLD):  # pragma: no cover
     """Get dict holding hostname and its associated ranks"""
     global node_ranks
     if node_ranks is None:
-        comm = MPI.COMM_WORLD
         hostname = MPI.Get_processor_name()
         rank_host = comm.allgather(hostname)
         node_ranks = defaultdict(list)
@@ -4586,9 +4585,9 @@ def create_subcomm_mpi4py(comm_ranks):  # pragma: no cover
     return new_comm
 
 
-def get_nodes_first_ranks():  # pragma: no cover
+def get_nodes_first_ranks(comm: MPI.Comm = MPI.COMM_WORLD):  # pragma: no cover
     """Get first rank in each node"""
-    host_ranks = get_host_ranks()
+    host_ranks = get_host_ranks(comm)
     return np.array([ranks[0] for ranks in host_ranks.values()], dtype="int32")
 
 

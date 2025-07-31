@@ -483,10 +483,12 @@ def handle_spawn_process(
     logger: logging.Logger,
 ):
     """Handle spawning a new process and return the process handle"""
-    debug_worker_msg(logger, f"Spawning process with command {command}")
     pid = None
     popen = None
-    if bodo.get_rank() not in bodo.libs.distributed_api.get_nodes_first_rank():
+    if bodo.get_rank() not in bodo.libs.distributed_api.get_nodes_first_ranks(
+        comm_world
+    ):
+        debug_worker_msg(logger, f"Spawning process with command {command}")
         popen = subprocess.Popen(
             command,
             env=env,
@@ -616,10 +618,11 @@ def worker_loop(
             if out_socket:
                 out_socket.close()
 
-            for worker_process_uuid in PROCESS_REGISTRY.keys():
+            for worker_process_uuid in list(PROCESS_REGISTRY.keys()):
                 worker_process = WorkerProcess()
                 worker_process._uuid = worker_process_uuid
                 handle_stop_process(worker_process, logger)
+
             return
         elif command == CommandType.BROADCAST.value:
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
@@ -656,10 +659,14 @@ def worker_loop(
             debug_worker_msg(logger, f"Set config {config_name}={config_value}")
         elif command == CommandType.SPAWN_PROCESS.value:
             command, env, cwd = spawner_intercomm.bcast(None, 0)
-            return handle_spawn_process(command, env, cwd, comm_world, logger)
+            worker_process = handle_spawn_process(command, env, cwd, comm_world, logger)
+            if bodo.get_rank() == 0:
+                spawner_intercomm.send(worker_process, dest=0)
         elif command == CommandType.STOP_PROCESS.value:
             worker_process = spawner_intercomm.bcast(None, 0)
-            return handle_stop_process(worker_process, logger)
+            handle_stop_process(worker_process, logger)
+            if bodo.get_rank() == 0:
+                spawner_intercomm.send(None, dest=0)
         else:
             raise ValueError(f"Unsupported command '{command}!")
 

@@ -833,8 +833,10 @@ class Spawner:
         assert not self._is_running, "spawn_process_on_workers: already running"
 
         self._is_running = True
-        self.worker_intercomm.bcast(CommandType.SPAWN_PROCESS.value, self.bcast_root)
-        self.worker_intercomm.bcast((command, env, cwd), self.bcast_root)
+        self.worker_intercomm.bcast(
+            CommandType.SPAWN_PROCESS.value, root=self.bcast_root
+        )
+        self.worker_intercomm.bcast((command, env, cwd), root=self.bcast_root)
         worker_process = self.worker_intercomm.recv(source=0)
         self._is_running = False
         self._run_del_queue()
@@ -845,8 +847,11 @@ class Spawner:
         assert not self._is_running, "stop_process_on_workers: already running"
 
         self._is_running = True
-        self.worker_intercomm.bcast(CommandType.STOP_PROCESS.value, self.bcast_root)
-        self.worker_intercomm.bcast(worker_process, self.bcast_root)
+        self.worker_intercomm.bcast(
+            CommandType.STOP_PROCESS.value, root=self.bcast_root
+        )
+        self.worker_intercomm.bcast(worker_process, root=self.bcast_root)
+        self.worker_intercomm.recv(source=0)  # Wait for confirmation
         self._is_running = False
         self._run_del_queue()
 
