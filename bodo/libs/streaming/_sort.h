@@ -426,6 +426,7 @@ struct StreamSortMetrics {
     time_t get_bounds_compute_bounds_time = 0;
     time_t partition_chunks_total_time = 0;
     time_t partition_chunks_pin_time = 0;
+    time_t parition_chunks_allreduce_time = 0;
     time_t partition_chunks_append_time = 0;
     time_t partition_chunks_sort_time = 0;
     time_t partition_chunks_sort_copy_time = 0;

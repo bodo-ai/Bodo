@@ -1329,10 +1329,12 @@ StreamSortState::PartitionChunksByRank(
     // rank. 'bytes_per_row' is already averaged globally.
     assert(this->parallel);
     uint64_t global_min_mem_budget_bytes = this->mem_budget_bytes;
+    time_pt start_allreduce = start_timer();
     CHECK_MPI(
         MPI_Allreduce(&this->mem_budget_bytes, &global_min_mem_budget_bytes, 1,
                       MPI_UINT64_T, MPI_MIN, MPI_COMM_WORLD),
         "StreamSortState::PartitionChunksByRank: MPI error on MPI_Allreduce:");
+    this->metrics.parition_chunks_allreduce_time += end_timer(start_allreduce);
     int myrank = -1;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     // Use the optimal chunk size unless an override has been provided.
@@ -1956,6 +1958,7 @@ void StreamSortState::ReportBuildMetrics(std::vector<MetricBase>& metrics_out) {
     APPEND_TIMER_METRIC(get_bounds_compute_bounds_time);
     APPEND_TIMER_METRIC(partition_chunks_total_time);
     APPEND_TIMER_METRIC(partition_chunks_pin_time);
+    APPEND_TIMER_METRIC(parition_chunks_allreduce_time);
     APPEND_TIMER_METRIC(partition_chunks_append_time);
     APPEND_TIMER_METRIC(partition_chunks_sort_time);
     APPEND_TIMER_METRIC(partition_chunks_sort_copy_time);
