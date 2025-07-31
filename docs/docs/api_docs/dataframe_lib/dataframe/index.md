@@ -29,6 +29,7 @@ ___
 
 - [`bodo.pandas.BodoDataFrame.to_iceberg`][bododftoiceberg]
 - [`bodo.pandas.BodoDataFrame.to_parquet`][bododftoparquet]
+- [`bodo.pandas.BodoDataFrame.to_s3_vectors`][bododftos3vectors]
 
 
 
@@ -40,4 +41,5 @@ ___
 [bododfsortvalues]: ../dataframe/sort_values.md
 [bododftoiceberg]: ../dataframe/to_iceberg.md
 [bododftoparquet]: ../dataframe/to_parquet.md
+[bododftos3vectors]: ../dataframe/to_s3_vectors.md
 [bododfgroupby]: ../dataframe/groupby.md
