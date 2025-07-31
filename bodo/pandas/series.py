@@ -886,7 +886,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return nonnumeric_describe(self)
 
         quantile_qs = [0.25, 0.5, 0.75]
+
         if percentiles is not None:
+            validate_quantile(percentiles)
             if 0.5 not in percentiles:
                 bisect.insort(percentiles, 0.5)
             quantile_qs = percentiles
