@@ -679,6 +679,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return BodoDatetimeProperties(self)
 
     @property
+    def ai(self):
+        return BodoSeriesAi(self)
+
+    @property
     def T(self):
         return self
 
@@ -1326,6 +1330,30 @@ class BodoStringMethods:
         Splits the string in the Series/Index from the end, at the specified delimiter string.
         """
         return _split_internal(self, "rsplit", pat, n, expand)
+
+
+class BodoSeriesAi:
+    def __init__(self, series):
+        self._series = series
+
+    def tokenize(
+        self,
+        tokenizer: Callable[[], Transformers.PreTrainedTokenizer],  # noqa: F821
+    ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.tokenize() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+
+        def per_row(tokenizer, row):
+            return tokenizer.encode(row, add_special_tokens=True)
+
+        list_of_int64 = pa.list_(pa.int64())
+        return self._series.map_with_state(
+            tokenizer,
+            per_row,
+            output_type=pd.Series(dtype=pd.ArrowDtype(list_of_int64)),
+        )
 
 
 class BodoDatetimeProperties:
