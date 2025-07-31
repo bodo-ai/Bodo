@@ -2930,3 +2930,33 @@ def test_map_with_state():
         reset_index=False,
         check_names=False,
     )
+
+
+def test_tokenize():
+    from transformers import AutoTokenizer
+
+    a = pd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+            "I am the third entry in this series.",
+            "May the fourth be with you.",
+        ]
+    )
+    ba = bd.Series(a)
+
+    def ret_tokenizer():
+        # Load a pretrained tokenizer (e.g., BERT)
+        return AutoTokenizer.from_pretrained("bert-base-uncased")
+
+    pd_tokenizer = ret_tokenizer()
+    b = a.map(lambda x: pd_tokenizer.encode(x, add_special_tokens=True))
+    bb = ba.ai.tokenize(ret_tokenizer)
+
+    _test_equal(
+        bb,
+        b,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
