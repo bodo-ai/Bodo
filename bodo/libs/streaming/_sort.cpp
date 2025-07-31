@@ -1127,6 +1127,8 @@ StreamSortState::StreamSortState(
               DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, op_pool,
               op_mm),
       reservoir_sampling_state(n_keys, sample_size, dict_builders, schema) {
+    std::cout << "MEMORY BUDGET: " << mem_budget_bytes << std::endl;
+
     if (char* debug_mode_env_ = std::getenv("BODO_DEBUG_STREAM_SORT")) {
         this->debug_mode = !std::strcmp(debug_mode_env_, "1");
     }
