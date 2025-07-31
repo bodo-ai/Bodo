@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import datetime
 import inspect
 import itertools
@@ -856,7 +857,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
         return ((squared_sum - (sum**2) / count) / (count - ddof)) ** 0.5
 
-    @check_args_fallback(unsupported="all")
+    @check_args_fallback(supported=["percentiles"])
     def describe(self, percentiles=None, include=None, exclude=None):
         """
         Generates descriptive statistics.
@@ -884,22 +885,21 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         ):
             return nonnumeric_describe(self)
 
-        reduced_self = _compute_series_reduce(self, ["count", "min", "max", "sum"])
-        count, min, max, sum = (reduced_self[i] for i in range(4))
+        quantile_qs = [0.25, 0.5, 0.75]
+        if percentiles is not None:
+            if 0.5 not in percentiles:
+                bisect.insort(percentiles, 0.5)
+            quantile_qs = percentiles
 
+        quantile_index = [f"{q * 100:g}%" for q in quantile_qs]
+        index = ["count", "mean", "std", "min"] + quantile_index + ["max"]
+
+        # Evaluate count and sum
+        count, sum = _compute_series_reduce(self, ["count", "sum"])
         if count == 0:
             return pd.Series(
-                [0] + [pd.NA] * 7,
-                index=[
-                    "count",
-                    "mean",
-                    "std",
-                    "min",
-                    "25%",
-                    "50%",
-                    "75%",
-                    "max",
-                ],
+                [0] + [pd.NA] * (len(index) - 1),
+                index=index,
                 name=self.name,
                 dtype=pd.ArrowDtype(pa.float64()),
             )
@@ -918,9 +918,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             else pd.NA
         )
 
-        # Evaluate quantiles
-        q = [0.25, 0.5, 0.75]
-        new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])
+        # Evaluate quantiles, min, and max altogether since KLL tracks exact min and max values
+        min_q_max = [0.0] + quantile_qs + [1.0]
+        new_arrow_schema = pa.schema(
+            [pa.field(f"{val}", pa.float64()) for val in min_q_max]
+        )
         zero_size_self = arrow_to_empty_df(new_arrow_schema)
 
         exprs = [
@@ -931,7 +933,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 [0],
                 True,  # dropna
             )
-            for func_name in [f"quantile_{val}" for val in q]
+            for func_name in [f"quantile_{val}" for val in min_q_max]
         ]
 
         plan = LogicalAggregate(
@@ -943,29 +945,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         out_rank = execute_plan(plan)
         quantile_df = pd.DataFrame(out_rank)
 
-        result = [
-            count,
-            mean_val,
-            std_val,
-            min,
-            quantile_df["0.25"][0],
-            quantile_df["0.5"][0],
-            quantile_df["0.75"][0],
-            max,
+        result = [count, mean_val, std_val] + [
+            quantile_df[str(val)][0] for val in min_q_max
         ]
 
         return pd.Series(
             result,
-            index=[
-                "count",
-                "mean",
-                "std",
-                "min",
-                "25%",
-                "50%",
-                "75%",
-                "max",
-            ],
+            index=index,
             name=self.name,
         )
 
