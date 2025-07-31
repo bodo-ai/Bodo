@@ -104,7 +104,7 @@ bodosql_use_streaming_plan = os.environ.get("BODO_STREAMING_ENABLED", "1") != "0
 # the streaming plan in BodoSQL on the existing unit tests that may only
 # have one batch worth of data.
 # NOTE: should be the same as the default value for STREAMING_BATCH_SIZE in _shuffle.h
-bodosql_streaming_batch_size = int(os.environ.get("BODO_STREAMING_BATCH_SIZE", 4096))
+bodosql_streaming_batch_size = int(os.environ.get("BODO_STREAMING_BATCH_SIZE", 32768))
 # How many iterations to run a streaming loop for before synchronizing
 # -1 means it's adaptive and is updated based on shuffle buffer sizes
 stream_loop_sync_iters = int(os.environ.get("BODO_STREAM_LOOP_SYNC_ITERS", -1))
