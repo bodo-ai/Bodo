@@ -743,6 +743,46 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
+    @check_args_fallback(unsupported="none")
+    def map_with_state(self, init_state_fn, row_fn, na_action=None, output_type=None):
+        """
+        Map values of the Series by first initializaing state and then processing
+        each row of the series using the given function.  This variant of map is useful
+        where the initialization is potentially so expensive that doing it once per
+        partition/batch is prohibitive.  This variant performs the initialization only
+        once via the init_state_fn function.  That function returns the initiailized
+        state which is then passed to each invocation of row_fn along with the given
+        row to be processed.
+
+        Args:
+            init_state_fn : Callable returning state, which can have any type
+            row_fn : Callable taking the state returned by init_state_fn and the
+                     row to be processed and returning the row to be included in the
+                     output series.
+            output_type : if present, is an empty Pandas series specifying the output
+                          dtype of the operation.
+
+        Returns:
+            A BodoSeries containing the result of running row_fn on each row of the
+            current series.
+        """
+        if output_type is None:
+            state = init_state_fn()
+            # Get output data type by running the UDF on a sample of the data.
+            empty_series = get_scalar_udf_result_type(
+                self, "map_with_state", (state, row_fn), na_action=na_action
+            )
+        else:
+            empty_series = output_type
+
+        return _get_series_python_func_plan(
+            self._plan,
+            empty_series,
+            "map_with_state",
+            (init_state_fn, row_fn, na_action),
+            {},
+        )
+
     @check_args_fallback(supported=["ascending", "na_position", "kind"])
     def sort_values(
         self,
@@ -1756,7 +1796,12 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return PythonScalarFuncExpression(
-            empty_data, plan, expr.args[1], (idx,) + tuple(index_cols), expr.is_cfunc
+            empty_data,
+            plan,
+            expr.args[1],
+            (idx,) + tuple(index_cols),
+            expr.is_cfunc,
+            False,
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -1872,6 +1917,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
         ),
         (0,) + index_cols,
         False,  # is_cfunc
+        False,  # has_state
     )
 
 
@@ -1896,6 +1942,7 @@ def _get_series_python_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
+    has_state = func == "map_with_state"
     if cfunc_decorator:
         func_args = (func, cfunc_decorator)
         is_cfunc = True
@@ -1910,7 +1957,12 @@ def _get_series_python_func_plan(
         is_cfunc = False
 
     expr = PythonScalarFuncExpression(
-        empty_data, source_data, func_args, (col_index,) + tuple(index_cols), is_cfunc
+        empty_data,
+        source_data,
+        func_args,
+        (col_index,) + tuple(index_cols),
+        is_cfunc,
+        has_state,
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
