@@ -45,8 +45,8 @@ jobs:
 
       - name: Install Bodo Packages
         env:
-          # Build with support for Javascript UDFs
-          BUILD_WITH_V8: 1
+          # # Build with support for Javascript UDFs
+          # BUILD_WITH_V8: 1
           # Use sccache over ccache
           DISABLE_CCACHE: 1
         run: pixi run build
