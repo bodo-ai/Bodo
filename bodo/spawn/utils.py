@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import typing as pt
+import uuid
 from enum import Enum
 from time import sleep
 
@@ -25,6 +26,8 @@ class CommandType(str, Enum):
     DELETE_RESULT = "delete_result"
     REGISTER_TYPE = "register_type"
     SET_CONFIG = "set_config"
+    SPAWN_PROCESS = "spawn_process"
+    STOP_PROCESS = "stop_process"
 
 
 def poll_for_barrier(comm: MPI.Comm, poll_freq: float | None = 0.1):
@@ -77,3 +80,13 @@ def set_global_config(config_name: str, config_value: pt.Any):
     exec(f"import {mod_name}; mod = {mod_name}", globals(), locs)
     mod = locs["mod"]
     setattr(mod, attr, config_value)
+
+
+class WorkerProcess:
+    _uuid: uuid.UUID
+    _rank_to_pid: dict[int, int] = {}
+
+    def __init__(self, rank_to_pid: dict[int, int] = {}):
+        """Initialize WorkerProcess with a mapping of ranks to PIDs."""
+        self._uuid = uuid.uuid4()
+        self._rank_to_pid = rank_to_pid

@@ -39,6 +39,7 @@ from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_cl
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
+    WorkerProcess,
     debug_msg,
     poll_for_barrier,
 )
@@ -822,6 +823,33 @@ class Spawner:
                 f"Unsupported type for scatter_data: {type(data)}. Expected DataFrame or Series."
             )
 
+    def spawn_process_on_workers(
+        self,
+        command: str | list[str],
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+    ) -> WorkerProcess:
+        """Spawn a process on all workers and return a WorkerProcess object"""
+        assert not self._is_running, "spawn_process_on_workers: already running"
+
+        self._is_running = True
+        self.worker_intercomm.bcast(CommandType.SPAWN_PROCESS.value, self.bcast_root)
+        self.worker_intercomm.bcast((command, env, cwd), self.bcast_root)
+        worker_process = self.worker_intercomm.recv(source=0)
+        self._is_running = False
+        self._run_del_queue()
+        return worker_process
+
+    def stop_process_on_workers(self, worker_process: WorkerProcess) -> None:
+        """Stop a process on all workers given the corresponding WorkerProcess."""
+        assert not self._is_running, "stop_process_on_workers: already running"
+
+        self._is_running = True
+        self.worker_intercomm.bcast(CommandType.STOP_PROCESS.value, self.bcast_root)
+        self.worker_intercomm.bcast(worker_process, self.bcast_root)
+        self._is_running = False
+        self._run_del_queue()
+
 
 spawner: Spawner | None = None
 
@@ -854,6 +882,27 @@ def submit_func_to_workers(
     spawner = get_spawner()
     return spawner.submit_func_to_workers(
         func_to_execute, propagate_env, *args, **kwargs
+    )
+
+
+def spawn_process_on_workers(
+    command: str | list[str],
+    env: dict[str, str] | None = None,
+    cwd: str | None = None,
+) -> WorkerProcess:
+    """Get the global spawner and spawn a process on all workers and returns a WorkerProcess object"""
+    assert bodo.spawn_mode, "Cannot spawn worker processes outside of Bodo spawn mode"
+
+    spawner = get_spawner()
+    return spawner.spawn_process_on_workers(command, env, cwd)
+
+
+def stop_process_on_workers(worker_process: WorkerProcess) -> None:
+    """Get the global spawner and stop a process on all workers given the corresponding WorkerProcess."""
+
+    spawner = get_spawner()
+    return spawner.stop_process_on_workers(
+        worker_process,
     )
 
 
