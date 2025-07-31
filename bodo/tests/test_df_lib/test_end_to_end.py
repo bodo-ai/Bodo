@@ -2895,3 +2895,36 @@ def test_dataframe_reset_index_pipeline():
         check_pandas_types=False,
         reset_index=False,
     )
+
+
+def test_map_with_state():
+    def init_state():
+        return {1: 7}
+
+    def per_row(state, row):
+        return "bodo" + str(row + state[1])
+
+    a = pd.Series(list(range(20)))
+    ba = bd.Series(a)
+    res = a.map(lambda x: "bodo" + str(x + 7))
+    bres = ba.map_with_state(init_state, per_row)
+
+    _test_equal(
+        bres,
+        res,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+    bres = ba.map_with_state(
+        init_state, per_row, output_type=pd.Series(dtype="string[pyarrow]")
+    )
+
+    _test_equal(
+        bres,
+        res,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
