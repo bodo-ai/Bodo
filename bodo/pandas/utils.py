@@ -601,10 +601,13 @@ def write_s3_vectors_helper(cpp_table, vector_bucket_name, index_name):
 
     df = cpp_table_to_df(cpp_table)
 
+    if not len(df):
+        return
+
     df = df.loc[:, ["key", "data", "metadata"]]
     df["data"] = df.data.map(lambda x: {"float32": x.tolist()})
 
-    s3vectors = boto3.client("s3vectors", region_name="us-east-2")
+    s3vectors = boto3.client("s3vectors")
     s3vectors.put_vectors(
         vectorBucketName=vector_bucket_name,
         indexName=index_name,
