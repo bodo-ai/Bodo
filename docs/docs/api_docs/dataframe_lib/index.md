@@ -56,8 +56,8 @@ When this happens, the current query plan of the DataFrame is immediately execut
 </div>
 
 
-[general-functions]: ../dataframe_lib/general_functions.md
-[dataframe]: ../dataframe_lib/dataframe.md
+[general-functions]: ../dataframe_lib/general_functions/index.md
+[dataframe]: ../dataframe_lib/dataframe/index.md
 [series]: ../dataframe_lib/series/index.md
 [inout]: ../dataframe_lib/io.md
 [groupby]: ../dataframe_lib/groupby/index.md
