@@ -450,6 +450,7 @@ class PythonScalarFuncExpression(Expression):
                 self.func_args,
                 (in_col_ind + col_index_offset,) + index_cols,
                 self.is_cfunc,
+                self.has_state,
             )
             expr.is_series = self.is_series
             return expr
@@ -852,6 +853,7 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
         ),
         tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
         False,  # is_cfunc
+        False,  # has_state
     )
 
     # Select Index columns explicitly for output
