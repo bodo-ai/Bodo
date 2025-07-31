@@ -147,7 +147,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             std::vector<std::string>({}), std::vector<std::string>({}));
 
         // If function_names includes quantiles, create a PhysicalQuantile
-        // operator
+        // operator. Function names for quantile evaluations are formatted as
+        // f"quantile_{value}" where q=value (i.e. "quantile_0.5" for q=0.5).
         if (function_names[0].starts_with("quantile")) {
             std::vector<double> quantiles{};
             for (auto it : function_names) {
