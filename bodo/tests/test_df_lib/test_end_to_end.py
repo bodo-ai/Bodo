@@ -2897,7 +2897,9 @@ def test_dataframe_reset_index_pipeline():
     )
 
 
-@pytest.mark.parametrize("quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1]])
+@pytest.mark.parametrize(
+    "quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1], [0.22, 0.55, 0.99], [0.5]]
+)
 def test_series_quantile(quantiles):
     """Tests that approximate quantiles using KLL fall within expected error bounds."""
 
@@ -3045,6 +3047,8 @@ def test_series_quantile_tails():
 
 
 def test_series_quantile_singleton():
+    """Tests quantile on a singleton BodoSeries."""
+
     pds = pd.Series([100])
     bds = bd.Series([100])
 
