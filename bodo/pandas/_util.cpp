@@ -351,6 +351,7 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
             throw std::runtime_error("args_in_func_args should be 2+-tuple");
         }
 
+        // We haven't run the init_state function yet so run it.
         if (init_state == nullptr) {
             // Extract first tuple element and verify it's callable
             PyObject *init_func =
@@ -374,19 +375,27 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
             throw std::runtime_error("New tuple creation failed");
         }
 
-        // New tuple will be the init_state followed by the other original args.
+        // New tuple will be the 5 tuple with the 4th element being yet another
+        // new tuple with init_state followed by the other original args in
+        // func_args.
         for (int i = 0; i < PyTuple_Size(args); ++i) {
+            // The args part of func_args.
             if (i == 3) {
+                // Create new tuple replacing init_func with init_state.
                 PyObject *new_args_in_func_args =
                     PyTuple_New(PyTuple_Size(args_in_func_args));
+                // Put init_state into the tuple.
                 PyTuple_SetItem(new_args_in_func_args, 0, init_state);
+                // Copy other original args to the new tuple.
                 for (int j = 1; j < PyTuple_Size(args_in_func_args); ++j) {
-                    PyTuple_SetItem(new_args_in_func_args, j,
-                                    PyTuple_GetItem(args_in_func_args, j));
+                    PyObject *arg_elem = PyTuple_GetItem(args_in_func_args, j);
+                    Py_INCREF(arg_elem);
+                    PyTuple_SetItem(new_args_in_func_args, j, arg_elem);
                 }
                 PyTuple_SetItem(new_tuple, i, new_args_in_func_args);
                 continue;
             }
+            // Copy over parts of func_args into the new func_args tuple.
             PyObject *tup_elem = PyTuple_GetItem(args, i);  // borrowed ref
             Py_INCREF(tup_elem);
             PyTuple_SetItem(new_tuple, i, tup_elem);

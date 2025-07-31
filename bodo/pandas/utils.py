@@ -557,18 +557,30 @@ def run_func_on_table(cpp_table, result_type, in_args):
 
     udf_time_start = time.perf_counter_ns()
     if isinstance(func, str) and is_attr:
+        # We implement our BodoSeries map_with_state with an underlying
+        # Pandas map and a function whose closure captures the previously
+        # created init_state.
         if func == "map_with_state":
             if len(args) != 3:
                 raise Exception(
                     f"Got unexpected number of args {len(args)} for map_with_state"
                 )
-            func = "map"
+            func = "map"  # Use pandas map to implement map_with_state
+            # Extract args[1] which is the mapping function provided by the user
+            # as row_fn in map_with_state.  We have to do these extractions and
+            # not use them directly in state_wrapper below because we reuse args
+            # and that changes the closure capture you'd otherwise expect in
+            # state_wrapper.
             state_wrapper_func = args[1]
+            # Extract args[0] which is the previously created init_state.
             state_wrapper_state = args[0]
 
             def state_wrapper(x):
+                # Call the user-prrovided row_fn function passing the init_state
+                # and the row x from the table.
                 return state_wrapper_func(state_wrapper_state, x)
 
+            # Map takes two args, the function to run and args[2] which is na_action.
             args = (state_wrapper, args[2])
 
         func_path_str = func
