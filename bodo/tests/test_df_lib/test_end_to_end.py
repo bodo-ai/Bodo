@@ -2946,6 +2946,41 @@ def test_dataframe_reset_index_pipeline():
     )
 
 
+def test_map_with_state():
+    def init_state():
+        return {1: 7}
+
+    def per_row(state, row):
+        return "bodo" + str(row + state[1])
+
+    a = pd.Series(list(range(20)))
+    ba = bd.Series(a)
+    res = a.map(lambda x: "bodo" + str(x + 7))
+    with assert_executed_plan_count(1):
+        bres = ba.map_with_state(init_state, per_row)
+
+    _test_equal(
+        bres,
+        res,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+    with assert_executed_plan_count(0):
+        bres = ba.map_with_state(
+            init_state, per_row, output_type=pd.Series(dtype="string[pyarrow]")
+        )
+
+    _test_equal(
+        bres,
+        res,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+
 @pytest.mark.parametrize(
     "quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1], [0.22, 0.55, 0.99], [0.5]]
 )

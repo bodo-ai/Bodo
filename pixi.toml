@@ -12,7 +12,9 @@ azure =        { features = ["rcpp", "dev", "local-mpi", "azure"], solve-group =
 platform =     { features = ["rcpp", "platform", "platform-mpi"],  solve-group = "313-platform" }
 platform-dev = { features = ["rcpp", "dev", "platform-mpi"],       solve-group = "313-platform" }
 # Pip C++ Deps
-pip-cpp-macos-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip" }
+pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
+pip-cpp-macos = { features = ["rcpp", "local-mpi-mac-pip", "pip"], no-default-feature = true, solve-group = "pip-mac" }
+
 
 # Build Commands
 [tasks.build-bodo]
@@ -133,7 +135,7 @@ setuptools = ">=64"
 setuptools_scm = ">=8"
 cython = ">=3.0"
 scikit-build-core = "*"
-# Copied into bodo/mpi4py
+# Copied into bodo/mpi4py (pip only)
 mpi4py = ">=4.0,<4.1"
 
 # Build C++ Deps
@@ -155,6 +157,8 @@ matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
+# Polaris (installed via pip) requires boto3/botocore <1.39
+boto3 = "<1.39"
 
 # Documentation Testing
 beautifulsoup4 = "*"
@@ -237,18 +241,25 @@ httpie = "*"
 # Restricted to match Intel MPI. Upgrade with IMPI.
 # Using h* to avoid the "external_*" kind
 [feature.local-mpi.target.osx.dependencies]
-mpich = { version = "4.1.*", build = "h*" }
+mpich = { version = "==4.3.1", build = "h*102" }
 [feature.local-mpi.target.linux.dependencies]
-mpich = { version = "4.1.*", build = "h*" }
-
+mpich = { version = "==4.3.1", build = "h*102" }
 [feature.local-mpi.target.win.dependencies]
 impi-devel = "*"
+
+# Newest mpich wheels availible via pip have a bug that prevents calling spawn,
+# the pixi version has to match the pip wheel for compatibility with mpi4py
+# (since we build mpi4py against this version).
+[feature.local-mpi-mac-pip.target.osx.dependencies]
+mpich = { version = "4.1.*" }
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
+# Note: newer MPICH versions (>=4.2.0) implement the MPI 4.1 specification which is currently incompatible
+# with i-mpi on the platform. TODO: Update platform MPI.
 dependencies = { mpich = { version = "==4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
 
 # Feature pip

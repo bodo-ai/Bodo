@@ -847,6 +847,7 @@ def overload_coerce_to_array(
                     bodo.MapArrayType,
                 ),
             )
+            or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(data)
         ):
 
             def impl_series_to_nullable(

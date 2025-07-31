@@ -27,7 +27,7 @@ static char* __env_streaming_batch_size_str =
     std::getenv("BODO_STREAMING_BATCH_SIZE");
 const int STREAMING_BATCH_SIZE = __env_streaming_batch_size_str != nullptr
                                      ? std::stoi(__env_streaming_batch_size_str)
-                                     : 4096;
+                                     : 32768;
 
 #ifndef DEFAULT_SYNC_ITERS
 // Default number of iterations between syncs

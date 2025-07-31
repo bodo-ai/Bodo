@@ -807,7 +807,8 @@ class PhysicalUDFExpression : public PhysicalExpression {
         : PhysicalExpression(children),
           scalar_func_data(_scalar_func_data),
           result_type(_result_type),
-          cfunc_ptr(nullptr) {
+          cfunc_ptr(nullptr),
+          init_state(nullptr) {
         if (scalar_func_data.is_cfunc) {
             PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
 
@@ -841,7 +842,11 @@ class PhysicalUDFExpression : public PhysicalExpression {
         }
     }
 
-    virtual ~PhysicalUDFExpression() = default;
+    virtual ~PhysicalUDFExpression() {
+        if (init_state != nullptr) {
+            Py_DECREF(init_state);
+        }
+    }
 
     /**
      * @brief How to process this expression tree node.
@@ -873,4 +878,5 @@ class PhysicalUDFExpression : public PhysicalExpression {
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalUDFExpressionMetrics metrics;
     table_udf_t cfunc_ptr;
+    PyObject *init_state;
 };

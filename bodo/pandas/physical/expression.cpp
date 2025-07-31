@@ -515,7 +515,8 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
     } else {
         auto [out_temp, cpp_to_py_time, udf_time, py_to_cpp_time] =
             runPythonScalarFunction(udf_input, result_type,
-                                    scalar_func_data.args);
+                                    scalar_func_data.args,
+                                    scalar_func_data.has_state, init_state);
         udf_output = out_temp;
         // Update the metrics.
         this->metrics.cpp_to_py_time += cpp_to_py_time;
