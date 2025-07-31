@@ -967,7 +967,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             max,
         ]
 
-        return pd.Series(
+        return BodoSeries(
             result,
             index=[
                 "count",
@@ -1141,43 +1141,39 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 else pd.NA
             )
 
-        new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])
-        zero_size_self = arrow_to_empty_df(new_arrow_schema)
+        # new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in [0]])
+        # zero_size_self = arrow_to_empty_df(new_arrow_schema)
+        new_arrow_schema = pd.Series(
+            dtype=pd.ArrowDtype(pa.float64()),
+            name=self.name,
+            index=[f"{val}" for val in q],
+        )
 
         exprs = [
             AggregateExpression(
-                zero_size_self,
+                new_arrow_schema,
                 self._plan,
                 func_name,
                 [0],
                 True,  # dropna
             )
-            for func_name in [f"quantile_{val}" for val in q]
+            for func_name in [f"quantile{val}" for val in q]
         ]
 
         plan = LogicalAggregate(
-            zero_size_self,
+            new_arrow_schema,
             self._plan,
             [],
             exprs,
         )
-        out_rank = execute_plan(plan)
 
-        df = pd.DataFrame(out_rank)
-        res = []
-        cols = df.columns
-
-        # Return as scalar if q is a scalar value.
+        # Return scalar if q is a single value, otherwise return a lazy BodoSeries.
         if not is_list:
-            return df[cols[0]][0]
+            out_series = execute_plan(plan)
+            idx = out_series.index[0]
+            return out_series[idx]
 
-        # Otherwise, return a BodoSeries with quantile values.
-        for i in range(len(cols)):
-            res.append(df[cols[i]][0])
-
-        return BodoSeries(
-            res, index=index, dtype=pd.ArrowDtype(pa.float64()), name=self.name
-        )
+        return wrap_plan(plan)
 
 
 class BodoStringMethods:

@@ -676,7 +676,7 @@ def wrap_plan(plan, res_id=None, nrows=None):
             metadata, collect_func=mgr._collect, del_func=_del_func, plan=plan
         )
     else:
-        empty_data = plan.empty_data.squeeze()
+        empty_data = plan.empty_data.iloc[:, 0]
         # Replace the dummy name with None set in LazyPlan constructor
         if empty_data.name == BODO_NONE_DUMMY:
             empty_data.name = None
@@ -862,7 +862,7 @@ def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
     """Create an empty Series like ser possibly converting some dtype to use
     pyarrow"""
     empty_df = arrow_to_empty_df(pa.Schema.from_pandas(ser.to_frame()))
-    empty_series = empty_df.squeeze()
+    empty_series = empty_df.iloc[:, 0]
     empty_series.name = ser.name
     return empty_series
 

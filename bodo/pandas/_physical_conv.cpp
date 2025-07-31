@@ -148,19 +148,31 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
         // If function_names includes quantiles, create a PhysicalQuantile
         // operator. Function names for quantile evaluations are formatted as
-        // f"quantile_{value}" where q=value (i.e. "quantile_0.5" for q=0.5).
+        // f"quantile{value}" where q=value (i.e. "quantile0.5" for q=0.5).
         if (function_names[0].starts_with("quantile")) {
             std::vector<double> quantiles{};
+            int max_precision = 0;
             for (auto it : function_names) {
                 if (!it.starts_with("quantile")) {
                     throw std::runtime_error(
                         "quantile functions cannot be mixed with other "
                         "aggregate operations.");
                 }
-                quantiles.push_back(std::stod(it.substr(9)));
+                std::string q_str = it.substr(8);
+                auto dot_pos = q_str.find('.');
+
+                // Track max precision of q values to unify precision in index
+                // like pandas.
+                if (dot_pos != std::string::npos) {
+                    int digits = q_str.size() - dot_pos - 1;
+                    max_precision = std::max(max_precision, digits);
+                }
+                quantiles.push_back(std::stod(q_str));
             }
-            auto physical_op =
-                std::make_shared<PhysicalQuantile>(bodo_schema, quantiles);
+            // Limit max precision to 6 to match pandas behavior.
+            max_precision = std::min(max_precision, 6);
+            auto physical_op = std::make_shared<PhysicalQuantile>(
+                bodo_schema, quantiles, max_precision);
             finished_pipelines.emplace_back(
                 this->active_pipeline->Build(physical_op));
             this->active_pipeline =

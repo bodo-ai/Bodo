@@ -26,10 +26,12 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalQuantile(
         std::shared_ptr<bodo::Schema> out_schema, std::vector<double> quantiles,
-        uint16_t k = datasketches::kll_constants::DEFAULT_K)
+        int max_precision, uint16_t k = datasketches::kll_constants::DEFAULT_K)
         : out_schema(out_schema),
           quantiles(quantiles),
-          sketch(std::make_shared<KLLDoubleSketch>(k)) {}
+          sketch(std::make_shared<KLLDoubleSketch>(k)),
+          collected(false),
+          max_precision(max_precision) {}
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
@@ -83,11 +85,12 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
     virtual ~PhysicalQuantile() = default;
 
     void Finalize() override {
-        if (collected) {
+        if (this->collected) {
             return;
         }
+        printf("Finalize\n");
         // Toggle collected flag to prevent multiple collections
-        collected = true;
+        this->collected = true;
         int rank, size;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -127,12 +130,16 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             }
 
             *sketch = std::move(merged_sketch);
-
-            std::vector<std::shared_ptr<array_info>> results{};
+            std::vector<std::shared_ptr<array_info>> results{}, idx_results{};
+            arrow::DoubleBuilder builder;
+            arrow::StringBuilder idx_builder;
             for (auto it : quantiles) {
+                std::ostringstream ss;
+                ss << std::fixed << std::setprecision(max_precision) << it;
+                std::string idx_name = ss.str();
+                // std::string idx_name = std::to_string(it);
                 double qval;
                 if (!sketch->is_empty()) {
-                    // For queries q=0.0 and q=1.0, return exact min/max values
                     if (it == 0.0) {
                         qval = sketch->get_min_item();
                     } else if (it == 1.0) {
@@ -143,13 +150,26 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                 } else {
                     qval = std::numeric_limits<double>::quiet_NaN();
                 }
-                auto arrow_scalar = arrow::MakeScalar(qval);
-                auto arr = ScalarToArrowArray(arrow_scalar);
-                auto bodo_arr =
-                    arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr());
-                results.push_back(bodo_arr);
+                CHECK_ARROW(builder.Append(qval),
+                            "Error appending value to DoubleBuilder");
+                CHECK_ARROW(idx_builder.Append(idx_name),
+                            "Error appending index name to DoubleBuilder");
             }
+
+            std::shared_ptr<arrow::Array> arr, idx_arr;
+            CHECK_ARROW(builder.Finish(&arr), "Error finishing DoubleBuilder");
+            CHECK_ARROW(idx_builder.Finish(&idx_arr),
+                        "Error finishing StringBuilder");
+            printf("arr: %s\n", arr->ToString().c_str());
+            // Wrap into Bodo array + table_info
+            std::shared_ptr<array_info> bodo_arr =
+                arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr());
+            results.push_back(bodo_arr);
+            std::shared_ptr<array_info> idx_bodo_arr =
+                arrow_array_to_bodo(idx_arr, bodo::BufferPool::DefaultPtr());
+            results.push_back(idx_bodo_arr);
             final_result = std::make_shared<table_info>(results);
+
         } else {
             // Produce empty result for rank != 0
             final_result = std::make_shared<table_info>(
@@ -170,5 +190,6 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
     const std::vector<double> quantiles;
     std::shared_ptr<KLLDoubleSketch> sketch;
     std::shared_ptr<table_info> final_result;
-    bool collected{false};
+    bool collected;
+    int max_precision;  // Precision for quantile values
 };
