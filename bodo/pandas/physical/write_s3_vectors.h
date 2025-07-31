@@ -21,7 +21,7 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
             return OperatorResult::FINISHED;
         }
 
-        // TODO: write data
+        this->write_batch(input_batch);
 
         // Sync is_last flag
         bool is_last = prev_op_result == OperatorResult::FINISHED;
@@ -44,6 +44,50 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
     }
 
    private:
+    /**
+     * @brief Write a batch of vectors to S3 using the
+     * bodo.pandas.utils.write_s3_vectors_helper function.
+     *
+     * @param input_batch input data to write to S3 Vectors.
+     */
+    void write_batch(std::shared_ptr<table_info> input_batch) {
+        // Call bodo.pandas.utils.write_s3_vectors_helper()
+
+        // Import the bodo.pandas.utils module
+        PyObject* bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+        if (!bodo_module) {
+            PyErr_Print();
+            throw std::runtime_error(
+                "Failed to import bodo.pandas.utils module");
+        }
+
+        // Call the write_s3_vectors_helper() with the table_info pointer and
+        // vector/index names
+        PyObject* vector_bucket_name_py =
+            PyUnicode_FromString(vector_bucket_name.c_str());
+        PyObject* index_name_py = PyUnicode_FromString(index_name.c_str());
+        if (!vector_bucket_name_py || !index_name_py) {
+            Py_DECREF(bodo_module);
+            throw std::runtime_error(
+                "Failed to create Python strings for bucket and index names");
+        }
+        PyObject* result = PyObject_CallMethod(
+            bodo_module, "write_s3_vectors_helper", "LOO",
+            reinterpret_cast<int64_t>(new table_info(*input_batch)),
+            vector_bucket_name_py, index_name_py);
+        if (!result) {
+            PyErr_Print();
+            Py_DECREF(bodo_module);
+            throw std::runtime_error("Error calling write_s3_vectors_helper");
+        }
+
+        // Clean up Python objects
+        Py_DECREF(vector_bucket_name_py);
+        Py_DECREF(index_name_py);
+        Py_DECREF(bodo_module);
+        Py_DECREF(result);
+    }
+
     std::string vector_bucket_name;
     std::string index_name;
 

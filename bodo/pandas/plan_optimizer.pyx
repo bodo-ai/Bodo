@@ -906,6 +906,8 @@ cdef class LogicalS3VectorsWrite(LogicalOperator):
     """
     Wrapper around DuckDB's LogicalCopyToFile for writing S3 Vector datasets.
     """
+    cdef readonly str vector_bucket_name
+    cdef readonly str index_name
 
     def __cinit__(self, object out_schema, LogicalOperator source,
             str vector_bucket_name,
