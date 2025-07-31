@@ -12,6 +12,7 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
         S3VectorsWriteFunctionData& bind_data)
         : vector_bucket_name(std::move(bind_data.vector_bucket_name)),
           index_name(std::move(bind_data.index_name)),
+          region(bind_data.region),
           is_last_state(std::make_shared<IsLastState>()),
           finished(false) {}
 
@@ -74,9 +75,9 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
                 "Failed to create Python strings for bucket and index names");
         }
         PyObject* result = PyObject_CallMethod(
-            bodo_module, "write_s3_vectors_helper", "LOO",
+            bodo_module, "write_s3_vectors_helper", "LOOO",
             reinterpret_cast<int64_t>(new table_info(*input_batch)),
-            vector_bucket_name_py, index_name_py);
+            vector_bucket_name_py, index_name_py, region);
         if (!result) {
             PyErr_Print();
             Py_DECREF(bodo_module);
@@ -92,6 +93,7 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
 
     std::string vector_bucket_name;
     std::string index_name;
+    PyObject* region;
 
     const std::shared_ptr<IsLastState> is_last_state;
     bool finished = false;

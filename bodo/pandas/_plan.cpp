@@ -800,14 +800,14 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
 
 duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_s3_vectors_write_node(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
-    std::string vector_bucket_name, std::string index_name) {
+    std::string vector_bucket_name, std::string index_name, PyObject *region) {
     auto source_duck = to_duckdb(source);
 
     duckdb::CopyFunction copy_function =
         duckdb::CopyFunction("bodo_s3_vectors_write");
     duckdb::unique_ptr<duckdb::FunctionData> bind_data =
         duckdb::make_uniq<S3VectorsWriteFunctionData>(vector_bucket_name,
-                                                      index_name);
+                                                      index_name, region);
 
     duckdb::unique_ptr<duckdb::LogicalCopyToFile> copy_node =
         duckdb::make_uniq<duckdb::LogicalCopyToFile>(

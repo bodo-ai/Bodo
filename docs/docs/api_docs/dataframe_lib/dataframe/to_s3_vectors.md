@@ -13,14 +13,16 @@ embeddings with the same length as expected by the vector index in each row.
 : __vector_bucket_name: *str*:__ S3 Vectors bucket name to use.
 
 : __index_name : *str*:__ S3 Vectors index name to use.
+: __region : *str, optional*:__ Region of S3 Vector bucket.
 
 <p class="api-header">Example</p>
 
 ``` py
 import pandas as pd
 import bodo.pandas as bd
-import pickle
+import boto3
 
+bedrock = boto3.client("bedrock-runtime", region_name="us-east-2")
 texts = [
     "Star Wars: A farm boy joins rebels to fight an evil empire in space", 
     "Jurassic Park: Scientists create dinosaurs in a theme park that goes wrong",
@@ -49,7 +51,8 @@ df["metadata"] = [
 bdf = bd.from_pandas(df)
 bdf.to_s3_vectors(
     vector_bucket_name="ehsan-test-vector",
-    index_name="test-ind"
+    index_name="test-ind",
+    region="us-east-2",
 )
 
 ```

@@ -595,7 +595,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
     return out_ptr, cpp_to_py, udf_time, py_to_cpp
 
 
-def write_s3_vectors_helper(cpp_table, vector_bucket_name, index_name):
+def write_s3_vectors_helper(cpp_table, vector_bucket_name, index_name, region):
     """Write a C++ table to S3 Vectors using the boto3 client."""
     import boto3
 
@@ -607,7 +607,7 @@ def write_s3_vectors_helper(cpp_table, vector_bucket_name, index_name):
     df = df.loc[:, ["key", "data", "metadata"]]
     df["data"] = df.data.map(lambda x: {"float32": x.tolist()})
 
-    s3vectors = boto3.client("s3vectors")
+    s3vectors = boto3.client("s3vectors", region_name=region)
     s3vectors.put_vectors(
         vectorBucketName=vector_bucket_name,
         indexName=index_name,

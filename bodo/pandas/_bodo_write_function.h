@@ -146,9 +146,10 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
  */
 struct S3VectorsWriteFunctionData : public BodoWriteFunctionData {
     S3VectorsWriteFunctionData(std::string vector_bucket_name,
-                               std::string index_name)
+                               std::string index_name, PyObject *region)
         : vector_bucket_name(std::move(vector_bucket_name)),
-          index_name(std::move(index_name)) {}
+          index_name(std::move(index_name)),
+          region(region) {}
 
     ~S3VectorsWriteFunctionData() override = default;
 
@@ -156,12 +157,13 @@ struct S3VectorsWriteFunctionData : public BodoWriteFunctionData {
         const S3VectorsWriteFunctionData &other =
             other_p.Cast<S3VectorsWriteFunctionData>();
         return (other.vector_bucket_name == this->vector_bucket_name &&
-                other.index_name == this->index_name);
+                other.index_name == this->index_name &&
+                other.region == this->region);
     }
 
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
         return duckdb::make_uniq<S3VectorsWriteFunctionData>(
-            this->vector_bucket_name, this->index_name);
+            this->vector_bucket_name, this->index_name, this->region);
     }
 
     std::shared_ptr<PhysicalSink> CreatePhysicalOperator(
@@ -169,4 +171,5 @@ struct S3VectorsWriteFunctionData : public BodoWriteFunctionData {
 
     std::string vector_bucket_name;
     std::string index_name;
+    PyObject *region;
 };

@@ -51,7 +51,9 @@ def test_write_s3_vectors(datapath):
     )
 
     try:
-        bdf.to_s3_vectors(vector_bucket_name=bucket_name, index_name=index_name)
+        bdf.to_s3_vectors(
+            vector_bucket_name=bucket_name, index_name=index_name, region=region
+        )
         # Verify write
         response = s3vectors.get_vectors(
             vectorBucketName=bucket_name,
@@ -66,16 +68,24 @@ def test_write_s3_vectors(datapath):
     # Error checking
     with pytest.raises(BodoError, match="DataFrame must have columns"):
         bdf_invalid = bd.from_pandas(df.drop("key", axis=1))
-        bdf_invalid.to_s3_vectors(vector_bucket_name=bucket_name, index_name=index_name)
+        bdf_invalid.to_s3_vectors(
+            vector_bucket_name=bucket_name, index_name=index_name, region=region
+        )
 
     with pytest.raises(BodoError, match="column must be strings to write"):
         bdf_invalid = bd.from_pandas(df.assign(key=[1, 2, 3]))
-        bdf_invalid.to_s3_vectors(vector_bucket_name=bucket_name, index_name=index_name)
+        bdf_invalid.to_s3_vectors(
+            vector_bucket_name=bucket_name, index_name=index_name, region=region
+        )
 
     with pytest.raises(BodoError, match="column must be a list of floats"):
         bdf_invalid = bd.from_pandas(df.assign(data=[1, 2, 3]))
-        bdf_invalid.to_s3_vectors(vector_bucket_name=bucket_name, index_name=index_name)
+        bdf_invalid.to_s3_vectors(
+            vector_bucket_name=bucket_name, index_name=index_name, region=region
+        )
 
     with pytest.raises(BodoError, match="column must be a struct type"):
         bdf_invalid = bd.from_pandas(df.assign(metadata=[1, 2, 3]))
-        bdf_invalid.to_s3_vectors(vector_bucket_name=bucket_name, index_name=index_name)
+        bdf_invalid.to_s3_vectors(
+            vector_bucket_name=bucket_name, index_name=index_name, region=region
+        )

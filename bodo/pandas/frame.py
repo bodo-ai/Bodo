@@ -582,6 +582,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         self,
         vector_bucket_name: str,
         index_name: str,
+        region: str = None,
     ) -> None:
         """
         Write the DataFrame to S3 Vectors storage.
@@ -622,6 +623,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self._plan,
             vector_bucket_name,
             index_name,
+            region,
         )
         execute_plan(write_plan)
 

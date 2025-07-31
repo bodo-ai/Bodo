@@ -332,7 +332,7 @@ cdef extern from "_plan.h" nogil:
         c_string bucket_region, int64_t max_pq_chunksize, c_string compression, object partition_tuples, object sort_tuples, c_string iceberg_schema_str,
         object output_pa_schema, object fs) except +
     cdef unique_ptr[CLogicalCopyToFile] make_s3_vectors_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string vector_bucket_name,
-        c_string index_name) except +
+        c_string index_name, object region) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
     cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
@@ -911,14 +911,14 @@ cdef class LogicalS3VectorsWrite(LogicalOperator):
 
     def __cinit__(self, object out_schema, LogicalOperator source,
             str vector_bucket_name,
-            str index_name):
+            str index_name, object region):
         self.out_schema = out_schema
         self.sources = [source]
         self.vector_bucket_name = vector_bucket_name
         self.index_name = index_name
 
         cdef unique_ptr[CLogicalCopyToFile] c_logical_copy_to_file = make_s3_vectors_write_node(source.c_logical_operator, out_schema, vector_bucket_name.encode(),
-                index_name.encode())
+                index_name.encode(), region)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_copy_to_file.release())
 
     def __str__(self):

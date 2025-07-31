@@ -301,11 +301,13 @@ class LogicalS3VectorsWrite(LogicalOperator):
         source,
         vector_bucket_name,
         index_name,
+        region,
     ):
         self.source = source
         self.vector_bucket_name = vector_bucket_name
         self.index_name = index_name
-        super().__init__(empty_data, source, vector_bucket_name, index_name)
+        self.region = region
+        super().__init__(empty_data, source, vector_bucket_name, index_name, region)
 
 
 class ColRefExpression(Expression):
