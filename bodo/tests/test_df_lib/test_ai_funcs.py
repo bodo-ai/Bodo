@@ -5,8 +5,10 @@ import random
 
 import boto3
 import pandas as pd
+import pytest
 
 import bodo.pandas as bd
+from bodo.utils.typing import BodoError
 
 
 def test_write_s3_vectors(datapath):
@@ -60,3 +62,20 @@ def test_write_s3_vectors(datapath):
     finally:
         # Clean up Index after the test
         s3vectors.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+
+    # Error checking
+    with pytest.raises(BodoError, match="DataFrame must have columns"):
+        bdf_invalid = bd.from_pandas(df.drop("key", axis=1))
+        bdf_invalid.to_s3_vectors(vector_bucket_name=bucket_name, index_name=index_name)
+
+    with pytest.raises(BodoError, match="column must be strings to write"):
+        bdf_invalid = bd.from_pandas(df.assign(key=[1, 2, 3]))
+        bdf_invalid.to_s3_vectors(vector_bucket_name=bucket_name, index_name=index_name)
+
+    with pytest.raises(BodoError, match="column must be a list of floats"):
+        bdf_invalid = bd.from_pandas(df.assign(data=[1, 2, 3]))
+        bdf_invalid.to_s3_vectors(vector_bucket_name=bucket_name, index_name=index_name)
+
+    with pytest.raises(BodoError, match="column must be a struct type"):
+        bdf_invalid = bd.from_pandas(df.assign(metadata=[1, 2, 3]))
+        bdf_invalid.to_s3_vectors(vector_bucket_name=bucket_name, index_name=index_name)

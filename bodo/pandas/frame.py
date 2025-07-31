@@ -586,11 +586,36 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """
         Write the DataFrame to S3 Vectors storage.
         """
+        import pyarrow as pa
+
         from bodo.pandas.base import _empty_like
 
         # https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-getting-started.html
 
-        # TODO: schema check
+        # Check schema
+        schema = self._plan.pa_schema
+        required_fields = {"key", "data", "metadata"}
+        if not required_fields.issubset(schema.names):
+            raise BodoError(
+                f"DataFrame must have columns {required_fields} to write to S3 Vectors."
+            )
+        if schema.field("key").type not in (pa.string(), pa.large_string()):
+            raise BodoError(
+                "DataFrame 'key' column must be strings to write to S3 Vectors."
+            )
+        if schema.field("data").type not in (
+            pa.list_(pa.float32()),
+            pa.large_list(pa.float32()),
+            pa.list_(pa.float64()),
+            pa.large_list(pa.float64()),
+        ):
+            raise BodoError(
+                "DataFrame 'data' column must be a list of floats to write to S3 Vectors."
+            )
+        if not isinstance(schema.field("metadata").type, pa.StructType):
+            raise BodoError(
+                "DataFrame 'metadata' column must be a struct type to write to S3 Vectors."
+            )
 
         write_plan = LogicalS3VectorsWrite(
             _empty_like(self),
