@@ -553,7 +553,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
         )
     else:
         input = cpp_table_to_df(cpp_table, use_arrow_dtypes=use_arrow_dtypes)
-    cpp_to_py = time.perf_counter_ns() - cpp_to_py_start
+    cpp_to_py = (time.perf_counter_ns() - cpp_to_py_start) // 1000
 
     udf_time_start = time.perf_counter_ns()
     if isinstance(func, str) and is_attr:
@@ -571,7 +571,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
         out = func(input, *args, **kwargs)
     else:
         out = func(input, *args, **kwargs)
-    udf_time = time.perf_counter_ns() - udf_time_start
+    udf_time = (time.perf_counter_ns() - udf_time_start) // 1000
 
     # astype can fail in some cases when input is empty
     if len(out):
@@ -591,7 +591,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
         )
     else:
         out_ptr = df_to_cpp_table(pd.DataFrame({out.name: out}))
-    py_to_cpp = time.perf_counter_ns() - py_to_cpp_start
+    py_to_cpp = (time.perf_counter_ns() - py_to_cpp_start) // 1000
     return out_ptr, cpp_to_py, udf_time, py_to_cpp
 
 

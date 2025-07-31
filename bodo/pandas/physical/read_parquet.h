@@ -10,6 +10,14 @@
 #include "duckdb/planner/table_filter.hpp"
 #include "operator.h"
 
+struct PhysicalReadParquetMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+
+    stat_t rows_read = 0;
+    time_t produce_time = 0;
+};
+
 /// @brief Physical node for reading Parquet files in pipelines.
 class PhysicalReadParquet : public PhysicalSource {
    private:
@@ -98,13 +106,25 @@ class PhysicalReadParquet : public PhysicalSource {
     }
     virtual ~PhysicalReadParquet() = default;
 
-    void Finalize() override {}
+    void Finalize() override {
+        std::vector<MetricBase> metrics_out;
+        this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            std::move(metrics_out));
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            this->metrics.rows_read);
+    }
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         uint64_t total_rows;
         bool is_last;
 
+        time_pt start_produce = start_timer();
         table_info *batch =
             internal_reader->read_batch(is_last, total_rows, true);
         auto result = is_last ? OperatorResult::FINISHED
@@ -112,7 +132,10 @@ class PhysicalReadParquet : public PhysicalSource {
 
         batch->column_names = out_column_names;
         batch->metadata = out_metadata;
-        return std::make_pair(std::shared_ptr<table_info>(batch), result);
+        auto ret = std::make_pair(std::shared_ptr<table_info>(batch), result);
+        this->metrics.rows_read += total_rows;
+        this->metrics.produce_time += end_timer(start_produce);
+        return ret;
     }
 
     /**
@@ -128,4 +151,12 @@ class PhysicalReadParquet : public PhysicalSource {
     // construction
     std::shared_ptr<TableMetadata> out_metadata;
     std::vector<std::string> out_column_names;
+
+   private:
+    PhysicalReadParquetMetrics metrics;
+
+    void ReportMetrics(std::vector<MetricBase> &metrics_out) {
+        metrics_out.emplace_back(
+            TimerMetric("produce_time", this->metrics.produce_time));
+    }
 };
