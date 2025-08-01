@@ -141,11 +141,14 @@ uint64_t Pipeline::Execute() {
     ///// DEBUG /////
 
     // Finalize
+    std::cout << "Finalizing " << source->ToString() << std::endl;
     source->Finalize();
 
     for (auto& op : between_ops) {
         op->Finalize();
     }
+
+    std::cout << "Finalizing " << sink->ToString() << std::endl;
     sink->Finalize();
 
     executed = true;
