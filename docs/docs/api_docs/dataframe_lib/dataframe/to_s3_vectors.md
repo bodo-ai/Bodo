@@ -21,6 +21,7 @@ embeddings with the same length as expected by the vector index in each row.
 import pandas as pd
 import bodo.pandas as bd
 import boto3
+import json
 
 bedrock = boto3.client("bedrock-runtime", region_name="us-east-2")
 texts = [
