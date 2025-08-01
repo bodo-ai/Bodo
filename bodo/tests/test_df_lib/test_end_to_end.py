@@ -2960,3 +2960,171 @@ def test_tokenize():
         reset_index=False,
         check_names=False,
     )
+
+
+@pytest.mark.parametrize(
+    "quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1], [0.22, 0.55, 0.99], [0.5]]
+)
+def test_series_quantile(quantiles):
+    """Tests that approximate quantiles using KLL fall within expected error bounds."""
+
+    def kll_error_bounds(q, k=200, pmf=False):
+        eps = 1.0 / np.sqrt(k) * (1.7 if pmf else 1.33)
+        return max(0.0, q - eps), min(1.0, q + eps)
+
+    df = bd.DataFrame(
+        {
+            "A": [1] * 30 + [3] * 40 + [5] * 20 + [100] * 10,
+            "B": [0.5, 1.5, 2.5] * 30 + [5.5] * 10,
+            "C": list(range(100)),
+            "D": [100, 200, 300] * 30 + [None] * 10,
+            "E": [1] + [100] * 98 + [1000],
+        }
+    )
+
+    for col in df.columns:
+        s = df[col]
+        with assert_executed_plan_count(1):
+            approx_quantiles = s.quantile(quantiles)
+
+        filtered_list = list(filter(lambda x: x is not pd.NA, s.values))
+        sorted_list = sorted(filtered_list)
+        n = len(sorted_list)
+
+        assert isinstance(approx_quantiles, bd.Series) and len(approx_quantiles) == len(
+            quantiles
+        )
+
+        for q in approx_quantiles.index:
+            approx = approx_quantiles[q]
+            q = float(q)
+            lo, hi = kll_error_bounds(q, k=200, pmf=False)
+
+            lo_idx = int(np.floor(lo * (n - 1)))
+            hi_idx = int(np.ceil(hi * (n - 1)))
+
+            true_low = sorted_list[lo_idx]
+            true_high = sorted_list[hi_idx]
+
+            assert true_low <= approx <= true_high, (
+                f"Quantile {q} estimate {approx} not within [{true_low}, {true_high}]"
+            )
+
+
+@pytest.mark.parametrize("q", [0.25, 0.5, 0.75, 0.9])
+def test_series_quantile_scalar(q):
+    """Tests that approximate quantiles with scalar arguments fall within expected error bounds."""
+
+    def kll_error_bounds(q, k=200, pmf=False):
+        eps = 1.0 / np.sqrt(k) * (1.7 if pmf else 1.33)
+        return max(0.0, q - eps), min(1.0, q + eps)
+
+    df = bd.DataFrame(
+        {
+            "A": [1] * 30 + [3] * 40 + [5] * 20 + [100] * 10,
+            "B": [0.5, 1.5, 2.5] * 30 + [5.5] * 10,
+            "C": list(range(100)),
+            "D": [100, 200, 300] * 30 + [None] * 10,
+        }
+    )
+
+    for col in df.columns:
+        s = df[col]
+        with assert_executed_plan_count(1):
+            approx = s.quantile(q)
+
+        filtered_list = list(filter(lambda x: x is not pd.NA, s.values))
+        sorted_list = sorted(filtered_list)
+        n = len(sorted_list)
+
+        assert isinstance(approx, float)
+
+        lo, hi = kll_error_bounds(q, k=200, pmf=False)
+
+        lo_idx = int(np.floor(lo * (n - 1)))
+        hi_idx = int(np.ceil(hi * (n - 1)))
+
+        true_low = sorted_list[lo_idx]
+        true_high = sorted_list[hi_idx]
+
+        assert true_low <= approx <= true_high, (
+            f"Quantile {q} estimate {approx} not within [{true_low}, {true_high}]"
+        )
+
+
+def test_series_quantile_empty():
+    """Tests that quantile on an empty BodoSeries returns either a scalar pd.NA or a BodoSeries of pd.NA."""
+
+    pds = pd.Series([])
+    bds = bd.Series([])
+
+    with assert_executed_plan_count(0):
+        pd_quantile = pds.quantile([0.5])
+        bodo_quantile = bds.quantile([0.5])
+
+    _test_equal(
+        bodo_quantile,
+        pd_quantile,
+        check_pandas_types=False,
+        reset_index=True,
+    )
+
+    with assert_executed_plan_count(0):
+        pd_quantile = pds.quantile(0.5)
+        bodo_quantile = bds.quantile(0.5)
+
+    assert np.isnan(pd_quantile) and bodo_quantile is pd.NA
+
+    pds = pd.Series([1, 2, 3])
+    pds = pds[pds > 4]
+    bds = bd.Series([1, 2, 3])
+    bds = bds[bds > 4]
+
+    with assert_executed_plan_count(1):
+        pd_quantile = pds.quantile([0, 0.2, 0.5, 0.8, 1])
+        bodo_quantile = bds.quantile([0, 0.2, 0.5, 0.8, 1])
+
+    _test_equal(
+        bodo_quantile,
+        pd_quantile,
+        check_pandas_types=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+def test_series_quantile_tails():
+    """Tests that querying quantiles at tail ends return exact values."""
+
+    df = pd.DataFrame({"A": [1] + [100] * 98 + [1000], "B": list(range(100))})
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(1):
+        out_bd = bdf["A"].quantile([0, 1])
+        out_pd = df["A"].quantile([0, 1])
+
+    _test_equal(
+        out_bd,
+        out_pd,
+        check_pandas_types=False,
+        reset_index=True,
+    )
+
+
+def test_series_quantile_singleton():
+    """Tests quantile on a singleton BodoSeries."""
+
+    pds = pd.Series([100])
+    bds = bd.Series([100])
+
+    with assert_executed_plan_count(1):
+        out_bd = bds.quantile([0, 0.2, 0.6, 0.89, 1])
+        out_pd = pds.quantile([0, 0.2, 0.6, 0.89, 1])
+
+    _test_equal(
+        out_bd,
+        out_pd,
+        check_pandas_types=False,
+        reset_index=True,
+        check_names=False,
+    )
