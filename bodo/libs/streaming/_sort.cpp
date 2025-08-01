@@ -1022,7 +1022,6 @@ std::shared_ptr<table_info> ReservoirSamplingState::Finalize() {
 uint64_t StreamSortState::GetBudget() const {
     int64_t budget = OperatorComptroller::Default()->GetOperatorBudget(op_id);
     if (budget == -1) {
-        std::cout << "setting budget to size of memory pool" << std::endl;
         return static_cast<uint64_t>(
             bodo::BufferPool::Default()->get_memory_size_bytes() *
             SORT_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL);
@@ -1129,8 +1128,6 @@ StreamSortState::StreamSortState(
               DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, op_pool,
               op_mm),
       reservoir_sampling_state(n_keys, sample_size, dict_builders, schema) {
-    std::cout << "MEMORY BUDGET: " << mem_budget_bytes << std::endl;
-
     if (char* debug_mode_env_ = std::getenv("BODO_DEBUG_STREAM_SORT")) {
         this->debug_mode = !std::strcmp(debug_mode_env_, "1");
     }
@@ -1327,15 +1324,6 @@ StreamSortState::PartitionChunksByRank(
     // also "delay" data transfer, so we may need a way to balance this.
     std::vector<SortedChunkedTableBuilder> rankToChunkedBuilders;
     assert(static_cast<uint64_t>(n_pes) == bounds->nrows() + 1);
-
-    ///// DEBUG /////
-    auto stats = bodo::BufferPool::DefaultPtr()->get_stats();
-    const boost::json::object& general_stats =
-        stats.at("general stats").as_object();
-    std::uint64_t curr_bytes_allocated =
-        general_stats.at("curr_bytes_allocated").as_int64();
-    std::cout << "curr_bytes_allocated: " << curr_bytes_allocated << std::endl;
-    ///// DEBUG /////
 
     // For each rank, we build n_pes ChunkedTableBuilder to store tables to
     // pass. To calculate the shuffle chunk size, we get the min budget on any

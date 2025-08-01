@@ -1,4 +1,6 @@
 #include "_pipeline.h"
+#include <boost/json/object.hpp>
+#include <iostream>
 
 #include "physical/result_collector.h"
 
@@ -80,6 +82,21 @@ uint64_t Pipeline::Execute() {
     // TODO: Do we need an explicit Init phase to measure initialization time
     // outside of the time spend in constructors?
 
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    ///// DEBUG /////
+    if (rank == 0) {
+        auto stats_before = bodo::BufferPool::DefaultPtr()->get_stats();
+        const boost::json::object& general_stats_before =
+            stats_before.at("general stats").as_object();
+        std::uint64_t curr_bytes_allocated_before =
+            general_stats_before.at("curr_bytes_allocated").as_int64();
+        std::cout << "curr_bytes_allocated before execution: "
+                  << curr_bytes_allocated_before << std::endl;
+    }
+    ///// DEBUG /////
+
     uint64_t batches_processed = 0;
     bool finished = false;
     while (!finished) {
@@ -111,6 +128,18 @@ uint64_t Pipeline::Execute() {
         finished = midPipelineExecute(0, batch, produce_result);
     }
 
+    ///// DEBUG /////
+    if (rank == 0) {
+        auto stats = bodo::BufferPool::DefaultPtr()->get_stats();
+        const boost::json::object& general_stats =
+            stats.at("general stats").as_object();
+        std::uint64_t curr_bytes_allocated =
+            general_stats.at("curr_bytes_allocated").as_int64();
+        std::cout << "curr_bytes_allocated after execution before finalize: "
+                  << curr_bytes_allocated << std::endl;
+    }
+    ///// DEBUG /////
+
     // Finalize
     source->Finalize();
 
@@ -120,6 +149,19 @@ uint64_t Pipeline::Execute() {
     sink->Finalize();
 
     executed = true;
+
+    ///// DEBUG /////
+    if (rank == 0) {
+        auto stats_after = bodo::BufferPool::DefaultPtr()->get_stats();
+        const boost::json::object& general_stats_after =
+            stats_after.at("general stats").as_object();
+        std::uint64_t curr_bytes_allocated_after =
+            general_stats_after.at("curr_bytes_allocated").as_int64();
+        std::cout << "curr_bytes_allocated after finalize: "
+                  << curr_bytes_allocated_after << std::endl;
+    }
+    ///// DEBUG /////
+
     return batches_processed;
 }
 
