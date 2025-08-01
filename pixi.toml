@@ -136,7 +136,7 @@ setuptools_scm = ">=8"
 cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py (pip only)
-mpi4py = ">=4.0"
+mpi4py = ">=4.0,<4.1"
 
 # Build C++ Deps
 # Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
