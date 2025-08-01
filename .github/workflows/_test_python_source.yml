@@ -129,6 +129,7 @@ jobs:
             BODO_SPAWN_MODE: "0"
             BODO_BUFFER_POOL_REMOTE_MODE: "1"
             BODO_BUFFER_POOL_DEBUG_MODE: "1"
+            BODO_STREAMING_BATCH_SIZE: "4096"
             # Testing Credentials
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
