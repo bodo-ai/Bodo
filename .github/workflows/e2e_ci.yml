@@ -71,9 +71,7 @@ jobs:
           # ------ Clean Maven and Spark Ivy Cache ------
           rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
 
-          python -c "import bodo"
-
-          python -c "import bodo; bodo.jit(lambda: print(bodo.get_rank()))()"
+          python -c "from mpi4py import MPI; print(MPI.Get_version())"
 
         env:
           PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
