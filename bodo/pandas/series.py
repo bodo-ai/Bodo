@@ -927,7 +927,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         quantile_qs = [0.25, 0.5, 0.75]
 
         if percentiles is not None:
-            validate_quantile(percentiles)
+            _, percentiles = validate_quantile(percentiles)
             if 0.5 not in percentiles:
                 bisect.insort(percentiles, 0.5)
             quantile_qs = percentiles
@@ -1836,12 +1836,14 @@ def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
 def _nonnumeric_describe(series):
     """Computes non-numeric series.describe() using DataFrameGroupBy."""
 
+    # Since Series groupby is unsupported, we toggle is_series to use DataFrameGroupBy.
     plan = series._plan
-
     plan.is_series = False
     plan.empty_data.columns = pd.Index(["A"])
     df = wrap_plan(plan)
 
+    # size() aggregation is not supported with single-column DataFrames.
+    # The workaround is setting a duplicate column.
     df.columns = pd.Index(["None"])
     df["B"] = df["None"]
     gb = df.groupby("None")

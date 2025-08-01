@@ -2271,7 +2271,11 @@ def test_loc(datapath):
     )
 
 
-def test_series_describe_numeric():
+@pytest.mark.parametrize(
+    "percentiles",
+    [None, (0.1, 0.4, 0.7, 0.9), [0, 1]],
+)
+def test_series_describe_numeric(percentiles):
     """Test for Series describe, using approximate bounds for quantiles."""
 
     def kll_error_bounds(q, k=200, pmf=False):
@@ -2295,11 +2299,11 @@ def test_series_describe_numeric():
         with assert_executed_plan_count(
             0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 3
         ):
-            describe_pd = df[c].describe()
-            describe_bodo = bdf[c].describe()
+            describe_pd = df[c].describe(percentiles=percentiles)
+            describe_bodo = bdf[c].describe(percentiles=percentiles)
 
         # For quantile columns, check approximate bounds instead of strict equality
-        for q in [0.25, 0.5, 0.75]:
+        for q in [0.25, 0.5, 0.75] + (list(percentiles) if percentiles else []):
             if q in describe_bodo.index:
                 approx = describe_bodo.loc[q]
                 true_vals = sorted(x for x in df[c].dropna().values.tolist())
@@ -2318,8 +2322,8 @@ def test_series_describe_numeric():
 
         # For all other stats (count, mean, std, min, max), keep exact check
         _test_equal(
-            describe_pd.drop(index=["25%", "50%", "75%"], errors="ignore"),
-            describe_bodo.drop(index=["25%", "50%", "75%"], errors="ignore"),
+            describe_pd.reindex(index=["count", "mean", "std", "min", "max"]),
+            describe_bodo.reindex(index=["count", "mean", "std", "min", "max"]),
             check_pandas_types=False,
         )
 
