@@ -1,5 +1,6 @@
 #include "_sort.h"
 #include <algorithm>
+#include <boost/json/object.hpp>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -1326,6 +1327,15 @@ StreamSortState::PartitionChunksByRank(
     // also "delay" data transfer, so we may need a way to balance this.
     std::vector<SortedChunkedTableBuilder> rankToChunkedBuilders;
     assert(static_cast<uint64_t>(n_pes) == bounds->nrows() + 1);
+
+    ///// DEBUG /////
+    auto stats = bodo::BufferPool::DefaultPtr()->get_stats();
+    const boost::json::object& general_stats =
+        stats.at("general stats").as_object();
+    std::uint64_t curr_bytes_allocated =
+        general_stats.at("curr_bytes_allocated").as_int64();
+    std::cout << "curr_bytes_allocated: " << curr_bytes_allocated << std::endl;
+    ///// DEBUG /////
 
     // For each rank, we build n_pes ChunkedTableBuilder to store tables to
     // pass. To calculate the shuffle chunk size, we get the min budget on any
