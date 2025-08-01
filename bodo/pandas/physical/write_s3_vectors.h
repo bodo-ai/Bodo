@@ -91,8 +91,8 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
         Py_DECREF(result);
     }
 
-    std::string vector_bucket_name;
-    std::string index_name;
+    const std::string vector_bucket_name;
+    const std::string index_name;
     PyObject* region;
 
     const std::shared_ptr<IsLastState> is_last_state;
