@@ -66,6 +66,7 @@ from bodo.pandas.plan import (
     is_single_projection,
     make_col_ref_exprs,
     match_binop_expr_source_plans,
+    maybe_make_list,
     reset_index,
 )
 from bodo.pandas.utils import (
@@ -679,6 +680,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return BodoDatetimeProperties(self)
 
     @property
+    def ai(self):
+        return BodoSeriesAi(self)
+
+    @property
     def T(self):
         return self
 
@@ -741,6 +746,46 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         return _get_series_python_func_plan(
             self._plan, empty_series, "map", (arg, na_action), {}
+        )
+
+    @check_args_fallback(unsupported="none")
+    def map_with_state(self, init_state_fn, row_fn, na_action=None, output_type=None):
+        """
+        Map values of the Series by first initializaing state and then processing
+        each row of the series using the given function.  This variant of map is useful
+        where the initialization is potentially so expensive that doing it once per
+        partition/batch is prohibitive.  This variant performs the initialization only
+        once via the init_state_fn function.  That function returns the initiailized
+        state which is then passed to each invocation of row_fn along with the given
+        row to be processed.
+
+        Args:
+            init_state_fn : Callable returning state, which can have any type
+            row_fn : Callable taking the state returned by init_state_fn and the
+                     row to be processed and returning the row to be included in the
+                     output series.
+            output_type : if present, is an empty Pandas series specifying the output
+                          dtype of the operation.
+
+        Returns:
+            A BodoSeries containing the result of running row_fn on each row of the
+            current series.
+        """
+        if output_type is None:
+            state = init_state_fn()
+            # Get output data type by running the UDF on a sample of the data.
+            empty_series = get_scalar_udf_result_type(
+                self, "map_with_state", (state, row_fn), na_action=na_action
+            )
+        else:
+            empty_series = output_type
+
+        return _get_series_python_func_plan(
+            self._plan,
+            empty_series,
+            "map_with_state",
+            (init_state_fn, row_fn, na_action),
+            {},
         )
 
     @check_args_fallback(supported=["ascending", "na_position", "kind"])
@@ -913,8 +958,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
         std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
 
-        # TODO [BSE-4970]: implement Series.quantile
-        quantile = self.quantile([0.25, 0.5, 0.75])
+        # TODO [BSE-4977]: full describe support, fix describe to use Bodo quantile
+        quantile = super().quantile([0.25, 0.5, 0.75])
         result = [
             count,
             mean_val,
@@ -1077,6 +1122,66 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         needs to be reset to the default before another operation.
         """
         return reset_index(self, drop, level, name=name)
+
+    @check_args_fallback(unsupported=["interpolation"])
+    def quantile(self, q=0.5, interpolation=lib.no_default):
+        """Return value at the given quantile."""
+
+        if not isinstance(self.dtype, pd.ArrowDtype):
+            raise BodoLibNotImplementedException()
+
+        is_list, q = validate_quantile(q)
+        index = [str(float(val)) for val in q] if is_list else []
+
+        # Drop Index columns since not necessary for reduction output.
+        pa_type = self.dtype.pyarrow_dtype
+
+        if pa.types.is_null(pa_type):
+            return (
+                BodoSeries(
+                    [pd.NA] * len(q), index=index, dtype=pd.ArrowDtype(pa.float64())
+                )
+                if is_list
+                else pd.NA
+            )
+
+        new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])
+        zero_size_self = arrow_to_empty_df(new_arrow_schema)
+
+        exprs = [
+            AggregateExpression(
+                zero_size_self,
+                self._plan,
+                func_name,
+                [0],
+                True,  # dropna
+            )
+            for func_name in [f"quantile_{val}" for val in q]
+        ]
+
+        plan = LogicalAggregate(
+            zero_size_self,
+            self._plan,
+            [],
+            exprs,
+        )
+        out_rank = execute_plan(plan)
+
+        df = pd.DataFrame(out_rank)
+        res = []
+        cols = df.columns
+
+        # Return as scalar if q is a scalar value.
+        if not is_list:
+            return df[cols[0]][0]
+
+        # Otherwise, return a BodoSeries with quantile values.
+        for i in range(len(cols)):
+            res.append(df[cols[i]][0])
+
+        return BodoSeries(
+            res, index=index, dtype=pd.ArrowDtype(pa.float64()), name=self.name
+        )
 
 
 class BodoStringMethods:
@@ -1286,6 +1391,30 @@ class BodoStringMethods:
         Splits the string in the Series/Index from the end, at the specified delimiter string.
         """
         return _split_internal(self, "rsplit", pat, n, expand)
+
+
+class BodoSeriesAi:
+    def __init__(self, series):
+        self._series = series
+
+    def tokenize(
+        self,
+        tokenizer: Callable[[], Transformers.PreTrainedTokenizer],  # noqa: F821
+    ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.tokenize() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+
+        def per_row(tokenizer, row):
+            return tokenizer.encode(row, add_special_tokens=True)
+
+        list_of_int64 = pa.list_(pa.int64())
+        return self._series.map_with_state(
+            tokenizer,
+            per_row,
+            output_type=pd.Series(dtype=pd.ArrowDtype(list_of_int64)),
+        )
 
 
 class BodoDatetimeProperties:
@@ -1609,6 +1738,26 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
     return res
 
 
+def validate_quantile(q):
+    """Validates that quantile input falls in the range [0, 1].
+    Taken from Pandas validation code for percentiles to produce the same behavior as Pandas.
+    https://github.com/pandas-dev/pandas/blob/d4ae6494f2c4489334be963e1bdc371af7379cd5/pandas/util/_validators.py#L311"""
+    from pandas.api.types import is_list_like
+
+    is_list = is_list_like(q)
+
+    q_arr = numpy.asarray(q)
+    msg = "percentiles should all be in the interval [0, 1]"
+    if q_arr.ndim == 0:
+        if not 0 <= q_arr <= 1:
+            raise ValueError(msg)
+    else:
+        if not all(0 <= qs <= 1 for qs in q_arr):
+            raise ValueError(msg)
+
+    return is_list, maybe_make_list(q)
+
+
 def _tz_localize_helper(s, tz, nonexistent):
     """Apply tz_localize on individual elements with ambiguous set to 'raise', fill with None."""
 
@@ -1756,7 +1905,12 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return PythonScalarFuncExpression(
-            empty_data, plan, expr.args[1], (idx,) + tuple(index_cols), expr.is_cfunc
+            empty_data,
+            plan,
+            expr.args[1],
+            (idx,) + tuple(index_cols),
+            expr.is_cfunc,
+            False,
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -1872,6 +2026,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
         ),
         (0,) + index_cols,
         False,  # is_cfunc
+        False,  # has_state
     )
 
 
@@ -1896,6 +2051,7 @@ def _get_series_python_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
+    has_state = func == "map_with_state"
     if cfunc_decorator:
         func_args = (func, cfunc_decorator)
         is_cfunc = True
@@ -1910,7 +2066,12 @@ def _get_series_python_func_plan(
         is_cfunc = False
 
     expr = PythonScalarFuncExpression(
-        empty_data, source_data, func_args, (col_index,) + tuple(index_cols), is_cfunc
+        empty_data,
+        source_data,
+        func_args,
+        (col_index,) + tuple(index_cols),
+        is_cfunc,
+        has_state,
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))

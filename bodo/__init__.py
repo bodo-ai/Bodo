@@ -304,6 +304,7 @@ timedelta64ns = numba.core.types.NPTimedelta("ns")
 
 from numba.core.types import List
 
+import bodo.ai
 import bodo.ext
 import bodo.libs
 import bodo.libs.distributed_api

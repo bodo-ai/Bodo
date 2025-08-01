@@ -17,6 +17,9 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ## Computations / descriptive stats
 - [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
 - [`bodo.pandas.BodoSeries.clip`][bodoseriesclip]
+!!! note
+    Unlike pandas’, the quantile in Bodo DataFrames is an approximate quantile based on the KLL sketch algorithm with probabilistic error guarantees, since computing exact quantiles across large datasets is extremely expensive.
+- [`bodo.pandas.BodoSeries.quantile`][bodoseriesquantile]
 - [`bodo.pandas.BodoSeries.round`][bodoseriesround]
 !!! note
     For the following reduction methods, only default parameters are currently supported.
@@ -334,3 +337,5 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriesrsub]: https://pandas.pydata.org/docs/reference/api/pandas.Series.rsub.html
 
 [bodoseriesresetindex]: https://pandas.pydata.org/docs/reference/api/pandas.Series.reset_index.html
+
+[bodoseriesquantile]: https://pandas.pydata.org/docs/reference/api/pandas.Series.quantile.html
