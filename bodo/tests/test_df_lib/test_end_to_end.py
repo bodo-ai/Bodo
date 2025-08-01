@@ -1895,7 +1895,7 @@ def test_filter_source_matching():
         df2 = df[["B", "C", "D"]].copy()
         py_out = df2[df.D]
     _test_equal(
-        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=False
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
     )
 
     # Match expression source
