@@ -1031,8 +1031,7 @@ def nonnumeric_describe(series):
 
     gb_size = gb.agg("size")  # Plan execution
     count_val = gb_size.sum()  # Plan execution
-    unique_val = len(gb_size)
-
+    unique_val = len(gb_size.index)
     gb_sorted = gb_size.sort_values(ascending=False)
     top_val = gb_sorted.index[0]
     freq_val = gb_sorted.iloc[0]  # Plan execution

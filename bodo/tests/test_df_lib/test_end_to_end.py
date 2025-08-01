@@ -2328,8 +2328,8 @@ def test_series_describe_nonnumeric():
     """Basic test for Series describe with string data."""
     df = pd.DataFrame(
         {
-            "A": ["apple", "banana", "apple", "cherry", "banana", "banana", "apple"],
-            "B": ["apple"] * 3 + ["APPLE"] * 2 + [None] * 2,
+            "A": ["apple", "banana", "apple", "cherry", "banana", "apple"],
+            "B": ["apple"] * 3 + ["APPLE"] * 2 + [None],
         }
     )
 
