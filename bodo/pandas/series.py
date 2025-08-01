@@ -66,6 +66,7 @@ from bodo.pandas.plan import (
     is_single_projection,
     make_col_ref_exprs,
     match_binop_expr_source_plans,
+    maybe_make_list,
     reset_index,
 )
 from bodo.pandas.utils import (
@@ -957,8 +958,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
         std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
 
-        # TODO [BSE-4970]: implement Series.quantile
-        quantile = self.quantile([0.25, 0.5, 0.75])
+        # TODO [BSE-4977]: full describe support, fix describe to use Bodo quantile
+        quantile = super().quantile([0.25, 0.5, 0.75])
         result = [
             count,
             mean_val,
@@ -1121,6 +1122,66 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         needs to be reset to the default before another operation.
         """
         return reset_index(self, drop, level, name=name)
+
+    @check_args_fallback(unsupported=["interpolation"])
+    def quantile(self, q=0.5, interpolation=lib.no_default):
+        """Return value at the given quantile."""
+
+        if not isinstance(self.dtype, pd.ArrowDtype):
+            raise BodoLibNotImplementedException()
+
+        is_list, q = validate_quantile(q)
+        index = [str(float(val)) for val in q] if is_list else []
+
+        # Drop Index columns since not necessary for reduction output.
+        pa_type = self.dtype.pyarrow_dtype
+
+        if pa.types.is_null(pa_type):
+            return (
+                BodoSeries(
+                    [pd.NA] * len(q), index=index, dtype=pd.ArrowDtype(pa.float64())
+                )
+                if is_list
+                else pd.NA
+            )
+
+        new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])
+        zero_size_self = arrow_to_empty_df(new_arrow_schema)
+
+        exprs = [
+            AggregateExpression(
+                zero_size_self,
+                self._plan,
+                func_name,
+                [0],
+                True,  # dropna
+            )
+            for func_name in [f"quantile_{val}" for val in q]
+        ]
+
+        plan = LogicalAggregate(
+            zero_size_self,
+            self._plan,
+            [],
+            exprs,
+        )
+        out_rank = execute_plan(plan)
+
+        df = pd.DataFrame(out_rank)
+        res = []
+        cols = df.columns
+
+        # Return as scalar if q is a scalar value.
+        if not is_list:
+            return df[cols[0]][0]
+
+        # Otherwise, return a BodoSeries with quantile values.
+        for i in range(len(cols)):
+            res.append(df[cols[i]][0])
+
+        return BodoSeries(
+            res, index=index, dtype=pd.ArrowDtype(pa.float64()), name=self.name
+        )
 
 
 class BodoStringMethods:
@@ -1675,6 +1736,26 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
         res.append(reduced_val)
     assert len(res) == len(func_names)
     return res
+
+
+def validate_quantile(q):
+    """Validates that quantile input falls in the range [0, 1].
+    Taken from Pandas validation code for percentiles to produce the same behavior as Pandas.
+    https://github.com/pandas-dev/pandas/blob/d4ae6494f2c4489334be963e1bdc371af7379cd5/pandas/util/_validators.py#L311"""
+    from pandas.api.types import is_list_like
+
+    is_list = is_list_like(q)
+
+    q_arr = numpy.asarray(q)
+    msg = "percentiles should all be in the interval [0, 1]"
+    if q_arr.ndim == 0:
+        if not 0 <= q_arr <= 1:
+            raise ValueError(msg)
+    else:
+        if not all(0 <= qs <= 1 for qs in q_arr):
+            raise ValueError(msg)
+
+    return is_list, maybe_make_list(q)
 
 
 def _tz_localize_helper(s, tz, nonexistent):

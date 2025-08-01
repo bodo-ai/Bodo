@@ -11,6 +11,7 @@
 #include "physical/join.h"
 #include "physical/limit.h"
 #include "physical/project.h"
+#include "physical/quantile.h"
 #include "physical/reduce.h"
 #include "physical/sample.h"
 #include "physical/sort.h"
@@ -144,6 +145,30 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
         }
         bodo_schema->metadata = std::make_shared<TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
+
+        // If function_names includes quantiles, create a PhysicalQuantile
+        // operator. Function names for quantile evaluations are formatted as
+        // f"quantile_{value}" where q=value (i.e. "quantile_0.5" for q=0.5).
+        if (function_names[0].starts_with("quantile")) {
+            std::vector<double> quantiles{};
+            for (auto it : function_names) {
+                if (!it.starts_with("quantile")) {
+                    throw std::runtime_error(
+                        "quantile functions cannot be mixed with other "
+                        "aggregate operations.");
+                }
+                quantiles.push_back(std::stod(it.substr(9)));
+            }
+            auto physical_op =
+                std::make_shared<PhysicalQuantile>(bodo_schema, quantiles);
+            finished_pipelines.emplace_back(
+                this->active_pipeline->Build(physical_op));
+            this->active_pipeline =
+                std::make_shared<PipelineBuilder>(physical_op);
+            return;
+        }
+
+        // Otherwise, create a PhysicalReduce operator
         auto physical_op =
             std::make_shared<PhysicalReduce>(bodo_schema, function_names);
         finished_pipelines.emplace_back(
