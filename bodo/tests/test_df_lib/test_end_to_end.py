@@ -2271,8 +2271,17 @@ def test_loc(datapath):
     )
 
 
-def test_series_describe():
-    """Basic test for Series describe."""
+@pytest.mark.parametrize(
+    "percentiles",
+    [None, (0.1, 0.4, 0.7, 0.9), [0, 1]],
+)
+def test_series_describe_numeric(percentiles):
+    """Test for Series describe, using approximate bounds for quantiles."""
+
+    def kll_error_bounds(q, k=200, pmf=False):
+        eps = 1.0 / np.sqrt(k) * (1.7 if pmf else 1.33)
+        return max(0.0, q - eps), min(1.0, q + eps)
+
     n = 10000
     df = pd.DataFrame(
         {
@@ -2280,7 +2289,7 @@ def test_series_describe():
             "B": np.flip(np.arange(n, dtype=np.int32)),
             "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
             "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
-            "E": [None] * n,
+            "E": list(range(n - 1)) + [None],
         }
     )
 
@@ -2289,9 +2298,82 @@ def test_series_describe():
         with assert_executed_plan_count(
             0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 3
         ):
-            describe_pd = df[c].describe()
+            describe_pd = df[c].describe(percentiles=percentiles)
+            describe_bodo = bdf[c].describe(percentiles=percentiles)
+
+        # For quantile columns, check approximate bounds instead of strict equality
+        # Iterate from idx=4 to second-to-last element, which is the quantile portion.
+        for q in describe_pd.index[4:-1:1]:
+            approx = describe_bodo.loc[q]
+            true_vals = sorted(x for x in df[c].dropna().values.tolist())
+            if not true_vals:
+                continue
+            nvals = len(true_vals)
+            float_q = (
+                int(q[:-1])
+            ) / 100  # Convert percentile to float, i.e. "20%" to 0.2
+            lo, hi = kll_error_bounds(float_q, k=200, pmf=False)
+            lo_idx = int(np.floor(lo * (nvals - 1)))
+            hi_idx = int(np.ceil(hi * (nvals - 1)))
+            true_low = true_vals[lo_idx]
+            true_high = true_vals[hi_idx]
+            assert true_low <= approx <= true_high, (
+                f"{c} quantile {float_q} estimate {approx} "
+                f"not within [{true_low}, {true_high}]"
+            )
+
+        # For all other stats (count, mean, std, min, max), keep exact check
+        _test_equal(
+            describe_bodo.reindex(index=["count", "mean", "std", "min", "max"]),
+            describe_pd.reindex(index=["count", "mean", "std", "min", "max"]),
+            check_pandas_types=False,
+        )
+
+
+def test_series_describe_nonnumeric():
+    """Basic test for Series describe with string data."""
+    df = pd.DataFrame(
+        {
+            "A": ["apple", "banana", "apple", "cherry", "banana", "apple"],
+            "B": ["apple"] * 3 + ["APPLE"] * 2 + [None],
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+    for c in df.columns:
+        with assert_executed_plan_count(3):
+            # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
+            # Applying map(str) to pandas output is a workaround to enable_test_equal to compare values of differing dtypes.
+            describe_pd = df[c].describe().map(str)
             describe_bodo = bdf[c].describe()
-        _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
+        _test_equal(describe_bodo, describe_pd, check_pandas_types=False)
+
+
+def test_series_describe_empty():
+    """Basic test for Series describe with empty data."""
+
+    pds = pd.Series([None] * 10)
+    bds = bd.Series([None] * 10)
+
+    with assert_executed_plan_count(0):
+        # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
+        # Mapping the conversion logic below avoids _test_equal() evaluating to False for correct
+        # results due to "nan" != "<NA>"
+        describe_bodo = bds.describe().map(
+            lambda x: str(x) if not pd.isna(x) else "None"
+        )
+        describe_pd = pds.describe().map(lambda x: str(x) if not x else "None")
+    _test_equal(describe_bodo, describe_pd, check_pandas_types=False, check_names=False)
+
+    pds = pd.Series([1, 2, 3])
+    pds = pds[pds > 4]
+    bds = bd.Series([1, 2, 3])
+    bds = bds[bds > 4]
+
+    with assert_executed_plan_count(1):
+        describe_pd = pds.describe()
+        describe_bodo = bds.describe()
+    _test_equal(describe_bodo, describe_pd, check_pandas_types=False, check_names=False)
 
 
 def test_groupby_getattr_fallback_behavior():

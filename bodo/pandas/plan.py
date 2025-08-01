@@ -926,6 +926,8 @@ def maybe_make_list(obj):
         return []
     elif not isinstance(obj, (tuple, list)):
         return [obj]
+    elif not isinstance(obj, list):
+        return list(obj)
     return obj
 
 
