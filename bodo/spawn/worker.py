@@ -485,9 +485,7 @@ def handle_spawn_process(
     """Handle spawning a new process and return the process handle"""
     pid = None
     popen = None
-    if bodo.get_rank() not in bodo.libs.distributed_api.get_nodes_first_ranks(
-        comm_world
-    ):
+    if bodo.get_rank() in bodo.libs.distributed_api.get_nodes_first_ranks(comm_world):
         debug_worker_msg(logger, f"Spawning process with command {command}")
         popen = subprocess.Popen(
             command,
