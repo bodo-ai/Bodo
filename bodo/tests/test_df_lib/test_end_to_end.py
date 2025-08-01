@@ -246,7 +246,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
-            reset_index=True,
+            reset_index=False,
         )
 
         # Already distributed DataFrame case
@@ -266,7 +266,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
-            reset_index=True,
+            reset_index=False,
         )
 
 
@@ -285,7 +285,7 @@ def test_projection(datapath):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -324,7 +324,7 @@ def test_filter_pushdown(datapath, file_path, op):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -383,7 +383,7 @@ def test_filter(datapath, op):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated in the process.
@@ -438,7 +438,7 @@ def test_filter_bound_between(datapath, file_path, mode):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -475,7 +475,7 @@ def test_filter_multiple1(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated in this process.
@@ -531,7 +531,7 @@ def test_filter_string(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated at this point.
@@ -595,7 +595,7 @@ def test_filter_datetime(datapath, op):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated at this point.
@@ -673,7 +673,7 @@ def test_head(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated at this point.
@@ -1070,7 +1070,7 @@ def test_parquet_read_partitioned(datapath):
         py_out,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -1781,7 +1781,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
         py_filter_a,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -1825,7 +1825,7 @@ def test_series_filter_distributed(datapath, file_path, op):
         py_filter_a,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -1872,7 +1872,7 @@ def test_series_filter_series(datapath, file_path, op, mode):
         py_filter_a,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -1895,7 +1895,7 @@ def test_filter_source_matching():
         df2 = df[["B", "C", "D"]].copy()
         py_out = df2[df.D]
     _test_equal(
-        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=False
     )
 
     # Match expression source
@@ -2249,7 +2249,7 @@ def test_drop(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=False,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -2267,7 +2267,7 @@ def test_loc(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=False,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -2400,7 +2400,7 @@ def test_empty_duckdb_filter():
         pd_out,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -2604,7 +2604,7 @@ def test_uncompilable_map():
         pdf,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -2632,7 +2632,7 @@ def test_numba_map():
         pdf,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
