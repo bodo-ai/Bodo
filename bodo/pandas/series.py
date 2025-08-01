@@ -912,7 +912,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         pa_type = self.dtype.pyarrow_dtype
 
         if pa.types.is_null(pa_type):
-            return pd.Series(
+            return BodoSeries(
                 [0, 0, pd.NA, pd.NA],
                 index=["count", "unique", "top", "freq"],
                 name=self.name,
@@ -939,7 +939,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Evaluate count and sum
         count, sum = _compute_series_reduce(self, ["count", "sum"])
         if count == 0:
-            return pd.Series(
+            return BodoSeries(
                 [0] + [pd.NA] * (len(index) - 1),
                 index=index,
                 name=self.name,
@@ -991,7 +991,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             quantile_df[str(val)][0] for val in min_q_max
         ]
 
-        return pd.Series(
+        return BodoSeries(
             result,
             index=index,
             name=self.name,
