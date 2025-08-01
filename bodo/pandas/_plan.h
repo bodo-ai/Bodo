@@ -353,6 +353,19 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
     std::string iceberg_schema_str, PyObject *output_pa_schema, PyObject *pyfs);
 
 /**
+ * @brief Create a LogicalCopyToFile node for writing S3 Vectors.
+ * @param source input data to write
+ * @param pyarrow_schema schema of the data to write
+ * @param vector_bucket_name name of the S3 bucket to write vectors to
+ * @param index_name name of the vector index to write to
+ * @param region AWS region for the S3 bucket
+ * @return duckdb::unique_ptr<duckdb::LogicalCopyToFile> created node
+ */
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_s3_vectors_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string vector_bucket_name, std::string index_name, PyObject *region);
+
+/**
  * @brief Create LogicalGet node for reading a dataframe sequentially
  *
  * @param df input dataframe to read
