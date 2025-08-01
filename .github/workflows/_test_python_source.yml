@@ -62,9 +62,10 @@ jobs:
             role-session-name: BodoEnginePrCiSession
             role-skip-session-tagging: true
             role-duration-seconds: 10800
-        - name: Install Extra Test dependencies
-          # This isn't published on pypi so no good way to list it as a dependency
-          run: pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+        # TODO[BSE-5031]: Enable polaris tests after fixing pip installation issues
+        # - name: Install Extra Test dependencies
+        #   # This isn't published on pypi so no good way to list it as a dependency
+        #   run: pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
 
         # Run Tests
         - name: Run Tests
