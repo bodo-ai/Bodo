@@ -912,7 +912,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         if pa.types.is_null(pa_type):
             return BodoSeries(
-                [0, 0, pd.NA, pd.NA],
+                ["0", "0", None, None],
                 index=["count", "unique", "top", "freq"],
                 name=self.name,
             )
