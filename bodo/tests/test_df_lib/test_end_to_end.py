@@ -2961,7 +2961,7 @@ def test_tokenize():
         check_names=False,
     )
 
-    
+
 @pytest.mark.parametrize(
     "quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1], [0.22, 0.55, 0.99], [0.5]]
 )
