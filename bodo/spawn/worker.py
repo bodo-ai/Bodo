@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 import socket
+import subprocess
 import sys
 import typing as pt
 import uuid
@@ -33,6 +34,7 @@ from bodo.spawn.spawner import BodoSQLContextMetadata, env_var_prefix
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
+    WorkerProcess,
     debug_msg,
     poll_for_barrier,
     set_global_config,
@@ -104,6 +106,7 @@ def _recv_arg(
 
 
 RESULT_REGISTRY: dict[str, pt.Any] = {}
+PROCESS_REGISTRY: dict[uuid.UUID, subprocess.Popen | None] = {}
 
 # Once >3.12 is our minimum version we can use the below instead
 # type is_distributed_t = bool + list[is_distributed_t] | tuple[is_distributed_t]
@@ -472,6 +475,79 @@ def exec_func_handler(
     os.environ = original_env_var
 
 
+def handle_spawn_process(
+    command: str | list[str],
+    env: dict[str, str],
+    cwd: str | None,
+    comm_world: MPI.Intracomm,
+    logger: logging.Logger,
+):
+    """Handle spawning a new process and return the process handle"""
+    pid = None
+    popen = None
+    if bodo.get_rank() in bodo.libs.distributed_api.get_nodes_first_ranks(comm_world):
+        debug_worker_msg(logger, f"Spawning process with command {command}")
+        popen = subprocess.Popen(
+            command,
+            env=env,
+            cwd=cwd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        pid = popen.pid
+        debug_worker_msg(logger, f"Spawned process with pid {pid}")
+    ranks_to_pids = comm_world.gather((bodo.get_rank(), pid), root=0)
+
+    worker_process = None
+    if bodo.get_rank() == 0:
+        ranks_to_pids = {r: p for r, p in ranks_to_pids if p is not None}
+
+        worker_process = WorkerProcess(ranks_to_pids)
+
+    worker_process = comm_world.bcast(worker_process, root=0)
+
+    PROCESS_REGISTRY[worker_process._uuid] = popen
+    return worker_process
+
+
+def handle_stop_process(
+    worker_process: WorkerProcess,
+    logger: logging.Logger,
+):
+    """Handle stopping a process and return the process handle"""
+    debug_worker_msg(logger, f"Stopping process with uuid {worker_process._uuid}")
+    if worker_process._uuid not in PROCESS_REGISTRY:
+        raise ValueError(f"Process with uuid {worker_process._uuid} not found")
+
+    popen = PROCESS_REGISTRY.pop(worker_process._uuid)
+    # The process is managed by a different rank
+    if popen is None:
+        return
+
+    if popen.poll() is None:
+        debug_worker_msg(logger, f"Killing process with pid {popen.pid}")
+        popen.terminate()
+        # Wait for the process to terminate
+        try:
+            popen.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            debug_worker_msg(
+                logger, f"Process with pid {popen.pid} did not stop in time"
+            )
+            # If the process does not stop, we can try to forcefully terminate it
+            popen.kill()
+            debug_worker_msg(
+                logger, f"Process with pid {popen.pid} forcefully terminated"
+            )
+        else:
+            debug_worker_msg(
+                logger, f"Process with pid {popen.pid} stopped successfully"
+            )
+    else:
+        debug_worker_msg(logger, f"Process with pid {popen.pid} already stopped")
+
+
 class StdoutQueue:
     """Replacement for stdout/stderr that sends output to the spawner via a ZeroMQ socket."""
 
@@ -539,6 +615,12 @@ def worker_loop(
             debug_worker_msg(logger, "Exiting...")
             if out_socket:
                 out_socket.close()
+
+            for worker_process_uuid in list(PROCESS_REGISTRY.keys()):
+                worker_process = WorkerProcess()
+                worker_process._uuid = worker_process_uuid
+                handle_stop_process(worker_process, logger)
+
             return
         elif command == CommandType.BROADCAST.value:
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
@@ -573,6 +655,16 @@ def worker_loop(
             (config_name, config_value) = spawner_intercomm.bcast(None, 0)
             set_global_config(config_name, config_value)
             debug_worker_msg(logger, f"Set config {config_name}={config_value}")
+        elif command == CommandType.SPAWN_PROCESS.value:
+            command, env, cwd = spawner_intercomm.bcast(None, 0)
+            worker_process = handle_spawn_process(command, env, cwd, comm_world, logger)
+            if bodo.get_rank() == 0:
+                spawner_intercomm.send(worker_process, dest=0)
+        elif command == CommandType.STOP_PROCESS.value:
+            worker_process = spawner_intercomm.bcast(None, 0)
+            handle_stop_process(worker_process, logger)
+            if bodo.get_rank() == 0:
+                spawner_intercomm.send(None, dest=0)
         else:
             raise ValueError(f"Unsupported command '{command}!")
 
