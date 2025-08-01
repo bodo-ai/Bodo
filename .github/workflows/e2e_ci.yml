@@ -45,12 +45,12 @@ jobs:
 
       - name: Install Bodo Packages
         env:
-          # Build with support for Javascript UDFs
-          BUILD_WITH_V8: 1
+          # Skipping BUILD_WITH_V8 due to conflict with MPICH's UCX dependency
+          BUILD_WITH_V8: 0
           # Use sccache over ccache
           DISABLE_CCACHE: 1
         run: pixi run build
-  
+
       - name: Run Tests
         run: |
           set -eo pipefail
@@ -74,8 +74,10 @@ jobs:
           # --------- Run Tests -----------
           cd e2e-tests
           pytest -s -v --durations=0
-          cd ..
-          pytest -s -v --durations=0 bodo/tests/test_javascript*
+
+          # TODO: reenable tests when dependency issue is resolved.
+          # cd ..
+          # pytest -s -v --durations=0 bodo/tests/test_javascript*
 
         env:
           PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
