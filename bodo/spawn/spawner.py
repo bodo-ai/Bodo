@@ -896,7 +896,9 @@ def spawn_process_on_workers(
     cwd: str | None = None,
 ) -> WorkerProcess:
     """Get the global spawner and spawn a process on all workers and returns a WorkerProcess object"""
-    assert bodo.spawn_mode, "Cannot spawn worker processes outside of Bodo spawn mode"
+    assert bodo.spawn_mode or bodo.tests.utils.test_spawn_mode_enabled, (
+        "Cannot spawn worker processes outside of Bodo spawn mode"
+    )
 
     spawner = get_spawner()
     return spawner.spawn_process_on_workers(command, env, cwd)
