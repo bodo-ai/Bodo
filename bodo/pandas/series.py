@@ -68,7 +68,6 @@ from bodo.pandas.plan import (
     make_col_ref_exprs,
     match_binop_expr_source_plans,
     maybe_make_list,
-    nonnumeric_describe,
     reset_index,
 )
 from bodo.pandas.utils import (
@@ -923,7 +922,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             or pa.types.is_integer(pa_type)
             or pa.types.is_floating(pa_type)
         ):
-            return nonnumeric_describe(self)
+            return _nonnumeric_describe(self)
 
         quantile_qs = [0.25, 0.5, 0.75]
 
@@ -1832,6 +1831,33 @@ def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
         return len(x) if isinstance(x, numpy.ndarray) else 1
 
     return split_s.map(get_len)
+
+
+def _nonnumeric_describe(series):
+    """Computes non-numeric series.describe() using DataFrameGroupBy."""
+
+    plan = series._plan
+
+    plan.is_series = False
+    plan.empty_data.columns = pd.Index(["A"])
+    df = wrap_plan(plan)
+
+    df.columns = pd.Index(["None"])
+    df["B"] = df["None"]
+    gb = df.groupby("None")
+
+    gb_size = gb.agg("size")  # Plan execution
+    count_val = gb_size.sum()  # Plan execution
+    unique_val = len(gb_size.index)
+    gb_sorted = gb_size.sort_values(ascending=False)
+    top_val = gb_sorted.index[0]
+    freq_val = gb_sorted.iloc[0]  # Plan execution
+
+    return bodo.pandas.BodoSeries(
+        [f"{count_val}", f"{unique_val}", f"{top_val}", f"{freq_val}"],
+        name=series.name,
+        index=pd.Index(["count", "unique", "top", "freq"]),
+    )
 
 
 def validate_str_cat(lhs, rhs):
