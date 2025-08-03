@@ -681,7 +681,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @property
     def ai(self):
-        return BodoSeriesAi(self)
+        return BodoSeriesAiMethods(self)
 
     @property
     def T(self):
@@ -1393,7 +1393,7 @@ class BodoStringMethods:
         return _split_internal(self, "rsplit", pat, n, expand)
 
 
-class BodoSeriesAi:
+class BodoSeriesAiMethods:
     def __init__(self, series):
         self._series = series
 
@@ -1415,6 +1415,81 @@ class BodoSeriesAi:
             per_row,
             output_type=pd.Series(dtype=pd.ArrowDtype(list_of_int64)),
         )
+
+    def query_s3_vectors(
+        self,
+        vector_bucket_name,
+        index_name,
+        region,
+        topk,
+        filter=None,
+        return_distance=False,
+        return_metadata=False,
+    ):
+        """Query S3 vector index and return matching vector data as a BodoDataFrame."""
+        series = self._series
+
+        if series.dtype.pyarrow_dtype not in (
+            pa.list_(pa.float32()),
+            pa.large_list(pa.float32()),
+            pa.list_(pa.float64()),
+            pa.large_list(pa.float64()),
+        ):
+            raise TypeError(
+                f"Series.ai.query_s3_vectors() got unsupported dtype: {series.dtype}, expected list[float32] or list[float64]."
+            )
+
+        index = series.head(0).index
+        struct_schema = {"keys": pa.large_list(pa.large_string())}
+        if return_distance:
+            struct_schema["distances"] = pa.large_list(pa.float32())
+        if return_metadata:
+            struct_schema["metadata"] = pa.large_list(pa.large_string())
+
+        # Output of projection function is a struct that is expanded into columns of a
+        # DataFrame.
+        struct_type = pa.struct(struct_schema)
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(struct_type),
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.utils.query_s3_vectors_helper",
+            (
+                vector_bucket_name,
+                index_name,
+                region,
+                topk,
+                filter,
+                return_distance,
+                return_metadata,
+            ),
+            {},
+            is_method=False,
+        )
+
+        n_index_arrays = get_n_index_arrays(index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
+        empty_data = arrow_to_empty_df(pa.schema(struct_type))
+        empty_data.index = index
+
+        exprs = tuple(
+            get_col_as_series_expr(f.name, empty_data, series_out, index_cols)
+            for f in struct_type
+        )
+
+        df_plan = LogicalProjection(
+            empty_data,
+            series_out._plan,
+            exprs + index_col_refs,
+        )
+        return wrap_plan(plan=df_plan)
 
 
 class BodoDatetimeProperties:
@@ -1801,6 +1876,11 @@ def _str_cat_helper(df, sep, na_rep, left_idx=0, right_idx=1):
 
 def _get_col_as_series(s, col):
     """Extracts column col from list series and returns as Pandas series."""
+
+    # Extract column from struct case
+    if isinstance(col, str):
+        return pd.Series(pa.table(s.array._pa_array).column(col))
+
     series = pd.Series(
         [
             None
