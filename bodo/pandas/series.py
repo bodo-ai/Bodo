@@ -1418,13 +1418,13 @@ class BodoSeriesAiMethods:
 
     def query_s3_vectors(
         self,
-        vector_bucket_name,
-        index_name,
-        region,
-        topk,
-        filter=None,
-        return_distance=False,
-        return_metadata=False,
+        vector_bucket_name: str,
+        index_name: str,
+        topk: int,
+        region: str = None,
+        filter: dict = None,
+        return_distance: bool = False,
+        return_metadata: bool = False,
     ):
         """Query S3 vector index and return matching vector data as a BodoDataFrame."""
         series = self._series
