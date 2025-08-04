@@ -181,7 +181,7 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
 };
 
 /**
- * @brief UDF plan node data to pass around in DuckDB plans in
+ * @brief Arrow Scalar UDF plan node data to pass around in DuckDB plans in
  * BoundFunctionExpression.
  *
  */

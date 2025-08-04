@@ -885,7 +885,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
    public:
     PhysicalArrowExpression(
         std::vector<std::shared_ptr<PhysicalExpression>> &children,
-        BodoArrowScalarFunction &_scalar_func_data,
+        BodoArrowScalarFunctionData &_scalar_func_data,
         const std::shared_ptr<arrow::DataType> &_result_type)
         : PhysicalExpression(children),
           scalar_func_data(_scalar_func_data),
@@ -905,11 +905,11 @@ class PhysicalArrowExpression : public PhysicalExpression {
                                     int64_t left_index,
                                     int64_t right_index) override {
         throw std::runtime_error(
-            "PhysicalUDFExpression::join_expr_internal unimplemented ");
+            "PhysicalArrowExpression::join_expr_internal unimplemented ");
     }
 
    protected:
-    BodoPythonScalarFunctionData scalar_func_data;
+    BodoArrowScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalUDFExpressionMetrics metrics;
 };
