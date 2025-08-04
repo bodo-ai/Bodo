@@ -7,12 +7,22 @@ import inspect
 import time
 import warnings
 
+import numba
 import pandas as pd
 import pyarrow as pa
 
 import bodo
+from bodo.hiframes.pd_index_ext import init_range_index
+from bodo.hiframes.pd_series_ext import init_series
+from bodo.libs.array import (
+    arr_info_list_to_table,
+    array_from_cpp_table,
+    array_to_info,
+    delete_table,
+)
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
+from bodo.utils.conversion import coerce_to_array
 from bodo.utils.typing import check_unsupported_args_fallback
 
 BODO_NONE_DUMMY = "_bodo_none_dummy_"
@@ -960,6 +970,26 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
     raise BodoLibNotImplementedException(
         f"could not infer the output type of user defined function{except_msg}."
     )
+
+
+@numba.njit
+def series_to_cpp_table_jit(series_type):
+    """Convert a Series to a cpp table (table_info)"""
+    out_arr = coerce_to_array(series_type, use_nullable_array=True)
+    out_info = array_to_info(out_arr)
+    out_cpp_table = arr_info_list_to_table([out_info])
+    return out_cpp_table
+
+
+@numba.njit
+def cpp_table_to_series_jit(in_cpp_table, series_arr_type):
+    """Convert a cpp table (table info) to a series using JIT"""
+    series_data = array_from_cpp_table(in_cpp_table, 0, series_arr_type)
+    # TODO: Add option to also convert index
+    index = init_range_index(0, len(series_data), 1, None)
+    out_series = init_series(series_data, index)
+    delete_table(in_cpp_table)
+    return out_series
 
 
 def compile_cfunc(func, decorator):

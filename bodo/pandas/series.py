@@ -9,7 +9,6 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
 
-import numba
 import numpy
 import pandas as pd
 import pyarrow as pa
@@ -23,15 +22,7 @@ from pandas._typing import (
 import bodo
 import bodo.decorators
 from bodo.ext import plan_optimizer
-from bodo.hiframes.pd_index_ext import init_range_index
-from bodo.hiframes.pd_series_ext import init_series
-from bodo.libs.array import (
-    arr_info_list_to_table,
-    array_from_cpp_table,
-    array_to_info,
-    delete_table,
-    table_type,
-)
+from bodo.libs.array import table_type
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
@@ -76,32 +67,15 @@ from bodo.pandas.utils import (
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
+    cpp_table_to_series_jit,
     fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
+    series_to_cpp_table_jit,
     wrap_plan,
 )
-from bodo.utils.conversion import coerce_to_array
 from bodo.utils.typing import BodoError
-
-
-@numba.njit
-def series_to_cpp_table(series_type):
-    out_arr = coerce_to_array(series_type, use_nullable_array=True)
-    out_info = array_to_info(out_arr)
-    out_cpp_table = arr_info_list_to_table([out_info])
-    return out_cpp_table
-
-
-@numba.njit
-def cpp_table_to_series(in_cpp_table, series_arr_type):
-    series_data = array_from_cpp_table(in_cpp_table, 0, series_arr_type)
-    # TODO: Add option to also convert index
-    index = init_range_index(0, len(series_data), 1, None)
-    out_series = init_series(series_data, index)
-    delete_table(in_cpp_table)
-    return out_series
 
 
 def get_map_jit_wrappers(empty_series, arg, na_action):
@@ -113,9 +87,9 @@ def get_map_jit_wrappers(empty_series, arg, na_action):
         return series.map(arg, na_action=na_action)
 
     def map_wrapper(in_cpp_table):
-        series = cpp_table_to_series(in_cpp_table, arr_type)
+        series = cpp_table_to_series_jit(in_cpp_table, arr_type)
         out_series = map_wrapper_inner(series)
-        out_cpp_table = series_to_cpp_table(out_series)
+        out_cpp_table = series_to_cpp_table_jit(out_series)
         return out_cpp_table
 
     return (
@@ -722,7 +696,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 error_msg = "Jit could not determine pyarrow return type from UDF."
 
             if empty_series is not None:
-                # Compile the cfunc and get pointer
                 return _get_series_python_func_plan(
                     self._plan,
                     empty_series,

@@ -6,6 +6,7 @@ from collections.abc import Callable, Hashable, Iterable, Sequence
 from contextlib import contextmanager
 
 import pandas as pd
+import pyarrow as pa
 from pandas._libs import lib
 
 if pt.TYPE_CHECKING:
@@ -29,11 +30,12 @@ if pt.TYPE_CHECKING:
     from pyiceberg.partitioning import PartitionSpec
     from pyiceberg.table.sorting import SortOrder
 
-
+import numba
 from pandas.core.indexing import _LocIndexer
 
 import bodo
 from bodo.ext import plan_optimizer
+from bodo.libs.array import table_type
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.groupby import DataFrameGroupBy
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -68,6 +70,7 @@ from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    _get_empty_series_arrow,
     check_args_fallback,
     fallback_wrapper,
     get_lazy_manager_class,
@@ -1220,7 +1223,44 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 loc = self._info_axis.get_loc(key)
                 self._iset_item_mgr(loc, *self._sanitize_column(head_val))
 
-    @check_args_fallback(supported=["func", "axis", "args"])
+    def _get_apply_jit_wrappers(self, func, args, **kwargs):
+        import numpy as np
+
+        from bodo.decorators import _cfunc
+        from bodo.hiframes.pd_dataframe_ext import init_dataframe
+        from bodo.hiframes.table import TableType
+        from bodo.libs.array import cpp_table_to_py_table
+        from bodo.pandas.utils import series_to_cpp_table_jit
+
+        empty_df = self.head(0)
+        df_type = bodo.typeof(empty_df)
+        py_table_type = TableType(df_type.data)
+        out_cols_arr = np.array(range(len(self.columns)), dtype=np.int64)
+        column_names = bodo.utils.typing.ColNamesMetaType(tuple(self.columns))
+
+        @numba.njit
+        def cpp_table_to_df(cpp_table):
+            py_table = cpp_table_to_py_table(cpp_table, out_cols_arr, py_table_type, 0)
+            index = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(py_table), 1, None
+            )
+            return init_dataframe((py_table,), index, column_names)
+
+        @bodo.jit(cache=True, spawn=False, distributed=False)
+        def apply_wrapper_inner(df):
+            return df.apply(func, axis=1)
+
+        def map_wrapper(in_cpp_table):
+            series = cpp_table_to_df(in_cpp_table)
+            out_series = apply_wrapper_inner(series)
+            out_cpp_table = series_to_cpp_table_jit(out_series)
+            return out_cpp_table
+
+        cfunc_decorator = _cfunc(table_type(table_type), cache=True)
+
+        return apply_wrapper_inner, map_wrapper, cfunc_decorator
+
+    @check_args_fallback(supported=["func", "axis", "args", "engine"])
     def apply(
         self,
         func,
@@ -1229,7 +1269,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         result_type=None,
         args=(),
         by_row="compat",
-        engine="python",
+        engine="bodo",
         engine_kwargs=None,
         **kwargs,
     ):
@@ -1242,6 +1282,64 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.apply(): only axis=1 supported"
             )
 
+        if engine == "numba":
+            raise BodoLibNotImplementedException(
+                "DataFrame.apply(): with engine='numba' not supported yet."
+            )
+        elif engine not in ("bodo", "python"):
+            raise TypeError(
+                "DataFrame.apply(): expected engine to be one of (bodo, python)"
+            )
+
+        if engine == "bodo":
+            zero_sized_self = self.head(0)
+
+            apply_wrapper_inner, map_wrapper, cfunc_decorator = (
+                self._get_apply_jit_wrappers(func, args, **kwargs)
+            )
+            empty_series, out_jit = None, None
+
+            try:
+                # Compile map inner wrapper, get the output type
+                out_jit = apply_wrapper_inner(zero_sized_self)
+            except BodoError as e:
+                error_msg = str(e)
+
+            # DataFrame output is supported by JIT but not DF library.
+            if isinstance(out_jit, pd.DataFrame):
+                raise BodoLibNotImplementedException(
+                    f"DataFrame.apply(): expected output to be Series, got: {type(out_jit)}."
+                )
+            elif isinstance(out_jit, pd.Series):
+                empty_series = _get_empty_series_arrow(out_jit)
+
+            # Jit failed to determine dtypes, likely from gaps in our Arrow support.
+            if empty_series is not None and pa.types.is_null(
+                empty_series.dtype.pyarrow_dtype
+            ):
+                empty_series = None
+                error_msg = "Jit could not determine pyarrow return type from UDF."
+
+            if empty_series is not None:
+                return _get_df_python_func_plan(
+                    self._plan,
+                    empty_series,
+                    map_wrapper,
+                    (),
+                    {},
+                    cfunc_decorator=cfunc_decorator,
+                )
+            else:
+                msg = (
+                    "DataFrame.apply(): Compiling user defined function failed or "
+                    "encountered an unsupported result type. Falling back to "
+                    "Python engine. Add engine='python' to ignore this warning. "
+                    "Original error: "
+                    f"{error_msg}."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+
+        # engine == "python"
         empty_series = get_scalar_udf_result_type(
             self, "apply", func, axis=axis, args=args, **kwargs
         )
