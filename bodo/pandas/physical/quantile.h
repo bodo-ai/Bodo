@@ -25,6 +25,7 @@ using KLLDoubleSketch = datasketches::kll_sketch<double>;
 struct PhysicalQuantileMetrics {
     using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
+    stat_t output_row_count = 0;
 
     time_t consume_time = 0;
     time_t finalize_time = 0;
@@ -158,6 +159,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                 auto arr = ScalarToArrowArray(arrow_scalar);
                 auto bodo_arr =
                     arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr());
+                this->metrics.output_row_count += next_batch->nrows();
                 results.push_back(bodo_arr);
             }
             final_result = std::make_shared<table_info>(results);
@@ -174,6 +176,10 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
                                                        1),
             std::move(metrics_out));
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
+                                                       1),
+            this->metrics.output_row_count);
     }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
