@@ -7,6 +7,7 @@ The DataFrame should have "key", "data" and "metadata" columns.
 "key" column data should be strings, and "data" column should be float32
 embeddings with the same length as expected by the vector index in each row.
 "metadata" should be key-value pairs.
+See [S3 documentation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-getting-started.html) for more details.
 
 <p class="api-header">Parameters</p>
 
@@ -51,8 +52,8 @@ df["metadata"] = [
 
 bdf = bd.from_pandas(df)
 bdf.to_s3_vectors(
-    vector_bucket_name="ehsan-test-vector",
-    index_name="test-ind",
+    vector_bucket_name="my-test-vector",
+    index_name="my-test-ind",
     region="us-east-2",
 )
 
