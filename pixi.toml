@@ -184,6 +184,7 @@ testcontainers = "*"
 
 # Other Deps
 pyyaml = "*"
+transformers = "*"
 
 # Developer Tools
 ruff = "*"
@@ -278,3 +279,4 @@ clangxx_osx-arm64 = "=19"
 [feature.azure.dependencies]
 pytest-azurepipelines = "*"
 pytest-nunit = "*"
+transformers = "*"
