@@ -462,6 +462,12 @@ class PythonScalarFuncExpression(Expression):
             return self
 
 
+class ArrowScalarFuncExpression(Expression):
+    """TODO: docstring"""
+
+    pass
+
+
 class BinaryExpression(Expression):
     """Base class for binary expressions in the query plan, such as arithmetic and
     comparison operations.

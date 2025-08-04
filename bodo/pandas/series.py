@@ -38,6 +38,7 @@ from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
+    ArrowScalarFuncExpression,
     ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
@@ -2044,6 +2045,44 @@ def _get_series_python_func_plan(
         (col_index,) + tuple(index_cols),
         is_cfunc,
         has_state,
+    )
+    # Select Index columns explicitly for output
+    index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
+    return wrap_plan(
+        plan=LogicalProjection(
+            empty_data,
+            source_data,
+            (expr,) + index_col_refs,
+        ),
+    )
+
+
+def _get_series_arrow_func_plan(
+    series_proj,
+    empty_data,
+    func_name,
+):
+    """Create a plan for calling a Series method in Arrow compute. Creates a proper
+    ArrowScalarFuncExpression with the correct arguments and a LogicalProjection.
+    """
+
+    # Optimize out trivial df["col"] projections to simplify plans
+    if is_single_colref_projection(series_proj):
+        source_data = series_proj.args[0]
+        input_expr = series_proj.args[1][0]
+        col_index = input_expr.args[1]
+    else:
+        source_data = series_proj
+        col_index = 0
+
+    n_cols = len(source_data.empty_data.columns)
+    index_cols = range(
+        n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
+    )
+
+    expr = ArrowScalarFuncExpression(
+        func_name,
+        (col_index,) + tuple(index_cols),
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
