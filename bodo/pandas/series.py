@@ -789,6 +789,56 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             {},
         )
 
+    def map_partitions(self, func, *args, **kwargs):
+        """
+        Apply a function to each partition of the series.
+
+        If self is a lazy plan, then the result will also be a lazy plan
+        (assuming result is Series and the dtype can be infered). Otherwise, the lazy
+        plan will be evaluated.
+        NOTE: this pickles the function and sends it to the workers, so globals are
+        pickled. The use of lazy data structures as globals causes issues.
+
+        Args:
+            func (Callable): A callable which takes in a DataFrame as its first
+                argument and returns a DataFrame or Series that has the same length
+                its input.
+            *args: Additional positional arguments to pass to func.
+            **kwargs: Additional key-word arguments to pass to func.
+
+        Returns:
+            DataFrame or Series: The result of applying the func.
+        """
+        import bodo.spawn.spawner
+
+        if self._exec_state == ExecState.PLAN:
+            required_fallback = False
+            try:
+                empty_series = get_scalar_udf_result_type(
+                    self, "map_partitions", func, *args, **kwargs
+                )
+            except BodoLibNotImplementedException as e:
+                required_fallback = True
+                msg = (
+                    f"map_paritions(): encountered exception: {e}, while trying to "
+                    "build lazy plan. Executing plan and running map_paritions on "
+                    "workers (may be slow or run out of memory)."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+
+                self_arg = self.execute_plan()
+
+            if not required_fallback:
+                return _get_series_python_func_plan(
+                    self._plan, empty_series, func, args, kwargs
+                )
+        else:
+            self_arg = self
+
+        return bodo.spawn.spawner.submit_func_to_workers(
+            func, [], self_arg, *args, **kwargs
+        )
+
     @check_args_fallback(supported=["ascending", "na_position", "kind"])
     def sort_values(
         self,
@@ -1429,6 +1479,18 @@ class BodoSeriesAi:
             per_row,
             output_type=pd.Series(dtype=pd.ArrowDtype(list_of_int64)),
         )
+
+    def llm_generate(
+        self,
+        endpoint: str,
+        api_token: str,
+        model: str | None = None,
+        **generation_kwargs,
+    ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
 
 
 class BodoDatetimeProperties:

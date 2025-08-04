@@ -108,6 +108,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.agg`][bodoseriesagg]
 - [`bodo.pandas.BodoSeries.aggregate`][bodoseriesaggregate]
 - [`bodo.pandas.BodoSeries.map`][bodoseriesmap]
+- [`bodo.pandas.BodoSeries.map_partitions`][bodoseriesmappartitions]
 
 ---
 
@@ -194,6 +195,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 [bodoserieshead]: ../series/head.md
 [bodoseriesmap]: ../series/map.md
+[bodoseriesmappartitions]: ../series/map_partitions.md
 [bodoseriessortvalues]: ../series/sort_values.md
 
 [overview]: ../index.md/#lazy-evaluation-and-fallback-to-pandas
