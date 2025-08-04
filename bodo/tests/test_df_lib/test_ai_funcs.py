@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pickle
 import random
+import re
 
 import boto3
 import pandas as pd
@@ -88,4 +89,54 @@ def test_write_s3_vectors(datapath):
         bdf_invalid = bd.from_pandas(df.assign(metadata=[1, 2, 3]))
         bdf_invalid.to_s3_vectors(
             vector_bucket_name=bucket_name, index_name=index_name, region=region
+        )
+
+
+@pytest.mark.parametrize("return_distance", [True, False])
+@pytest.mark.parametrize("return_metadata", [True, False])
+def test_query_s3_vectors(datapath, return_distance, return_metadata):
+    """Test querying S3 Vectors using Bodo Series AI API."""
+
+    embedding_path = datapath("query_embedding.pkl")
+
+    with open(embedding_path, "rb") as f:
+        embedding = pickle.load(f)
+
+    df = pd.DataFrame({"data": [embedding] * 10})
+    bdf = bd.from_pandas(df)
+
+    out_df = bdf.data.ai.query_s3_vectors(
+        vector_bucket_name="ehsan-test-vector",
+        index_name="test-ind",
+        region="us-east-2",
+        topk=3,
+        filter={"genre": "scifi"},
+        return_distance=return_distance,
+        return_metadata=return_metadata,
+    )
+
+    assert isinstance(out_df, bd.BodoDataFrame), "Output should be a BodoDataFrame"
+    expected_columns = ["keys"]
+    if return_distance:
+        expected_columns.append("distances")
+    if return_metadata:
+        expected_columns.append("metadata")
+
+    pd.testing.assert_index_equal(out_df.columns, pd.Index(expected_columns))
+
+
+def test_query_s3_vectors_error_checking():
+    # Check data type errors
+    df = pd.DataFrame({"data": [["ABC", "123"]] * 10})
+    bdf = bd.from_pandas(df)
+
+    with pytest.raises(
+        TypeError, match=re.escape("expected list[float32] or list[float64]")
+    ):
+        bdf.data.ai.query_s3_vectors(
+            vector_bucket_name="ehsan-test-vector",
+            index_name="test-ind",
+            region="us-east-2",
+            topk=3,
+            filter={"genre": "scifi"},
         )

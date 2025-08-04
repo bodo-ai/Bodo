@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include "../../libs/_query_profile_collector.h"
 #include "../../libs/streaming/_shuffle.h"
 #include "_bodo_write_function.h"
 #include "physical/operator.h"
@@ -40,7 +41,17 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
                        : OperatorResult::NEED_MORE_INPUT;
     }
 
-    void Finalize() override {}
+    void Finalize() override {
+        std::vector<MetricBase> metrics_out;
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            std::move(metrics_out));
+        // Write doesn't produce rows
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1), 0);
+    }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         return std::shared_ptr<table_info>(nullptr);
