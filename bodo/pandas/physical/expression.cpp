@@ -528,6 +528,11 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
                                              udf_output->column_names[0]);
 }
 
+std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
+    std::shared_ptr<table_info> input_batch) {
+    return;
+}
+
 bool PhysicalExpression::join_expr(array_info** left_table,
                                    array_info** right_table, void** left_data,
                                    void** right_data, void** left_null_bitmap,

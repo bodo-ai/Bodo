@@ -181,6 +181,20 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
 };
 
 /**
+ * @brief UDF plan node data to pass around in DuckDB plans in
+ * BoundFunctionExpression.
+ *
+ */
+struct BodoArrowScalarFunctionData : public duckdb::FunctionData {
+    BodoArrowScalarFunctionData(std::string func_name,
+                                std::shared_ptr<arrow::Schema> out_schema)
+        : func_name(func_name), out_schema(std::move(out_schema)) {}
+
+    std::string func_name;
+    std::shared_ptr<arrow::Schema> out_schema;
+};
+
+/**
  * @brief Aggregate node data to pass around in DuckDB plans in
  * BoundAggregateExpression.
  *
