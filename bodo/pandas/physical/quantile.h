@@ -159,7 +159,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                 auto arr = ScalarToArrowArray(arrow_scalar);
                 auto bodo_arr =
                     arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr());
-                this->metrics.output_row_count += next_batch->nrows();
+                this->metrics.output_row_count += 1;
                 results.push_back(bodo_arr);
             }
             final_result = std::make_shared<table_info>(results);
