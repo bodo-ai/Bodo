@@ -57,10 +57,26 @@ class PhysicalProjection : public PhysicalSourceSink {
                 }
             } else if (expr->type == duckdb::ExpressionType::BOUND_FUNCTION) {
                 auto& func_expr = expr->Cast<duckdb::BoundFunctionExpression>();
-                if (func_expr.bind_info) {
+                if (func_expr.bind_info &&
+                    bfe.bind_info->Cast<BodoPythonScalarFunctionData>().args) {
                     BodoPythonScalarFunctionData& scalar_func_data =
                         func_expr.bind_info
                             ->Cast<BodoPythonScalarFunctionData>();
+                    std::unique_ptr<bodo::DataType> col_type =
+                        bodo::Schema::FromArrowSchema(
+                            scalar_func_data.out_schema)
+                            ->column_types[0]
+                            ->copy();
+                    this->output_schema->append_column(std::move(col_type));
+                    col_names.emplace_back(
+                        scalar_func_data.out_schema->field(0)->name());
+                } else if (func_expr.bind_info &&
+                           bfe.bind_info->Cast<BodoArrowScalarFunctionData>()
+                               .args) {
+                    // TODO: combine with previous case to avoid duplicate code
+                    BodoArrowScalarFunctionData& scalar_func_data =
+                        func_expr.bind_info
+                            ->Cast<BodoArrowScalarFunctionData>();
                     std::unique_ptr<bodo::DataType> col_type =
                         bodo::Schema::FromArrowSchema(
                             scalar_func_data.out_schema)

@@ -407,6 +407,23 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                 return std::static_pointer_cast<PhysicalExpression>(
                     std::make_shared<PhysicalUDFExpression>(
                         phys_children, scalar_func_data, result_type));
+            } else if (bfe.bind_info &&
+                       bfe.bind_info->Cast<BodoArrowScalarFunctionData>()
+                           .args) {
+                // TODO: combine with previous case to avoid duplicate code
+                BodoArrowScalarFunctionData& scalar_func_data =
+                    bfe.bind_info->Cast<BodoArrowScalarFunctionData>();
+                std::vector<std::shared_ptr<PhysicalExpression>> phys_children;
+                for (auto& child_expr : bfe.children) {
+                    phys_children.emplace_back(buildPhysicalExprTree(
+                        child_expr, col_ref_map, no_scalars));
+                }
+
+                const std::shared_ptr<arrow::DataType>& result_type =
+                    scalar_func_data.out_schema->field(0)->type();
+                return std::static_pointer_cast<PhysicalExpression>(
+                    std::make_shared<PhysicalArrowExpression>(
+                        phys_children, scalar_func_data, result_type));
             } else {
                 switch (bfe.children.size()) {
                     case 1: {
