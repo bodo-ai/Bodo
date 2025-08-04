@@ -1019,10 +1019,7 @@ def overload_extract_cpp_index(cpp_table, n_cols, index_type, length):
 
         def impl(cpp_table, n_cols, index_type, length):  # pragma: no cover
             # TODO: get range index start/stop from metadata
-            start = 0
-            return bodo.hiframes.pd_index_ext.init_range_index(
-                start, start + length, 1, None
-            )
+            return bodo.hiframes.pd_index_ext.init_range_index(0, length, 1, None)
     elif isinstance(index_type, MultiIndexType):
         # MultiIndex is not supported in df.apply, thus this branch is untested:
         # TODO: support multi index apply and add implementation for this case.
