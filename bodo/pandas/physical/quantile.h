@@ -25,7 +25,6 @@ using KLLDoubleSketch = datasketches::kll_sketch<double>;
 struct PhysicalQuantileMetrics {
     using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
-    stat_t output_row_count = 0;
 
     time_t consume_time = 0;
     time_t finalize_time = 0;
@@ -88,7 +87,6 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
-        this->metrics.output_row_count += next_batch->nrows();
         return {final_result, OperatorResult::FINISHED};
     }
 
@@ -176,10 +174,6 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
                                                        1),
             std::move(metrics_out));
-        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       1),
-            this->metrics.output_row_count);
     }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
@@ -200,5 +194,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {
         metrics_out.emplace_back(
             TimerMetric("consume_time", this->metrics.consume_time));
+        metrics_out.emplace_back(
+            TimerMetric("finalize_time", this->metrics.finalize_time));
     }
 };
