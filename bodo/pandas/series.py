@@ -2081,6 +2081,8 @@ def _get_series_arrow_func_plan(
     )
 
     expr = ArrowScalarFuncExpression(
+        empty_data,
+        source_data,
         func_name,
         (col_index,) + tuple(index_cols),
     )

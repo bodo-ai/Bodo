@@ -606,6 +606,11 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     return scalar_expr;
 }
 
+// TODO: implement
+duckdb::unique_ptr<duckdb::Expression> make_arrow_scalar_func_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
+    std::string func_name, const std::vector<int> &selected_columns) {}
+
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
