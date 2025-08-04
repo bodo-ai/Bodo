@@ -16,7 +16,7 @@ from bodo.pandas.plan import (
     LogicalGetPandasReadSeq,
     assert_executed_plan_count,
 )
-from bodo.pandas.utils import BodoLibFallbackWarning
+from bodo.pandas.utils import BodoCompilationFailedWarning, BodoLibFallbackWarning
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
@@ -686,7 +686,7 @@ def test_head(datapath):
 
 def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
-    with assert_executed_plan_count(1):
+    with assert_executed_plan_count(0):
         df = pd.DataFrame(
             {
                 "a": pd.array([1, 2, 3] * 10, "Int64"),
@@ -776,14 +776,14 @@ def test_series_map_non_jit(index_val):
 
     warn_msg = "Compiling user defined function failed "
     bdf = bd.from_pandas(df)
-    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+    with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
         bdf2 = bdf.A.map(func1)
     pdf = df.copy()
     pdf2 = pdf.A.map(func1)
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
     bdf = bd.from_pandas(df)
-    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+    with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
         bdf2 = bdf.A.map(func2)
     pdf = df.copy()
     pdf2 = pdf.A.map(func2)

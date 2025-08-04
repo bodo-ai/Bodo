@@ -30,12 +30,12 @@ if pt.TYPE_CHECKING:
     from pyiceberg.partitioning import PartitionSpec
     from pyiceberg.table.sorting import SortOrder
 
-import numba
+import numpy as np
 from pandas.core.indexing import _LocIndexer
 
 import bodo
 from bodo.ext import plan_optimizer
-from bodo.libs.array import table_type
+from bodo.hiframes.table import TableType
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.groupby import DataFrameGroupBy
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -68,14 +68,18 @@ from bodo.pandas.plan import (
 )
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     _get_empty_series_arrow,
     check_args_fallback,
+    cpp_table_to_df_jit,
     fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
+    get_udf_cfunc_decorator,
+    series_to_cpp_table_jit,
     wrap_plan,
 )
 from bodo.utils.typing import (
@@ -1223,43 +1227,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 loc = self._info_axis.get_loc(key)
                 self._iset_item_mgr(loc, *self._sanitize_column(head_val))
 
-    def _get_apply_jit_wrappers(self, func, args, **kwargs):
-        import numpy as np
-
-        from bodo.decorators import _cfunc
-        from bodo.hiframes.pd_dataframe_ext import init_dataframe
-        from bodo.hiframes.table import TableType
-        from bodo.libs.array import cpp_table_to_py_table
-        from bodo.pandas.utils import series_to_cpp_table_jit
-
-        empty_df = self.head(0)
-        df_type = bodo.typeof(empty_df)
-        py_table_type = TableType(df_type.data)
-        out_cols_arr = np.array(range(len(self.columns)), dtype=np.int64)
-        column_names = bodo.utils.typing.ColNamesMetaType(tuple(self.columns))
-
-        @numba.njit
-        def cpp_table_to_df(cpp_table):
-            py_table = cpp_table_to_py_table(cpp_table, out_cols_arr, py_table_type, 0)
-            index = bodo.hiframes.pd_index_ext.init_range_index(
-                0, len(py_table), 1, None
-            )
-            return init_dataframe((py_table,), index, column_names)
-
-        @bodo.jit(cache=True, spawn=False, distributed=False)
-        def apply_wrapper_inner(df):
-            return df.apply(func, axis=1)
-
-        def map_wrapper(in_cpp_table):
-            series = cpp_table_to_df(in_cpp_table)
-            out_series = apply_wrapper_inner(series)
-            out_cpp_table = series_to_cpp_table_jit(out_series)
-            return out_cpp_table
-
-        cfunc_decorator = _cfunc(table_type(table_type), cache=True)
-
-        return apply_wrapper_inner, map_wrapper, cfunc_decorator
-
     @check_args_fallback(supported=["func", "axis", "args", "engine"])
     def apply(
         self,
@@ -1294,9 +1261,24 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if engine == "bodo":
             zero_sized_self = self.head(0)
 
-            apply_wrapper_inner, map_wrapper, cfunc_decorator = (
-                self._get_apply_jit_wrappers(func, args, **kwargs)
-            )
+            # Generate wrappers for calling apply from C++.
+            df_type = bodo.typeof(zero_sized_self)
+            py_table_type = TableType(df_type.data)
+            out_cols_arr = np.array(range(len(self.columns)), dtype=np.int64)
+            column_names = bodo.utils.typing.ColNamesMetaType(tuple(self.columns))
+
+            @bodo.jit(cache=True, spawn=False, distributed=False)
+            def apply_wrapper_inner(df):
+                return df.apply(func, axis=1)
+
+            def apply_wrapper(in_cpp_table):
+                series = cpp_table_to_df_jit(
+                    in_cpp_table, out_cols_arr, column_names, py_table_type
+                )
+                out_series = apply_wrapper_inner(series)
+                out_cpp_table = series_to_cpp_table_jit(out_series)
+                return out_cpp_table
+
             empty_series, out_jit = None, None
 
             try:
@@ -1324,10 +1306,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 return _get_df_python_func_plan(
                     self._plan,
                     empty_series,
-                    map_wrapper,
+                    apply_wrapper,
                     (),
                     {},
-                    cfunc_decorator=cfunc_decorator,
+                    cfunc_decorator=get_udf_cfunc_decorator(),
                 )
             else:
                 msg = (
@@ -1337,7 +1319,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     "Original error: "
                     f"{error_msg}."
                 )
-                warnings.warn(BodoLibFallbackWarning(msg))
+                warnings.warn(BodoCompilationFailedWarning(msg))
 
         # engine == "python"
         empty_series = get_scalar_udf_result_type(

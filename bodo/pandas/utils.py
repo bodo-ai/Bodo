@@ -12,13 +12,17 @@ import pandas as pd
 import pyarrow as pa
 
 import bodo
+from bodo.decorators import _cfunc
+from bodo.hiframes.pd_dataframe_ext import init_dataframe
 from bodo.hiframes.pd_index_ext import init_range_index
 from bodo.hiframes.pd_series_ext import init_series
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_from_cpp_table,
     array_to_info,
+    cpp_table_to_py_table,
     delete_table,
+    table_type,
 )
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
@@ -214,6 +218,12 @@ class BodoLibNotImplementedException(Exception):
 class BodoLibFallbackWarning(Warning):
     """Warning raised in the Bodo library in the fallback decorator when some
     functionality is not implemented yet and we need to fall back to Pandas.
+    """
+
+
+class BodoCompilationFailedWarning(Warning):
+    """Warning raised when executing UDFs (apply, map) when compiling and running user
+    provided function on empty data raises a BodoError or did not return a valid type.
     """
 
 
@@ -990,6 +1000,20 @@ def cpp_table_to_series_jit(in_cpp_table, series_arr_type):
     out_series = init_series(series_data, index)
     delete_table(in_cpp_table)
     return out_series
+
+
+@numba.njit
+def cpp_table_to_df_jit(cpp_table, out_cols_arr, column_names, py_table_type):
+    """Convert a cpp table (table info) to a DataFrame using JIT apis."""
+    py_table = cpp_table_to_py_table(cpp_table, out_cols_arr, py_table_type, 0)
+    index = bodo.hiframes.pd_index_ext.init_range_index(0, len(py_table), 1, None)
+    return init_dataframe((py_table,), index, column_names)
+
+
+def get_udf_cfunc_decorator():
+    """Decorator for creating C callbacks for map/apply that take in a table info and
+    return a table info."""
+    return _cfunc(table_type(table_type), cache=True)
 
 
 def compile_cfunc(func, decorator):
