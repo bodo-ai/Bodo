@@ -22,6 +22,15 @@ using KLLDoubleSketch = datasketches::kll_sketch<double>;
         throw std::runtime_error(err_msg);                                 \
     }
 
+struct PhysicalQuantileMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    stat_t output_row_count = 0;
+
+    time_t consume_time = 0;
+    time_t finalize_time = 0;
+};
+
 class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalQuantile(
@@ -33,6 +42,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        time_pt start_consume_time = start_timer();
         auto col = input_batch->columns[0];
         arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
         std::shared_ptr<arrow::Array> in_arrow_array = bodo_array_to_arrow(
@@ -70,6 +80,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             }
         }
 
+        this->metrics.consume_time += end_timer(start_consume_time);
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;
@@ -77,6 +88,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
+        this->metrics.output_row_count += next_batch->nrows();
         return {final_result, OperatorResult::FINISHED};
     }
 
@@ -86,6 +98,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
         if (collected) {
             return;
         }
+        time_pt start_finalize_time = start_timer();
         // Toggle collected flag to prevent multiple collections
         collected = true;
         int rank, size;
@@ -155,6 +168,18 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
             final_result = std::make_shared<table_info>(
                 std::vector<std::shared_ptr<array_info>>{});
         }
+        this->metrics.finalize_time += end_timer(start_finalize_time);
+
+        std::vector<MetricBase> metrics_out;
+        this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
+                                                       1),
+            std::move(metrics_out));
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
+                                                       1),
+            this->metrics.output_row_count);
     }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
@@ -171,4 +196,9 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
     std::shared_ptr<KLLDoubleSketch> sketch;
     std::shared_ptr<table_info> final_result;
     bool collected{false};
+    PhysicalQuantileMetrics metrics;
+    void ReportMetrics(std::vector<MetricBase>& metrics_out) {
+        metrics_out.emplace_back(
+            TimerMetric("consume_time", this->metrics.consume_time));
+    }
 };
