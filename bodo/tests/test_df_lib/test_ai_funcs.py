@@ -6,8 +6,11 @@ import random
 import boto3
 import pandas as pd
 import pytest
+import requests
 
 import bodo.pandas as bd
+from bodo.spawn.spawner import spawn_process_on_workers
+from bodo.tests.utils import _test_equal
 from bodo.utils.typing import BodoError
 
 
@@ -89,3 +92,73 @@ def test_write_s3_vectors(datapath):
         bdf_invalid.to_s3_vectors(
             vector_bucket_name=bucket_name, index_name=index_name, region=region
         )
+
+
+def test_tokenize():
+    from transformers import AutoTokenizer
+
+    a = pd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+            "I am the third entry in this series.",
+            "May the fourth be with you.",
+        ]
+    )
+    ba = bd.Series(a)
+
+    def ret_tokenizer():
+        # Load a pretrained tokenizer (e.g., BERT)
+        return AutoTokenizer.from_pretrained("bert-base-uncased")
+
+    pd_tokenizer = ret_tokenizer()
+    b = a.map(lambda x: pd_tokenizer.encode(x, add_special_tokens=True))
+    bb = ba.ai.tokenize(ret_tokenizer)
+
+    _test_equal(
+        bb,
+        b,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+
+def test_llm_generate():
+    prompts = bd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+        ]
+    )
+
+    try:
+        spawn_process_on_workers(
+            "docker run -v ollama:/root/.ollama -p 11434:11434 --name bodo_test_ollama ollama/ollama:latest".split(
+                " "
+            )
+        )
+        spawn_process_on_workers(
+            "docker exec bodo_test_ollama ollama run smollm:135m".split(" ")
+        )
+        # Wait for the container to start
+        for _ in range(20):
+            try:
+                response = requests.get("http://localhost:11434/api/tags", timeout=5)
+                if response.status_code == 200 and "smollm:135m" in response.text:
+                    break
+                raise AssertionError("Model not available yet")
+            except requests.exceptions.RequestException:
+                pass
+        res = prompts.ai.llm_generate(
+            endpoint="http://localhost:11434/v1",
+            api_token="",
+            model="smollm:135m",
+            max_tokens=10,
+            temperature=0.1,
+        ).execute_plan()
+        assert len(res) == 2
+        assert all(isinstance(x, str) for x in res)
+
+    finally:
+        spawn_process_on_workers("docker rm bodo_test_ollama -f".split(" "))

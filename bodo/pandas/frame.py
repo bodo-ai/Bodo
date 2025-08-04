@@ -889,8 +889,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             except BodoLibNotImplementedException as e:
                 required_fallback = True
                 msg = (
-                    f"map_paritions(): encountered exception: {e}, while trying to "
-                    "build lazy plan. Executing plan and running map_paritions on "
+                    f"map_partitions(): encountered exception: {e}, while trying to "
+                    "build lazy plan. Executing plan and running map_partitions on "
                     "workers (may be slow or run out of memory)."
                 )
                 warnings.warn(BodoLibFallbackWarning(msg))

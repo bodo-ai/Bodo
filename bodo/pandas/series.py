@@ -820,8 +820,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             except BodoLibNotImplementedException as e:
                 required_fallback = True
                 msg = (
-                    f"map_paritions(): encountered exception: {e}, while trying to "
-                    "build lazy plan. Executing plan and running map_paritions on "
+                    f"map_partitions(): encountered exception: {e}, while trying to "
+                    "build lazy plan. Executing plan and running map_partitions on "
                     "workers (may be slow or run out of memory)."
                 )
                 warnings.warn(BodoLibFallbackWarning(msg))
@@ -1487,10 +1487,49 @@ class BodoSeriesAi:
         model: str | None = None,
         **generation_kwargs,
     ) -> BodoSeries:
+        import importlib
+
+        assert importlib.util.find_spec("openai") is not None, (
+            "Series.ai.llm_generate() requires the 'openai' package to be installed. "
+            "Please install it using 'pip install openai[aiohttp]'."
+        )
+
         if self._series.dtype != "string[pyarrow]":
             raise TypeError(
                 f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
             )
+        if model is not None:
+            generation_kwargs["model"] = model
+
+        def map_func(series, api_token, endpoint, generation_kwargs):
+            import asyncio
+
+            import openai
+
+            client = openai.AsyncOpenAI(
+                api_key=api_token,
+                base_url=endpoint,
+                # TODO: The below should have better performance but currently
+                # pixi won't solve the dependencies.
+                # http_client=openai.DefaultAioHttpClient(),
+            )
+
+            async def per_row(row, client, generation_kwargs):
+                response = await client.chat.completions.create(
+                    messages=[{"role": "user", "content": row}],
+                    **generation_kwargs,
+                )
+                return response.choices[0].message.content
+
+            async def all_tasks(series, client, generation_kwargs):
+                tasks = [per_row(row, client, generation_kwargs) for row in series]
+                return await asyncio.gather(*tasks)
+
+            return pd.Series(asyncio.run(all_tasks(series, client, generation_kwargs)))
+
+        return self._series.map_partitions(
+            map_func, api_token, endpoint, generation_kwargs=generation_kwargs
+        )
 
 
 class BodoDatetimeProperties:
