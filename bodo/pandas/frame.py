@@ -1263,6 +1263,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
             # Generate wrappers for calling apply from C++.
             df_type = bodo.typeof(zero_sized_self)
+            index_type = df_type.index
             py_table_type = TableType(df_type.data)
             out_cols_arr = np.array(range(len(self.columns)), dtype=np.int64)
             column_names = bodo.utils.typing.ColNamesMetaType(tuple(self.columns))
@@ -1273,7 +1274,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
             def apply_wrapper(in_cpp_table):
                 series = cpp_table_to_df_jit(
-                    in_cpp_table, out_cols_arr, column_names, py_table_type
+                    in_cpp_table, out_cols_arr, column_names, py_table_type, index_type
                 )
                 out_series = apply_wrapper_inner(series)
                 out_cpp_table = series_to_cpp_table_jit(out_series)

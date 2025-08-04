@@ -701,6 +701,34 @@ def test_apply(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+def test_apply_non_jit(datapath, index_val):
+    """Very simple test for df.apply() for sanity checking."""
+    with assert_executed_plan_count(1):
+        df = pd.DataFrame(
+            {
+                "a": pd.array([1, 2, 3] * 10, "Int64"),
+                "b": pd.array([4, 5, 6] * 10, "Int64"),
+                "c": ["a", "b", "c"] * 10,
+            },
+            index=index_val[:30],
+        )
+        bdf = bd.from_pandas(df)
+
+        def unknown_func(x):
+            return x + 10
+
+        def apply_func(row):
+            return unknown_func(row.a)
+
+        out_pd = df.apply(apply_func, axis=1)
+        with pytest.warns(
+            BodoCompilationFailedWarning, match="Compiling user defined function failed"
+        ):
+            out_bodo = bdf.apply(apply_func, axis=1)
+
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
 def test_chain_python_func(datapath, index_val):
     """Make sure chaining multiple Series functions that run in Python works"""
     with assert_executed_plan_count(0):
