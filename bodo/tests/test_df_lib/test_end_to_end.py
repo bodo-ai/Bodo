@@ -686,7 +686,9 @@ def test_head(datapath):
 
 def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
-    with assert_executed_plan_count(0):
+    # Multi-Index apply are not supported by JIT
+    n_execs = 1 if isinstance(index_val, pd.MultiIndex) else 0
+    with assert_executed_plan_count(n_execs):
         df = pd.DataFrame(
             {
                 "a": pd.array([1, 2, 3] * 10, "Int64"),
