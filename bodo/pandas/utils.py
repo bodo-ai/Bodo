@@ -407,6 +407,7 @@ def check_args_fallback(
                     # The dataframe library must not support some specified option.
                     # Get overloaded functions for this dataframe/series in JIT mode.
                     overloads = get_overloads(self.__class__.__name__)
+                    print("todd", overloads)
                     if func.__name__ in overloads:
                         # TO-DO: Generate a function and bodo JIT it to do this
                         # individual operation.  If the compile fails then fallthrough
@@ -1045,3 +1046,58 @@ def fallback_wrapper(self, attr):
         return silenced_method
 
     return attr
+
+
+class JITFallback:
+    def __init__(self, base_obj, name):
+        self.base_obj = base_obj
+        self.name = name
+
+    def __call__(self, *args, **kwargs):
+        if not kwargs:
+            if self.base_obj is None:
+                jit_supported = False
+                raise BodoLibNotImplementedException(
+                    "JITFallback path for top-level functions not yet implemented."
+                )
+            else:
+                overloads = get_overloads(self.base_obj.__class__.__name__)
+                jit_supported = self.name in overloads
+
+            if jit_supported:
+                fname = f"bodo_jitfallback_{self.name}"
+                self_arg = "self, " if self.base_obj is not None else ""
+                numbered_args = ",".join([f"arg{i}" for i in range(len(args))])
+                func_text = f"def {fname}({self_arg}{numbered_args}):\n"
+                if self.base_obj is None:
+                    func_text += f"    return pd.{self.name}({numbered_args})\n"
+                else:
+                    func_text += f"    return self.{self.name}({numbered_args})\n"
+
+                new_func = bodo.utils.utils.bodo_spawn_exec(
+                    func_text, {"pd": pd}, {}, __name__
+                )
+                compiled_method = bodo.jit(new_func, cache=True)
+                try:
+                    if self.base_obj is None:
+                        cm_args = args
+                    else:
+                        cm_args = (self.base_obj, *args)
+                    ret = compiled_method(*cm_args)
+                    print("JITFallback succeeded for", self.name)
+                    return ret
+                except Exception:
+                    print("JITFallback failed for", self.name)
+                    pass
+
+        msg = (
+            f"{self.name} is not implemented in Bodo Dataframe Library yet. "
+            "Falling back to Pandas (may be slow or run out of memory)."
+        )
+        warnings.warn(BodoLibFallbackWarning(msg))
+        if self.base_obj is None:
+            return getattr(pd, self.name)(*args, **kwargs)
+        else:
+            return fallback_wrapper(
+                self.base_obj, object.__getattribute__(self.base_obj, self.name)
+            )(*args, **kwargs)

@@ -68,8 +68,8 @@ from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    JITFallback,
     check_args_fallback,
-    fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
@@ -222,12 +222,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             and not name.startswith("_")
             and hasattr(pd.DataFrame, name)
         ):
-            msg = (
-                f"{name} is not implemented in Bodo Dataframe Library yet. "
-                "Falling back to Pandas (may be slow or run out of memory)."
-            )
-            warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(self, object.__getattribute__(self, name))
+            return JITFallback(self, name)
 
         return object.__getattribute__(self, name)
 
