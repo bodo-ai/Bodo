@@ -689,6 +689,7 @@ def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     # Multi-Index apply are not supported by JIT
     n_execs = 1 if isinstance(index_val, pd.MultiIndex) else 0
+
     with assert_executed_plan_count(n_execs):
         df = pd.DataFrame(
             {
@@ -701,11 +702,29 @@ def test_apply(datapath, index_val):
         bdf = bd.from_pandas(df)
         out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
         out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
+
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_apply_str(datapath, index_val):
+    """Test passing a string argument to func works."""
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "a": pd.array([1, 2, 3] * 10, "Int64"),
+                "b": pd.array([4, 5, 6] * 10, "Int64"),
+            },
+            index=index_val[:30],
+        )
+        bdf = bd.from_pandas(df)
+        out_pd = df.apply("sum", axis=1)
+        out_bodo = bdf.apply("sum", axis=1)
+
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
 def test_apply_non_jit(datapath, index_val):
-    """Very simple test for df.apply() for sanity checking."""
+    """Test unsupported UDFs fallback to Pandas execution."""
     with assert_executed_plan_count(1):
         df = pd.DataFrame(
             {
