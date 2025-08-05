@@ -543,7 +543,9 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
     std::shared_ptr<ExprResult> res = children[0]->ProcessBatch(input_batch);
     std::shared_ptr<array_info> result;
     if (scalar_func_data.arrow_func_name == "date") {
-        // TODO: explanation for this workaround
+        // The Arrow compute equivalent of Series.dt.date() is year_month_day,
+        // which returns a struct. To match the output dtype of Pandas, we Cast
+        // to Date32 instead.
         result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
     } else {
         result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
