@@ -94,7 +94,8 @@ jobs:
       set -exo pipefail
 
       # This isn't published on pypi so no good way to list it as a dependency
-      pixi run -e azure pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+      # TODO[BSE-5031]: Enable polaris tests after fixing pip installation issues
+      # pixi run -e azure pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
       pixi run -e azure pip install transformers
 
       unamestr=`uname`
