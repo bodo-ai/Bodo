@@ -407,7 +407,6 @@ def check_args_fallback(
                     # The dataframe library must not support some specified option.
                     # Get overloaded functions for this dataframe/series in JIT mode.
                     overloads = get_overloads(self.__class__.__name__)
-                    print("todd", overloads)
                     if func.__name__ in overloads:
                         # TO-DO: Generate a function and bodo JIT it to do this
                         # individual operation.  If the compile fails then fallthrough
@@ -1049,46 +1048,70 @@ def fallback_wrapper(self, attr):
 
 
 class JITFallback:
+    # Holds a mapping of a tuple of class name and function name to either
+    # False to say that compilation previously failed for that function or
+    # a callable dispatcher for the JIT compiled version of that function.
+    fallback_cache = {}
+
     def __init__(self, base_obj, name):
         self.base_obj = base_obj
         self.name = name
 
     def __call__(self, *args, **kwargs):
-        if not kwargs:
-            if self.base_obj is None:
-                jit_supported = False
-                raise BodoLibNotImplementedException(
-                    "JITFallback path for top-level functions not yet implemented."
-                )
-            else:
-                overloads = get_overloads(self.base_obj.__class__.__name__)
-                jit_supported = self.name in overloads
-
-            if jit_supported:
-                fname = f"bodo_jitfallback_{self.name}"
-                self_arg = "self, " if self.base_obj is not None else ""
-                numbered_args = ",".join([f"arg{i}" for i in range(len(args))])
-                func_text = f"def {fname}({self_arg}{numbered_args}):\n"
+        # if self.name == "pivot":
+        #    breakpoint()
+        # See if we previously tried to compile this function.
+        cache_entry = JITFallback.fallback_cache.get(
+            (self.base_obj.__class__.__name__, self.name), None
+        )
+        cache_entry = None
+        if not kwargs and cache_entry != False:
+            # None means it wasn't in the cache either way so we can try to
+            # JIT compile it.
+            if cache_entry is None:
                 if self.base_obj is None:
-                    func_text += f"    return pd.{self.name}({numbered_args})\n"
-                else:
-                    func_text += f"    return self.{self.name}({numbered_args})\n"
+                    from bodo.numba_compat import is_func_overloaded
 
-                new_func = bodo.utils.utils.bodo_spawn_exec(
-                    func_text, {"pd": pd}, {}, __name__
-                )
-                compiled_method = bodo.jit(new_func, cache=True)
-                try:
+                    # Do a better check here if this function appears overloaded.
+                    jit_supported = is_func_overloaded("pandas", self.name)
+                else:
+                    overloads = get_overloads(self.base_obj.__class__.__name__)
+                    jit_supported = self.name in overloads
+
+                if jit_supported:
+                    fname = f"bodo_jitfallback_{self.name}"
+                    self_arg = "self, " if self.base_obj is not None else ""
+                    numbered_args = ",".join([f"arg{i}" for i in range(len(args))])
+                    func_text = f"def {fname}({self_arg}{numbered_args}):\n"
                     if self.base_obj is None:
-                        cm_args = args
+                        func_text += f"    return pd.{self.name}({numbered_args})\n"
                     else:
-                        cm_args = (self.base_obj, *args)
-                    ret = compiled_method(*cm_args)
-                    print("JITFallback succeeded for", self.name)
-                    return ret
-                except Exception:
-                    print("JITFallback failed for", self.name)
-                    pass
+                        func_text += f"    return self.{self.name}({numbered_args})\n"
+
+                    new_func = bodo.utils.utils.bodo_spawn_exec(
+                        func_text, {"pd": pd}, {}, __name__
+                    )
+                    compiled_method = bodo.jit(new_func, cache=True)
+                    try:
+                        if self.base_obj is None:
+                            cm_args = args
+                        else:
+                            cm_args = (self.base_obj, *args)
+                        ret = compiled_method(*cm_args)
+                        # Remember that this compile worked.
+                        # JITFallback.fallback_cache[(self.base_obj.__class__.__name__, self.name)] = compiled_method
+                        return ret
+                    except Exception:
+                        # Remember not to try to compile this again.
+                        # JITFallback.fallback_cache[(self.base_obj.__class__.__name__, self.name)] = False
+                        pass
+            else:
+                # Previous successful compile so just run it.
+                if self.base_obj is None:
+                    cm_args = args
+                else:
+                    cm_args = (self.base_obj, *args)
+                return cache_entry(*cm_args)
 
         msg = (
             f"{self.name} is not implemented in Bodo Dataframe Library yet. "
