@@ -1531,6 +1531,57 @@ class BodoSeriesAiMethods:
             map_func, api_token, endpoint, generation_kwargs=generation_kwargs
         )
 
+    def embed(
+        self,
+        endpoint: str,
+        api_token: str,
+        model: str | None = None,
+        **embedding_kwargs,
+    ) -> BodoSeries:
+        import importlib
+
+        assert importlib.util.find_spec("openai") is not None, (
+            "Series.ai.embed() requires the 'openai' package to be installed. "
+            "Please install it using 'pip install openai[aiohttp]'."
+        )
+
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+        if model is not None:
+            embedding_kwargs["model"] = model
+
+        def map_func(series, api_token, endpoint, embedding_kwargs):
+            import asyncio
+
+            import openai
+
+            client = openai.AsyncOpenAI(
+                api_key=api_token,
+                base_url=endpoint,
+                # TODO: The below should have better performance but currently
+                # pixi won't solve the dependencies.
+                # http_client=openai.DefaultAioHttpClient(),
+            )
+
+            async def per_row(row, client, embedding_kwargs):
+                response = await client.embeddings.create(
+                    input=row,
+                    **embedding_kwargs,
+                )
+                return response.data[0].embedding
+
+            async def all_tasks(series, client, embedding_kwargs):
+                tasks = [per_row(row, client, embedding_kwargs) for row in series]
+                return await asyncio.gather(*tasks)
+
+            return pd.Series(asyncio.run(all_tasks(series, client, embedding_kwargs)))
+
+        return self._series.map_partitions(
+            map_func, api_token, endpoint, embedding_kwargs=embedding_kwargs
+        )
+
     def query_s3_vectors(
         self,
         vector_bucket_name: str,

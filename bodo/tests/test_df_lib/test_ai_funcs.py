@@ -3,9 +3,11 @@ from __future__ import annotations
 import pickle
 import random
 import re
+import time
 
 import boto3
 import pandas as pd
+import pyarrow as pa
 import pytest
 import requests
 
@@ -200,7 +202,7 @@ def test_llm_generate():
                     break
                 raise AssertionError("Model not available yet")
             except requests.exceptions.RequestException:
-                pass
+                time.sleep(3)
         res = prompts.ai.llm_generate(
             endpoint="http://localhost:11434/v1",
             api_token="",
@@ -210,6 +212,44 @@ def test_llm_generate():
         ).execute_plan()
         assert len(res) == 2
         assert all(isinstance(x, str) for x in res)
+
+    finally:
+        spawn_process_on_workers("docker rm bodo_test_ollama -f".split(" "))
+
+
+def test_embed():
+    prompts = bd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+        ]
+    )
+
+    try:
+        spawn_process_on_workers(
+            "docker run -v ollama:/root/.ollama -p 11434:11434 --name bodo_test_ollama ollama/ollama:latest".split(
+                " "
+            )
+        )
+        spawn_process_on_workers(
+            "docker exec bodo_test_ollama ollama run all-minilm:22m".split(" ")
+        )
+        # Wait for the container to start
+        for _ in range(20):
+            try:
+                response = requests.get("http://localhost:11434/api/tags", timeout=5)
+                if response.status_code == 200 and "all-minilm:22m" in response.text:
+                    break
+                raise AssertionError("Model not available yet")
+            except requests.exceptions.RequestException:
+                time.sleep(3)
+        res = prompts.ai.embed(
+            endpoint="http://localhost:11434/v1",
+            api_token="",
+            model="all-minilm:22m",
+        ).execute_plan()
+        assert len(res) == 2
+        assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
 
     finally:
         spawn_process_on_workers("docker rm bodo_test_ollama -f".split(" "))
