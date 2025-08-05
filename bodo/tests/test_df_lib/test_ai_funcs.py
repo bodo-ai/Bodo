@@ -205,7 +205,7 @@ def test_llm_generate():
             endpoint="http://localhost:11434/v1",
             api_token="",
             model="smollm:135m",
-            max_tokens=10,
+            max_tokens=1,
             temperature=0.1,
         ).execute_plan()
         assert len(res) == 2
