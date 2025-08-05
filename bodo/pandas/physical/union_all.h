@@ -23,7 +23,9 @@ class PhysicalUnionAll : public PhysicalProcessBatch, public PhysicalSink {
 
     virtual ~PhysicalUnionAll() = default;
 
-    void Finalize() override {
+    void FinalizeSink() override {}
+
+    void FinalizeProcessBatch() override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(

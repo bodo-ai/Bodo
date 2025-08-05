@@ -305,10 +305,12 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     virtual ~PhysicalJoin() = default;
 
-    void Finalize() override {
+    void FinalizeSink() override {
         QueryProfileCollector::Default().SubmitOperatorName(
             PhysicalSink::getOpId(), PhysicalSink::ToString());
     }
+
+    void FinalizeProcessBatch() override {}
 
     /**
      * @brief process input tables to build side of join (populate the hash

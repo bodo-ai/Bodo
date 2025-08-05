@@ -46,11 +46,6 @@ class PhysicalOperator {
     bool is_source() const { return operator_type() != OperatorType::SINK; }
     bool is_sink() const { return operator_type() != OperatorType::SOURCE; }
 
-    // Constructor is always required for initialization
-    // We should have a separate Finalize step that can throw an exception
-    // as well as the destructor for cleanup
-    virtual void Finalize() = 0;
-
     virtual std::string ToString() {
         return typeid(*this).name();  // returns mangled name
     }
@@ -74,6 +69,11 @@ class PhysicalSource : public PhysicalOperator {
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult>
     ProduceBatch() = 0;
 
+    // Constructor is always required for initialization
+    // We should have a separate Finalize step that can throw an exception
+    // as well as the destructor for cleanup
+    virtual void FinalizeSource() = 0;
+
     /**
      * @brief Get the physical schema of the source data
      *
@@ -94,6 +94,8 @@ class PhysicalSink : public PhysicalOperator {
                                         OperatorResult prev_op_result) = 0;
     virtual std::variant<std::shared_ptr<table_info>, PyObject*>
     GetResult() = 0;
+
+    virtual void FinalizeSink() = 0;
 };
 
 /**
@@ -110,6 +112,8 @@ class PhysicalProcessBatch : public PhysicalOperator {
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) = 0;
+
+    virtual void FinalizeProcessBatch() = 0;
 
     /**
      * @brief Get the physical schema of the output data

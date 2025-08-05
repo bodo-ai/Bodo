@@ -112,12 +112,12 @@ uint64_t Pipeline::Execute() {
     }
 
     // Finalize
-    source->Finalize();
+    source->FinalizeSource();
 
     for (auto& op : between_ops) {
-        op->Finalize();
+        op->FinalizeProcessBatch();
     }
-    sink->Finalize();
+    sink->FinalizeSink();
 
     executed = true;
     return batches_processed;

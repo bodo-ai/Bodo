@@ -27,7 +27,7 @@ class PhysicalSample : public PhysicalProcessBatch {
 
     virtual ~PhysicalSample() = default;
 
-    void Finalize() override {
+    void FinalizeProcessBatch() override {
         std::vector<MetricBase> metrics_out;
         metrics_out.emplace_back(
             TimerMetric("sample_time", this->metrics.sample_time));
