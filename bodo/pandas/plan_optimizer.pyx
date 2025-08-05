@@ -590,7 +590,7 @@ cdef class AggregateExpression(Expression):
         return f"AggregateExpression({self.function_name})"
 
 cdef class ScalarFuncExpression(Expression):
-    """Wrapper around DuckDB's BoundFunctionExpression for running Python functions.
+    """Wrapper around DuckDB's BoundFunctionExpression for running Python/Arrow functions.
     """
 
     def __cinit__(self,
