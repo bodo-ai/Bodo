@@ -30,7 +30,7 @@ from bodo.libs.array import (
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 from bodo.utils.conversion import coerce_to_array, index_from_array
-from bodo.utils.typing import BodoError, check_unsupported_args_fallback
+from bodo.utils.typing import check_unsupported_args_fallback, unwrap_typeref
 
 if pt.TYPE_CHECKING:
     from numba.core.ccallback import CFunc
@@ -1072,15 +1072,33 @@ def overload_extract_cpp_index(cpp_table, n_cols, index_type, length):
     (table info) assuming that the index arrays begin after n_cols in the cpp_table
     """
 
-    index_type = index_type.instance_type
+    index_type = unwrap_typeref(index_type)
 
     if isinstance(index_type, bodo.RangeIndexType):
 
         def impl(cpp_table, n_cols, index_type, length):  # pragma: no cover
             return bodo.hiframes.pd_index_ext.init_range_index(0, length, 1, None)
     elif isinstance(index_type, MultiIndexType):
-        # TODO: MultiIndex is not supported in JIT fordf.apply.
-        raise BodoError("Extracting Multi-Index from cpp table not implemented yet.")
+        n_levels = len(index_type.array_types)
+        func_text = "def impl(cpp_table, n_cols, index_type, length):\n"
+        index_arrays = ",".join(
+            f"array_from_cpp_table(cpp_table, n_cols + {i}, arr_types[{i}])"
+            for i in range(n_levels)
+        )
+        names = ",".join(f"names[{i}]" for i in range(n_levels))
+        func_text += "  print(names)\n"
+
+        func_text += f"  return init_multi_index(({index_arrays},), ({names},), None)"
+
+        locals = {}
+        globals = {
+            "arr_types": index_type.array_types,
+            "names": tuple(name.literal_value for name in index_type.names_typ),
+            "init_multi_index": bodo.hiframes.pd_multi_index_ext.init_multi_index,
+            "array_from_cpp_table": array_from_cpp_table,
+        }
+        exec(func_text, globals, locals)
+        return locals["impl"]
     else:
         arr_type = index_type.data
 
