@@ -32,7 +32,7 @@
  * @brief Physical node for join.
  *
  */
-class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
+class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
    public:
     explicit PhysicalJoin(
         duckdb::LogicalComparisonJoin& logical_join,

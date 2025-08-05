@@ -16,7 +16,7 @@ struct PhysicalUnionAllMetrics {
  * @brief Physical node for union all.
  *
  */
-class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
+class PhysicalUnionAll : public PhysicalProcessBatch, public PhysicalSink {
    public:
     explicit PhysicalUnionAll(std::shared_ptr<bodo::Schema> input_schema)
         : output_schema(input_schema) {}

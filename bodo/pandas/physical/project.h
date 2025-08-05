@@ -26,7 +26,7 @@ struct PhysicalProjectionMetrics {
  * @brief Physical node for projection.
  *
  */
-class PhysicalProjection : public PhysicalSourceSink {
+class PhysicalProjection : public PhysicalProcessBatch {
    public:
     explicit PhysicalProjection(
         std::vector<duckdb::ColumnBinding>& source_cols,

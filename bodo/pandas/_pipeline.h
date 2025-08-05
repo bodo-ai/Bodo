@@ -17,7 +17,7 @@
 class Pipeline {
    private:
     std::shared_ptr<PhysicalSource> source;
-    std::vector<std::shared_ptr<PhysicalSourceSink>> between_ops;
+    std::vector<std::shared_ptr<PhysicalProcessBatch>> between_ops;
     std::shared_ptr<PhysicalSink> sink;
     bool executed;
     std::vector<std::shared_ptr<Pipeline>> dependencies;
@@ -53,14 +53,14 @@ class Pipeline {
 class PipelineBuilder {
    private:
     std::shared_ptr<PhysicalSource> source;
-    std::vector<std::shared_ptr<PhysicalSourceSink>> between_ops;
+    std::vector<std::shared_ptr<PhysicalProcessBatch>> between_ops;
 
    public:
     explicit PipelineBuilder(std::shared_ptr<PhysicalSource> _source)
         : source(std::move(_source)) {}
 
     // Add a physical operator to the pipeline
-    void AddOperator(std::shared_ptr<PhysicalSourceSink> op) {
+    void AddOperator(std::shared_ptr<PhysicalProcessBatch> op) {
         between_ops.emplace_back(op);
     }
 

@@ -19,7 +19,7 @@ struct PhysicalSampleMetrics {
  * @brief Physical node for sampling.
  *
  */
-class PhysicalSample : public PhysicalSourceSink {
+class PhysicalSample : public PhysicalProcessBatch {
    public:
     explicit PhysicalSample(float percent,
                             std::shared_ptr<bodo::Schema> input_schema)

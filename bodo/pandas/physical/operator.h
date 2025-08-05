@@ -62,6 +62,11 @@ class PhysicalOperator {
     static int64_t next_op_id;
 };
 
+/**
+ * @brief Base class for operators that produce batches at the start of
+ * pipelines.
+ *
+ */
 class PhysicalSource : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SOURCE; }
@@ -77,6 +82,10 @@ class PhysicalSource : public PhysicalOperator {
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
+/**
+ * @brief Base class for operators that consume batches at the end of pipelines.
+ *
+ */
 class PhysicalSink : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SINK; }
@@ -87,7 +96,12 @@ class PhysicalSink : public PhysicalOperator {
     GetResult() = 0;
 };
 
-class PhysicalSourceSink : public PhysicalOperator {
+/**
+ * @brief Base class for operators that both consume and produce batches in the
+ * middle of pipelines.
+ *
+ */
+class PhysicalProcessBatch : public PhysicalOperator {
    public:
     OperatorType operator_type() const override {
         return OperatorType::SOURCE_AND_SINK;
