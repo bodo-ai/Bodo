@@ -106,7 +106,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
                        : OperatorResult::NEED_MORE_INPUT;
     }
 
-    void Finalize() override {
+    void FinalizeSink() override {
         // Gather iceberg_files_info from all ranks using MPI
         // Equivalent to all_infos = comm.gather(iceberg_files_info_py)
 

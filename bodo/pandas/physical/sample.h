@@ -19,7 +19,7 @@ struct PhysicalSampleMetrics {
  * @brief Physical node for sampling.
  *
  */
-class PhysicalSample : public PhysicalSourceSink {
+class PhysicalSample : public PhysicalProcessBatch {
    public:
     explicit PhysicalSample(float percent,
                             std::shared_ptr<bodo::Schema> input_schema)
@@ -27,7 +27,7 @@ class PhysicalSample : public PhysicalSourceSink {
 
     virtual ~PhysicalSample() = default;
 
-    void Finalize() override {
+    void FinalizeProcessBatch() override {
         std::vector<MetricBase> metrics_out;
         metrics_out.emplace_back(
             TimerMetric("sample_time", this->metrics.sample_time));

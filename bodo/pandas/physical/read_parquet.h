@@ -106,7 +106,7 @@ class PhysicalReadParquet : public PhysicalSource {
     }
     virtual ~PhysicalReadParquet() = default;
 
-    void Finalize() override {
+    void FinalizeSource() override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
