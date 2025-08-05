@@ -427,10 +427,11 @@ def test_filter_bound_between(datapath, file_path, mode):
 
     # Make sure bodo_df2 is unevaluated at this point.
     with assert_executed_plan_count(0):
-        bodo_df2 = bodo_df1[(bodo_df1.A > 20) & (bodo_df1.A < 40)]
+        bodo_df2 = bodo_df1[(bodo_df1.A > 3) & (bodo_df1.A < 8)]
 
     py_df1 = pd.read_parquet(datapath(file_path))
-    py_df2 = py_df1[(py_df1.A > 20) & (py_df1.A < 40)]
+    py_df2 = py_df1[(py_df1.A > 3) & (py_df1.A < 8)]
+    assert len(py_df2) == 4
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
@@ -438,7 +439,7 @@ def test_filter_bound_between(datapath, file_path, mode):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=False,
+        reset_index=True,
     )
 
 
@@ -1815,17 +1816,18 @@ def test_series_filter_distributed(datapath, file_path, op):
     # Make sure bodo_filter_a is unevaluated in the process.
     with assert_executed_plan_count(0):
         bodo_series_a = bodo_df1["A"]
-        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 5")]
 
         py_series_a = py_df1["A"]
-        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 5")]
+        assert len(py_filter_a) != 0
 
     _test_equal(
         bodo_filter_a,
         py_filter_a,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=False,
+        reset_index=True,
     )
 
 
@@ -1863,16 +1865,17 @@ def test_series_filter_series(datapath, file_path, op, mode):
 
     # Make sure bodo_filter_a is unevaluated in the process.
     with assert_executed_plan_count(0):
-        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 5")]
         py_series_a = py_df1["A"]
-        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 5")]
+        assert len(py_filter_a) != 0
 
     _test_equal(
         bodo_filter_a,
         py_filter_a,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=False,
+        reset_index=True,
     )
 
 
