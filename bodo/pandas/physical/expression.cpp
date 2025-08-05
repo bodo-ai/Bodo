@@ -391,9 +391,11 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_FUNCTION: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
-            printf("In buildPhysicalExprTree\n");
             auto& bfe = expr->Cast<duckdb::BoundFunctionExpression>();
-            if (bfe.bind_info) {
+            if (bfe.bind_info &&
+                (bfe.bind_info->Cast<BodoScalarFunctionData>().args ||
+                 !bfe.bind_info->Cast<BodoScalarFunctionData>()
+                      .arrow_func_name.empty())) {
                 BodoScalarFunctionData& scalar_func_data =
                     bfe.bind_info->Cast<BodoScalarFunctionData>();
 

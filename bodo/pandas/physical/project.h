@@ -57,7 +57,6 @@ class PhysicalProjection : public PhysicalSourceSink {
                 }
             } else if (expr->type == duckdb::ExpressionType::BOUND_FUNCTION) {
                 auto& func_expr = expr->Cast<duckdb::BoundFunctionExpression>();
-                printf("In PhysicalProjection\n");
                 if (func_expr.bind_info) {
                     BodoScalarFunctionData& scalar_func_data =
                         func_expr.bind_info->Cast<BodoScalarFunctionData>();
