@@ -136,6 +136,20 @@ struct BodoScalarFunctionData : public duckdb::FunctionData {
         }
     }
 
+    BodoScalarFunctionData(PyObject *args,
+                           std::shared_ptr<arrow::Schema> out_schema,
+                           bool is_cfunc, bool has_state,
+                           std::string arrow_func_name)
+        : args(args),
+          out_schema(std::move(out_schema)),
+          is_cfunc(is_cfunc),
+          has_state(has_state),
+          arrow_func_name(arrow_func_name) {
+        if (args) {
+            Py_INCREF(args);
+        }
+    }
+
     BodoScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema,
                            std::string arrow_func_name)
         : args(nullptr),

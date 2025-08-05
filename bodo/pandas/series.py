@@ -38,7 +38,6 @@ from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
-    ArrowScalarFuncExpression,
     ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
@@ -55,6 +54,7 @@ from bodo.pandas.plan import (
     LogicalOrder,
     LogicalProjection,
     PythonScalarFuncExpression,
+    ScalarFuncExpression,
     UnaryOpExpression,
     _get_df_python_func_plan,
     execute_plan,
@@ -2045,13 +2045,14 @@ def _get_series_python_func_plan(
         )
         is_cfunc = False
 
-    expr = PythonScalarFuncExpression(
+    expr = ScalarFuncExpression(
         empty_data,
         source_data,
-        func_args,
         (col_index,) + tuple(index_cols),
+        func_args,
         is_cfunc,
         has_state,
+        "",
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
@@ -2087,11 +2088,14 @@ def _get_series_arrow_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
-    expr = ArrowScalarFuncExpression(
+    expr = ScalarFuncExpression(
         empty_data,
         source_data,
-        func_name,
         (col_index,) + tuple(index_cols),
+        None,
+        False,
+        False,
+        func_name,
     )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
