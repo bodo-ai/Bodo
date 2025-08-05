@@ -610,8 +610,6 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
 duckdb::unique_ptr<duckdb::Expression> make_arrow_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     std::string func_name, const std::vector<int> &selected_columns) {
-    printf("In make_arrow_scalar_func_expr(%s)\n", func_name.c_str());
-
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
 
@@ -645,7 +643,6 @@ duckdb::unique_ptr<duckdb::Expression> make_arrow_scalar_func_expr(
         make_uniq<duckdb::BoundFunctionExpression>(out_type, scalar_function,
                                                    std::move(udf_in_exprs),
                                                    std::move(bind_data1));
-    printf("Returning scalar_expr\n");
     return scalar_expr;
 }
 
