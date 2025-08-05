@@ -1227,17 +1227,31 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 loc = self._info_axis.get_loc(key)
                 self._iset_item_mgr(loc, *self._sanitize_column(head_val))
 
-    def _apply_jit(self, func, args, **kwargs):
+    def _apply_bodo(
+        self, func: Callable | str, args: tuple, **kwargs
+    ) -> tuple[BodoDataFrame | None, str]:
+        """Attempts to create a wrapper for creating a C callback for the provided
+        function and determine output types using JIT.
+
+        Raises:
+            BodoLibNotImplementedException: If output of UDF is a DataFrame.
+
+        Returns:
+            tuple["BodoDataFrame" | None, str]: The new lazy dataframe.
+                If errors occured during compilation, first value will be None
+                followed by the errors.
+        """
         from bodo.pandas_compat import _prepare_function_arguments
 
         zero_sized_self = self.head(0)
 
         # Convert kwargs into args to avoid dynamically generating apply wrapper.
-        try:
-            args, _ = _prepare_function_arguments(func, args, kwargs)
-        except ValueError:
-            # Keyword only arguments in UDFs are rare.
-            return None, "Keyword only arguments not supported by JIT."
+        if callable(func):
+            try:
+                args, _ = _prepare_function_arguments(func, args, kwargs)
+            except ValueError:
+                # Keyword-only arguments in UDFs are rare.
+                return None, "Keyword only arguments not supported by JIT"
 
         # Generate wrappers for calling apply from C++.
         df_type = bodo.typeof(zero_sized_self)
@@ -1265,16 +1279,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             # Compilation failed, attempt execute UDF in Python.
             return None, str(e)
 
-        # DataFrame output is supported by JIT but not DF library.
+        # DataFrame output is supported by JIT but not Bodo DataFr.
         if isinstance(out_jit, pd.DataFrame):
             raise BodoLibNotImplementedException(
-                f"DataFrame.apply(): expected output to be Series, got: {type(out_jit)}."
+                f"DataFrame.apply(): expected output to be Series, got: {type(out_jit)}"
             )
         empty_series = _get_empty_series_arrow(out_jit)
 
         # Jit failed to determine dtypes, likely from gaps in our Arrow support.
         if pa.types.is_null(empty_series.dtype.pyarrow_dtype):
-            return None, "Jit could not determine pyarrow return type from UDF."
+            return None, "Jit could not determine pyarrow return type from UDF"
 
         return _get_df_python_func_plan(
             self._plan,
@@ -1317,9 +1331,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             )
 
         if engine == "bodo":
-            plan, error_msg = self._apply_jit(func, args, **kwargs)
+            apply_result, error_msg = self._apply_bodo(func, args, **kwargs)
 
-            if plan is None:
+            if apply_result is None:
                 msg = (
                     "DataFrame.apply(): Compiling user defined function failed or "
                     "encountered an unsupported result type. Falling back to "
@@ -1329,7 +1343,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
                 warnings.warn(BodoCompilationFailedWarning(msg))
             else:
-                return plan
+                return apply_result
 
         # engine == "python" or jit fallthrough
         empty_series = get_scalar_udf_result_type(

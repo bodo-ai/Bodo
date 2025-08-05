@@ -851,8 +851,6 @@ def overload_coerce_to_array(
 
     # series
     if isinstance(data, SeriesType):
-        # breakpoint()
-
         if not is_overload_none(use_nullable_array) and (
             not is_nullable_type(data.data)
             or isinstance(
