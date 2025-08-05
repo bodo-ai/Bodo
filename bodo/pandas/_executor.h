@@ -52,6 +52,13 @@ class Executor {
             std::cout << "Before execute pipeline " << i << std::endl;
 #endif
             uint64_t batches_processed = pipelines[i]->Execute();
+
+            // Free pipeline resources as early as possible to reduce memory
+            // pressure.
+            if (i < pipelines.size() - 1) {
+                pipelines[i].reset();
+            }
+
 #ifdef DEBUG_PIPELINE
             std::cout << "After execute pipeline " << i << std::endl;
 #endif
