@@ -108,11 +108,14 @@ class CoerceToNdarrayInfer(AbstractTemplate):
             if not is_overload_none(use_nullable_array) and (
                 isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
                 or data.dtype == bodo.timedelta64ns
+                or data.dtype == bodo.datetime64ns
             ):
                 if data.dtype == types.bool_:
                     output = bodo.boolean_array_type
                 elif data.dtype == bodo.timedelta64ns:
                     output = bodo.timedelta_array_type
+                elif data.dtype == bodo.datetime64ns:
+                    output = bodo.DatetimeArrayType(None)
                 elif isinstance(data.dtype, types.Float):
                     output = bodo.FloatingArrayType(data.dtype)
                 else:  # Integer case
@@ -254,6 +257,17 @@ def overload_np_to_nullable_array(data):
                     data, np.full((len(data) + 7) >> 3, 255, np.uint8)
                 )
             )  # pragma: no cover
+    elif data.dtype == bodo.datetime64ns:
+        if data.layout != "C":
+            return lambda data: bodo.libs.pd_datetime_arr_ext.init_datetime_array(
+                np.ascontiguousarray(data),
+                np.full((len(data) + 7) >> 3, 255, np.uint8),
+                None,
+            )  # pragma: no cover
+        else:
+            return lambda data: bodo.libs.pd_datetime_arr_ext.init_datetime_array(
+                data, np.full((len(data) + 7) >> 3, 255, np.uint8), None
+            )  # pragma: no cover
 
     raise BodoError(
         f"np_to_nullable_array: invalid dtype {data.dtype}, integer, bool or float dtype expected"
@@ -321,6 +335,7 @@ def overload_coerce_to_ndarray(
         if not is_overload_none(use_nullable_array) and (
             isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
             or data.dtype == bodo.timedelta64ns
+            or data.dtype == bodo.datetime64ns
         ):
             return (
                 lambda data,
@@ -836,6 +851,8 @@ def overload_coerce_to_array(
 
     # series
     if isinstance(data, SeriesType):
+        # breakpoint()
+
         if not is_overload_none(use_nullable_array) and (
             not is_nullable_type(data.data)
             or isinstance(
@@ -848,6 +865,7 @@ def overload_coerce_to_array(
                 ),
             )
             or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(data)
+            or bodo.hiframes.pd_series_ext.is_dt64_series_typ(data)
         ):
 
             def impl_series_to_nullable(
