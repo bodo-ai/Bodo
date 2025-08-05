@@ -177,6 +177,33 @@ def test_tokenize():
     )
 
 
+def get_ollama_models():
+    for i in range(20):
+        try:
+            response = requests.get("http://localhost:11434/api/tags", timeout=5)
+            if response.status_code == 200:
+                return response
+            else:
+                time.sleep(3)
+        except requests.exceptions.RequestException:
+            time.sleep(3)
+        if i == 19:
+            raise AssertionError("Ollama server not available yet")
+
+
+def wait_for_ollama():
+    get_ollama_models()
+
+
+def wait_for_ollama_model(model_name):
+    for _ in range(20):
+        models = get_ollama_models()
+        if model_name in models.text:
+            return
+        else:
+            time.sleep(3)
+
+
 def test_llm_generate():
     prompts = bd.Series(
         [
@@ -191,18 +218,11 @@ def test_llm_generate():
                 " "
             )
         )
+        wait_for_ollama()
         spawn_process_on_workers(
             "docker exec bodo_test_ollama ollama run smollm:135m".split(" ")
         )
-        # Wait for the container to start
-        for _ in range(20):
-            try:
-                response = requests.get("http://localhost:11434/api/tags", timeout=5)
-                if response.status_code == 200 and "smollm:135m" in response.text:
-                    break
-                raise AssertionError("Model not available yet")
-            except requests.exceptions.RequestException:
-                time.sleep(3)
+        wait_for_ollama_model("smollm:135m")
         res = prompts.ai.llm_generate(
             endpoint="http://localhost:11434/v1",
             api_token="",
@@ -231,18 +251,11 @@ def test_embed():
                 " "
             )
         )
+        wait_for_ollama()
         spawn_process_on_workers(
             "docker exec bodo_test_ollama ollama pull all-minilm:22m".split(" ")
         )
-        # Wait for the container to start
-        for _ in range(20):
-            try:
-                response = requests.get("http://localhost:11434/api/tags", timeout=5)
-                if response.status_code == 200 and "all-minilm:22m" in response.text:
-                    break
-                raise AssertionError("Model not available yet")
-            except requests.exceptions.RequestException:
-                time.sleep(3)
+        wait_for_ollama_model("all-minilm:22m")
         res = prompts.ai.embed(
             endpoint="http://localhost:11434/v1",
             api_token="",
