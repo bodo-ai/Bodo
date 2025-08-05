@@ -26,7 +26,7 @@ struct PhysicalProjectionMetrics {
  * @brief Physical node for projection.
  *
  */
-class PhysicalProjection : public PhysicalSourceSink {
+class PhysicalProjection : public PhysicalProcessBatch {
    public:
     explicit PhysicalProjection(
         std::vector<duckdb::ColumnBinding>& source_cols,
@@ -131,7 +131,7 @@ class PhysicalProjection : public PhysicalSourceSink {
 
     virtual ~PhysicalProjection() = default;
 
-    void Finalize() override {
+    void FinalizeProcessBatch() override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),

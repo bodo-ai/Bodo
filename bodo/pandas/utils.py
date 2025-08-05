@@ -621,6 +621,80 @@ def run_func_on_table(cpp_table, result_type, in_args):
     return out_ptr, cpp_to_py, udf_time, py_to_cpp
 
 
+def write_s3_vectors_helper(cpp_table, vector_bucket_name, index_name, region):
+    """Write a C++ table to S3 Vectors using the boto3 client."""
+    import boto3
+
+    df = cpp_table_to_df(cpp_table)
+
+    if not len(df):
+        return
+
+    df = df.loc[:, ["key", "data", "metadata"]]
+    df["data"] = df.data.map(lambda x: {"float32": x.tolist()})
+
+    s3vectors = boto3.client("s3vectors", region_name=region)
+    s3vectors.put_vectors(
+        vectorBucketName=vector_bucket_name,
+        indexName=index_name,
+        vectors=df.to_dict(orient="records"),
+    )
+
+
+def query_s3_vectors_helper(
+    S,
+    vector_bucket_name,
+    index_name,
+    region,
+    topk,
+    filter,
+    return_distance,
+    return_metadata,
+):
+    """Query S3 Vectors using the boto3 client."""
+    import boto3
+
+    s3vectors = boto3.client("s3vectors", region_name=region)
+
+    keys = []
+    distances = []
+    metadata = []
+
+    for embedding in S:
+        response = s3vectors.query_vectors(
+            vectorBucketName=vector_bucket_name,
+            indexName=index_name,
+            queryVector={"float32": embedding},
+            topK=topk,
+            filter=filter,
+            returnDistance=return_distance,
+            returnMetadata=return_metadata,
+        )
+        vectors = response.get("vectors", [])
+        keys.append([v["key"] for v in vectors])
+        if return_distance:
+            distances.append([v["distance"] for v in vectors])
+        if return_metadata:
+            metadata.append([str(v["metadata"]) for v in vectors])
+
+    out_keys = pa.array(keys, type=pa.large_list(pa.large_string()))
+    arrs = [out_keys]
+    names = ["keys"]
+
+    if return_distance:
+        out_distances = pa.array(distances, type=pa.large_list(pa.float32()))
+        arrs.append(out_distances)
+        names.append("distances")
+
+    if return_metadata:
+        out_metadata = pa.array(metadata, type=pa.large_list(pa.large_string()))
+        arrs.append(out_metadata)
+        names.append("metadata")
+
+    out_arr = pa.StructArray.from_arrays(arrs, names=names)
+    return pd.Series(out_arr, name=S.name, index=S.index)
+
+
 def _del_func(x):
     # Intentionally do nothing
     pass

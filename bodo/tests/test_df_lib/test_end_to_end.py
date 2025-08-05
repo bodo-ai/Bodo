@@ -246,7 +246,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
-            reset_index=True,
+            reset_index=False,
         )
 
         # Already distributed DataFrame case
@@ -266,7 +266,7 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
-            reset_index=True,
+            reset_index=False,
         )
 
 
@@ -285,7 +285,7 @@ def test_projection(datapath):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -324,7 +324,7 @@ def test_filter_pushdown(datapath, file_path, op):
         py_df2,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -383,7 +383,7 @@ def test_filter(datapath, op):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated in the process.
@@ -427,10 +427,11 @@ def test_filter_bound_between(datapath, file_path, mode):
 
     # Make sure bodo_df2 is unevaluated at this point.
     with assert_executed_plan_count(0):
-        bodo_df2 = bodo_df1[(bodo_df1.A > 20) & (bodo_df1.A < 40)]
+        bodo_df2 = bodo_df1[(bodo_df1.A > 3) & (bodo_df1.A < 8)]
 
     py_df1 = pd.read_parquet(datapath(file_path))
-    py_df2 = py_df1[(py_df1.A > 20) & (py_df1.A < 40)]
+    py_df2 = py_df1[(py_df1.A > 3) & (py_df1.A < 8)]
+    assert len(py_df2) == 4
 
     # TODO: remove copy when df.apply(axis=0) is implemented
     _test_equal(
@@ -475,7 +476,7 @@ def test_filter_multiple1(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated in this process.
@@ -531,7 +532,7 @@ def test_filter_string(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated at this point.
@@ -595,7 +596,7 @@ def test_filter_datetime(datapath, op):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated at this point.
@@ -673,7 +674,7 @@ def test_head(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
     # Make sure bodo_df2 is unevaluated at this point.
@@ -1070,7 +1071,7 @@ def test_parquet_read_partitioned(datapath):
         py_out,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -1781,7 +1782,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
         py_filter_a,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -1815,10 +1816,11 @@ def test_series_filter_distributed(datapath, file_path, op):
     # Make sure bodo_filter_a is unevaluated in the process.
     with assert_executed_plan_count(0):
         bodo_series_a = bodo_df1["A"]
-        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 5")]
 
         py_series_a = py_df1["A"]
-        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 5")]
+        assert len(py_filter_a) != 0
 
     _test_equal(
         bodo_filter_a,
@@ -1863,9 +1865,10 @@ def test_series_filter_series(datapath, file_path, op, mode):
 
     # Make sure bodo_filter_a is unevaluated in the process.
     with assert_executed_plan_count(0):
-        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 20")]
+        bodo_filter_a = bodo_series_a[eval(f"bodo_series_a {op_str} 5")]
         py_series_a = py_df1["A"]
-        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 20")]
+        py_filter_a = py_series_a[eval(f"py_series_a {op_str} 5")]
+        assert len(py_filter_a) != 0
 
     _test_equal(
         bodo_filter_a,
@@ -2249,7 +2252,7 @@ def test_drop(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=False,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -2267,12 +2270,21 @@ def test_loc(datapath):
         py_df1,
         check_pandas_types=False,
         sort_output=False,
-        reset_index=True,
+        reset_index=False,
     )
 
 
-def test_series_describe():
-    """Basic test for Series describe."""
+@pytest.mark.parametrize(
+    "percentiles",
+    [None, (0.1, 0.4, 0.7, 0.9), [0, 1]],
+)
+def test_series_describe_numeric(percentiles):
+    """Test for Series describe, using approximate bounds for quantiles."""
+
+    def kll_error_bounds(q, k=200, pmf=False):
+        eps = 1.0 / np.sqrt(k) * (1.7 if pmf else 1.33)
+        return max(0.0, q - eps), min(1.0, q + eps)
+
     n = 10000
     df = pd.DataFrame(
         {
@@ -2280,7 +2292,7 @@ def test_series_describe():
             "B": np.flip(np.arange(n, dtype=np.int32)),
             "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
             "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
-            "E": [None] * n,
+            "E": list(range(n - 1)) + [None],
         }
     )
 
@@ -2289,9 +2301,82 @@ def test_series_describe():
         with assert_executed_plan_count(
             0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 3
         ):
-            describe_pd = df[c].describe()
+            describe_pd = df[c].describe(percentiles=percentiles)
+            describe_bodo = bdf[c].describe(percentiles=percentiles)
+
+        # For quantile columns, check approximate bounds instead of strict equality
+        # Iterate from idx=4 to second-to-last element, which is the quantile portion.
+        for q in describe_pd.index[4:-1:1]:
+            approx = describe_bodo.loc[q]
+            true_vals = sorted(x for x in df[c].dropna().values.tolist())
+            if not true_vals:
+                continue
+            nvals = len(true_vals)
+            float_q = (
+                int(q[:-1])
+            ) / 100  # Convert percentile to float, i.e. "20%" to 0.2
+            lo, hi = kll_error_bounds(float_q, k=200, pmf=False)
+            lo_idx = int(np.floor(lo * (nvals - 1)))
+            hi_idx = int(np.ceil(hi * (nvals - 1)))
+            true_low = true_vals[lo_idx]
+            true_high = true_vals[hi_idx]
+            assert true_low <= approx <= true_high, (
+                f"{c} quantile {float_q} estimate {approx} "
+                f"not within [{true_low}, {true_high}]"
+            )
+
+        # For all other stats (count, mean, std, min, max), keep exact check
+        _test_equal(
+            describe_bodo.reindex(index=["count", "mean", "std", "min", "max"]),
+            describe_pd.reindex(index=["count", "mean", "std", "min", "max"]),
+            check_pandas_types=False,
+        )
+
+
+def test_series_describe_nonnumeric():
+    """Basic test for Series describe with string data."""
+    df = pd.DataFrame(
+        {
+            "A": ["apple", "banana", "apple", "cherry", "banana", "apple"],
+            "B": ["apple"] * 3 + ["APPLE"] * 2 + [None],
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+    for c in df.columns:
+        with assert_executed_plan_count(3):
+            # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
+            # Applying map(str) to pandas output is a workaround to enable_test_equal to compare values of differing dtypes.
+            describe_pd = df[c].describe().map(str)
             describe_bodo = bdf[c].describe()
-        _test_equal(describe_pd, describe_bodo, check_pandas_types=False)
+        _test_equal(describe_bodo, describe_pd, check_pandas_types=False)
+
+
+def test_series_describe_empty():
+    """Basic test for Series describe with empty data."""
+
+    pds = pd.Series([None] * 10)
+    bds = bd.Series([None] * 10)
+
+    with assert_executed_plan_count(0):
+        # Since BodoSeries cannot have mixed dtypes, BodoSeries.describe casts all elements to string.
+        # Mapping the conversion logic below avoids _test_equal() evaluating to False for correct
+        # results due to "nan" != "<NA>"
+        describe_bodo = bds.describe().map(
+            lambda x: str(x) if not pd.isna(x) else "None"
+        )
+        describe_pd = pds.describe().map(lambda x: str(x) if not x else "None")
+    _test_equal(describe_bodo, describe_pd, check_pandas_types=False, check_names=False)
+
+    pds = pd.Series([1, 2, 3])
+    pds = pds[pds > 4]
+    bds = bd.Series([1, 2, 3])
+    bds = bds[bds > 4]
+
+    with assert_executed_plan_count(1):
+        describe_pd = pds.describe()
+        describe_bodo = bds.describe()
+    _test_equal(describe_bodo, describe_pd, check_pandas_types=False, check_names=False)
 
 
 def test_groupby_getattr_fallback_behavior():
@@ -2400,7 +2485,7 @@ def test_empty_duckdb_filter():
         pd_out,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -2604,7 +2689,7 @@ def test_uncompilable_map():
         pdf,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -2632,7 +2717,7 @@ def test_numba_map():
         pdf,
         check_pandas_types=False,
         sort_output=True,
-        reset_index=True,
+        reset_index=False,
     )
 
 
@@ -2926,6 +3011,36 @@ def test_map_with_state():
     _test_equal(
         bres,
         res,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+
+def test_tokenize():
+    from transformers import AutoTokenizer
+
+    a = pd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+            "I am the third entry in this series.",
+            "May the fourth be with you.",
+        ]
+    )
+    ba = bd.Series(a)
+
+    def ret_tokenizer():
+        # Load a pretrained tokenizer (e.g., BERT)
+        return AutoTokenizer.from_pretrained("bert-base-uncased")
+
+    pd_tokenizer = ret_tokenizer()
+    b = a.map(lambda x: pd_tokenizer.encode(x, add_special_tokens=True))
+    bb = ba.ai.tokenize(ret_tokenizer)
+
+    _test_equal(
+        bb,
+        b,
         check_pandas_types=False,
         reset_index=False,
         check_names=False,

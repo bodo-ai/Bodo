@@ -16,14 +16,16 @@ struct PhysicalUnionAllMetrics {
  * @brief Physical node for union all.
  *
  */
-class PhysicalUnionAll : public PhysicalSourceSink, public PhysicalSink {
+class PhysicalUnionAll : public PhysicalProcessBatch, public PhysicalSink {
    public:
     explicit PhysicalUnionAll(std::shared_ptr<bodo::Schema> input_schema)
         : output_schema(input_schema) {}
 
     virtual ~PhysicalUnionAll() = default;
 
-    void Finalize() override {
+    void FinalizeSink() override {}
+
+    void FinalizeProcessBatch() override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(

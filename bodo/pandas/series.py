@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import datetime
 import inspect
 import itertools
@@ -680,6 +681,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return BodoDatetimeProperties(self)
 
     @property
+    def ai(self):
+        return BodoSeriesAiMethods(self)
+
+    @property
     def T(self):
         return self
 
@@ -895,7 +900,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
         return ((squared_sum - (sum**2) / count) / (count - ddof)) ** 0.5
 
-    @check_args_fallback(unsupported="all")
+    @check_args_fallback(supported=["percentiles"])
     def describe(self, percentiles=None, include=None, exclude=None):
         """
         Generates descriptive statistics.
@@ -910,75 +915,88 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         pa_type = self.dtype.pyarrow_dtype
 
         if pa.types.is_null(pa_type):
-            return pd.Series(
-                [0, 0, pd.NA, pd.NA],
+            return BodoSeries(
+                ["0", "0", None, None],
                 index=["count", "unique", "top", "freq"],
                 name=self.name,
             )
 
-        # TODO: Support describe() for non-numeric Series
         if not (
             pa.types.is_unsigned_integer(pa_type)
             or pa.types.is_integer(pa_type)
             or pa.types.is_floating(pa_type)
         ):
-            raise BodoLibNotImplementedException(
-                "Series.describe() is not supported for non-numeric Series yet."
-            )
+            return _nonnumeric_describe(self)
 
-        reduced_self = _compute_series_reduce(self, ["count", "min", "max", "sum"])
-        count, min, max, sum = (reduced_self[i] for i in range(4))
+        quantile_qs = [0.25, 0.5, 0.75]
 
+        if percentiles is not None:
+            _, percentiles = validate_quantile(percentiles)
+            if 0.5 not in percentiles:
+                bisect.insort(percentiles, 0.5)
+            quantile_qs = percentiles
+
+        quantile_index = [f"{q * 100:g}%" for q in quantile_qs]
+        index = ["count", "mean", "std", "min"] + quantile_index + ["max"]
+
+        # Evaluate count and sum
+        count, sum = _compute_series_reduce(self, ["count", "sum"])
         if count == 0:
-            return pd.Series(
-                [0] + [pd.NA] * 7,
-                index=[
-                    "count",
-                    "mean",
-                    "std",
-                    "min",
-                    "25%",
-                    "50%",
-                    "75%",
-                    "max",
-                ],
+            return BodoSeries(
+                [0] + [pd.NA] * (len(index) - 1),
+                index=index,
                 name=self.name,
                 dtype=pd.ArrowDtype(pa.float64()),
             )
+        count = float(count)  # Float cast to match Pandas behavior
 
         # Evaluate mean
         mean_val = sum / count
 
         # Evaluate std
-        squared = self.map(lambda x: x * x)
+        squared = self.map(lambda x: x * x, na_action="ignore")
         squared_sum = _compute_series_reduce(squared, ["sum"])[0]
-        std_val = ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
 
-        # TODO [BSE-4977]: full describe support, fix describe to use Bodo quantile
-        quantile = super().quantile([0.25, 0.5, 0.75])
-        result = [
-            count,
-            mean_val,
-            std_val,
-            min,
-            quantile[0.25],
-            quantile[0.5],
-            quantile[0.75],
-            max,
+        std_val = (
+            ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
+            if count != 1
+            else pd.NA
+        )
+
+        # Evaluate quantiles, min, and max altogether since KLL tracks exact min and max values
+        min_q_max = [0.0] + quantile_qs + [1.0]
+        new_arrow_schema = pa.schema(
+            [pa.field(f"{val}", pa.float64()) for val in min_q_max]
+        )
+        zero_size_self = arrow_to_empty_df(new_arrow_schema)
+
+        exprs = [
+            AggregateExpression(
+                zero_size_self,
+                self._plan,
+                func_name,
+                [0],
+                True,  # dropna
+            )
+            for func_name in [f"quantile_{val}" for val in min_q_max]
         ]
 
-        return pd.Series(
+        plan = LogicalAggregate(
+            zero_size_self,
+            self._plan,
+            [],
+            exprs,
+        )
+        out_rank = execute_plan(plan)
+        quantile_df = pd.DataFrame(out_rank)
+
+        result = [count, mean_val, std_val] + [
+            quantile_df[str(val)][0] for val in min_q_max
+        ]
+
+        return BodoSeries(
             result,
-            index=[
-                "count",
-                "mean",
-                "std",
-                "min",
-                "25%",
-                "50%",
-                "75%",
-                "max",
-            ],
+            index=index,
             name=self.name,
         )
 
@@ -1385,6 +1403,105 @@ class BodoStringMethods:
         return _split_internal(self, "rsplit", pat, n, expand)
 
 
+class BodoSeriesAiMethods:
+    def __init__(self, series):
+        self._series = series
+
+    def tokenize(
+        self,
+        tokenizer: Callable[[], Transformers.PreTrainedTokenizer],  # noqa: F821
+    ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.tokenize() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+
+        def per_row(tokenizer, row):
+            return tokenizer.encode(row, add_special_tokens=True)
+
+        list_of_int64 = pa.list_(pa.int64())
+        return self._series.map_with_state(
+            tokenizer,
+            per_row,
+            output_type=pd.Series(dtype=pd.ArrowDtype(list_of_int64)),
+        )
+
+    def query_s3_vectors(
+        self,
+        vector_bucket_name: str,
+        index_name: str,
+        topk: int,
+        region: str = None,
+        filter: dict = None,
+        return_distance: bool = False,
+        return_metadata: bool = False,
+    ):
+        """Query S3 vector index and return matching vector data as a BodoDataFrame."""
+        series = self._series
+
+        if series.dtype.pyarrow_dtype not in (
+            pa.list_(pa.float32()),
+            pa.large_list(pa.float32()),
+            pa.list_(pa.float64()),
+            pa.large_list(pa.float64()),
+        ):
+            raise TypeError(
+                f"Series.ai.query_s3_vectors() got unsupported dtype: {series.dtype}, expected list[float32] or list[float64]."
+            )
+
+        index = series.head(0).index
+        struct_schema = {"keys": pa.large_list(pa.large_string())}
+        if return_distance:
+            struct_schema["distances"] = pa.large_list(pa.float32())
+        if return_metadata:
+            struct_schema["metadata"] = pa.large_list(pa.large_string())
+
+        # Output of projection function is a struct that is expanded into columns of a
+        # DataFrame.
+        struct_type = pa.struct(struct_schema)
+        new_metadata = pd.Series(
+            dtype=pd.ArrowDtype(struct_type),
+            name=series.name,
+            index=index,
+        )
+
+        series_out = _get_series_python_func_plan(
+            series._plan,
+            new_metadata,
+            "bodo.pandas.utils.query_s3_vectors_helper",
+            (
+                vector_bucket_name,
+                index_name,
+                region,
+                topk,
+                filter,
+                return_distance,
+                return_metadata,
+            ),
+            {},
+            is_method=False,
+        )
+
+        n_index_arrays = get_n_index_arrays(index)
+        index_cols = tuple(range(1, 1 + n_index_arrays))
+        index_col_refs = tuple(make_col_ref_exprs(index_cols, series_out._plan))
+
+        empty_data = arrow_to_empty_df(pa.schema(struct_type))
+        empty_data.index = index
+
+        exprs = tuple(
+            get_col_as_series_expr(f.name, empty_data, series_out, index_cols)
+            for f in struct_type
+        )
+
+        df_plan = LogicalProjection(
+            empty_data,
+            series_out._plan,
+            exprs + index_col_refs,
+        )
+        return wrap_plan(plan=df_plan)
+
+
 class BodoDatetimeProperties:
     """Support Series.dt datetime accessors same as Pandas."""
 
@@ -1769,6 +1886,11 @@ def _str_cat_helper(df, sep, na_rep, left_idx=0, right_idx=1):
 
 def _get_col_as_series(s, col):
     """Extracts column col from list series and returns as Pandas series."""
+
+    # Extract column from struct case
+    if isinstance(col, str):
+        return pd.Series(pa.table(s.array._pa_array).column(col))
+
     series = pd.Series(
         [
             None
@@ -1813,6 +1935,35 @@ def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
         return len(x) if isinstance(x, numpy.ndarray) else 1
 
     return split_s.map(get_len)
+
+
+def _nonnumeric_describe(series):
+    """Computes non-numeric series.describe() using DataFrameGroupBy."""
+
+    # Since Series groupby is unsupported, we toggle is_series to use DataFrameGroupBy.
+    plan = series._plan
+    plan.is_series = False
+    plan.empty_data.columns = pd.Index(["A"])
+    df = wrap_plan(plan)
+
+    # size() aggregation is not supported with single-column DataFrames.
+    # The workaround is setting a duplicate column.
+    df.columns = pd.Index(["None"])
+    df["B"] = df["None"]
+    gb = df.groupby("None")
+
+    gb_size = gb.agg("size")  # Plan execution
+    count_val = gb_size.sum()  # Plan execution
+    unique_val = len(gb_size.index)
+    gb_sorted = gb_size.sort_values(ascending=False)
+    top_val = gb_sorted.index[0]
+    freq_val = gb_sorted.iloc[0]  # Plan execution
+
+    return bodo.pandas.BodoSeries(
+        [f"{count_val}", f"{unique_val}", f"{top_val}", f"{freq_val}"],
+        name=series.name,
+        index=pd.Index(["count", "unique", "top", "freq"]),
+    )
 
 
 def validate_str_cat(lhs, rhs):

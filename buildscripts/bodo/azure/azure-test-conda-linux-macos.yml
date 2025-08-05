@@ -94,7 +94,9 @@ jobs:
       set -exo pipefail
 
       # This isn't published on pypi so no good way to list it as a dependency
-      pixi run -e azure pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+      # TODO[BSE-5031]: Enable polaris tests after fixing pip installation issues
+      # pixi run -e azure pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+      pixi run -e azure pip install transformers
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -147,6 +149,8 @@ jobs:
         export BODO_NUM_WORKERS="$NP"
         pixi run -e azure pytest -s -v -Wignore -m "$(PYTEST_MARKER)" bodo/tests --junitxml=pytest-report-df-library.xml --test-run-title="${{ parameters.name }}"
       else
+        # Some tests assume a batch size of 4096 for testing specific behavior.
+        export BODO_STREAMING_BATCH_SIZE=4096 
         pixi run -e azure python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       fi
     env:

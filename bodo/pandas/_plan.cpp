@@ -802,6 +802,28 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
     return copy_node;
 }
 
+duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_s3_vectors_write_node(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
+    std::string vector_bucket_name, std::string index_name, PyObject *region) {
+    auto source_duck = to_duckdb(source);
+
+    duckdb::CopyFunction copy_function =
+        duckdb::CopyFunction("bodo_s3_vectors_write");
+    duckdb::unique_ptr<duckdb::FunctionData> bind_data =
+        duckdb::make_uniq<S3VectorsWriteFunctionData>(vector_bucket_name,
+                                                      index_name, region);
+
+    duckdb::unique_ptr<duckdb::LogicalCopyToFile> copy_node =
+        duckdb::make_uniq<duckdb::LogicalCopyToFile>(
+            copy_function, std::move(bind_data),
+            duckdb::make_uniq<duckdb::CopyInfo>());
+
+    copy_node->return_type = duckdb::CopyFunctionReturnType::CHANGED_ROWS;
+    copy_node->AddChild(std::move(source_duck));
+
+    return copy_node;
+}
+
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
     PyObject *df, PyObject *pyarrow_schema, int64_t num_rows) {
     // See DuckDB Pandas scan code:

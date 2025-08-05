@@ -63,8 +63,10 @@ jobs:
             role-skip-session-tagging: true
             role-duration-seconds: 10800
         - name: Install Extra Test dependencies
+          # TODO[BSE-5031]: Enable polaris tests after fixing pip installation issues
           # This isn't published on pypi so no good way to list it as a dependency
-          run: pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+          # run: pip install 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+          run: pip install transformers
 
         # Run Tests
         - name: Run Tests

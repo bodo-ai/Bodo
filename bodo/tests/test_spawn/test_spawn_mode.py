@@ -1,9 +1,11 @@
 import os
 import subprocess
 import sys
+import time
 
 import numpy as np
 import pandas as pd
+import psutil
 import pytest
 
 import bodo
@@ -464,3 +466,42 @@ def test_spawn_jupyter_worker_output_redirect():
         assert result.returncode == 0
         assert result.stdout.strip() == "Hello from worker"
         assert result.stderr == ""
+
+
+def test_spawn_process_on_workers():
+    """
+    Test that spawn_process works correctly on workers.
+    This is a basic test to ensure that the spawn_process function can be called
+    and that it returns the expected result.
+    """
+
+    # Test IO doesn't break spawn_process
+    proc = bodo.spawn_process_on_workers(["python", "-c", "print(0)"])
+    bodo.stop_process_on_workers(proc)
+    assert proc._rank_to_pid is not None, "Process should have a rank to PID mapping"
+    assert isinstance(proc._rank_to_pid, dict), (
+        "Rank to PID mapping should be a dictionary"
+    )
+    assert len(proc._rank_to_pid) == 1, (
+        "There should be one process spawned on the worker since we test on one node"
+    )
+    time.sleep(1)  # Give some time for the process to close
+    for rank, pid in proc._rank_to_pid.items():
+        # Check that the process was stopped on the worker
+        assert not psutil.pid_exists(pid), (
+            f"Process on rank {rank} with PID {pid} still exists"
+        )
+
+    # Test we can stop a process that is running
+    proc = bodo.spawn_process_on_workers(["python", "-c", "import time; sleep(10)"])
+    # Ensure the process is running
+    assert all(psutil.pid_exists(pid) for pid in proc._rank_to_pid.values()), (
+        "Process should be running on all workers"
+    )
+    bodo.stop_process_on_workers(proc)
+    time.sleep(1)  # Give some time for the process to close
+    for rank, pid in proc._rank_to_pid.items():
+        # Check that the process was stopped on the worker
+        assert not psutil.pid_exists(pid), (
+            f"Process on rank {rank} with PID {pid} still exists"
+        )

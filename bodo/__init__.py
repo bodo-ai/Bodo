@@ -304,6 +304,7 @@ timedelta64ns = numba.core.types.NPTimedelta("ns")
 
 from numba.core.types import List
 
+import bodo.ai
 import bodo.ext
 import bodo.libs
 import bodo.libs.distributed_api
@@ -414,6 +415,7 @@ from bodo.hiframes.pd_categorical_ext import (
 from bodo.utils.typing import register_type
 from bodo.libs.logging_ext import LoggingLoggerType
 from bodo.hiframes.table import TableType
+from bodo.spawn.spawner import spawn_process_on_workers, stop_process_on_workers
 
 
 import bodo.compiler  # isort:skip

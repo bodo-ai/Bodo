@@ -47,7 +47,9 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalReduce() = default;
 
-    void Finalize() override {
+    void FinalizeSink() override {}
+
+    void FinalizeSource() override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
