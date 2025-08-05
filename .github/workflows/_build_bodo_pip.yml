@@ -52,7 +52,7 @@ jobs:
       # some of the envs is enough
       - name: Install Pixi for Compiler
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
-        uses: prefix-dev/setup-pixi@v0.8.11
+        uses: prefix-dev/setup-pixi@v0.8.14
         with:
           pixi-version: v0.40.2
           cache: true
