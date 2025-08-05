@@ -541,7 +541,13 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
 std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
     std::shared_ptr<table_info> input_batch) {
     std::shared_ptr<ExprResult> res = children[0]->ProcessBatch(input_batch);
-    auto result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
+    std::shared_ptr<array_info> result;
+    if (scalar_func_data.arrow_func_name == "date") {
+        // TODO: explanation for this workaround
+        result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
+    } else {
+        result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
+    }
     return std::make_shared<ArrayExprResult>(result, "Arrow Scalar");
 }
 

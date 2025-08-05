@@ -2011,7 +2011,7 @@ def _get_series_python_func_plan(
     """
 
     # TODO: fix + add dt.date
-    if func in {"dt.dayofweek", "dt.hour", "dt.month"}:
+    if func in {"dt.dayofweek", "dt.hour", "dt.month", "dt.date"}:
         if func == "dt.dayofweek":
             func = "dt.day_of_week"
         method = func.split(".")[1]
