@@ -20,7 +20,7 @@ struct PhysicalFilterMetrics {
  * @brief Physical node for filter.
  *
  */
-class PhysicalFilter : public PhysicalSourceSink {
+class PhysicalFilter : public PhysicalProcessBatch {
    public:
     explicit PhysicalFilter(duckdb::LogicalFilter& logical_filter,
                             std::shared_ptr<PhysicalExpression> expr,
@@ -55,7 +55,7 @@ class PhysicalFilter : public PhysicalSourceSink {
 
     virtual ~PhysicalFilter() = default;
 
-    void Finalize() override {
+    void FinalizeProcessBatch() override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
