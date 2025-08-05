@@ -1228,7 +1228,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 self._iset_item_mgr(loc, *self._sanitize_column(head_val))
 
     def _apply_bodo(
-        self, func: Callable | str, args: tuple, **kwargs
+        self, func, args: tuple, **kwargs
     ) -> tuple[BodoDataFrame | None, str]:
         """Attempts to create a wrapper for creating a C callback for the provided
         function and determine output types using JIT.
@@ -1237,7 +1237,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             BodoLibNotImplementedException: If output of UDF is a DataFrame.
 
         Returns:
-            tuple["BodoDataFrame" | None, str]: The new lazy dataframe.
+            tuple[BodoDataFrame | None, str]: The new lazy dataframe.
                 If errors occured during compilation, first value will be None
                 followed by the errors.
         """
@@ -1251,7 +1251,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 args, _ = _prepare_function_arguments(func, args, kwargs)
             except ValueError:
                 # Keyword-only arguments in UDFs are rare.
-                return None, "Keyword only arguments not supported by JIT"
+                return None, "Keyword-only arguments not supported by JIT"
+        elif kwargs:
+            return (
+                None,
+                "Keyword arguments are only supported for callable funcs, use args instead",
+            )
 
         # Generate wrappers for calling apply from C++.
         df_type = bodo.typeof(zero_sized_self)

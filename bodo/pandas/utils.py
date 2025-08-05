@@ -5,6 +5,7 @@ import functools
 import importlib
 import inspect
 import time
+import typing as pt
 import warnings
 
 import numba
@@ -30,6 +31,9 @@ from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 from bodo.utils.conversion import coerce_to_array, index_from_array
 from bodo.utils.typing import BodoError, check_unsupported_args_fallback
+
+if pt.TYPE_CHECKING:
+    from numba.core.ccallback import CFunc
 
 BODO_NONE_DUMMY = "_bodo_none_dummy_"
 
@@ -1064,23 +1068,20 @@ def extract_cpp_index(cpp_table, n_cols, index_type, length):
 
 @numba.extending.overload(extract_cpp_index)
 def overload_extract_cpp_index(cpp_table, n_cols, index_type, length):
-    """Extract *index_type* index from cpp_table (table info) assuming that the
-    index arrays begin after n_cols in the cpp_table"""
+    """Helper for cpp_table_to_df_jit to extract *index_type* index from cpp_table
+    (table info) assuming that the index arrays begin after n_cols in the cpp_table
+    """
 
     index_type = index_type.instance_type
 
     if isinstance(index_type, bodo.RangeIndexType):
 
         def impl(cpp_table, n_cols, index_type, length):  # pragma: no cover
-            # TODO: get range index start/stop from metadata
             return bodo.hiframes.pd_index_ext.init_range_index(0, length, 1, None)
     elif isinstance(index_type, MultiIndexType):
-        # MultiIndex is not supported in df.apply, thus this branch is untested:
-        # TODO: support multi index apply and add implementation for this case.
+        # TODO: MultiIndex is not supported in JIT fordf.apply.
         raise BodoError("Extracting Multi-Index from cpp table not implemented yet.")
     else:
-        # Supported index types:
-        # TimedeltaIndex, DateTimeIndex, NumericIndex, StringBinaryIndex
         arr_type = index_type.data
 
         def impl(cpp_table, n_cols, index_type, length):  # pragma: no cover
@@ -1099,7 +1100,7 @@ def cpp_table_to_df_jit(
     Args:
         cpp_table (table_info): Input table to convert to a DataFrame
         out_cols_arr (Array): Array of indices from cpp_table to select as columns.
-        column_names (MetaType): The names of the columns.
+        column_names (ColNamesMetaType): The names of the columns.
         py_table_type (TableType): Type of the columns of the dataframe.
         index_type (IndexType): The type of the index.
 
@@ -1112,7 +1113,7 @@ def cpp_table_to_df_jit(
     return init_dataframe((py_table,), index, column_names)
 
 
-def get_udf_cfunc_decorator():
+def get_udf_cfunc_decorator() -> pt.Callable[[pt.Callable], CFunc]:
     """Decorator for creating C callbacks for map/apply that take in a table info and
     return a table info."""
     return _cfunc(table_type(table_type), cache=True)
