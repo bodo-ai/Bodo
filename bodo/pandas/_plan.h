@@ -144,19 +144,9 @@ std::vector<int> get_projection_pushed_down_columns(
  * @param has_state Whether the UDF requires separate initialization state
  * @return duckdb::unique_ptr<duckdb::Expression> Expression node for UDF
  */
-duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
-    bool has_state);
-
-// TODO: docstring
-duckdb::unique_ptr<duckdb::Expression> make_arrow_scalar_func_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    std::string func_name, const std::vector<int> &selected_columns);
-
 duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    const std::vector<int> &selected_columns, PyObject *args, bool is_cfunc,
+    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
     bool has_state, const std::string func_name);
 
 /**

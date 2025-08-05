@@ -648,7 +648,7 @@ duckdb::unique_ptr<duckdb::Expression> make_arrow_scalar_func_expr(
 
 duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    const std::vector<int> &selected_columns, PyObject *args, bool is_cfunc,
+    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
     bool has_state, const std::string func_name) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);

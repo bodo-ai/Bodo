@@ -53,7 +53,6 @@ from bodo.pandas.plan import (
     LogicalOperator,
     LogicalOrder,
     LogicalProjection,
-    PythonScalarFuncExpression,
     ScalarFuncExpression,
     UnaryOpExpression,
     _get_df_python_func_plan,
@@ -1877,13 +1876,15 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = expr.args[2][0]
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
-        return PythonScalarFuncExpression(
+        print(f"Index: {((idx,) + tuple(index_cols),)}\n")
+        return ScalarFuncExpression(
             empty_data,
             plan,
             expr.args[1],
             (idx,) + tuple(index_cols),
             expr.is_cfunc,
             False,
+            "",
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -1987,7 +1988,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
     Extracts indexed column values from list series and
     returns resulting scalar expression.
     """
-    return PythonScalarFuncExpression(
+    return ScalarFuncExpression(
         empty_data,
         series_out._plan,
         (
@@ -2000,6 +2001,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
         (0,) + index_cols,
         False,  # is_cfunc
         False,  # has_state
+        "",
     )
 
 
@@ -2007,7 +2009,7 @@ def _get_series_python_func_plan(
     series_proj, empty_data, func, args, kwargs, is_method=True, cfunc_decorator=None
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
-    PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
+    ScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
 
     # TODO: fix + add dt.date
@@ -2048,8 +2050,8 @@ def _get_series_python_func_plan(
     expr = ScalarFuncExpression(
         empty_data,
         source_data,
-        (col_index,) + tuple(index_cols),
         func_args,
+        (col_index,) + tuple(index_cols),
         is_cfunc,
         has_state,
         "",
@@ -2071,7 +2073,7 @@ def _get_series_arrow_func_plan(
     func_name,
 ):
     """Create a plan for calling a Series method in Arrow compute. Creates a proper
-    ArrowScalarFuncExpression with the correct arguments and a LogicalProjection.
+    ScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
 
     # Optimize out trivial df["col"] projections to simplify plans
@@ -2091,8 +2093,8 @@ def _get_series_arrow_func_plan(
     expr = ScalarFuncExpression(
         empty_data,
         source_data,
+        (),
         (col_index,) + tuple(index_cols),
-        None,
         False,
         False,
         func_name,

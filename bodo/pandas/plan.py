@@ -50,9 +50,9 @@ class LazyPlan:
         if isinstance(self, ColRefExpression):
             col_index = args[1]
             return f"ColRefExpression({col_index})"
-        elif isinstance(self, PythonScalarFuncExpression):
+        elif isinstance(self, ScalarFuncExpression):
             func_name, col_indices = args[1][0], args[2]
-            return f"PythonScalarFuncExpression({func_name}, {col_indices})"
+            return f"ScalarFuncExpression({func_name}, {col_indices})"
 
         out = f"{self.plan_class}: \n"
         args_str = ""
@@ -397,7 +397,7 @@ class AggregateExpression(Expression):
             return self
 
 
-class PythonScalarFuncExpression(Expression):
+class ScalarFuncExpression(Expression):
     """Expression representing a Python scalar function call in the query plan."""
 
     @property
@@ -431,7 +431,7 @@ class PythonScalarFuncExpression(Expression):
             assert len(self.input_column_indices) == 1 + get_n_index_arrays(
                 self.empty_data.index
             ), (
-                "PythonScalarFuncExpression::update_func_expr_source: expected single input column"
+                "ScalarFuncExpression::update_func_expr_source: expected single input column"
             )
             # Previous input data column index
             in_col_ind = self.input_column_indices[0]
@@ -444,34 +444,23 @@ class PythonScalarFuncExpression(Expression):
                     + get_n_index_arrays(new_source_plan.empty_data.index),
                 )
             )
-            expr = PythonScalarFuncExpression(
+            expr = ScalarFuncExpression(
                 self.empty_data,
                 new_source_plan,
                 self.func_args,
                 (in_col_ind + col_index_offset,) + index_cols,
                 self.is_cfunc,
                 self.has_state,
+                "",
             )
             expr.is_series = self.is_series
             return expr
         return self
 
     def replace_source(self, new_source: LazyPlan):
-        # TODO: handle source replacement for PythonScalarFuncExpression
+        # TODO: handle source replacement for ScalarFuncExpression
         if self.source == new_source:
             return self
-
-
-class ArrowScalarFuncExpression(Expression):
-    """TODO: docstring"""
-
-    pass
-
-
-class ScalarFuncExpression(Expression):
-    """TODO: docstring"""
-
-    pass
 
 
 class BinaryExpression(Expression):
@@ -850,10 +839,10 @@ def count_plan(self):
 
 def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=True):
     """Create plan for calling some function or method on a DataFrame. Creates a
-    PythonScalarFuncExpression with provided arguments and a LogicalProjection.
+    ScalarFuncExpression with provided arguments and a LogicalProjection.
     """
     df_len = len(df_plan.empty_data.columns)
-    udf_arg = PythonScalarFuncExpression(
+    udf_arg = ScalarFuncExpression(
         empty_data,
         df_plan,
         (
@@ -866,6 +855,7 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
         tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
         False,  # is_cfunc
         False,  # has_state
+        "",
     )
 
     # Select Index columns explicitly for output
@@ -888,7 +878,7 @@ def is_col_ref(expr):
 
 
 def is_scalar_func(expr):
-    return isinstance(expr, PythonScalarFuncExpression)
+    return isinstance(expr, ScalarFuncExpression)
 
 
 def is_arith_expr(expr):
