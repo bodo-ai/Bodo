@@ -718,7 +718,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
             if empty_series is not None:
                 # Compile the cfunc and get pointer
-                return _get_series_python_func_plan(
+                return _get_series_func_plan(
                     self._plan,
                     empty_series,
                     map_cfunc_wrapper,
@@ -740,7 +740,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Get output data type by running the UDF on a sample of the data.
         empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
 
-        return _get_series_python_func_plan(
+        return _get_series_func_plan(
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
@@ -776,7 +776,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         else:
             empty_series = output_type
 
-        return _get_series_python_func_plan(
+        return _get_series_func_plan(
             self._plan,
             empty_series,
             "map_with_state",
@@ -1098,9 +1098,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return wrap_plan(proj_plan)
 
         # It's just a map function if 'values' is not a BodoSeries
-        return _get_series_python_func_plan(
-            self._plan, new_metadata, "isin", (values,), {}
-        )
+        return _get_series_func_plan(self._plan, new_metadata, "isin", (values,), {})
 
     @check_args_fallback(supported=["drop", "name", "level"])
     def reset_index(
@@ -1280,13 +1278,11 @@ class BodoStringMethods:
 
         # If input Series is a series of lists, creates plan that maps 'join_list'.
         if not self._is_string:
-            return _get_series_python_func_plan(
+            return _get_series_func_plan(
                 series._plan, new_metadata, "map", (join_list, None), {}
             )
 
-        return _get_series_python_func_plan(
-            series._plan, new_metadata, "str.join", (sep,), {}
-        )
+        return _get_series_func_plan(series._plan, new_metadata, "str.join", (sep,), {})
 
     def extract(self, pat, flags=0, expand=True):
         """
@@ -1320,7 +1316,7 @@ class BodoStringMethods:
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.series._str_extract_helper",
@@ -1436,7 +1432,7 @@ class BodoDatetimeProperties:
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.series._isocalendar_helper",
@@ -1485,7 +1481,7 @@ class BodoDatetimeProperties:
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.series._components_helper",
@@ -1555,7 +1551,7 @@ class BodoDatetimeProperties:
             index=index,
         )
 
-        return _get_series_python_func_plan(
+        return _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.series._tz_localize_helper",
@@ -1876,7 +1872,6 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = expr.args[2][0]
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
-        print(f"Index: {((idx,) + tuple(index_cols),)}\n")
         return ScalarFuncExpression(
             empty_data,
             plan,
@@ -2005,19 +2000,12 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
     )
 
 
-def _get_series_python_func_plan(
+def _get_series_func_plan(
     series_proj, empty_data, func, args, kwargs, is_method=True, cfunc_decorator=None
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
     ScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
-
-    # TODO: fix + add dt.date
-    if func in {"dt.dayofweek", "dt.hour", "dt.month", "dt.date"}:
-        if func == "dt.dayofweek":
-            func = "dt.day_of_week"
-        method = func.split(".")[1]
-        return _get_series_arrow_func_plan(series_proj, empty_data, method)
 
     # Optimize out trivial df["col"] projections to simplify plans
     if is_single_colref_projection(series_proj):
@@ -2033,19 +2021,29 @@ def _get_series_python_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
-    has_state = func == "map_with_state"
-    if cfunc_decorator:
-        func_args = (func, cfunc_decorator)
-        is_cfunc = True
-    else:
-        func_args = (
-            func,
-            True,  # is_series
-            is_method,  # is_method
-            args,  # args
-            kwargs,  # kwargs
-        )
+    if func in {"dt.dayofweek", "dt.hour", "dt.month", "dt.date"}:
+        if func == "dt.dayofweek":
+            func = "dt.day_of_week"
+        func_name = func.split(".")[1]
+        func_args = ()  # TODO: expand on this to enable arrow compute calls with args
         is_cfunc = False
+        has_state = False
+    else:
+        # Empty func_name separates Python calls from Arrow calls.
+        func_name = ""
+        has_state = func == "map_with_state"
+        if cfunc_decorator:
+            func_args = (func, cfunc_decorator)
+            is_cfunc = True
+        else:
+            func_args = (
+                func,
+                True,  # is_series
+                is_method,  # is_method
+                args,  # args
+                kwargs,  # kwargs
+            )
+            is_cfunc = False
 
     expr = ScalarFuncExpression(
         empty_data,
@@ -2054,49 +2052,6 @@ def _get_series_python_func_plan(
         (col_index,) + tuple(index_cols),
         is_cfunc,
         has_state,
-        "",
-    )
-    # Select Index columns explicitly for output
-    index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
-    return wrap_plan(
-        plan=LogicalProjection(
-            empty_data,
-            source_data,
-            (expr,) + index_col_refs,
-        ),
-    )
-
-
-def _get_series_arrow_func_plan(
-    series_proj,
-    empty_data,
-    func_name,
-):
-    """Create a plan for calling a Series method in Arrow compute. Creates a proper
-    ScalarFuncExpression with the correct arguments and a LogicalProjection.
-    """
-
-    # Optimize out trivial df["col"] projections to simplify plans
-    if is_single_colref_projection(series_proj):
-        source_data = series_proj.args[0]
-        input_expr = series_proj.args[1][0]
-        col_index = input_expr.args[1]
-    else:
-        source_data = series_proj
-        col_index = 0
-
-    n_cols = len(source_data.empty_data.columns)
-    index_cols = range(
-        n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
-    )
-
-    expr = ScalarFuncExpression(
-        empty_data,
-        source_data,
-        (),
-        (col_index,) + tuple(index_cols),
-        False,
-        False,
         func_name,
     )
     # Select Index columns explicitly for output
@@ -2140,7 +2095,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
     else:
         kwargs = {"pat": pat, "n": n, "expand": False}
 
-    series_out = _get_series_python_func_plan(
+    series_out = _get_series_func_plan(
         series._plan,
         empty_series,
         f"str.{name}",
@@ -2157,7 +2112,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
         index=index,
     )
 
-    length_series = _get_series_python_func_plan(
+    length_series = _get_series_func_plan(
         series._plan,
         cnt_empty_series,
         "bodo.pandas.series._get_split_len",
@@ -2215,7 +2170,7 @@ def gen_partition(name):
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             f"str.{name}",
@@ -2422,7 +2377,7 @@ def gen_method(
             index=index,
         )
 
-        return _get_series_python_func_plan(
+        return _get_series_func_plan(
             series._plan, new_metadata, accessor_type + name, args, kwargs
         )
 
