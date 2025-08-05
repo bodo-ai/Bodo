@@ -32,7 +32,7 @@ bool Pipeline::midPipelineExecute(unsigned idx,
         return ret;
     } else {
         // Get the current operator.
-        std::shared_ptr<PhysicalSourceSink>& op = between_ops[idx];
+        std::shared_ptr<PhysicalProcessBatch>& op = between_ops[idx];
         while (true) {
 #ifdef DEBUG_PIPELINE
             for (unsigned i = 0; i < idx; ++i)
@@ -112,12 +112,12 @@ uint64_t Pipeline::Execute() {
     }
 
     // Finalize
-    source->Finalize();
+    source->FinalizeSource();
 
     for (auto& op : between_ops) {
-        op->Finalize();
+        op->FinalizeProcessBatch();
     }
-    sink->Finalize();
+    sink->FinalizeSink();
 
     executed = true;
     return batches_processed;

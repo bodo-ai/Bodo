@@ -17,7 +17,6 @@ Tokenize a series of string dtype into a series of lists of int64.
 
 ``` py
 import bodo.pandas as pd
-import bodo.ai as ai
 from transformers import AutoTokenizer
 
 a = pd.Series(["bodo.ai will improve your workflows.", "This is a professional sentence.", "I am the third entry in this series.", "May the fourth be with you."])

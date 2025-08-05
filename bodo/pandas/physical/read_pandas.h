@@ -102,7 +102,7 @@ class PhysicalReadPandas : public PhysicalSource {
 
     virtual ~PhysicalReadPandas() { Py_DECREF(df); }
 
-    void Finalize() override {}
+    void FinalizeSource() override {}
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {

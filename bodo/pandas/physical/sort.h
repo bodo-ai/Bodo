@@ -125,11 +125,13 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalSort() = default;
 
-    void Finalize() override {
+    void FinalizeSink() override {
         QueryProfileCollector::Default().SubmitOperatorName(
             PhysicalSink::getOpId(), PhysicalSink::ToString());
         stream_sorter->FinalizeBuild();
     }
+
+    void FinalizeSource() override {}
 
     /**
      * @brief process input tables to sort

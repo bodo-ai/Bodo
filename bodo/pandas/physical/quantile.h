@@ -82,7 +82,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalQuantile() = default;
 
-    void Finalize() override {
+    void FinalizeSink() override {
         if (collected) {
             return;
         }
@@ -156,6 +156,8 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                 std::vector<std::shared_ptr<array_info>>{});
         }
     }
+
+    void FinalizeSource() override {}
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         throw std::runtime_error("GetResult called on a quantile node.");

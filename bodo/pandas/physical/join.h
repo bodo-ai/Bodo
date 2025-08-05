@@ -32,7 +32,7 @@
  * @brief Physical node for join.
  *
  */
-class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
+class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
    public:
     explicit PhysicalJoin(
         duckdb::LogicalComparisonJoin& logical_join,
@@ -305,10 +305,12 @@ class PhysicalJoin : public PhysicalSourceSink, public PhysicalSink {
 
     virtual ~PhysicalJoin() = default;
 
-    void Finalize() override {
+    void FinalizeSink() override {
         QueryProfileCollector::Default().SubmitOperatorName(
             PhysicalSink::getOpId(), PhysicalSink::ToString());
     }
+
+    void FinalizeProcessBatch() override {}
 
     /**
      * @brief process input tables to build side of join (populate the hash

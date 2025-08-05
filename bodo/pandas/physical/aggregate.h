@@ -147,7 +147,9 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalAggregate() = default;
 
-    void Finalize() override {
+    void FinalizeSink() override {}
+
+    void FinalizeSource() override {
         QueryProfileCollector::Default().SubmitOperatorName(
             PhysicalSink::getOpId(), PhysicalSink::ToString());
     }
@@ -290,7 +292,7 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalCountStar() = default;
 
-    void Finalize() override {
+    void FinalizeSink() override {
         int result =
             MPI_Allreduce(&local_count, &global_count, 1,
                           MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
@@ -299,6 +301,8 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
                 "PhysicalCountStar::Finalize MPI_Allreduce failed.");
         }
     }
+
+    void FinalizeSource() override {}
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {

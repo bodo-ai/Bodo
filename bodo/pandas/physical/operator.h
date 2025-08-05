@@ -46,11 +46,6 @@ class PhysicalOperator {
     bool is_source() const { return operator_type() != OperatorType::SINK; }
     bool is_sink() const { return operator_type() != OperatorType::SOURCE; }
 
-    // Constructor is always required for initialization
-    // We should have a separate Finalize step that can throw an exception
-    // as well as the destructor for cleanup
-    virtual void Finalize() = 0;
-
     virtual std::string ToString() {
         return typeid(*this).name();  // returns mangled name
     }
@@ -62,12 +57,22 @@ class PhysicalOperator {
     static int64_t next_op_id;
 };
 
+/**
+ * @brief Base class for operators that produce batches at the start of
+ * pipelines.
+ *
+ */
 class PhysicalSource : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SOURCE; }
 
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult>
     ProduceBatch() = 0;
+
+    // Constructor is always required for initialization
+    // We should have a separate Finalize step that can throw an exception
+    // as well as the destructor for cleanup
+    virtual void FinalizeSource() = 0;
 
     /**
      * @brief Get the physical schema of the source data
@@ -77,6 +82,10 @@ class PhysicalSource : public PhysicalOperator {
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
+/**
+ * @brief Base class for operators that consume batches at the end of pipelines.
+ *
+ */
 class PhysicalSink : public PhysicalOperator {
    public:
     OperatorType operator_type() const override { return OperatorType::SINK; }
@@ -85,9 +94,16 @@ class PhysicalSink : public PhysicalOperator {
                                         OperatorResult prev_op_result) = 0;
     virtual std::variant<std::shared_ptr<table_info>, PyObject*>
     GetResult() = 0;
+
+    virtual void FinalizeSink() = 0;
 };
 
-class PhysicalSourceSink : public PhysicalOperator {
+/**
+ * @brief Base class for operators that both consume and produce batches in the
+ * middle of pipelines.
+ *
+ */
+class PhysicalProcessBatch : public PhysicalOperator {
    public:
     OperatorType operator_type() const override {
         return OperatorType::SOURCE_AND_SINK;
@@ -96,6 +112,8 @@ class PhysicalSourceSink : public PhysicalOperator {
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) = 0;
+
+    virtual void FinalizeProcessBatch() = 0;
 
     /**
      * @brief Get the physical schema of the output data

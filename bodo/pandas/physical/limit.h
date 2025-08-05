@@ -27,7 +27,7 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
      * meet that goal.
      *
      */
-    void Finalize() override {
+    void FinalizeSink() override {
         int n_pes = 0;
         int myrank = 0;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);   // total ranks
@@ -76,6 +76,8 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
 
         collected_rows = std::move(reduced_collected_rows);
     }
+
+    void FinalizeSource() override {}
 
     /**
      * @brief get_n_rows - utility function to get a fixed number of rows from a
