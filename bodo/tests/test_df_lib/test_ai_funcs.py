@@ -232,7 +232,7 @@ def test_embed():
             )
         )
         spawn_process_on_workers(
-            "docker exec bodo_test_ollama ollama run all-minilm:22m".split(" ")
+            "docker exec bodo_test_ollama ollama pull all-minilm:22m".split(" ")
         )
         # Wait for the container to start
         for _ in range(20):
