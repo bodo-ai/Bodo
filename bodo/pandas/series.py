@@ -2010,6 +2010,13 @@ def _get_series_python_func_plan(
     PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
 
+    # TODO: fix + add dt.date
+    if func in {"dt.dayofweek", "dt.hour", "dt.month"}:
+        if func == "dt.dayofweek":
+            func = "dt.day_of_week"
+        method = func.split(".")[1]
+        return _get_series_arrow_func_plan(series_proj, empty_data, method)
+
     # Optimize out trivial df["col"] projections to simplify plans
     if is_single_colref_projection(series_proj):
         source_data = series_proj.args[0]

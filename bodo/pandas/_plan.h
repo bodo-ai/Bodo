@@ -149,6 +149,17 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
     bool has_state);
 
+// TODO: docstring
+duckdb::unique_ptr<duckdb::Expression> make_arrow_scalar_func_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
+    std::string func_name, const std::vector<int> &selected_columns);
+
+duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
+    const std::vector<int> &selected_columns, PyObject *args = nullptr,
+    bool is_cfunc = false, bool has_state = false,
+    const std::string &arrow_func_name = "");
+
 /**
  * @brief Create an expression for a NULL value of given type.
  *

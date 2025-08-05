@@ -391,11 +391,12 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
         case duckdb::ExpressionClass::BOUND_FUNCTION: {
             // Convert the base duckdb::Expression node to its actual derived
             // type.
+            printf("In buildPhysicalExprTree\n");
             auto& bfe = expr->Cast<duckdb::BoundFunctionExpression>();
-            if (bfe.bind_info &&
-                bfe.bind_info->Cast<BodoPythonScalarFunctionData>().args) {
-                BodoPythonScalarFunctionData& scalar_func_data =
-                    bfe.bind_info->Cast<BodoPythonScalarFunctionData>();
+            if (bfe.bind_info) {
+                BodoScalarFunctionData& scalar_func_data =
+                    bfe.bind_info->Cast<BodoScalarFunctionData>();
+
                 std::vector<std::shared_ptr<PhysicalExpression>> phys_children;
                 for (auto& child_expr : bfe.children) {
                     phys_children.emplace_back(buildPhysicalExprTree(
@@ -404,26 +405,16 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
 
                 const std::shared_ptr<arrow::DataType>& result_type =
                     scalar_func_data.out_schema->field(0)->type();
-                return std::static_pointer_cast<PhysicalExpression>(
-                    std::make_shared<PhysicalUDFExpression>(
-                        phys_children, scalar_func_data, result_type));
-            } else if (bfe.bind_info &&
-                       bfe.bind_info->Cast<BodoArrowScalarFunctionData>()
-                           .args) {
-                // TODO: combine with previous case to avoid duplicate code
-                BodoArrowScalarFunctionData& scalar_func_data =
-                    bfe.bind_info->Cast<BodoArrowScalarFunctionData>();
-                std::vector<std::shared_ptr<PhysicalExpression>> phys_children;
-                for (auto& child_expr : bfe.children) {
-                    phys_children.emplace_back(buildPhysicalExprTree(
-                        child_expr, col_ref_map, no_scalars));
-                }
 
-                const std::shared_ptr<arrow::DataType>& result_type =
-                    scalar_func_data.out_schema->field(0)->type();
-                return std::static_pointer_cast<PhysicalExpression>(
-                    std::make_shared<PhysicalArrowExpression>(
-                        phys_children, scalar_func_data, result_type));
+                if (!scalar_func_data.arrow_func_name.empty()) {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalArrowExpression>(
+                            phys_children, scalar_func_data, result_type));
+                } else if (scalar_func_data.args) {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalUDFExpression>(
+                            phys_children, scalar_func_data, result_type));
+                }
             } else {
                 switch (bfe.children.size()) {
                     case 1: {
@@ -547,7 +538,10 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
 
 std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
     std::shared_ptr<table_info> input_batch) {
-    return;
+    std::shared_ptr<ExprResult> res = children[0]->ProcessBatch(input_batch);
+    printf("%s\n", scalar_func_data.arrow_func_name.c_str());
+    auto result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
+    return std::make_shared<ArrayExprResult>(result, "Arrow Scalar");
 }
 
 bool PhysicalExpression::join_expr(array_info** left_table,

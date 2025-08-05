@@ -802,7 +802,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
    public:
     PhysicalUDFExpression(
         std::vector<std::shared_ptr<PhysicalExpression>> &children,
-        BodoPythonScalarFunctionData &_scalar_func_data,
+        BodoScalarFunctionData &_scalar_func_data,
         const std::shared_ptr<arrow::DataType> &_result_type)
         : PhysicalExpression(children),
           scalar_func_data(_scalar_func_data),
@@ -874,7 +874,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
     }
 
    protected:
-    BodoPythonScalarFunctionData scalar_func_data;
+    BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalUDFExpressionMetrics metrics;
     table_udf_t cfunc_ptr;
@@ -885,7 +885,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
    public:
     PhysicalArrowExpression(
         std::vector<std::shared_ptr<PhysicalExpression>> &children,
-        BodoArrowScalarFunctionData &_scalar_func_data,
+        BodoScalarFunctionData &_scalar_func_data,
         const std::shared_ptr<arrow::DataType> &_result_type)
         : PhysicalExpression(children),
           scalar_func_data(_scalar_func_data),
@@ -909,7 +909,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
     }
 
    protected:
-    BodoArrowScalarFunctionData scalar_func_data;
+    BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalUDFExpressionMetrics metrics;
 };

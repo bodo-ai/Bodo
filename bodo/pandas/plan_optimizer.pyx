@@ -618,15 +618,15 @@ cdef class ArrowScalarFuncExpression(Expression):
     def __cinit__(self,
         object out_schema,
         LogicalOperator source,
-        c_string func_name,
+        str function_name,
         vector[int] input_column_indices):
 
         self.out_schema = out_schema
         self.c_expression = make_arrow_scalar_func_expr(
-            source.c_logical_operator, out_schema, func_name, input_column_indices)
+            source.c_logical_operator, out_schema, function_name.encode(), input_column_indices)
 
     def __str__(self):
-        return f"ArrowScalarFuncExpression({self.out_schema})"
+        return f"ArrowScalarFuncExpression({self.function_name})"
 
 
 
