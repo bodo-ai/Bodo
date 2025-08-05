@@ -800,7 +800,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         pickled. The use of lazy data structures as globals causes issues.
 
         Args:
-            func (Callable): A callable which takes in a DataFrame as its first
+            func (Callable): A callable which takes in a Series as its first
                 argument and returns a DataFrame or Series that has the same length
                 its input.
             *args: Additional positional arguments to pass to func.
