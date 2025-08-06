@@ -190,6 +190,9 @@ ruff = "*"
 pre-commit = "*"
 ipython = "*"
 
+# Generation/Embedding Tests
+openai = "*"
+
 # For deltalake testing
 # As of 2023-10-06, deltalake requires pyarrow <=12.0.0
 # - pip:
