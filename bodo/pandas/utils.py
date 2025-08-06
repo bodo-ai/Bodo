@@ -1112,13 +1112,10 @@ class JITFallback:
         self.name = name
 
     def __call__(self, *args, **kwargs):
-        # if self.name == "pivot":
-        #    breakpoint()
         # See if we previously tried to compile this function.
         cache_entry = JITFallback.fallback_cache.get(
             (self.base_obj.__class__.__name__, self.name), None
         )
-        cache_entry = None
         if not kwargs and cache_entry != False:
             # None means it wasn't in the cache either way so we can try to
             # JIT compile it.
@@ -1142,7 +1139,7 @@ class JITFallback:
                     else:
                         func_text += f"    return self.{self.name}({numbered_args})\n"
 
-                    new_func = bodo.utils.utils.bodo_spawn_exec(
+                    new_func = bodo.utils.utils.bodo_exec(
                         func_text, {"pd": pd}, {}, __name__
                     )
                     compiled_method = bodo.jit(new_func, cache=True)
@@ -1153,12 +1150,15 @@ class JITFallback:
                             cm_args = (self.base_obj, *args)
                         ret = compiled_method(*cm_args)
                         # Remember that this compile worked.
-                        # JITFallback.fallback_cache[(self.base_obj.__class__.__name__, self.name)] = compiled_method
+                        JITFallback.fallback_cache[
+                            (self.base_obj.__class__.__name__, self.name)
+                        ] = compiled_method
                         return ret
                     except Exception:
                         # Remember not to try to compile this again.
-                        # JITFallback.fallback_cache[(self.base_obj.__class__.__name__, self.name)] = False
-                        pass
+                        JITFallback.fallback_cache[
+                            (self.base_obj.__class__.__name__, self.name)
+                        ] = False
             else:
                 # Previous successful compile so just run it.
                 if self.base_obj is None:
