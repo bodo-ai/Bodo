@@ -16,7 +16,7 @@ from bodo.pandas.plan import (
     LogicalGetPandasReadSeq,
     assert_executed_plan_count,
 )
-from bodo.pandas.utils import BodoLibFallbackWarning
+from bodo.pandas.utils import BodoCompilationFailedWarning, BodoLibFallbackWarning
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
@@ -687,7 +687,10 @@ def test_head(datapath):
 
 def test_apply(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
-    with assert_executed_plan_count(1):
+    # Multi-Index apply are not supported by JIT
+    n_execs = 1 if isinstance(index_val, pd.MultiIndex) else 0
+
+    with assert_executed_plan_count(n_execs):
         df = pd.DataFrame(
             {
                 "a": pd.array([1, 2, 3] * 10, "Int64"),
@@ -699,6 +702,52 @@ def test_apply(datapath, index_val):
         bdf = bd.from_pandas(df)
         out_pd = df.apply(lambda x: x["a"] + 1, axis=1)
         out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
+
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_apply_str(datapath, index_val):
+    """Test passing a string argument to func works."""
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "a": pd.array([1, 2, 3] * 10, "Int64"),
+                "b": pd.array([4, 5, 6] * 10, "Int64"),
+            },
+            index=index_val[:30],
+        )
+        bdf = bd.from_pandas(df)
+        out_pd = df.apply("sum", axis=1)
+        out_bodo = bdf.apply("sum", axis=1)
+
+    _test_equal(out_bodo, out_pd, check_pandas_types=False)
+
+
+def test_apply_non_jit(datapath, index_val):
+    """Test unsupported UDFs fallback to Pandas execution."""
+    with assert_executed_plan_count(1):
+        df = pd.DataFrame(
+            {
+                "a": pd.array([1, 2, 3] * 10, "Int64"),
+                "b": pd.array([4, 5, 6] * 10, "Int64"),
+                "c": ["a", "b", "c"] * 10,
+            },
+            index=index_val[:30],
+        )
+        bdf = bd.from_pandas(df)
+
+        def unknown_func(x):
+            return x + 10
+
+        def apply_func(row):
+            return unknown_func(row.a)
+
+        out_pd = df.apply(apply_func, axis=1)
+        with pytest.warns(
+            BodoCompilationFailedWarning, match="Compiling user defined function failed"
+        ):
+            out_bodo = bdf.apply(apply_func, axis=1)
+
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
@@ -777,14 +826,14 @@ def test_series_map_non_jit(index_val):
 
     warn_msg = "Compiling user defined function failed "
     bdf = bd.from_pandas(df)
-    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+    with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
         bdf2 = bdf.A.map(func1)
     pdf = df.copy()
     pdf2 = pdf.A.map(func1)
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
     bdf = bd.from_pandas(df)
-    with pytest.warns(BodoLibFallbackWarning, match=warn_msg):
+    with pytest.warns(BodoCompilationFailedWarning, match=warn_msg):
         bdf2 = bdf.A.map(func2)
     pdf = df.copy()
     pdf2 = pdf.A.map(func2)
