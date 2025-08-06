@@ -1465,7 +1465,7 @@ class BodoSeriesAiMethods:
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.utils.query_s3_vectors_helper",
