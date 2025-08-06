@@ -1080,14 +1080,13 @@ def overload_extract_cpp_index(cpp_table, n_cols, index_type, length):
             return bodo.hiframes.pd_index_ext.init_range_index(0, length, 1, None)
     elif isinstance(index_type, MultiIndexType):
         n_levels = len(index_type.array_types)
-        func_text = "def impl(cpp_table, n_cols, index_type, length):\n"
         index_arrays = ",".join(
             f"array_from_cpp_table(cpp_table, n_cols + {i}, arr_types[{i}])"
             for i in range(n_levels)
         )
         names = ",".join(f"names[{i}]" for i in range(n_levels))
-        func_text += "  print(names)\n"
 
+        func_text = "def impl(cpp_table, n_cols, index_type, length):\n"
         func_text += f"  return init_multi_index(({index_arrays},), ({names},), None)"
 
         locals = {}

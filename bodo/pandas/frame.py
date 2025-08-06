@@ -1293,7 +1293,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         # Jit failed to determine dtypes, likely from gaps in our Arrow support.
         if pa.types.is_null(empty_series.dtype.pyarrow_dtype):
-            return None, "Jit could not determine pyarrow return type from UDF"
+            return None, "JIT could not determine pyarrow return type from UDF"
 
         return _get_df_python_func_plan(
             self._plan,
