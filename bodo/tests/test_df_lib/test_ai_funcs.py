@@ -177,10 +177,10 @@ def test_tokenize():
     )
 
 
-def get_ollama_models():
+def get_ollama_models(url):
     for i in range(20):
         try:
-            response = requests.get("http://localhost:11434/api/tags", timeout=5)
+            response = requests.get(f"{url}/api/tags", timeout=5)
             if response.status_code == 200:
                 return response
             else:
@@ -191,13 +191,13 @@ def get_ollama_models():
             raise AssertionError("Ollama server not available yet")
 
 
-def wait_for_ollama():
-    get_ollama_models()
+def wait_for_ollama(url):
+    get_ollama_models(url)
 
 
-def wait_for_ollama_model(model_name):
+def wait_for_ollama_model(url, model_name):
     for _ in range(20):
-        models = get_ollama_models()
+        models = get_ollama_models(url)
         if model_name in models.text:
             return
         else:
@@ -218,11 +218,11 @@ def test_llm_generate():
                 " "
             )
         )
-        wait_for_ollama()
+        wait_for_ollama("http://localhost:11434")
         spawn_process_on_workers(
             "docker exec bodo_test_ollama ollama run smollm:135m".split(" ")
         )
-        wait_for_ollama_model("smollm:135m")
+        wait_for_ollama_model("http://localhost:11434", "smollm:135m")
         res = prompts.ai.llm_generate(
             endpoint="http://localhost:11434/v1",
             api_token="",
@@ -247,17 +247,17 @@ def test_embed():
 
     try:
         spawn_process_on_workers(
-            "docker run -v ollama:/root/.ollama -p 11434:11434 --name bodo_test_ollama ollama/ollama:latest".split(
+            "docker run -v ollama:/root/.ollama -p 11435:11434 --name bodo_test_ollama_embed ollama/ollama:latest".split(
                 " "
             )
         )
-        wait_for_ollama()
+        wait_for_ollama("http://localhost:11435")
         spawn_process_on_workers(
-            "docker exec bodo_test_ollama ollama pull all-minilm:22m".split(" ")
+            "docker exec bodo_test_ollama_embed ollama pull all-minilm:22m".split(" ")
         )
-        wait_for_ollama_model("all-minilm:22m")
+        wait_for_ollama_model("http://localhost:11435", "all-minilm:22m")
         res = prompts.ai.embed(
-            endpoint="http://localhost:11434/v1",
+            endpoint="http://localhost:11435/v1",
             api_token="",
             model="all-minilm:22m",
         ).execute_plan()
@@ -265,4 +265,4 @@ def test_embed():
         assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
 
     finally:
-        spawn_process_on_workers("docker rm bodo_test_ollama -f".split(" "))
+        spawn_process_on_workers("docker rm bodo_test_ollama_embed -f".split(" "))

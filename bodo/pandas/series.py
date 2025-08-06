@@ -1523,7 +1523,7 @@ class BodoSeriesAiMethods:
 
             async def all_tasks(series, client, generation_kwargs):
                 tasks = [per_row(row, client, generation_kwargs) for row in series]
-                return await asyncio.gather(*tasks)
+                return await asyncio.gather(*tasks, return_exceptions=True)
 
             return pd.Series(asyncio.run(all_tasks(series, client, generation_kwargs)))
 
@@ -1574,7 +1574,7 @@ class BodoSeriesAiMethods:
 
             async def all_tasks(series, client, embedding_kwargs):
                 tasks = [per_row(row, client, embedding_kwargs) for row in series]
-                return await asyncio.gather(*tasks)
+                return await asyncio.gather(*tasks, return_exceptions=True)
 
             return pd.Series(asyncio.run(all_tasks(series, client, embedding_kwargs)))
 
