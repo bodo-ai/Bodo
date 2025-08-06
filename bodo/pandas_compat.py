@@ -287,45 +287,47 @@ def get_conversion_factor_to_ns(in_reso: str) -> int:
 # https://github.com/pandas-dev/pandas/pull/61032
 bodo_pandas_udf_execution_engine = None
 
+
+def _prepare_function_arguments(
+    func: Callable, args: tuple, kwargs: dict, *, num_required_args: int = 1
+) -> tuple[tuple, dict]:
+    """
+    Prepare arguments for jitted function by trying to move keyword arguments inside
+    of args to eliminate kwargs.
+
+    This simplifies typing as well as catches keyword-only arguments,
+    which lead to unexpected behavior in Bodo. Copied from:
+    https://github.com/pandas-dev/pandas/blob/5fef9793dd23867e7b227a1df7aa60a283f6204e/pandas/core/util/numba_.py#L97
+    """
+    _sentinel = object()
+
+    if not kwargs:
+        return args, kwargs
+
+    # the udf should have this pattern: def udf(arg1, arg2, ..., *args, **kwargs):...
+    signature = inspect.signature(func)
+    arguments = signature.bind(*[_sentinel] * num_required_args, *args, **kwargs)
+    arguments.apply_defaults()
+    # Ref: https://peps.python.org/pep-0362/
+    # Arguments which could be passed as part of either *args or **kwargs
+    # will be included only in the BoundArguments.args attribute.
+    args = arguments.args
+    kwargs = arguments.kwargs
+
+    if kwargs:
+        # Bodo change: error message
+        raise ValueError("Bodo does not support keyword only arguments.")
+
+    args = args[num_required_args:]
+    return args, kwargs
+
+
 if pandas_version >= (3, 0):
     from collections.abc import Callable
     from typing import Any
 
     from pandas._typing import AggFuncType, Axis
     from pandas.core.apply import BaseExecutionEngine
-
-    def _prepare_function_arguments(
-        func: Callable, args: tuple, kwargs: dict, *, num_required_args: int
-    ) -> tuple[tuple, dict]:
-        """
-        Prepare arguments for jitted function by trying to move keyword arguments inside
-        of args to eliminate kwargs.
-
-        This simplifies typing as well as catches keyword-only arguments,
-        which lead to unexpected behavior in Bodo. Copied from:
-        https://github.com/pandas-dev/pandas/blob/5fef9793dd23867e7b227a1df7aa60a283f6204e/pandas/core/util/numba_.py#L97
-        """
-        _sentinel = object()
-
-        if not kwargs:
-            return args, kwargs
-
-        # the udf should have this pattern: def udf(arg1, arg2, ..., *args, **kwargs):...
-        signature = inspect.signature(func)
-        arguments = signature.bind(*[_sentinel] * num_required_args, *args, **kwargs)
-        arguments.apply_defaults()
-        # Ref: https://peps.python.org/pep-0362/
-        # Arguments which could be passed as part of either *args or **kwargs
-        # will be included only in the BoundArguments.args attribute.
-        args = arguments.args
-        kwargs = arguments.kwargs
-
-        if kwargs:
-            # Bodo change: error message
-            raise ValueError("Bodo does not support keyword only arguments.")
-
-        args = args[num_required_args:]
-        return args, kwargs
 
     class BodoExecutionEngine(BaseExecutionEngine):
         @staticmethod

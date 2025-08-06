@@ -9,7 +9,6 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
 
-import numba
 import numpy
 import pandas as pd
 import pyarrow as pa
@@ -21,17 +20,7 @@ from pandas._typing import (
 )
 
 import bodo
-import bodo.decorators
 from bodo.ext import plan_optimizer
-from bodo.hiframes.pd_index_ext import init_range_index
-from bodo.hiframes.pd_series_ext import init_series
-from bodo.libs.array import (
-    arr_info_list_to_table,
-    array_from_cpp_table,
-    array_to_info,
-    delete_table,
-    table_type,
-)
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
@@ -39,6 +28,7 @@ from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
+    ArrowScalarFuncExpression,
     ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
@@ -61,8 +51,9 @@ from bodo.pandas.plan import (
     get_proj_expr_single,
     get_single_proj_source_if_present,
     is_arith_expr,
+    is_arrow_scalar_func,
     is_col_ref,
-    is_scalar_func,
+    is_python_scalar_func,
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
@@ -71,58 +62,22 @@ from bodo.pandas.plan import (
     reset_index,
 )
 from bodo.pandas.utils import (
+    BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
+    cpp_table_to_series_jit,
     fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
+    get_udf_cfunc_decorator,
+    series_to_cpp_table_jit,
     wrap_plan,
 )
-from bodo.utils.conversion import coerce_to_array
 from bodo.utils.typing import BodoError
-
-
-@numba.njit
-def series_to_cpp_table(series_type):
-    out_arr = coerce_to_array(series_type, use_nullable_array=True)
-    out_info = array_to_info(out_arr)
-    out_cpp_table = arr_info_list_to_table([out_info])
-    return out_cpp_table
-
-
-@numba.njit
-def cpp_table_to_series(in_cpp_table, series_arr_type):
-    series_data = array_from_cpp_table(in_cpp_table, 0, series_arr_type)
-    # TODO: Add option to also convert index
-    index = init_range_index(0, len(series_data), 1, None)
-    out_series = init_series(series_data, index)
-    delete_table(in_cpp_table)
-    return out_series
-
-
-def get_map_jit_wrappers(empty_series, arg, na_action):
-    """Returns a jitted map wrapper, cfunc wrapper, and decorator for cfunc"""
-    arr_type = bodo.typeof(empty_series).data
-
-    @bodo.jit(cache=True, spawn=False, distributed=False)
-    def map_wrapper_inner(series):
-        return series.map(arg, na_action=na_action)
-
-    def map_wrapper(in_cpp_table):
-        series = cpp_table_to_series(in_cpp_table, arr_type)
-        out_series = map_wrapper_inner(series)
-        out_cpp_table = series_to_cpp_table(out_series)
-        return out_cpp_table
-
-    return (
-        map_wrapper_inner,
-        map_wrapper,
-        bodo.decorators._cfunc(table_type(table_type), cache=True),
-    )
 
 
 class BodoSeries(pd.Series, BodoLazyWrapper):
@@ -701,13 +656,21 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         if engine == "bodo":
             empty_series = self.head(0)
 
-            map_jit_wrapper, map_cfunc_wrapper, cfunc_deco = get_map_jit_wrappers(
-                empty_series, arg, na_action
-            )
+            arr_type = bodo.typeof(empty_series).data
+
+            @bodo.jit(cache=True, spawn=False, distributed=False)
+            def map_wrapper_inner(series):
+                return series.map(arg, na_action=na_action)
+
+            def map_wrapper(in_cpp_table):
+                series = cpp_table_to_series_jit(in_cpp_table, arr_type)
+                out_series = map_wrapper_inner(series)
+                out_cpp_table = series_to_cpp_table_jit(out_series)
+                return out_cpp_table
 
             try:
                 # Compile map inner wrapper, get the output type
-                empty_series = _get_empty_series_arrow(map_jit_wrapper(empty_series))
+                empty_series = _get_empty_series_arrow(map_wrapper_inner(empty_series))
             except BodoError as e:
                 empty_series = None
                 error_msg = str(e)
@@ -723,13 +686,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
             if empty_series is not None:
                 # Compile the cfunc and get pointer
-                return _get_series_python_func_plan(
+                return _get_series_func_plan(
                     self._plan,
                     empty_series,
-                    map_cfunc_wrapper,
+                    map_wrapper,
                     (),
                     {},
-                    cfunc_decorator=cfunc_deco,
+                    cfunc_decorator=get_udf_cfunc_decorator(),
                 )
             else:
                 msg = (
@@ -739,13 +702,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     "Original error: "
                     f"{error_msg}."
                 )
-                warnings.warn(BodoLibFallbackWarning(msg))
+                warnings.warn(BodoCompilationFailedWarning(msg))
 
         # engine == "python"
         # Get output data type by running the UDF on a sample of the data.
         empty_series = get_scalar_udf_result_type(self, "map", arg, na_action=na_action)
 
-        return _get_series_python_func_plan(
+        return _get_series_func_plan(
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
@@ -781,12 +744,63 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         else:
             empty_series = output_type
 
-        return _get_series_python_func_plan(
+        return _get_series_func_plan(
             self._plan,
             empty_series,
             "map_with_state",
             (init_state_fn, row_fn, na_action),
             {},
+        )
+
+    def map_partitions(self, func, *args, **kwargs):
+        """
+        Apply a function to each partition of the series.
+
+        If self is a lazy plan, then the result will also be a lazy plan
+        (assuming result is Series and the dtype can be infered). Otherwise, the supplied
+        function will be sent to the workers and executed immediately.
+
+        NOTE: this pickles the function and sends it to the workers, so globals are
+        pickled. The use of lazy data structures as globals causes issues.
+
+        Args:
+            func (Callable): A callable which takes in a Series as its first
+                argument and returns a DataFrame or Series that has the same length
+                its input.
+            *args: Additional positional arguments to pass to func.
+            **kwargs: Additional key-word arguments to pass to func.
+
+        Returns:
+            DataFrame or Series: The result of applying the func.
+        """
+        import bodo.spawn.spawner
+
+        if self._exec_state == ExecState.PLAN:
+            required_fallback = False
+            try:
+                empty_series = get_scalar_udf_result_type(
+                    self, "map_partitions", func, *args, **kwargs
+                )
+            except BodoLibNotImplementedException as e:
+                required_fallback = True
+                msg = (
+                    f"map_partitions(): encountered exception: {e}, while trying to "
+                    "build lazy plan. Executing plan and running map_partitions on "
+                    "workers (may be slow or run out of memory)."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+
+                self_arg = self.execute_plan()
+
+            if not required_fallback:
+                return _get_series_func_plan(
+                    self._plan, empty_series, func, args, kwargs
+                )
+        else:
+            self_arg = self
+
+        return bodo.spawn.spawner.submit_func_to_workers(
+            func, [], self_arg, *args, **kwargs
         )
 
     @check_args_fallback(supported=["ascending", "na_position", "kind"])
@@ -1116,9 +1130,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return wrap_plan(proj_plan)
 
         # It's just a map function if 'values' is not a BodoSeries
-        return _get_series_python_func_plan(
-            self._plan, new_metadata, "isin", (values,), {}
-        )
+        return _get_series_func_plan(self._plan, new_metadata, "isin", (values,), {})
 
     @check_args_fallback(supported=["drop", "name", "level"])
     def reset_index(
@@ -1298,13 +1310,11 @@ class BodoStringMethods:
 
         # If input Series is a series of lists, creates plan that maps 'join_list'.
         if not self._is_string:
-            return _get_series_python_func_plan(
+            return _get_series_func_plan(
                 series._plan, new_metadata, "map", (join_list, None), {}
             )
 
-        return _get_series_python_func_plan(
-            series._plan, new_metadata, "str.join", (sep,), {}
-        )
+        return _get_series_func_plan(series._plan, new_metadata, "str.join", (sep,), {})
 
     def extract(self, pat, flags=0, expand=True):
         """
@@ -1338,7 +1348,7 @@ class BodoStringMethods:
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.series._str_extract_helper",
@@ -1430,6 +1440,108 @@ class BodoSeriesAiMethods:
             output_type=pd.Series(dtype=pd.ArrowDtype(list_of_int64)),
         )
 
+    def llm_generate(
+        self,
+        endpoint: str,
+        api_token: str,
+        model: str | None = None,
+        **generation_kwargs,
+    ) -> BodoSeries:
+        import importlib
+
+        assert importlib.util.find_spec("openai") is not None, (
+            "Series.ai.llm_generate() requires the 'openai' package to be installed. "
+            "Please install it using 'pip install openai[aiohttp]'."
+        )
+
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+        if model is not None:
+            generation_kwargs["model"] = model
+
+        def map_func(series, api_token, endpoint, generation_kwargs):
+            import asyncio
+
+            import openai
+
+            client = openai.AsyncOpenAI(
+                api_key=api_token,
+                base_url=endpoint,
+                # TODO: The below should have better performance but currently
+                # pixi won't solve the dependencies.
+                # http_client=openai.DefaultAioHttpClient(),
+            )
+
+            async def per_row(row, client, generation_kwargs):
+                response = await client.chat.completions.create(
+                    messages=[{"role": "user", "content": row}],
+                    **generation_kwargs,
+                )
+                return response.choices[0].message.content
+
+            async def all_tasks(series, client, generation_kwargs):
+                tasks = [per_row(row, client, generation_kwargs) for row in series]
+                return await asyncio.gather(*tasks, return_exceptions=True)
+
+            return pd.Series(asyncio.run(all_tasks(series, client, generation_kwargs)))
+
+        return self._series.map_partitions(
+            map_func, api_token, endpoint, generation_kwargs=generation_kwargs
+        )
+
+    def embed(
+        self,
+        endpoint: str,
+        api_token: str,
+        model: str | None = None,
+        **embedding_kwargs,
+    ) -> BodoSeries:
+        import importlib
+
+        assert importlib.util.find_spec("openai") is not None, (
+            "Series.ai.embed() requires the 'openai' package to be installed. "
+            "Please install it using 'pip install openai[aiohttp]'."
+        )
+
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+        if model is not None:
+            embedding_kwargs["model"] = model
+
+        def map_func(series, api_token, endpoint, embedding_kwargs):
+            import asyncio
+
+            import openai
+
+            client = openai.AsyncOpenAI(
+                api_key=api_token,
+                base_url=endpoint,
+                # TODO: The below should have better performance but currently
+                # pixi won't solve the dependencies.
+                # http_client=openai.DefaultAioHttpClient(),
+            )
+
+            async def per_row(row, client, embedding_kwargs):
+                response = await client.embeddings.create(
+                    input=row,
+                    **embedding_kwargs,
+                )
+                return response.data[0].embedding
+
+            async def all_tasks(series, client, embedding_kwargs):
+                tasks = [per_row(row, client, embedding_kwargs) for row in series]
+                return await asyncio.gather(*tasks, return_exceptions=True)
+
+            return pd.Series(asyncio.run(all_tasks(series, client, embedding_kwargs)))
+
+        return self._series.map_partitions(
+            map_func, api_token, endpoint, embedding_kwargs=embedding_kwargs
+        )
+
     def query_s3_vectors(
         self,
         vector_bucket_name: str,
@@ -1469,7 +1581,7 @@ class BodoSeriesAiMethods:
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.utils.query_s3_vectors_helper",
@@ -1553,7 +1665,7 @@ class BodoDatetimeProperties:
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.series._isocalendar_helper",
@@ -1602,7 +1714,7 @@ class BodoDatetimeProperties:
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.series._components_helper",
@@ -1672,7 +1784,7 @@ class BodoDatetimeProperties:
             index=index,
         )
 
-        return _get_series_python_func_plan(
+        return _get_series_func_plan(
             series._plan,
             new_metadata,
             "bodo.pandas.series._tz_localize_helper",
@@ -2023,17 +2135,27 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return ColRefExpression(empty_data, plan, idx)
-    elif is_scalar_func(expr):
-        idx = expr.args[2][0]
+    elif is_python_scalar_func(expr):
+        idx = expr.input_column_indices[0]
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return PythonScalarFuncExpression(
             empty_data,
             plan,
-            expr.args[1],
+            expr.func_args,
             (idx,) + tuple(index_cols),
             expr.is_cfunc,
             False,
+        )
+    elif is_arrow_scalar_func(expr):
+        idx = expr.input_column_indices[0]
+        idx = get_new_idx(idx, first, side)
+        empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
+        return ArrowScalarFuncExpression(
+            empty_data,
+            plan,
+            (idx,) + tuple(index_cols),
+            expr.function_name,
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -2153,11 +2275,11 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
     )
 
 
-def _get_series_python_func_plan(
+def _get_series_func_plan(
     series_proj, empty_data, func, args, kwargs, is_method=True, cfunc_decorator=None
 ):
     """Create a plan for calling a Series method in Python. Creates a proper
-    PythonScalarFuncExpression with the correct arguments and a LogicalProjection.
+    ScalarFuncExpression with the correct arguments and a LogicalProjection.
     """
 
     # Optimize out trivial df["col"] projections to simplify plans
@@ -2174,28 +2296,43 @@ def _get_series_python_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
-    has_state = func == "map_with_state"
-    if cfunc_decorator:
-        func_args = (func, cfunc_decorator)
-        is_cfunc = True
-    else:
-        func_args = (
-            func,
-            True,  # is_series
-            is_method,  # is_method
-            args,  # args
-            kwargs,  # kwargs
-        )
+    if func in {"dt.dayofweek", "dt.hour", "dt.month", "dt.date"}:
+        if func == "dt.dayofweek":
+            func = "dt.day_of_week"
+        func_name = func.split(".")[1]
+        func_args = ()  # TODO: expand on this to enable arrow compute calls with args
         is_cfunc = False
+        has_state = False
+        expr = ArrowScalarFuncExpression(
+            empty_data,
+            source_data,
+            (col_index,) + tuple(index_cols),
+            func_name,
+        )
+    else:
+        # Empty func_name separates Python calls from Arrow calls.
+        has_state = func == "map_with_state"
+        if cfunc_decorator:
+            func_args = (func, cfunc_decorator)
+            is_cfunc = True
+        else:
+            func_args = (
+                func,
+                True,  # is_series
+                is_method,  # is_method
+                args,  # args
+                kwargs,  # kwargs
+            )
+            is_cfunc = False
 
-    expr = PythonScalarFuncExpression(
-        empty_data,
-        source_data,
-        func_args,
-        (col_index,) + tuple(index_cols),
-        is_cfunc,
-        has_state,
-    )
+        expr = PythonScalarFuncExpression(
+            empty_data,
+            source_data,
+            func_args,
+            (col_index,) + tuple(index_cols),
+            is_cfunc,
+            has_state,
+        )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
     return wrap_plan(
@@ -2237,7 +2374,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
     else:
         kwargs = {"pat": pat, "n": n, "expand": False}
 
-    series_out = _get_series_python_func_plan(
+    series_out = _get_series_func_plan(
         series._plan,
         empty_series,
         f"str.{name}",
@@ -2254,7 +2391,7 @@ def _split_internal(self, name, pat, n, expand, regex=None):
         index=index,
     )
 
-    length_series = _get_series_python_func_plan(
+    length_series = _get_series_func_plan(
         series._plan,
         cnt_empty_series,
         "bodo.pandas.series._get_split_len",
@@ -2312,7 +2449,7 @@ def gen_partition(name):
             index=index,
         )
 
-        series_out = _get_series_python_func_plan(
+        series_out = _get_series_func_plan(
             series._plan,
             new_metadata,
             f"str.{name}",
@@ -2519,7 +2656,7 @@ def gen_method(
             index=index,
         )
 
-        return _get_series_python_func_plan(
+        return _get_series_func_plan(
             series._plan, new_metadata, accessor_type + name, args, kwargs
         )
 

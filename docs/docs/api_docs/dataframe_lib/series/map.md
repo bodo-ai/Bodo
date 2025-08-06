@@ -1,6 +1,6 @@
 # bodo.pandas.BodoSeries.map
 ```
-BodoSeries.map(arg, na_action=None) -> BodoSeries
+BodoSeries.map(arg, na_action=None, engine="bodo") -> BodoSeries
 ```
 Map values of a BodoSeries according to a mapping.
 
@@ -17,12 +17,15 @@ from within the execution pipeline are avoided.
 !!! note
     Functions passed to `arg` (whether explicitly wrapper with a JIT decorator or not) may not
     use Numba's `with objmode` context.  Doing so will result in a runtime exception.
-    
+
 <p class="api-header">Parameters</p>
 
 : __arg : *function, collections.abc.Mapping subclass or Series*:__ Mapping correspondence.  *function* may be a Python function or a dispatcher generated through numba.jit or bodo.jit.
 
 : __na_actions : *{None, ‘ignore’}, default None*:__ If 'ignore' then NaN values will be propagated without passing them to the mapping correspondence.
+
+: __engine : *{'bodo', 'python'}, default 'bodo'*:__  The engine to use to compute the UDF. By default, engine='bodo' will apply bodo.jit
+to `arg` with fallback to Python as described above. Use engine='python' to avoid any jit compilation.
 
 <p class="api-header">Returns</p>
 

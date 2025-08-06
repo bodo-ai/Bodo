@@ -8,7 +8,7 @@ BodoDataFrame.apply(
         result_type=None,
         args=(),
         by_row="compat",
-        engine="python",
+        engine="bodo",
         engine_kwargs=None,
         **kwargs,
     ) -> BodoSeries
@@ -20,10 +20,19 @@ Currently only supports applying a function that returns a scalar value for each
 All other uses will fall back to Pandas.
 See [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.apply.html#pandas.DataFrame.apply) for more details.
 
+By default, bodo.jit will be applied to `func`.  If this JIT compilation fails for any
+reason, the mapping function will be run as a normal Python function.  If the compilation succeeds,
+the JIT compiled function will be used for apply and the overheads associated with running Python code
+from within the execution pipeline are avoided.
+
 !!! note
-    Calling `BodoDataFrame.apply` will immediately execute a plan to generate a small sample of the BodoDataFrame
-    and then call `pandas.DataFrame.apply` on the sample to infer output types
-    before proceeding with lazy evaluation.
+    Calling `BodoDataFrame.apply` will immediately execute a plan if this JIT compilation fails,
+    generating a small sample of the BodoDataFrame and calling `pandas.DataFrame.apply` on the sample to
+    infer output types before proceeding with lazy evaluation.
+
+!!! note
+    Functions passed to `func` (whether explicitly wrapper with a JIT decorator or not) may not
+    use Numba's `with objmode` context.  Doing so will result in a runtime exception.
 
 <p class="api-header">Parameters</p>
 
@@ -32,6 +41,9 @@ See [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pand
 : __axis : *{0 or 1}, default 0*:__ The axis to apply the function over. `axis=0` will fall back to [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.apply.html#pandas.DataFrame.apply).
 
 : __args : *tuple*:__ Additional positional arguments to pass to *func*.
+
+: __engine : *{'bodo', 'python', 'numba'}, default 'bodo'*:__ The engine to use to compute the UDF. By default, `engine="bodo"` will apply bodo.jit
+to `func` with fallback to Python described above. Use engine='python' to avoid any jit compilation. `engine='numba'` will trigger a fall back to [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.apply.html#pandas.DataFrame.apply).
 
 : __\*\*kwargs:__ Additional keyword arguments to pass as keyword arguments to *func*.
 

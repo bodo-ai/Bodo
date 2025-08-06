@@ -66,6 +66,7 @@ postgres = ["sqlalchemy", "psycopg2"]
 oracle = ["sqlalchemy", "cx-Oracle", "libaio"]
 iceberg = ["pyiceberg[glue]>=0.9"]
 huggingface_hub = ["huggingface_hub"]
+openai = ["openai"]
 
 
 # -------------------------- CMake Config -------------------------- #

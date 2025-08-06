@@ -802,7 +802,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
    public:
     PhysicalUDFExpression(
         std::vector<std::shared_ptr<PhysicalExpression>> &children,
-        BodoPythonScalarFunctionData &_scalar_func_data,
+        BodoScalarFunctionData &_scalar_func_data,
         const std::shared_ptr<arrow::DataType> &_result_type)
         : PhysicalExpression(children),
           scalar_func_data(_scalar_func_data),
@@ -874,9 +874,55 @@ class PhysicalUDFExpression : public PhysicalExpression {
     }
 
    protected:
-    BodoPythonScalarFunctionData scalar_func_data;
+    BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalUDFExpressionMetrics metrics;
     table_udf_t cfunc_ptr;
     PyObject *init_state;
+};
+
+struct PhysicalArrowExpressionMetrics {
+    using timer_t = MetricBase::TimerValue;
+    timer_t arrow_compute_time = 0;
+};
+/**
+ * @brief Physical expression tree node type for Arrow Compute functions.
+ *
+ */
+class PhysicalArrowExpression : public PhysicalExpression {
+   public:
+    PhysicalArrowExpression(
+        std::vector<std::shared_ptr<PhysicalExpression>> &children,
+        BodoScalarFunctionData &_scalar_func_data,
+        const std::shared_ptr<arrow::DataType> &_result_type)
+        : PhysicalExpression(children),
+          scalar_func_data(_scalar_func_data),
+          result_type(_result_type) {}
+
+    /**
+     * @brief How to process this expression tree node.
+     *
+     */
+    std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch) override;
+
+    arrow::Datum join_expr_internal(array_info **left_table,
+                                    array_info **right_table, void **left_data,
+                                    void **right_data, void **left_null_bitmap,
+                                    void **right_null_bitmap,
+                                    int64_t left_index,
+                                    int64_t right_index) override {
+        throw std::runtime_error(
+            "PhysicalArrowExpression::join_expr_internal unimplemented ");
+    }
+
+    void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
+        metrics_out.push_back(
+            TimerMetric("arrow_compute_time", metrics.arrow_compute_time));
+    }
+
+   protected:
+    BodoScalarFunctionData scalar_func_data;
+    const std::shared_ptr<arrow::DataType> result_type;
+    PhysicalArrowExpressionMetrics metrics;
 };

@@ -3,12 +3,17 @@ from __future__ import annotations
 import pickle
 import random
 import re
+import time
 
 import boto3
 import pandas as pd
+import pyarrow as pa
 import pytest
+import requests
 
 import bodo.pandas as bd
+from bodo.spawn.spawner import spawn_process_on_workers
+from bodo.tests.utils import _test_equal
 from bodo.utils.typing import BodoError
 
 
@@ -140,3 +145,124 @@ def test_query_s3_vectors_error_checking():
             topk=3,
             filter={"genre": "scifi"},
         )
+
+
+def test_tokenize():
+    from transformers import AutoTokenizer
+
+    a = pd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+            "I am the third entry in this series.",
+            "May the fourth be with you.",
+        ]
+    )
+    ba = bd.Series(a)
+
+    def ret_tokenizer():
+        # Load a pretrained tokenizer (e.g., BERT)
+        return AutoTokenizer.from_pretrained("bert-base-uncased")
+
+    pd_tokenizer = ret_tokenizer()
+    b = a.map(lambda x: pd_tokenizer.encode(x, add_special_tokens=True))
+    bb = ba.ai.tokenize(ret_tokenizer)
+
+    _test_equal(
+        bb,
+        b,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+
+def get_ollama_models(url):
+    for i in range(20):
+        try:
+            response = requests.get(f"{url}/api/tags", timeout=5)
+            if response.status_code == 200:
+                return response
+            else:
+                time.sleep(3)
+        except requests.exceptions.RequestException:
+            time.sleep(3)
+        if i == 19:
+            raise AssertionError("Ollama server not available yet")
+
+
+def wait_for_ollama(url):
+    get_ollama_models(url)
+
+
+def wait_for_ollama_model(url, model_name):
+    for _ in range(20):
+        models = get_ollama_models(url)
+        if model_name in models.text:
+            return
+        else:
+            time.sleep(3)
+
+
+def test_llm_generate():
+    prompts = bd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+        ]
+    )
+
+    try:
+        spawn_process_on_workers(
+            "docker run -v ollama:/root/.ollama -p 11434:11434 --name bodo_test_ollama ollama/ollama:latest".split(
+                " "
+            )
+        )
+        wait_for_ollama("http://localhost:11434")
+        spawn_process_on_workers(
+            "docker exec bodo_test_ollama ollama run smollm:135m".split(" ")
+        )
+        wait_for_ollama_model("http://localhost:11434", "smollm:135m")
+        res = prompts.ai.llm_generate(
+            endpoint="http://localhost:11434/v1",
+            api_token="",
+            model="smollm:135m",
+            max_tokens=1,
+            temperature=0.1,
+        ).execute_plan()
+        assert len(res) == 2
+        assert all(isinstance(x, str) for x in res)
+
+    finally:
+        spawn_process_on_workers("docker rm bodo_test_ollama -f".split(" "))
+
+
+def test_embed():
+    prompts = bd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+        ]
+    )
+
+    try:
+        spawn_process_on_workers(
+            "docker run -v ollama:/root/.ollama -p 11435:11434 --name bodo_test_ollama_embed ollama/ollama:latest".split(
+                " "
+            )
+        )
+        wait_for_ollama("http://localhost:11435")
+        spawn_process_on_workers(
+            "docker exec bodo_test_ollama_embed ollama pull all-minilm:22m".split(" ")
+        )
+        wait_for_ollama_model("http://localhost:11435", "all-minilm:22m")
+        res = prompts.ai.embed(
+            endpoint="http://localhost:11435/v1",
+            api_token="",
+            model="all-minilm:22m",
+        ).execute_plan()
+        assert len(res) == 2
+        assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
+
+    finally:
+        spawn_process_on_workers("docker rm bodo_test_ollama_embed -f".split(" "))

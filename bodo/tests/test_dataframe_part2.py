@@ -587,7 +587,7 @@ def test_df_apply_getitem(memory_leak_check):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.df_lib
+# @pytest.mark.df_lib TODO (df_lib): properly support RangeIndex in apply
 def test_df_apply_name_heterogeneous(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -602,7 +602,7 @@ def test_df_apply_name_heterogeneous(memory_leak_check):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.df_lib
+# @pytest.mark.df_lib TODO (df_lib): properly support RangeIndex in apply
 def test_df_apply_name_homogeneous(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with

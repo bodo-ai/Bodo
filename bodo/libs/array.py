@@ -1694,7 +1694,7 @@ def to_pa_arr(A, arrow_type, arrow_type_no_dict):
     if isinstance(A, np.ndarray) and A.ndim == 2:
         A = [A[i] for i in range(len(A))]
 
-    arr = pa.array(A, arrow_type_no_dict)
+    arr = pa.array(A, arrow_type_no_dict, from_pandas=True)
 
     if arrow_type != arrow_type_no_dict:
         arr = convert_arrow_arr_to_dict(arr, arrow_type)
