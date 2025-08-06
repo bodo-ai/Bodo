@@ -789,6 +789,57 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             {},
         )
 
+    def map_partitions(self, func, *args, **kwargs):
+        """
+        Apply a function to each partition of the series.
+
+        If self is a lazy plan, then the result will also be a lazy plan
+        (assuming result is Series and the dtype can be infered). Otherwise, the supplied
+        function will be sent to the workers and executed immediately.
+
+        NOTE: this pickles the function and sends it to the workers, so globals are
+        pickled. The use of lazy data structures as globals causes issues.
+
+        Args:
+            func (Callable): A callable which takes in a Series as its first
+                argument and returns a DataFrame or Series that has the same length
+                its input.
+            *args: Additional positional arguments to pass to func.
+            **kwargs: Additional key-word arguments to pass to func.
+
+        Returns:
+            DataFrame or Series: The result of applying the func.
+        """
+        import bodo.spawn.spawner
+
+        if self._exec_state == ExecState.PLAN:
+            required_fallback = False
+            try:
+                empty_series = get_scalar_udf_result_type(
+                    self, "map_partitions", func, *args, **kwargs
+                )
+            except BodoLibNotImplementedException as e:
+                required_fallback = True
+                msg = (
+                    f"map_partitions(): encountered exception: {e}, while trying to "
+                    "build lazy plan. Executing plan and running map_partitions on "
+                    "workers (may be slow or run out of memory)."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+
+                self_arg = self.execute_plan()
+
+            if not required_fallback:
+                return _get_series_python_func_plan(
+                    self._plan, empty_series, func, args, kwargs
+                )
+        else:
+            self_arg = self
+
+        return bodo.spawn.spawner.submit_func_to_workers(
+            func, [], self_arg, *args, **kwargs
+        )
+
     @check_args_fallback(supported=["ascending", "na_position", "kind"])
     def sort_values(
         self,
@@ -1428,6 +1479,108 @@ class BodoSeriesAiMethods:
             tokenizer,
             per_row,
             output_type=pd.Series(dtype=pd.ArrowDtype(list_of_int64)),
+        )
+
+    def llm_generate(
+        self,
+        endpoint: str,
+        api_token: str,
+        model: str | None = None,
+        **generation_kwargs,
+    ) -> BodoSeries:
+        import importlib
+
+        assert importlib.util.find_spec("openai") is not None, (
+            "Series.ai.llm_generate() requires the 'openai' package to be installed. "
+            "Please install it using 'pip install openai[aiohttp]'."
+        )
+
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+        if model is not None:
+            generation_kwargs["model"] = model
+
+        def map_func(series, api_token, endpoint, generation_kwargs):
+            import asyncio
+
+            import openai
+
+            client = openai.AsyncOpenAI(
+                api_key=api_token,
+                base_url=endpoint,
+                # TODO: The below should have better performance but currently
+                # pixi won't solve the dependencies.
+                # http_client=openai.DefaultAioHttpClient(),
+            )
+
+            async def per_row(row, client, generation_kwargs):
+                response = await client.chat.completions.create(
+                    messages=[{"role": "user", "content": row}],
+                    **generation_kwargs,
+                )
+                return response.choices[0].message.content
+
+            async def all_tasks(series, client, generation_kwargs):
+                tasks = [per_row(row, client, generation_kwargs) for row in series]
+                return await asyncio.gather(*tasks, return_exceptions=True)
+
+            return pd.Series(asyncio.run(all_tasks(series, client, generation_kwargs)))
+
+        return self._series.map_partitions(
+            map_func, api_token, endpoint, generation_kwargs=generation_kwargs
+        )
+
+    def embed(
+        self,
+        endpoint: str,
+        api_token: str,
+        model: str | None = None,
+        **embedding_kwargs,
+    ) -> BodoSeries:
+        import importlib
+
+        assert importlib.util.find_spec("openai") is not None, (
+            "Series.ai.embed() requires the 'openai' package to be installed. "
+            "Please install it using 'pip install openai[aiohttp]'."
+        )
+
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+        if model is not None:
+            embedding_kwargs["model"] = model
+
+        def map_func(series, api_token, endpoint, embedding_kwargs):
+            import asyncio
+
+            import openai
+
+            client = openai.AsyncOpenAI(
+                api_key=api_token,
+                base_url=endpoint,
+                # TODO: The below should have better performance but currently
+                # pixi won't solve the dependencies.
+                # http_client=openai.DefaultAioHttpClient(),
+            )
+
+            async def per_row(row, client, embedding_kwargs):
+                response = await client.embeddings.create(
+                    input=row,
+                    **embedding_kwargs,
+                )
+                return response.data[0].embedding
+
+            async def all_tasks(series, client, embedding_kwargs):
+                tasks = [per_row(row, client, embedding_kwargs) for row in series]
+                return await asyncio.gather(*tasks, return_exceptions=True)
+
+            return pd.Series(asyncio.run(all_tasks(series, client, embedding_kwargs)))
+
+        return self._series.map_partitions(
+            map_func, api_token, endpoint, embedding_kwargs=embedding_kwargs
         )
 
     def query_s3_vectors(

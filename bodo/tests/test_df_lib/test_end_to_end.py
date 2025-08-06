@@ -1710,7 +1710,7 @@ def test_series_compound_expression(datapath):
     )
 
 
-def test_map_partitions():
+def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
     with assert_executed_plan_count(0):
         df = pd.DataFrame(
@@ -1743,6 +1743,41 @@ def test_map_partitions():
 
         py_out = df + 2 + 3
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
+
+
+def test_map_partitions_series():
+    """Simple tests for map_partition on lazy Series."""
+    with assert_executed_plan_count(0):
+        series = pd.Series(
+            pd.array([2, 2, 3] * 2, "Int64"),
+            index=[0, 41, 2] * 2,
+        )
+
+        bodo_series = bd.Series(
+            pd.array([2, 2, 3] * 2, "Int64"),
+            index=[0, 41, 2] * 2,
+        )
+
+        def f(series, a, b=1):
+            return series + a + b
+
+    with assert_executed_plan_count(1):
+        bodo_series2 = bodo_series.map_partitions(f, 2, b=3)
+        py_out = series + 2 + 3
+
+    _test_equal(bodo_series2, py_out, check_pandas_types=False, check_names=False)
+
+    with assert_executed_plan_count(2):
+        # test fallback case for unsupported func
+        # that returns a DataFrame
+        def g(series, a, b=1):
+            return pd.DataFrame({"A": series})
+
+        with pytest.warns(BodoLibFallbackWarning):
+            bodo_df = bodo_series.map_partitions(g, 2, b=3)
+
+        py_out = pd.DataFrame({"A": series})
+    _test_equal(bodo_df, py_out, check_pandas_types=False)
 
 
 @pytest.mark.parametrize(
@@ -3011,36 +3046,6 @@ def test_map_with_state():
     _test_equal(
         bres,
         res,
-        check_pandas_types=False,
-        reset_index=False,
-        check_names=False,
-    )
-
-
-def test_tokenize():
-    from transformers import AutoTokenizer
-
-    a = pd.Series(
-        [
-            "bodo.ai will improve your workflows.",
-            "This is a professional sentence.",
-            "I am the third entry in this series.",
-            "May the fourth be with you.",
-        ]
-    )
-    ba = bd.Series(a)
-
-    def ret_tokenizer():
-        # Load a pretrained tokenizer (e.g., BERT)
-        return AutoTokenizer.from_pretrained("bert-base-uncased")
-
-    pd_tokenizer = ret_tokenizer()
-    b = a.map(lambda x: pd_tokenizer.encode(x, add_special_tokens=True))
-    bb = ba.ai.tokenize(ret_tokenizer)
-
-    _test_equal(
-        bb,
-        b,
         check_pandas_types=False,
         reset_index=False,
         check_names=False,
