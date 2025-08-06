@@ -43,7 +43,7 @@ from within the execution pipeline are avoided.
 : __args : *tuple*:__ Additional positional arguments to pass to *func*.
 
 : __engine : *{'bodo', 'python', 'numba'}, default 'bodo'*:__ The engine to use to compute the UDF. By default, `engine="bodo"` will apply bodo.jit
-to `func` with fallback to python described above. Use engine='python' to avoid any jit compilation. `engine='numba'` will trigger a fall back to [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.apply.html#pandas.DataFrame.apply).
+to `func` with fallback to Python described above. Use engine='python' to avoid any jit compilation. `engine='numba'` will trigger a fall back to [`pandas.DataFrame.apply`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.apply.html#pandas.DataFrame.apply).
 
 : __\*\*kwargs:__ Additional keyword arguments to pass as keyword arguments to *func*.
 

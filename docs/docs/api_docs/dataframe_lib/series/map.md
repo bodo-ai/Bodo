@@ -25,7 +25,7 @@ from within the execution pipeline are avoided.
 : __na_actions : *{None, ‘ignore’}, default None*:__ If 'ignore' then NaN values will be propagated without passing them to the mapping correspondence.
 
 : __engine : *{'bodo', 'python'}, default 'bodo'*:__  The engine to use to compute the UDF. By default, engine='bodo' will apply bodo.jit
-to `arg` with fallback to python as described above. Use engine='python' to avoid any jit compilation.
+to `arg` with fallback to Python as described above. Use engine='python' to avoid any jit compilation.
 
 <p class="api-header">Returns</p>
 
