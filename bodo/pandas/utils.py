@@ -1001,8 +1001,8 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
 
     except_msg = ""
     for sample_size in sample_sizes:
-        df_sample = obj.head(sample_size).execute_plan()
-        pd_sample = base_class(df_sample)
+        pd_sample = base_class(obj.head(sample_size))
+
         if method_name == "map_with_state":
             out_sample = pd_sample.apply(lambda row: func[1](func[0], row))
         else:
