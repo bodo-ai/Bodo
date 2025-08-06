@@ -37,8 +37,7 @@ def add_fallback():
         for func in set(pandas_attrs).difference(bodo_df_lib_attrs):
             # Export the pandas functions that aren't implemented by bodo
             # into bodo.pandas.
-            #setattr(current_module, func, JITFallback(None, func))
-            setattr(current_module, func, getattr(pandas, func))
+            setattr(current_module, func, JITFallback(None, func))
 
 # Must do this at the end so that all functions we want to provide already exist.
 add_fallback()

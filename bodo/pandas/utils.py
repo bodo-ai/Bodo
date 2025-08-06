@@ -1116,7 +1116,7 @@ class JITFallback:
         cache_entry = JITFallback.fallback_cache.get(
             (self.base_obj.__class__.__name__, self.name), None
         )
-        if not kwargs and cache_entry != False:
+        if cache_entry != False:
             # None means it wasn't in the cache either way so we can try to
             # JIT compile it.
             if cache_entry is None:
@@ -1132,12 +1132,18 @@ class JITFallback:
                 if jit_supported:
                     fname = f"bodo_jitfallback_{self.name}"
                     self_arg = "self, " if self.base_obj is not None else ""
-                    numbered_args = ",".join([f"arg{i}" for i in range(len(args))])
-                    func_text = f"def {fname}({self_arg}{numbered_args}):\n"
+                    sig_args = ",".join(
+                        [f"arg{i}" for i in range(len(args))] + list(kwargs.keys())
+                    )
+                    caller_args = ",".join(
+                        [f"arg{i}" for i in range(len(args))]
+                        + [f"{x}={x}" for x in kwargs.keys()]
+                    )
+                    func_text = f"def {fname}({self_arg}{sig_args}):\n"
                     if self.base_obj is None:
-                        func_text += f"    return pd.{self.name}({numbered_args})\n"
+                        func_text += f"    return pd.{self.name}({caller_args})\n"
                     else:
-                        func_text += f"    return self.{self.name}({numbered_args})\n"
+                        func_text += f"    return self.{self.name}({caller_args})\n"
 
                     new_func = bodo.utils.utils.bodo_exec(
                         func_text, {"pd": pd}, {}, __name__
@@ -1145,9 +1151,9 @@ class JITFallback:
                     compiled_method = bodo.jit(new_func, cache=True)
                     try:
                         if self.base_obj is None:
-                            cm_args = args
+                            cm_args = args + tuple(kwargs.values())
                         else:
-                            cm_args = (self.base_obj, *args)
+                            cm_args = (self.base_obj, *args, *tuple(kwargs.values()))
                         ret = compiled_method(*cm_args)
                         # Remember that this compile worked.
                         JITFallback.fallback_cache[
@@ -1162,9 +1168,9 @@ class JITFallback:
             else:
                 # Previous successful compile so just run it.
                 if self.base_obj is None:
-                    cm_args = args
+                    cm_args = args + tuple(kwargs.values())
                 else:
-                    cm_args = (self.base_obj, *args)
+                    cm_args = (self.base_obj, *args, *tuple(kwargs.values()))
                 return cache_entry(*cm_args)
 
         msg = (
