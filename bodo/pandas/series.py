@@ -794,8 +794,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Apply a function to each partition of the series.
 
         If self is a lazy plan, then the result will also be a lazy plan
-        (assuming result is Series and the dtype can be infered). Otherwise, the lazy
-        plan will be evaluated.
+        (assuming result is Series and the dtype can be infered). Otherwise, the supplied
+        function will be sent to the workers and executed immediately.
+
         NOTE: this pickles the function and sends it to the workers, so globals are
         pickled. The use of lazy data structures as globals causes issues.
 
