@@ -45,7 +45,7 @@ class PhysicalResultCollector : public PhysicalSink {
                    : OperatorResult::NEED_MORE_INPUT;
     }
 
-    void Finalize() override {}
+    void FinalizeSink() override {}
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         return buffer->data_table;
