@@ -16,7 +16,11 @@ from bodo.pandas.plan import (
     LogicalGetPandasReadSeq,
     assert_executed_plan_count,
 )
-from bodo.pandas.utils import BodoCompilationFailedWarning, BodoLibFallbackWarning, JITFallback
+from bodo.pandas.utils import (
+    BodoCompilationFailedWarning,
+    BodoLibFallbackWarning,
+    JITFallback,
+)
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)

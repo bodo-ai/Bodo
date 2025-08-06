@@ -75,7 +75,6 @@ from bodo.pandas.utils import (
     _get_empty_series_arrow,
     check_args_fallback,
     cpp_table_to_df_jit,
-    fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
