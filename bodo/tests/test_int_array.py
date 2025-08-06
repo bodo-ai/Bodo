@@ -635,3 +635,13 @@ def test_int_arr_nbytes(memory_leak_check):
     py_out = 40 + n_pes  # 1 extra byte for null_bit_map per rank
     check_func(impl, (arr,), py_output=py_out, only_1D=True)
     check_func(impl, (arr,), py_output=41, only_seq=True)
+
+
+def test_int_pd_na_object(memory_leak_check):
+    """Test that pd.NA works properly in an object array with integers"""
+
+    def impl(A):
+        return A
+
+    S = pd.Series([0, pd.NA])
+    check_func(impl, (S,), only_seq=True)

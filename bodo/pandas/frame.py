@@ -6,6 +6,7 @@ from collections.abc import Callable, Hashable, Iterable, Sequence
 from contextlib import contextmanager
 
 import pandas as pd
+import pyarrow as pa
 from pandas._libs import lib
 
 if pt.TYPE_CHECKING:
@@ -29,11 +30,12 @@ if pt.TYPE_CHECKING:
     from pyiceberg.partitioning import PartitionSpec
     from pyiceberg.table.sorting import SortOrder
 
-
+import numpy as np
 from pandas.core.indexing import _LocIndexer
 
 import bodo
 from bodo.ext import plan_optimizer
+from bodo.hiframes.table import TableType
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.groupby import DataFrameGroupBy
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -66,13 +68,18 @@ from bodo.pandas.plan import (
 )
 from bodo.pandas.series import BodoSeries
 from bodo.pandas.utils import (
+    BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    _get_empty_series_arrow,
     check_args_fallback,
+    cpp_table_to_df_jit,
     fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
+    get_udf_cfunc_decorator,
+    series_to_cpp_table_jit,
     wrap_plan,
 )
 from bodo.utils.typing import (
@@ -889,8 +896,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             except BodoLibNotImplementedException as e:
                 required_fallback = True
                 msg = (
-                    f"map_paritions(): encountered exception: {e}, while trying to "
-                    "build lazy plan. Executing plan and running map_paritions on "
+                    f"map_partitions(): encountered exception: {e}, while trying to "
+                    "build lazy plan. Executing plan and running map_partitions on "
                     "workers (may be slow or run out of memory)."
                 )
                 warnings.warn(BodoLibFallbackWarning(msg))
@@ -1220,7 +1227,84 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 loc = self._info_axis.get_loc(key)
                 self._iset_item_mgr(loc, *self._sanitize_column(head_val))
 
-    @check_args_fallback(supported=["func", "axis", "args"])
+    def _apply_bodo(
+        self, func, args: tuple, **kwargs
+    ) -> tuple[BodoDataFrame | None, str]:
+        """Attempts to create a wrapper for creating a C callback for the provided
+        function and determine output types using JIT.
+
+        Raises:
+            BodoLibNotImplementedException: If output of UDF is a DataFrame.
+
+        Returns:
+            tuple[BodoDataFrame | None, str]: The new lazy dataframe.
+                If errors occured during compilation, first value will be None
+                followed by the errors.
+        """
+        from bodo.pandas_compat import _prepare_function_arguments
+
+        zero_sized_self = self.head(0)
+
+        # Convert kwargs into args to avoid dynamically generating apply wrapper.
+        if callable(func):
+            try:
+                args, _ = _prepare_function_arguments(func, args, kwargs)
+            except ValueError:
+                # Keyword-only arguments in UDFs are rare.
+                return None, "Keyword-only arguments not supported by JIT"
+        elif kwargs:
+            return (
+                None,
+                "Keyword arguments are only supported for callable funcs, use args instead",
+            )
+
+        # Generate wrappers for calling apply from C++.
+        df_type = bodo.typeof(zero_sized_self)
+        index_type = df_type.index
+        py_table_type = TableType(df_type.data)
+        out_cols_arr = np.array(range(len(self.columns)), dtype=np.int64)
+        column_names = bodo.utils.typing.ColNamesMetaType(tuple(self.columns))
+
+        @bodo.jit(cache=True, spawn=False, distributed=False)
+        def apply_wrapper_inner(df):
+            return df.apply(func, axis=1, args=args)
+
+        def apply_wrapper(in_cpp_table):
+            series = cpp_table_to_df_jit(
+                in_cpp_table, out_cols_arr, column_names, py_table_type, index_type
+            )
+            out_series = apply_wrapper_inner(series)
+            out_cpp_table = series_to_cpp_table_jit(out_series)
+            return out_cpp_table
+
+        try:
+            # Compile map inner wrapper, get the output type
+            out_jit = apply_wrapper_inner(zero_sized_self)
+        except BodoError as e:
+            # Compilation failed, attempt execute UDF in Python.
+            return None, str(e)
+
+        # DataFrame output is supported by JIT but not Bodo DataFr.
+        if isinstance(out_jit, pd.DataFrame):
+            raise BodoLibNotImplementedException(
+                f"DataFrame.apply(): expected output to be Series, got: {type(out_jit)}"
+            )
+        empty_series = _get_empty_series_arrow(out_jit)
+
+        # Jit failed to determine dtypes, likely from gaps in our Arrow support.
+        if pa.types.is_null(empty_series.dtype.pyarrow_dtype):
+            return None, "JIT could not determine pyarrow return type from UDF"
+
+        return _get_df_python_func_plan(
+            self._plan,
+            empty_series,
+            apply_wrapper,
+            (),
+            {},
+            cfunc_decorator=get_udf_cfunc_decorator(),
+        ), ""
+
+    @check_args_fallback(supported=["func", "axis", "args", "engine"])
     def apply(
         self,
         func,
@@ -1229,7 +1313,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         result_type=None,
         args=(),
         by_row="compat",
-        engine="python",
+        engine="bodo",
         engine_kwargs=None,
         **kwargs,
     ):
@@ -1242,6 +1326,31 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.apply(): only axis=1 supported"
             )
 
+        if engine == "numba":
+            raise BodoLibNotImplementedException(
+                "DataFrame.apply(): with engine='numba' not supported yet."
+            )
+        elif engine not in ("bodo", "python"):
+            raise TypeError(
+                "DataFrame.apply(): expected engine to be one of (bodo, python)"
+            )
+
+        if engine == "bodo":
+            apply_result, error_msg = self._apply_bodo(func, args, **kwargs)
+
+            if apply_result is None:
+                msg = (
+                    "DataFrame.apply(): Compiling user defined function failed or "
+                    "encountered an unsupported result type. Falling back to "
+                    "Python engine. Add engine='python' to ignore this warning. "
+                    "Original error: "
+                    f"{error_msg}."
+                )
+                warnings.warn(BodoCompilationFailedWarning(msg))
+            else:
+                return apply_result
+
+        # engine == "python" or jit fallthrough
         empty_series = get_scalar_udf_result_type(
             self, "apply", func, axis=axis, args=args, **kwargs
         )
