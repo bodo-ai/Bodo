@@ -50,9 +50,12 @@ class LazyPlan:
         if isinstance(self, ColRefExpression):
             col_index = args[1]
             return f"ColRefExpression({col_index})"
-        elif isinstance(self, ScalarFuncExpression):
+        elif isinstance(self, PythonScalarFuncExpression):
             func_name, col_indices = args[1][0], args[2]
-            return f"ScalarFuncExpression({func_name}, {col_indices})"
+            return f"PythonScalarFuncExpression({func_name}, {col_indices})"
+        elif isinstance(self, ArrowScalarFuncExpression):
+            func_name, col_indices = args[2], args[1]
+            return f"ArrowScalarFuncExpression({func_name}, {col_indices})"
 
         out = f"{self.plan_class}: \n"
         args_str = ""
@@ -415,7 +418,7 @@ class AggregateExpression(Expression):
             return self
 
 
-class ScalarFuncExpression(Expression):
+class PythonScalarFuncExpression(Expression):
     """Expression representing a Python scalar function call in the query plan."""
 
     @property
@@ -449,7 +452,7 @@ class ScalarFuncExpression(Expression):
             assert len(self.input_column_indices) == 1 + get_n_index_arrays(
                 self.empty_data.index
             ), (
-                "ScalarFuncExpression::update_func_expr_source: expected single input column"
+                "PythonScalarFuncExpression::update_func_expr_source: expected single input column"
             )
             # Previous input data column index
             in_col_ind = self.input_column_indices[0]
@@ -462,21 +465,73 @@ class ScalarFuncExpression(Expression):
                     + get_n_index_arrays(new_source_plan.empty_data.index),
                 )
             )
-            expr = ScalarFuncExpression(
+            expr = PythonScalarFuncExpression(
                 self.empty_data,
                 new_source_plan,
                 self.func_args,
                 (in_col_ind + col_index_offset,) + index_cols,
                 self.is_cfunc,
                 self.has_state,
-                "",
             )
             expr.is_series = self.is_series
             return expr
         return self
 
     def replace_source(self, new_source: LazyPlan):
-        # TODO: handle source replacement for ScalarFuncExpression
+        # TODO: handle source replacement for PythonScalarFuncExpression
+        if self.source == new_source:
+            return self
+
+
+class ArrowScalarFuncExpression(Expression):
+    """Expression representing a Python scalar function call in the query plan."""
+
+    @property
+    def source(self):
+        """Return the source of the expression."""
+        return self.args[0]
+
+    @property
+    def input_column_indices(self):
+        """Return the columns relevant to the expression."""
+        return self.args[1]
+
+    @property
+    def function_name(self):
+        """Return the function name."""
+        return self.args[2]
+
+    def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
+        """Update the source and column index of the function expression."""
+        if self.source != new_source_plan:
+            assert len(self.input_column_indices) == 1 + get_n_index_arrays(
+                self.empty_data.index
+            ), (
+                "ArrowScalarFuncExpression::update_func_expr_source: expected single input column"
+            )
+            # Previous input data column index
+            in_col_ind = self.input_column_indices[0]
+            n_source_cols = len(new_source_plan.empty_data.columns)
+            # Add Index columns of the new source plan as input
+            index_cols = tuple(
+                range(
+                    n_source_cols,
+                    n_source_cols
+                    + get_n_index_arrays(new_source_plan.empty_data.index),
+                )
+            )
+            expr = ArrowScalarFuncExpression(
+                self.empty_data,
+                new_source_plan,
+                (in_col_ind + col_index_offset,) + index_cols,
+                self.function_name,
+            )
+            expr.is_series = self.is_series
+            return expr
+        return self
+
+    def replace_source(self, new_source: LazyPlan):
+        # TODO: handle source replacement for ArrowScalarFuncExpression
         if self.source == new_source:
             return self
 
@@ -860,7 +915,7 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
     ScalarFuncExpression with provided arguments and a LogicalProjection.
     """
     df_len = len(df_plan.empty_data.columns)
-    udf_arg = ScalarFuncExpression(
+    udf_arg = PythonScalarFuncExpression(
         empty_data,
         df_plan,
         (
@@ -873,7 +928,6 @@ def _get_df_python_func_plan(df_plan, empty_data, func, args, kwargs, is_method=
         tuple(range(df_len + get_n_index_arrays(df_plan.empty_data.index))),
         False,  # is_cfunc
         False,  # has_state
-        "",
     )
 
     # Select Index columns explicitly for output
@@ -895,8 +949,12 @@ def is_col_ref(expr):
     return isinstance(expr, ColRefExpression)
 
 
-def is_scalar_func(expr):
-    return isinstance(expr, ScalarFuncExpression)
+def is_python_scalar_func(expr):
+    return isinstance(expr, PythonScalarFuncExpression)
+
+
+def is_arrow_scalar_func(expr):
+    return isinstance(expr, ArrowScalarFuncExpression)
 
 
 def is_arith_expr(expr):

@@ -881,6 +881,14 @@ class PhysicalUDFExpression : public PhysicalExpression {
     PyObject *init_state;
 };
 
+struct PhysicalArrowExpressionMetrics {
+    using timer_t = MetricBase::TimerValue;
+    timer_t arrow_compute_time = 0;
+};
+/**
+ * @brief Physical expression tree node type for Arrow Compute functions.
+ *
+ */
 class PhysicalArrowExpression : public PhysicalExpression {
    public:
     PhysicalArrowExpression(
@@ -908,8 +916,13 @@ class PhysicalArrowExpression : public PhysicalExpression {
             "PhysicalArrowExpression::join_expr_internal unimplemented ");
     }
 
+    void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
+        metrics_out.push_back(
+            TimerMetric("arrow_compute_time", metrics.arrow_compute_time));
+    }
+
    protected:
     BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
-    PhysicalUDFExpressionMetrics metrics;
+    PhysicalArrowExpressionMetrics metrics;
 };

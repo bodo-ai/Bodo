@@ -542,6 +542,7 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
     std::shared_ptr<table_info> input_batch) {
     std::shared_ptr<ExprResult> res = children[0]->ProcessBatch(input_batch);
     std::shared_ptr<array_info> result;
+    time_pt start_init_time = start_timer();
     if (scalar_func_data.arrow_func_name == "date") {
         // The Arrow compute equivalent of Series.dt.date() is year_month_day,
         // which returns a struct. To match the output dtype of Pandas, we Cast
@@ -550,6 +551,7 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
     } else {
         result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
     }
+    this->metrics.arrow_compute_time += end_timer(start_init_time);
     return std::make_shared<ArrayExprResult>(result, "Arrow Scalar");
 }
 

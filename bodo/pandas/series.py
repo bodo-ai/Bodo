@@ -39,6 +39,7 @@ from bodo.pandas.managers import LazyMetadataMixin, LazySingleBlockManager
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
+    ArrowScalarFuncExpression,
     ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
@@ -54,15 +55,16 @@ from bodo.pandas.plan import (
     LogicalOperator,
     LogicalOrder,
     LogicalProjection,
-    ScalarFuncExpression,
+    PythonScalarFuncExpression,
     UnaryOpExpression,
     _get_df_python_func_plan,
     execute_plan,
     get_proj_expr_single,
     get_single_proj_source_if_present,
     is_arith_expr,
+    is_arrow_scalar_func,
     is_col_ref,
-    is_scalar_func,
+    is_python_scalar_func,
     is_single_colref_projection,
     is_single_projection,
     make_col_ref_exprs,
@@ -2019,18 +2021,27 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return ColRefExpression(empty_data, plan, idx)
-    elif is_scalar_func(expr):
-        idx = expr.args[2][0]
+    elif is_python_scalar_func(expr):
+        idx = expr.input_column_indices[0]
         idx = get_new_idx(idx, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
-        return ScalarFuncExpression(
+        return PythonScalarFuncExpression(
             empty_data,
             plan,
-            expr.args[1],
+            expr.func_args,
             (idx,) + tuple(index_cols),
             expr.is_cfunc,
             False,
-            "",
+        )
+    elif is_arrow_scalar_func(expr):
+        idx = expr.input_column_indices[0]
+        idx = get_new_idx(idx, first, side)
+        empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
+        return ArrowScalarFuncExpression(
+            empty_data,
+            plan,
+            (idx,) + tuple(index_cols),
+            expr.function_name,
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -2134,7 +2145,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
     Extracts indexed column values from list series and
     returns resulting scalar expression.
     """
-    return ScalarFuncExpression(
+    return PythonScalarFuncExpression(
         empty_data,
         series_out._plan,
         (
@@ -2147,7 +2158,6 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
         (0,) + index_cols,
         False,  # is_cfunc
         False,  # has_state
-        "",
     )
 
 
@@ -2179,9 +2189,14 @@ def _get_series_func_plan(
         func_args = ()  # TODO: expand on this to enable arrow compute calls with args
         is_cfunc = False
         has_state = False
+        expr = ArrowScalarFuncExpression(
+            empty_data,
+            source_data,
+            (col_index,) + tuple(index_cols),
+            func_name,
+        )
     else:
         # Empty func_name separates Python calls from Arrow calls.
-        func_name = ""
         has_state = func == "map_with_state"
         if cfunc_decorator:
             func_args = (func, cfunc_decorator)
@@ -2196,15 +2211,14 @@ def _get_series_func_plan(
             )
             is_cfunc = False
 
-    expr = ScalarFuncExpression(
-        empty_data,
-        source_data,
-        func_args,
-        (col_index,) + tuple(index_cols),
-        is_cfunc,
-        has_state,
-        func_name,
-    )
+        expr = PythonScalarFuncExpression(
+            empty_data,
+            source_data,
+            func_args,
+            (col_index,) + tuple(index_cols),
+            is_cfunc,
+            has_state,
+        )
     # Select Index columns explicitly for output
     index_col_refs = tuple(make_col_ref_exprs(index_cols, source_data))
     return wrap_plan(

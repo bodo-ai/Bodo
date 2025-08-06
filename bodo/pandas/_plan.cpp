@@ -565,7 +565,7 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
 duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
-    bool has_state, const std::string func_name) {
+    bool has_state, const std::string arrow_compute_func) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
@@ -576,18 +576,18 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     // Necessary before accessing source->types attribute
     source->ResolveOperatorTypes();
 
-    auto scalar_name = (func_name == "") ? "bodo_udf" : func_name;
+    auto scalar_name =
+        (arrow_compute_func == "") ? "bodo_udf" : arrow_compute_func;
 
     // Create ScalarFunction for Python UDF or Arrow Compute Function
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
         scalar_name, source->types, out_type, RunFunction, nullptr, nullptr,
-        nullptr, nullptr, duckdb::LogicalTypeId::INVALID,
-        duckdb::FunctionStability::VOLATILE,
+        nullptr, nullptr, Id::INVALID, duckdb::FunctionStability::VOLATILE,
         duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
 
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoScalarFunctionData>(args, out_schema, is_cfunc,
-                                                  has_state, func_name);
+        duckdb::make_uniq<BodoScalarFunctionData>(
+            args, out_schema, is_cfunc, has_state, arrow_compute_func);
 
     std::vector<duckdb::ColumnBinding> source_cols =
         source->GetColumnBindings();
@@ -929,7 +929,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
 
 void registerFloor(duckdb::shared_ptr<duckdb::DuckDB> db) {
     duckdb::LogicalType double_type(duckdb::LogicalType::DOUBLE);
-    duckdb::LogicalType float_type(duckdb::LogicalType::FLOAT);
+    duckdb::LogicalType float_type(::FLOAT);
     duckdb::vector<duckdb::LogicalType> double_arguments = {double_type};
     duckdb::vector<duckdb::LogicalType> float_arguments = {float_type};
     duckdb::ScalarFunction floor_fun_double("floor", double_arguments,
@@ -989,7 +989,7 @@ arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema) {
     // https://github.com/apache/arrow/blob/5e9fce493f21098d616f08034bc233fcc529b3ad/cpp/src/arrow/type_fwd.h#L322
 
     duckdb::vector<duckdb::string> return_names;
-    duckdb::vector<duckdb::LogicalType> logical_types;
+    duckdb::vector<> logical_types;
 
     for (int i = 0; i < arrow_schema->num_fields(); i++) {
         const std::shared_ptr<arrow::Field> &field = arrow_schema->field(i);
