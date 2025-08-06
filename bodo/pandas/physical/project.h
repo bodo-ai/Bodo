@@ -58,9 +58,9 @@ class PhysicalProjection : public PhysicalProcessBatch {
             } else if (expr->type == duckdb::ExpressionType::BOUND_FUNCTION) {
                 auto& func_expr = expr->Cast<duckdb::BoundFunctionExpression>();
                 if (func_expr.bind_info) {
-                    BodoPythonScalarFunctionData& scalar_func_data =
-                        func_expr.bind_info
-                            ->Cast<BodoPythonScalarFunctionData>();
+                    BodoScalarFunctionData& scalar_func_data =
+                        func_expr.bind_info->Cast<BodoScalarFunctionData>();
+
                     std::unique_ptr<bodo::DataType> col_type =
                         bodo::Schema::FromArrowSchema(
                             scalar_func_data.out_schema)
