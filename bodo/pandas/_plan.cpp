@@ -582,7 +582,8 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     // Create ScalarFunction for Python UDF or Arrow Compute Function
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
         scalar_name, source->types, out_type, RunFunction, nullptr, nullptr,
-        nullptr, nullptr, Id::INVALID, duckdb::FunctionStability::VOLATILE,
+        nullptr, nullptr, duckdb::LogicalTypeId::INVALID,
+        duckdb::FunctionStability::VOLATILE,
         duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
 
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
@@ -929,7 +930,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
 
 void registerFloor(duckdb::shared_ptr<duckdb::DuckDB> db) {
     duckdb::LogicalType double_type(duckdb::LogicalType::DOUBLE);
-    duckdb::LogicalType float_type(::FLOAT);
+    duckdb::LogicalType float_type(duckdb::LogicalType::FLOAT);
     duckdb::vector<duckdb::LogicalType> double_arguments = {double_type};
     duckdb::vector<duckdb::LogicalType> float_arguments = {float_type};
     duckdb::ScalarFunction floor_fun_double("floor", double_arguments,
@@ -989,7 +990,7 @@ arrow_schema_to_duckdb(const std::shared_ptr<arrow::Schema> &arrow_schema) {
     // https://github.com/apache/arrow/blob/5e9fce493f21098d616f08034bc233fcc529b3ad/cpp/src/arrow/type_fwd.h#L322
 
     duckdb::vector<duckdb::string> return_names;
-    duckdb::vector<> logical_types;
+    duckdb::vector<duckdb::LogicalType> logical_types;
 
     for (int i = 0; i < arrow_schema->num_fields(); i++) {
         const std::shared_ptr<arrow::Field> &field = arrow_schema->field(i);
