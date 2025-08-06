@@ -6,6 +6,12 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 	 DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of 
 	 the Bodo DataFrame Library for more info.
 
+## AI Functions
+- [`bodo.pandas.BodoSeries.ai.tokenize`][bodoseriesaitokenize]
+- [`bodo.pandas.BodoSeries.ai.embed`][bodoseriesaiembed]
+- [`bodo.pandas.BodoSeries.ai.llm_generate`][bodoseriesaillmgenerate]
+- [`bodo.pandas.BodoSeries.ai.query_s3_vectors`][bodoseriesaiquerys3vectors]
+
 ## Binary operator functions
 - [`bodo.pandas.BodoSeries.add`][bodoseriesadd]
 - [`bodo.pandas.BodoSeries.sub`][bodoseriessub]
@@ -199,6 +205,12 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 [bodoseriessortvalues]: ../series/sort_values.md
 
 [overview]: ../index.md/#lazy-evaluation-and-fallback-to-pandas
+
+[bodoseriesaitokenize]: ../series/ai/tokenize.md
+[bodoseriesaiembed]: ../series/ai/embed.md
+[bodoseriesaillmgenerate]: ../series/ai/llm_generate.md
+[bodoseriesaiquerys3vectors]: ../series/ai/query_s3_vectors.md
+
 
 [bodoseriesstrcapitalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.capitalize.html
 [bodoseriesstrcasefold]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.casefold.html
