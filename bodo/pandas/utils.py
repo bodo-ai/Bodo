@@ -1106,17 +1106,32 @@ class JITFallback:
     # False to say that compilation previously failed for that function or
     # a callable dispatcher for the JIT compiled version of that function.
     fallback_cache = {}
+    compile_success = 0
+    compile_fail = 0
+    after_success = 0
+    python_fallback = 0
 
     def __init__(self, base_obj, name):
         self.base_obj = base_obj
         self.name = name
 
     def __call__(self, *args, **kwargs):
-        # See if we previously tried to compile this function.
-        cache_entry = JITFallback.fallback_cache.get(
-            (self.base_obj.__class__.__name__, self.name), None
+        key = (
+            (
+                self.base_obj.__class__.__name__,
+                self.name,
+                *[type(x) for x in args],
+                *list(kwargs.keys()),
+                *[type(x) for x in kwargs.values()],
+            ),
+            None,
         )
-        if cache_entry != False:
+        # See if we previously tried to compile this function.
+        cache_entry = JITFallback.fallback_cache.get(key, None)
+        if (
+            self.name not in ("items", "set_index", "rename_axis", "copy")
+            and cache_entry != False
+        ):
             # None means it wasn't in the cache either way so we can try to
             # JIT compile it.
             if cache_entry is None:
@@ -1145,7 +1160,7 @@ class JITFallback:
                     else:
                         func_text += f"    return self.{self.name}({caller_args})\n"
 
-                    new_func = bodo.utils.utils.bodo_exec(
+                    new_func = bodo.utils.utils.bodo_spawn_exec(
                         func_text, {"pd": pd}, {}, __name__
                     )
                     compiled_method = bodo.jit(new_func, cache=True)
@@ -1156,16 +1171,17 @@ class JITFallback:
                             cm_args = (self.base_obj, *args, *tuple(kwargs.values()))
                         ret = compiled_method(*cm_args)
                         # Remember that this compile worked.
-                        JITFallback.fallback_cache[
-                            (self.base_obj.__class__.__name__, self.name)
-                        ] = compiled_method
+                        JITFallback.fallback_cache[key] = compiled_method
+                        JITFallback.compile_success += 1
                         return ret
                     except Exception:
                         # Remember not to try to compile this again.
-                        JITFallback.fallback_cache[
-                            (self.base_obj.__class__.__name__, self.name)
-                        ] = False
+                        JITFallback.fallback_cache[key] = False
+                        JITFallback.compile_fail += 1
+                else:
+                    JITFallback.fallback_cache[key] = False
             else:
+                JITFallback.after_success += 1
                 # Previous successful compile so just run it.
                 if self.base_obj is None:
                     cm_args = args + tuple(kwargs.values())
@@ -1173,6 +1189,7 @@ class JITFallback:
                     cm_args = (self.base_obj, *args, *tuple(kwargs.values()))
                 return cache_entry(*cm_args)
 
+        JITFallback.python_fallback += 1
         msg = (
             f"{self.name} is not implemented in Bodo Dataframe Library yet. "
             "Falling back to Pandas (may be slow or run out of memory)."
