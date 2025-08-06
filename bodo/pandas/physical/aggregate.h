@@ -17,14 +17,11 @@
 #include "operator.h"
 
 struct PhysicalAggregateMetrics {
-    using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
 
-    stat_t output_row_count = 0;
-    // Roughly match operator stages in BodoSQL
-    time_t init_time = 0;
-    time_t consume_time = 0;
-    time_t produce_time = 0;
+    time_t init_time = 0;     // stage_0
+    time_t consume_time = 0;  // stage_1
+    time_t produce_time = 0;  // stage_2
 };
 
 /**
@@ -180,10 +177,6 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
                                                        2),
             metrics.produce_time);
-        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       2),
-            this->metrics.output_row_count);
     }
 
     /**
@@ -218,7 +211,6 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::shared_ptr<table_info> next_batch =
             groupby_produce_output_batch_wrapper(this->groupby_state.get(),
                                                  &out_is_last, true);
-        this->metrics.output_row_count += next_batch->nrows();
         this->metrics.produce_time += end_timer(start_produce);
         return {next_batch, out_is_last ? OperatorResult::FINISHED
                                         : OperatorResult::HAVE_MORE_OUTPUT};
