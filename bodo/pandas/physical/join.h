@@ -28,6 +28,17 @@
     }
 #endif
 
+struct PhysicalJoinMetrics {
+    using time_t = MetricBase::TimerValue;
+    using stat_t = MetricBase::StatValue;
+
+    time_t init_time = 0;
+    time_t consume_time = 0;
+    time_t process_batch_time = 0;
+
+    stat_t output_row_count = 0;
+};
+
 /**
  * @brief Physical node for join.
  *
@@ -41,6 +52,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         const std::shared_ptr<bodo::Schema> probe_table_schema)
         : has_non_equi_cond(false),
           is_mark_join(logical_join.join_type == duckdb::JoinType::MARK) {
+        time_pt start_init = start_timer();
         duckdb::vector<duckdb::ColumnBinding> left_bindings =
             logical_join.children[0]->GetColumnBindings();
         duckdb::vector<duckdb::ColumnBinding> right_bindings =
@@ -191,13 +203,14 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             // TODO: support forcing broadcast by the planner
             false, join_func, true, true, get_streaming_batch_size(), -1,
             //  TODO: support query profiling
-            PhysicalSink::getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
+            getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
             /*is_na_equal*/ true, is_mark_join);
 
         this->initOutputSchema(build_table_schema_reordered,
                                probe_table_schema_reordered,
                                logical_join.GetColumnBindings().size(),
                                build_table_outer, probe_table_outer);
+        this->metrics.init_time += end_timer(start_init);
     }
 
     /**
@@ -283,6 +296,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                  const std::shared_ptr<bodo::Schema> build_table_schema,
                  const std::shared_ptr<bodo::Schema> probe_table_schema)
         : has_non_equi_cond(false) {
+        time_pt start_init = start_timer();
         // TODO[BSE-4998]: support cross join with conditions.
         cond_expr_fn_t join_func = nullptr;
         this->join_state_ = std::make_shared<NestedLoopJoinState>(
@@ -301,16 +315,29 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         this->initOutputSchema(build_table_schema, probe_table_schema,
                                logical_join.GetColumnBindings().size(), false,
                                false);
+        this->metrics.init_time += end_timer(start_init);
     }
 
     virtual ~PhysicalJoin() = default;
 
-    void FinalizeSink() override {
-        QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSink::getOpId(), PhysicalSink::ToString());
-    }
+    void FinalizeSink() override {}
 
-    void FinalizeProcessBatch() override {}
+    void FinalizeProcessBatch() override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
+            metrics.init_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            metrics.consume_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
+            metrics.process_batch_time);
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
+            this->metrics.output_row_count);
+    }
 
     /**
      * @brief process input tables to build side of join (populate the hash
@@ -320,6 +347,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
         if (join_state_->IsNestedLoopJoin()) {
@@ -346,6 +374,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         if (global_is_last) {
             return OperatorResult::FINISHED;
         }
+        this->metrics.consume_time += end_timer(start_consume);
         return join_state->build_shuffle_state.BuffersFull()
                    ? OperatorResult::HAVE_MORE_OUTPUT
                    : OperatorResult::NEED_MORE_INPUT;
@@ -360,6 +389,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) override {
+        time_pt start_produce = start_timer();
         bool is_last = prev_op_result == OperatorResult::FINISHED;
 
         if (has_non_equi_cond) {
@@ -448,6 +478,8 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             /*force_return*/ is_last);
 
         is_last = is_last && join_state_->output_buffer->total_remaining == 0;
+        this->metrics.output_row_count += out_table->nrows();
+        this->metrics.process_batch_time += end_timer(start_produce);
 
         return {out_table,
                 is_last ? OperatorResult::FINISHED
@@ -471,6 +503,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
+
+    std::string ToString() override { return PhysicalSink::ToString(); }
+
+    int64_t getOpId() const { return PhysicalSink::getOpId(); }
 
    private:
     /**
@@ -527,6 +563,8 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     std::shared_ptr<PhysicalExpression> physExprTree;
 
     bool is_mark_join = false;
+
+    PhysicalJoinMetrics metrics;
 };
 
 #undef CONSUME_PROBE_BATCH
