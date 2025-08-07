@@ -108,12 +108,12 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
         if (limit == -1 && offset == -1) {
             stream_sorter = std::make_unique<StreamSortState>(
-                PhysicalSink::getOpId(), keys.size(), std::move(ascending),
+                getOpId(), keys.size(), std::move(ascending),
                 std::move(na_last), build_table_schema_reordered,
                 /*parallel*/ true);
         } else {
             stream_sorter = std::make_unique<StreamSortLimitOffsetState>(
-                PhysicalSink::getOpId(), keys.size(), std::move(ascending),
+                getOpId(), keys.size(), std::move(ascending),
                 std::move(na_last), build_table_schema_reordered,
                 /*parallel*/ true, limit, offset);
         }
@@ -145,23 +145,19 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     }
 
     void FinalizeSource() override {
-        QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSource::getOpId(), PhysicalSource::ToString());
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(
-                PhysicalSource::getOpId(), 0),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
             this->metrics.init_time);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(
-                PhysicalSource::getOpId(), 1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.consume_time);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(
-                PhysicalSource::getOpId(), 2),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.produce_time);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(
-                PhysicalSource::getOpId(), 2),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
     }
 
@@ -233,6 +229,10 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
+
+    std::string ToString() override { return PhysicalSink::ToString(); }
+
+    int64_t getOpId() const { return PhysicalSink::getOpId(); }
 
    private:
     static void bidirectionalColumnMapping(

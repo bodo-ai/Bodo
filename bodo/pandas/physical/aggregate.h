@@ -121,8 +121,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
-            get_streaming_batch_size(), true, -1, PhysicalSink::getOpId(), -1,
-            false, std::nullopt,
+            get_streaming_batch_size(), true, -1, getOpId(), -1, false,
+            std::nullopt,
             /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value());
         this->metrics.init_time += end_timer(start_init);
     }
@@ -152,8 +152,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
-            get_streaming_batch_size(), true, -1, PhysicalSink::getOpId(), -1,
-            false, std::nullopt,
+            get_streaming_batch_size(), true, -1, getOpId(), -1, false,
+            std::nullopt,
             /*use_sql_rules*/ false, /* pandas_drop_na_*/ false);
         this->metrics.init_time += end_timer(start_init);
     }
@@ -163,19 +163,16 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     void FinalizeSink() override {}
 
     void FinalizeSource() override {
-        QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSink::getOpId(), PhysicalSink::ToString());
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       0),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
             metrics.init_time);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             metrics.consume_time);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       2),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             metrics.produce_time);
     }
 
@@ -231,6 +228,10 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
+
+    std::string ToString() override { return PhysicalSink::ToString(); }
+
+    int64_t getOpId() const { return PhysicalSink::getOpId(); }
 
    private:
     /**

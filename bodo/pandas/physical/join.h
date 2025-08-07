@@ -34,7 +34,7 @@ struct PhysicalJoinMetrics {
 
     time_t init_time = 0;
     time_t consume_time = 0;
-    time_t produce_time = 0;
+    time_t process_batch_time = 0;
 
     stat_t output_row_count = 0;
 };
@@ -203,7 +203,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             // TODO: support forcing broadcast by the planner
             false, join_func, true, true, get_streaming_batch_size(), -1,
             //  TODO: support query profiling
-            PhysicalSink::getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
+            getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
             /*is_na_equal*/ true, is_mark_join);
 
         this->initOutputSchema(build_table_schema_reordered,
@@ -323,23 +323,19 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     void FinalizeSink() override {}
 
     void FinalizeProcessBatch() override {
-        QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalProcessBatch::getOpId(), PhysicalProcessBatch::ToString());
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(
-                PhysicalProcessBatch::getOpId(), 0),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
             metrics.init_time);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(
-                PhysicalProcessBatch::getOpId(), 1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             metrics.consume_time);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(
-                PhysicalProcessBatch::getOpId(), 2),
-            metrics.produce_time);
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
+            metrics.process_batch_time);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(
-                PhysicalProcessBatch::getOpId(), 2),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
     }
 
@@ -483,7 +479,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
         is_last = is_last && join_state_->output_buffer->total_remaining == 0;
         this->metrics.output_row_count += out_table->nrows();
-        this->metrics.produce_time += end_timer(start_produce);
+        this->metrics.process_batch_time += end_timer(start_produce);
 
         return {out_table,
                 is_last ? OperatorResult::FINISHED
@@ -507,6 +503,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
+
+    std::string ToString() override { return PhysicalSink::ToString(); }
+
+    int64_t getOpId() const { return PhysicalSink::getOpId(); }
 
    private:
     /**
