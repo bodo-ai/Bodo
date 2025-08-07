@@ -45,7 +45,7 @@ from bodo.pandas.plan import (
     _get_df_python_func_plan,
     make_col_ref_exprs,
 )
-from bodo.pandas.series import BodoSeries, _get_series_python_func_plan
+from bodo.pandas.series import BodoSeries, _get_series_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
     BodoLibNotImplementedException,
@@ -446,7 +446,7 @@ def to_datetime(
         )
 
     # 2. Series Case
-    return _get_series_python_func_plan(
+    return _get_series_func_plan(
         arg._plan,
         new_metadata,
         "pandas.to_datetime",

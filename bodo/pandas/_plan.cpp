@@ -282,7 +282,7 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
 
     auto &bound_func_expr = result->Cast<duckdb::BoundFunctionExpression>();
     bound_func_expr.bind_info =
-        duckdb::make_uniq<BodoPythonScalarFunctionData>(out_schema);
+        duckdb::make_uniq<BodoScalarFunctionData>(out_schema);
 
     client_context->transaction.ClearTransaction();
     return result;
@@ -562,10 +562,10 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
     throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
+duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
     PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
-    bool has_state) {
+    bool has_state, const std::string arrow_compute_func) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
@@ -576,15 +576,19 @@ duckdb::unique_ptr<duckdb::Expression> make_python_scalar_func_expr(
     // Necessary before accessing source->types attribute
     source->ResolveOperatorTypes();
 
-    // Create ScalarFunction for UDF
+    auto scalar_name =
+        (arrow_compute_func == "") ? "bodo_udf" : arrow_compute_func;
+
+    // Create ScalarFunction for Python UDF or Arrow Compute Function
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
-        "bodo_udf", source->types, out_type, RunFunction, nullptr, nullptr,
+        scalar_name, source->types, out_type, RunFunction, nullptr, nullptr,
         nullptr, nullptr, duckdb::LogicalTypeId::INVALID,
         duckdb::FunctionStability::VOLATILE,
         duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
+
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
-        duckdb::make_uniq<BodoPythonScalarFunctionData>(args, out_schema,
-                                                        is_cfunc, has_state);
+        duckdb::make_uniq<BodoScalarFunctionData>(
+            args, out_schema, is_cfunc, has_state, arrow_compute_func);
 
     std::vector<duckdb::ColumnBinding> source_cols =
         source->GetColumnBindings();

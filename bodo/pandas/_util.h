@@ -122,36 +122,67 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
  * BoundFunctionExpression.
  *
  */
-struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
-    BodoPythonScalarFunctionData(PyObject *args,
-                                 std::shared_ptr<arrow::Schema> out_schema,
-                                 bool is_cfunc, bool has_state)
+struct BodoScalarFunctionData : public duckdb::FunctionData {
+    BodoScalarFunctionData(PyObject *args,
+                           std::shared_ptr<arrow::Schema> out_schema,
+                           bool is_cfunc, bool has_state)
         : args(args),
           out_schema(std::move(out_schema)),
           is_cfunc(is_cfunc),
-          has_state(has_state) {
-        if (args)
+          has_state(has_state),
+          arrow_func_name("") {
+        if (args) {
             Py_INCREF(args);
+        }
     }
-    BodoPythonScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema)
+
+    BodoScalarFunctionData(PyObject *args,
+                           std::shared_ptr<arrow::Schema> out_schema,
+                           bool is_cfunc, bool has_state,
+                           std::string arrow_func_name)
+        : args(args),
+          out_schema(std::move(out_schema)),
+          is_cfunc(is_cfunc),
+          has_state(has_state),
+          arrow_func_name(arrow_func_name) {
+        if (args) {
+            Py_INCREF(args);
+        }
+    }
+
+    BodoScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema,
+                           std::string arrow_func_name)
         : args(nullptr),
           out_schema(std::move(out_schema)),
           is_cfunc(false),
-          has_state(false) {}
-    ~BodoPythonScalarFunctionData() override {
-        if (args)
+          has_state(false),
+          arrow_func_name(std::move(arrow_func_name)) {}
+
+    BodoScalarFunctionData(std::shared_ptr<arrow::Schema> out_schema)
+        : args(nullptr),
+          out_schema(std::move(out_schema)),
+          is_cfunc(false),
+          has_state(false),
+          arrow_func_name("") {}
+
+    ~BodoScalarFunctionData() override {
+        if (args) {
             Py_DECREF(args);
+        }
     }
-    BodoPythonScalarFunctionData(const BodoPythonScalarFunctionData &other)
+
+    BodoScalarFunctionData(const BodoScalarFunctionData &other)
         : args(other.args),
           out_schema(other.out_schema),
           is_cfunc(other.is_cfunc),
-          has_state(other.has_state) {
-        if (args)
+          has_state(other.has_state),
+          arrow_func_name(other.arrow_func_name) {
+        if (args) {
             Py_INCREF(args);
+        }
     }
-    BodoPythonScalarFunctionData &operator=(
-        const BodoPythonScalarFunctionData &other) {
+
+    BodoScalarFunctionData &operator=(const BodoScalarFunctionData &other) {
         if (this != &other) {
             Py_XINCREF(other.args);
             Py_XDECREF(args);
@@ -159,25 +190,32 @@ struct BodoPythonScalarFunctionData : public duckdb::FunctionData {
             out_schema = other.out_schema;
             is_cfunc = other.is_cfunc;
             has_state = other.has_state;
+            arrow_func_name = other.arrow_func_name;
         }
         return *this;
     }
 
     bool Equals(const FunctionData &other_p) const override {
-        const BodoPythonScalarFunctionData &other =
-            other_p.Cast<BodoPythonScalarFunctionData>();
+        const auto &other = other_p.Cast<BodoScalarFunctionData>();
         return (other.args == this->args && other.is_cfunc == this->is_cfunc &&
-                other.has_state == this->has_state);
+                other.has_state == this->has_state &&
+                other.arrow_func_name == this->arrow_func_name);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoPythonScalarFunctionData>(
-            this->args, out_schema, is_cfunc, has_state);
+        if (!arrow_func_name.empty()) {
+            return duckdb::make_uniq<BodoScalarFunctionData>(out_schema,
+                                                             arrow_func_name);
+        } else {
+            return duckdb::make_uniq<BodoScalarFunctionData>(
+                args, out_schema, is_cfunc, has_state);
+        }
     }
 
     PyObject *args;  // If present then a UDF.
     std::shared_ptr<arrow::Schema> out_schema;
     bool is_cfunc;
     bool has_state;
+    std::string arrow_func_name;  // Non-empty means we’re using Arrow compute
 };
 
 /**

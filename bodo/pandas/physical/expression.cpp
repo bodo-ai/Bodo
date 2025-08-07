@@ -393,9 +393,12 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // type.
             auto& bfe = expr->Cast<duckdb::BoundFunctionExpression>();
             if (bfe.bind_info &&
-                bfe.bind_info->Cast<BodoPythonScalarFunctionData>().args) {
-                BodoPythonScalarFunctionData& scalar_func_data =
-                    bfe.bind_info->Cast<BodoPythonScalarFunctionData>();
+                (bfe.bind_info->Cast<BodoScalarFunctionData>().args ||
+                 !bfe.bind_info->Cast<BodoScalarFunctionData>()
+                      .arrow_func_name.empty())) {
+                BodoScalarFunctionData& scalar_func_data =
+                    bfe.bind_info->Cast<BodoScalarFunctionData>();
+
                 std::vector<std::shared_ptr<PhysicalExpression>> phys_children;
                 for (auto& child_expr : bfe.children) {
                     phys_children.emplace_back(buildPhysicalExprTree(
@@ -404,9 +407,16 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
 
                 const std::shared_ptr<arrow::DataType>& result_type =
                     scalar_func_data.out_schema->field(0)->type();
-                return std::static_pointer_cast<PhysicalExpression>(
-                    std::make_shared<PhysicalUDFExpression>(
-                        phys_children, scalar_func_data, result_type));
+
+                if (!scalar_func_data.arrow_func_name.empty()) {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalArrowExpression>(
+                            phys_children, scalar_func_data, result_type));
+                } else if (scalar_func_data.args) {
+                    return std::static_pointer_cast<PhysicalExpression>(
+                        std::make_shared<PhysicalUDFExpression>(
+                            phys_children, scalar_func_data, result_type));
+                }
             } else {
                 switch (bfe.children.size()) {
                     case 1: {
@@ -526,6 +536,23 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
 
     return std::make_shared<ArrayExprResult>(udf_output->columns[0],
                                              udf_output->column_names[0]);
+}
+
+std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
+    std::shared_ptr<table_info> input_batch) {
+    std::shared_ptr<ExprResult> res = children[0]->ProcessBatch(input_batch);
+    std::shared_ptr<array_info> result;
+    time_pt start_init_time = start_timer();
+    if (scalar_func_data.arrow_func_name == "date") {
+        // The Arrow compute equivalent of Series.dt.date() is year_month_day,
+        // which returns a struct. To match the output dtype of Pandas, we Cast
+        // to Date32 instead.
+        result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
+    } else {
+        result = do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
+    }
+    this->metrics.arrow_compute_time += end_timer(start_init_time);
+    return std::make_shared<ArrayExprResult>(result, "Arrow Scalar");
 }
 
 bool PhysicalExpression::join_expr(array_info** left_table,
