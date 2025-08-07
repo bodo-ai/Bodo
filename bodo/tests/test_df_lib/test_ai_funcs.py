@@ -224,8 +224,8 @@ def test_llm_generate():
         )
         wait_for_ollama_model("http://localhost:11434", "smollm:135m")
         res = prompts.ai.llm_generate(
-            endpoint="http://localhost:11434/v1",
-            api_token="",
+            base_url="http://localhost:11434/v1",
+            api_key="",
             model="smollm:135m",
             max_tokens=1,
             temperature=0.1,
@@ -257,8 +257,8 @@ def test_embed():
         )
         wait_for_ollama_model("http://localhost:11435", "all-minilm:22m")
         res = prompts.ai.embed(
-            endpoint="http://localhost:11435/v1",
-            api_token="",
+            base_url="http://localhost:11435/v1",
+            api_key="",
             model="all-minilm:22m",
         ).execute_plan()
         assert len(res) == 2
