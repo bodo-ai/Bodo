@@ -1491,6 +1491,42 @@ class BodoSeriesAiMethods:
             map_func, api_token, endpoint, generation_kwargs=generation_kwargs
         )
 
+    def llm_generate_bedrock(
+        self,
+        model,
+        **generation_kwargs,
+    ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.llm_generate_bedrock() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+
+        def map_func(series, model):
+            import boto3
+            import botocore.config
+
+            client = boto3.client(
+                "bedrock-runtime",
+                config=botocore.config.Config(
+                    connect_timeout=3600,  # 60 minutes
+                    read_timeout=3600,  # 60 minutes
+                    retries={"max_attempts": 1},
+                ),
+            )
+
+            def per_row(row):
+                response = client.invoke_model(
+                    modelId=model,
+                    body=row.encode("utf-8"),
+                    contentType="text/plain",
+                    **generation_kwargs,
+                )
+                return response["body"].read().decode("utf-8")
+
+            return pd.Series([per_row(row) for row in series])
+
+        return self._series.map_partitions(map_func, model)
+
     def embed(
         self,
         endpoint: str,
@@ -1541,6 +1577,42 @@ class BodoSeriesAiMethods:
         return self._series.map_partitions(
             map_func, api_token, endpoint, embedding_kwargs=embedding_kwargs
         )
+
+    def embed_bedrock(
+        self,
+        model: str,
+        **embedding_kwargs,
+    ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.embed_bedrock() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+
+        def map_func(series, model):
+            import boto3
+            import botocore.config
+
+            client = boto3.client(
+                "bedrock-runtime",
+                config=botocore.config.Config(
+                    connect_timeout=3600,  # 60 minutes
+                    read_timeout=3600,  # 60 minutes
+                    retries={"max_attempts": 1},
+                ),
+            )
+
+            def per_row(row):
+                response = client.invoke_model(
+                    modelId=model,
+                    body=row.encode("utf-8"),
+                    contentType="text/plain",
+                    **embedding_kwargs,
+                )
+                return response["body"].read()
+
+            return pd.Series([per_row(row) for row in series])
+
+        return self._series.map_partitions(map_func, model)
 
     def query_s3_vectors(
         self,
