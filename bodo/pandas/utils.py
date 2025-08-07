@@ -434,11 +434,10 @@ def check_args_fallback(
                     # Get overloaded functions for this dataframe/series in JIT mode.
                     overloads = get_overloads(self.__class__.__name__)
                     if func.__name__ in overloads:
-                        # TO-DO: Generate a function and bodo JIT it to do this
-                        # individual operation.  If the compile fails then fallthrough
-                        # to the pure Python code below.  If the compile works then
-                        # run the operation using the JITted function.
-                        pass
+                        try:
+                            return JITFallback(self, func.__name__)(*args, **kwargs)
+                        except Exception:
+                            pass
 
                     # Fallback to Python. Call the same method in the base class.
                     if self.__class__.__name__ in ("DataFrameGroupBy", "SeriesGroupBy"):
@@ -1249,7 +1248,16 @@ class JITFallback:
         # See if we previously tried to compile this function.
         cache_entry = JITFallback.fallback_cache.get(key, None)
         if (
-            self.name not in ("items", "set_index", "rename_axis", "copy")
+            self.name
+            not in (
+                "items",
+                "set_index",
+                "rename_axis",
+                "copy",
+                "keys",
+                "apply",
+                "groupby",
+            )
             and cache_entry != False
         ):
             # None means it wasn't in the cache either way so we can try to
@@ -1318,6 +1326,21 @@ class JITFallback:
         if self.base_obj is None:
             return getattr(pd, self.name)(*args, **kwargs)
         else:
-            return fallback_wrapper(
-                self.base_obj, object.__getattribute__(self.base_obj, self.name)
-            )(*args, **kwargs)
+            if isinstance(self.base_obj, bodo.pandas.BodoSeries):
+                pd_self = pd.Series(self.base_obj)
+
+                # When self.dtype is pd.ArrowDtype(pa.timestamp("ns")), apply to_datetime elementwise.
+                if isinstance(
+                    self.base_obj.dtype, pd.ArrowDtype
+                ) and pa.types.is_timestamp(self.base_obj.dtype.pyarrow_dtype):
+                    warnings.warn(
+                        BodoLibFallbackWarning(
+                            "TypeError triggering deeper fallback. Converting PyarrowDtype elements in self to Pandas dtypes."
+                        )
+                    )
+                    converted = pd_self.array._pa_array.to_pandas()
+                    return getattr(converted, self.name)(*args[1:], **kwargs)
+
+            return getattr(self.base_obj.__class__.__bases__[0], self.name)(
+                self.base_obj, *args, **kwargs
+            )

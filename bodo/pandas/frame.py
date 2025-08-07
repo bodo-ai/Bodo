@@ -75,6 +75,7 @@ from bodo.pandas.utils import (
     _get_empty_series_arrow,
     check_args_fallback,
     cpp_table_to_df_jit,
+    fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
@@ -229,7 +230,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             and not name.startswith("_")
             and hasattr(pd.DataFrame, name)
         ):
-            return JITFallback(self, name)
+            if callable(object.__getattribute__(self, name)):
+                return JITFallback(self, name)
+            else:
+                msg = (
+                    f"{name} is not implemented in Bodo Dataframe Library yet. "
+                    "Falling back to Pandas (may be slow or run out of memory)."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+                return fallback_wrapper(self, object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
