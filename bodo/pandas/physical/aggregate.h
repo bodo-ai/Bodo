@@ -6,6 +6,7 @@
 #include "../_util.h"
 #include "../io/arrow_reader.h"
 #include "../libs/_array_utils.h"
+#include "../libs/_query_profile_collector.h"
 #include "../libs/_utils.h"
 #include "../libs/groupby/_groupby_ftypes.h"
 #include "../libs/streaming/_groupby.h"
@@ -15,6 +16,14 @@
 #include "expression.h"
 #include "operator.h"
 
+struct PhysicalAggregateMetrics {
+    using time_t = MetricBase::TimerValue;
+
+    time_t init_time = 0;     // stage_0
+    time_t consume_time = 0;  // stage_1
+    time_t produce_time = 0;  // stage_2
+};
+
 /**
  * @brief Physical node for groupby aggregation
  *
@@ -23,6 +32,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
                                duckdb::LogicalAggregate& op) {
+        time_pt start_init = start_timer();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
 
@@ -114,10 +124,12 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             get_streaming_batch_size(), true, -1, PhysicalSink::getOpId(), -1,
             false, std::nullopt,
             /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value());
+        this->metrics.init_time += end_timer(start_init);
     }
 
     explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
                                duckdb::LogicalDistinct& op) {
+        time_pt start_init = start_timer();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
 
@@ -143,6 +155,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             get_streaming_batch_size(), true, -1, PhysicalSink::getOpId(), -1,
             false, std::nullopt,
             /*use_sql_rules*/ false, /* pandas_drop_na_*/ false);
+        this->metrics.init_time += end_timer(start_init);
     }
 
     virtual ~PhysicalAggregate() = default;
@@ -152,6 +165,18 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     void FinalizeSource() override {
         QueryProfileCollector::Default().SubmitOperatorName(
             PhysicalSink::getOpId(), PhysicalSink::ToString());
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
+                                                       0),
+            metrics.init_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
+                                                       1),
+            metrics.consume_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
+                                                       2),
+            metrics.produce_time);
     }
 
     /**
@@ -162,6 +187,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
         bool request_input = true;
         std::shared_ptr<table_info> input_batch_reordered =
@@ -173,16 +199,19 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         if (global_is_last) {
             return OperatorResult::FINISHED;
         }
+        this->metrics.consume_time += end_timer(start_consume);
         return request_input ? OperatorResult::NEED_MORE_INPUT
                              : OperatorResult::HAVE_MORE_OUTPUT;
     }
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
+        time_pt start_produce = start_timer();
         bool out_is_last = false;
         std::shared_ptr<table_info> next_batch =
             groupby_produce_output_batch_wrapper(this->groupby_state.get(),
                                                  &out_is_last, true);
+        this->metrics.produce_time += end_timer(start_produce);
         return {next_batch, out_is_last ? OperatorResult::FINISHED
                                         : OperatorResult::HAVE_MORE_OUTPUT};
     }
@@ -257,6 +286,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     std::shared_ptr<GroupbyState> groupby_state;
     std::shared_ptr<bodo::Schema> output_schema;
     std::vector<uint64_t> keys;
+    PhysicalAggregateMetrics metrics;
     // Mapping of input table column indices to move keys to the front.
     std::vector<int64_t> input_col_inds;
 
