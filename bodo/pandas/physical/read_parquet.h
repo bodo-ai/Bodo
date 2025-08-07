@@ -15,6 +15,7 @@ struct PhysicalReadParquetMetrics {
     using time_t = MetricBase::TimerValue;
 
     stat_t rows_read = 0;
+    time_t init_time = 0;
     time_t produce_time = 0;
 };
 
@@ -31,6 +32,7 @@ class PhysicalReadParquet : public PhysicalSource {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val) {
+        time_pt start_init = start_timer();
         // ----------------------------------------------------------
         // Handle columns.
         // ----------------------------------------------------------
@@ -103,6 +105,7 @@ class PhysicalReadParquet : public PhysicalSource {
         }
 
         Py_DECREF(schema_fields);
+        this->metrics.init_time += end_timer(start_init);
     }
     virtual ~PhysicalReadParquet() = default;
 
@@ -111,6 +114,12 @@ class PhysicalReadParquet : public PhysicalSource {
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
+            this->metrics.init_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            this->metrics.produce_time);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));
