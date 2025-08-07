@@ -101,7 +101,57 @@
          <changefreq>daily</changefreq>
     </url>
     <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/io/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
          <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/apply/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/groupby/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/head/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/map_partitions/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/set_columns/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/sort_values/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/to_iceberg/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/to_parquet/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/dataframe/to_s3_vectors/</loc>
          <lastmod>2025-08-07</lastmod>
          <changefreq>daily</changefreq>
     </url>
@@ -111,7 +161,7 @@
          <changefreq>daily</changefreq>
     </url>
     <url>
-         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/io/</loc>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/general_functions/from_pandas/</loc>
          <lastmod>2025-08-07</lastmod>
          <changefreq>daily</changefreq>
     </url>
@@ -146,7 +196,37 @@
          <changefreq>daily</changefreq>
     </url>
     <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/series/map_partitions/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/series/map_with_state/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
          <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/series/sort_values/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/series/ai/embed/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/series/ai/llm_generate/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/series/ai/query_s3_vectors/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/api_docs/dataframe_lib/series/ai/tokenize/</loc>
          <lastmod>2025-08-07</lastmod>
          <changefreq>daily</changefreq>
     </url>
@@ -5042,6 +5122,11 @@
     </url>
     <url>
          <loc>https://docs.bodo.ai/2025.8/release_notes/2025.07/</loc>
+         <lastmod>2025-08-07</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://docs.bodo.ai/2025.8/release_notes/2025.08/</loc>
          <lastmod>2025-08-07</lastmod>
          <changefreq>daily</changefreq>
     </url>
