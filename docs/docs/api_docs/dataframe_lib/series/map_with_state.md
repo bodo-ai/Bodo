@@ -17,6 +17,10 @@ initialization.
     determine the output type of the series.  This plan execution and initialization can be avoided
     if the output\_type is manually specified.
 
+!!! note
+    If a per-worker clean-up is required then state can be an instance of a class with the
+    \_\_del\_\_ method defined in which the clean-up is performed.
+
 <p class="api-header">Parameters</p>
 
 : __init_state_fn : *function*:__ Initialization function.  Run only once per worker.
