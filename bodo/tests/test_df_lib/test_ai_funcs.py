@@ -12,7 +12,7 @@ import pytest
 import requests
 
 import bodo.pandas as bd
-from bodo.spawn.spawner import spawn_process_on_workers
+from bodo.spawn.spawner import spawn_process_on_nodes
 from bodo.tests.utils import _test_equal
 from bodo.utils.typing import BodoError
 
@@ -213,13 +213,13 @@ def test_llm_generate():
     )
 
     try:
-        spawn_process_on_workers(
+        spawn_process_on_nodes(
             "docker run -v ollama:/root/.ollama -p 11434:11434 --name bodo_test_ollama ollama/ollama:latest".split(
                 " "
             )
         )
         wait_for_ollama("http://localhost:11434")
-        spawn_process_on_workers(
+        spawn_process_on_nodes(
             "docker exec bodo_test_ollama ollama run smollm:135m".split(" ")
         )
         wait_for_ollama_model("http://localhost:11434", "smollm:135m")
@@ -234,7 +234,7 @@ def test_llm_generate():
         assert all(isinstance(x, str) for x in res)
 
     finally:
-        spawn_process_on_workers("docker rm bodo_test_ollama -f".split(" "))
+        spawn_process_on_nodes("docker rm bodo_test_ollama -f".split(" "))
 
 
 def test_embed():
@@ -246,13 +246,13 @@ def test_embed():
     )
 
     try:
-        spawn_process_on_workers(
+        spawn_process_on_nodes(
             "docker run -v ollama:/root/.ollama -p 11435:11434 --name bodo_test_ollama_embed ollama/ollama:latest".split(
                 " "
             )
         )
         wait_for_ollama("http://localhost:11435")
-        spawn_process_on_workers(
+        spawn_process_on_nodes(
             "docker exec bodo_test_ollama_embed ollama pull all-minilm:22m".split(" ")
         )
         wait_for_ollama_model("http://localhost:11435", "all-minilm:22m")
@@ -265,4 +265,4 @@ def test_embed():
         assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
 
     finally:
-        spawn_process_on_workers("docker rm bodo_test_ollama_embed -f".split(" "))
+        spawn_process_on_nodes("docker rm bodo_test_ollama_embed -f".split(" "))

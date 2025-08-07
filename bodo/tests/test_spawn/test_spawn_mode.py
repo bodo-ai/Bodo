@@ -468,7 +468,7 @@ def test_spawn_jupyter_worker_output_redirect():
         assert result.stderr == ""
 
 
-def test_spawn_process_on_workers():
+def test_spawn_process_on_nodes():
     """
     Test that spawn_process works correctly on workers.
     This is a basic test to ensure that the spawn_process function can be called
@@ -476,7 +476,7 @@ def test_spawn_process_on_workers():
     """
 
     # Test IO doesn't break spawn_process
-    proc = bodo.spawn_process_on_workers(["python", "-c", "print(0)"])
+    proc = bodo.spawn_process_on_nodes(["python", "-c", "print(0)"])
     bodo.stop_process_on_workers(proc)
     assert proc._rank_to_pid is not None, "Process should have a rank to PID mapping"
     assert isinstance(proc._rank_to_pid, dict), (
@@ -493,7 +493,7 @@ def test_spawn_process_on_workers():
         )
 
     # Test we can stop a process that is running
-    proc = bodo.spawn_process_on_workers(["python", "-c", "import time; sleep(10)"])
+    proc = bodo.spawn_process_on_nodes(["python", "-c", "import time; sleep(10)"])
     # Ensure the process is running
     assert all(psutil.pid_exists(pid) for pid in proc._rank_to_pid.values()), (
         "Process should be running on all workers"
