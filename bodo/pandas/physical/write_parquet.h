@@ -15,6 +15,8 @@ struct PhysicalWriteParquetMetrics {
     stat_t max_buffer_size = 0;
     stat_t n_files_written = 0;
 
+    time_t init_time = 0;
+    time_t consume_time = 0;
     time_t accumulate_time = 0;
     time_t file_write_time = 0;
 };
@@ -32,6 +34,7 @@ class PhysicalWriteParquet : public PhysicalSink {
           finished(false) {
         // Similar to streaming parquet write in Bodo JIT
         // https://github.com/bodo-ai/Bodo/blob/9902c4bd19f0c1f85ef0c971c58e42cf84a35fc7/bodo/io/stream_parquet_write.py#L269
+        time_pt start_init = start_timer();
 
         pq_write_create_dir(this->path.c_str());
 
@@ -41,6 +44,7 @@ class PhysicalWriteParquet : public PhysicalSink {
                 create_dict_builder_for_array(col->copy(), false));
         }
         buffer = std::make_shared<TableBuildBuffer>(in_schema, dict_builders);
+        this->metrics.init_time += end_timer(start_init);
     }
 
     virtual ~PhysicalWriteParquet() = default;
@@ -49,7 +53,6 @@ class PhysicalWriteParquet : public PhysicalSink {
                                 OperatorResult prev_op_result) override {
         // Similar to streaming parquet write in Bodo JIT
         // https://github.com/bodo-ai/Bodo/blob/3741f4e05e4236b5c3cc35ef5ecccad921f17dc4/bodo/io/stream_parquet_write.py#L433
-
         if (finished) {
             return OperatorResult::FINISHED;
         }
@@ -92,6 +95,7 @@ class PhysicalWriteParquet : public PhysicalSink {
             buffer->Reset();
         }
         this->metrics.file_write_time += end_timer(start_write);
+        this->metrics.consume_time += end_timer(start_accumulate);
 
         if (is_last) {
             finished = true;
@@ -107,6 +111,12 @@ class PhysicalWriteParquet : public PhysicalSink {
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
+            this->metrics.init_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            this->metrics.consume_time);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));

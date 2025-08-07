@@ -1442,9 +1442,10 @@ class BodoSeriesAiMethods:
 
     def llm_generate(
         self,
-        endpoint: str,
-        api_token: str,
+        *,
+        api_key: str,
         model: str | None = None,
+        base_url: str | None = None,
         **generation_kwargs,
     ) -> BodoSeries:
         import importlib
@@ -1461,14 +1462,14 @@ class BodoSeriesAiMethods:
         if model is not None:
             generation_kwargs["model"] = model
 
-        def map_func(series, api_token, endpoint, generation_kwargs):
+        def map_func(series, api_key, base_url, generation_kwargs):
             import asyncio
 
             import openai
 
             client = openai.AsyncOpenAI(
-                api_key=api_token,
-                base_url=endpoint,
+                api_key=api_key,
+                base_url=base_url,
                 # TODO: The below should have better performance but currently
                 # pixi won't solve the dependencies.
                 # http_client=openai.DefaultAioHttpClient(),
@@ -1488,14 +1489,15 @@ class BodoSeriesAiMethods:
             return pd.Series(asyncio.run(all_tasks(series, client, generation_kwargs)))
 
         return self._series.map_partitions(
-            map_func, api_token, endpoint, generation_kwargs=generation_kwargs
+            map_func, api_key, base_url, generation_kwargs=generation_kwargs
         )
 
     def embed(
         self,
-        endpoint: str,
-        api_token: str,
+        *,
+        api_key: str,
         model: str | None = None,
+        base_url: str | None = None,
         **embedding_kwargs,
     ) -> BodoSeries:
         import importlib
@@ -1512,14 +1514,14 @@ class BodoSeriesAiMethods:
         if model is not None:
             embedding_kwargs["model"] = model
 
-        def map_func(series, api_token, endpoint, embedding_kwargs):
+        def map_func(series, api_key, base_url, embedding_kwargs):
             import asyncio
 
             import openai
 
             client = openai.AsyncOpenAI(
-                api_key=api_token,
-                base_url=endpoint,
+                api_key=api_key,
+                base_url=base_url,
                 # TODO: The below should have better performance but currently
                 # pixi won't solve the dependencies.
                 # http_client=openai.DefaultAioHttpClient(),
@@ -1539,7 +1541,7 @@ class BodoSeriesAiMethods:
             return pd.Series(asyncio.run(all_tasks(series, client, embedding_kwargs)))
 
         return self._series.map_partitions(
-            map_func, api_token, endpoint, embedding_kwargs=embedding_kwargs
+            map_func, api_key, base_url, embedding_kwargs=embedding_kwargs
         )
 
     def query_s3_vectors(
@@ -2296,11 +2298,11 @@ def _get_series_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
-    if func in {"dt.dayofweek", "dt.hour", "dt.month", "dt.date"}:
+    if func in {"dt.dayofweek", "dt.day_of_week", "dt.hour", "dt.month", "dt.date"}:
         if func == "dt.dayofweek":
             func = "dt.day_of_week"
         func_name = func.split(".")[1]
-        func_args = ()  # TODO: expand on this to enable arrow compute calls with args
+        func_args = ()  # TODO: expand this to enable arrow compute calls with args
         is_cfunc = False
         has_state = False
         expr = ArrowScalarFuncExpression(
@@ -2753,31 +2755,31 @@ series_str_methods = [
 dt_accessors = [
     # idx = 0: Series(Int64)
     (
-        # NOTE: These methods are int32 for regular types in Pandas but int64 for
-        # ArrowDtype as of Pandas 2.3.
+        # NOTE: The methods below (e.g., hour, month, dayofweek) return int32 in Pandas by default.
+        # In Bodo, the output dtype is int64 because we use PyArrow Compute.
         [
-            "year",
-            "month",
-            "day",
             "hour",
-            "minute",
-            "second",
-            "microsecond",
-            "nanosecond",
+            "month",
             "dayofweek",
             "day_of_week",
-            "weekday",
-            "dayofyear",
-            "day_of_year",
-            "daysinmonth",
-            "days_in_month",
-            "quarter",
         ],
         pd.ArrowDtype(pa.int64()),
     ),
     # idx = 0: Series(Int32)
     (
         [
+            "quarter",
+            "year",
+            "day",
+            "minute",
+            "second",
+            "microsecond",
+            "nanosecond",
+            "weekday",
+            "dayofyear",
+            "day_of_year",
+            "daysinmonth",
+            "days_in_month",
             "days",
             "seconds",
             "microseconds",

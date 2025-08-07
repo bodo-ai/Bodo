@@ -136,8 +136,13 @@ class PhysicalProjection : public PhysicalProcessBatch {
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
+            this->metrics.init_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            this->metrics.expr_eval_time);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            // TODO: Use a proper operator ID
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
