@@ -2296,11 +2296,11 @@ def _get_series_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
-    if func in {"dt.dayofweek", "dt.hour", "dt.month", "dt.date"}:
+    if func in {"dt.dayofweek", "dt.day_of_week", "dt.hour", "dt.month", "dt.date"}:
         if func == "dt.dayofweek":
             func = "dt.day_of_week"
         func_name = func.split(".")[1]
-        func_args = ()  # TODO: expand on this to enable arrow compute calls with args
+        func_args = ()  # TODO: expand this to enable arrow compute calls with args
         is_cfunc = False
         has_state = False
         expr = ArrowScalarFuncExpression(
@@ -2753,31 +2753,31 @@ series_str_methods = [
 dt_accessors = [
     # idx = 0: Series(Int64)
     (
-        # NOTE: These methods are int32 for regular types in Pandas but int64 for
-        # ArrowDtype as of Pandas 2.3.
+        # NOTE: The methods below (e.g., hour, month, dayofweek) return int32 in Pandas by default.
+        # In Bodo, the output dtype is int64 because we use PyArrow Compute.
         [
-            "year",
-            "month",
-            "day",
             "hour",
-            "minute",
-            "second",
-            "microsecond",
-            "nanosecond",
+            "month",
             "dayofweek",
             "day_of_week",
-            "weekday",
-            "dayofyear",
-            "day_of_year",
-            "daysinmonth",
-            "days_in_month",
-            "quarter",
         ],
         pd.ArrowDtype(pa.int64()),
     ),
     # idx = 0: Series(Int32)
     (
         [
+            "quarter",
+            "year",
+            "day",
+            "minute",
+            "second",
+            "microsecond",
+            "nanosecond",
+            "weekday",
+            "dayofyear",
+            "day_of_year",
+            "daysinmonth",
+            "days_in_month",
             "days",
             "seconds",
             "microseconds",
