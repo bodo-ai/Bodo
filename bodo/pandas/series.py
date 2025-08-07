@@ -20,6 +20,7 @@ from pandas._typing import (
 )
 
 import bodo
+from bodo.ai.utils import get_default_bedrock_request_formatter
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -1493,15 +1494,26 @@ class BodoSeriesAiMethods:
 
     def llm_generate_bedrock(
         self,
-        model,
+        modelId: str,
+        request_formatter: Callable[[str], str] | None = None,
         **generation_kwargs,
     ) -> BodoSeries:
+        """Generate text using Amazon Bedrock model.
+        Args:
+            modelId (str): The Bedrock model ID to use for text generation.
+            request_formatter (Callable[[str], str], optional): A function that formats the input text
+                into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Nova, Titan, Claude, and OpenAI models.
+            **generation_kwargs: Additional keyword arguments to pass to the Bedrock invoke_model API.
+        """
         if self._series.dtype != "string[pyarrow]":
             raise TypeError(
                 f"Series.ai.llm_generate_bedrock() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
             )
 
-        def map_func(series, model):
+        if request_formatter is None:
+            request_formatter = get_default_bedrock_request_formatter(modelId)
+
+        def map_func(series, modelId):
             import boto3
             import botocore.config
 
@@ -1516,16 +1528,15 @@ class BodoSeriesAiMethods:
 
             def per_row(row):
                 response = client.invoke_model(
-                    modelId=model,
-                    body=row.encode("utf-8"),
-                    contentType="text/plain",
+                    modelId=modelId,
+                    body=request_formatter(row),
                     **generation_kwargs,
                 )
                 return response["body"].read().decode("utf-8")
 
             return pd.Series([per_row(row) for row in series])
 
-        return self._series.map_partitions(map_func, model)
+        return self._series.map_partitions(map_func, modelId)
 
     def embed(
         self,
@@ -1580,15 +1591,25 @@ class BodoSeriesAiMethods:
 
     def embed_bedrock(
         self,
-        model: str,
+        modelId: str,
+        request_formatter: Callable[[str], str] | None = None,
         **embedding_kwargs,
     ) -> BodoSeries:
+        """Embed text using Amazon Bedrock model.
+        Args:
+            modelId (str): The Bedrock model ID to use for embedding.
+            request_formatter (Callable[[str], str], optional): A function that formats the input text
+                into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Nova, Titan, Claude, and OpenAI models.
+            **embedding_kwargs: Additional keyword arguments to pass to the Bedrock invoke_model API.
+        """
         if self._series.dtype != "string[pyarrow]":
             raise TypeError(
                 f"Series.ai.embed_bedrock() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
             )
+        if request_formatter is None:
+            request_formatter = get_default_bedrock_request_formatter(modelId)
 
-        def map_func(series, model):
+        def map_func(series, modelId):
             import boto3
             import botocore.config
 
@@ -1603,16 +1624,16 @@ class BodoSeriesAiMethods:
 
             def per_row(row):
                 response = client.invoke_model(
-                    modelId=model,
-                    body=row.encode("utf-8"),
-                    contentType="text/plain",
+                    modelId=modelId,
+                    body=request_formatter(row),
+                    contentType="text/json",
                     **embedding_kwargs,
                 )
                 return response["body"].read()
 
             return pd.Series([per_row(row) for row in series])
 
-        return self._series.map_partitions(map_func, model)
+        return self._series.map_partitions(map_func, modelId)
 
     def query_s3_vectors(
         self,

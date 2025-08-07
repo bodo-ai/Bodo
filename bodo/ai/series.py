@@ -26,3 +26,27 @@ def embed(
     return series.ai.embedd(
         endpoint=endpoint, api_token=api_token, model=model, **embedding_kwargs
     )
+
+
+def llm_generate_bedrock(
+    series: BodoSeries,
+    modelId: str,
+    request_formatter: Callable[[str], str] | None = None,
+    **generation_kwargs,
+) -> BodoSeries:
+    """Generates text using Amazon Bedrock LLMs, see BodoSeries.ai.llm_generate_bedrock for more details."""
+    return series.ai.llm_generate_bedrock(
+        modelId=modelId, request_formatter=request_formatter, **generation_kwargs
+    )
+
+
+def embed_bedrock(
+    series: BodoSeries,
+    modelId: str,
+    request_formatter: Callable[[str], str] | None = None,
+    **embedding_kwargs,
+) -> BodoSeries:
+    """Embeds text using Amazon Bedrock LLMs, see BodoSeries.ai.embed_bedrock for more details."""
+    return series.ai.embed_bedrock(
+        modelId=modelId, request_formatter=request_formatter, **embedding_kwargs
+    )
