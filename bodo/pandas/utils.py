@@ -1248,16 +1248,16 @@ class JITFallback:
         # See if we previously tried to compile this function.
         cache_entry = JITFallback.fallback_cache.get(key, None)
         if (
-            self.name
-            not in (
-                "items",
-                "set_index",
-                "rename_axis",
-                "copy",
-                "keys",
-                "apply",
-                "groupby",
-            )
+            self.name in ("duplicated", "pivot")
+            # not in (
+            #    "items",
+            #    "set_index",
+            #    "rename_axis",
+            #    "copy",
+            #    "keys",
+            #    "apply",
+            #    "groupby",
+            # )
             and cache_entry != False
         ):
             # None means it wasn't in the cache either way so we can try to
