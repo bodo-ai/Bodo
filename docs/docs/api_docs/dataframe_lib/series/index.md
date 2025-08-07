@@ -6,17 +6,37 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 	 DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of 
 	 the Bodo DataFrame Library for more info.
 
+## AI Functions
+- [`bodo.pandas.BodoSeries.ai.tokenize`][bodoseriesaitokenize]
+- [`bodo.pandas.BodoSeries.ai.embed`][bodoseriesaiembed]
+- [`bodo.pandas.BodoSeries.ai.llm_generate`][bodoseriesaillmgenerate]
+- [`bodo.pandas.BodoSeries.ai.query_s3_vectors`][bodoseriesaiquerys3vectors]
+
+## Binary operator functions
+- [`bodo.pandas.BodoSeries.add`][bodoseriesadd]
+- [`bodo.pandas.BodoSeries.sub`][bodoseriessub]
+- [`bodo.pandas.BodoSeries.radd`][bodoseriesradd]
+- [`bodo.pandas.BodoSeries.rsub`][bodoseriesrsub]
+
+---
+
 ## Computations / descriptive stats
 - [`bodo.pandas.BodoSeries.abs`][bodoseriesabs]
 - [`bodo.pandas.BodoSeries.clip`][bodoseriesclip]
+- [`bodo.pandas.BodoSeries.describe`][bodoseriesdescribe]
+!!! note
+    Unlike pandas’, the quantile in Bodo DataFrames is an approximate quantile based on the KLL sketch algorithm with probabilistic error guarantees, since computing exact quantiles across large datasets is extremely expensive.
+- [`bodo.pandas.BodoSeries.quantile`][bodoseriesquantile]
 - [`bodo.pandas.BodoSeries.round`][bodoseriesround]
 !!! note
     For the following reduction methods, only default parameters are currently supported.
 - [`bodo.pandas.BodoSeries.count`][bodoseriescount]
 - [`bodo.pandas.BodoSeries.max`][bodoseriesmax]
+- [`bodo.pandas.BodoSeries.mean`][bodoseriesmean]
 - [`bodo.pandas.BodoSeries.min`][bodoseriesmin]
 - [`bodo.pandas.BodoSeries.product`][bodoseriesproduct]
 - [`bodo.pandas.BodoSeries.sum`][bodoseriessum]
+- [`bodo.pandas.BodoSeries.std`][bodoseriessum]
 
 ---
 
@@ -94,6 +114,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 - [`bodo.pandas.BodoSeries.agg`][bodoseriesagg]
 - [`bodo.pandas.BodoSeries.aggregate`][bodoseriesaggregate]
 - [`bodo.pandas.BodoSeries.map`][bodoseriesmap]
+- [`bodo.pandas.BodoSeries.map_partitions`][bodoseriesmappartitions]
 
 ---
 
@@ -109,6 +130,7 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 ## Reindexing / Selection / Label manipulation
 - [`bodo.pandas.BodoSeries.head`][bodoserieshead]
 - [`bodo.pandas.BodoSeries.isin`][bodoseriesisin]
+- [`bodo.pandas.BodoSeries.reset_index`][bodoseriesresetindex]
 
 ---
 
@@ -179,9 +201,16 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 [bodoserieshead]: ../series/head.md
 [bodoseriesmap]: ../series/map.md
+[bodoseriesmappartitions]: ../series/map_partitions.md
 [bodoseriessortvalues]: ../series/sort_values.md
 
 [overview]: ../index.md/#lazy-evaluation-and-fallback-to-pandas
+
+[bodoseriesaitokenize]: ../series/ai/tokenize.md
+[bodoseriesaiembed]: ../series/ai/embed.md
+[bodoseriesaillmgenerate]: ../series/ai/llm_generate.md
+[bodoseriesaiquerys3vectors]: ../series/ai/query_s3_vectors.md
+
 
 [bodoseriesstrcapitalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.capitalize.html
 [bodoseriesstrcasefold]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.casefold.html
@@ -310,3 +339,17 @@ The Bodo DataFrame Library supports Pandas Series methods and accessors that are
 
 [bodoseriesagg]: https://pandas.pydata.org/docs/reference/api/pandas.Series.agg.html
 [bodoseriesaggregate]: https://pandas.pydata.org/docs/reference/api/pandas.Series.aggregate.html
+
+[bodoseriesdescribe]: https://pandas.pydata.org/docs/reference/api/pandas.Series.describe.html
+[bodoseriesmean]: https://pandas.pydata.org/docs/reference/api/pandas.Series.mean.html
+[bodoseriesstd]: https://pandas.pydata.org/docs/reference/api/pandas.Series.std.html
+
+
+[bodoseriesadd]: https://pandas.pydata.org/docs/reference/api/pandas.Series.add.html
+[bodoseriessub]: https://pandas.pydata.org/docs/reference/api/pandas.Series.sub.html
+[bodoseriesradd]: https://pandas.pydata.org/docs/reference/api/pandas.Series.radd.html
+[bodoseriesrsub]: https://pandas.pydata.org/docs/reference/api/pandas.Series.rsub.html
+
+[bodoseriesresetindex]: https://pandas.pydata.org/docs/reference/api/pandas.Series.reset_index.html
+
+[bodoseriesquantile]: https://pandas.pydata.org/docs/reference/api/pandas.Series.quantile.html
