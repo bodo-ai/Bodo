@@ -751,7 +751,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             {},
         )
 
-    def map_partitions_with_state(self, init_state_fn, func, *args, **kwargs, output_type=None):
+    def map_partitions_with_state(
+        self, init_state_fn, func, *args, output_type=None, **kwargs
+    ):
         """
         Apply a function to each partition of the series with a one-time initialization.
 
