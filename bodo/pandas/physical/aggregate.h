@@ -164,18 +164,18 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     void FinalizeSource() override {
         QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSink::getOpId(), PhysicalSink::ToString());
+            PhysicalSource::getOpId(), PhysicalSource::ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       0),
+            QueryProfileCollector::MakeOperatorStageID(
+                PhysicalSource::getOpId(), 0),
             metrics.init_time);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       1),
+            QueryProfileCollector::MakeOperatorStageID(
+                PhysicalSource::getOpId(), 1),
             metrics.consume_time);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       2),
+            QueryProfileCollector::MakeOperatorStageID(
+                PhysicalSource::getOpId(), 2),
             metrics.produce_time);
     }
 
