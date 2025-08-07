@@ -611,7 +611,7 @@ def run_func_on_table(cpp_table, result_type, in_args):
         elif func == "map_partitions_with_state":
             func = args[1]
             state = args[0]
-            args = (state, input, args[2:])
+            args = (state, input, *args[2:])
 
         if not callable(func):
             func_path_str = func

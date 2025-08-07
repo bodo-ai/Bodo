@@ -3104,14 +3104,14 @@ def test_map_with_state():
 def test_map_partitions_with_state():
     class mystate:
         def __init__(self):
-            self.dict = {1: 7}
+            self.dict = {1: 5}
 
     def init_state():
         return mystate()
 
     def per_batch(state, batch, *args, **kwargs):
         def per_row(row):
-            return "bodo" + str(row + state.dict[1])
+            return "bodo" + str(row + state.dict[1] + args[0] + kwargs["bodo"])
 
         return batch.map(per_row)
 
@@ -3119,7 +3119,7 @@ def test_map_partitions_with_state():
     ba = bd.Series(a)
     res = a.map(lambda x: "bodo" + str(x + 7))
     with assert_executed_plan_count(1):
-        bres = ba.map_partitions_with_state(init_state, per_batch)
+        bres = ba.map_partitions_with_state(init_state, per_batch, 1, bodo=1)
 
     _test_equal(
         bres,
@@ -3131,7 +3131,11 @@ def test_map_partitions_with_state():
 
     with assert_executed_plan_count(0):
         bres = ba.map_partitions_with_state(
-            init_state, per_batch, output_type=pd.Series(dtype="string[pyarrow]")
+            init_state,
+            per_batch,
+            1,
+            output_type=pd.Series(dtype="string[pyarrow]"),
+            bodo=1,
         )
 
     _test_equal(
