@@ -2298,10 +2298,35 @@ def _get_series_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
-    if func in {"dt.dayofweek", "dt.day_of_week", "dt.hour", "dt.month", "dt.date"}:
-        if func == "dt.dayofweek":
-            func = "dt.day_of_week"
-        func_name = func.split(".")[1]
+    # List of Series methods to be routed to Arrow Compute
+    arrow_compute_list = (
+        "dt.hour",
+        "dt.month",
+        "dt.dayofweek",
+        "dt.day_of_week",
+        "dt.quarter",
+        "dt.year",
+        "dt.day",
+        "dt.minute",
+        "dt.second",
+        "dt.microsecond",
+        "dt.nanosecond",
+        "dt.weekday",
+        "dt.dayofyear",
+        "dt.day_of_year",
+        # TODO: consider including methods like str.islower and routing to ascii_is_*
+    )
+
+    def get_arrow_func(name):
+        """Maps method name to its corresponding Arrow Compute Function name."""
+        if name in ("dt.dayofweek", "dt.weekday"):
+            return "day_of_week"
+        if name == "dt.dayofyear":
+            return "day_of_year"
+        return name.split(".")[1]
+
+    if func in arrow_compute_list:
+        func_name = get_arrow_func(func)
         func_args = ()  # TODO: expand this to enable arrow compute calls with args
         is_cfunc = False
         has_state = False
@@ -2762,12 +2787,6 @@ dt_accessors = [
             "month",
             "dayofweek",
             "day_of_week",
-        ],
-        pd.ArrowDtype(pa.int64()),
-    ),
-    # idx = 0: Series(Int32)
-    (
-        [
             "quarter",
             "year",
             "day",
@@ -2777,7 +2796,12 @@ dt_accessors = [
             "nanosecond",
             "weekday",
             "dayofyear",
-            "day_of_year",
+        ],
+        pd.ArrowDtype(pa.int64()),
+    ),
+    # idx = 0: Series(Int32)
+    (
+        [
             "daysinmonth",
             "days_in_month",
             "days",
