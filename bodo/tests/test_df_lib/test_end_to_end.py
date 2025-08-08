@@ -246,7 +246,8 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
-            reset_index=False,
+            # RangeIndex order is not guaranteed
+            reset_index=isinstance(index_val, pd.RangeIndex),
         )
 
         # Already distributed DataFrame case
@@ -266,7 +267,8 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
-            reset_index=False,
+            # RangeIndex order is not guaranteed
+            reset_index=isinstance(index_val, pd.RangeIndex),
         )
 
 
