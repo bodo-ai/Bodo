@@ -2780,7 +2780,7 @@ series_str_methods = [
 dt_accessors = [
     # idx = 0: Series(Int64)
     (
-        # NOTE: The methods below (e.g., hour, month, dayofweek) return int32 in Pandas by default.
+        # NOTE: The methods below return int32 in Pandas by default.
         # In Bodo, the output dtype is int64 because we use PyArrow Compute.
         [
             "hour",
