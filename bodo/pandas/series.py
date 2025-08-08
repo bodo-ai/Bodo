@@ -1509,6 +1509,10 @@ class BodoSeriesAiMethods:
             modelId (str): The Bedrock model ID to use for text generation.
             request_formatter (Callable[[str], str], optional): A function that formats the input text
                 into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Nova, Titan, Claude, and OpenAI models.
+            response_formatter (Callable[[str], str], optional): A function that formats the response
+                from the Bedrock model into a string. Defaults to None, which uses a default formatter
+                for Nova, Titan, Claude, and OpenAI models.
+            region (str, optional): The AWS region to use for the Bedrock model. Defaults to None, which uses the default region configured in AWS SDK.
             **generation_kwargs: Additional keyword arguments to pass to the Bedrock invoke_model API.
         """
         if self._series.dtype != "string[pyarrow]":
@@ -1614,6 +1618,7 @@ class BodoSeriesAiMethods:
                 into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Titan embeddings models.
             response_formatter (Callable[[str], list[float]], optional): A function that formats the response
                 from the Bedrock model into a list of floats. Defaults to None, which uses a default formatter for Titan embeddings models.
+            region (str, optional): The AWS region to use for the Bedrock model. Defaults to None, which uses the default region configured in AWS SDK.
             **embedding_kwargs: Additional keyword arguments to pass to the Bedrock invoke_model API.
         """
         if self._series.dtype != "string[pyarrow]":
