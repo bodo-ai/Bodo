@@ -2314,7 +2314,21 @@ def _get_series_func_plan(
         "dt.weekday",
         "dt.dayofyear",
         "dt.day_of_year",
-        # TODO: consider including methods like str.islower and routing to ascii_is_*
+        # string methods that correspond to utf8_{name}
+        "str.isalnum",
+        "str.isalpha",
+        "str.isdecimal",
+        "str.isdigit",
+        "str.isnumeric",
+        "str.isupper",
+        "str.isspace",
+        "str.capitalize",
+        "str.length",
+        "str.lower",
+        "str.upper",
+        "str.swapcase",
+        "str.title",
+        "str.reverse",
     )
 
     def get_arrow_func(name):
@@ -2323,6 +2337,11 @@ def _get_series_func_plan(
             return "day_of_week"
         if name == "dt.dayofyear":
             return "day_of_year"
+        if name.startswith("str.is"):
+            body = name.split(".")[1]
+            return "utf8_" + body[:2] + "_" + body[2:]
+        if name.startswith("str."):
+            return "utf8_" + name.split(".")[1]
         return name.split(".")[1]
 
     if func in arrow_compute_list:
