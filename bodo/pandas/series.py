@@ -712,7 +712,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
-    @check_args_fallback(unsupported="none")
     def map_with_state(self, init_state_fn, row_fn, na_action=None, output_type=None):
         """
         Map values of the Series by first initializaing state and then processing
@@ -750,6 +749,45 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "map_with_state",
             (init_state_fn, row_fn, na_action),
             {},
+        )
+
+    def map_partitions_with_state(
+        self, init_state_fn, func, *args, output_type=None, **kwargs
+    ):
+        """
+        Apply a function to each partition of the series with a one-time initialization.
+
+        NOTE: this pickles the function and sends it to the workers, so globals are
+        pickled. The use of lazy data structures as globals causes issues.
+
+        Args:
+            init_state_fn : Callable returning state, which can have any type
+            func (Callable): A callable which takes in a Series as its first
+                argument and returns a DataFrame or Series that has the same length
+                its input.
+            *args: Additional positional arguments to pass to func.
+            **kwargs: Additional key-word arguments to pass to func.
+            output_type : if present, is an empty Pandas series specifying the output
+                          dtype of the operation.
+
+        Returns:
+            DataFrame or Series: The result of applying the func.
+        """
+        if output_type is None:
+            state = init_state_fn()
+            # Get output data type by running the UDF on a sample of the data.
+            empty_series = get_scalar_udf_result_type(
+                self, "map_partitions_with_state", (state, func), *args, **kwargs
+            )
+        else:
+            empty_series = output_type
+
+        return _get_series_func_plan(
+            self._plan,
+            empty_series,
+            "map_partitions_with_state",
+            (init_state_fn, func, *args),
+            kwargs,
         )
 
     def map_partitions(self, func, *args, **kwargs):
@@ -2313,7 +2351,7 @@ def _get_series_func_plan(
         )
     else:
         # Empty func_name separates Python calls from Arrow calls.
-        has_state = func == "map_with_state"
+        has_state = func in ("map_with_state", "map_partitions_with_state")
         if cfunc_decorator:
             func_args = (func, cfunc_decorator)
             is_cfunc = True

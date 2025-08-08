@@ -3103,6 +3103,52 @@ def test_map_with_state():
     )
 
 
+def test_map_partitions_with_state():
+    class mystate:
+        def __init__(self):
+            self.dict = {1: 5}
+
+    def init_state():
+        return mystate()
+
+    def per_batch(state, batch, *args, **kwargs):
+        def per_row(row):
+            return "bodo" + str(row + state.dict[1] + args[0] + kwargs["bodo"])
+
+        return batch.map(per_row)
+
+    a = pd.Series(list(range(20)))
+    ba = bd.Series(a)
+    res = a.map(lambda x: "bodo" + str(x + 7))
+    with assert_executed_plan_count(1):
+        bres = ba.map_partitions_with_state(init_state, per_batch, 1, bodo=1)
+
+    _test_equal(
+        bres,
+        res,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+    with assert_executed_plan_count(0):
+        bres = ba.map_partitions_with_state(
+            init_state,
+            per_batch,
+            1,
+            output_type=pd.Series(dtype="string[pyarrow]"),
+            bodo=1,
+        )
+
+    _test_equal(
+        bres,
+        res,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+
 @pytest.mark.parametrize(
     "quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1], [0.22, 0.55, 0.99], [0.5]]
 )

@@ -608,11 +608,16 @@ def run_func_on_table(cpp_table, result_type, in_args):
 
             # Map takes two args, the function to run and args[2] which is na_action.
             args = (state_wrapper, args[2])
+        elif func == "map_partitions_with_state":
+            func = args[1]
+            state = args[0]
+            args = (state, input, *args[2:])
 
-        func_path_str = func
-        func = input
-        for atr in func_path_str.split("."):
-            func = getattr(func, atr)
+        if not callable(func):
+            func_path_str = func
+            func = input
+            for atr in func_path_str.split("."):
+                func = getattr(func, atr)
         if not callable(func):
             # func is assumed to be an accessor
             out = func
@@ -985,8 +990,14 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
         Empty Series with the dtype matching the output of the UDF
         (or equivalent pyarrow dtype)
     """
-    assert method_name in {"map", "apply", "map_partitions", "map_with_state"}, (
-        "expected method to be one of {'apply', 'map', 'map_partitions', 'map_with_state'}"
+    assert method_name in {
+        "map",
+        "apply",
+        "map_partitions",
+        "map_with_state",
+        "map_partitions_with_state",
+    }, (
+        "expected method to be one of {'apply', 'map', 'map_partitions', 'map_with_state', 'map_partitions_with_state'}"
     )
 
     base_class = obj.__class__.__bases__[0]
@@ -1005,6 +1016,8 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
 
         if method_name == "map_with_state":
             out_sample = pd_sample.apply(lambda row: func[1](func[0], row))
+        elif method_name == "map_partitions_with_state":
+            out_sample = func[1](func[0], pd_sample, *args, **kwargs)
         else:
             out_sample = (
                 func(pd_sample, *args, **kwargs)
