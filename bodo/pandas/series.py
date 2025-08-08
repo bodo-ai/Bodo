@@ -20,7 +20,10 @@ from pandas._typing import (
 )
 
 import bodo
-from bodo.ai.utils import get_default_bedrock_request_formatter
+from bodo.ai.utils import (
+    get_default_bedrock_request_formatter,
+    get_default_bedrock_response_formatter,
+)
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -1496,6 +1499,8 @@ class BodoSeriesAiMethods:
         self,
         modelId: str,
         request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], str] | None = None,
+        region: str = None,
         **generation_kwargs,
     ) -> BodoSeries:
         """Generate text using Amazon Bedrock model.
@@ -1512,6 +1517,8 @@ class BodoSeriesAiMethods:
 
         if request_formatter is None:
             request_formatter = get_default_bedrock_request_formatter(modelId)
+        if response_formatter is None:
+            response_formatter = get_default_bedrock_response_formatter(modelId)
 
         def map_func(series, modelId):
             import boto3
@@ -1523,6 +1530,7 @@ class BodoSeriesAiMethods:
                     connect_timeout=3600,  # 60 minutes
                     read_timeout=3600,  # 60 minutes
                     retries={"max_attempts": 1},
+                    region_name=region,
                 ),
             )
 
@@ -1532,7 +1540,7 @@ class BodoSeriesAiMethods:
                     body=request_formatter(row),
                     **generation_kwargs,
                 )
-                return response["body"].read().decode("utf-8")
+                return response_formatter(response["body"].read().decode("utf-8"))
 
             return pd.Series([per_row(row) for row in series])
 
@@ -1593,13 +1601,17 @@ class BodoSeriesAiMethods:
         self,
         modelId: str,
         request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], list[float]] | None = None,
+        region: str | None = None,
         **embedding_kwargs,
     ) -> BodoSeries:
         """Embed text using Amazon Bedrock model.
         Args:
             modelId (str): The Bedrock model ID to use for embedding.
             request_formatter (Callable[[str], str], optional): A function that formats the input text
-                into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Nova, Titan, Claude, and OpenAI models.
+                into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Titan embeddings models.
+            response_formatter (Callable[[str], list[float]], optional): A function that formats the response
+                from the Bedrock model into a list of floats. Defaults to None, which uses a default formatter for Titan embeddings models.
             **embedding_kwargs: Additional keyword arguments to pass to the Bedrock invoke_model API.
         """
         if self._series.dtype != "string[pyarrow]":
@@ -1608,6 +1620,8 @@ class BodoSeriesAiMethods:
             )
         if request_formatter is None:
             request_formatter = get_default_bedrock_request_formatter(modelId)
+        if response_formatter is None:
+            response_formatter = get_default_bedrock_response_formatter(modelId)
 
         def map_func(series, modelId):
             import boto3
@@ -1620,16 +1634,16 @@ class BodoSeriesAiMethods:
                     read_timeout=3600,  # 60 minutes
                     retries={"max_attempts": 1},
                 ),
+                region_name=region,
             )
 
             def per_row(row):
                 response = client.invoke_model(
                     modelId=modelId,
                     body=request_formatter(row),
-                    contentType="text/json",
                     **embedding_kwargs,
                 )
-                return response["body"].read()
+                return response_formatter(response["body"].read())
 
             return pd.Series([per_row(row) for row in series])
 
