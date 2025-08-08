@@ -842,9 +842,9 @@ class Spawner:
         self._run_del_queue()
         return worker_process
 
-    def stop_process_on_workers(self, worker_process: WorkerProcess) -> None:
+    def stop_process_on_nodes(self, worker_process: WorkerProcess) -> None:
         """Stop a process on all workers given the corresponding WorkerProcess."""
-        assert not self._is_running, "stop_process_on_workers: already running"
+        assert not self._is_running, "stop_process_on_nodes: already running"
 
         self._is_running = True
         self.worker_intercomm.bcast(
@@ -901,11 +901,11 @@ def spawn_process_on_nodes(
     return spawner.spawn_process_on_nodes(command, env, cwd)
 
 
-def stop_process_on_workers(worker_process: WorkerProcess) -> None:
+def stop_process_on_nodes(worker_process: WorkerProcess) -> None:
     """Get the global spawner and stop a process on all workers given the corresponding WorkerProcess."""
 
     spawner = get_spawner()
-    return spawner.stop_process_on_workers(
+    return spawner.stop_process_on_nodes(
         worker_process,
     )
 

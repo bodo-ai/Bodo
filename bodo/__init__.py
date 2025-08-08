@@ -415,7 +415,7 @@ from bodo.hiframes.pd_categorical_ext import (
 from bodo.utils.typing import register_type
 from bodo.libs.logging_ext import LoggingLoggerType
 from bodo.hiframes.table import TableType
-from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_workers
+from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 
 
 import bodo.compiler  # isort:skip

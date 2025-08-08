@@ -477,7 +477,7 @@ def test_spawn_process_on_nodes():
 
     # Test IO doesn't break spawn_process
     proc = bodo.spawn_process_on_nodes(["python", "-c", "print(0)"])
-    bodo.stop_process_on_workers(proc)
+    bodo.stop_process_on_nodes(proc)
     assert proc._rank_to_pid is not None, "Process should have a rank to PID mapping"
     assert isinstance(proc._rank_to_pid, dict), (
         "Rank to PID mapping should be a dictionary"
@@ -498,7 +498,7 @@ def test_spawn_process_on_nodes():
     assert all(psutil.pid_exists(pid) for pid in proc._rank_to_pid.values()), (
         "Process should be running on all workers"
     )
-    bodo.stop_process_on_workers(proc)
+    bodo.stop_process_on_nodes(proc)
     time.sleep(1)  # Give some time for the process to close
     for rank, pid in proc._rank_to_pid.items():
         # Check that the process was stopped on the worker
