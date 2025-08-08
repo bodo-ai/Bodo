@@ -1446,9 +1446,10 @@ class BodoSeriesAiMethods:
 
     def llm_generate(
         self,
-        endpoint: str,
-        api_token: str,
+        *,
+        api_key: str,
         model: str | None = None,
+        base_url: str | None = None,
         **generation_kwargs,
     ) -> BodoSeries:
         import importlib
@@ -1465,14 +1466,14 @@ class BodoSeriesAiMethods:
         if model is not None:
             generation_kwargs["model"] = model
 
-        def map_func(series, api_token, endpoint, generation_kwargs):
+        def map_func(series, api_key, base_url, generation_kwargs):
             import asyncio
 
             import openai
 
             client = openai.AsyncOpenAI(
-                api_key=api_token,
-                base_url=endpoint,
+                api_key=api_key,
+                base_url=base_url,
                 # TODO: The below should have better performance but currently
                 # pixi won't solve the dependencies.
                 # http_client=openai.DefaultAioHttpClient(),
@@ -1492,7 +1493,7 @@ class BodoSeriesAiMethods:
             return pd.Series(asyncio.run(all_tasks(series, client, generation_kwargs)))
 
         return self._series.map_partitions(
-            map_func, api_token, endpoint, generation_kwargs=generation_kwargs
+            map_func, api_key, base_url, generation_kwargs=generation_kwargs
         )
 
     def llm_generate_bedrock(
@@ -1548,9 +1549,10 @@ class BodoSeriesAiMethods:
 
     def embed(
         self,
-        endpoint: str,
-        api_token: str,
+        *,
+        api_key: str,
         model: str | None = None,
+        base_url: str | None = None,
         **embedding_kwargs,
     ) -> BodoSeries:
         import importlib
@@ -1567,14 +1569,14 @@ class BodoSeriesAiMethods:
         if model is not None:
             embedding_kwargs["model"] = model
 
-        def map_func(series, api_token, endpoint, embedding_kwargs):
+        def map_func(series, api_key, base_url, embedding_kwargs):
             import asyncio
 
             import openai
 
             client = openai.AsyncOpenAI(
-                api_key=api_token,
-                base_url=endpoint,
+                api_key=api_key,
+                base_url=base_url,
                 # TODO: The below should have better performance but currently
                 # pixi won't solve the dependencies.
                 # http_client=openai.DefaultAioHttpClient(),
@@ -1594,7 +1596,7 @@ class BodoSeriesAiMethods:
             return pd.Series(asyncio.run(all_tasks(series, client, embedding_kwargs)))
 
         return self._series.map_partitions(
-            map_func, api_token, endpoint, embedding_kwargs=embedding_kwargs
+            map_func, api_key, base_url, embedding_kwargs=embedding_kwargs
         )
 
     def embed_bedrock(

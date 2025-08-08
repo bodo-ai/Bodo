@@ -7,6 +7,17 @@
 #include "duckdb/planner/operator/logical_order.hpp"
 #include "operator.h"
 
+struct PhysicalSortMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+
+    time_t init_time = 0;
+    time_t consume_time = 0;
+    time_t produce_time = 0;
+
+    stat_t output_row_count = 0;
+};
+
 /**
  * @brief Physical node for sort.
  *
@@ -19,6 +30,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
         std::vector<duckdb::ColumnBinding>& source_cols, int64_t limit,
         int64_t offset, unsigned node_cols,
         const std::vector<duckdb::idx_t>& projection_map = {}) {
+        time_pt start_init = start_timer();
         // Calculate the output schema.
         this->output_schema = std::make_shared<bodo::Schema>();
         if (projection_map.empty()) {
@@ -96,15 +108,16 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
         if (limit == -1 && offset == -1) {
             stream_sorter = std::make_unique<StreamSortState>(
-                PhysicalSink::getOpId(), keys.size(), std::move(ascending),
+                getOpId(), keys.size(), std::move(ascending),
                 std::move(na_last), build_table_schema_reordered,
                 /*parallel*/ true);
         } else {
             stream_sorter = std::make_unique<StreamSortLimitOffsetState>(
-                PhysicalSink::getOpId(), keys.size(), std::move(ascending),
+                getOpId(), keys.size(), std::move(ascending),
                 std::move(na_last), build_table_schema_reordered,
                 /*parallel*/ true, limit, offset);
         }
+        this->metrics.init_time = end_timer(start_init);
     }
 
    public:
@@ -126,12 +139,27 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     virtual ~PhysicalSort() = default;
 
     void FinalizeSink() override {
-        QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSink::getOpId(), PhysicalSink::ToString());
+        time_pt start_finalize_build = start_timer();
         stream_sorter->FinalizeBuild();
+        this->metrics.consume_time += end_timer(start_finalize_build);
     }
 
-    void FinalizeSource() override {}
+    void FinalizeSource() override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
+            this->metrics.init_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            this->metrics.consume_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
+            this->metrics.produce_time);
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
+            this->metrics.output_row_count);
+    }
 
     /**
      * @brief process input tables to sort
@@ -140,12 +168,14 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
      */
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
         std::shared_ptr<table_info> input_batch_reordered =
             ProjectTable(input_batch, col_inds);
 
         stream_sorter->ConsumeBatch(input_batch_reordered);
+        this->metrics.consume_time += end_timer(start_consume);
 
         return local_is_last ? OperatorResult::FINISHED
                              : OperatorResult::NEED_MORE_INPUT;
@@ -159,6 +189,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
      */
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
+        time_pt start_produce = start_timer();
         auto sorted_res = stream_sorter->GetOutput();
 
         // Undo column reordering for sorting.
@@ -174,6 +205,8 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
         std::shared_ptr<table_info> out_table = std::make_shared<table_info>(
             out_cols, sorted_table->nrows(), output_schema->column_names,
             output_schema->metadata);
+        this->metrics.output_row_count += sorted_table->nrows();
+        this->metrics.produce_time += end_timer(start_produce);
 
         return {out_table, sorted_res.second
                                ? OperatorResult::FINISHED
@@ -197,6 +230,10 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
         return output_schema;
     }
 
+    std::string ToString() override { return PhysicalSink::ToString(); }
+
+    int64_t getOpId() const { return PhysicalSink::getOpId(); }
+
    private:
     static void bidirectionalColumnMapping(
         std::vector<int64_t>& col_inds, std::vector<int64_t>& inverse_col_inds,
@@ -214,4 +251,6 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     std::shared_ptr<bodo::Schema> output_schema;
     std::unique_ptr<StreamSortState> stream_sorter;
     std::vector<uint64_t> kept_cols;
+
+    PhysicalSortMetrics metrics;
 };

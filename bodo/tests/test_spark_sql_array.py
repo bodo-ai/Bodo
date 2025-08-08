@@ -18,7 +18,7 @@ from bodo.tests.utils import check_func
         pd.DataFrame(
             {
                 "A": [
-                    np.array([1.1234, np.nan, 3.31111]),
+                    np.array([1.1234, 1.99, 3.31111]),
                     np.array([2.1334, 5.1, -6.3]),
                 ]
                 * 20,

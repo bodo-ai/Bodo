@@ -179,7 +179,7 @@ def test_tokenize():
 
 
 def get_ollama_models(url):
-    for i in range(20):
+    for i in range(50):
         try:
             response = requests.get(f"{url}/api/tags", timeout=5)
             if response.status_code == 200:
@@ -188,7 +188,7 @@ def get_ollama_models(url):
                 time.sleep(3)
         except requests.exceptions.RequestException:
             time.sleep(3)
-        if i == 19:
+        if i == 49:
             raise AssertionError("Ollama server not available yet")
 
 
@@ -203,6 +203,9 @@ def wait_for_ollama_model(url, model_name):
             return
         else:
             time.sleep(3)
+    raise AssertionError(
+        f"Model {model_name} not found in Ollama server at {url} after waiting for 60 seconds"
+    )
 
 
 def test_llm_generate():
@@ -225,8 +228,8 @@ def test_llm_generate():
         )
         wait_for_ollama_model("http://localhost:11434", "smollm:135m")
         res = prompts.ai.llm_generate(
-            endpoint="http://localhost:11434/v1",
-            api_token="",
+            base_url="http://localhost:11434/v1",
+            api_key="",
             model="smollm:135m",
             max_tokens=1,
             temperature=0.1,
@@ -258,8 +261,8 @@ def test_embed():
         )
         wait_for_ollama_model("http://localhost:11435", "all-minilm:22m")
         res = prompts.ai.embed(
-            endpoint="http://localhost:11435/v1",
-            api_token="",
+            base_url="http://localhost:11435/v1",
+            api_key="",
             model="all-minilm:22m",
         ).execute_plan()
         assert len(res) == 2
