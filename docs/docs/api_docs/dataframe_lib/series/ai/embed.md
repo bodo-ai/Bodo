@@ -39,3 +39,42 @@ dtype: list<item: float64>[pyarrow]
 
 ---
 
+# bodo.pandas.BodoSeries.ai.embed_bedrock
+
+```py
+BodoSeries.ai.embed_bedrock(
+        modelId: str,
+        request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], str] | None = None,
+        region: str = None,
+        **embed_kwargs) -> BodoSeries
+```
+Embed a series of strings using the Amazon Bedrock API.
+<p class="api-header">Parameters</p>
+- __modelId: *str*__: The ID of the Amazon Bedrock model to use
+    for embedding.
+- __request_formatter: *Callable[[str], str] | None*__: A function to
+    format the input text into the model's expected format before sending it to the model. If a  Titan embedding model is used, this can be None and a default request formatter will be used. Otherwise, this must be provided.
+- __response_formatter: *Callable[[str], str] | None*__: A function to
+    format the model's response into a string. If a Titan embedding model is used, this can be None and a default response formatter will be used. Otherwise, this must be provided.
+- __region: *str*__: The AWS region where the Bedrock model is hosted. If None, the configured default region will be used.
+<p class="api-header">Returns</p>
+- __BodoSeries__: A series containing the embedded vectors as lists of doubles.
+<p class="api-header">Example</p>
+
+```py
+import bodo.pandas as pd
+from bodo.pandas.ai import embed_bedrock
+# Example series
+a = pd.Series(["bodo.ai will improve your workflows.", "This is a professional sentence."])
+# Define the Bedrock model ID and formatters
+modelId = "amazon.titan-embed-text-v2:0"
+region = "us-west-2"
+# Generate embeddings using the Bedrock model
+b = a.ai.embed_bedrock(
+    modelId,
+)
+print(b)
+```
+
+---
