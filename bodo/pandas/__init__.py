@@ -6,6 +6,7 @@ from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.base import *
+from bodo.pandas.utils import JITFallback
 import os
 
 DataFrame = BodoDataFrame
@@ -36,7 +37,7 @@ def add_fallback():
         for func in set(pandas_attrs).difference(bodo_df_lib_attrs):
             # Export the pandas functions that aren't implemented by bodo
             # into bodo.pandas.
-            setattr(current_module, func, getattr(pandas, func))
+            setattr(current_module, func, JITFallback(None, func))
 
 # Must do this at the end so that all functions we want to provide already exist.
 add_fallback()

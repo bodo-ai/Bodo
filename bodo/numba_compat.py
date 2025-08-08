@@ -6927,6 +6927,20 @@ if hasattr(numba.core.caching, "CacheImpl"):
     # This allows for the caching of text-generation functions created through bodo_exec.
     numba.core.caching.CacheImpl._locator_classes.append(BodoCacheLocator)
 
+
+@functools.lru_cache
+def is_func_overloaded(mod, func_name):
+    from numba.core.registry import cpu_target
+    ctx = cpu_target._toplevel_typing_context
+    for k in ctx._functions.keys():
+        if hasattr(k, "__func__"):
+            func = k.__func__
+            # Should we check module here as well?
+            if func.__name__ == func_name:
+                return True
+    return False
+
+
 def get_method_overloads(typ):
     """Returns a list of method names with overloads
        for the given Numba datatype.

@@ -71,6 +71,7 @@ from bodo.pandas.utils import (
     BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    JITFallback,
     _get_empty_series_arrow,
     check_args_fallback,
     cpp_table_to_df_jit,
@@ -229,12 +230,15 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             and not name.startswith("_")
             and hasattr(pd.DataFrame, name)
         ):
-            msg = (
-                f"{name} is not implemented in Bodo Dataframe Library yet. "
-                "Falling back to Pandas (may be slow or run out of memory)."
-            )
-            warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(self, object.__getattribute__(self, name))
+            if callable(object.__getattribute__(self, name)):
+                return JITFallback(self, name)
+            else:
+                msg = (
+                    f"{name} is not implemented in Bodo Dataframe Library yet. "
+                    "Falling back to Pandas (may be slow or run out of memory)."
+                )
+                warnings.warn(BodoLibFallbackWarning(msg))
+                return fallback_wrapper(self, object.__getattribute__(self, name))
 
         return object.__getattribute__(self, name)
 
@@ -1437,6 +1441,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
         # Convert to True/False list instead of str.
         na_position = [True if x == "first" else False for x in na_position]
+
+        if any(col not in self.columns for col in by):
+            raise BodoLibNotImplementedException(
+                "sort_values on index column not supported"
+            )
 
         # Convert column names to indices.
         cols = [self.columns.get_loc(col) for col in by]
