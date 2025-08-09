@@ -184,8 +184,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 f"Series.{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(self, object.__getattribute__(self, name), name)
+            return fallback_wrapper(
+                self, object.__getattribute__(self, name), name, msg
+            )
 
         return object.__getattribute__(self, name)
 
