@@ -168,6 +168,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "to_string",
             "attrs",
             "flags",
+            "iloc",
         ]
 
         cls = object.__getattribute__(self, "__class__")
