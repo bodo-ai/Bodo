@@ -234,7 +234,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(self, object.__getattribute__(self, name))
+            return fallback_wrapper(self, object.__getattribute__(self, name), name)
 
         return object.__getattribute__(self, name)
 

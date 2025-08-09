@@ -464,9 +464,9 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     warnings.warn(BodoLibFallbackWarning(msg))
-                    py_res = fallback_wrapper(self, getattr(base_class, func.__name__))(
-                        self, *args, **kwargs
-                    )
+                    py_res = fallback_wrapper(
+                        self, getattr(base_class, func.__name__), func.__name__
+                    )(self, *args, **kwargs)
                     return py_res
 
         return wrapper
@@ -1186,7 +1186,7 @@ def ensure_datetime64ns(df):
 
 
 # TODO: further generalize. Currently, this method is only used for BodoSeries and BodoDataFrame.
-def fallback_wrapper(self, attr):
+def fallback_wrapper(self, attr, name):
     """
     Wrap callable attributes with a warning silencer, unless they are known
     accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
