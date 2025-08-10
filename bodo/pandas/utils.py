@@ -1199,6 +1199,13 @@ def fallback_wrapper(self, attr, name, msg):
     ):
 
         def silenced_method(*args, **kwargs):
+            jit_fallback = JITFallback(self, name)
+            try:
+                print("jit fallback trying", name)
+                return jit_fallback(*args, **kwargs)
+            except Exception:
+                pass
+
             nonlocal msg
             warnings.warn(BodoLibFallbackWarning(msg))
             msg = ""
@@ -1265,19 +1272,7 @@ class JITFallback:
         )
         # See if we previously tried to compile this function.
         cache_entry = JITFallback.fallback_cache.get(key, None)
-        if (
-            self.name in ("duplicated")
-            # not in (
-            #    "items",
-            #    "set_index",
-            #    "rename_axis",
-            #    "copy",
-            #    "keys",
-            #    "apply",
-            #    "groupby",
-            # )
-            and cache_entry != False
-        ):
+        if self.name in ("duplicated", "pivot") and cache_entry != False:
             # None means it wasn't in the cache either way so we can try to
             # JIT compile it.
             if cache_entry is None:
