@@ -1201,7 +1201,6 @@ def fallback_wrapper(self, attr, name, msg):
         def silenced_method(*args, **kwargs):
             jit_fallback = JITFallback(self, name)
             try:
-                print("jit fallback trying", name)
                 return jit_fallback(*args, **kwargs)
             except Exception:
                 pass
