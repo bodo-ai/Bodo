@@ -331,7 +331,6 @@ def test_filter_pushdown(datapath, file_path, op):
         check_pandas_types=False,
         sort_output=True,
         reset_index=False,
-        check_names=False,
     )
 
 
