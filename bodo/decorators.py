@@ -511,6 +511,15 @@ def _init_extensions():
 
         need_refresh = True
 
+    if "scipy" in sys.modules and "bodo.libs.csr_matrix_ext" not in sys.modules:
+        # side effect: initialize Numba extensions
+        import bodo.libs.csr_matrix_ext  # noqa
+        from bodo.utils.typing import gen_objmode_func_overload
+
+        import scipy.special
+
+        gen_objmode_func_overload(scipy.special.factorial, "int64")
+
     if need_refresh:
         numba.core.registry.cpu_target.target_context.refresh()
 

@@ -123,6 +123,7 @@ def test_astype_check(memory_leak_check):
 
 def test_nullarray_cast():
     """Test casting arrays to null array, which is necessary for BodoSQL"""
+    import bodo.libs.csr_matrix_ext
 
     def impl(A, flag):
         n = len(A)
