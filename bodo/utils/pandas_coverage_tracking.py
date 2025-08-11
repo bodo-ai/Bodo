@@ -4,7 +4,6 @@ This script will be run during the import bodo step if specified by _check_panda
 """
 
 import numba
-import requests
 from numba.core.target_extension import dispatcher_registry
 
 from bodo.pandas_compat import _check_pandas_change
@@ -33,6 +32,7 @@ PANDAS_URLS: dict[str, str] = {
 
 def get_pandas_refs_from_url(url: str) -> list:
     """Gets all API refs from an index page `url`."""
+    import requests
     from bs4 import BeautifulSoup
 
     result = []
