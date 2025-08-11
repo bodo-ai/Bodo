@@ -7,7 +7,11 @@ from bodo.tests.utils import _test_equal
 
 def test_basic_agg_udf():
     df = pd.DataFrame(
-        {"A": [1, 2, 1, 2, 1, 2, 1, 2, 1], "B": [-2, -2, 3, 4, 5, 6, 4, 8, 9]}
+        {
+            "A": [1, 2, 1, 2, 1, 2, 1, 2, 1],
+            "C": [1, 2, 1, 2, 1, 2, 1, 2, 1],
+            "B": [-2, -2, 3, 4, 5, 6, 4, 8, 9],
+        }
     )
     bdf = bd.from_pandas(df)
 
@@ -16,8 +20,8 @@ def test_basic_agg_udf():
             return None
         return len(x[x > 0]) / len(x)
 
-    df2 = df.groupby(by="A").agg(udf)
+    df2 = df.groupby(by=["A", "C"]).agg(udf)
     with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby(by="A").agg(udf)
+        bdf2 = bdf.groupby(by=["A", "C"]).agg(udf)
 
     _test_equal(bdf2, df2, check_pandas_types=False)

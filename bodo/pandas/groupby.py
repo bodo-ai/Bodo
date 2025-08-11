@@ -71,39 +71,42 @@ class GroupbyAggFunc:
         # TODO: custom impls of builtin funcs
         return callable(self.func) and self.func_name not in BUILTIN_AGG_FUNCS
 
-    def cfunc_wrapper(self, in_col) -> pt.Callable[[], int]:
-        """Get a wrapper to be called per worker to compile/get Cfunc
-        TODO: Generate a single wrapper for all UDFs?
-        """
 
-        if self.is_custom_aggfunc:
-            col_offset = 1  # TODO: n_keys (that are not dead) + udf_table_idx
-            func = self.func
-            out_type = _get_agg_udf_output_type(self, in_col.dtype.pyarrow_dtype)
-            out_arr_type = bodo.typeof(_empty_pd_array(out_type))
-            in_arr_type = bodo.typeof(in_col).data
+def _get_cfunc_wrapper(empty_data: pd.DataFrame, n_keys, funcs: list[GroupbyAggFunc]):
+    """Get a wrapper to be called per worker to compile/get Cfunc
+    TODO: Generate a single wrapper for all UDFs?
+    """
 
-            def wrapper():
-                jitted_func = bodo.jit(spawn=False, distributed=False, cache=True)(func)
-
-                def agg_func(num_groups, in_table, out_table):
-                    if num_groups == 0:
-                        return
-
-                    out_col = array_from_cpp_table(out_table, col_offset, out_arr_type)
-                    for j in range(num_groups):
-                        in_col = array_from_cpp_table(in_table, j, in_arr_type)
-                        out_col[j] = jitted_func(
-                            pd.Series(in_col)
-                        )  # func returns scalar
-
-                c_sig = types.void(types.int64, types.voidptr, types.voidptr)
-                cfunc = _cfunc(c_sig, cache=True)(agg_func)
-                return ctypes.c_void_p(cfunc.address).value
-
-            return wrapper
-
+    if not any(func.is_custom_aggfunc for func in funcs):
         return None
+
+    # TODO: multiple funcs
+    assert len(funcs) == 1
+
+    col_offset = n_keys  # TODO: n_keys (that are not dead) + udf_table_idx
+    func = funcs[0].func
+    in_col = empty_data[funcs[0].in_col]
+    out_type = _get_agg_udf_output_type(funcs[0], in_col.dtype.pyarrow_dtype)
+    out_arr_type = bodo.typeof(_empty_pd_array(out_type))
+    in_arr_type = bodo.typeof(in_col).data
+
+    def wrapper():
+        jitted_func = bodo.jit(spawn=False, distributed=False, cache=True)(func)
+
+        def agg_func(num_groups, in_table, out_table):
+            if num_groups == 0:
+                return
+
+            out_col = array_from_cpp_table(out_table, col_offset, out_arr_type)
+            for j in range(num_groups):
+                in_col = array_from_cpp_table(in_table, j, in_arr_type)
+                out_col[j] = jitted_func(pd.Series(in_col))  # func returns scalar
+
+        c_sig = types.void(types.int64, types.voidptr, types.voidptr)
+        cfunc = _cfunc(c_sig, cache=True)(agg_func)
+        return ctypes.c_void_p(cfunc.address).value
+
+    return wrapper
 
 
 class DataFrameGroupBy:
@@ -513,6 +516,8 @@ def _groupby_agg_plan(
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
+    cfunc_wrapper = _get_cfunc_wrapper(empty_data, len(key_indices), func)
+
     exprs = [
         AggregateExpression(
             empty_data.iloc[:, i]
@@ -520,7 +525,7 @@ def _groupby_agg_plan(
             else empty_data,
             grouped._obj._plan,
             f"udf_{i}" if func_.is_custom_aggfunc else func_.func_name,
-            func_.cfunc_wrapper(empty_data[func_.in_col]),
+            cfunc_wrapper,
             [grouped._obj.columns.get_loc(func_.in_col)],
             grouped._dropna,
         )
