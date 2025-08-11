@@ -27,8 +27,6 @@ from bodo.hiframes.table import TableType
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import pyarrow_schema_type, pyiceberg_catalog_type
-from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.common import IcebergConnectionType
 from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
 from bodo.ir.connector import Connector, log_limit_pushdown
 from bodo.ir.filter import Filter, FilterVisitor
@@ -603,6 +601,8 @@ def iceberg_distributed_run(
     is_independent: bool = False,
     meta_head_only_info=None,
 ):
+    from bodo.io.iceberg.common import IcebergConnectionType
+
     # Add debug info about column pruning
     if bodo.user_logging.get_verbose_level() >= 1:
         op_id_msg = (
@@ -1223,6 +1223,8 @@ def _gen_iceberg_reader_chunked_py(
         This is used for "remapping" the build columns in rtjf_interval_cols to the
         correct indices.
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+
     source_pyarrow_schema = pyarrow_schema
     assert source_pyarrow_schema is not None, (
         "SQLReader node must contain a source_pyarrow_schema if reading from Iceberg"
@@ -1454,6 +1456,8 @@ def _gen_iceberg_reader_py(
         dict_encode_in_bodo: Whether the dict-encoding should be done in Bodo
             instead of Arrow.
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+
     # a unique int used to create global variables with unique names
     call_id = next_label()
 
