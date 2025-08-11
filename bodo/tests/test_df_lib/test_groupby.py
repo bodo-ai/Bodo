@@ -27,23 +27,25 @@ def test_basic_agg_udf():
     _test_equal(bdf2, df2, check_pandas_types=False)
 
 
-# def test_basic_agg_multiple_udf():
-#     df = pd.DataFrame(
-#         {
-#             "A": [1, 2, 1, 2, 1, 2, 1, 2, 1],
-#             "C": [1, 2, 1, 2, 1, 2, 1, 2, 1],
-#             "B": [-2, -2, 3, 4, 5, 6, 4, 8, 9],
-#         }
-#     )
-#     bd.from_pandas(df)
+def test_basic_agg_multiple_udf():
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 1, 2, 1, 2, 1, 2, 1],
+            "C": [1, 2, 1, 2, 1, 2, 1, 2, 1],
+            "B": [-2, -2, 3, 4, 5, 6, 4, 8, 9],
+        }
+    )
+    bdf = bd.from_pandas(df)
 
-#     def udf(x):
-#         if len(x) == 0:
-#             return None
-#         return len(x[x > 0]) / len(x)
+    def udf(x):
+        if len(x) == 0:
+            return None
+        return len(x[x > 0]) / len(x)
 
-#     print(df.groupby(by=["A", "C"]).agg({"B": udf, "C": udf}))
-# with assert_executed_plan_count(0):
-#     bdf2 = bdf.groupby(by=["A"]).agg({"B": udf, "C": udf})
+    df2 = df.groupby(by=["A"]).agg({"B": udf, "C": udf})
+    with assert_executed_plan_count(0):
+        bdf2 = bdf.groupby(by=["A"]).agg({"B": udf, "C": udf})
 
-# _test_equal(bdf2, df2, check_pandas_types=False)
+    # TODO: fix len(bdf2)
+    bdf2.execute_plan()
+    _test_equal(bdf2, df2, check_pandas_types=False)
