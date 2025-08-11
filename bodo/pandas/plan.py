@@ -895,6 +895,7 @@ def count_plan(self):
                 "count_star",
                 # Adding column 0 as input to avoid deleting all input by the optimizer
                 # TODO: avoid materializing the input column
+                None,  # cfunc_wrapper
                 [0],
                 False,  # dropna
             )

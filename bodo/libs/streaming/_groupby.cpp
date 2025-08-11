@@ -3,9 +3,12 @@
 #include <fmt/format.h>
 #include <mpi.h>
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <list>
 #include <memory>
+#include <optional>
+#include <sstream>
 #include <tuple>
 #include "../_array_hash.h"
 #include "../_array_operations.h"
@@ -218,6 +221,8 @@ std::shared_ptr<table_info> get_update_table(
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets,
     const std::vector<int32_t>& f_in_offsets,
     const std::vector<int32_t>& f_in_cols, const bool req_extended_group_info,
+    std::optional<udfinfo_t> udf_info,
+    std::vector<std::shared_ptr<GeneralUdfColSet>> gen_udf_colsets,
     GroupbyMetrics::AggUpdateMetrics& metrics,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
@@ -273,11 +278,40 @@ std::shared_ptr<table_info> get_update_table(
             update_table->columns.push_back(e_arr);
         }
         ScopedTimer update_timer(metrics.colset_update_time);
+        std::cout << "calling update on col set!" << std::endl;
         col_set->update(grp_infos, pool, mm);
         update_timer.finalize();
         metrics.colset_update_nrows += in_table->nrows();
         col_set->clear();
     }
+
+    std::stringstream ss_up;
+    DEBUG_PrintTable(ss_up, update_table);
+    std::cout << "update table: " << ss_up.str() << std::endl;
+
+    // Run Update for UDFs:
+    // For each UDF col set, Create num_groups columns
+    // This table is passed to input
+    // TODO can UDFs share input columns?
+    // TODO: break up general_input_table to reduce mem pressure?
+    if (udf_info.has_value()) {
+        assert(is_acc_case);
+        std::shared_ptr<table_info> general_in_table =
+            std::make_shared<table_info>();
+        for (auto udf_colset : gen_udf_colsets) {
+            udf_colset->fill_in_columns(general_in_table, grp_info);
+        }
+        std::cout << udf_info.value().general_udf << std::endl;
+        // Gen UDF:
+        // For each func, call func for each group and fill output column
+        udf_info.value().general_udf(
+            grp_info.num_groups, general_in_table.get(), update_table.get());
+        // clear UDF col set state
+        for (auto udf_colset : gen_udf_colsets) {
+            udf_colset->clear_after_gen_udf();
+        }
+    }
+
     return update_table;
 }
 
@@ -666,7 +700,9 @@ GroupbyPartition::GroupbyPartition(
     GroupbyMetrics& metrics_, bodo::OperatorBufferPool* op_pool_,
     const std::shared_ptr<::arrow::MemoryManager> op_mm_,
     bodo::OperatorScratchPool* op_scratch_pool_,
-    const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_)
+    const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_,
+    std::optional<udfinfo_t> udf_info,
+    std::vector<std::shared_ptr<GeneralUdfColSet>> gen_udf_col_sets)
     : build_table_schema(std::move(build_table_schema_)),
       build_table_dict_builders(build_table_dict_builders_),
       build_hash_table(std::make_unique<hash_table_t>(
@@ -679,6 +715,8 @@ GroupbyPartition::GroupbyPartition(
       f_in_offsets(f_in_offsets_),
       f_in_cols(f_in_cols_),
       f_running_value_offsets(f_running_value_offsets_),
+      udf_info(udf_info),
+      gen_udf_col_sets(gen_udf_col_sets),
       metrics(metrics_),
       num_top_bits(num_top_bits_),
       top_bitmask(top_bitmask_),
@@ -1041,7 +1079,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->f_in_offsets, this->f_in_cols, this->f_running_value_offsets,
             is_active, this->accumulate_before_update,
             this->req_extended_group_info, this->metrics, this->op_pool,
-            this->op_mm, this->op_scratch_pool, this->op_scratch_mm);
+            this->op_mm, this->op_scratch_pool, this->op_scratch_mm,
+            this->udf_info, this->gen_udf_col_sets);
 
     std::shared_ptr<GroupbyPartition> new_part2 =
         std::make_shared<GroupbyPartition>(
@@ -1051,7 +1090,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->f_in_offsets, this->f_in_cols, this->f_running_value_offsets,
             false, this->accumulate_before_update,
             this->req_extended_group_info, this->metrics, this->op_pool,
-            this->op_mm, this->op_scratch_pool, this->op_scratch_mm);
+            this->op_mm, this->op_scratch_pool, this->op_scratch_mm,
+            this->udf_info, this->gen_udf_col_sets);
 
     std::vector<bool> append_partition1;
     if (is_active) {
@@ -1427,16 +1467,33 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
         // not required for re-partitioning (in case there is one), we will use
         // the scratch portion of the pool for them.
 
+        std::stringstream ss_in;
+        DEBUG_PrintTable(ss_in, this->build_table_buffer->data_table);
+        std::cout << ">>>> in table <<<<\n " << ss_in.str()
+                  << "\n >>>>>>>>>>>>>" << std::endl;
+
         // Get update table with the running values:
         ScopedTimer update_timer(this->metrics.finalize_get_update_table_time);
         std::shared_ptr<table_info> update_table =
             get_update_table</*is_acc_case*/ true>(
                 this->build_table_buffer->data_table, this->n_keys,
                 this->col_sets, this->f_in_offsets, this->f_in_cols,
-                this->req_extended_group_info,
-                this->metrics.finalize_update_metrics, this->op_scratch_pool,
-                this->op_scratch_mm);
+                this->req_extended_group_info, this->udf_info,
+                this->gen_udf_col_sets, this->metrics.finalize_update_metrics,
+                this->op_scratch_pool, this->op_scratch_mm);
         update_timer.finalize();
+
+        std::stringstream ss_update;
+        DEBUG_PrintTable(ss_update, update_table);
+        std::cout << ">>>> update table <<<<\n " << ss_update.str()
+                  << "\n >>>>>>>>>>>>>" << std::endl;
+
+        std::cout << "running val offsets: ";
+        for (auto offset : this->f_running_value_offsets) {
+            std::cout << offset << ",";
+        }
+        std::cout << std::endl;
+
         // Call eval on these running values to get the final output.
         this->metrics.finalize_eval_nrows += update_table->nrows();
         ScopedTimer eval_timer(this->metrics.finalize_eval_time);
@@ -1444,6 +1501,12 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
             this->f_running_value_offsets, this->col_sets, update_table,
             this->n_keys, this->separate_out_cols->data_table,
             this->op_scratch_pool, this->op_scratch_mm);
+
+        std::stringstream ss_out;
+        DEBUG_PrintTable(ss_out, out_table);
+        std::cout << ">>>> out table <<<<\n " << ss_out.str()
+                  << "\n >>>>>>>>>>>>>" << std::endl;
+
         eval_timer.finalize();
     } else {
         // Note that we don't need to call RebuildHashTableFromBuildBuffer
@@ -2562,7 +2625,7 @@ GroupbyState::GroupbyState(
     int64_t op_pool_size_bytes_, bool allow_any_work_stealing,
     std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
         key_dict_builders_,
-    bool use_sql_rules, bool pandas_drop_na_)
+    bool use_sql_rules, bool pandas_drop_na_, std::optional<udfinfo_t> udf_info)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -2589,6 +2652,7 @@ GroupbyState::GroupbyState(
       pandas_drop_na(pandas_drop_na_),
       f_in_offsets(std::move(f_in_offsets_)),
       f_in_cols(std::move(f_in_cols_)),
+      udf_info(udf_info),
       sort_asc(std::move(sort_asc_vec_)),
       sort_na(std::move(sort_na_pos_)),
       cols_to_keep_bitmask(std::move(cols_to_keep_bitmask_)),
@@ -2778,6 +2842,7 @@ GroupbyState::GroupbyState(
             local_input_cols_vec(ftypes.size());
         std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
             in_arr_types_vec(ftypes.size());
+
         for (size_t i = 0; i < ftypes.size(); i++) {
             // Get the input columns, array types, and dtypes for the current
             // function
@@ -2797,6 +2862,12 @@ GroupbyState::GroupbyState(
                     (in_schema_->column_types.at(physical_input_ind))->copy());
             }
         }
+
+        // UDF
+        int udf_idx = 0;
+        std::shared_ptr<table_info> udf_out_types =
+            udf_info.has_value() ? udf_info.value().udf_table_dummy : nullptr;
+
         // Handle non-window functions.
         // Perform a check on the running value and output types.
         // If any of them are of type string, set accumulate_before_update to
@@ -2812,12 +2883,15 @@ GroupbyState::GroupbyState(
             }
 
             std::unique_ptr<bodo::Schema> running_values_schema =
-                this->getRunningValueColumnTypes(local_input_cols,
-                                                 std::move(in_arr_types_copy),
-                                                 ftypes[i], 0, window_args);
+                this->getRunningValueColumnTypes(
+                    local_input_cols, std::move(in_arr_types_copy), ftypes[i],
+                    0, window_args, udf_out_types, udf_idx);
+            if (ftypes[i] == Bodo_FTypes::gen_udf) {
+                udf_idx++;
+            }
 
-            auto seperate_out_cols =
-                this->getSeparateOutputColumns(local_input_cols, ftypes[i], 0);
+            auto seperate_out_cols = this->getSeparateOutputColumns(
+                local_input_cols, ftypes[i], 0, udf_out_types, udf_idx);
             std::set<bodo_array_type::arr_type_enum> force_acc_types = {
                 bodo_array_type::STRING, bodo_array_type::DICT,
                 bodo_array_type::ARRAY_ITEM, bodo_array_type::STRUCT,
@@ -2859,7 +2933,8 @@ GroupbyState::GroupbyState(
                 // safer to mark things as *not* parallel to avoid
                 // any synchronization and hangs.
                 {}, 0, /*is_parallel*/ false, this->sort_asc, this->sort_na,
-                window_args, 0, nullptr, nullptr, 0, nullptr, use_sql_rules);
+                window_args, 0, nullptr, udf_out_types, gen_udf_col_sets.size(),
+                nullptr, use_sql_rules);
 
             // get update/combine type info to initialize build state
             std::unique_ptr<bodo::Schema> running_values_schema =
@@ -2892,6 +2967,11 @@ GroupbyState::GroupbyState(
             this->f_running_value_offsets.push_back(curr_running_value_offset);
 
             this->col_sets.push_back(col_set);
+            if (ftypes[i] == Bodo_FTypes::gen_udf) {
+                this->gen_udf_col_sets.push_back(
+                    std::dynamic_pointer_cast<GeneralUdfColSet>(
+                        col_sets.back()));
+            }
         }
     }
 
@@ -2966,7 +3046,8 @@ GroupbyState::GroupbyState(
         this->f_in_offsets, this->f_in_cols, this->f_running_value_offsets,
         /*is_active*/ true, this->accumulate_before_update,
         this->req_extended_group_info, this->metrics, this->op_pool.get(),
-        this->op_mm, this->op_scratch_pool.get(), this->op_scratch_mm));
+        this->op_mm, this->op_scratch_pool.get(), this->op_scratch_mm, udf_info,
+        gen_udf_col_sets));
     this->partition_state.emplace_back(std::make_pair<size_t, uint32_t>(0, 0));
 
     // Reserve space upfront. The output-batch-size is typically the same
@@ -2999,7 +3080,8 @@ GroupbyState::GroupbyState(
 std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
     std::vector<std::shared_ptr<array_info>> local_input_cols,
     std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype,
-    int window_ftype, std::shared_ptr<table_info> window_args) {
+    int window_ftype, std::shared_ptr<table_info> window_args,
+    std::shared_ptr<table_info> udf_output_types, int udf_table_idx) {
     std::shared_ptr<BasicColSet> col_set =
         makeColSet(local_input_cols,  // in_cols
                    nullptr,           // index_col
@@ -3015,8 +3097,8 @@ std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
                    window_args,       // window_args
                    0,                 // n_input_cols
                    nullptr,           // udf_n_redvars
-                   nullptr,           // udf_table
-                   0,                 // udf_table_idx
+                   udf_output_types,  // udf_table
+                   udf_table_idx,     // udf_table_idx
                    nullptr,           // nunique_table
                    true               // use_sql_rules
         );
@@ -3033,7 +3115,8 @@ std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
 std::vector<std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
 GroupbyState::getSeparateOutputColumns(
     std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype,
-    int window_ftype) {
+    int window_ftype, std::shared_ptr<table_info> udf_output_types,
+    int udf_table_idx) {
     std::shared_ptr<BasicColSet> col_set =
         makeColSet(local_input_cols,  // in_cols
                    nullptr,           // index_col
@@ -3049,8 +3132,8 @@ GroupbyState::getSeparateOutputColumns(
                    nullptr,           // window_args
                    0,                 // n_input_cols
                    nullptr,           // udf_n_redvars
-                   nullptr,           // udf_table
-                   0,                 // udf_table_idx
+                   udf_output_types,  // udf_table
+                   udf_table_idx,     // udf_table_idx
                    nullptr,           // nunique_table
                    true               // use_sql_rules
         );
@@ -4112,6 +4195,7 @@ void GroupbyState::FinalizeBuild() {
                 // Finalize the partition and get output from it.
                 // TODO: Write output directly into the GroupybyState's
                 // output buffer instead of returning the output.
+                std::cout << "finalizing partition" << std::endl;
                 if (this->agg_type == AggregationType::MRNF) {
                     // Initialize output buffer if this is the first
                     // partition.
@@ -4320,7 +4404,8 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     in_table = get_update_table</*is_acc_case*/ false>(
         in_table, groupby_state->n_keys, groupby_state->col_sets,
         groupby_state->f_in_offsets, groupby_state->f_in_cols,
-        groupby_state->req_extended_group_info,
+        groupby_state->req_extended_group_info, std::nullopt,
+        std::vector<std::shared_ptr<GeneralUdfColSet>>(),
         groupby_state->metrics.pre_agg_metrics);
     groupby_state->metrics.pre_agg_total_time += end_timer(start_pre_agg);
     groupby_state->metrics.pre_agg_output_nrows += in_table->nrows();

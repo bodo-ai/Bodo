@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include "../_bodo_common.h"
 #include "../_chunked_table_builder.h"
 #include "../_dict_builder.h"
@@ -7,6 +8,7 @@
 #include "../_query_profile_collector.h"
 #include "../_table_builder.h"
 #include "../groupby/_groupby_col_set.h"
+#include "../groupby/_groupby_udf.h"
 #include "../vendored/hyperloglog.hpp"
 
 #include "_shuffle.h"
@@ -256,7 +258,9 @@ class GroupbyPartition {
         GroupbyMetrics& metrics_, bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_,
         bodo::OperatorScratchPool* op_scratch_pool_,
-        const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_);
+        const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_,
+        std::optional<udfinfo_t> udf_info,
+        std::vector<std::shared_ptr<GeneralUdfColSet>> gen_udf_col_sets);
 
     // The schema of the build table.
     std::shared_ptr<bodo::Schema> build_table_schema;
@@ -306,6 +310,10 @@ class GroupbyPartition {
     const std::vector<int32_t>& f_in_offsets;
     const std::vector<int32_t>& f_in_cols;
     const std::vector<int32_t>& f_running_value_offsets;
+
+    // UDF info for computing agg with custom functions
+    std::optional<udfinfo_t> udf_info;
+    std::vector<std::shared_ptr<GeneralUdfColSet>> gen_udf_col_sets;
 
     // Reference to the metrics for this operator. Shared with the global state
     // and all other partitions.
@@ -1075,6 +1083,10 @@ class GroupbyState {
     // a special Finalize path.
     std::vector<int32_t> f_running_value_offsets;
 
+    // UDF info for computing custom aggfuncs (groupby.apply)
+    std::optional<udfinfo_t> udf_info;
+    std::vector<std::shared_ptr<GeneralUdfColSet>> gen_udf_col_sets;
+
     // Min-Row Number Filter (MRNF) specific attributes.
     AggregationType agg_type = AggregationType::AGGREGATE;
     const std::vector<bool> sort_asc;
@@ -1166,7 +1178,8 @@ class GroupbyState {
         int64_t op_pool_size_bytes_, bool allow_any_work_stealing = true,
         std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
             key_dict_builders_ = std::nullopt,
-        bool use_sql_rules = true, bool pandas_drop_na_ = false);
+        bool use_sql_rules = true, bool pandas_drop_na_ = false,
+        std::optional<udfinfo_t> udf_info = std::nullopt);
 
     ~GroupbyState() { MPI_Comm_free(&this->shuffle_comm); }
 
@@ -1428,7 +1441,8 @@ class GroupbyState {
     std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         std::vector<std::shared_ptr<array_info>> local_input_cols,
         std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype,
-        int window_ftype, std::shared_ptr<table_info> window_args);
+        int window_ftype, std::shared_ptr<table_info> window_args,
+        std::shared_ptr<table_info> udf_output_types, int udf_table_idx);
 
     /**
      * Helper function that gets the output column types for a given function.
@@ -1441,7 +1455,8 @@ class GroupbyState {
         std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
     getSeparateOutputColumns(
         std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype,
-        int window_ftype);
+        int window_ftype, std::shared_ptr<table_info> udf_output_types,
+        int udf_table_idx);
 
     /*@brief Split the partition at index 'idx' into two partitions.
      * This must only be called in the event of a threshold enforcement error.

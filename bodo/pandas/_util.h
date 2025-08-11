@@ -2,6 +2,8 @@
 
 #include <Python.h>
 #include <arrow/api.h>
+#include <object.h>
+#include <pytypedefs.h>
 #include <cstdint>
 #include <map>
 #include <variant>
@@ -225,22 +227,32 @@ struct BodoScalarFunctionData : public duckdb::FunctionData {
  */
 struct BodoAggFunctionData : public duckdb::FunctionData {
     BodoAggFunctionData(bool dropna, std::string name,
+                        PyObject *callback_wrapper,
                         std::shared_ptr<arrow::Schema> out_schema)
-        : out_schema(std::move(out_schema)), dropna(dropna), name(name) {}
+        : out_schema(std::move(out_schema)),
+          dropna(dropna),
+          name(name),
+          callback_wrapper(callback_wrapper) {
+        Py_INCREF(callback_wrapper);
+    }
+
+    ~BodoAggFunctionData() override { Py_DECREF(callback_wrapper); }
 
     bool Equals(const FunctionData &other_p) const override {
         const BodoAggFunctionData &other = other_p.Cast<BodoAggFunctionData>();
         return (other.dropna == this->dropna && other.name == this->name &&
+                other.callback_wrapper == this->callback_wrapper &&
                 other.out_schema == this->out_schema);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
-        return duckdb::make_uniq<BodoAggFunctionData>(this->dropna, this->name,
-                                                      this->out_schema);
+        return duckdb::make_uniq<BodoAggFunctionData>(
+            this->dropna, this->name, this->callback_wrapper, this->out_schema);
     }
 
     const std::shared_ptr<arrow::Schema> out_schema;
     const bool dropna;
     const std::string name;
+    PyObject *callback_wrapper;
 };
 
 /**

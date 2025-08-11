@@ -1487,6 +1487,9 @@ void UdfColSet::alloc_update_columns(
     if (this->combine_step) {
         offset = 1;
     }
+
+    std::cout << "allocating update column: " << udf_table_idx << std::endl;
+
     // for update table we only need redvars (skip first column which is
     // output column)
     for (int i = udf_table_idx + offset; i < udf_table_idx + 1 + n_redvars;
@@ -1556,6 +1559,13 @@ GeneralUdfColSet::GeneralUdfColSet(std::shared_ptr<array_info> in_col,
     : UdfColSet(in_col, false, udf_table, udf_table_idx, 0, use_sql_rules) {}
 
 GeneralUdfColSet::~GeneralUdfColSet() = default;
+
+std::unique_ptr<bodo::Schema> GeneralUdfColSet::getRunningValueColumnTypes(
+    const std::shared_ptr<bodo::Schema>& in_schema) const {
+    std::vector<int> col_idxs;
+    col_idxs.push_back(udf_table_idx);
+    return udf_table->schema()->Project(col_idxs);
+}
 
 void GeneralUdfColSet::fill_in_columns(
     const std::shared_ptr<table_info>& general_in_table,

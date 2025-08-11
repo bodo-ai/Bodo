@@ -1088,27 +1088,27 @@ class UdfColSet : public BasicColSet {
               std::shared_ptr<::arrow::MemoryManager> mm =
                   bodo::default_buffer_memory_manager()) override;
 
-    virtual void setUpdateCols(
-        std::vector<std::shared_ptr<array_info>> update_cols_) override {
-        throw std::runtime_error(
-            "UDFColSet not implemented for streaming groupby");
-    }
-    virtual void setCombineCols(
+    // void setUpdateCols(
+    //     std::vector<std::shared_ptr<array_info>> update_cols_) override {
+    //     throw std::runtime_error(
+    //         "UDFColSet not implemented for streaming groupby");
+    // }
+    void setCombineCols(
         std::vector<std::shared_ptr<array_info>> combine_cols_) override {
         throw std::runtime_error(
             "UDFColSet not implemented for streaming groupby");
     }
-    virtual void setInCol(
-        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
-        throw std::runtime_error(
-            "UDFColSet not implemented for streaming groupby");
-    }
-    virtual void clear() override {
+    // void setInCol(
+    //     std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+    //     throw std::runtime_error(
+    //         "UDFColSet not implemented for streaming groupby");
+    // }
+    void clear() override {
         throw std::runtime_error(
             "UDFColSet not implemented for streaming groupby");
     }
 
-   private:
+   protected:
     const std::shared_ptr<table_info>
         udf_table;            // the table containing type info for UDF columns
     const int udf_table_idx;  // index to my information in the udf table
@@ -1133,6 +1133,15 @@ class GeneralUdfColSet : public UdfColSet {
      */
     void fill_in_columns(const std::shared_ptr<table_info>& general_in_table,
                          const grouping_info& grp_info) const;
+
+    std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
+        const std::shared_ptr<bodo::Schema>& in_schema) const override;
+
+    // clear state of all general UDFs at the same time
+    void clear() override {}
+
+    // clear state once all col sets have been processed
+    void clear_after_gen_udf() { BasicColSet::clear(); }
 };
 
 /**

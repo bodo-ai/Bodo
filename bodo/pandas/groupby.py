@@ -30,6 +30,83 @@ if pt.TYPE_CHECKING:
     from bodo.pandas import BodoDataFrame, BodoSeries
 
 
+BUILTIN_AGG_FUNCS = {
+    "sum",
+    "min",
+    "max",
+    "idxmin",
+    "idxmax",
+    "median",
+    "mean",
+    "std",
+    "var",
+    "skew",
+    "count",
+    "size",
+    "nunique",
+}
+
+
+class GroupbyAggFunc:
+    in_col: str
+    func: Any
+
+    def __init__(self, in_col, func):
+        self.in_col = in_col
+        self.func = func
+
+    @property
+    def func_name(self) -> str:
+        return _get_aggfunc_str(self.func)
+
+    @property
+    def is_custom_aggfunc(self):
+        # TODO: custom impls of builtin funcs
+        return callable(self.func) and self.func_name not in BUILTIN_AGG_FUNCS
+
+    def cfunc_wrapper(self, in_col) -> pt.Callable[[], int]:
+        """Get a wrapper to be called per worker to compile/get Cfunc
+        TODO: Generate a single wrapper for all UDFs?
+        """
+        import ctypes
+
+        from numba import types
+
+        import bodo
+        from bodo.decorators import _cfunc
+        from bodo.libs.array import array_from_cpp_table
+        from bodo.pandas.utils import _empty_pd_array
+
+        if self.is_custom_aggfunc:
+            col_offset = 1  # TODO: n_keys (that are not dead) + udf_table_idx
+            func = self.func
+            out_type = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
+            out_arr_type = bodo.typeof(_empty_pd_array(out_type))
+            in_arr_type = bodo.typeof(in_col).data
+
+            def wrapper():
+                jitted_func = bodo.jit(spawn=False, distributed=False, cache=True)(func)
+
+                def agg_func(num_groups, in_table, out_table):
+                    if num_groups == 0:
+                        return
+
+                    out_col = array_from_cpp_table(out_table, col_offset, out_arr_type)
+                    for j in range(num_groups):
+                        in_col = array_from_cpp_table(in_table, j, in_arr_type)
+                        out_col[j] = jitted_func(
+                            pd.Series(in_col)
+                        )  # func returns scalar
+
+                c_sig = types.void(types.int64, types.voidptr, types.voidptr)
+                cfunc = _cfunc(c_sig, cache=True)(agg_func)
+                return ctypes.c_void_p(cfunc.address).value
+
+            return wrapper
+
+        return None
+
+
 class DataFrameGroupBy:
     """
     Similar to pandas DataFrameGroupBy. See Pandas code for reference:
@@ -115,7 +192,7 @@ class DataFrameGroupBy:
 
     def _normalize_agg_func(
         self, func, selection, kwargs: dict
-    ) -> list[tuple[str, str]]:
+    ) -> list[GroupbyAggFunc]:
         """
         Convert func and kwargs into a list of (column, function) tuples.
         """
@@ -126,22 +203,21 @@ class DataFrameGroupBy:
             # Handle cases like agg(my_sum=("A", "sum")) -> creates column my_sum
             # that sums column A.
             normalized_func = [
-                (col, _get_aggfunc_str(func_)) for col, func_ in kwargs.values()
+                GroupbyAggFunc(col, func_) for col, func_ in kwargs.values()
             ]
         elif is_dict_like(func):
             # Handle cases like {"A": "sum"} -> creates sum column over column A
             normalized_func = [
-                (col, _get_aggfunc_str(func_)) for col, func_ in func.items()
+                GroupbyAggFunc(col, func_) for col, func_ in func.items()
             ]
         elif is_list_like(func):
             # Handle cases like ["sum", "count"] -> creates a sum and count column
             # for each input column (column names are a multi-index) i.e.:
             # ("A", "sum"), ("A", "count"), ("B", "sum), ("B", "count")
             normalized_func = [
-                (col, _get_aggfunc_str(func_)) for col in selection for func_ in func
+                GroupbyAggFunc(col, func_) for col in selection for func_ in func
             ]
         else:
-            func = _get_aggfunc_str(func)
             # Size is a special case that only produces 1 column, since it doesn't
             # depend on input column given.
             if func == "size":
@@ -151,9 +227,9 @@ class DataFrameGroupBy:
                     raise BodoLibNotImplementedException(
                         "GroupBy.size(): Aggregating without selected columns not supported yet."
                     )
-                normalized_func = [(selection[0], "size")]
+                normalized_func = [GroupbyAggFunc(selection[0], func)]
             else:
-                normalized_func = [(col, func) for col in selection]
+                normalized_func = [GroupbyAggFunc(col, func) for col in selection]
 
         return normalized_func
 
@@ -444,14 +520,12 @@ def _groupby_agg_plan(
             if isinstance(empty_data, pd.DataFrame)
             else empty_data,
             grouped._obj._plan,
-            func_,
-            [grouped._obj.columns.get_loc(col)],
+            f"udf_{i}" if func_.is_custom_aggfunc else func_.func_name,
+            func_.cfunc_wrapper(empty_data[func_.in_col]),
+            [grouped._obj.columns.get_loc(func_.in_col)],
             grouped._dropna,
         )
-        for i, (
-            col,
-            func_,
-        ) in enumerate(func)
+        for i, func_ in enumerate(func)
     ]
 
     plan = LogicalAggregate(
@@ -491,6 +565,14 @@ def _get_aggfunc_str(func):
     )
 
 
+def _get_agg_udf_output_type(func: GroupbyAggFunc, in_type: pa.DataType):
+    # TODO
+    # Try to compile the UDF and get the output type
+    # If the output type cannot be determined fallback
+    # to Pandas (return None).
+    return pa.float64()
+
+
 def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.DataType:
     """Cast the input type to the correct output type depending on func or raise if
     the specific combination of func + input type is not supported.
@@ -511,9 +593,10 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
     """
     new_type = None
     fallback = False
+    func_name = func.func_name
 
     # TODO: Enable more fallbacks where the operation is supported in Pandas and not in Bodo
-    if func in ("sum",):
+    if func_name in ("sum",):
         if pa.types.is_signed_integer(pa_type) or pa.types.is_boolean(pa_type):
             new_type = pa.int64()
         elif pa.types.is_unsigned_integer(pa_type):
@@ -527,15 +610,15 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
         elif pa.types.is_decimal(pa_type):
             # TODO: Decimal sum
             fallback = True
-    elif func in ("mean", "std", "var", "skew"):
+    elif func_name in ("mean", "std", "var", "skew"):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
             # TODO Support bool/decimal columns
             fallback = True
-    elif func in ("count", "size", "nunique"):
+    elif func_name in ("count", "size", "nunique"):
         new_type = pa.int64()
-    elif func in ("min", "max"):
+    elif func_name in ("min", "max"):
         if (
             pa.types.is_integer(pa_type)
             or pa.types.is_floating(pa_type)
@@ -548,7 +631,7 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
             new_type = pa_type
         elif pa.types.is_decimal(pa_type):
             fallback = True
-    elif func == "median":
+    elif func_name == "median":
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa_type
         elif (
@@ -559,6 +642,9 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
         ):
             # TODO: bool/decimal median
             fallback = True
+    elif callable(func.func):
+        # UDF case
+        new_type = _get_agg_udf_output_type(func.func, pa_type)
     else:
         raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
 
@@ -609,7 +695,8 @@ def _cast_groupby_agg_columns(
         out_data = out_data.astype(pd.ArrowDtype(new_type))
         return out_data
 
-    for i, (in_col_name, func_) in enumerate(func):
+    for i, func_ in enumerate(func):
+        in_col_name = func_.in_col
         out_col_name = out_data.columns[i + n_key_cols]
 
         # Checks for cases like bdf.groupby("C")[["A", "A"]].agg(["sum"]).
