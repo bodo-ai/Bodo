@@ -18,42 +18,41 @@ Supports OpenAI-compatible endpoints and Amazon Bedrock via the backend paramete
 
 <p class="api-header">Parameters</p>
 
-__api_key: *str | None*__:
-    The API key for authentication. Required for OpenAI backend. Must not be passed for Bedrock backend.
+: __api_key: *str | None*__: The API key for authentication. Required for OpenAI backend. Must not be passed for Bedrock backend.
 
-__model: *str | None:*__
+: __model: *str | None:*__
     The model to use for generation. If None, the backend's default model will be used. If the backend is Bedrock, this should be the model ID (e.g., "amazon.titan-text-lite-v1:") and may not be None. For OpenAI, this should be the model name (e.g., "gpt-3.5-turbo").
 
-__base_url: *str | None:*__
+: __base_url: *str | None:*__
     The URL of an OpenAI-compatible LLM endpoint (only applies to OpenAI-style backends).
 
-__request_formatter: *Callable[[str], str] | None:*__
+: __request_formatter: *Callable[[str], str] | None:*__
     Optional function to format the input text before sending to the model. This is only used for the Bedrock backend and must not be passed otherwise.
 
     If None, a default formatter will be used for supported backends (e.g., Nova, Titan, Claude, OpenAI).
 
     For unsupported/custom models, this must be provided.
 
-__response_formatter: *Callable[[str], str] | None:__
+: __response_formatter: *Callable[[str], str] | None*:__
     Optional function to format the model's raw response into a string. This is only used for the Bedrock backend and must not be passed otherwise.
 
-        If None, a default formatter will be used for supported backends.
+    If None, a default formatter will be used for supported backends.
 
-        For unsupported/custom models, this must be provided.
+    For unsupported/custom models, this must be provided.
 
-__region: *str | None:*__
+: __region: *str | None:*__
     The AWS region where the Bedrock model is hosted (only applies to Bedrock backend).
     If None, the default configured region will be used.
 
-__backend: *bodo.ai.backend.Backend:*__
-    The backend to use for generation. Examples include:
+: __backend: *bodo.ai.backend.Backend:*__
+    The backend to use for generation. Currently supports:
 
-        Backend.OPENAI – for OpenAI-compatible endpoints
+        bodo.ai.backend.Backend.OPENAI – for OpenAI-compatible endpoints
 
-        Backend.BEDROCK – for Amazon Bedrock models
-__**embedding_kwargs: *dict*__: Additional keyword arguments for the embedding API.
+        bodo.ai.backend.Backend.BEDROCK – for Amazon Bedrock models
+: __**embedding_kwargs: *dict*__: Additional keyword arguments for the embedding API.
 <p class="api-header">Returns</p>
-__BodoSeries__: A series containing the embedded vectors as lists of doubles. 
+: __BodoSeries__: A series containing the embedded vectors as lists of doubles. 
 
 <p class="api-header">Example — OpenAI-compatible backend</p>
 
