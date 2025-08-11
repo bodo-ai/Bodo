@@ -4,15 +4,20 @@ Provides a Bodo implementation of the pandas groupby API.
 
 from __future__ import annotations
 
+import ctypes
 import typing as pt
 import warnings
 from typing import Any, Literal
 
 import pandas as pd
 import pyarrow as pa
+from numba import types
 from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
+import bodo
+from bodo.decorators import _cfunc
+from bodo.libs.array import array_from_cpp_table
 from bodo.pandas.plan import (
     AggregateExpression,
     LogicalAggregate,
@@ -22,6 +27,8 @@ from bodo.pandas.plan import (
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    _empty_pd_array,
+    _get_empty_series_arrow,
     check_args_fallback,
     wrap_plan,
 )
@@ -68,19 +75,11 @@ class GroupbyAggFunc:
         """Get a wrapper to be called per worker to compile/get Cfunc
         TODO: Generate a single wrapper for all UDFs?
         """
-        import ctypes
-
-        from numba import types
-
-        import bodo
-        from bodo.decorators import _cfunc
-        from bodo.libs.array import array_from_cpp_table
-        from bodo.pandas.utils import _empty_pd_array
 
         if self.is_custom_aggfunc:
             col_offset = 1  # TODO: n_keys (that are not dead) + udf_table_idx
             func = self.func
-            out_type = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
+            out_type = _get_agg_udf_output_type(self, in_col.dtype.pyarrow_dtype)
             out_arr_type = bodo.typeof(_empty_pd_array(out_type))
             in_arr_type = bodo.typeof(in_col).data
 
@@ -566,11 +565,37 @@ def _get_aggfunc_str(func):
 
 
 def _get_agg_udf_output_type(func: GroupbyAggFunc, in_type: pa.DataType):
-    # TODO
-    # Try to compile the UDF and get the output type
-    # If the output type cannot be determined fallback
-    # to Pandas (return None).
-    return pa.float64()
+    empty_series = pd.Series([], dtype=pd.ArrowDtype(in_type))
+    func = func.func
+
+    deco = bodo.jit(spawn=False, distributed=False, cache=True)
+
+    # Assumes that func returns a scalar
+    jitted_func = deco(func)
+
+    # Convert back to series to make it easier to cast the output to arrow
+    # TODO: make this more robust
+    def outer_func(x):
+        return pd.Series([jitted_func(x)])
+
+    try:
+        out_series = deco(outer_func)(empty_series)
+    except Exception as e:
+        raise BodoLibNotImplementedException(
+            f"Groupby.agg(): unable to compile {func.func_name}:", str(e)
+        )
+
+    out_series_arrow = _get_empty_series_arrow(out_series)
+
+    if not isinstance(out_series_arrow.dtype, pd.ArrowDtype) or pa.types.is_null(
+        out_series_arrow.dtype.pyarrow_dtype
+    ):
+        raise BodoLibNotImplementedException(
+            f"Groupby.agg(): unable determine dtypes of {func.func_name}, got:",
+            out_series_arrow.dtype,
+        )
+
+    return out_series.dtype.pyarrow_dtype
 
 
 def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.DataType:
@@ -644,7 +669,7 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
             fallback = True
     elif callable(func.func):
         # UDF case
-        new_type = _get_agg_udf_output_type(func.func, pa_type)
+        new_type = _get_agg_udf_output_type(func, pa_type)
     else:
         raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
 

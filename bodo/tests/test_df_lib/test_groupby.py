@@ -11,8 +11,13 @@ def test_basic_agg_udf():
     )
     bdf = bd.from_pandas(df)
 
-    df2 = df.groupby(by="A").agg(lambda x: len(x[x > 0]) / len(x))
+    def udf(x):
+        if len(x) == 0:
+            return None
+        return len(x[x > 0]) / len(x)
+
+    df2 = df.groupby(by="A").agg(udf)
     with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby(by="A").agg(lambda x: len(x[x > 0]) / len(x))
+        bdf2 = bdf.groupby(by="A").agg(udf)
 
     _test_equal(bdf2, df2, check_pandas_types=False)
