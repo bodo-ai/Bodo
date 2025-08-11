@@ -65,7 +65,7 @@ a = pd.Series(["bodo.ai will improve your workflows.", "This is a professional s
 # Define the LLM base_url and API key
 base_url = "https://api.example.com/v1"
 api_key = "your_api_key_here"
-# Embed the series using the LLM
+# Embed the series using the model
 b = a.ai.embed(
     api_key=api_key,
     model="text-embedding-3-small",
