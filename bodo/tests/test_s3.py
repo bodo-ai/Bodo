@@ -406,6 +406,7 @@ def test_s3_parquet_write_seq(
 
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df, f"s3://{bucket_name}/test_df_bodo_seq.pq")
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -434,6 +435,7 @@ def test_s3_parquet_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
 
     bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -462,6 +464,7 @@ def test_s3_parquet_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -500,6 +503,7 @@ def test_s3_csv_write_seq(
 
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df, f"s3://{bucket_name}/test_df_bodo_seq.csv")
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -534,6 +538,7 @@ def test_s3_csv_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
 
     bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -578,6 +583,7 @@ def test_s3_csv_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -618,6 +624,7 @@ def test_s3_csv_write_header_seq(minio_server_with_s3_envs, s3_bucket, test_df):
 
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df)
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -643,6 +650,7 @@ def test_s3_csv_write_header_1D(minio_server_with_s3_envs, s3_bucket, test_df):
 
     bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -679,6 +687,7 @@ def test_s3_csv_write_header_1D_var(minio_server_with_s3_envs, s3_bucket, test_d
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -770,6 +779,7 @@ def test_s3_json_write_records_lines_seq(
 
     bodo_write = bodo.jit(test_write)
     bodo_write(test_df, f"s3://{bucket_name}/df_records_lines_seq.json")
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -802,6 +812,7 @@ def test_s3_json_write_records_lines_1D(minio_server_with_s3_envs, s3_bucket, te
 
     bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False))
+    bodo.barrier()
 
     @run_rank0
     def read_table():
@@ -833,6 +844,7 @@ def test_s3_json_write_records_lines_1D_var(
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
+    bodo.barrier()
 
     @run_rank0
     def read_table():

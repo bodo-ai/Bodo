@@ -16,7 +16,11 @@ from bodo.pandas.plan import (
     LogicalGetPandasReadSeq,
     assert_executed_plan_count,
 )
-from bodo.pandas.utils import BodoCompilationFailedWarning, BodoLibFallbackWarning
+from bodo.pandas.utils import (
+    BodoCompilationFailedWarning,
+    BodoLibFallbackWarning,
+    JITFallback,
+)
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
@@ -246,7 +250,8 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
-            reset_index=False,
+            # RangeIndex order is not guaranteed
+            reset_index=isinstance(index_val, pd.RangeIndex),
         )
 
         # Already distributed DataFrame case
@@ -266,7 +271,8 @@ def test_write_parquet(index_val):
             df,
             check_pandas_types=False,
             sort_output=True,
-            reset_index=False,
+            # RangeIndex order is not guaranteed
+            reset_index=isinstance(index_val, pd.RangeIndex),
         )
 
 
@@ -3101,6 +3107,52 @@ def test_map_with_state():
     )
 
 
+def test_map_partitions_with_state():
+    class mystate:
+        def __init__(self):
+            self.dict = {1: 5}
+
+    def init_state():
+        return mystate()
+
+    def per_batch(state, batch, *args, **kwargs):
+        def per_row(row):
+            return "bodo" + str(row + state.dict[1] + args[0] + kwargs["bodo"])
+
+        return batch.map(per_row)
+
+    a = pd.Series(list(range(20)))
+    ba = bd.Series(a)
+    res = a.map(lambda x: "bodo" + str(x + 7))
+    with assert_executed_plan_count(1):
+        bres = ba.map_partitions_with_state(init_state, per_batch, 1, bodo=1)
+
+    _test_equal(
+        bres,
+        res,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+    with assert_executed_plan_count(0):
+        bres = ba.map_partitions_with_state(
+            init_state,
+            per_batch,
+            1,
+            output_type=pd.Series(dtype="string[pyarrow]"),
+            bodo=1,
+        )
+
+    _test_equal(
+        bres,
+        res,
+        check_pandas_types=False,
+        reset_index=False,
+        check_names=False,
+    )
+
+
 @pytest.mark.parametrize(
     "quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1], [0.22, 0.55, 0.99], [0.5]]
 )
@@ -3266,4 +3318,58 @@ def test_series_quantile_singleton():
         check_pandas_types=False,
         reset_index=True,
         check_names=False,
+    )
+
+
+def test_dataframe_jit_fallback(datapath):
+    """Test fallback to JIT."""
+    path = datapath("dataframe_library/df1.parquet")
+
+    bodo_out = bd.read_parquet(path)[["A", "D"]]
+    py_out = pd.read_parquet(path)[["A", "D"]]
+
+    start_jit_fallback_compile_success = JITFallback.compile_success
+    with assert_executed_plan_count(1):
+        py_dup = py_out.duplicated()
+        bd_dup = bodo_out.duplicated()
+    end_jit_fallback_compile_success = JITFallback.compile_success
+
+    assert end_jit_fallback_compile_success - start_jit_fallback_compile_success == 1
+
+    _test_equal(
+        bd_dup,
+        py_dup,
+        check_pandas_types=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+def test_top_level_jit_fallback(datapath):
+    """Test fallback to JIT."""
+    df = pd.DataFrame(
+        {
+            "A": ["X", "X", "X", "X", "Y", "Y"],
+            "B": [1, 2, 3, 4, 5, 6],
+            "C": [10, 11, 12, 20, 21, 22],
+        }
+    )
+    bodo_df = bd.DataFrame(df)
+
+    start_jit_fallback_compile_success = JITFallback.compile_success
+    with assert_executed_plan_count(1):
+        py_pivoted = pd.pivot(df, columns="A", index="B", values="C")
+        bodo_pivoted = bd.pivot(bodo_df, columns="A", index="B", values="C")
+    end_jit_fallback_compile_success = JITFallback.compile_success
+
+    assert end_jit_fallback_compile_success - start_jit_fallback_compile_success == 1
+
+    bodo_reordered = bodo_pivoted[py_pivoted.columns]
+    _test_equal(
+        bodo_reordered,
+        py_pivoted,
+        check_pandas_types=False,
+        reset_index=True,
+        check_names=False,
+        sort_output=True,
     )

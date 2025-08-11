@@ -173,6 +173,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "to_string",
             "attrs",
             "flags",
+            "iloc",
         ]
 
         cls = object.__getattribute__(self, "__class__")
@@ -188,8 +189,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 f"Series.{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(self, object.__getattribute__(self, name))
+            return fallback_wrapper(
+                self, object.__getattribute__(self, name), name, msg
+            )
 
         return object.__getattribute__(self, name)
 
@@ -717,7 +719,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             self._plan, empty_series, "map", (arg, na_action), {}
         )
 
-    @check_args_fallback(unsupported="none")
     def map_with_state(self, init_state_fn, row_fn, na_action=None, output_type=None):
         """
         Map values of the Series by first initializaing state and then processing
@@ -755,6 +756,45 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "map_with_state",
             (init_state_fn, row_fn, na_action),
             {},
+        )
+
+    def map_partitions_with_state(
+        self, init_state_fn, func, *args, output_type=None, **kwargs
+    ):
+        """
+        Apply a function to each partition of the series with a one-time initialization.
+
+        NOTE: this pickles the function and sends it to the workers, so globals are
+        pickled. The use of lazy data structures as globals causes issues.
+
+        Args:
+            init_state_fn : Callable returning state, which can have any type
+            func (Callable): A callable which takes in a Series as its first
+                argument and returns a DataFrame or Series that has the same length
+                its input.
+            *args: Additional positional arguments to pass to func.
+            **kwargs: Additional key-word arguments to pass to func.
+            output_type : if present, is an empty Pandas series specifying the output
+                          dtype of the operation.
+
+        Returns:
+            DataFrame or Series: The result of applying the func.
+        """
+        if output_type is None:
+            state = init_state_fn()
+            # Get output data type by running the UDF on a sample of the data.
+            empty_series = get_scalar_udf_result_type(
+                self, "map_partitions_with_state", (state, func), *args, **kwargs
+            )
+        else:
+            empty_series = output_type
+
+        return _get_series_func_plan(
+            self._plan,
+            empty_series,
+            "map_partitions_with_state",
+            (init_state_fn, func, *args),
+            kwargs,
         )
 
     def map_partitions(self, func, *args, **kwargs):
@@ -2468,10 +2508,54 @@ def _get_series_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
-    if func in {"dt.dayofweek", "dt.day_of_week", "dt.hour", "dt.month", "dt.date"}:
-        if func == "dt.dayofweek":
-            func = "dt.day_of_week"
-        func_name = func.split(".")[1]
+    # List of Series methods to be routed to Arrow Compute
+    arrow_compute_list = (
+        "dt.hour",
+        "dt.month",
+        "dt.dayofweek",
+        "dt.day_of_week",
+        "dt.quarter",
+        "dt.year",
+        "dt.day",
+        "dt.minute",
+        "dt.second",
+        "dt.microsecond",
+        "dt.nanosecond",
+        "dt.weekday",
+        "dt.dayofyear",
+        "dt.day_of_year",
+        # string methods that correspond to utf8_{name}
+        "str.isalnum",
+        "str.isalpha",
+        "str.isdecimal",
+        "str.isdigit",
+        "str.isnumeric",
+        "str.isupper",
+        "str.isspace",
+        "str.capitalize",
+        "str.length",
+        "str.lower",
+        "str.upper",
+        "str.swapcase",
+        "str.title",
+        "str.reverse",
+    )
+
+    def get_arrow_func(name):
+        """Maps method name to its corresponding Arrow Compute Function name."""
+        if name in ("dt.dayofweek", "dt.weekday"):
+            return "day_of_week"
+        if name == "dt.dayofyear":
+            return "day_of_year"
+        if name.startswith("str.is"):
+            body = name.split(".")[1]
+            return "utf8_" + body[:2] + "_" + body[2:]
+        if name.startswith("str."):
+            return "utf8_" + name.split(".")[1]
+        return name.split(".")[1]
+
+    if func in arrow_compute_list:
+        func_name = get_arrow_func(func)
         func_args = ()  # TODO: expand this to enable arrow compute calls with args
         is_cfunc = False
         has_state = False
@@ -2483,7 +2567,7 @@ def _get_series_func_plan(
         )
     else:
         # Empty func_name separates Python calls from Arrow calls.
-        has_state = func == "map_with_state"
+        has_state = func in ("map_with_state", "map_partitions_with_state")
         if cfunc_decorator:
             func_args = (func, cfunc_decorator)
             is_cfunc = True
@@ -2925,19 +3009,13 @@ series_str_methods = [
 dt_accessors = [
     # idx = 0: Series(Int64)
     (
-        # NOTE: The methods below (e.g., hour, month, dayofweek) return int32 in Pandas by default.
+        # NOTE: The methods below return int32 in Pandas by default.
         # In Bodo, the output dtype is int64 because we use PyArrow Compute.
         [
             "hour",
             "month",
             "dayofweek",
             "day_of_week",
-        ],
-        pd.ArrowDtype(pa.int64()),
-    ),
-    # idx = 0: Series(Int32)
-    (
-        [
             "quarter",
             "year",
             "day",
@@ -2947,7 +3025,12 @@ dt_accessors = [
             "nanosecond",
             "weekday",
             "dayofyear",
-            "day_of_year",
+        ],
+        pd.ArrowDtype(pa.int64()),
+    ),
+    # idx = 0: Series(Int32)
+    (
+        [
             "daysinmonth",
             "days_in_month",
             "days",

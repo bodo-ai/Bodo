@@ -13,6 +13,7 @@ from libc.stdint cimport int64_t, uint64_t
 import pandas as pd
 import pyarrow.parquet as pq
 
+import bodo
 from bodo.io.fs_io import (
     expand_path_globs,
     getfs,
@@ -792,11 +793,13 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     """
     cdef readonly object path
     cdef readonly object storage_options
+    cdef readonly int nrows
 
     def __cinit__(self, object out_schema, object parquet_path, object storage_options):
         self.out_schema = out_schema
         self.path = parquet_path
         self.storage_options = storage_options
+        self.nrows = bodo.libs.distributed_api.bcast_scalar(self._get_nrows() if bodo.get_rank() == 0 else 0)
         cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, self.getCardinality())
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
@@ -804,6 +807,9 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return f"LogicalGetParquetRead({self.path})"
 
     def getCardinality(self):
+        return self.nrows
+
+    def _get_nrows(self):
         fpath, parsed_url, protocol = parse_fpath(self.path)
         fs = getfs(fpath, protocol, self.storage_options, parallel=False)
 
