@@ -6,6 +6,7 @@ from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.base import *
+from bodo.pandas.utils import fallback_wrapper
 import os
 
 DataFrame = BodoDataFrame
@@ -36,7 +37,11 @@ def add_fallback():
         for func in set(pandas_attrs).difference(bodo_df_lib_attrs):
             # Export the pandas functions that aren't implemented by bodo
             # into bodo.pandas.
-            setattr(current_module, func, getattr(pandas, func))
+            msg = (
+                f"{func} is not implemented in Bodo Dataframe Library yet. "
+                "Falling back to Pandas (may be slow or run out of memory)."
+            )
+            setattr(current_module, func, fallback_wrapper(pandas, getattr(pandas, func), func, msg))
 
 # Must do this at the end so that all functions we want to provide already exist.
 add_fallback()

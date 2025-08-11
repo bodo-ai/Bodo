@@ -16,7 +16,11 @@ from bodo.pandas.plan import (
     LogicalGetPandasReadSeq,
     assert_executed_plan_count,
 )
-from bodo.pandas.utils import BodoCompilationFailedWarning, BodoLibFallbackWarning
+from bodo.pandas.utils import (
+    BodoCompilationFailedWarning,
+    BodoLibFallbackWarning,
+    JITFallback,
+)
 from bodo.tests.utils import _test_equal, pytest_mark_spawn_mode, temp_config_override
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
@@ -3314,4 +3318,58 @@ def test_series_quantile_singleton():
         check_pandas_types=False,
         reset_index=True,
         check_names=False,
+    )
+
+
+def test_dataframe_jit_fallback(datapath):
+    """Test fallback to JIT."""
+    path = datapath("dataframe_library/df1.parquet")
+
+    bodo_out = bd.read_parquet(path)[["A", "D"]]
+    py_out = pd.read_parquet(path)[["A", "D"]]
+
+    start_jit_fallback_compile_success = JITFallback.compile_success
+    with assert_executed_plan_count(1):
+        py_dup = py_out.duplicated()
+        bd_dup = bodo_out.duplicated()
+    end_jit_fallback_compile_success = JITFallback.compile_success
+
+    assert end_jit_fallback_compile_success - start_jit_fallback_compile_success == 1
+
+    _test_equal(
+        bd_dup,
+        py_dup,
+        check_pandas_types=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+def test_top_level_jit_fallback(datapath):
+    """Test fallback to JIT."""
+    df = pd.DataFrame(
+        {
+            "A": ["X", "X", "X", "X", "Y", "Y"],
+            "B": [1, 2, 3, 4, 5, 6],
+            "C": [10, 11, 12, 20, 21, 22],
+        }
+    )
+    bodo_df = bd.DataFrame(df)
+
+    start_jit_fallback_compile_success = JITFallback.compile_success
+    with assert_executed_plan_count(1):
+        py_pivoted = pd.pivot(df, columns="A", index="B", values="C")
+        bodo_pivoted = bd.pivot(bodo_df, columns="A", index="B", values="C")
+    end_jit_fallback_compile_success = JITFallback.compile_success
+
+    assert end_jit_fallback_compile_success - start_jit_fallback_compile_success == 1
+
+    bodo_reordered = bodo_pivoted[py_pivoted.columns]
+    _test_equal(
+        bodo_reordered,
+        py_pivoted,
+        check_pandas_types=False,
+        reset_index=True,
+        check_names=False,
+        sort_output=True,
     )
