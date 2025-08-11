@@ -12,6 +12,7 @@ import pyarrow as pa
 import pytest
 import requests
 
+import bodo.ai.backend
 import bodo.pandas as bd
 from bodo.spawn.spawner import spawn_process_on_workers
 from bodo.tests.utils import _test_equal
@@ -208,7 +209,7 @@ def wait_for_ollama_model(url, model_name):
     )
 
 
-def test_llm_generate():
+def test_llm_generate_ollama():
     prompts = bd.Series(
         [
             "bodo.ai will improve your workflows.",
@@ -241,7 +242,7 @@ def test_llm_generate():
         spawn_process_on_workers("docker rm bodo_test_ollama -f".split(" "))
 
 
-def test_embed():
+def test_embed_ollama():
     prompts = bd.Series(
         [
             "bodo.ai will improve your workflows.",
@@ -303,10 +304,11 @@ def test_llm_generate_bedrock_custom_formatters():
     def response_formatter(response: str) -> str:
         return json.loads(response)["output"]["message"]["content"][0]["text"]
 
-    res = prompts.ai.llm_generate_bedrock(
-        modelId="us.amazon.nova-micro-v1:0",
+    res = prompts.ai.llm_generate(
+        model="us.amazon.nova-micro-v1:0",
         request_formatter=request_formatter,
         region="us-east-2",
+        backend=bodo.ai.backend.Backend.BEDROCK,
     ).execute_plan()
 
     assert len(res) == 4
@@ -331,9 +333,10 @@ def test_llm_generate_bedrock_default_formatter(modelId):
         ]
     )
 
-    res = prompts.ai.llm_generate_bedrock(
-        modelId=modelId,
+    res = prompts.ai.llm_generate(
+        model=modelId,
         region="us-east-1",
+        backend=bodo.ai.backend.Backend.BEDROCK,
     ).execute_plan()
 
     assert len(res) == 4
@@ -356,10 +359,11 @@ def test_embed_bedrock_custom_formatters():
     def response_formatter(response: str) -> list[float]:
         return json.loads(response)["embedding"]
 
-    res = prompts.ai.embed_bedrock(
-        modelId="amazon.titan-embed-text-v2:0",
+    res = prompts.ai.embed(
+        model="amazon.titan-embed-text-v2:0",
         request_formatter=request_formatter,
         region="us-east-2",
+        backend=bodo.ai.backend.Backend.BEDROCK,
     ).execute_plan()
 
     assert len(res) == 4
@@ -376,9 +380,10 @@ def test_embed_bedrock_default_formatter():
         ]
     )
 
-    res = prompts.ai.embed_bedrock(
-        modelId="amazon.titan-embed-text-v2:0",
+    res = prompts.ai.embed(
+        model="amazon.titan-embed-text-v2:0",
         region="us-east-1",
+        backend=bodo.ai.backend.Backend.BEDROCK,
     ).execute_plan()
 
     assert len(res) == 4
