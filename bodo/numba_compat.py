@@ -3012,7 +3012,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     typeinfer.add_type(self.target, sig.return_type, loc=self.loc)
 
     # Bodo change: update streaming state type
-    if pos_args[0] != sig.args[0] and is_streaming_build_funcs(getattr(fnty, "typing_key", None)):
+    if len(pos_args) > 0 and len(sig.args) > 0 and pos_args[0] != sig.args[0] and is_streaming_build_funcs(getattr(fnty, "typing_key", None)):
         typeinfer.add_type(self.args[0].name, sig.args[0], loc=self.loc)
 
     # If the function is a bound function and its receiver type
