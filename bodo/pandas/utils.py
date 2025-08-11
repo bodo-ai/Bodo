@@ -1300,7 +1300,6 @@ class JITFallback:
                     else:
                         func_text += f"    return self.{self.name}({caller_args})\n"
 
-                    # print("new_func_text:", func_text)
                     new_func = bodo.utils.utils.bodo_spawn_exec(
                         func_text, {"pd": pd}, {}, __name__
                     )
@@ -1332,9 +1331,3 @@ class JITFallback:
 
         JITFallback.python_fallback += 1
         raise JITFallback.JITFallbackFail()
-
-        # msg = (
-        #    f"{self.name} is not implemented in Bodo Dataframe Library yet. "
-        #    "Falling back to Pandas (may be slow or run out of memory)."
-        # )
-        # return fallback_wrapper(self.base_obj, getattr(self.base_obj.__class__.__bases__[0], self.name), msg)(*args, **kwargs)
