@@ -1271,6 +1271,12 @@ class JITFallback:
         )
         # See if we previously tried to compile this function.
         cache_entry = JITFallback.fallback_cache.get(key, None)
+        # We are using an allow-list strategy below because many of the possible
+        # functions return data-types that don't have equivalents in this
+        # dataframe library yet or we don't have conversions from the Python
+        # type to the corresponding dataframe library type or plain just don't
+        # work for unknown reasons.  So, we will be on the safe side for now and
+        # only JIT fallback for methods that we have tested.
         if self.name in ("duplicated", "pivot") and cache_entry != False:
             # None means it wasn't in the cache either way so we can try to
             # JIT compile it.
