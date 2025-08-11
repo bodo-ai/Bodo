@@ -307,6 +307,7 @@ def test_llm_generate_bedrock_custom_formatters():
     res = prompts.ai.llm_generate(
         model="us.amazon.nova-micro-v1:0",
         request_formatter=request_formatter,
+        response_formatter=response_formatter,
         region="us-east-2",
         backend=bodo.ai.backend.Backend.BEDROCK,
     ).execute_plan()
@@ -362,6 +363,7 @@ def test_embed_bedrock_custom_formatters():
     res = prompts.ai.embed(
         model="amazon.titan-embed-text-v2:0",
         request_formatter=request_formatter,
+        response_formatter=response_formatter,
         region="us-east-2",
         backend=bodo.ai.backend.Backend.BEDROCK,
     ).execute_plan()
