@@ -80,26 +80,32 @@ def _get_cfunc_wrapper(empty_data: pd.DataFrame, n_keys, funcs: list[GroupbyAggF
     if not any(func.is_custom_aggfunc for func in funcs):
         return None
 
-    # TODO: multiple funcs
     assert len(funcs) == 1
 
     col_offset = n_keys  # TODO: n_keys (that are not dead) + udf_table_idx
-    func = funcs[0].func
-    in_col = empty_data[funcs[0].in_col]
-    out_type = _get_agg_udf_output_type(funcs[0], in_col.dtype.pyarrow_dtype)
-    out_arr_type = bodo.typeof(_empty_pd_array(out_type))
-    in_arr_type = bodo.typeof(in_col).data
+    deco = bodo.jit(spawn=False, distributed=False, cache=True)
+    jitted_funcs, in_col_types, out_col_types = [], [], []
+
+    for func in funcs:
+        jitted_funcs.append(deco(func.func))
+
+        in_col = empty_data[func.in_col]
+        in_col_types.append(bodo.typeof(in_col).data)
+        out_type = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
+        out_col_types.append(bodo.typeof(_empty_pd_array(out_type)))
+
+    jitted_func = jitted_funcs[0]
+    in_col_type = in_col_types[0]
+    out_col_type = out_col_types[0]
 
     def wrapper():
-        jitted_func = bodo.jit(spawn=False, distributed=False, cache=True)(func)
-
         def agg_func(num_groups, in_table, out_table):
             if num_groups == 0:
                 return
 
-            out_col = array_from_cpp_table(out_table, col_offset, out_arr_type)
+            out_col = array_from_cpp_table(out_table, col_offset, out_col_type)
             for j in range(num_groups):
-                in_col = array_from_cpp_table(in_table, j, in_arr_type)
+                in_col = array_from_cpp_table(in_table, j, in_col_type)
                 out_col[j] = jitted_func(pd.Series(in_col))  # func returns scalar
 
         c_sig = types.void(types.int64, types.voidptr, types.voidptr)
@@ -571,12 +577,12 @@ def _get_aggfunc_str(func):
 
 def _get_agg_udf_output_type(func: GroupbyAggFunc, in_type: pa.DataType):
     empty_series = pd.Series([], dtype=pd.ArrowDtype(in_type))
-    func = func.func
+    func_ = func.func
 
     deco = bodo.jit(spawn=False, distributed=False, cache=True)
 
     # Assumes that func returns a scalar
-    jitted_func = deco(func)
+    jitted_func = deco(func_)
 
     # Convert back to series to make it easier to cast the output to arrow
     # TODO: make this more robust
