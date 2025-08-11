@@ -875,12 +875,6 @@ def get_filters_pyobject(filter_str, vars):  # pragma: no cover
     pass
 
 
-try:
-    import pyiceberg.expressions as pie
-except ImportError:
-    pie = None
-
-
 def literal(val) -> Literal:
     """
     Wrapper over PyIceberg's literal function for constructing filters.
@@ -902,8 +896,7 @@ def literal(val) -> Literal:
 @overload(get_filters_pyobject, no_unliteral=True)
 def overload_get_filters_pyobject(filters_str, var_tup):
     """generate a pyobject for filter expression to pass to C++"""
-    if pie is None:
-        raise_bodo_error("pyiceberg not found")
+    import pyiceberg.expressions as pie
 
     filter_str_val = get_overload_const_str(filters_str)
     var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
@@ -943,6 +936,8 @@ class IcebergFilterVisitor(FilterVisitor[str]):
     Returns:
         A string representation of the FilterExpr object.
     """
+
+    import pyiceberg.expressions as pie
 
     def __init__(self, filter_map):
         self.filter_map = filter_map
@@ -1059,7 +1054,7 @@ def add_rtjf_iceberg_filter(
     """
     For each column in filtered_cols create a FilterExpr containing it's bounds and combine them all with file_filters
     """
-    assert pie is not None
+    import pyiceberg.expressions as pie
 
     is_empty = bodo.ir.sql_ext.is_empty_build_table(state_var)
     with bodo.no_warning_objmode(combined_filters="parquet_predicate_type"):
