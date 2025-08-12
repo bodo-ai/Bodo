@@ -144,23 +144,15 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                                          agg_expr.function.name);
             }
 
-            if (agg_expr.function.name.starts_with("udf")) {
-                ftypes.push_back(Bodo_FTypes::gen_udf);
-            } else {
-                ftypes.push_back(function_to_ftype.at(agg_expr.function.name));
-            }
-
             // Extract bind_info
             BodoAggFunctionData& bind_info =
                 agg_expr.bind_info->Cast<BodoAggFunctionData>();
 
-            // Extract out type
-            auto out_arr_type = arrow_type_to_bodo_data_type(
-                bind_info.out_schema->field(0)->type());
-
-            // extract Cfunc and create a udf struct for storing callback and
-            // output types
-            if (ftypes.back() == Bodo_FTypes::gen_udf) {
+            std::unique_ptr<bodo::DataType> out_arr_type;
+            if (agg_expr.function.name.starts_with("udf")) {
+                ftypes.push_back(Bodo_FTypes::gen_udf);
+                out_arr_type = arrow_type_to_bodo_data_type(
+                    bind_info.out_schema->field(0)->type());
                 // callback_wrapper is a tuple of (callback_wrapper, func_arg)
                 // the callback_wrapper is the same for every func, so only need
                 // to extract it once.
@@ -170,6 +162,16 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                 }
                 udfs.push_back(PyTuple_GET_ITEM(bind_info.callback_wrapper, 1));
                 udf_idxs.push_back(i + this->keys.size());
+            } else {
+                ftypes.push_back(function_to_ftype.at(agg_expr.function.name));
+                std::tuple<bodo_array_type::arr_type_enum,
+                           Bodo_CTypes::CTypeEnum>
+                    output_dtype = get_groupby_output_dtype(
+                        ftypes.back(),
+                        in_table_schema->column_types[col_idx]->array_type,
+                        in_table_schema->column_types[col_idx]->c_type);
+                out_arr_type = std::make_unique<bodo::DataType>(
+                    std::get<0>(output_dtype), std::get<1>(output_dtype));
             }
 
             this->output_schema->append_column(std::move(out_arr_type));

@@ -344,18 +344,14 @@ class SeriesGroupBy:
         normalized_func: list[tuple[str, str]] = []
         if func is None and kwargs:
             # Handle case agg(A="mean") -> create mean column "A"
-            normalized_func = [
-                (col, _get_aggfunc_str(func_)) for func_ in kwargs.values()
-            ]
+            normalized_func = [GroupbyAggFunc(col, func_) for func_ in kwargs.values()]
         elif is_dict_like(func):
             # (Deprecated) handle cases like {"A": "mean"} -> create mean column "A"
-            normalized_func = [
-                (col, _get_aggfunc_str(func_)) for func_ in func.values()
-            ]
+            normalized_func = [GroupbyAggFunc(col, func_) for func_ in func.values()]
         elif is_list_like(func):
-            normalized_func = [(col, _get_aggfunc_str(func_)) for func_ in func]
+            normalized_func = [GroupbyAggFunc(col, func_) for func_ in func]
         else:
-            normalized_func = [(col, _get_aggfunc_str(func))]
+            normalized_func = [GroupbyAggFunc(col, func)]
 
         return normalized_func
 
@@ -563,7 +559,7 @@ def _get_agg_udf_output_type(func: GroupbyAggFunc, in_type: pa.DataType):
             out_series_arrow.dtype,
         )
 
-    return out_series.dtype.pyarrow_dtype
+    return out_series_arrow.dtype.pyarrow_dtype
 
 
 def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.DataType:
@@ -657,7 +653,7 @@ def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.D
 
 
 def _cast_groupby_agg_columns(
-    func: list[tuple[str, str]] | str,
+    func: list[GroupbyAggFunc] | str,
     in_data: pd.Series | pd.DataFrame,
     out_data: pd.Series | pd.DataFrame,
     n_key_cols: int,
@@ -680,8 +676,8 @@ def _cast_groupby_agg_columns(
     """
 
     if isinstance(out_data, pd.Series):
-        col, func = func[0]
-        in_data = in_data[col]
+        func = func[0]
+        in_data = in_data[func.in_col]
         new_type = _get_agg_output_type(
             func, in_data.dtype.pyarrow_dtype, out_data.name
         )
