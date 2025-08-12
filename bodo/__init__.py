@@ -272,6 +272,15 @@ def set_numba_environ_vars():
     """
     # This env variable is set by the platform and points to the central cache directory
     # on the shared filesystem.
+    in_spawn = "PMI_SIZE" in os.environ or "PMI_RANK" in os.environ
+    #print("set_numba_environ_vars", in_spawn)
+    #import traceback
+    #traceback.print_stack()
+    from bodo.mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
     if (cache_loc := os.environ.get("BODO_PLATFORM_CACHE_LOCATION")) is not None:
         if ("NUMBA_CACHE_DIR" in os.environ) and (
             os.environ["NUMBA_CACHE_DIR"] != cache_loc
@@ -281,11 +290,19 @@ def set_numba_environ_vars():
             warnings.warn(
                 "Since BODO_PLATFORM_CACHE_LOC is set, the value set for NUMBA_CACHE_DIR will be ignored"
             )
-        numba.config.CACHE_DIR = cache_loc
-        # In certain cases, numba reloads its config variables from the
-        # environment. In those cases, the above line would be overridden.
-        # Therefore, we also set it to the env var that numba reloads from.
-        os.environ["NUMBA_CACHE_DIR"] = cache_loc
+
+    cache_loc = (os.environ.get("BODO_PLATFORM_CACHE_LOCATION") or
+                 os.environ.get("NUMBA_CACHE_DIR") or "__bodo_pycache__")
+
+    if in_spawn:
+        cache_loc = os.path.join(cache_loc, str(rank))
+
+    numba.config.CACHE_DIR = cache_loc
+    #print("cache_loc", cache_loc)
+    # In certain cases, numba reloads its config variables from the
+    # environment. In those cases, the above line would be overridden.
+    # Therefore, we also set it to the env var that numba reloads from.
+    os.environ["NUMBA_CACHE_DIR"] = cache_loc
 
     # avoid Numba parallel performance warning when there is no Parfor in the IR
     numba.config.DISABLE_PERFORMANCE_WARNINGS = 1
