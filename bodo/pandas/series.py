@@ -20,6 +20,11 @@ from pandas._typing import (
 )
 
 import bodo
+from bodo.ai.backend import Backend
+from bodo.ai.utils import (
+    get_default_bedrock_request_formatter,
+    get_default_bedrock_response_formatter,
+)
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -1483,11 +1488,48 @@ class BodoSeriesAiMethods:
     def llm_generate(
         self,
         *,
-        api_key: str,
+        api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,
+        request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], str] | None = None,
+        region: str | None = None,
+        backend: Backend = Backend.OPENAI,
         **generation_kwargs,
     ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+
+        if backend == Backend.BEDROCK:
+            if model is None:
+                raise ValueError(
+                    "Series.ai.llm_generate() requires a model ID when using the Bedrock backend."
+                )
+            if base_url is not None:
+                raise ValueError(
+                    "Series.ai.llm_generate() does not support base_url with the Bedrock backend."
+                )
+            return self._llm_generate_bedrock(
+                modelId=model,
+                request_formatter=request_formatter,
+                response_formatter=response_formatter,
+                region=region,
+                **generation_kwargs,
+            )
+
+        # OpenAI backend
+        api_key = api_key or ""
+        if request_formatter is not None or response_formatter is not None:
+            raise ValueError(
+                "Series.ai.llm_generate() does not support request_formatter or response_formatter with the OpenAI backend."
+            )
+        if region is not None:
+            raise ValueError(
+                "Series.ai.llm_generate() does not support region with the OpenAI backend."
+            )
+
         import importlib
 
         assert importlib.util.find_spec("openai") is not None, (
@@ -1495,10 +1537,6 @@ class BodoSeriesAiMethods:
             "Please install it using 'pip install openai[aiohttp]'."
         )
 
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
         if model is not None:
             generation_kwargs["model"] = model
 
@@ -1532,14 +1570,101 @@ class BodoSeriesAiMethods:
             map_func, api_key, base_url, generation_kwargs=generation_kwargs
         )
 
+    def _llm_generate_bedrock(
+        self,
+        modelId: str,
+        request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], str] | None = None,
+        region: str = None,
+        **generation_kwargs,
+    ) -> BodoSeries:
+        """Generate text using Amazon Bedrock model.
+        Args:
+            modelId (str): The Bedrock model ID to use for text generation.
+            request_formatter (Callable[[str], str], optional): A function that formats the input text
+                into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Nova, Titan, Claude, and OpenAI models.
+            response_formatter (Callable[[str], str], optional): A function that formats the response
+                from the Bedrock model into a string. Defaults to None, which uses a default formatter
+                for Nova, Titan, Claude, and OpenAI models.
+            region (str, optional): The AWS region to use for the Bedrock model. Defaults to None, which uses the default region configured in AWS SDK.
+            **generation_kwargs: Additional keyword arguments to pass to the Bedrock invoke_model API.
+        """
+        if request_formatter is None:
+            request_formatter = get_default_bedrock_request_formatter(modelId)
+        if response_formatter is None:
+            response_formatter = get_default_bedrock_response_formatter(modelId)
+
+        def map_func(series, modelId):
+            import boto3
+            import botocore.config
+
+            client = boto3.client(
+                "bedrock-runtime",
+                config=botocore.config.Config(
+                    connect_timeout=3600,  # 60 minutes
+                    read_timeout=3600,  # 60 minutes
+                    retries={"max_attempts": 1},
+                    region_name=region,
+                ),
+            )
+
+            def per_row(row):
+                response = client.invoke_model(
+                    modelId=modelId,
+                    body=request_formatter(row),
+                    **generation_kwargs,
+                )
+                return response_formatter(response["body"].read().decode("utf-8"))
+
+            return pd.Series([per_row(row) for row in series])
+
+        return self._series.map_partitions(map_func, modelId)
+
     def embed(
         self,
         *,
-        api_key: str,
+        api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,
+        request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], list[float]] | None = None,
+        region: str | None = None,
+        backend: Backend = Backend.OPENAI,
         **embedding_kwargs,
     ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+
+        if backend == Backend.BEDROCK:
+            if model is None:
+                raise ValueError(
+                    "Series.ai.embed() requires a model ID when using the Bedrock backend."
+                )
+            if base_url is not None:
+                raise ValueError(
+                    "Series.ai.embed() does not support base_url with the Bedrock backend."
+                )
+            return self._embed_bedrock(
+                modelId=model,
+                request_formatter=request_formatter,
+                response_formatter=response_formatter,
+                region=region,
+                **embedding_kwargs,
+            )
+
+        # OpenAI backend
+        api_key = api_key or ""
+        if request_formatter is not None or response_formatter is not None:
+            raise ValueError(
+                "Series.ai.embed() does not support request_formatter or response_formatter with the OpenAI backend."
+            )
+        if region is not None:
+            raise ValueError(
+                "Series.ai.embed() does not support region with the OpenAI backend."
+            )
+
         import importlib
 
         assert importlib.util.find_spec("openai") is not None, (
@@ -1547,10 +1672,6 @@ class BodoSeriesAiMethods:
             "Please install it using 'pip install openai[aiohttp]'."
         )
 
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
         if model is not None:
             embedding_kwargs["model"] = model
 
@@ -1583,6 +1704,55 @@ class BodoSeriesAiMethods:
         return self._series.map_partitions(
             map_func, api_key, base_url, embedding_kwargs=embedding_kwargs
         )
+
+    def _embed_bedrock(
+        self,
+        modelId: str,
+        request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], list[float]] | None = None,
+        region: str | None = None,
+        **embedding_kwargs,
+    ) -> BodoSeries:
+        """Embed text using Amazon Bedrock model.
+        Args:
+            modelId (str): The Bedrock model ID to use for embedding.
+            request_formatter (Callable[[str], str], optional): A function that formats the input text
+                into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Titan embeddings models.
+            response_formatter (Callable[[str], list[float]], optional): A function that formats the response
+                from the Bedrock model into a list of floats. Defaults to None, which uses a default formatter for Titan embeddings models.
+            region (str, optional): The AWS region to use for the Bedrock model. Defaults to None, which uses the default region configured in AWS SDK.
+            **embedding_kwargs: Additional keyword arguments to pass to the Bedrock invoke_model API.
+        """
+        if request_formatter is None:
+            request_formatter = get_default_bedrock_request_formatter(modelId)
+        if response_formatter is None:
+            response_formatter = get_default_bedrock_response_formatter(modelId)
+
+        def map_func(series, modelId):
+            import boto3
+            import botocore.config
+
+            client = boto3.client(
+                "bedrock-runtime",
+                config=botocore.config.Config(
+                    connect_timeout=3600,  # 60 minutes
+                    read_timeout=3600,  # 60 minutes
+                    retries={"max_attempts": 1},
+                ),
+                region_name=region,
+            )
+
+            def per_row(row):
+                response = client.invoke_model(
+                    modelId=modelId,
+                    body=request_formatter(row),
+                    **embedding_kwargs,
+                )
+                return response_formatter(response["body"].read())
+
+            return pd.Series([per_row(row) for row in series])
+
+        return self._series.map_partitions(map_func, modelId)
 
     def query_s3_vectors(
         self,
