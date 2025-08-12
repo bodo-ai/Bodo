@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
         # Setup
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@v5
         - name: Install Java
           uses: actions/setup-java@v4
           with:

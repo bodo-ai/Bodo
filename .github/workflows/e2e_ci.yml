@@ -18,8 +18,8 @@ jobs:
     name: Run E2E
     runs-on: self-hosted-xlarge
     steps:
-      - uses: actions/checkout@v4
-      - uses: prefix-dev/setup-pixi@v0.8.11
+      - uses: actions/checkout@v5
+      - uses: prefix-dev/setup-pixi@v0.9.0
         with:
           pixi-version: v0.40.2
           cache: true
@@ -103,8 +103,8 @@ jobs:
         pleias_ocr_correction_tokenization.py
         #Tutorials/*.py
     steps:
-      - uses: actions/checkout@v4
-      - uses: prefix-dev/setup-pixi@v0.8.11
+      - uses: actions/checkout@v5
+      - uses: prefix-dev/setup-pixi@v0.9.0
         with:
           pixi-version: v0.40.2
           cache: true

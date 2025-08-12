@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # For setuptools_scm to be able to determine version,
           # we need to fetch the entire history
@@ -81,13 +81,13 @@ jobs:
           role-session-name: BodoEngineBuildWheelSession
           role-skip-session-tagging: true
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # For setuptools_scm to be able to determine version,
           # we need to fetch the entire history
           fetch-depth: 0
 
-      - uses: prefix-dev/setup-pixi@v0.8.11
+      - uses: prefix-dev/setup-pixi@v0.9.0
         with:
           pixi-version: v0.40.2
           cache: true
@@ -95,7 +95,7 @@ jobs:
           environments: 'default'
           activate-environment: true
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         id: download-artifact
         with:
           pattern: cibw-wheels-linux-x86-3.13
@@ -124,12 +124,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         id: download-bodo-artifact
         with:
           pattern: cibw-wheels-linux-x86-${{ matrix.python_version }}
           path: .
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         id: download-bodosql-artifact
         with:
           pattern: bodosql-wheel-no-arch
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # For setuptools_scm to be able to determine version,
           # we need to fetch the entire history
@@ -185,7 +185,7 @@ jobs:
         with:
           python-version: ${{ matrix.python_version }}
       - name: Download Iceberg Wheel
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: cibw-iceberg
       - name: Test Import
@@ -203,7 +203,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && github.event.action == 'published'
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: dist
           merge-multiple: true
