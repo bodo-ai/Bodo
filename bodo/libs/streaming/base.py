@@ -68,3 +68,43 @@ class StreamingStateType(types.Type):
                 raise numba.NumbaError(
                     f"{fn_name}: unknown input table type in streaming state"
                 )
+
+
+def is_streaming_build_funcs(func):
+    """
+    Check if a function is a streaming build function (join/groupby/IO etc.).
+    Imports are in this function to make them lazy (since not necessary in DataFrame
+    library).
+    """
+
+    from bodo.io.iceberg.stream_iceberg_write import iceberg_writer_append_table
+    from bodo.io.snowflake_write import snowflake_writer_append_table
+    from bodo.io.stream_parquet_write import parquet_writer_append_table
+    from bodo.libs.streaming.groupby import (
+        groupby_build_consume_batch,
+        groupby_grouping_sets_build_consume_batch,
+    )
+    from bodo.libs.streaming.join import (
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
+    from bodo.libs.streaming.sort import sort_build_consume_batch
+    from bodo.libs.streaming.union import union_consume_batch
+    from bodo.libs.streaming.window import window_build_consume_batch
+    from bodo.libs.table_builder import table_builder_append
+
+    streaming_build_funcs = (
+        groupby_build_consume_batch,
+        groupby_grouping_sets_build_consume_batch,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+        window_build_consume_batch,
+        union_consume_batch,
+        table_builder_append,
+        sort_build_consume_batch,
+        snowflake_writer_append_table,
+        iceberg_writer_append_table,
+        parquet_writer_append_table,
+    )
+
+    return func in streaming_build_funcs

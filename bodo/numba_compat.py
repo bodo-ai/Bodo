@@ -2935,36 +2935,7 @@ numba.core.lowering.Lower._lower_call_ExternalFunction = _lower_call_ExternalFun
 def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.transforms.type_inference.native_typer import bodo_resolve_call
     from bodo.transforms.type_inference.typeinfer import BodoFunction
-    from bodo.libs.streaming.base import StreamingStateType
-    from bodo.libs.streaming.groupby import (
-        groupby_build_consume_batch,
-        groupby_grouping_sets_build_consume_batch,
-    )
-    from bodo.libs.streaming.join import (
-        join_build_consume_batch,
-        join_probe_consume_batch,
-    )
-    from bodo.libs.streaming.window import window_build_consume_batch
-    from bodo.libs.streaming.union import union_consume_batch
-    from bodo.libs.streaming.sort import sort_build_consume_batch
-    from bodo.libs.table_builder import table_builder_append
-    from bodo.io.snowflake_write import snowflake_writer_append_table
-    from bodo.io.iceberg.stream_iceberg_write import iceberg_writer_append_table
-    from bodo.io.stream_parquet_write import parquet_writer_append_table
-
-    streaming_build_funcs = (
-        groupby_build_consume_batch,
-        groupby_grouping_sets_build_consume_batch,
-        join_build_consume_batch,
-        join_probe_consume_batch,
-        window_build_consume_batch,
-        union_consume_batch,
-        table_builder_append,
-        sort_build_consume_batch,
-        snowflake_writer_append_table,
-        iceberg_writer_append_table,
-        parquet_writer_append_table,
-    )
+    from bodo.libs.streaming.base import StreamingStateType, is_streaming_build_funcs
 
     assert fnty
     context = typeinfer.context
@@ -2980,7 +2951,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
         # Forbids imprecise type except array of undefined dtype
         if not a.is_precise() and not isinstance(a, types.Array):
             # Bodo change: allow streaming state type to be imprecise
-            if getattr(fnty, "typing_key", None) in streaming_build_funcs and isinstance(a, StreamingStateType):
+            if isinstance(a, StreamingStateType) and is_streaming_build_funcs(getattr(fnty, "typing_key", None)):
                 continue
             return
 
@@ -3041,7 +3012,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     typeinfer.add_type(self.target, sig.return_type, loc=self.loc)
 
     # Bodo change: update streaming state type
-    if getattr(fnty, "typing_key", None) in streaming_build_funcs and pos_args[0] != sig.args[0]:
+    if len(pos_args) > 0 and len(sig.args) > 0 and pos_args[0] != sig.args[0] and is_streaming_build_funcs(getattr(fnty, "typing_key", None)):
         typeinfer.add_type(self.args[0].name, sig.args[0], loc=self.loc)
 
     # If the function is a bound function and its receiver type
@@ -6926,6 +6897,20 @@ if hasattr(numba.core.caching, "CacheImpl"):
     # list of CacheLocators it has and uses the first one that doesn't return None.
     # This allows for the caching of text-generation functions created through bodo_exec.
     numba.core.caching.CacheImpl._locator_classes.append(BodoCacheLocator)
+
+
+@functools.lru_cache
+def is_func_overloaded(mod, func_name):
+    from numba.core.registry import cpu_target
+    ctx = cpu_target._toplevel_typing_context
+    for k in ctx._functions.keys():
+        if hasattr(k, "__func__"):
+            func = k.__func__
+            # Should we check module here as well?
+            if func.__name__ == func_name:
+                return True
+    return False
+
 
 def get_method_overloads(typ):
     """Returns a list of method names with overloads
