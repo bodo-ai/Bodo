@@ -36,7 +36,7 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
           role-session-name: BodoEngineBuildWheelSession
           role-skip-session-tagging: true
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # https://github.com/actions/runner-images/issues/10624
       - name: Fix PATH in .bashrc
@@ -52,7 +52,7 @@ jobs:
       # some of the envs is enough
       - name: Install Pixi for Compiler
         if: ${{ contains(inputs.os, 'macos') ||  contains(inputs.os, 'windows') }}
-        uses: prefix-dev/setup-pixi@v0.8.11
+        uses: prefix-dev/setup-pixi@v0.9.0
         with:
           pixi-version: v0.40.2
           cache: true

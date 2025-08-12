@@ -38,7 +38,7 @@ jobs:
     runs-on: ${{ inputs.os }}
     steps:
         # Setup
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@v5
         - name: Build from Source
           uses: ./.github/actions/build-source
           with:
