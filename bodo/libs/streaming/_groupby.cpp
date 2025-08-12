@@ -3811,6 +3811,15 @@ void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
                                      this->metrics.appends_inactive_time));
     metrics.emplace_back(StatMetric("appends_inactive_nrows",
                                     this->metrics.appends_inactive_nrows));
+    metrics.emplace_back(
+        TimerMetric("update_histogram_buckets_time",
+                    this->metrics.update_histogram_buckets_time));
+    metrics.emplace_back(
+        TimerMetric("append_row_to_build_table_append_time",
+                    this->metrics.append_row_to_build_table_append_time));
+    metrics.emplace_back(
+        TimerMetric("append_row_to_build_table_flip_time",
+                    this->metrics.append_row_to_build_table_flip_time));
 
     if (is_final) {
         // Final number of partitions
