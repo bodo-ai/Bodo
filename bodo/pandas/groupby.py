@@ -477,11 +477,12 @@ def _groupby_agg_plan(
 
     cfunc_wrapper = _get_cfunc_wrapper(grouped._obj.head(0))
 
+    out_types = empty_data
+    if isinstance(empty_data, pd.DataFrame) and not grouped._as_index:
+        out_types = empty_data.iloc[:, n_key_cols:]
     exprs = [
         AggregateExpression(
-            empty_data.iloc[:, i]
-            if isinstance(empty_data, pd.DataFrame)
-            else empty_data,
+            out_types.iloc[:, i] if isinstance(out_types, pd.DataFrame) else out_types,
             grouped._obj._plan,
             f"udf_{i}" if func_.is_custom_aggfunc else func_.func_name,
             (cfunc_wrapper, func_) if func_.is_custom_aggfunc else None,

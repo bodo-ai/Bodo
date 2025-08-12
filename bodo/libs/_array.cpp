@@ -429,6 +429,7 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
                             uint64_t* n_bytes, char** data, char** null_bitmap,
                             NRT_MemInfo** meminfo,
                             NRT_MemInfo** meminfo_bitmask) {
+    std::cout << info->arr_type << " info arr type" << std::endl;
     if ((info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) &&
         (info->arr_type != bodo_array_type::NUMPY)) {
         PyErr_SetString(PyExc_RuntimeError,
