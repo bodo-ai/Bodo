@@ -3331,10 +3331,12 @@ void GroupbyState::AppendBuildBatchHelper(
     const std::shared_ptr<uint32_t[]>& partitioning_hashes) {
     // Update the histogram buckets, regardless of how many partitions
     // there are.
+    time_pt start_histogram = start_timer();
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         this->histogram_buckets[hash_to_bucket(partitioning_hashes[i_row],
                                                this->num_histogram_bits)] += 1;
     }
+    this->metrics.update_histogram_buckets_time += end_timer(start_histogram);
 
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
@@ -3411,11 +3413,13 @@ void GroupbyState::AppendBuildBatchHelper(
     const std::vector<bool>& append_rows) {
     // Update the histogram buckets, regardless of how many partitions
     // there are.
+    time_pt start_histogram = start_timer();
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         this->histogram_buckets[hash_to_bucket(partitioning_hashes[i_row],
                                                this->num_histogram_bits)] +=
             append_rows[i_row] ? 1 : 0;
     }
+    this->metrics.update_histogram_buckets_time += end_timer(start_histogram);
 
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
@@ -4350,11 +4354,15 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     // Use the cached allocation:
     std::vector<bool>& append_row_to_build_table =
         groupby_state->append_row_to_build_table;
+    time_pt start_append =
+        start_timer();  // Start timer for appending rows to build table
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         append_row_to_build_table.push_back(
             (!groupby_state->parallel ||
              (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank)));
     }
+    groupby_state->metrics->append_row_to_build_table_append_time +=
+        end_timer(start_append);
 
     // Fill row group numbers in grouping_info to reuse existing
     // infrastructure. We set group=-1 for rows that don't belong to the
@@ -4365,13 +4373,16 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
                                           batch_hashes_groupby,
                                           append_row_to_build_table);
 
+    time_pt start_flip = start_timer();
     append_row_to_build_table.flip();
+    groupby_state->metrics.append_row_to_build_table_flip_time +=
+        end_timer(start_flip);
     // Do the same for the shuffle groups:
     groupby_state->UpdateShuffleGroupsAndCombine(in_table, batch_hashes_groupby,
                                                  append_row_to_build_table);
 
     // Reset the bitmask for the next iteration:
-    append_row_to_build_table.resize(0);
+    append_row_to_build_table.clear();
 
     if (groupby_state->parallel) {
         std::optional<std::shared_ptr<table_info>> new_data_ =
@@ -4463,23 +4474,29 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     // Use cached allocation:
     std::vector<bool>& append_row_to_build_table =
         groupby_state->append_row_to_build_table;
+    time_pt start_append = start_timer();
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         append_row_to_build_table.push_back(
             (!groupby_state->parallel ||
              hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank));
     }
+    groupby_state->metrics->append_row_to_build_table_append_time +=
+        end_timer(start_append);
     groupby_state->AppendBuildBatch(in_table, batch_hashes_partition,
                                     append_row_to_build_table);
 
     batch_hashes_partition.reset();
 
+    time_pt start_flip = start_timer();
     append_row_to_build_table.flip();
+    groupby_state->metrics.append_row_to_build_table_flip_time +=
+        end_timer(start_flip);
     std::vector<bool>& append_row_to_shuffle_table = append_row_to_build_table;
     groupby_state->shuffle_state->AppendBatch(in_table,
                                               append_row_to_shuffle_table);
 
     // Reset for next iteration:
-    append_row_to_build_table.resize(0);
+    append_row_to_build_table.clear();
 
     // Shuffle data of other ranks and append received data to local buffer
     if (groupby_state->parallel) {
