@@ -31,7 +31,7 @@ def test_basic_agg_multiple_udf():
     df = pd.DataFrame(
         {
             "A": [1, 2, 1, 2, 1, 2, 1, 2, 1],
-            "C": [1, 2, 1, 2, 1, 2, 1, 2, 1],
+            "C": [1, 0, 1, -2, 1, -2, -1, 2, 1],
             "B": [-2, -2, 3, 4, 5, 6, 4, 8, 9],
         }
     )
@@ -42,10 +42,13 @@ def test_basic_agg_multiple_udf():
             return None
         return len(x[x > 0]) / len(x)
 
-    df2 = df.groupby(by=["A"]).agg({"B": udf, "C": udf})
-    with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby(by=["A"]).agg({"B": udf, "C": udf})
+    def udf2(x):
+        if sum(x) == 0:
+            return None
+        return sum(x[x < 0]) / sum(x)
 
-    # TODO: fix len(bdf2)
-    bdf2.execute_plan()
+    df2 = df.groupby(by=["A"]).agg({"B": udf2, "C": udf})
+    with assert_executed_plan_count(0):
+        bdf2 = bdf.groupby(by=["A"]).agg({"B": udf2, "C": udf})
+
     _test_equal(bdf2, df2, check_pandas_types=False)

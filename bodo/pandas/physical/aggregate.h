@@ -2,6 +2,7 @@
 
 #include <Python.h>
 #include <object.h>
+#include <pytypedefs.h>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -31,13 +32,27 @@ struct PhysicalAggregateMetrics {
     time_t produce_time = 0;  // stage_2
 };
 
-udf_general_fn get_cfunc_from_wrapper(PyObject* cfunc_wrapper) {
-    if (cfunc_wrapper == Py_None) {
-        throw std::runtime_error(
-            "Expected wrapper for getting callback, got None");
+udf_general_fn get_cfunc_from_wrapper(PyObject* cfunc_wrapper, size_t n_keys,
+                                      std::vector<PyObject*>& funcs) {
+    const Py_ssize_t n = static_cast<Py_ssize_t>(funcs.size());
+
+    PyObject* funcs_tuple = PyTuple_New(n);
+
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        PyObject* obj = funcs[static_cast<size_t>(i)];
+        Py_INCREF(obj);
+        PyTuple_SET_ITEM(funcs_tuple, i, obj);
     }
 
-    PyObject* result = PyObject_CallNoArgs(cfunc_wrapper);
+    PyObject* py_n_keys = PyLong_FromSize_t(n_keys);
+    PyObject* args = PyTuple_New(2);  // new ref
+
+    PyTuple_SET_ITEM(args, 0, py_n_keys);
+    PyTuple_SET_ITEM(args, 1, funcs_tuple);
+
+    // Call: cfunc_wrapper(py_n_keys, funcs_tuple)
+    PyObject* result = PyObject_Call(cfunc_wrapper, args, /*kwargs=*/nullptr);
+    Py_DECREF(args);
 
     if (!result) {
         PyErr_Print();
@@ -75,7 +90,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::optional<bool> dropna = std::nullopt;
 
         // The cfunc to call on accumulated data to compute UDF
-        udf_general_fn agg_cfunc = nullptr;
+        PyObject* cfunc_wrapper = nullptr;
+        std::vector<PyObject*> udfs;
         std::vector<int> udf_idxs;
 
         for (size_t i = 0; i < op.expressions.size(); i++) {
@@ -131,17 +147,16 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             // extract Cfunc and create a udf struct for storing callback and
             // output types
             if (ftypes.back() == Bodo_FTypes::gen_udf) {
-                agg_cfunc = get_cfunc_from_wrapper(bind_info.callback_wrapper);
+                // callback_wrapper is a tuple of (callback_wrapper, func_arg)
+                // the callback_wrapper is the same for every func, so only need
+                // to extract it once.
+                if (!cfunc_wrapper) {
+                    cfunc_wrapper =
+                        PyTuple_GET_ITEM(bind_info.callback_wrapper, 0);
+                }
+                udfs.push_back(PyTuple_GET_ITEM(bind_info.callback_wrapper, 1));
                 udf_idxs.push_back(i + this->keys.size());
             }
-
-            // TODO: remove?
-            // std::tuple<bodo_array_type::arr_type_enum,
-            // Bodo_CTypes::CTypeEnum>
-            //     out_arr_type = get_groupby_output_dtype(
-            //         ftypes.back(),
-            //         in_table_schema->column_types[col_idx]->array_type,
-            //         in_table_schema->column_types[col_idx]->c_type);
 
             this->output_schema->append_column(std::move(out_arr_type));
             this->output_schema->column_names.push_back(agg_expr.function.name);
@@ -167,11 +182,12 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
         // Create the udf info struct for GroupbyState
         std::optional<udfinfo_t> udf_info = std::nullopt;
-        if (agg_cfunc != nullptr) {
+        if (udfs.size()) {
+            udf_general_fn agg_cfunc =
+                get_cfunc_from_wrapper(cfunc_wrapper, this->keys.size(), udfs);
+
             auto udf_table =
                 alloc_table(this->output_schema->Project(udf_idxs));
-            std::cout << this->output_schema->Project(udf_idxs)->ToString()
-                      << std::endl;
             udf_info = {.udf_table_dummy = udf_table,
                         .update = nullptr,
                         .combine = nullptr,

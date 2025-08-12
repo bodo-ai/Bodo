@@ -57,14 +57,12 @@ BUILTIN_AGG_FUNCS = {
 class GroupbyAggFunc:
     in_col: str
     func: Any
+    func_name: str
 
     def __init__(self, in_col, func):
         self.in_col = in_col
         self.func = func
-
-    @property
-    def func_name(self) -> str:
-        return _get_aggfunc_str(self.func)
+        self.func_name = _get_aggfunc_str(func)
 
     @property
     def is_custom_aggfunc(self):
@@ -72,27 +70,25 @@ class GroupbyAggFunc:
         return callable(self.func) and self.func_name not in BUILTIN_AGG_FUNCS
 
 
-def _get_cfunc_wrapper(empty_data: pd.DataFrame, n_keys, funcs: list[GroupbyAggFunc]):
-    """Get a wrapper to be called per worker to compile/get Cfunc
-    TODO: Generate a single wrapper for all UDFs?
-    """
+def _get_cfunc_wrapper(empty_data: pd.DataFrame):
+    """Get a wrapper to be called per worker to compile/get Cfunc"""
 
-    if not any(func.is_custom_aggfunc for func in funcs):
-        return None
+    def wrapper(n_keys: int, funcs: list[GroupbyAggFunc]):
+        col_offset = n_keys  # TODO: n_keys (that are not dead) + udf_table_idx
+        deco = bodo.jit(spawn=False, distributed=False, cache=True)
+        jitted_funcs, in_col_types, out_col_types = [], [], []
 
-    col_offset = n_keys  # TODO: n_keys (that are not dead) + udf_table_idx
-    deco = bodo.jit(spawn=False, distributed=False, cache=True)
-    jitted_funcs, in_col_types, out_col_types = [], [], []
+        for func in funcs:
+            jitted_funcs.append(deco(func.func))
 
-    for func in funcs:
-        jitted_funcs.append(deco(func.func))
+            in_col = empty_data[func.in_col]
+            in_col_types.append(bodo.typeof(in_col).data)
+            out_type = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
+            out_col_types.append(bodo.typeof(_empty_pd_array(out_type)))
 
-        in_col = empty_data[func.in_col]
-        in_col_types.append(bodo.typeof(in_col).data)
-        out_type = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
-        out_col_types.append(bodo.typeof(_empty_pd_array(out_type)))
-
-    def wrapper():
+        # Generate a function that takes in a "wide" dataframe
+        # (1 column per group per UDF) and call each func on sets of
+        # num_groups columns.
         func_text = "def bodo_agg_func_impl(num_groups, in_table, out_table):\n"
         func_text += "  if num_groups == 0:\n"
         func_text += "    return\n"
@@ -531,7 +527,7 @@ def _groupby_agg_plan(
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
-    cfunc_wrapper = _get_cfunc_wrapper(empty_data, len(key_indices), func)
+    cfunc_wrapper = _get_cfunc_wrapper(grouped._obj)
 
     exprs = [
         AggregateExpression(
@@ -540,7 +536,7 @@ def _groupby_agg_plan(
             else empty_data,
             grouped._obj._plan,
             f"udf_{i}" if func_.is_custom_aggfunc else func_.func_name,
-            cfunc_wrapper,
+            (cfunc_wrapper, func_) if func_.is_custom_aggfunc else None,
             [grouped._obj.columns.get_loc(func_.in_col)],
             grouped._dropna,
         )
