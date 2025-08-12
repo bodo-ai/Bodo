@@ -8,7 +8,6 @@
 #include <list>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <tuple>
 #include "../_array_hash.h"
 #include "../_array_operations.h"
@@ -278,16 +277,11 @@ std::shared_ptr<table_info> get_update_table(
             update_table->columns.push_back(e_arr);
         }
         ScopedTimer update_timer(metrics.colset_update_time);
-        std::cout << "calling update on col set!" << std::endl;
         col_set->update(grp_infos, pool, mm);
         update_timer.finalize();
         metrics.colset_update_nrows += in_table->nrows();
         col_set->clear();
     }
-
-    std::stringstream ss_up;
-    DEBUG_PrintTable(ss_up, update_table);
-    std::cout << "update table: " << ss_up.str() << std::endl;
 
     // Run Update for UDFs:
     // For each UDF col set, create num_groups columns
@@ -303,9 +297,8 @@ std::shared_ptr<table_info> get_update_table(
             // TODO: reuse input columns if two UDFs share the same
             udf_colset->fill_in_columns(general_in_table, grp_info);
         }
-        std::cout << udf_info.value().general_udf << std::endl;
-        // Gen UDF:
-        // For each func, call func for each group and fill output column
+
+        // Gen UDF: Call func for each group and fill output column.
         udf_info.value().general_udf(
             grp_info.num_groups, general_in_table.get(), update_table.get());
         // clear UDF col set state
@@ -1469,11 +1462,6 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
         // not required for re-partitioning (in case there is one), we will use
         // the scratch portion of the pool for them.
 
-        std::stringstream ss_in;
-        DEBUG_PrintTable(ss_in, this->build_table_buffer->data_table);
-        std::cout << ">>>> in table <<<<\n " << ss_in.str()
-                  << "\n >>>>>>>>>>>>>" << std::endl;
-
         // Get update table with the running values:
         ScopedTimer update_timer(this->metrics.finalize_get_update_table_time);
         std::shared_ptr<table_info> update_table =
@@ -1485,17 +1473,6 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
                 this->op_scratch_pool, this->op_scratch_mm);
         update_timer.finalize();
 
-        std::stringstream ss_update;
-        DEBUG_PrintTable(ss_update, update_table);
-        std::cout << ">>>> update table <<<<\n " << ss_update.str()
-                  << "\n >>>>>>>>>>>>>" << std::endl;
-
-        std::cout << "running val offsets: ";
-        for (auto offset : this->f_running_value_offsets) {
-            std::cout << offset << ",";
-        }
-        std::cout << std::endl;
-
         // Call eval on these running values to get the final output.
         this->metrics.finalize_eval_nrows += update_table->nrows();
         ScopedTimer eval_timer(this->metrics.finalize_eval_time);
@@ -1503,11 +1480,6 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
             this->f_running_value_offsets, this->col_sets, update_table,
             this->n_keys, this->separate_out_cols->data_table,
             this->op_scratch_pool, this->op_scratch_mm);
-
-        std::stringstream ss_out;
-        DEBUG_PrintTable(ss_out, out_table);
-        std::cout << ">>>> out table <<<<\n " << ss_out.str()
-                  << "\n >>>>>>>>>>>>>" << std::endl;
 
         eval_timer.finalize();
     } else {
@@ -4197,7 +4169,6 @@ void GroupbyState::FinalizeBuild() {
                 // Finalize the partition and get output from it.
                 // TODO: Write output directly into the GroupybyState's
                 // output buffer instead of returning the output.
-                std::cout << "finalizing partition" << std::endl;
                 if (this->agg_type == AggregationType::MRNF) {
                     // Initialize output buffer if this is the first
                     // partition.

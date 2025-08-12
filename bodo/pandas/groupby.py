@@ -479,7 +479,7 @@ def _groupby_agg_plan(
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
-    cfunc_wrapper = _get_cfunc_wrapper(grouped._obj)
+    cfunc_wrapper = _get_cfunc_wrapper(grouped._obj.head(0))
 
     exprs = [
         AggregateExpression(
@@ -536,7 +536,7 @@ def _get_agg_udf_output_type(func: GroupbyAggFunc, in_type: pa.DataType):
     empty_series = pd.Series([], dtype=pd.ArrowDtype(in_type))
     func_ = func.func
 
-    deco = bodo.jit(spawn=False, distributed=False, cache=True)
+    deco = bodo.jit(spawn=False, distributed=False, cache=False)
 
     # Assumes that func returns a scalar
     jitted_func = deco(func_)
@@ -715,7 +715,7 @@ def _get_cfunc_wrapper(empty_data: pd.DataFrame):
     """Get a wrapper to be called per worker to compile/get Cfunc"""
 
     def wrapper(col_offsets: list[int], funcs: list[GroupbyAggFunc]):
-        deco = bodo.jit(spawn=False, distributed=False, cache=True)
+        deco = bodo.jit(spawn=False, distributed=False, cache=False)
         jitted_funcs, in_col_types, out_col_types = [], [], []
 
         for func in funcs:

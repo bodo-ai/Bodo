@@ -213,7 +213,6 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         if (!dropna.has_value()) {
             dropna = true;
         }
-        std::cout << "calling init groupby state" << std::endl;
         this->groupby_state = std::make_unique<GroupbyState>(
             std::make_unique<bodo::Schema>(*in_table_schema_reordered), ftypes,
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),

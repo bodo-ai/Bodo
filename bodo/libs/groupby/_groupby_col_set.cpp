@@ -1487,7 +1487,6 @@ void UdfColSet::alloc_update_columns(
     if (this->combine_step) {
         offset = 1;
     }
-
     // for update table we only need redvars (skip first column which is
     // output column)
     for (int i = udf_table_idx + offset; i < udf_table_idx + 1 + n_redvars;
