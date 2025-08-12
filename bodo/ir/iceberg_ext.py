@@ -27,8 +27,6 @@ from bodo.hiframes.table import TableType
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import pyarrow_schema_type, pyiceberg_catalog_type
-from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.common import IcebergConnectionType
 from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
 from bodo.ir.connector import Connector, log_limit_pushdown
 from bodo.ir.filter import Filter, FilterVisitor
@@ -603,6 +601,8 @@ def iceberg_distributed_run(
     is_independent: bool = False,
     meta_head_only_info=None,
 ):
+    from bodo.io.iceberg.common import IcebergConnectionType
+
     # Add debug info about column pruning
     if bodo.user_logging.get_verbose_level() >= 1:
         op_id_msg = (
@@ -875,12 +875,6 @@ def get_filters_pyobject(filter_str, vars):  # pragma: no cover
     pass
 
 
-try:
-    import pyiceberg.expressions as pie
-except ImportError:
-    pie = None
-
-
 def literal(val) -> Literal:
     """
     Wrapper over PyIceberg's literal function for constructing filters.
@@ -902,8 +896,7 @@ def literal(val) -> Literal:
 @overload(get_filters_pyobject, no_unliteral=True)
 def overload_get_filters_pyobject(filters_str, var_tup):
     """generate a pyobject for filter expression to pass to C++"""
-    if pie is None:
-        raise_bodo_error("pyiceberg not found")
+    import pyiceberg.expressions as pie
 
     filter_str_val = get_overload_const_str(filters_str)
     var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
@@ -945,6 +938,8 @@ class IcebergFilterVisitor(FilterVisitor[str]):
     """
 
     def __init__(self, filter_map):
+        import pyiceberg.expressions as pie  # noqa
+
         self.filter_map = filter_map
 
     def visit_scalar(self, scalar: bif.Scalar) -> str:
@@ -1059,7 +1054,7 @@ def add_rtjf_iceberg_filter(
     """
     For each column in filtered_cols create a FilterExpr containing it's bounds and combine them all with file_filters
     """
-    assert pie is not None
+    import pyiceberg.expressions as pie
 
     is_empty = bodo.ir.sql_ext.is_empty_build_table(state_var)
     with bodo.no_warning_objmode(combined_filters="parquet_predicate_type"):
@@ -1223,6 +1218,8 @@ def _gen_iceberg_reader_chunked_py(
         This is used for "remapping" the build columns in rtjf_interval_cols to the
         correct indices.
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+
     source_pyarrow_schema = pyarrow_schema
     assert source_pyarrow_schema is not None, (
         "SQLReader node must contain a source_pyarrow_schema if reading from Iceberg"
@@ -1454,6 +1451,8 @@ def _gen_iceberg_reader_py(
         dict_encode_in_bodo: Whether the dict-encoding should be done in Bodo
             instead of Arrow.
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+
     # a unique int used to create global variables with unique names
     call_id = next_label()
 
