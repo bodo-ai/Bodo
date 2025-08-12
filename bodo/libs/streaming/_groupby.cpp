@@ -253,11 +253,6 @@ std::shared_ptr<table_info> get_update_table(
     alloc_init_keys(tables, update_table, grp_infos, n_keys, num_groups, pool,
                     mm);
 
-    std::cout << "update table before col sets were called";
-    std::stringstream ss;
-    DEBUG_PrintTable(ss, update_table);
-    std::cout << ss.str() << std::endl;
-
     for (size_t i = 0; i < col_sets.size(); i++) {
         const std::shared_ptr<BasicColSet>& col_set = col_sets[i];
 
@@ -288,9 +283,6 @@ std::shared_ptr<table_info> get_update_table(
         metrics.colset_update_nrows += in_table->nrows();
         col_set->clear();
     }
-
-    std::cout << update_table->ncols() << std::endl;
-    std::cout << update_table->schema()->ToString() << std::endl;
 
     // Run Update for UDFs:
     // For each UDF col set, create num_groups columns

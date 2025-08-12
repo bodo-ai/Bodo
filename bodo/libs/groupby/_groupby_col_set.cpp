@@ -1485,10 +1485,6 @@ void UdfColSet::alloc_update_columns(
     std::shared_ptr<::arrow::MemoryManager> mm) {
     int offset = 0;
 
-    std::stringstream ss;
-    DEBUG_PrintTable(ss, udf_table);
-    std::cout << ss.str() << std::endl;
-
     if (this->combine_step) {
         offset = 1;
     }
