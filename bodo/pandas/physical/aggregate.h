@@ -37,30 +37,35 @@ struct PhysicalAggregateMetrics {
  *
  * @param cfunc_wrapper Callable python object that takes in an int and a tuple
  * of function objects and returns the address of the cfunc.
- * @param n_keys The number of keys in the input table.
+ * @param udf_idxs The indices of the udf output columns in the output table.
  * @param funcs A list of GroupbyAggFunc objects.
  * @return udf_general_fn cfunc for applying UDFs on a grouped table.
  */
-udf_general_fn get_cfunc_from_wrapper(PyObject* cfunc_wrapper, size_t n_keys,
+udf_general_fn get_cfunc_from_wrapper(PyObject* cfunc_wrapper,
+                                      std::vector<int> udf_idxs,
                                       std::vector<PyObject*>& funcs) {
     const Py_ssize_t n = static_cast<Py_ssize_t>(funcs.size());
 
     PyObject* funcs_tuple = PyTuple_New(n);
+    PyObject* offsets_tuple = PyTuple_New(n);
 
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        PyObject* obj = funcs[static_cast<size_t>(i)];
-        Py_INCREF(obj);
-        PyTuple_SET_ITEM(funcs_tuple, i, obj);
+    for (Py_ssize_t i = 0; i < n; i++) {
+        PyObject* func_obj = funcs[static_cast<size_t>(i)];
+        Py_INCREF(func_obj);
+        PyTuple_SET_ITEM(funcs_tuple, i, func_obj);
+
+        PyObject* py_offset =
+            PyLong_FromLongLong(udf_idxs[static_cast<size_t>(i)]);
+        PyTuple_SET_ITEM(offsets_tuple, i, py_offset);
     }
 
-    PyObject* py_n_keys = PyLong_FromSize_t(n_keys);
     PyObject* args = PyTuple_New(2);  // new ref
 
-    PyTuple_SET_ITEM(args, 0, py_n_keys);
+    PyTuple_SET_ITEM(args, 0, offsets_tuple);
     PyTuple_SET_ITEM(args, 1, funcs_tuple);
 
-    // Call: cfunc_wrapper(py_n_keys, funcs_tuple)
-    PyObject* result = PyObject_Call(cfunc_wrapper, args, /*kwargs=*/nullptr);
+    // Call: cfunc_wrapper(offsets_tuple, funcs_tuple)
+    PyObject* result = PyObject_Call(cfunc_wrapper, args, nullptr);
     Py_DECREF(args);
 
     if (!result) {
@@ -193,7 +198,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::optional<udfinfo_t> udf_info = std::nullopt;
         if (udfs.size()) {
             udf_general_fn agg_cfunc =
-                get_cfunc_from_wrapper(cfunc_wrapper, this->keys.size(), udfs);
+                get_cfunc_from_wrapper(cfunc_wrapper, udf_idxs, udfs);
 
             auto udf_table =
                 alloc_table(this->output_schema->Project(udf_idxs));

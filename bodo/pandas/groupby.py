@@ -714,8 +714,7 @@ def _cast_groupby_agg_columns(
 def _get_cfunc_wrapper(empty_data: pd.DataFrame):
     """Get a wrapper to be called per worker to compile/get Cfunc"""
 
-    def wrapper(n_keys: int, funcs: list[GroupbyAggFunc]):
-        col_offset = n_keys  # TODO: n_keys (that are not dead) + udf_table_idx
+    def wrapper(col_offsets: list[int], funcs: list[GroupbyAggFunc]):
         deco = bodo.jit(spawn=False, distributed=False, cache=True)
         jitted_funcs, in_col_types, out_col_types = [], [], []
 
@@ -735,7 +734,7 @@ def _get_cfunc_wrapper(empty_data: pd.DataFrame):
         func_text += "    return\n"
 
         for i in range(len(funcs)):
-            func_text += f"  out_col_{i} = array_from_cpp_table(out_table, col_offset+{i}, out_col_type_{i})\n"
+            func_text += f"  out_col_{i} = array_from_cpp_table(out_table, col_offsets[{i}], out_col_type_{i})\n"
             func_text += "  for j in range(num_groups):\n"
             func_text += f"    in_col_{i} = array_from_cpp_table(in_table, num_groups*{i} + j, in_col_type_{i})\n"
             func_text += (
@@ -744,7 +743,7 @@ def _get_cfunc_wrapper(empty_data: pd.DataFrame):
 
         glbs = {
             "array_from_cpp_table": array_from_cpp_table,
-            "col_offset": col_offset,
+            "col_offsets": col_offsets,
             "pd": pd,
         }
         glbs |= {f"jitted_func_{i}": jitted_funcs[i] for i in range(len(funcs))}
