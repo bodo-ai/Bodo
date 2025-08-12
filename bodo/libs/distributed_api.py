@@ -909,6 +909,7 @@ def gatherv_impl_jit(
     'warn_if_rep' flag controls if a warning is raised if the input is replicated and
     gatherv has no effect (applicable only inside jit functions).
     """
+    from bodo.libs.csr_matrix_ext import CSRMatrixType
 
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
         data, "bodo.gatherv()"
@@ -1144,11 +1145,7 @@ def gatherv_impl_jit(
         return impl_df
 
     # CSR Matrix
-    if type(data).__name__ == "CSRMatrixType":
-        # Load CSRMatrixType code lazily
-        from bodo.libs.csr_matrix_ext import CSRMatrixType
-
-        assert isinstance(data, CSRMatrixType)
+    if isinstance(data, CSRMatrixType):
 
         def impl_csr_matrix(
             data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0

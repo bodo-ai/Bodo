@@ -6125,10 +6125,6 @@ def _install_type_call_typers():
     e.g. bodo.DataFrameType()
     """
     for type_name in bodo_types_with_params:
-        # TODO(ehsan): support lazy load of CSRMatrixType
-        if type_name == "CSRMatrixType":
-            continue
-
         typ = getattr(bodo, type_name)
         _install_typer_for_type(type_name, typ)
 

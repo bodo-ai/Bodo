@@ -131,6 +131,7 @@ BODO_ARRAY_TYPE_CLASSES = (
     bodo.libs.tuple_arr_ext.TupleArrayType,
     bodo.libs.map_arr_ext.MapArrayType,
     bodo.libs.matrix_ext.MatrixType,
+    bodo.libs.csr_matrix_ext.CSRMatrixType,
     bodo.DatetimeArrayType,
     TimeArrayType,
     TimestampTZArrayType,
@@ -2799,8 +2800,6 @@ def _install_null_array_casts():
     """Install casting all Bodo arrays to null array"""
     for t in BODO_ARRAY_TYPE_CLASSES:
         lower_cast(bodo.null_array_type, t)(cast_null_arr)
-
-    # TODO(ehsan): install null cast for CSRMatrixType lazily
 
 
 _install_null_array_casts()
