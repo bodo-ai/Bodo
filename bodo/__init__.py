@@ -309,7 +309,6 @@ import bodo.ext
 import bodo.libs
 import bodo.libs.distributed_api
 import bodo.libs.memory_budget
-import bodo.libs.vendored.timsort
 import bodo.libs.query_profile_collector
 import bodo.libs.streaming.join
 import bodo.libs.streaming.groupby

@@ -841,6 +841,51 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
     )
 
 
+def getitem_arr_tup(arr_tup, ind):  # pragma: no cover
+    l = [arr[ind] for arr in arr_tup]
+    return tuple(l)
+
+
+@overload(getitem_arr_tup, no_unliteral=True)
+def getitem_arr_tup_overload(arr_tup, ind):
+    count = arr_tup.count
+
+    func_text = "def f(arr_tup, ind):\n"
+    func_text += "  return ({}{})\n".format(
+        ",".join([f"arr_tup[{i}][ind]" for i in range(count)]),
+        "," if count == 1 else "",
+    )  # single value needs comma to become tuple
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["f"]
+    return impl
+
+
+def setitem_arr_tup(arr_tup, ind, val_tup):  # pragma: no cover
+    for arr, val in zip(arr_tup, val_tup):
+        arr[ind] = val
+
+
+@overload(setitem_arr_tup, no_unliteral=True)
+def setitem_arr_tup_overload(arr_tup, ind, val_tup):
+    count = arr_tup.count
+
+    func_text = "def f(arr_tup, ind, val_tup):\n"
+    for i in range(count):
+        if isinstance(val_tup, numba.core.types.BaseTuple):
+            func_text += f"  arr_tup[{i}][ind] = val_tup[{i}]\n"
+        else:
+            assert arr_tup.count == 1
+            func_text += f"  arr_tup[{i}][ind] = val_tup\n"
+    func_text += "  return\n"
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["f"]
+    return impl
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def tuple_to_scalar(n):
     """Convert to scalar if 1-tuple, otherwise return original value"""
