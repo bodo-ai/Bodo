@@ -937,9 +937,9 @@ class IcebergFilterVisitor(FilterVisitor[str]):
         A string representation of the FilterExpr object.
     """
 
-    import pyiceberg.expressions as pie
-
     def __init__(self, filter_map):
+        import pyiceberg.expressions as pie  # noqa
+
         self.filter_map = filter_map
 
     def visit_scalar(self, scalar: bif.Scalar) -> str:
