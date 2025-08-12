@@ -4361,7 +4361,7 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
             (!groupby_state->parallel ||
              (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank)));
     }
-    groupby_state->metrics->append_row_to_build_table_append_time +=
+    groupby_state->metrics.append_row_to_build_table_append_time +=
         end_timer(start_append);
 
     // Fill row group numbers in grouping_info to reuse existing
