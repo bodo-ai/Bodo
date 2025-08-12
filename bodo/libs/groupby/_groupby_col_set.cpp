@@ -1488,8 +1488,6 @@ void UdfColSet::alloc_update_columns(
         offset = 1;
     }
 
-    std::cout << "allocating update column: " << udf_table_idx << std::endl;
-
     // for update table we only need redvars (skip first column which is
     // output column)
     for (int i = udf_table_idx + offset; i < udf_table_idx + 1 + n_redvars;

@@ -1,6 +1,5 @@
 #include "_groupby.h"
 #include <map>
-#include <string>
 #include <utility>
 
 #include "../_array_hash.h"
@@ -632,7 +631,6 @@ class GroupbyPipeline {
         }
         for (auto col_set : col_sets) {
             std::vector<std::shared_ptr<array_info>> list_arr;
-            std::cout << "calling alloc update col" << std::endl;
             col_set->alloc_update_columns(update_col_len, list_arr);
             for (auto& e_arr : list_arr) {
                 update_table->columns.push_back(e_arr);
@@ -654,10 +652,6 @@ class GroupbyPipeline {
 
         if (n_udf > 0) {
             int n_gen_udf = gen_udf_col_sets.size();
-            std::cout << "n gen udfs " << n_gen_udf << std::endl;
-            std::stringstream ss;
-            DEBUG_PrintTable(ss, update_table);
-            std::cout << ss.str() << std::endl;
             if (n_udf > n_gen_udf) {
                 // regular UDFs
                 udf_info.update(in_table.get(), update_table.get(),

@@ -55,9 +55,11 @@ BUILTIN_AGG_FUNCS = {
 
 
 class GroupbyAggFunc:
+    """Stores data about individual aggfuncs"""
+
     in_col: str
-    func: Any
-    func_name: str
+    func: pt.Callable | str  # The actual function
+    func_name: str  # The function name as it will appear in the output
 
     def __init__(self, in_col, func):
         self.in_col = in_col
@@ -68,56 +70,6 @@ class GroupbyAggFunc:
     def is_custom_aggfunc(self):
         # TODO: custom impls of builtin funcs
         return callable(self.func) and self.func_name not in BUILTIN_AGG_FUNCS
-
-
-def _get_cfunc_wrapper(empty_data: pd.DataFrame):
-    """Get a wrapper to be called per worker to compile/get Cfunc"""
-
-    def wrapper(n_keys: int, funcs: list[GroupbyAggFunc]):
-        col_offset = n_keys  # TODO: n_keys (that are not dead) + udf_table_idx
-        deco = bodo.jit(spawn=False, distributed=False, cache=True)
-        jitted_funcs, in_col_types, out_col_types = [], [], []
-
-        for func in funcs:
-            jitted_funcs.append(deco(func.func))
-
-            in_col = empty_data[func.in_col]
-            in_col_types.append(bodo.typeof(in_col).data)
-            out_type = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
-            out_col_types.append(bodo.typeof(_empty_pd_array(out_type)))
-
-        # Generate a function that takes in a "wide" dataframe
-        # (1 column per group per UDF) and call each func on sets of
-        # num_groups columns.
-        func_text = "def bodo_agg_func_impl(num_groups, in_table, out_table):\n"
-        func_text += "  if num_groups == 0:\n"
-        func_text += "    return\n"
-
-        for i in range(len(funcs)):
-            func_text += f"  out_col_{i} = array_from_cpp_table(out_table, col_offset+{i}, out_col_type_{i})\n"
-            func_text += "  for j in range(num_groups):\n"
-            func_text += f"    in_col_{i} = array_from_cpp_table(in_table, num_groups*{i} + j, in_col_type_{i})\n"
-            func_text += (
-                f"    out_col_{i}[j] = jitted_func_{i}(pd.Series(in_col_{i}))\n"
-            )
-
-        glbs = {
-            "array_from_cpp_table": array_from_cpp_table,
-            "col_offset": col_offset,
-            "pd": pd,
-        }
-        glbs |= {f"jitted_func_{i}": jitted_funcs[i] for i in range(len(funcs))}
-        glbs |= {f"in_col_type_{i}": in_col_types[i] for i in range(len(funcs))}
-        glbs |= {f"out_col_type_{i}": out_col_types[i] for i in range(len(funcs))}
-
-        agg_func_impl = bodo.utils.utils.bodo_exec(func_text, glbs, {}, __name__)
-
-        c_sig = types.void(types.int64, types.voidptr, types.voidptr)
-        # TODO: enable cache and fix errors
-        cfunc = _cfunc(c_sig, cache=False)(agg_func_impl)
-        return ctypes.c_void_p(cfunc.address).value
-
-    return wrapper
 
 
 class DataFrameGroupBy:
@@ -757,3 +709,53 @@ def _cast_groupby_agg_columns(
         out_data[out_col_name] = out_data[out_col_name].astype(pd.ArrowDtype(new_type))
 
     return out_data
+
+
+def _get_cfunc_wrapper(empty_data: pd.DataFrame):
+    """Get a wrapper to be called per worker to compile/get Cfunc"""
+
+    def wrapper(n_keys: int, funcs: list[GroupbyAggFunc]):
+        col_offset = n_keys  # TODO: n_keys (that are not dead) + udf_table_idx
+        deco = bodo.jit(spawn=False, distributed=False, cache=True)
+        jitted_funcs, in_col_types, out_col_types = [], [], []
+
+        for func in funcs:
+            jitted_funcs.append(deco(func.func))
+
+            in_col = empty_data[func.in_col]
+            in_col_types.append(bodo.typeof(in_col).data)
+            out_type = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
+            out_col_types.append(bodo.typeof(_empty_pd_array(out_type)))
+
+        # Generate a function that takes in a "wide" dataframe
+        # (1 column per group per UDF) and call each func on sets of
+        # num_groups columns.
+        func_text = "def bodo_agg_func_impl(num_groups, in_table, out_table):\n"
+        func_text += "  if num_groups == 0:\n"
+        func_text += "    return\n"
+
+        for i in range(len(funcs)):
+            func_text += f"  out_col_{i} = array_from_cpp_table(out_table, col_offset+{i}, out_col_type_{i})\n"
+            func_text += "  for j in range(num_groups):\n"
+            func_text += f"    in_col_{i} = array_from_cpp_table(in_table, num_groups*{i} + j, in_col_type_{i})\n"
+            func_text += (
+                f"    out_col_{i}[j] = jitted_func_{i}(pd.Series(in_col_{i}))\n"
+            )
+
+        glbs = {
+            "array_from_cpp_table": array_from_cpp_table,
+            "col_offset": col_offset,
+            "pd": pd,
+        }
+        glbs |= {f"jitted_func_{i}": jitted_funcs[i] for i in range(len(funcs))}
+        glbs |= {f"in_col_type_{i}": in_col_types[i] for i in range(len(funcs))}
+        glbs |= {f"out_col_type_{i}": out_col_types[i] for i in range(len(funcs))}
+
+        agg_func_impl = bodo.utils.utils.bodo_exec(func_text, glbs, {}, __name__)
+
+        c_sig = types.void(types.int64, types.voidptr, types.voidptr)
+        # TODO: enable cache and fix errors
+        cfunc = _cfunc(c_sig, cache=False)(agg_func_impl)
+        return ctypes.c_void_p(cfunc.address).value
+
+    return wrapper

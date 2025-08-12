@@ -290,15 +290,17 @@ std::shared_ptr<table_info> get_update_table(
     std::cout << "update table: " << ss_up.str() << std::endl;
 
     // Run Update for UDFs:
-    // For each UDF col set, Create num_groups columns
-    // This table is passed to input
-    // TODO can UDFs share input columns?
-    // TODO: break up general_input_table to reduce mem pressure?
+    // For each UDF col set, create num_groups columns
+    // and fill each collumn with values from corresponding group
+    // then call general_udf, which computes all UDF outputs at
+    // the same time.
     if (udf_info.has_value()) {
         assert(is_acc_case);
         std::shared_ptr<table_info> general_in_table =
             std::make_shared<table_info>();
+
         for (auto udf_colset : gen_udf_colsets) {
+            // TODO: reuse input columns if two UDFs share the same
             udf_colset->fill_in_columns(general_in_table, grp_info);
         }
         std::cout << udf_info.value().general_udf << std::endl;
@@ -308,7 +310,7 @@ std::shared_ptr<table_info> get_update_table(
             grp_info.num_groups, general_in_table.get(), update_table.get());
         // clear UDF col set state
         for (auto udf_colset : gen_udf_colsets) {
-            udf_colset->clear_after_gen_udf();
+            udf_colset->clear_udf();
         }
     }
 

@@ -32,6 +32,15 @@ struct PhysicalAggregateMetrics {
     time_t produce_time = 0;  // stage_2
 };
 
+/**
+ * @brief Gets a cfunc for computing the output of all UDFs.
+ *
+ * @param cfunc_wrapper Callable python object that takes in an int and a tuple
+ * of function objects and returns the address of the cfunc.
+ * @param n_keys The number of keys in the input table.
+ * @param funcs A list of GroupbyAggFunc objects.
+ * @return udf_general_fn cfunc for applying UDFs on a grouped table.
+ */
 udf_general_fn get_cfunc_from_wrapper(PyObject* cfunc_wrapper, size_t n_keys,
                                       std::vector<PyObject*>& funcs) {
     const Py_ssize_t n = static_cast<Py_ssize_t>(funcs.size());

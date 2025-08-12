@@ -1088,21 +1088,21 @@ class UdfColSet : public BasicColSet {
               std::shared_ptr<::arrow::MemoryManager> mm =
                   bodo::default_buffer_memory_manager()) override;
 
-    // void setUpdateCols(
-    //     std::vector<std::shared_ptr<array_info>> update_cols_) override {
-    //     throw std::runtime_error(
-    //         "UDFColSet not implemented for streaming groupby");
-    // }
+    void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "UDFColSet not implemented for streaming groupby");
+    }
     void setCombineCols(
         std::vector<std::shared_ptr<array_info>> combine_cols_) override {
         throw std::runtime_error(
             "UDFColSet not implemented for streaming groupby");
     }
-    // void setInCol(
-    //     std::vector<std::shared_ptr<array_info>> new_in_cols) override {
-    //     throw std::runtime_error(
-    //         "UDFColSet not implemented for streaming groupby");
-    // }
+    void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "UDFColSet not implemented for streaming groupby");
+    }
     void clear() override {
         throw std::runtime_error(
             "UDFColSet not implemented for streaming groupby");
@@ -1137,11 +1137,28 @@ class GeneralUdfColSet : public UdfColSet {
     std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         const std::shared_ptr<bodo::Schema>& in_schema) const override;
 
-    // clear state of all general UDFs at the same time
+    void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        update_cols = update_cols_;
+    }
+
+    void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        in_col = new_in_cols[0];
+    }
+
     void clear() override {}
 
-    // clear state once all col sets have been processed
-    void clear_after_gen_udf() { BasicColSet::clear(); }
+    /**
+     * @brief Clears UDF col set state, to be called after computing output of
+     * all UDFs.
+     *
+     */
+    void clear_udf() {
+        this->update_cols.clear();
+        this->combine_cols.clear();
+        this->in_col.reset();
+    }
 };
 
 /**
