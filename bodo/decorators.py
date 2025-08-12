@@ -520,6 +520,8 @@ def _init_extensions():
 
         gen_objmode_func_overload(scipy.special.factorial, "int64")
 
+        need_refresh = True
+
     if need_refresh:
         numba.core.registry.cpu_target.target_context.refresh()
 
