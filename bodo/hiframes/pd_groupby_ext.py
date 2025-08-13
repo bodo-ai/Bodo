@@ -39,7 +39,6 @@ from bodo.libs.array import (
     array_from_cpp_table,
     array_to_info,
     delete_table,
-    get_groupby_labels,
     get_null_shuffle_info,
     get_shuffle_info,
     reverse_shuffle_table,
@@ -2386,6 +2385,15 @@ def get_group_indices(keys, dropna, _is_parallel):  # pragma: no cover
 @overload(get_group_indices)
 def get_group_indices_overload(keys, dropna, _is_parallel):
     """get group indices (labels) for a tuple of key arrays."""
+    from bodo.libs.array import table_type
+
+    get_groupby_labels = types.ExternalFunction(
+        "get_groupby_labels_py_entry",
+        types.int64(
+            table_type, types.voidptr, types.voidptr, types.boolean, types.bool_
+        ),
+    )
+
     func_text = "def impl(keys, dropna, _is_parallel):\n"
     # convert arrays to table
     func_text += (

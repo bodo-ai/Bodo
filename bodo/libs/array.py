@@ -3302,12 +3302,6 @@ def drop_duplicates_local_dictionary(dict_arr, sort_dictionary):  # pragma: no c
     return out_arr
 
 
-get_groupby_labels = types.ExternalFunction(
-    "get_groupby_labels_py_entry",
-    types.int64(table_type, types.voidptr, types.voidptr, types.boolean, types.bool_),
-)
-
-
 _array_isin = types.ExternalFunction(
     "array_isin_py_entry",
     types.void(array_info_type, array_info_type, array_info_type, types.bool_),
