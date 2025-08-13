@@ -3927,10 +3927,3 @@ def _retrieve_table(typingctx, cpp_table, row_bitmask):
     )
 
     return sig, codegen
-
-
-# ----------- Export Array and Table Info Unpin for Testing -----------------
-
-_array_info_unpin = types.ExternalFunction(
-    "array_info_unpin", types.void(array_info_type)
-)
