@@ -4158,26 +4158,26 @@ def overload_print_if_not_empty(*args):
     return impl
 
 
-# _wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
+_wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
 
 
-# @numba.generated_jit(nopython=True)
-# def wait(req, cond=True):
-#     """wait on MPI request"""
-#     # Tuple of requests (e.g. nullable arrays)
-#     if isinstance(req, types.BaseTuple):
-#         count = len(req.types)
-#         tup_call = ",".join(f"_wait(req[{i}], cond)" for i in range(count))
-#         func_text = "def bodo_wait(req, cond=True):\n"
-#         func_text += f"  return {tup_call}\n"
-#         return bodo_exec(func_text, {"_wait": _wait}, {}, __name__)
+@numba.generated_jit(nopython=True)
+def wait(req, cond=True):
+    """wait on MPI request"""
+    # Tuple of requests (e.g. nullable arrays)
+    if isinstance(req, types.BaseTuple):
+        count = len(req.types)
+        tup_call = ",".join(f"_wait(req[{i}], cond)" for i in range(count))
+        func_text = "def bodo_wait(req, cond=True):\n"
+        func_text += f"  return {tup_call}\n"
+        return bodo_exec(func_text, {"_wait": _wait}, {}, __name__)
 
-#     # None passed means no request to wait on (no-op), happens for shift() for string
-#     # arrays since we use blocking communication instead
-#     if is_overload_none(req):
-#         return lambda req, cond=True: None  # pragma: no cover
+    # None passed means no request to wait on (no-op), happens for shift() for string
+    # arrays since we use blocking communication instead
+    if is_overload_none(req):
+        return lambda req, cond=True: None  # pragma: no cover
 
-#     return lambda req, cond=True: _wait(req, cond)  # pragma: no cover
+    return lambda req, cond=True: _wait(req, cond)  # pragma: no cover
 
 
 t777 = time.perf_counter()
