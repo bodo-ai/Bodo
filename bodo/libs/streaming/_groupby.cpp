@@ -812,14 +812,19 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         }
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             if (new_group_flags[i_row]) {
-                // add new group
-                build_table_buffer->AppendRowKeys(in_table, i_row, n_keys);
-                build_table_buffer->IncrementSizeDataColumns(n_keys);
-                this->build_table_groupby_hashes.emplace_back(
-                    batch_hashes_groupby[i_row]);
-                auto group = next_group++;
-                this->build_hash_table->emplace(group, group);
-                grp_info.row_to_group[i_row] = group;
+                auto group_iter = this->build_hash_table->find(-i_row - 1);
+                if ((group_iter != this->build_hash_table->end())) {
+                    grp_info.row_to_group[i_row] = group_iter->second;
+                } else {
+                    // add new group
+                    build_table_buffer->AppendRowKeys(in_table, i_row, n_keys);
+                    build_table_buffer->IncrementSizeDataColumns(n_keys);
+                    this->build_table_groupby_hashes.emplace_back(
+                        batch_hashes_groupby[i_row]);
+                    auto group = next_group++;
+                    this->build_hash_table->emplace(group, group);
+                    grp_info.row_to_group[i_row] = group;
+                }
             }
         }
 
@@ -904,8 +909,8 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         // error.
         std::vector<bool> new_group_flags(in_table->nrows(), false);
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            auto group_iter = this->build_hash_table->find(-i_row - 1);
             if (append_rows[i_row]) {
+                auto group_iter = this->build_hash_table->find(-i_row - 1);
                 if (group_iter != this->build_hash_table->end()) {
                     grp_info.row_to_group[i_row] = group_iter->second;
                 } else {
@@ -915,14 +920,19 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         }
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             if (new_group_flags[i_row]) {
-                // add new group
-                build_table_buffer->AppendRowKeys(in_table, i_row, n_keys);
-                build_table_buffer->IncrementSizeDataColumns(n_keys);
-                this->build_table_groupby_hashes.emplace_back(
-                    batch_hashes_groupby[i_row]);
-                auto group = next_group++;
-                this->build_hash_table->emplace(group, group);
-                grp_info.row_to_group[i_row] = group;
+                auto group_iter = this->build_hash_table->find(-i_row - 1);
+                if (group_iter != this->build_hash_table->end()) {
+                    grp_info.row_to_group[i_row] = group_iter->second;
+                } else {
+                    // add new group
+                    build_table_buffer->AppendRowKeys(in_table, i_row, n_keys);
+                    build_table_buffer->IncrementSizeDataColumns(n_keys);
+                    this->build_table_groupby_hashes.emplace_back(
+                        batch_hashes_groupby[i_row]);
+                    auto group = next_group++;
+                    this->build_hash_table->emplace(group, group);
+                    grp_info.row_to_group[i_row] = group;
+                }
             }
         }
 
@@ -1668,13 +1678,18 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
     }
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         if (new_group_flags[i_row]) {
-            // add new group
-            this->table_buffer->AppendRowKeys(in_table, i_row, n_keys);
-            this->table_buffer->IncrementSizeDataColumns(n_keys);
-            this->groupby_hashes.emplace_back(batch_hashes_groupby[i_row]);
-            auto group = next_group++;
-            this->hash_table->emplace(group, group);
-            shuffle_grp_info.row_to_group[i_row] = group;
+            auto group_iter = this->hash_table->find(-i_row - 1);
+            if ((group_iter != this->hash_table->end())) {
+                shuffle_grp_info.row_to_group[i_row] = group_iter->second;
+            } else {
+                // add new group
+                this->table_buffer->AppendRowKeys(in_table, i_row, n_keys);
+                this->table_buffer->IncrementSizeDataColumns(n_keys);
+                this->groupby_hashes.emplace_back(batch_hashes_groupby[i_row]);
+                auto group = next_group++;
+                this->hash_table->emplace(group, group);
+                shuffle_grp_info.row_to_group[i_row] = group;
+            }
         }
     }
     size_t row_count = in_table->nrows();
