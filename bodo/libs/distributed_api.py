@@ -4348,6 +4348,8 @@ c_broadcast_table = ExternalFunctionErrorChecked(
     table_type(table_type, array_info_type, types.int32, types.int64),
 )
 
+t77 = time.perf_counter()
+
 
 def bcast(data, comm_ranks=None, root=DEFAULT_ROOT, comm=None):  # pragma: no cover
     """bcast() sends data from rank 0 to comm_ranks."""
@@ -4740,3 +4742,6 @@ print(t5 - t4)
 print(t6 - t5)
 print(t7 - t6)
 print(t8 - t7)
+
+
+print("half:", t77 - t7)
