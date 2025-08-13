@@ -108,6 +108,32 @@ def schema_has_index_arrays(arrow_schema: pa.Schema) -> bool:
     return False
 
 
+def convert_to_pandas_types(obj: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
+    """Returns a DataFrame with the same column name with arrow types cast to
+    Pandas to avoid limitations in Pandas arrow types casting.
+    """
+
+    def dtype_to_pandas(dtype):
+        if isinstance(dtype, pd.ArrowDtype):
+            return pa.array([], dtype.pyarrow_dtype).to_pandas().dtype
+        return dtype
+
+    if isinstance(obj, pd.Series):
+        new_type = dtype_to_pandas(obj.dtype)
+        return obj.astype(new_type)
+
+    new_obj = pd.DataFrame()
+    for c in obj.columns:
+        if not isinstance(obj[c], pd.Series):
+            raise BodoLibNotImplementedException(
+                "Bodo DataFrame with duplicate columns detected."
+            )
+        new_type = dtype_to_pandas(obj[c].dtype)
+        new_obj[c] = obj[c].astype(new_type)
+
+    return new_obj
+
+
 def cpp_table_to_df(
     cpp_table, arrow_schema=None, use_arrow_dtypes=True, delete_input=True
 ):

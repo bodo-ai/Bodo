@@ -893,9 +893,9 @@ def count_plan(self):
                 count_star_schema,
                 self._plan,
                 "count_star",
+                None,  # udf_args
                 # Adding column 0 as input to avoid deleting all input by the optimizer
                 # TODO: avoid materializing the input column
-                None,  # cfunc_wrapper
                 [0],
                 False,  # dropna
             )

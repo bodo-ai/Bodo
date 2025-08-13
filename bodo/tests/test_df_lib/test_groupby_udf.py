@@ -1,9 +1,10 @@
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
-from bodo.pandas.utils import BodoLibFallbackWarning
+from bodo.pandas.utils import BodoLibFallbackWarning, convert_to_pandas_types
 from bodo.tests.utils import _test_equal
 
 
@@ -95,11 +96,17 @@ def test_agg_mix_udf_builtin(groupby_df):
 @pytest.mark.parametrize(
     "func",
     [
-        pytest.param(lambda x: x.nunique(), id="int_ret"),
-        # TODO: Fix frontend validation checking.
-        # pytest.param(lambda x: x.nunique() > 1, id="bool_ret"),
-        # pytest.param(lambda x: 1.23, id="float_ret"),
-        # pytest.param(lambda x: {"unique": x.nunique(), "len": len(x)}, id="struct_ret"),
+        pytest.param(lambda x: 4, id="int_ret"),
+        pytest.param(lambda x: True, id="bool_ret"),
+        pytest.param(lambda x: 1.23, id="float_ret", marks=pytest.mark.slow),
+        pytest.param(lambda x: pd.Timestamp(2021, 11, 3), id="timestamp_ret"),
+        pytest.param(
+            lambda x: pd.Timedelta(3), id="timedelta_ret", marks=pytest.mark.slow
+        ),
+        # TODO: fix nested return types case
+        # pytest.param(lambda x: "A", id="string_ret"),
+        # pytest.param(lambda x: {"id": 1, "text": "hello"}, id="struct_ret"),
+        # pytest.param(lambda x: [1, 2], id="list_ret"),
     ],
 )
 @pytest.mark.parametrize(
@@ -121,10 +128,31 @@ def test_agg_mix_udf_builtin(groupby_df):
                 dtype="datetime64[ns]",
             ),
             id="datetime_col",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.array([None, None, 3, 100] * 3, dtype="timedelta64[ns]"),
             id="timedelta_col",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.array(
+                [None, [1, 2, 3], [4, 5, 6], [1, 2, 3]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
+            id="list_col",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.array(
+                [{"A": 1, "B": "a"}, {"A": 1, "B": "a"}, None, {"A": 2, "B": "b"}] * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [pa.field("A", pa.int64()), pa.field("B", pa.large_string())]
+                    )
+                ),
+            ),
+            id="struct_col",
         ),
     ],
 )
@@ -132,10 +160,10 @@ def test_agg_udf_types(val_col, func):
     """Test agg with custom funcs of different types."""
 
     df = pd.DataFrame({"A": ["A", "B", "C"] * 4, "B": val_col})
-
     bdf = bd.from_pandas(df)
+    pdf = convert_to_pandas_types(df)
 
-    df2 = df.groupby(by=["A"]).agg({"B": func})
+    df2 = pdf.groupby(by=["A"]).agg({"B": func})
     with assert_executed_plan_count(0):
         bdf2 = bdf.groupby(by=["A"]).agg({"B": func})
 

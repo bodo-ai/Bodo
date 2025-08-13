@@ -30,6 +30,7 @@ from bodo.pandas.utils import (
     _empty_pd_array,
     _get_empty_series_arrow,
     check_args_fallback,
+    convert_to_pandas_types,
     wrap_plan,
 )
 
@@ -452,7 +453,12 @@ def _groupby_agg_plan(
     grouped_selection = grouped.selection_for_plan
 
     zero_size_df = _empty_like(grouped._obj)
-    empty_data_pandas = zero_size_df.groupby(grouped._keys, as_index=grouped._as_index)[
+
+    # Convert to Pandas types to avoid gaps in Arrow conversion
+    zero_size_df_pandas = convert_to_pandas_types(zero_size_df)
+    empty_data_pandas = zero_size_df_pandas.groupby(
+        grouped._keys, as_index=grouped._as_index
+    )[
         grouped_selection[0]
         if isinstance(grouped, SeriesGroupBy)
         else grouped_selection
@@ -474,6 +480,7 @@ def _groupby_agg_plan(
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
+    # Generate CFunc wrapper for custom agg funcs.
     cfunc_wrapper = _get_cfunc_wrapper(grouped._obj.head(0))
 
     out_types = empty_data
@@ -697,7 +704,9 @@ def _cast_groupby_agg_columns(
         new_type = _get_agg_output_type(
             func, in_data.dtype.pyarrow_dtype, out_data.name
         )
-        out_data = out_data.astype(pd.ArrowDtype(new_type))
+        out_data = pd.Series(
+            [], dtype=pd.ArrowDtype(new_type), name=out_data.name, index=out_data.index
+        )
         return out_data
 
     for i, func_ in enumerate(func):
@@ -718,7 +727,7 @@ def _cast_groupby_agg_columns(
             )
 
         new_type = _get_agg_output_type(func_, in_col.dtype.pyarrow_dtype, in_col_name)
-        out_data[out_col_name] = out_data[out_col_name].astype(pd.ArrowDtype(new_type))
+        out_data[out_col_name] = pd.Series([], dtype=pd.ArrowDtype(new_type))
 
     return out_data
 
@@ -730,6 +739,8 @@ def _get_cfunc_wrapper(empty_data: pd.DataFrame):
     """
 
     def wrapper(col_offsets: tuple[int], funcs: tuple[GroupbyAggFunc]) -> int:
+        assert len(funcs) > 0, "Wrapper must be called with at least 1 func."
+
         deco = bodo.jit(spawn=False, distributed=False, cache=False)
         jitted_funcs, in_col_types, out_col_types = [], [], []
 

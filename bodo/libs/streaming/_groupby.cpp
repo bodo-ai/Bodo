@@ -284,9 +284,9 @@ std::shared_ptr<table_info> get_update_table(
     }
 
     // Run Update for UDFs:
-    // For each UDF col set, create num_groups columns
-    // and fill each collumn with values from corresponding group
-    // then call general_udf, which computes all UDF outputs at
+    // For each UDF col set, create num_groups columns,
+    // fill each column with values from corresponding group
+    // then call general_udf to computes all UDF outputs at
     // the same time.
     if (udf_info.has_value()) {
         assert(is_acc_case);
@@ -294,7 +294,7 @@ std::shared_ptr<table_info> get_update_table(
             std::make_shared<table_info>();
 
         for (auto udf_colset : gen_udf_colsets) {
-            // TODO: reuse input columns if two UDFs share the same
+            // TODO: Avoid extra calls when UDFs share the same input col.
             udf_colset->fill_in_columns(general_in_table, grp_info);
         }
 
