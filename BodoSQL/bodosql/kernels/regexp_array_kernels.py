@@ -12,8 +12,8 @@ import bodo
 from bodo.libs.array import (
     array_info_type,
     array_to_info,
+    check_and_propagate_cpp_exception,
     delete_info,
-    get_replace_regex,
     info_to_array,
 )
 from bodo.libs.re_ext import init_const_pattern
@@ -697,6 +697,24 @@ def get_replace_regex_dict_state(
     out_arr_info = _get_replace_regex_dict_state(
         in_arr_info, pattern_typ, replace_typ, dict_encoding_state, func_id
     )
+    out = info_to_array(out_arr_info, in_arr)
+    delete_info(out_arr_info)
+    return out
+
+
+_get_replace_regex = types.ExternalFunction(
+    "get_replace_regex_py_entry",
+    # params: in array, pattern, replacement,
+    # Output: out array
+    array_info_type(array_info_type, types.voidptr, types.voidptr),
+)
+
+
+@numba.njit(no_cpython_wrapper=True)
+def get_replace_regex(in_arr, pattern_typ, replace_typ):  # pragma: no cover
+    in_arr_info = array_to_info(in_arr)
+    out_arr_info = _get_replace_regex(in_arr_info, pattern_typ, replace_typ)
+    check_and_propagate_cpp_exception()
     out = info_to_array(out_arr_info, in_arr)
     delete_info(out_arr_info)
     return out
