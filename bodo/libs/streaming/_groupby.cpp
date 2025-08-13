@@ -818,7 +818,7 @@ void GroupbyPartition::UpdateGroupsAndCombine(
                 this->build_table_groupby_hashes.emplace_back(
                     batch_hashes_groupby[i_row]);
                 auto group = next_group++;
-                this->build_hash_table->emplace(group, group);
+                (*this->build_hash_table)[group] = group;
                 grp_info.row_to_group[i_row] = group;
             }
         }
@@ -921,7 +921,7 @@ void GroupbyPartition::UpdateGroupsAndCombine(
                 this->build_table_groupby_hashes.emplace_back(
                     batch_hashes_groupby[i_row]);
                 auto group = next_group++;
-                this->build_hash_table->emplace(group, group);
+                (*this->build_hash_table)[group] = group;
                 grp_info.row_to_group[i_row] = group;
             }
         }
@@ -1673,7 +1673,7 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
             this->table_buffer->IncrementSizeDataColumns(n_keys);
             this->groupby_hashes.emplace_back(batch_hashes_groupby[i_row]);
             auto group = next_group++;
-            this->hash_table->emplace(group, group);
+            (*this->hash_table)[group] = group;
             shuffle_grp_info.row_to_group[i_row] = group;
         }
     }
