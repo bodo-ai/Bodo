@@ -805,9 +805,8 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             auto group_iter = this->build_hash_table->find(-i_row - 1);
             if ((group_iter != this->build_hash_table->end())) {
-                grp_info.row_to_group[i_row] = group_iter->second;
-            } else {
                 new_group_flags[i_row] = true;
+                grp_info.row_to_group[i_row] = group_iter->second;
             }
         }
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
@@ -907,9 +906,8 @@ void GroupbyPartition::UpdateGroupsAndCombine(
             auto group_iter = this->build_hash_table->find(-i_row - 1);
             if (append_rows[i_row] &&
                 (group_iter != this->build_hash_table->end())) {
-                grp_info.row_to_group[i_row] = group_iter->second;
-            } else {
                 new_group_flags[i_row] = true;
+                grp_info.row_to_group[i_row] = group_iter->second;
             }
         }
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
@@ -1660,9 +1658,8 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         auto group_iter = this->hash_table->find(-i_row - 1);
         if ((group_iter != this->hash_table->end())) {
-            shuffle_grp_info.row_to_group[i_row] = group_iter->second;
-        } else {
             new_group_flags[i_row] = true;
+            shuffle_grp_info.row_to_group[i_row] = group_iter->second;
         }
     }
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
