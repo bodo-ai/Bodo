@@ -6,6 +6,8 @@ import warnings
 from collections import defaultdict
 from enum import Enum
 
+t0 = time.perf_counter()
+
 import llvmlite.binding as ll
 import numba
 import numpy as np
@@ -32,6 +34,9 @@ from bodo.hiframes.datetime_timedelta_ext import timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import hdist
+
+t1 = time.perf_counter()
+
 from bodo.libs.array import (
     array_info_type,
     array_to_info,
@@ -43,6 +48,9 @@ from bodo.libs.array import (
     py_table_to_cpp_table,
     table_type,
 )
+
+t2 = time.perf_counter()
+
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     np_offset_type,
@@ -135,6 +143,9 @@ ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
 
 # Wrapper for getting process rank from C (MPI rank currently)
 get_rank = hdist.get_rank_py_wrapper
+
+
+t3 = time.perf_counter()
 
 
 # XXX same as _distributed.h::BODO_ReduceOps::ReduceOpsEnum
@@ -899,6 +910,9 @@ def gatherv_impl_wrapper(
     data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
 ):
     return gatherv_impl_jit(data, allgather, warn_if_rep, root, comm)
+
+
+t4 = time.perf_counter()
 
 
 @numba.generated_jit(nopython=True)
@@ -2012,6 +2026,9 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     raise BodoError(f"get_value_for_type(dtype): Missing data type {dtype}")
 
 
+t5 = time.perf_counter()
+
+
 @numba.njit(cache=True, no_cpython_wrapper=True)
 def get_scatter_comm_info(root, comm):
     """Return communication attributes for scatterv based on root and intercomm"""
@@ -3068,6 +3085,9 @@ def bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
     return
 
 
+t6 = time.perf_counter()
+
+
 @infer_global(bcast_scalar_impl)
 class BcastScalarInfer(AbstractTemplate):
     def generic(self, args, kws):
@@ -3996,6 +4016,9 @@ def dist_cummin_impl(in_arr, out_arr):
     return cummin_impl
 
 
+t7 = time.perf_counter()
+
+
 @numba.njit(cache=True)
 def dist_cummax(in_arr, out_arr):
     return dist_cummax_impl(in_arr, out_arr)
@@ -4705,3 +4728,15 @@ delete_is_last_state = types.ExternalFunction(
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
 )
+
+
+t8 = time.perf_counter()
+
+print(t1 - t0)
+print(t2 - t1)
+print(t3 - t2)
+print(t4 - t3)
+print(t5 - t4)
+print(t6 - t5)
+print(t7 - t6)
+print(t8 - t7)
