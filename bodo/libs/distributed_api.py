@@ -4024,7 +4024,7 @@ def dist_cummax(in_arr, out_arr):
     return dist_cummax_impl(in_arr, out_arr)
 
 
-# @numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True)
 def dist_cummax_impl(in_arr, out_arr):
     if isinstance(in_arr.dtype, types.Float):
         neutral_val = np.finfo(in_arr.dtype(1).dtype).min
@@ -4158,7 +4158,7 @@ def overload_print_if_not_empty(*args):
 _wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
 
 
-# @numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True)
 def wait(req, cond=True):
     """wait on MPI request"""
     # Tuple of requests (e.g. nullable arrays)
