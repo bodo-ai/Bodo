@@ -2327,6 +2327,221 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     )
 
 
+def _gen_row_access_intrinsic(col_array_typ, c_ind):
+    """Generate an intrinsic for loading a value from a table column with
+    'col_array_typ' array type. 'c_ind' is the index of the column within the table.
+    The intrinsic's input is an array of pointers for the table's data either array
+    info or data depending on the type and a row index.
+
+    For example, col_dtype=int64, c_ind=1, table=[A_data_ptr, B_data_ptr, C_data_ptr],
+    row_ind=2 will return 6 for the table below.
+    A  B  C
+    1  4  7
+    2  5  8
+    3  6  9
+
+    NOTE: This function may execute even if the data is NA, so the implementation must
+    not segfault when accessing NA data.
+    """
+    from llvmlite import ir as lir
+
+    col_dtype = col_array_typ.dtype
+
+    if isinstance(
+        col_dtype,
+        (
+            types.Number,
+            bodo.TimeType,
+            bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
+        ),
+    ) or col_dtype in [
+        bodo.datetime_date_type,
+        bodo.datetime64ns,
+        bodo.timedelta64ns,
+        types.bool_,
+    ]:
+        # Note: PandasDatetimeTZDtype is not the return type for scalar data.
+        # In C++ the data is just a datetime64ns
+        if isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+            col_dtype = bodo.datetime64ns
+
+        # This code path just returns the data.
+        @intrinsic
+        def getitem_func(typingctx, table_t, ind_t):
+            def codegen(context, builder, sig, args):
+                table, row_ind = args
+                # cast void* to void**
+                table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
+                # get data pointer for input column and cast to proper data type
+                col_ind = lir.Constant(lir.IntType(64), c_ind)
+                col_ptr = builder.load(builder.gep(table, [col_ind]))
+
+                if col_array_typ == bodo.boolean_array_type:
+                    # Boolean arrays store 1 bit per value, so we need a custom path to load the bit.
+                    col_ptr = builder.bitcast(
+                        col_ptr, context.get_data_type(types.uint8).as_pointer()
+                    )
+                    data_val = bodo.utils.cg_helpers.get_bitmap_bit(
+                        builder, col_ptr, row_ind
+                    )
+                    # Case the loaded bit to bool
+                    return context.cast(
+                        builder,
+                        data_val,
+                        types.uint8,
+                        col_dtype,
+                    )
+                else:
+                    col_ptr = builder.bitcast(
+                        col_ptr, context.get_data_type(col_dtype).as_pointer()
+                    )
+                    data_val = builder.gep(col_ptr, [row_ind])
+                    # Similar to Numpy array getitem in Numba:
+                    # https://github.com/numba/numba/blob/2298ad6186d177f39c564046890263b0f1c74ecc/numba/np/arrayobj.py#L130
+                    # makes sure we don't get LLVM i1 vs i8 mismatches for bool scalars
+                    return context.unpack_value(builder, col_dtype, data_val)
+
+            return col_dtype(types.voidptr, types.int64), codegen
+
+        return getitem_func
+
+    if col_array_typ in (bodo.string_array_type, bodo.binary_array_type):
+        # If we have a unicode type we want to leave the raw
+        # data pointer as a void* because we don't have a full
+        # string yet.
+
+        # This code path returns the data + length
+
+        @intrinsic
+        def getitem_func(typingctx, table_t, ind_t):
+            def codegen(context, builder, sig, args):
+                table, row_ind = args
+                # cast void* to void**
+                table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
+                # get data pointer for input column and cast to proper data type
+                col_ind = lir.Constant(lir.IntType(64), c_ind)
+                col_ptr = builder.load(builder.gep(table, [col_ind]))
+                fnty = lir.FunctionType(
+                    lir.IntType(8).as_pointer(),
+                    [
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(64),
+                        lir.IntType(64).as_pointer(),
+                    ],
+                )
+                getitem_fn = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="array_info_getitem"
+                )
+                # Allocate for the output size
+                size = cgutils.alloca_once(builder, lir.IntType(64))
+                args = (col_ptr, row_ind, size)
+                data_ptr = builder.call(getitem_fn, args)
+                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                return context.compile_internal(
+                    builder,
+                    lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
+                        data, length
+                    ),
+                    decode_sig,
+                    [data_ptr, builder.load(size)],
+                )
+
+            return (
+                bodo.string_type(types.voidptr, types.int64),
+                codegen,
+            )
+
+        return getitem_func
+
+    if col_array_typ == bodo.libs.dict_arr_ext.dict_str_arr_type:
+        # If we have a dictionary string type we want to extract the two
+        # components and execute them differently. First we want to run to
+        # extract the index in the dictionary in the intrinsic and get the
+        # unicode data from C++.
+        # This code path returns the data + length
+        @intrinsic
+        def getitem_func(typingctx, table_t, ind_t):
+            def codegen(context, builder, sig, args):
+                # Define some constants
+                zero = lir.Constant(lir.IntType(64), 0)
+                one = lir.Constant(lir.IntType(64), 1)
+
+                table, row_ind = args
+                # cast void* to void**
+                table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
+                # get data pointer for the input column
+                col_ind = lir.Constant(lir.IntType(64), c_ind)
+                col_ptr = builder.load(builder.gep(table, [col_ind]))
+                # Extract the index array from the dict array
+                fnty = lir.FunctionType(
+                    lir.IntType(8).as_pointer(),
+                    [
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(64),
+                    ],
+                )
+                get_info_func = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="get_child_info"
+                )
+                args = (col_ptr, one)
+                indices_array_info = builder.call(get_info_func, args)
+                # Extract the data from the array info
+                fnty = lir.FunctionType(
+                    lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer()]
+                )
+                get_data_func = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="array_info_getdata1"
+                )
+                args = (indices_array_info,)
+                index_ptr = builder.call(get_data_func, args)
+                index_ptr = builder.bitcast(
+                    index_ptr,
+                    context.get_data_type(col_array_typ.indices_dtype).as_pointer(),
+                )
+                dict_loc = builder.sext(
+                    builder.load(builder.gep(index_ptr, [row_ind])), lir.IntType(64)
+                )
+                # NA gets checked after this function.
+                # Extract the dictionary from the dict array
+                args = (col_ptr, zero)
+                dictionary_ptr = builder.call(get_info_func, args)
+                fnty = lir.FunctionType(
+                    lir.IntType(8).as_pointer(),
+                    [
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(64),
+                        lir.IntType(64).as_pointer(),
+                    ],
+                )
+                getitem_fn = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="array_info_getitem"
+                )
+                # Allocate for the output size
+                size = cgutils.alloca_once(builder, lir.IntType(64))
+                args = (dictionary_ptr, dict_loc, size)
+                data_ptr = builder.call(getitem_fn, args)
+                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                return context.compile_internal(
+                    builder,
+                    lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
+                        data, length
+                    ),
+                    decode_sig,
+                    [data_ptr, builder.load(size)],
+                )
+
+            return (
+                bodo.string_type(types.voidptr, types.int64),
+                codegen,
+            )
+
+        return getitem_func
+
+    raise BodoError(
+        f"General Join Conditions with '{col_array_typ}' column type and '{col_dtype}' data type not supported"
+    )
+
+
 def _replace_column_accesses(
     expr,
     logical_to_physical_ind,
@@ -2371,7 +2586,7 @@ def _replace_column_accesses(
 
         physical_ind = logical_to_physical_ind[c_ind]
 
-        table_getitem_funcs[getitem_fname] = bodo.libs.array._gen_row_access_intrinsic(
+        table_getitem_funcs[getitem_fname] = _gen_row_access_intrinsic(
             array_typ, physical_ind
         )
         expr = expr.replace(cname, val_varname)
