@@ -905,15 +905,16 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         std::vector<bool> new_group_flags(in_table->nrows(), false);
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             auto group_iter = this->build_hash_table->find(-i_row - 1);
-            if (append_rows[i_row] &&
-                (group_iter != this->build_hash_table->end())) {
-                grp_info.row_to_group[i_row] = group_iter->second;
-            } else {
-                new_group_flags[i_row] = true;
+            if (append_rows[i_row]) {
+                if (group_iter != this->build_hash_table->end()) {
+                    grp_info.row_to_group[i_row] = group_iter->second;
+                } else {
+                    new_group_flags[i_row] = true;
+                }
             }
         }
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            if (append_rows[i_row] && new_group_flags[i_row]) {
+            if (new_group_flags[i_row]) {
                 // add new group
                 build_table_buffer->AppendRowKeys(in_table, i_row, n_keys);
                 build_table_buffer->IncrementSizeDataColumns(n_keys);
