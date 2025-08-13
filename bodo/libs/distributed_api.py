@@ -4177,6 +4177,9 @@ def wait(req, cond=True):
     return lambda req, cond=True: _wait(req, cond)  # pragma: no cover
 
 
+t777 = time.perf_counter()
+
+
 @register_jitable
 def _set_if_in_range(A, val, index, chunk_start):  # pragma: no cover
     if index >= chunk_start and index < chunk_start + len(A):
@@ -4745,3 +4748,4 @@ print(t8 - t7)
 
 
 print("half:", t77 - t7)
+print("quarter:", t777 - t7)
