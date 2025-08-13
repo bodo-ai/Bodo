@@ -2939,6 +2939,8 @@ def sort(arr, ascending, inplace):  # pragma: no cover
 # For example: Inside of sklearn functions.
 @overload(sort, no_unliteral=True, jit_options={"cache": True})
 def overload_sort(arr, ascending, inplace):
+    import bodo.libs.vendored.timsort
+
     def impl(arr, ascending, inplace):  # pragma: no cover
         n = len(arr)
         data = (np.arange(n),)

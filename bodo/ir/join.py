@@ -43,7 +43,6 @@ from bodo.libs.array import (
     nested_loop_join_table,
     py_data_to_cpp_table,
 )
-from bodo.libs.vendored.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import (
@@ -63,7 +62,12 @@ from bodo.utils.typing import (
     is_str_arr_type,
     to_nullable_type,
 )
-from bodo.utils.utils import alloc_arr_tup, is_null_pointer
+from bodo.utils.utils import (
+    alloc_arr_tup,
+    getitem_arr_tup,
+    is_null_pointer,
+    setitem_arr_tup,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
