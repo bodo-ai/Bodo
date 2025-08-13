@@ -4049,9 +4049,9 @@ def dist_cummax_impl(in_arr, out_arr):
     return cummax_impl
 
 
-_allgather = types.ExternalFunction(
-    "allgather", types.void(types.voidptr, types.int32, types.voidptr, types.int32)
-)
+# _allgather = types.ExternalFunction(
+#     "allgather", types.void(types.voidptr, types.int32, types.voidptr, types.int32)
+# )
 
 
 @numba.njit(cache=True)
@@ -4155,7 +4155,7 @@ def overload_print_if_not_empty(*args):
     return impl
 
 
-_wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
+# _wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
 
 
 @numba.generated_jit(nopython=True)
