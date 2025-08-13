@@ -4082,6 +4082,9 @@ ArrayAnalysis._analyze_op_call_bodo_libs_distributed_api_dist_return = dist_retu
 ArrayAnalysis._analyze_op_call_bodo_libs_distributed_api_rep_return = dist_return_equiv
 
 
+t777_7 = time.perf_counter()
+
+
 def threaded_return(A):  # pragma: no cover
     return A
 
@@ -4749,3 +4752,5 @@ print(t8 - t7)
 
 print("half:", t77 - t7)
 print("quarter:", t777 - t7)
+
+print("eight:", t777_7 - t7)
