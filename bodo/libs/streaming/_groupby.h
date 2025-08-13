@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../_array_hash.h"
 #include "../_bodo_common.h"
 #include "../_chunked_table_builder.h"
 #include "../_dict_builder.h"
@@ -247,6 +248,9 @@ using grpby_hash_table_t =
 class GroupbyPartition {
    public:
     using hash_table_t = grpby_hash_table_t</*is_local*/ true>;
+    // Use an identity hash function for bloom filters since
+    // we are using the hashes of the rows as the keys.
+    using bloom_filter_t = SimdBlockFilterFixed<IDHash>;
 
     explicit GroupbyPartition(
         size_t num_top_bits_, uint32_t top_bitmask_,
@@ -274,6 +278,8 @@ class GroupbyPartition {
     int64_t next_group = 0;
     // Map row number to group number
     std::unique_ptr<hash_table_t> build_hash_table;
+    std::unique_ptr<bloom_filter_t> build_bloom_filter;
+
     // Hashes of data in build_table_buffer
     // XXX Might be better to use unique_ptrs to guarantee
     // that memory is released during FinalizeBuild.
@@ -347,7 +353,7 @@ class GroupbyPartition {
      * running values.
      * @param batch_hashes_groupby Groupby Hashes for input batch.
      */
-    template <bool is_active>
+    template <bool is_active, bool build_bloom_filter>
     void UpdateGroupsAndCombine(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& batch_hashes_groupby);
@@ -365,7 +371,7 @@ class GroupbyPartition {
      * @param append_rows Bitmask specifying the rows to use for the update and
      * combine steps.
      */
-    template <bool is_active>
+    template <bool is_active, bool build_bloom_filter>
     void UpdateGroupsAndCombine(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
@@ -619,6 +625,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     int64_t next_group = 0;
     // Map row number to group number
     std::unique_ptr<shuffle_hash_table_t> hash_table;
+    std::unique_ptr<GroupbyPartition::bloom_filter_t> bloom_filter;
     // Hashes of data in table_buffer
     bodo::vector<uint32_t> groupby_hashes;
     // Temporary batch data (used by HashGroupbyTable and KeyEqualGroupbyTable)
@@ -776,6 +783,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
      * @param in_table Input batch to update and combine using.
      * @param batch_hashes_groupby Groupby hashes for the input batch records.
      */
+    template <bool use_bloom_filter>
     void UpdateGroupsAndCombine(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& batch_hashes_groupby);

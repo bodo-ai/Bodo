@@ -41,6 +41,30 @@ std::string get_aggregation_type_string(AggregationType type) {
             throw std::runtime_error("Unsupported aggregation type!");
     }
 }
+/**
+ * @brief Create a new bloom filter for the build table.
+ * This is used when resetting the hash table in
+ * UpdateGroupsAndCombine and initializing the partition.
+ *
+ * @return std::unique_ptr<GroupbyPartition::bloom_filter_t>
+ */
+std::unique_ptr<GroupbyPartition::bloom_filter_t> create_bloom_filter() {
+    if (bloom_filter_supported()) {
+        // Estimate the number of rows to specify based on
+        // the target size in bytes in the env or 1MiB
+        // if not provided.
+        int64_t target_bytes = 1 * 1024 * 1024;
+        char* env_target_bytes =
+            std::getenv("BODO_STREAM_GROUPBY_BLOOM_FILTER_TARGET_BYTES");
+        if (env_target_bytes) {
+            target_bytes = std::stoi(env_target_bytes);
+        }
+        int64_t num_entries = num_elements_for_bytes(target_bytes);
+        return std::make_unique<GroupbyPartition::bloom_filter_t>(num_entries);
+    } else {
+        return nullptr;
+    }
+}
 
 /* --------------------------- HashGroupbyTable --------------------------- */
 
@@ -673,6 +697,7 @@ GroupbyPartition::GroupbyPartition(
           0, HashGroupbyTable<true>(this, nullptr),
           KeyEqualGroupbyTable<true>(this, nullptr, n_keys_),
           op_scratch_pool_)),
+      build_bloom_filter(create_bloom_filter()),
       build_table_groupby_hashes(op_pool_),
       separate_out_cols_schema(std::move(separate_out_cols_schema_)),
       col_sets(col_sets_),
@@ -760,7 +785,7 @@ inline void GroupbyPartition::RebuildHashTableFromBuildBuffer() {
     insert_timer.finalize();
 }
 
-template <bool is_active>
+template <bool is_active, bool build_bloom_filter>
 void GroupbyPartition::UpdateGroupsAndCombine(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby) {
@@ -864,7 +889,7 @@ void GroupbyPartition::UpdateGroupsAndCombine(
     }
 }
 
-template <bool is_active>
+template <bool is_active, bool build_bloom_filter>
 void GroupbyPartition::UpdateGroupsAndCombine(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
@@ -1351,8 +1376,13 @@ void GroupbyPartition::ActivatePartition() {
             // Treat the partition as active temporarily.
             // This step can fail. If it does, we can repartition and retry
             // safely since the CTB still has all the original data.
-            this->UpdateGroupsAndCombine</*is_active*/ true>(
-                chunk, chunk_hashes_groupby);
+            if (this->build_bloom_filter) {
+                this->UpdateGroupsAndCombine</*is_active*/ true, true>(
+                    chunk, chunk_hashes_groupby);
+            } else {
+                this->UpdateGroupsAndCombine</*is_active*/ true, false>(
+                    chunk, chunk_hashes_groupby);
+            }
             start_pin = start_timer();
         }
 
@@ -1608,6 +1638,7 @@ GroupbyIncrementalShuffleState::GroupbyIncrementalShuffleState(
       hash_table(std::make_unique<shuffle_hash_table_t>(
           0, HashGroupbyTable<false>(nullptr, this),
           KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys))),
+      bloom_filter(create_bloom_filter()),
       pre_reduction_table_buffer(std::make_unique<TableBuildBuffer>(
           this->schema, this->dict_builders)),
       col_sets(col_sets_),
@@ -1640,6 +1671,7 @@ void GroupbyIncrementalShuffleState::Finalize() {
     IncrementalShuffleState::Finalize();
 }
 
+template <bool use_bloom_filter>
 void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby) {
@@ -1667,17 +1699,22 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
     int64_t shuffle_init_start_row = this->next_group;
 
     // Add new groups and get group mappings for input batch
-    std::vector<bool> new_group_flags(in_table->nrows(), false);
+    std::vector<bool> new_group(in_table->nrows(), false);
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        auto group_iter = this->hash_table->find(-i_row - 1);
-        if ((group_iter != this->hash_table->end())) {
-            shuffle_grp_info.row_to_group[i_row] = group_iter->second;
-        } else {
-            new_group_flags[i_row] = true;
+        if (use_bloom_filter &&
+            !this->bloom_filter->Find(batch_hashes_groupby[i_row])) {
+            new_group[i_row] = true;
+            this->table_buffer->AppendRowKeys(in_table, i_row, n_keys);
+            this->table_buffer->IncrementSizeDataColumns(n_keys);
+            this->groupby_hashes.emplace_back(batch_hashes_groupby[i_row]);
+            auto group = next_group++;
+            this->hash_table->emplace(group, group);
+            shuffle_grp_info.row_to_group[i_row] = group;
+            this->bloom_filter->Add(batch_hashes_groupby[i_row]);
         }
     }
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        if (new_group_flags[i_row]) {
+        if (!new_group[i_row]) {
             auto group_iter = this->hash_table->find(-i_row - 1);
             if ((group_iter != this->hash_table->end())) {
                 shuffle_grp_info.row_to_group[i_row] = group_iter->second;
@@ -1689,6 +1726,7 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
                 auto group = next_group++;
                 this->hash_table->emplace(group, group);
                 shuffle_grp_info.row_to_group[i_row] = group;
+                this->bloom_filter->Add(batch_hashes_groupby[i_row]);
             }
         }
     }
@@ -1759,8 +1797,13 @@ bool GroupbyIncrementalShuffleState::ShouldShuffleAfterProcessing(
                         this->pre_reduction_hashes.size());
                 memcpy(hashes.get(), this->pre_reduction_hashes.data(),
                        sizeof(uint32_t) * this->pre_reduction_hashes.size());
-                this->UpdateGroupsAndCombine(
-                    this->pre_reduction_table_buffer->data_table, hashes);
+                if (this->bloom_filter) {
+                    this->UpdateGroupsAndCombine<true>(
+                        this->pre_reduction_table_buffer->data_table, hashes);
+                } else {
+                    this->UpdateGroupsAndCombine<false>(
+                        this->pre_reduction_table_buffer->data_table, hashes);
+                }
                 // Recompute should_shuffle since we are inserting into the hash
                 // table.
                 should_shuffle =
@@ -3203,8 +3246,13 @@ void GroupbyState::UpdateGroupsAndCombineHelper(
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby) {
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
-        this->partitions[0]->UpdateGroupsAndCombine<true>(in_table,
-                                                          batch_hashes_groupby);
+        if (this->partitions[0]->build_bloom_filter) {
+            this->partitions[0]->UpdateGroupsAndCombine<true, true>(
+                in_table, batch_hashes_groupby);
+        } else {
+            this->partitions[0]->UpdateGroupsAndCombine<true, false>(
+                in_table, batch_hashes_groupby);
+        }
         return;
     }
     time_pt start_part_check = start_timer();
@@ -3235,11 +3283,23 @@ void GroupbyState::UpdateGroupsAndCombineHelper(
     }
     this->metrics.input_partition_check_time += end_timer(start_part_check);
     this->metrics.input_partition_check_nrows += in_table->nrows();
-    this->partitions[0]->UpdateGroupsAndCombine<true>(
-        in_table, batch_hashes_groupby, append_rows_by_partition[0]);
+    if (this->partitions[0]->build_bloom_filter) {
+        this->partitions[0]->UpdateGroupsAndCombine<true, true>(
+            in_table, batch_hashes_groupby, append_rows_by_partition[0]);
+    } else {
+        this->partitions[0]->UpdateGroupsAndCombine<true, false>(
+            in_table, batch_hashes_groupby, append_rows_by_partition[0]);
+    }
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
-        this->partitions[i_part]->UpdateGroupsAndCombine<false>(
-            in_table, batch_hashes_groupby, append_rows_by_partition[i_part]);
+        if (this->partitions[i_part]->build_bloom_filter) {
+            this->partitions[i_part]->UpdateGroupsAndCombine<false, true>(
+                in_table, batch_hashes_groupby,
+                append_rows_by_partition[i_part]);
+        } else {
+            this->partitions[i_part]->UpdateGroupsAndCombine<false, false>(
+                in_table, batch_hashes_groupby,
+                append_rows_by_partition[i_part]);
+        }
     }
 }
 
@@ -3282,8 +3342,13 @@ void GroupbyState::UpdateGroupsAndCombineHelper(
     const std::vector<bool>& append_rows) {
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
-        this->partitions[0]->UpdateGroupsAndCombine<true>(
-            in_table, batch_hashes_groupby, append_rows);
+        if (this->partitions[0]->build_bloom_filter) {
+            this->partitions[0]->UpdateGroupsAndCombine<true, true>(
+                in_table, batch_hashes_groupby, append_rows);
+        } else {
+            this->partitions[0]->UpdateGroupsAndCombine<true, false>(
+                in_table, batch_hashes_groupby, append_rows);
+        }
         return;
     }
 
@@ -3320,12 +3385,23 @@ void GroupbyState::UpdateGroupsAndCombineHelper(
     }
     this->metrics.input_partition_check_time += end_timer(start_part_check);
     this->metrics.input_partition_check_nrows += in_table->nrows();
-
-    this->partitions[0]->UpdateGroupsAndCombine<true>(
-        in_table, batch_hashes_groupby, append_rows_by_partition[0]);
+    if (this->partitions[0]->build_bloom_filter) {
+        this->partitions[0]->UpdateGroupsAndCombine<true, true>(
+            in_table, batch_hashes_groupby, append_rows_by_partition[0]);
+    } else {
+        this->partitions[0]->UpdateGroupsAndCombine<true, false>(
+            in_table, batch_hashes_groupby, append_rows_by_partition[0]);
+    }
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
-        this->partitions[i_part]->UpdateGroupsAndCombine<false>(
-            in_table, batch_hashes_groupby, append_rows_by_partition[i_part]);
+        if (this->partitions[i_part]->build_bloom_filter) {
+            this->partitions[i_part]->UpdateGroupsAndCombine<false, true>(
+                in_table, batch_hashes_groupby,
+                append_rows_by_partition[i_part]);
+        } else {
+            this->partitions[i_part]->UpdateGroupsAndCombine<false, false>(
+                in_table, batch_hashes_groupby,
+                append_rows_by_partition[i_part]);
+        }
     }
 }
 

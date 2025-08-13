@@ -1169,3 +1169,8 @@ int8_t check_like_kernel_cache(like_kernel_cache_t* cache, uint32_t idx1,
  * @param cache Pointer to the hashmap
  */
 void dealloc_like_kernel_cache(like_kernel_cache_t* cache) noexcept;
+
+class IDHash {
+   public:
+    auto operator()(auto key) const noexcept { return key; }
+};
