@@ -3477,37 +3477,6 @@ _get_replace_regex = types.ExternalFunction(
 )
 
 
-@intrinsic
-def _get_replace_regex_dict_state(
-    typingctx, arr_info_t, pattern_t, replace_t, dict_encoding_state_t, func_id_t
-):
-    assert arr_info_t == array_info_type
-    assert isinstance(func_id_t, types.Integer), "func_id must be an integer"
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_replace_regex_dict_state_py_entry"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    sig = array_info_type(
-        arr_info_t, types.voidptr, types.voidptr, dict_encoding_state_t, types.int64
-    )
-    return sig, codegen
-
-
 @numba.njit(no_cpython_wrapper=True)
 def get_search_regex(
     in_arr, case, match, pat, out_arr, do_full_match=False
@@ -3523,19 +3492,6 @@ def get_replace_regex(in_arr, pattern_typ, replace_typ):  # pragma: no cover
     in_arr_info = array_to_info(in_arr)
     out_arr_info = _get_replace_regex(in_arr_info, pattern_typ, replace_typ)
     check_and_propagate_cpp_exception()
-    out = info_to_array(out_arr_info, in_arr)
-    delete_info(out_arr_info)
-    return out
-
-
-@numba.njit(no_cpython_wrapper=True)
-def get_replace_regex_dict_state(
-    in_arr, pattern_typ, replace_typ, dict_encoding_state, func_id
-):  # pragma: no cover
-    in_arr_info = array_to_info(in_arr)
-    out_arr_info = _get_replace_regex_dict_state(
-        in_arr_info, pattern_typ, replace_typ, dict_encoding_state, func_id
-    )
     out = info_to_array(out_arr_info, in_arr)
     delete_info(out_arr_info)
     return out
