@@ -3454,27 +3454,3 @@ def array_isin(out_arr, in_arr, in_values, is_parallel):  # pragma: no cover
         is_parallel,
     )
     check_and_propagate_cpp_exception()
-
-
-_get_search_regex = types.ExternalFunction(
-    "get_search_regex_py_entry",
-    # params: in array, case-sensitive flag, pattern, output boolean array
-    types.void(
-        array_info_type,
-        types.bool_,
-        types.bool_,
-        types.voidptr,
-        array_info_type,
-        types.bool_,
-    ),
-)
-
-
-@numba.njit(no_cpython_wrapper=True)
-def get_search_regex(
-    in_arr, case, match, pat, out_arr, do_full_match=False
-):  # pragma: no cover
-    in_arr_info = array_to_info(in_arr)
-    out_arr_info = array_to_info(out_arr)
-    _get_search_regex(in_arr_info, case, match, pat, out_arr_info, do_full_match)
-    check_and_propagate_cpp_exception()
