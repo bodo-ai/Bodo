@@ -4114,48 +4114,48 @@ class ThreadedRetTyper(AbstractTemplate):
         return signature(args[0], *args)
 
 
-@numba.njit(cache=True)
-def parallel_print(*args):  # pragma: no cover
-    print(*args)
+# @numba.njit(cache=True)
+# def parallel_print(*args):  # pragma: no cover
+#     print(*args)
 
 
-@numba.njit(cache=True)
-def single_print(*args):  # pragma: no cover
-    if bodo.libs.distributed_api.get_rank() == 0:
-        print(*args)
+# @numba.njit(cache=True)
+# def single_print(*args):  # pragma: no cover
+#     if bodo.libs.distributed_api.get_rank() == 0:
+#         print(*args)
 
 
-def print_if_not_empty(args):  # pragma: no cover
-    pass
+# def print_if_not_empty(args):  # pragma: no cover
+#     pass
 
 
-@overload(print_if_not_empty)
-def overload_print_if_not_empty(*args):
-    """print input arguments only if rank == 0 or any data on current rank is not empty"""
+# @overload(print_if_not_empty)
+# def overload_print_if_not_empty(*args):
+#     """print input arguments only if rank == 0 or any data on current rank is not empty"""
 
-    any_not_empty = (
-        "("
-        + " or ".join(
-            ["False"]
-            + [
-                f"len(args[{i}]) != 0"
-                for i, arg_type in enumerate(args)
-                if is_array_typ(arg_type)
-                or isinstance(arg_type, bodo.hiframes.pd_dataframe_ext.DataFrameType)
-            ]
-        )
-        + ")"
-    )
-    func_text = (
-        f"def impl(*args):\n"
-        f"    if {any_not_empty} or bodo.get_rank() == 0:\n"
-        f"        print(*args)"
-    )
-    loc_vars = {}
-    # TODO: Provide specific globals after Numba's #3355 is resolved
-    exec(func_text, globals(), loc_vars)
-    impl = loc_vars["impl"]
-    return impl
+#     any_not_empty = (
+#         "("
+#         + " or ".join(
+#             ["False"]
+#             + [
+#                 f"len(args[{i}]) != 0"
+#                 for i, arg_type in enumerate(args)
+#                 if is_array_typ(arg_type)
+#                 or isinstance(arg_type, bodo.hiframes.pd_dataframe_ext.DataFrameType)
+#             ]
+#         )
+#         + ")"
+#     )
+#     func_text = (
+#         f"def impl(*args):\n"
+#         f"    if {any_not_empty} or bodo.get_rank() == 0:\n"
+#         f"        print(*args)"
+#     )
+#     loc_vars = {}
+#     # TODO: Provide specific globals after Numba's #3355 is resolved
+#     exec(func_text, globals(), loc_vars)
+#     impl = loc_vars["impl"]
+#     return impl
 
 
 _wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
