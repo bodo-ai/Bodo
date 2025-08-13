@@ -801,25 +801,11 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         // Add new groups and get group mappings for input batch. This will
         // make allocations that could invoke the threshold enforcement
         // error.
-        std::vector<bool> new_group_flags(in_table->nrows(), false);
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            auto group_iter = this->build_hash_table->find(-i_row - 1);
-            if ((group_iter != this->build_hash_table->end())) {
-                new_group_flags[i_row] = true;
-                grp_info.row_to_group[i_row] = group_iter->second;
-            }
-        }
-        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            if (new_group_flags[i_row]) {
-                // add new group
-                build_table_buffer->AppendRowKeys(in_table, i_row, n_keys);
-                build_table_buffer->IncrementSizeDataColumns(n_keys);
-                this->build_table_groupby_hashes.emplace_back(
-                    batch_hashes_groupby[i_row]);
-                auto group = next_group++;
-                (*this->build_hash_table)[group] = group;
-                grp_info.row_to_group[i_row] = group;
-            }
+            update_groups_helper(
+                *(this->build_table_buffer), this->build_table_groupby_hashes,
+                *(this->build_hash_table), this->next_group, this->n_keys,
+                grp_info, in_table, batch_hashes_groupby, i_row);
         }
 
         // Increment separate_out_cols size so aggfunc_out_initialize
@@ -901,25 +887,13 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         // Add new groups and get group mappings for input batch. This will
         // make allocations that could invoke the threshold enforcement
         // error.
-        std::vector<bool> new_group_flags(in_table->nrows(), false);
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            auto group_iter = this->build_hash_table->find(-i_row - 1);
-            if (append_rows[i_row] &&
-                (group_iter != this->build_hash_table->end())) {
-                new_group_flags[i_row] = true;
-                grp_info.row_to_group[i_row] = group_iter->second;
-            }
-        }
-        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            if (append_rows[i_row] && new_group_flags[i_row]) {
-                // add new group
-                build_table_buffer->AppendRowKeys(in_table, i_row, n_keys);
-                build_table_buffer->IncrementSizeDataColumns(n_keys);
-                this->build_table_groupby_hashes.emplace_back(
-                    batch_hashes_groupby[i_row]);
-                auto group = next_group++;
-                (*this->build_hash_table)[group] = group;
-                grp_info.row_to_group[i_row] = group;
+            if (append_rows[i_row]) {
+                update_groups_helper(*(this->build_table_buffer),
+                                     this->build_table_groupby_hashes,
+                                     *(this->build_hash_table),
+                                     this->next_group, this->n_keys, grp_info,
+                                     in_table, batch_hashes_groupby, i_row);
             }
         }
 
@@ -1654,24 +1628,11 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
     int64_t shuffle_init_start_row = this->next_group;
 
     // Add new groups and get group mappings for input batch
-    std::vector<bool> new_group_flags(in_table->nrows(), false);
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        auto group_iter = this->hash_table->find(-i_row - 1);
-        if ((group_iter != this->hash_table->end())) {
-            new_group_flags[i_row] = true;
-            shuffle_grp_info.row_to_group[i_row] = group_iter->second;
-        }
-    }
-    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        if (new_group_flags[i_row]) {
-            // add new group
-            this->table_buffer->AppendRowKeys(in_table, i_row, n_keys);
-            this->table_buffer->IncrementSizeDataColumns(n_keys);
-            this->groupby_hashes.emplace_back(batch_hashes_groupby[i_row]);
-            auto group = next_group++;
-            (*this->hash_table)[group] = group;
-            shuffle_grp_info.row_to_group[i_row] = group;
-        }
+        update_groups_helper(*(this->table_buffer), this->groupby_hashes,
+                             *(this->hash_table), this->next_group,
+                             this->n_keys, shuffle_grp_info, in_table,
+                             batch_hashes_groupby, i_row);
     }
     size_t row_count = in_table->nrows();
     this->metrics.shuffle_update_logical_ht_time += end_timer(start);
