@@ -2,7 +2,6 @@
 
 #include <iostream>
 #include <numeric>
-#include <sstream>
 #include <utility>
 
 #include <fmt/format.h>

@@ -35,8 +35,8 @@ struct PhysicalAggregateMetrics {
 /**
  * @brief Gets a cfunc for computing the output of all UDFs.
  *
- * @param cfunc_wrapper Callable python object that takes in an int and a tuple
- * of function objects and returns the address of the cfunc.
+ * @param cfunc_wrapper Python function that takes in a tuple of ints and a
+ * tuple of function objects and returns the address of the cfunc.
  * @param udf_idxs The indices of the udf output columns in the output table.
  * @param funcs A list of GroupbyAggFunc objects.
  * @return udf_general_fn cfunc for applying UDFs on a grouped table.
@@ -103,9 +103,9 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::vector<int32_t> f_in_cols;
         std::optional<bool> dropna = std::nullopt;
 
-        // The cfunc to call on accumulated data to compute UDF
-        PyObject* cfunc_wrapper = nullptr;
-        std::vector<PyObject*> udfs;
+        PyObject* cfunc_wrapper =
+            nullptr;  // The cfunc to call on accumulated data to compute UDFs.
+        std::vector<PyObject*> udfs;  // Arguments for generating cfunc_wrapper.
         std::vector<int> udf_idxs;
 
         for (size_t i = 0; i < op.expressions.size(); i++) {
@@ -153,14 +153,13 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                 ftypes.push_back(Bodo_FTypes::gen_udf);
                 out_arr_type = arrow_type_to_bodo_data_type(
                     bind_info.out_schema->field(0)->type());
-                // callback_wrapper is a tuple of (callback_wrapper, func_arg)
+                // py_udf_args is a tuple of (callback_wrapper, func_arg)
                 // the callback_wrapper is the same for every func, so only need
                 // to extract it once.
                 if (!cfunc_wrapper) {
-                    cfunc_wrapper =
-                        PyTuple_GET_ITEM(bind_info.callback_wrapper, 0);
+                    cfunc_wrapper = PyTuple_GET_ITEM(bind_info.py_udf_args, 0);
                 }
-                udfs.push_back(PyTuple_GET_ITEM(bind_info.callback_wrapper, 1));
+                udfs.push_back(PyTuple_GET_ITEM(bind_info.py_udf_args, 1));
                 udf_idxs.push_back(i + this->keys.size());
             } else {
                 ftypes.push_back(function_to_ftype.at(agg_expr.function.name));

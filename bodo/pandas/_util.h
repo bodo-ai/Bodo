@@ -226,33 +226,32 @@ struct BodoScalarFunctionData : public duckdb::FunctionData {
  *
  */
 struct BodoAggFunctionData : public duckdb::FunctionData {
-    BodoAggFunctionData(bool dropna, std::string name,
-                        PyObject *callback_wrapper,
+    BodoAggFunctionData(bool dropna, std::string name, PyObject *py_udf_args,
                         std::shared_ptr<arrow::Schema> out_schema)
         : out_schema(std::move(out_schema)),
           dropna(dropna),
           name(name),
-          callback_wrapper(callback_wrapper) {
-        Py_INCREF(callback_wrapper);
+          py_udf_args(py_udf_args) {
+        Py_INCREF(py_udf_args);
     }
 
-    ~BodoAggFunctionData() override { Py_DECREF(callback_wrapper); }
+    ~BodoAggFunctionData() override { Py_DECREF(py_udf_args); }
 
     bool Equals(const FunctionData &other_p) const override {
         const BodoAggFunctionData &other = other_p.Cast<BodoAggFunctionData>();
         return (other.dropna == this->dropna && other.name == this->name &&
-                other.callback_wrapper == this->callback_wrapper &&
+                other.py_udf_args == this->py_udf_args &&
                 other.out_schema == this->out_schema);
     }
     duckdb::unique_ptr<duckdb::FunctionData> Copy() const override {
         return duckdb::make_uniq<BodoAggFunctionData>(
-            this->dropna, this->name, this->callback_wrapper, this->out_schema);
+            this->dropna, this->name, this->py_udf_args, this->out_schema);
     }
 
     const std::shared_ptr<arrow::Schema> out_schema;
     const bool dropna;
     const std::string name;
-    PyObject *callback_wrapper;
+    PyObject *py_udf_args;
 };
 
 /**

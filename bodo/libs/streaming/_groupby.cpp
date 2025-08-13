@@ -8,7 +8,6 @@
 #include <list>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <tuple>
 #include "../_array_hash.h"
 #include "../_array_operations.h"
@@ -1473,7 +1472,6 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
                 this->gen_udf_col_sets, this->metrics.finalize_update_metrics,
                 this->op_scratch_pool, this->op_scratch_mm);
         update_timer.finalize();
-
         // Call eval on these running values to get the final output.
         this->metrics.finalize_eval_nrows += update_table->nrows();
         ScopedTimer eval_timer(this->metrics.finalize_eval_time);
@@ -1481,7 +1479,6 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
             this->f_running_value_offsets, this->col_sets, update_table,
             this->n_keys, this->separate_out_cols->data_table,
             this->op_scratch_pool, this->op_scratch_mm);
-
         eval_timer.finalize();
     } else {
         // Note that we don't need to call RebuildHashTableFromBuildBuffer
@@ -2817,7 +2814,6 @@ GroupbyState::GroupbyState(
             local_input_cols_vec(ftypes.size());
         std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
             in_arr_types_vec(ftypes.size());
-
         for (size_t i = 0; i < ftypes.size(); i++) {
             // Get the input columns, array types, and dtypes for the current
             // function
@@ -2838,7 +2834,7 @@ GroupbyState::GroupbyState(
             }
         }
 
-        // UDF
+        // UDF colset-specific values
         int udf_idx = 0;
         std::shared_ptr<table_info> udf_out_types =
             udf_info.has_value() ? udf_info.value().udf_table_dummy : nullptr;
