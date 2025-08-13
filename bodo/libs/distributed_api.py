@@ -4299,11 +4299,8 @@ def dist_permutation_array_index(
 
 ########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
 
-ht0 = time.perf_counter()
-from bodo.io import hdfs_reader
 
-ht1 = time.perf_counter()
-print("hdfs_reader import time:", ht1 - ht0)
+from bodo.io import hdfs_reader
 
 finalize = hdist.finalize_py_wrapper
 disconnect_hdfs_py_wrapper = hdfs_reader.disconnect_hdfs_py_wrapper
