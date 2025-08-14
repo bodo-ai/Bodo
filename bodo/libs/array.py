@@ -2754,26 +2754,6 @@ def delete_shuffle_info(typingctx, shuffle_info_t=None):
 
 
 @intrinsic
-def reverse_shuffle_table(typingctx, table_t, shuffle_info_t):
-    """call reverse shuffle if shuffle info not none"""
-
-    def codegen(context, builder, sig, args):
-        if sig.args[-1] == types.none:
-            return context.get_constant_null(table_type)
-
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="reverse_shuffle_table"
-        )
-        return builder.call(fn_tp, args)
-
-    return table_type(table_type, shuffle_info_t), codegen
-
-
-@intrinsic
 def get_null_shuffle_info(typingctx):
     """return a null shuffle info object"""
 
