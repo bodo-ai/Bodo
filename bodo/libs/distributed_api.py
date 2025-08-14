@@ -4282,9 +4282,6 @@ from bodo.io import hdfs_reader
 finalize = hdist.finalize_py_wrapper
 disconnect_hdfs_py_wrapper = hdfs_reader.disconnect_hdfs_py_wrapper
 
-ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
-disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
-
 
 def call_finalize():  # pragma: no cover
     finalize()
