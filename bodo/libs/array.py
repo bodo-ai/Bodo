@@ -3092,47 +3092,6 @@ def sort_values_table_py_entry(
 
 
 @intrinsic
-def sample_table(
-    typingctx, table_t, n_keys_t, frac_t, replace_t, random_state_t, parallel_t
-):
-    """
-    Interface to the sampling of tables.
-    """
-    assert table_t == table_type
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.DoubleType(),
-                lir.IntType(1),
-                lir.IntType(64),
-                lir.IntType(1),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="sample_table_py_entry"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        table_type(
-            table_t,
-            types.int64,
-            types.float64,
-            types.boolean,
-            types.int64,
-            types.boolean,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
 def shuffle_renormalization(typingctx, table_t, random_t, random_seed_t, is_parallel_t):
     """
     Interface to the rebalancing of the table
