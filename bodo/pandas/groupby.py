@@ -26,13 +26,12 @@ from bodo.pandas.plan import (
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
-    _empty_pd_array,
     _get_empty_series_arrow,
     check_args_fallback,
     convert_to_pandas_types,
     wrap_plan,
 )
-from bodo.utils.conversion import coerce_scalar_to_array
+from bodo.utils.conversion import coerce_to_array
 
 if pt.TYPE_CHECKING:
     from bodo.pandas import BodoDataFrame, BodoSeries
@@ -85,13 +84,13 @@ class GroupbyAggFunc:
             jitted_func = deco(self.func)
             in_col = empty_data[self.in_col]
             in_col_type = bodo.typeof(in_col).data
-            out_col_dtype = _get_agg_output_type(self, in_col.dtype.pyarrow_dtype, "")
-            out_col_type = bodo.typeof(_empty_pd_array(out_col_dtype))
 
             def agg_func_impl(in_cpp_arr):
                 in_arr = info_to_array(in_cpp_arr, in_col_type)
                 out = jitted_func(pd.Series(in_arr))
-                out_arr = coerce_scalar_to_array(out, 1, out_col_type)
+                out_arr = coerce_to_array(
+                    out, scalar_to_arr_len=1, use_nullable_array=True
+                )
                 return array_to_info(out_arr)
 
             c_sig = array_info_type(array_info_type)

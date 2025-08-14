@@ -1,6 +1,7 @@
 #include "_groupby_col_set.h"
 
 #include <iostream>
+#include <memory>
 #include <numeric>
 #include <stdexcept>
 #include <utility>
@@ -1597,20 +1598,52 @@ std::unique_ptr<bodo::Schema> StreamingUDFColSet::getRunningValueColumnTypes(
     return udf_table->schema()->Project(col_idxs);
 }
 
-void StreamingUDFColSet::alloc_update_columns(
+void StreamingUDFColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
-    const bool alloc_out_if_no_combine, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
-    throw std::runtime_error(
-        "StreamingUDFColSet::alloc_update_columns: Not implemented yet.");
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    // Allocate a dummy array column, actual column will be filled in by update
+    bodo_array_type::arr_type_enum arr_type =
+        udf_table->columns[udf_table_idx]->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = udf_table->columns[udf_table_idx]->dtype;
+    auto update_col = alloc_array_top_level(0, 0, 0, arr_type, dtype);
+    out_cols.push_back(std::move(update_col));
 }
 
 void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
                                 bodo::IBufferPool* const pool,
                                 std::shared_ptr<::arrow::MemoryManager> mm) {
-    (void)func;
-    throw std::runtime_error(
-        "StreamingUDFColSet::update: Not implemented yet.");
+    const grouping_info& grp_info = grp_infos[0];
+    std::shared_ptr<array_info> in_col = this->in_col;
+    bodo::vector<bodo::vector<int64_t>> group_rows(grp_info.num_groups, pool);
+    // get the rows in each group
+    for (size_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = grp_info.row_to_group[i];
+        group_rows[i_grp].push_back(i);
+    }
+
+    // TODO: make out_arrs a bodo::vector for large number of groups case
+    std::vector<std::shared_ptr<array_info>> out_arrs(grp_info.num_groups);
+    for (size_t i = 0; i < grp_info.num_groups; i++) {
+        bodo::vector<int64_t> row_idxs = group_rows[i];
+        std::shared_ptr<array_info> in_group_arr =
+            RetrieveArray_SingleColumn(in_col, row_idxs);
+        array_info* out_arr_result = func(in_group_arr.get());
+
+        if (!out_arr_result) {
+            throw std::runtime_error(
+                "Groupby.agg(): An error occured while executing user defined "
+                "function.");
+        }
+        std::shared_ptr<array_info> out_arr(out_arr_result);
+
+        out_arrs[i] = out_arr;
+    }
+
+    std::shared_ptr<array_info> real_out_col = concat_arrays(out_arrs);
+
+    // Replace the dummy update column.
+    std::shared_ptr<array_info> out_col = this->update_cols[0];
+    *out_col = std::move(*real_out_col);
 }
 
 // ############################## Percentile ##############################

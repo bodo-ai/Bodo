@@ -1158,9 +1158,8 @@ class StreamingUDFColSet : public BasicColSet {
      * @brief Allocate dummy update columns, actual update columns are created
      * inside of update.
      */
-    void alloc_update_columns(
+    void alloc_running_value_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
-        const bool alloc_out_if_no_combine = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) override;
