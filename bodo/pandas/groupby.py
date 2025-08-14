@@ -547,8 +547,9 @@ def _get_cfunc_wrapper(
     if not func.is_custom_aggfunc:
         return None
 
+    # TODO: enable cache and fix issues.
     def wrapper() -> int:  # pragma: no cover
-        deco = bodo.jit(spawn=False, distributed=False, cache=True)
+        deco = bodo.jit(spawn=False, distributed=False, cache=False)
         jitted_func = deco(func.func)
         in_col = empty_data[func.in_col]
         in_col_type = bodo.typeof(in_col).data
@@ -585,7 +586,7 @@ def _get_cfunc_wrapper(
             return array_to_info(out_arr)
 
         c_sig = array_info_type(array_info_type)
-        cfunc = _cfunc(c_sig, cache=True)(agg_func_impl)
+        cfunc = _cfunc(c_sig, cache=False)(agg_func_impl)
         return ctypes.c_void_p(cfunc.address).value
 
     return wrapper
@@ -613,7 +614,7 @@ def _get_agg_udf_output_type(func: GroupbyAggFunc, in_type: pa.DataType) -> pa.D
 
     # Checks that func_ is jittable and determine output types
     # TODO: Make more robust.
-    deco = bodo.jit(spawn=False, distributed=False, cache=True)
+    deco = bodo.jit(spawn=False, distributed=False, cache=False)
     jitted_func = deco(func_)
 
     # Cast output to Series to allow cases where output
