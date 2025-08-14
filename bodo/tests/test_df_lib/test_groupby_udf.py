@@ -208,3 +208,15 @@ def test_agg_udf_errorchecking(groupby_df):
         bdf2 = bdf.groupby("A").agg(udf3)
 
     _test_equal(bdf2, df2)
+
+
+def test_agg_null_keys():
+    df = pd.DataFrame({"A": [None, None, None, 1, 2, 3], "B": [1, 2, 3, 4, 5, 6]})
+
+    bdf = bd.from_pandas(df)
+
+    df2 = df.groupby("A", dropna=False).agg(lambda x: x.sum())
+    with assert_executed_plan_count(0):
+        bdf2 = bdf.groupby("A", dropna=False).agg(lambda x: x.sum())
+
+    _test_equal(bdf2, df2, sort_output=True)
