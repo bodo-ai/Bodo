@@ -2867,6 +2867,11 @@ GroupbyState::GroupbyState(
                 in_arr_types_copy.push_back(t->copy());
             }
 
+            stream_udf_t* udf_cfunc = nullptr;
+            if (ftypes[i] == Bodo_FTypes::stream_udf) {
+                udf_cfunc = udf_cfuncs[udf_idx];
+            }
+
             std::shared_ptr<BasicColSet> col_set = makeColSet(
                 local_input_cols, index_col, ftypes[i], do_combine,
                 skip_na_data, 0,
@@ -2875,8 +2880,11 @@ GroupbyState::GroupbyState(
                 // any synchronization and hangs.
                 {}, 0, /*is_parallel*/ false, this->sort_asc, this->sort_na,
                 window_args, 0, nullptr, udf_out_types, udf_idx, nullptr,
-                use_sql_rules, {}, udf_cfuncs[udf_idx]);
+                use_sql_rules, {}, udf_cfunc);
 
+            if (ftypes[i] == Bodo_FTypes::stream_udf) {
+                udf_idx++;
+            }
             // get update/combine type info to initialize build state
             std::unique_ptr<bodo::Schema> running_values_schema =
                 col_set->getRunningValueColumnTypes(
@@ -2908,9 +2916,6 @@ GroupbyState::GroupbyState(
             this->f_running_value_offsets.push_back(curr_running_value_offset);
 
             this->col_sets.push_back(col_set);
-            if (ftypes[i] == Bodo_FTypes::stream_udf) {
-                udf_idx++;
-            }
         }
     }
 
