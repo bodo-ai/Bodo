@@ -1572,7 +1572,7 @@ class BodoSeriesAiMethods:
                         lambda: pd.Series(
                             asyncio.run(all_tasks(series, client, generation_kwargs))
                         )
-                    )
+                    ).result()
             except RuntimeError:
                 # If no running loop, run the async function directly
                 return pd.Series(
@@ -1719,7 +1719,7 @@ class BodoSeriesAiMethods:
                         lambda: pd.Series(
                             asyncio.run(all_tasks(series, client, embedding_kwargs))
                         )
-                    )
+                    ).result()
             except RuntimeError:
                 # If no running loop, run the async function directly
                 return pd.Series(
