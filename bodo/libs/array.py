@@ -25,6 +25,7 @@ from numba.extending import (
     typeof_impl,
 )
 from numba.np.arrayobj import _getitem_array_single_int
+t01 = time.perf_counter()
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
@@ -80,6 +81,7 @@ from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
     numba_to_c_type,
 )
+t02 = time.perf_counter()
 
 ll.add_symbol("array_item_array_to_info", array_ext.array_item_array_to_info)
 ll.add_symbol("struct_array_to_info", array_ext.struct_array_to_info)
@@ -176,6 +178,9 @@ ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
 
 t1 = time.perf_counter()
 print(f"array imports: {t1 - t0} seconds")
+print(f"numba imports: {t01 - t0} seconds")
+print(f"bodo imports: {t02 - t01} seconds")
+print(f"symbol imports: {t1 - t02} seconds")
 
 
 # Sentinal for field names when converting tuple arrays to struct arrays (workaround
