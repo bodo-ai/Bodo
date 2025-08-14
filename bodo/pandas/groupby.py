@@ -11,13 +11,12 @@ from typing import Any, Literal
 
 import pandas as pd
 import pyarrow as pa
-from numba import types
 from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
 import bodo
 from bodo.decorators import _cfunc
-from bodo.libs.array import array_from_cpp_table
+from bodo.libs.array import array_info_type, array_to_info, info_to_array
 from bodo.pandas.plan import (
     AggregateExpression,
     LogicalAggregate,
@@ -27,12 +26,12 @@ from bodo.pandas.plan import (
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
-    _empty_pd_array,
     _get_empty_series_arrow,
     check_args_fallback,
     convert_to_pandas_types,
     wrap_plan,
 )
+from bodo.utils.conversion import coerce_scalar_to_array
 
 if pt.TYPE_CHECKING:
     from bodo.pandas import BodoDataFrame, BodoSeries
@@ -70,6 +69,34 @@ class GroupbyAggFunc:
     @property
     def is_custom_aggfunc(self):
         return callable(self.func) and self.func_name not in BUILTIN_AGG_FUNCS
+
+    def get_cfunc_wrapper(
+        self, empty_data: pd.DataFrame
+    ) -> None | pt.Callable[[], int]:
+        """Get a wrapper to be called per worker to compile/get a Cfunc for computing
+        aggregate UDFs. Similar to:
+        """
+        if self.is_custom_aggfunc:
+            return None
+
+        def wrapper() -> int:
+            deco = bodo.jit(spawn=False, distributed=False, cache=False)
+            jitted_func = deco(self.func)
+            in_col = empty_data[self.in_col]
+            in_col_type = bodo.typeof(in_col).data
+            out_col_type = _get_agg_output_type(self, in_col.dtype.pyarrow_type)
+
+            def agg_func_impl(in_cpp_arr):
+                in_arr = info_to_array(in_cpp_arr, in_col_type)
+                out = jitted_func(pd.Series(in_arr))
+                out_arr = coerce_scalar_to_array(out, 1, out_col_type)
+                return array_to_info(out_arr)
+
+            c_sig = array_info_type(array_info_type)
+            cfunc = _cfunc(c_sig, cache=False)(agg_func_impl)
+            return ctypes.c_void_p(cfunc.address).value
+
+        return wrapper
 
 
 class DataFrameGroupBy:
@@ -480,9 +507,6 @@ def _groupby_agg_plan(
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
-    # Generate CFunc wrapper for custom agg funcs.
-    cfunc_wrapper = _get_cfunc_wrapper(grouped._obj.head(0))
-
     out_types = empty_data
     if isinstance(empty_data, pd.DataFrame) and not grouped._as_index:
         out_types = empty_data.iloc[:, n_key_cols:]
@@ -491,7 +515,7 @@ def _groupby_agg_plan(
             out_types.iloc[:, i] if isinstance(out_types, pd.DataFrame) else out_types,
             grouped._obj._plan,
             f"udf_{i}" if func_.is_custom_aggfunc else func_.func_name,
-            (cfunc_wrapper, func_) if func_.is_custom_aggfunc else None,
+            func_.get_cfunc_wrapper(zero_size_df),
             [grouped._obj.columns.get_loc(func_.in_col)],
             grouped._dropna,
         )
@@ -730,57 +754,3 @@ def _cast_groupby_agg_columns(
         out_data[out_col_name] = pd.Series([], dtype=pd.ArrowDtype(new_type))
 
     return out_data
-
-
-def _get_cfunc_wrapper(empty_data: pd.DataFrame):
-    """Get a wrapper to be called per worker to compile/get a Cfunc for computing
-    aggregate UDFs. Similar to:
-    https://github.com/bodo-ai/Bodo/blob/7e60b5bbbc23c02ae143b474dbaa83b62d55fc47/bodo/ir/aggregate.py#L1949
-    """
-
-    def wrapper(col_offsets: tuple[int], funcs: tuple[GroupbyAggFunc]) -> int:
-        assert len(funcs) > 0, "Wrapper must be called with at least 1 func."
-
-        deco = bodo.jit(spawn=False, distributed=False, cache=False)
-        jitted_funcs, in_col_types, out_col_types = [], [], []
-
-        for func in funcs:
-            jitted_funcs.append(deco(func.func))
-
-            in_col = empty_data[func.in_col]
-            in_col_types.append(bodo.typeof(in_col).data)
-            out_type = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
-            out_col_types.append(bodo.typeof(_empty_pd_array(out_type)))
-
-        # Generate a function that takes in a "wide" dataframe
-        # (1 column per group per UDF) and call each func on sets of
-        # num_groups columns.
-        func_text = "def bodo_agg_func_impl(num_groups, in_table, out_table):\n"
-        func_text += "  if num_groups == 0:\n"
-        func_text += "    return\n"
-
-        for i in range(len(funcs)):
-            func_text += f"  out_col_{i} = array_from_cpp_table(out_table, col_offsets[{i}], out_col_type_{i})\n"
-            func_text += "  for j in range(num_groups):\n"
-            func_text += f"    in_col_{i} = array_from_cpp_table(in_table, num_groups*{i} + j, in_col_type_{i})\n"
-            func_text += (
-                f"    out_col_{i}[j] = jitted_func_{i}(pd.Series(in_col_{i}))\n"
-            )
-
-        glbs = {
-            "array_from_cpp_table": array_from_cpp_table,
-            "col_offsets": col_offsets,
-            "pd": pd,
-        }
-        glbs |= {f"jitted_func_{i}": jitted_funcs[i] for i in range(len(funcs))}
-        glbs |= {f"in_col_type_{i}": in_col_types[i] for i in range(len(funcs))}
-        glbs |= {f"out_col_type_{i}": out_col_types[i] for i in range(len(funcs))}
-
-        agg_func_impl = bodo.utils.utils.bodo_exec(func_text, glbs, {}, __name__)
-
-        c_sig = types.void(types.int64, types.voidptr, types.voidptr)
-        # TODO: enable cache and fix errors
-        cfunc = _cfunc(c_sig, cache=False)(agg_func_impl)
-        return ctypes.c_void_p(cfunc.address).value
-
-    return wrapper

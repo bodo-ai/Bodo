@@ -4,6 +4,7 @@
 #include "../_dict_builder.h"
 #include "_groupby.h"
 #include "_groupby_common.h"
+#include "_groupby_udf.h"
 
 /**
  * This file declares the functions used to create "col sets"
@@ -1108,7 +1109,7 @@ class UdfColSet : public BasicColSet {
             "UDFColSet not implemented for streaming groupby");
     }
 
-   protected:
+   private:
     const std::shared_ptr<table_info>
         udf_table;            // the table containing type info for UDF columns
     const int udf_table_idx;  // index to my information in the udf table
@@ -1133,32 +1134,51 @@ class GeneralUdfColSet : public UdfColSet {
      */
     void fill_in_columns(const std::shared_ptr<table_info>& general_in_table,
                          const grouping_info& grp_info) const;
+};
 
+class StreamingUDFColSet : public BasicColSet {
+   public:
+    StreamingUDFColSet(std::shared_ptr<array_info> in_col,
+                       std::shared_ptr<table_info> udf_table, int udf_table_idx,
+                       stream_udf_t func, bool use_sql_rules);
+
+    virtual ~StreamingUDFColSet();
+
+    /**
+     * @brief Get the Running Value Column Types based on udf_table and
+     * udf_table_idx.
+     *
+     * @param in_schema Input schema (unused)
+     * @return std::unique_ptr<bodo::Schema>
+     */
     std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         const std::shared_ptr<bodo::Schema>& in_schema) const override;
 
-    void setUpdateCols(
-        std::vector<std::shared_ptr<array_info>> update_cols_) override {
-        update_cols = update_cols_;
-    }
-
-    void setInCol(
-        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
-        in_col = new_in_cols[0];
-    }
-
-    void clear() override {}
+    /**
+     * @brief Allocate dummy update columns, actual update columns are created
+     * inside of update.
+     */
+    void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        const bool alloc_out_if_no_combine = true,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
     /**
-     * @brief Clears UDF col set state, to be called after computing output of
-     * all UDFs.
-     *
+     * @brief Call a cfunc for each group in grp_info and concatenate results.
+     * update will allocate the update column based on the results.
      */
-    void clear_udf() {
-        this->update_cols.clear();
-        this->combine_cols.clear();
-        this->in_col.reset();
-    }
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
+
+   private:
+    const std::shared_ptr<table_info>
+        udf_table;            // the table containing type info for UDF columns
+    const int udf_table_idx;  // index to my information in the udf table
+    stream_udf_t* func;  // A ccallback for computing the UDF on a single group.
 };
 
 /**
@@ -1662,4 +1682,5 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::shared_ptr<table_info> nunique_table = nullptr,
     bool use_sql_rules = false,
     std::vector<std::vector<std::unique_ptr<bodo::DataType>>> in_arr_types_vec =
-        {});
+        {},
+    stream_udf_t* udf_cfunc = nullptr);

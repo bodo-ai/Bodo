@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <numeric>
+#include <stdexcept>
 #include <utility>
 
 #include <fmt/format.h>
@@ -15,6 +16,7 @@
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_mode.h"
+#include "_groupby_udf.h"
 #include "_groupby_update.h"
 
 /**
@@ -1557,13 +1559,6 @@ GeneralUdfColSet::GeneralUdfColSet(std::shared_ptr<array_info> in_col,
 
 GeneralUdfColSet::~GeneralUdfColSet() = default;
 
-std::unique_ptr<bodo::Schema> GeneralUdfColSet::getRunningValueColumnTypes(
-    const std::shared_ptr<bodo::Schema>& in_schema) const {
-    std::vector<int> col_idxs;
-    col_idxs.push_back(udf_table_idx);
-    return udf_table->schema()->Project(col_idxs);
-}
-
 void GeneralUdfColSet::fill_in_columns(
     const std::shared_ptr<table_info>& general_in_table,
     const grouping_info& grp_info) const {
@@ -1581,6 +1576,41 @@ void GeneralUdfColSet::fill_in_columns(
             RetrieveArray_SingleColumn(in_col, group_rows[i]);
         general_in_table->columns.push_back(col);
     }
+}
+
+// ############################## StreaminglUDF ##############################
+StreamingUDFColSet::StreamingUDFColSet(std::shared_ptr<array_info> in_col,
+                                       std::shared_ptr<table_info> udf_table,
+                                       int udf_table_idx, stream_udf_t* func,
+                                       bool use_sql_rules)
+    : BasicColSet(in_col, Bodo_FTypes::stream_udf, false, use_sql_rules),
+      udf_table(std::move(udf_table)),
+      udf_table_idx(udf_table_idx),
+      func(func) {}
+
+std::unique_ptr<bodo::Schema> StreamingUDFColSet::getRunningValueColumnTypes(
+    const std::shared_ptr<bodo::Schema>& in_schema) const {
+    std::vector<int> col_idxs;
+    col_idxs.push_back(udf_table_idx);
+    return udf_table->schema()->Project(col_idxs);
+}
+
+void alloc_update_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    const bool alloc_out_if_no_combine = true,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    throw std::runtime_error(
+        "StreamingUDFColSet::alloc_update_columns: Not implemented yet.");
+}
+
+void update(const std::vector<grouping_info>& grp_infos,
+            bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+            std::shared_ptr<::arrow::MemoryManager> mm =
+                bodo::default_buffer_memory_manager()) {
+    throw std::runtime_error(
+        "StreamingUDFColSet::update: Not implemented yet.");
 }
 
 // ############################## Percentile ##############################
@@ -2114,10 +2144,10 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::vector<bool> window_na_position,
     std::shared_ptr<table_info> window_args, int n_input_cols,
     int* udf_n_redvars, std::shared_ptr<table_info> udf_table,
-    int udf_table_idx, std::shared_ptr<table_info> nunique_table,
+    int udf_table_idx, void*, std::shared_ptr<table_info> nunique_table,
     bool use_sql_rules,
-    std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
-        in_arr_types_vec) {
+    std::vector<std::vector<std::unique_ptr<bodo::DataType>>> in_arr_types_vec,
+    stream_udf_t* udf_cfunc) {
     BasicColSet* colset;
 
     if (ftype != Bodo_FTypes::size && ftype != Bodo_FTypes::window &&
@@ -2149,6 +2179,11 @@ std::unique_ptr<BasicColSet> makeColSet(
         case Bodo_FTypes::gen_udf:
             colset = new GeneralUdfColSet(in_cols[0], std::move(udf_table),
                                           udf_table_idx, use_sql_rules);
+            break;
+        case Bodo_FTypes::stream_udf:
+            colset =
+                new StreamingUDFColSet(in_cols[0], std::move(udf_table),
+                                       udf_table_idx, udf_cfunc, use_sql_rules);
             break;
         case Bodo_FTypes::percentile_disc:
         case Bodo_FTypes::percentile_cont:

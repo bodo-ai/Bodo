@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include "../_bodo_common.h"
 #include "../_chunked_table_builder.h"
@@ -258,9 +259,7 @@ class GroupbyPartition {
         GroupbyMetrics& metrics_, bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_,
         bodo::OperatorScratchPool* op_scratch_pool_,
-        const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_,
-        std::optional<udfinfo_t> udf_info,
-        std::vector<std::shared_ptr<GeneralUdfColSet>> gen_udf_col_sets);
+        const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_);
 
     // The schema of the build table.
     std::shared_ptr<bodo::Schema> build_table_schema;
@@ -310,10 +309,6 @@ class GroupbyPartition {
     const std::vector<int32_t>& f_in_offsets;
     const std::vector<int32_t>& f_in_cols;
     const std::vector<int32_t>& f_running_value_offsets;
-
-    // UDF info for computing agg with custom functions
-    std::optional<udfinfo_t> udf_info;
-    std::vector<std::shared_ptr<GeneralUdfColSet>> gen_udf_col_sets;
 
     // Reference to the metrics for this operator. Shared with the global state
     // and all other partitions.
@@ -1083,10 +1078,6 @@ class GroupbyState {
     // a special Finalize path.
     std::vector<int32_t> f_running_value_offsets;
 
-    // UDF info for computing custom aggfuncs (groupby.apply)
-    std::optional<udfinfo_t> udf_info;
-    std::vector<std::shared_ptr<GeneralUdfColSet>> gen_udf_col_sets;
-
     // Min-Row Number Filter (MRNF) specific attributes.
     AggregationType agg_type = AggregationType::AGGREGATE;
     const std::vector<bool> sort_asc;
@@ -1179,7 +1170,8 @@ class GroupbyState {
         std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
             key_dict_builders_ = std::nullopt,
         bool use_sql_rules = true, bool pandas_drop_na_ = false,
-        std::optional<udfinfo_t> udf_info = std::nullopt);
+        std::shared_ptr<table_info> udf_out_types = nullptr,
+        std::vector<stream_udf_t*> udf_cfuncs = {});
 
     ~GroupbyState() { MPI_Comm_free(&this->shuffle_comm); }
 

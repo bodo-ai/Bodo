@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Python.h>
+#include <abstract.h>
 #include <object.h>
 #include <pytypedefs.h>
 #include <cstddef>
@@ -37,36 +38,14 @@ struct PhysicalAggregateMetrics {
  *
  * @param cfunc_wrapper Python function that takes in a tuple of ints and a
  * tuple of function objects and returns the address of the cfunc.
- * @param udf_idxs The indices of the udf output columns in the output table.
- * @param funcs A list of GroupbyAggFunc objects.
  * @return udf_general_fn cfunc for applying UDFs on a grouped table.
  */
-udf_general_fn get_cfunc_from_wrapper(PyObject* cfunc_wrapper,
-                                      std::vector<int> udf_idxs,
-                                      std::vector<PyObject*>& funcs) {
-    const Py_ssize_t n = static_cast<Py_ssize_t>(funcs.size());
-
-    PyObject* funcs_tuple = PyTuple_New(n);
-    PyObject* offsets_tuple = PyTuple_New(n);
-
-    for (Py_ssize_t i = 0; i < n; i++) {
-        PyObject* func_obj = funcs[static_cast<size_t>(i)];
-        Py_INCREF(func_obj);
-        PyTuple_SET_ITEM(funcs_tuple, i, func_obj);
-
-        PyObject* py_offset =
-            PyLong_FromLongLong(udf_idxs[static_cast<size_t>(i)]);
-        PyTuple_SET_ITEM(offsets_tuple, i, py_offset);
+stream_udf_t* get_cfunc_from_wrapper(PyObject* cfunc_wrapper) {
+    if (cfunc_wrapper == Py_None) {
+        throw std::runtime_error("agg: No cfunc_wrapper found for aggfunc.");
     }
 
-    PyObject* args = PyTuple_New(2);  // new ref
-
-    PyTuple_SET_ITEM(args, 0, offsets_tuple);
-    PyTuple_SET_ITEM(args, 1, funcs_tuple);
-
-    // Call: cfunc_wrapper(offsets_tuple, funcs_tuple)
-    PyObject* result = PyObject_Call(cfunc_wrapper, args, nullptr);
-    Py_DECREF(args);
+    PyObject* result = PyObject_CallNoArgs(cfunc_wrapper);
 
     if (!result) {
         PyErr_Print();
@@ -78,7 +57,7 @@ udf_general_fn get_cfunc_from_wrapper(PyObject* cfunc_wrapper,
             "agg: Expected cfunc wrapper to return an integer.");
     }
 
-    return reinterpret_cast<udf_general_fn>(PyLong_AsLongLong(result));
+    return reinterpret_cast<stream_udf_t*>(PyLong_AsLongLong(result));
 }
 
 /**
@@ -103,9 +82,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::vector<int32_t> f_in_cols;
         std::optional<bool> dropna = std::nullopt;
 
-        PyObject* cfunc_wrapper =
-            nullptr;  // The cfunc to call on accumulated data to compute UDFs.
-        std::vector<PyObject*> udfs;  // Arguments for generating cfunc_wrapper.
+        std::vector<stream_udf_t*>
+            udfs;  // Arguments for generating cfunc_wrapper.
         std::vector<int> udf_idxs;
 
         for (size_t i = 0; i < op.expressions.size(); i++) {
@@ -150,16 +128,10 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
             std::unique_ptr<bodo::DataType> out_arr_type;
             if (agg_expr.function.name.starts_with("udf")) {
-                ftypes.push_back(Bodo_FTypes::gen_udf);
+                ftypes.push_back(Bodo_FTypes::stream_udf);
                 out_arr_type = arrow_type_to_bodo_data_type(
                     bind_info.out_schema->field(0)->type());
-                // py_udf_args is a tuple of (callback_wrapper, func_arg)
-                // the callback_wrapper is the same for every func, so only need
-                // to extract it once.
-                if (!cfunc_wrapper) {
-                    cfunc_wrapper = PyTuple_GET_ITEM(bind_info.py_udf_args, 0);
-                }
-                udfs.push_back(PyTuple_GET_ITEM(bind_info.py_udf_args, 1));
+                udfs.push_back(get_cfunc_from_wrapper(bind_info.py_udf_args));
                 udf_idxs.push_back(i + this->keys.size());
             } else {
                 ftypes.push_back(function_to_ftype.at(agg_expr.function.name));
@@ -195,20 +167,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::vector<int32_t> f_in_offsets(f_in_cols.size() + 1);
         std::iota(f_in_offsets.begin(), f_in_offsets.end(), 0);
 
-        // Create the udf info struct for GroupbyState
-        std::optional<udfinfo_t> udf_info = std::nullopt;
-        if (udfs.size()) {
-            udf_general_fn agg_cfunc =
-                get_cfunc_from_wrapper(cfunc_wrapper, udf_idxs, udfs);
-
-            auto udf_table =
-                alloc_table(this->output_schema->Project(udf_idxs));
-            udf_info = {.udf_table_dummy = udf_table,
-                        .update = nullptr,
-                        .combine = nullptr,
-                        .eval = nullptr,
-                        .general_udf = agg_cfunc};
-        }
+        auto udf_table = alloc_table(this->output_schema->Project(udf_idxs));
 
         // TODO: propagate dropna value when agg columns are pruned out.
         if (!dropna.has_value()) {
@@ -221,7 +180,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             get_streaming_batch_size(), true, -1, getOpId(), -1, false,
             std::nullopt,
             /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value(),
-            udf_info);
+            udf_table, udfs);
         this->metrics.init_time += end_timer(start_init);
     }
 
