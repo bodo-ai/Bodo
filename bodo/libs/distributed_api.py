@@ -3857,27 +3857,6 @@ def alltoallv(
     )  # pragma: no cover
 
 
-def alltoallv_tup(
-    send_data, out_data, send_counts, recv_counts, send_disp, recv_disp
-):  # pragma: no cover
-    return
-
-
-@overload(alltoallv_tup, no_unliteral=True)
-def alltoallv_tup_overload(
-    send_data, out_data, send_counts, recv_counts, send_disp, recv_disp
-):
-    count = send_data.count
-    assert out_data.count == count
-
-    func_text = "def bodo_alltoallv_tup(send_data, out_data, send_counts, recv_counts, send_disp, recv_disp):\n"
-    for i in range(count):
-        func_text += f"  alltoallv(send_data[{i}], out_data[{i}], send_counts, recv_counts, send_disp, recv_disp)\n"
-    func_text += "  return\n"
-
-    return bodo_exec(func_text, {"alltoallv": alltoallv}, {}, __name__)
-
-
 @numba.njit(cache=True)
 def get_start_count(n):  # pragma: no cover
     rank = bodo.libs.distributed_api.get_rank()
