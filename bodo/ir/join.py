@@ -38,8 +38,6 @@ from bodo.libs.array import (
     array_to_info,
     cpp_table_to_py_data,
     delete_table,
-    hash_join_table,
-    nested_loop_join_table,
     py_data_to_cpp_table,
 )
 from bodo.transforms import distributed_analysis, distributed_pass
@@ -1279,6 +1277,186 @@ def _gen_cross_join_repeat(
     nodes = f_block.body[:-3]
     nodes[-1].target = join_node.out_data_vars[0]
     return nodes
+
+
+@intrinsic
+def hash_join_table(
+    typingctx,
+    left_table_t,
+    right_table_t,
+    left_parallel_t,
+    right_parallel_t,
+    n_keys_t,
+    n_data_left_t,
+    n_data_right_t,
+    same_vect_t,
+    key_in_out_t,
+    same_need_typechange_t,
+    is_left_t,
+    is_right_t,
+    is_join_t,
+    extra_data_col_t,
+    indicator,
+    _bodo_na_equal,
+    _bodo_rebalance_output_if_skewed,
+    cond_func,
+    left_col_nums,
+    left_col_nums_len,
+    right_col_nums,
+    right_col_nums_len,
+    num_rows_ptr_t,
+):
+    """
+    Interface to the hash join of two tables.
+    """
+    from bodo.libs.array import table_type
+
+    assert left_table_t == table_type
+    assert right_table_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="hash_join_table"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        table_type(
+            left_table_t,
+            right_table_t,
+            types.boolean,
+            types.boolean,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.voidptr,
+            types.voidptr,
+            types.int64,
+            types.voidptr,
+            types.int64,
+            types.voidptr,
+        ),
+        codegen,
+    )
+
+
+@intrinsic
+def nested_loop_join_table(
+    typingctx,
+    left_table_t,
+    right_table_t,
+    left_parallel_t,
+    right_parallel_t,
+    is_left_t,
+    is_right_t,
+    key_in_output_t,
+    need_typechange_t,
+    _bodo_rebalance_output_if_skewed,
+    cond_func,
+    left_col_nums,
+    left_col_nums_len,
+    right_col_nums,
+    right_col_nums_len,
+    num_rows_ptr_t,
+):
+    """
+    Call cpp function for cross join of two tables.
+    """
+    from bodo.libs.array import table_type
+
+    assert left_table_t == table_type, "nested_loop_join_table: cpp table type expected"
+    assert right_table_t == table_type, (
+        "nested_loop_join_table: cpp table type expected"
+    )
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="nested_loop_join_table"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        table_type(
+            left_table_t,
+            right_table_t,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.voidptr,
+            types.voidptr,
+            types.boolean,
+            types.voidptr,
+            types.voidptr,
+            types.int64,
+            types.voidptr,
+            types.int64,
+            types.voidptr,
+        ),
+        codegen,
+    )
 
 
 @intrinsic
