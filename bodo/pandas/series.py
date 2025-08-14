@@ -8,6 +8,7 @@ import numbers
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy
 import pandas as pd
@@ -1564,7 +1565,19 @@ class BodoSeriesAiMethods:
                 tasks = [per_row(row, client, generation_kwargs) for row in series]
                 return await asyncio.gather(*tasks, return_exceptions=True)
 
-            return pd.Series(asyncio.run(all_tasks(series, client, generation_kwargs)))
+            try:
+                asyncio.get_running_loop()
+                with ThreadPoolExecutor(1) as pool:
+                    return pool.submit(
+                        lambda: pd.Series(
+                            asyncio.run(all_tasks(series, client, generation_kwargs))
+                        )
+                    )
+            except RuntimeError:
+                # If no running loop, run the async function directly
+                return pd.Series(
+                    asyncio.run(all_tasks(series, client, generation_kwargs))
+                )
 
         return self._series.map_partitions(
             map_func, api_key, base_url, generation_kwargs=generation_kwargs
@@ -1699,7 +1712,19 @@ class BodoSeriesAiMethods:
                 tasks = [per_row(row, client, embedding_kwargs) for row in series]
                 return await asyncio.gather(*tasks, return_exceptions=True)
 
-            return pd.Series(asyncio.run(all_tasks(series, client, embedding_kwargs)))
+            try:
+                asyncio.get_running_loop()
+                with ThreadPoolExecutor(1) as pool:
+                    return pool.submit(
+                        lambda: pd.Series(
+                            asyncio.run(all_tasks(series, client, embedding_kwargs))
+                        )
+                    )
+            except RuntimeError:
+                # If no running loop, run the async function directly
+                return pd.Series(
+                    asyncio.run(all_tasks(series, client, embedding_kwargs))
+                )
 
         return self._series.map_partitions(
             map_func, api_key, base_url, embedding_kwargs=embedding_kwargs
