@@ -2,7 +2,9 @@
 
 import warnings
 from collections import defaultdict
+import time
 
+t0 = time.perf_counter()
 import llvmlite.binding as ll
 import numba
 import numpy as np
@@ -170,6 +172,10 @@ ll.add_symbol(
     "BODO_NRT_MemInfo_alloc_safe_aligned", array_ext.NRT_MemInfo_alloc_safe_aligned
 )
 ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
+
+
+t1 = time.perf_counter()
+print(f"array imports: {t1 - t0} seconds")
 
 
 # Sentinal for field names when converting tuple arrays to struct arrays (workaround
