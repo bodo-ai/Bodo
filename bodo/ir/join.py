@@ -3023,13 +3023,6 @@ def _count_overlap(r_key_arr, start, end):  # pragma: no cover
     return offset, count
 
 
-import llvmlite.binding as ll
-
-from bodo.libs import hdist
-
-ll.add_symbol("c_alltoallv", hdist.c_alltoallv)
-
-
 @numba.njit
 def calc_disp(arr):  # pragma: no cover
     disp = np.empty_like(arr)
