@@ -3092,49 +3092,6 @@ def sort_values_table_py_entry(
 
 
 @intrinsic
-def sort_table_for_interval_join(
-    typingctx,
-    table_t,
-    bounds_arr_t,
-    is_table_point_side_t,
-    parallel_t,
-):
-    """
-    Interface to the sorting of a table for interval join.
-    Bounds must be provided.
-    """
-    assert table_t == table_type, "C++ table type expected"
-    assert bounds_arr_t == array_info_type, "C++ Array Info type expected"
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="sort_table_for_interval_join_py_entrypoint"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    return (
-        table_type(
-            table_t,
-            bounds_arr_t,
-            types.boolean,
-            types.boolean,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
 def sample_table(
     typingctx, table_t, n_keys_t, frac_t, replace_t, random_state_t, parallel_t
 ):

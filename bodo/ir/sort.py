@@ -6,7 +6,7 @@ from collections import defaultdict
 
 import numba
 import numpy as np
-from numba.core import ir, ir_utils, typeinfer, types
+from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     mk_unique_var,
@@ -14,6 +14,7 @@ from numba.core.ir_utils import (
     replace_vars_inner,
     visit_vars_inner,
 )
+from numba.extending import intrinsic
 
 import bodo
 from bodo.libs.array import (
@@ -23,7 +24,6 @@ from bodo.libs.array import (
     cpp_table_to_py_data,
     delete_table,
     py_data_to_cpp_table,
-    sort_table_for_interval_join,
     sort_values_table_py_entry,
 )
 from bodo.transforms import distributed_analysis, distributed_pass
@@ -468,6 +468,53 @@ def apply_copies_sort(
 
 
 ir_utils.apply_copy_propagate_extensions[Sort] = apply_copies_sort
+
+
+@intrinsic
+def sort_table_for_interval_join(
+    typingctx,
+    table_t,
+    bounds_arr_t,
+    is_table_point_side_t,
+    parallel_t,
+):
+    """
+    Interface to the sorting of a table for interval join.
+    Bounds must be provided.
+    """
+    from llvmlite import ir as lir
+
+    from bodo.libs.array import array_info_type, table_type
+
+    assert table_t == table_type, "C++ table type expected"
+    assert bounds_arr_t == array_info_type, "C++ Array Info type expected"
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="sort_table_for_interval_join_py_entrypoint"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        table_type(
+            table_t,
+            bounds_arr_t,
+            types.boolean,
+            types.boolean,
+        ),
+        codegen,
+    )
 
 
 def sort_distributed_run(
