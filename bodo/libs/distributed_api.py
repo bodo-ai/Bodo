@@ -108,7 +108,6 @@ ll.add_symbol("c_get_rank", hdist.dist_get_rank)
 ll.add_symbol("c_get_size", hdist.dist_get_size)
 ll.add_symbol("c_get_remote_size", hdist.dist_get_remote_size)
 ll.add_symbol("c_barrier", hdist.barrier)
-ll.add_symbol("c_alltoall", hdist.c_alltoall)
 ll.add_symbol("c_gather_scalar", hdist.c_gather_scalar)
 ll.add_symbol("c_gatherv", hdist.c_gatherv)
 ll.add_symbol("c_scatterv", hdist.c_scatterv)
@@ -516,19 +515,6 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
         return impl
 
     raise BodoError(f"irecv(): array type {arr} not supported yet")
-
-
-_alltoall = types.ExternalFunction(
-    "c_alltoall", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
-)
-
-
-@numba.njit(cache=True)
-def alltoall(send_arr, recv_arr, count):  # pragma: no cover
-    # TODO: handle int64 counts
-    assert count < INT_MAX
-    type_enum = get_type_enum(send_arr)
-    _alltoall(send_arr.ctypes, recv_arr.ctypes, np.int32(count), type_enum)
 
 
 @numba.njit(cache=True)

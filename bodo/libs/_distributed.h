@@ -132,8 +132,6 @@ static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
 static void c_bcast(void* send_data, int sendcount, int typ_enum, int root,
                     int64_t comm_ptr) __UNUSED__;
 
-static void c_alltoall(void* send_data, void* recv_data, int count,
-                       int typ_enum) __UNUSED__;
 static void c_comm_create(const int* comm_ranks, int n,
                           MPI_Comm* comm) __UNUSED__;
 static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
@@ -961,14 +959,6 @@ static void c_bcast(void* send_data, int sendcount, int typ_enum, int root,
     }
     CHECK_MPI(MPI_Bcast(send_data, sendcount, mpi_typ, root, comm),
               "_distributed.h::c_bcast: MPI error on MPI_Bcast:");
-}
-
-static void c_alltoall(void* send_data, void* recv_data, int count,
-                       int typ_enum) {
-    MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    CHECK_MPI(MPI_Alltoall(send_data, count, mpi_typ, recv_data, count, mpi_typ,
-                           MPI_COMM_WORLD),
-              "_distributed.h::c_alltoall: MPI error on MPI_Alltoall:");
 }
 
 static int finalize() {
