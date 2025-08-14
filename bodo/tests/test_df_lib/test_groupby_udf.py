@@ -103,10 +103,9 @@ def test_agg_mix_udf_builtin(groupby_df):
         pytest.param(
             lambda x: pd.Timedelta(3), id="timedelta_ret", marks=pytest.mark.slow
         ),
-        # TODO: fix nested return types case
-        # pytest.param(lambda x: "A", id="string_ret"),
-        # pytest.param(lambda x: {"id": 1, "text": "hello"}, id="struct_ret"),
-        # pytest.param(lambda x: [1, 2], id="list_ret"),
+        pytest.param(lambda x: "A", id="string_ret"),
+        pytest.param(lambda x: {"id": 1, "text": "hello"}, id="struct_ret"),
+        pytest.param(lambda x: [1, 2], id="list_ret"),
     ],
 )
 @pytest.mark.parametrize(
@@ -167,7 +166,7 @@ def test_agg_udf_types(val_col, func):
     with assert_executed_plan_count(0):
         bdf2 = bdf.groupby(by=["A"]).agg({"B": func})
 
-    _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True)
+    _test_equal(bdf2, df2, check_pandas_types=False)
 
 
 def test_agg_udf_errorchecking(groupby_df):
@@ -195,9 +194,11 @@ def test_agg_udf_errorchecking(groupby_df):
     with pytest.raises(ValueError, match="Must produce aggregated value"):
         bdf.groupby("A").agg(udf1).execute_plan()
 
-    # TODO: exception handling inside cfuncs
-    # with pytest.raises(Exception):
-    #     bdf.groupby("A").agg(udf2).execute_plan()
+    with pytest.raises(
+        Exception,
+        match=r"Groupby.agg\(\): An error occured while executing user defined function.",
+    ):
+        bdf.groupby("A").agg(udf2).execute_plan()
 
     # UDF cannot be compiled, fallback to Pandas
     df2 = groupby_df.groupby("A").agg(udf3)

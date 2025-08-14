@@ -26,12 +26,13 @@ from bodo.pandas.plan import (
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    _empty_pd_array,
     _get_empty_series_arrow,
     check_args_fallback,
     convert_to_pandas_types,
     wrap_plan,
 )
-from bodo.utils.conversion import coerce_to_array
+from bodo.utils.conversion import coerce_scalar_to_array, coerce_to_array
 
 if pt.TYPE_CHECKING:
     from bodo.pandas import BodoDataFrame, BodoSeries
@@ -68,36 +69,9 @@ class GroupbyAggFunc:
 
     @property
     def is_custom_aggfunc(self):
+        """False if self is a builtin agg func e.g. sum, mean,..."""
+        # TODO: support custom implementations of builtin agg funcs
         return callable(self.func) and self.func_name not in BUILTIN_AGG_FUNCS
-
-    def get_cfunc_wrapper(
-        self, empty_data: pd.DataFrame
-    ) -> None | pt.Callable[[], int]:
-        """Get a wrapper to be called per worker to compile/get a Cfunc for computing
-        aggregate UDFs. Similar to:
-        """
-        if not self.is_custom_aggfunc:
-            return None
-
-        def wrapper() -> int:  # pragma: no cover
-            deco = bodo.jit(spawn=False, distributed=False, cache=False)
-            jitted_func = deco(self.func)
-            in_col = empty_data[self.in_col]
-            in_col_type = bodo.typeof(in_col).data
-
-            def agg_func_impl(in_cpp_arr):
-                in_arr = info_to_array(in_cpp_arr, in_col_type)
-                out = jitted_func(pd.Series(in_arr))
-                out_arr = coerce_to_array(
-                    out, scalar_to_arr_len=1, use_nullable_array=True
-                )
-                return array_to_info(out_arr)
-
-            c_sig = array_info_type(array_info_type)
-            cfunc = _cfunc(c_sig, cache=False)(agg_func_impl)
-            return ctypes.c_void_p(cfunc.address).value
-
-        return wrapper
 
 
 class DataFrameGroupBy:
@@ -492,7 +466,7 @@ def _groupby_agg_plan(
         else grouped_selection
     ].agg(func, *args, **kwargs)
 
-    func = grouped._normalize_agg_func(func, grouped_selection, kwargs)
+    normalized_func = grouped._normalize_agg_func(func, grouped_selection, kwargs)
 
     # NOTE: assumes no key columns are being aggregated e.g:
     # df1.groupby("C", as_index=False)[["C"]].agg("sum")
@@ -503,7 +477,7 @@ def _groupby_agg_plan(
 
     n_key_cols = 0 if grouped._as_index else len(grouped._keys)
     empty_data = _cast_groupby_agg_columns(
-        func, zero_size_df, empty_data_pandas, n_key_cols
+        normalized_func, zero_size_df, empty_data_pandas, n_key_cols
     )
 
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
@@ -515,12 +489,12 @@ def _groupby_agg_plan(
         AggregateExpression(
             out_types.iloc[:, i] if isinstance(out_types, pd.DataFrame) else out_types,
             grouped._obj._plan,
-            f"udf_{i}" if func_.is_custom_aggfunc else func_.func_name,
-            func_.get_cfunc_wrapper(zero_size_df),
-            [grouped._obj.columns.get_loc(func_.in_col)],
+            f"udf_{i}" if func.is_custom_aggfunc else func.func_name,
+            _get_cfunc_wrapper(func, zero_size_df),
+            [grouped._obj.columns.get_loc(func.in_col)],
             grouped._dropna,
         )
-        for i, func_ in enumerate(func)
+        for i, func in enumerate(normalized_func)
     ]
 
     plan = LogicalAggregate(
@@ -533,7 +507,9 @@ def _groupby_agg_plan(
     # Add the data column then the keys since they become Index columns in output.
     # DuckDB generates keys first in output so we need to reverse the order.
     if grouped._as_index:
-        col_indices = list(range(len(grouped._keys), len(grouped._keys) + len(func)))
+        col_indices = list(
+            range(len(grouped._keys), len(grouped._keys) + len(normalized_func))
+        )
         col_indices += list(range(len(grouped._keys)))
 
         exprs = make_col_ref_exprs(col_indices, plan)
@@ -560,6 +536,61 @@ def _get_aggfunc_str(func):
     )
 
 
+def _get_cfunc_wrapper(
+    func: GroupbyAggFunc, empty_data: pd.DataFrame
+) -> None | pt.Callable[[], int]:
+    """Get a wrapper to be called per worker to compile/get a Cfunc for computing
+    aggregate UDFs.
+    """
+    import numba
+
+    if not func.is_custom_aggfunc:
+        return None
+
+    def wrapper() -> int:  # pragma: no cover
+        deco = bodo.jit(spawn=False, distributed=False, cache=True)
+        jitted_func = deco(func.func)
+        in_col = empty_data[func.in_col]
+        in_col_type = bodo.typeof(in_col).data
+        out_col_dtype = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
+        out_col_type = bodo.typeof(_empty_pd_array(out_col_dtype))
+
+        if isinstance(out_col_type, bodo.ArrayItemArrayType):
+
+            @numba.njit
+            def coerce_to_array_impl(scalar):
+                # ArrayItemArrayType expects an Array Dtype, so we first have to
+                # coerce the type to Array before converting the Array to a nested array.
+                out_arr = coerce_to_array(scalar, use_nullable_array=True)
+                out_arr = coerce_scalar_to_array(
+                    out_arr, 1, out_col_type, dict_encode=False
+                )
+                return out_arr
+        else:
+
+            @numba.njit
+            def coerce_to_array_impl(scalar):
+                out_arr = coerce_scalar_to_array(
+                    scalar, 1, out_col_type, dict_encode=False
+                )
+                # coerce_scalar_to_array doesn't respect nullable types, so using coerce_to_array
+                # to cast output to nullable if it isn't already.
+                out_arr = coerce_to_array(out_arr, use_nullable_array=True)
+                return out_arr
+
+        def agg_func_impl(in_cpp_arr):
+            in_arr = info_to_array(in_cpp_arr, in_col_type)
+            out = jitted_func(pd.Series(in_arr))
+            out_arr = coerce_to_array_impl(out)
+            return array_to_info(out_arr)
+
+        c_sig = array_info_type(array_info_type)
+        cfunc = _cfunc(c_sig, cache=True)(agg_func_impl)
+        return ctypes.c_void_p(cfunc.address).value
+
+    return wrapper
+
+
 def _get_agg_udf_output_type(func: GroupbyAggFunc, in_type: pa.DataType) -> pa.DataType:
     """Determine the output type of func based on it's input type.
 
@@ -582,7 +613,7 @@ def _get_agg_udf_output_type(func: GroupbyAggFunc, in_type: pa.DataType) -> pa.D
 
     # Checks that func_ is jittable and determine output types
     # TODO: Make more robust.
-    deco = bodo.jit(spawn=False, distributed=False, cache=False)
+    deco = bodo.jit(spawn=False, distributed=False, cache=True)
     jitted_func = deco(func_)
 
     # Cast output to Series to allow cases where output

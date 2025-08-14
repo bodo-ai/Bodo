@@ -1615,6 +1615,11 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
     const grouping_info& grp_info = grp_infos[0];
     std::shared_ptr<array_info> in_col = this->in_col;
     bodo::vector<bodo::vector<int64_t>> group_rows(grp_info.num_groups, pool);
+
+    if (!in_col->length) {
+        return;
+    }
+
     // get the rows in each group
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = grp_info.row_to_group[i];
