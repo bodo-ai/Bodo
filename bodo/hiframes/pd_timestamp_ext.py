@@ -5,7 +5,9 @@ from __future__ import annotations
 import calendar
 import datetime
 import operator
+import time
 
+t0 = time.perf_counter()
 import llvmlite.binding as ll
 import numba
 import numpy as np
@@ -36,6 +38,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
+t1 = time.perf_counter()
 
 import bodo
 import bodo.libs.str_ext
@@ -71,6 +74,7 @@ from bodo.utils.typing import (
     is_overload_none,
     raise_bodo_error,
 )
+t2 = time.perf_counter()
 
 ll.add_symbol("extract_year_days", hdatetime_ext.extract_year_days)
 ll.add_symbol("get_month_day", hdatetime_ext.get_month_day)
@@ -124,6 +128,11 @@ timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
 timedelta_methods = ["total_seconds", "to_pytimedelta"]
 iNaT = pd._libs.tslibs.iNaT
 
+t3 = time.perf_counter()
+
+print(f"numba imports: {t1 - t0} seconds")
+print(f"bodo imports: {t2 - t1} seconds")
+print(f"timestamp inits: {t3 - t2} seconds")
 
 class PandasTimestampType(types.Type):
     def __init__(self, tz_val=None):
