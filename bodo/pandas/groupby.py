@@ -26,6 +26,7 @@ from bodo.pandas.plan import (
 from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
+    _empty_pd_array,
     _get_empty_series_arrow,
     check_args_fallback,
     convert_to_pandas_types,
@@ -76,15 +77,16 @@ class GroupbyAggFunc:
         """Get a wrapper to be called per worker to compile/get a Cfunc for computing
         aggregate UDFs. Similar to:
         """
-        if self.is_custom_aggfunc:
+        if not self.is_custom_aggfunc:
             return None
 
-        def wrapper() -> int:
+        def wrapper() -> int:  # pragma: no cover
             deco = bodo.jit(spawn=False, distributed=False, cache=False)
             jitted_func = deco(self.func)
             in_col = empty_data[self.in_col]
             in_col_type = bodo.typeof(in_col).data
-            out_col_type = _get_agg_output_type(self, in_col.dtype.pyarrow_type)
+            out_col_dtype = _get_agg_output_type(self, in_col.dtype.pyarrow_dtype, "")
+            out_col_type = bodo.typeof(_empty_pd_array(out_col_dtype))
 
             def agg_func_impl(in_cpp_arr):
                 in_arr = info_to_array(in_cpp_arr, in_col_type)
@@ -609,7 +611,9 @@ def _get_agg_udf_output_type(func: GroupbyAggFunc, in_type: pa.DataType) -> pa.D
     return out_series_arrow.dtype.pyarrow_dtype
 
 
-def _get_agg_output_type(func: str, pa_type: pa.DataType, col_name: str) -> pa.DataType:
+def _get_agg_output_type(
+    func: GroupbyAggFunc, pa_type: pa.DataType, col_name: str
+) -> pa.DataType:
     """Cast the input type to the correct output type depending on func or raise if
     the specific combination of func + input type is not supported.
 

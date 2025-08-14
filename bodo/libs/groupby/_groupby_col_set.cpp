@@ -1588,6 +1588,8 @@ StreamingUDFColSet::StreamingUDFColSet(std::shared_ptr<array_info> in_col,
       udf_table_idx(udf_table_idx),
       func(func) {}
 
+StreamingUDFColSet::~StreamingUDFColSet() = default;
+
 std::unique_ptr<bodo::Schema> StreamingUDFColSet::getRunningValueColumnTypes(
     const std::shared_ptr<bodo::Schema>& in_schema) const {
     std::vector<int> col_idxs;
@@ -1595,20 +1597,18 @@ std::unique_ptr<bodo::Schema> StreamingUDFColSet::getRunningValueColumnTypes(
     return udf_table->schema()->Project(col_idxs);
 }
 
-void alloc_update_columns(
+void StreamingUDFColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
-    const bool alloc_out_if_no_combine = true,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-    std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager()) {
+    const bool alloc_out_if_no_combine, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     throw std::runtime_error(
         "StreamingUDFColSet::alloc_update_columns: Not implemented yet.");
 }
 
-void update(const std::vector<grouping_info>& grp_infos,
-            bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-            std::shared_ptr<::arrow::MemoryManager> mm =
-                bodo::default_buffer_memory_manager()) {
+void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
+                                bodo::IBufferPool* const pool,
+                                std::shared_ptr<::arrow::MemoryManager> mm) {
+    (void)func;
     throw std::runtime_error(
         "StreamingUDFColSet::update: Not implemented yet.");
 }
@@ -2144,7 +2144,7 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::vector<bool> window_na_position,
     std::shared_ptr<table_info> window_args, int n_input_cols,
     int* udf_n_redvars, std::shared_ptr<table_info> udf_table,
-    int udf_table_idx, void*, std::shared_ptr<table_info> nunique_table,
+    int udf_table_idx, std::shared_ptr<table_info> nunique_table,
     bool use_sql_rules,
     std::vector<std::vector<std::unique_ptr<bodo::DataType>>> in_arr_types_vec,
     stream_udf_t* udf_cfunc) {
