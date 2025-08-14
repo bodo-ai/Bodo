@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from numba.extending import overload
 
-from bodo.utils.utils import alloc_arr_tup
+from bodo.utils.utils import alloc_arr_tup, getitem_arr_tup, setitem_arr_tup
 
 # ported from Spark to Numba-compilable Python
 # A port of the Android TimSort class, which utilizes a "stable, adaptive, iterative mergesort."
@@ -1111,51 +1111,6 @@ def copyElement_tup_overload(src_arr_tup, src_pos, dst_arr_tup, dst_pos):
     exec(func_text, {"copyElement": copyElement}, loc_vars)
     copy_impl = loc_vars["f"]
     return copy_impl
-
-
-def getitem_arr_tup(arr_tup, ind):  # pragma: no cover
-    l = [arr[ind] for arr in arr_tup]
-    return tuple(l)
-
-
-@overload(getitem_arr_tup, no_unliteral=True)
-def getitem_arr_tup_overload(arr_tup, ind):
-    count = arr_tup.count
-
-    func_text = "def f(arr_tup, ind):\n"
-    func_text += "  return ({}{})\n".format(
-        ",".join([f"arr_tup[{i}][ind]" for i in range(count)]),
-        "," if count == 1 else "",
-    )  # single value needs comma to become tuple
-
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
-def setitem_arr_tup(arr_tup, ind, val_tup):  # pragma: no cover
-    for arr, val in zip(arr_tup, val_tup):
-        arr[ind] = val
-
-
-@overload(setitem_arr_tup, no_unliteral=True)
-def setitem_arr_tup_overload(arr_tup, ind, val_tup):
-    count = arr_tup.count
-
-    func_text = "def f(arr_tup, ind, val_tup):\n"
-    for i in range(count):
-        if isinstance(val_tup, numba.core.types.BaseTuple):
-            func_text += f"  arr_tup[{i}][ind] = val_tup[{i}]\n"
-        else:
-            assert arr_tup.count == 1
-            func_text += f"  arr_tup[{i}][ind] = val_tup\n"
-    func_text += "  return\n"
-
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
 
 
 def test():  # pragma: no cover

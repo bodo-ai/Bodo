@@ -1557,6 +1557,40 @@ def lower_runtime_join_filter(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
+@intrinsic
+def _retrieve_table(typingctx, cpp_table, row_bitmask):
+    """This function takes in a cpp table and a bitmask over it's rows
+    and returns a new table after applying the bitmask. If the bitmask is
+    all True copying is skipped.
+    """
+    from bodo.libs import array_ext
+
+    ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),  # output is a table
+            [
+                lir.IntType(8).as_pointer(),  # in_table
+                lir.IntType(8).as_pointer(),  # row_bitmask
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="retrieve_table_py_entry"
+        )
+        func_args = [args[0], args[1]]
+        table_ret = builder.call(fn_tp, func_args)  # change this to bitmask
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return table_ret
+
+    sig = cpp_table(
+        cpp_table,
+        array_info_type,
+    )
+
+    return sig, codegen
+
+
 def overload_runtime_join_filter(
     join_states, table, join_keys_idxs, process_col_bitmasks
 ):
@@ -1652,7 +1686,7 @@ def impl_runtime_join_filter(
                 func_text += "    if applied_any_filter:\n"
                 func_text += "        row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)\n"
                 func_text += f"        cpp_table = bodo.libs.array.py_data_to_cpp_table(cast_table, (), col_inds_t, {n_cols})\n"
-                func_text += "        cpp_table = bodo.libs.array._retrieve_table(\n"
+                func_text += "        cpp_table = _retrieve_table(\n"
                 func_text += "            cpp_table, row_bitmask_arr\n"
                 func_text += "        )\n"
                 func_text += (
@@ -1679,7 +1713,7 @@ def impl_runtime_join_filter(
     row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)
 
     if applied_any_filter:
-        out_cpp_table = bodo.libs.array._retrieve_table(
+        out_cpp_table = _retrieve_table(
             cpp_table, row_bitmask_arr
         )
         out_table = bodo.libs.array.cpp_table_to_py_table(
@@ -1709,6 +1743,7 @@ def impl_runtime_join_filter(
         "can_apply_bloom_filters": can_apply_bloom_filters,
         "can_apply_column_filters": can_apply_col_filters,
         "_runtime_join_filter": _runtime_join_filter,
+        "_retrieve_table": _retrieve_table,
     }
     exec(func_text, global_vars, loc_vars)
 

@@ -20,7 +20,13 @@ from numba.core.imputils import lower_builtin
 from numba.core.ir_utils import find_const, guard
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import lower_cast, overload, overload_attribute, register_jitable
+from numba.extending import (
+    intrinsic,
+    lower_cast,
+    overload,
+    overload_attribute,
+    register_jitable,
+)
 from numba.np.arrayobj import make_array
 from numba.np.numpy_support import as_dtype
 from numba.parfors.array_analysis import ArrayAnalysis
@@ -44,7 +50,6 @@ from bodo.libs.array import (
     delete_table,
     drop_duplicates_cpp_table,
     drop_duplicates_local_dictionary,
-    sample_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
@@ -1339,6 +1344,49 @@ def duplicated(data, parallel=False):
     )
     impl = loc_vars["impl"]
     return impl
+
+
+@intrinsic
+def sample_table(
+    typingctx, table_t, n_keys_t, frac_t, replace_t, random_state_t, parallel_t
+):
+    """
+    Interface to the sampling of tables.
+    """
+    from bodo.libs.array import table_type
+
+    assert table_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.DoubleType(),
+                lir.IntType(1),
+                lir.IntType(64),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="sample_table_py_entry"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        table_type(
+            table_t,
+            types.int64,
+            types.float64,
+            types.boolean,
+            types.int64,
+            types.boolean,
+        ),
+        codegen,
+    )
 
 
 def sample_table_operation(
@@ -2939,6 +2987,8 @@ def sort(arr, ascending, inplace):  # pragma: no cover
 # For example: Inside of sklearn functions.
 @overload(sort, no_unliteral=True, jit_options={"cache": True})
 def overload_sort(arr, ascending, inplace):
+    import bodo.libs.vendored.timsort
+
     def impl(arr, ascending, inplace):  # pragma: no cover
         n = len(arr)
         data = (np.arange(n),)

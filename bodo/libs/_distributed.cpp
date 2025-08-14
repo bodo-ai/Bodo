@@ -872,8 +872,6 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     SetAttrStringFromVoidPtr(m, c_bcast);
     SetAttrStringFromVoidPtr(m, broadcast_array_py_entry);
     SetAttrStringFromVoidPtr(m, broadcast_table_py_entry);
-    SetAttrStringFromVoidPtr(m, c_alltoallv);
-    SetAttrStringFromVoidPtr(m, c_alltoall);
     SetAttrStringFromVoidPtr(m, allgather);
     SetAttrStringFromVoidPtr(m, oneD_reshape_shuffle);
     SetAttrStringFromVoidPtr(m, permutation_int);

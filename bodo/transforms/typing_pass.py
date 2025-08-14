@@ -3747,6 +3747,8 @@ class TypingTransforms:
         self, assign: ir.Assign, rhs: ir.Expr, func_name, label
     ):
         """transform pd.read_sql_table into a SQL node"""
+        import bodo.io.iceberg
+
         func_str = "pandas.read_sql_table"
         lhs = assign.target
         kws = dict(rhs.kws)
