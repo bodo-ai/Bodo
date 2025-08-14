@@ -60,10 +60,7 @@ from bodo.utils.typing import (
     to_nullable_type,
 )
 from bodo.utils.utils import (
-    alloc_arr_tup,
-    getitem_arr_tup,
     is_null_pointer,
-    setitem_arr_tup,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -151,7 +148,7 @@ def get_join_cond_addr(name):
     return addr
 
 
-HOW_OPTIONS = Literal["inner", "left", "right", "outer", "asof", "cross"]
+HOW_OPTIONS = Literal["inner", "left", "right", "outer", "cross"]
 
 
 class Join(ir.Stmt):
@@ -2179,58 +2176,34 @@ def join_distributed_run(
         join_node.gen_cond_expr = ""
         general_cond_cfunc = None
 
-    # TODO: Update asof to use table format.
-    if join_node.how == "asof":
-        if left_parallel or right_parallel:
-            assert left_parallel and right_parallel, (
-                "pd.merge_asof requires both left and right to be replicated or distributed"
-            )
-            # only the right key needs to be aligned
-            func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
-        func_text += (
-            "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
-            " = bodo.ir.join.local_merge_asof(t1_keys, t2_keys, data_left, data_right)\n"
-        )
-    else:
-        func_text += _gen_join_cpp_call(
-            join_node,
-            left_key_types,
-            right_key_types,
-            matched_key_types,
-            left_other_names,
-            right_other_names,
-            left_other_types,
-            right_other_types,
-            left_key_in_output,
-            right_key_in_output,
-            left_parallel,
-            right_parallel,
-            glbs,
-            out_physical_to_logical_list,
-            out_table_type,
-            index_col_type,
-            join_node.get_out_table_used_cols(),
-            left_used_key_nums,
-            right_used_key_nums,
-            general_cond_cfunc,
-            left_col_nums,
-            right_col_nums,
-            left_physical_to_logical_list,
-            right_physical_to_logical_list,
-            left_logical_physical_map,
-            right_logical_physical_map,
-        )
-    # TODO: Update asof
-    # Set the output variables.
-    if join_node.how == "asof":
-        for i in range(len(left_other_names)):
-            func_text += f"    left_{i} = out_data_left[{i}]\n"
-        for i in range(len(right_other_names)):
-            func_text += f"    right_{i} = out_data_right[{i}]\n"
-        for i in range(n_keys):
-            func_text += f"    t1_keys_{i} = out_t1_keys[{i}]\n"
-        for i in range(n_keys):
-            func_text += f"    t2_keys_{i} = out_t2_keys[{i}]\n"
+    func_text += _gen_join_cpp_call(
+        join_node,
+        left_key_types,
+        right_key_types,
+        matched_key_types,
+        left_other_names,
+        right_other_names,
+        left_other_types,
+        right_other_types,
+        left_key_in_output,
+        right_key_in_output,
+        left_parallel,
+        right_parallel,
+        glbs,
+        out_physical_to_logical_list,
+        out_table_type,
+        index_col_type,
+        join_node.get_out_table_used_cols(),
+        left_used_key_nums,
+        right_used_key_nums,
+        general_cond_cfunc,
+        left_col_nums,
+        right_col_nums,
+        left_physical_to_logical_list,
+        right_physical_to_logical_list,
+        left_logical_physical_map,
+        right_logical_physical_map,
+    )
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -2241,7 +2214,6 @@ def join_distributed_run(
             "bodo": bodo,
             "np": np,
             "pd": pd,
-            "parallel_asof_comm": parallel_asof_comm,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
             "nested_loop_join_table": nested_loop_join_table,
@@ -3651,61 +3623,6 @@ def _normalize_expr_cond(cond: pandas.core.computation.ops.BinOp) -> None:
 
 
 @numba.njit
-def parallel_asof_comm(left_key_arrs, right_key_arrs, right_data):  # pragma: no cover
-    # align the left and right intervals
-    # allgather the boundaries of all left intervals and calculate overlap
-    # rank = bodo.libs.distributed_api.get_rank()
-    n_pes = bodo.libs.distributed_api.get_size()
-    # TODO: multiple keys
-    bnd_starts = np.empty(n_pes, left_key_arrs[0].dtype)
-    bnd_ends = np.empty(n_pes, left_key_arrs[0].dtype)
-    bodo.libs.distributed_api.allgather(bnd_starts, left_key_arrs[0][0])
-    bodo.libs.distributed_api.allgather(bnd_ends, left_key_arrs[0][-1])
-
-    send_counts = np.zeros(n_pes, np.int32)
-    send_disp = np.zeros(n_pes, np.int32)
-    recv_counts = np.zeros(n_pes, np.int32)
-    my_start = right_key_arrs[0][0]
-    my_end = right_key_arrs[0][-1]
-
-    offset = -1
-    i = 0
-    # ignore no overlap processors (end of their interval is before current)
-    while i < n_pes - 1 and bnd_ends[i] < my_start:
-        i += 1
-    while i < n_pes and bnd_starts[i] <= my_end:
-        offset, count = _count_overlap(right_key_arrs[0], bnd_starts[i], bnd_ends[i])
-        # one extra element in case first value is needed for start of boundary
-        if offset != 0:
-            offset -= 1
-            count += 1
-        send_counts[i] = count
-        send_disp[i] = offset
-        i += 1
-    # one extra element in case last value is need for start of boundary
-    # TODO: see if next processor provides the value
-    while i < n_pes:
-        send_counts[i] = 1
-        send_disp[i] = len(right_key_arrs[0]) - 1
-        i += 1
-
-    bodo.libs.distributed_api.alltoall(send_counts, recv_counts, 1)
-    n_total_recv = recv_counts.sum()
-    out_r_keys = np.empty(n_total_recv, right_key_arrs[0].dtype)
-    # TODO: support string
-    out_r_data = alloc_arr_tup(n_total_recv, right_data)
-    recv_disp = bodo.ir.join.calc_disp(recv_counts)
-    bodo.libs.distributed_api.alltoallv(
-        right_key_arrs[0], out_r_keys, send_counts, recv_counts, send_disp, recv_disp
-    )
-    bodo.libs.distributed_api.alltoallv_tup(
-        right_data, out_r_data, send_counts, recv_counts, send_disp, recv_disp
-    )
-
-    return (out_r_keys,), out_r_data
-
-
-@numba.njit
 def _count_overlap(r_key_arr, start, end):  # pragma: no cover
     # TODO: use binary search
     count = 0
@@ -3720,13 +3637,6 @@ def _count_overlap(r_key_arr, start, end):  # pragma: no cover
     return offset, count
 
 
-import llvmlite.binding as ll
-
-from bodo.libs import hdist
-
-ll.add_symbol("c_alltoallv", hdist.c_alltoallv)
-
-
 @numba.njit
 def calc_disp(arr):  # pragma: no cover
     disp = np.empty_like(arr)
@@ -3734,48 +3644,3 @@ def calc_disp(arr):  # pragma: no cover
     for i in range(1, len(arr)):
         disp[i] = disp[i - 1] + arr[i - 1]
     return disp
-
-
-@numba.njit
-def local_merge_asof(left_keys, right_keys, data_left, data_right):  # pragma: no cover
-    # adapted from pandas/_libs/join_func_helper.pxi
-    l_size = len(left_keys[0])
-    r_size = len(right_keys[0])
-
-    out_left_keys = alloc_arr_tup(l_size, left_keys)
-    out_right_keys = alloc_arr_tup(l_size, right_keys)
-    out_data_left = alloc_arr_tup(l_size, data_left)
-    out_data_right = alloc_arr_tup(l_size, data_right)
-
-    left_ind = 0
-    right_ind = 0
-
-    for left_ind in range(l_size):
-        # restart right_ind if it went negative in a previous iteration
-        if right_ind < 0:
-            right_ind = 0
-
-        # find last position in right whose value is less than left's
-        while right_ind < r_size and getitem_arr_tup(
-            right_keys, right_ind
-        ) <= getitem_arr_tup(left_keys, left_ind):
-            right_ind += 1
-
-        right_ind -= 1
-
-        setitem_arr_tup(out_left_keys, left_ind, getitem_arr_tup(left_keys, left_ind))
-        # TODO: copy_tup
-        setitem_arr_tup(out_data_left, left_ind, getitem_arr_tup(data_left, left_ind))
-
-        if right_ind >= 0:
-            setitem_arr_tup(
-                out_right_keys, left_ind, getitem_arr_tup(right_keys, right_ind)
-            )
-            setitem_arr_tup(
-                out_data_right, left_ind, getitem_arr_tup(data_right, right_ind)
-            )
-        else:
-            bodo.libs.array_kernels.setna_tup(out_right_keys, left_ind)
-            bodo.libs.array_kernels.setna_tup(out_data_right, left_ind)
-
-    return out_left_keys, out_right_keys, out_data_left, out_data_right
