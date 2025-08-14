@@ -4698,9 +4698,7 @@ register_model(IsLastStateType)(models.OpaqueModel)
 is_last_state_type = IsLastStateType()
 
 init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_type())
-delete_is_last_state = types.ExternalFunction(
-    "delete_is_last_state", types.none(is_last_state_type)
-)
+
 # NOTE: using int32 types to avoid i1 vs i8 boolean errors in lowering
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
