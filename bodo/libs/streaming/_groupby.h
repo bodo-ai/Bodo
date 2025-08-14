@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/unordered/unordered_flat_map.hpp>
 #include "../_array_hash.h"
 #include "../_bodo_common.h"
 #include "../_chunked_table_builder.h"
@@ -229,8 +230,11 @@ struct GroupbyMetrics {
 
 template <bool is_local>
 using grpby_hash_table_t =
-    bodo::unord_map_container<int64_t, int64_t, HashGroupbyTable<is_local>,
-                              KeyEqualGroupbyTable<is_local>>;
+    // bodo::unord_map_container<int64_t, int64_t, HashGroupbyTable<is_local>,
+    //                           KeyEqualGroupbyTable<is_local>>;
+    boost::unordered::unordered_flat_map<int64_t, int64_t,
+                                         HashGroupbyTable<is_local>,
+                                         KeyEqualGroupbyTable<is_local>>;
 
 /**
  * @brief Holds the state of a single partition

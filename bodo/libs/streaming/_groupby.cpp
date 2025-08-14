@@ -695,8 +695,7 @@ GroupbyPartition::GroupbyPartition(
       build_table_dict_builders(build_table_dict_builders_),
       build_hash_table(std::make_unique<hash_table_t>(
           0, HashGroupbyTable<true>(this, nullptr),
-          KeyEqualGroupbyTable<true>(this, nullptr, n_keys_),
-          op_scratch_pool_)),
+          KeyEqualGroupbyTable<true>(this, nullptr, n_keys_))),
       build_bloom_filter(create_bloom_filter()),
       build_table_groupby_hashes(op_pool_),
       separate_out_cols_schema(std::move(separate_out_cols_schema_)),
@@ -1918,19 +1917,19 @@ GroupbyIncrementalShuffleState::GetShuffleTableAndHashes() {
 }
 
 void GroupbyIncrementalShuffleState::ResetAfterShuffle() {
-    size_t ht_size = this->hash_table->get_allocator().size();
-    this->metrics.peak_ht_size_bytes =
-        std::max(static_cast<MetricBase::StatValue>(ht_size),
-                 this->metrics.peak_ht_size_bytes);
-    if (ht_size > MAX_SHUFFLE_HASHTABLE_SIZE) {
-        // If the shuffle hash table is too large, reset it.
-        // This shouldn't happen often in practice, but is a safeguard.
-        this->hash_table.reset();
-        this->hash_table = std::make_unique<shuffle_hash_table_t>(
-            0, HashGroupbyTable<false>(nullptr, this),
-            KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys));
-        this->metrics.n_ht_reset++;
-    }
+    // size_t ht_size = this->hash_table->size();
+    // this->metrics.peak_ht_size_bytes =
+    //     std::max(static_cast<MetricBase::StatValue>(ht_size),
+    //              this->metrics.peak_ht_size_bytes);
+    // if (ht_size > MAX_SHUFFLE_HASHTABLE_SIZE) {
+    //     // If the shuffle hash table is too large, reset it.
+    //     // This shouldn't happen often in practice, but is a safeguard.
+    //     this->hash_table.reset();
+    //     this->hash_table = std::make_unique<shuffle_hash_table_t>(
+    //         0, HashGroupbyTable<false>(nullptr, this),
+    //         KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys));
+    //     this->metrics.n_ht_reset++;
+    // }
     size_t hashes_size = this->groupby_hashes.get_allocator().size();
     this->metrics.peak_hashes_size_bytes =
         std::max(static_cast<MetricBase::StatValue>(hashes_size),
