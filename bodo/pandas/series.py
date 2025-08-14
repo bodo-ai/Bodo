@@ -1565,16 +1565,22 @@ class BodoSeriesAiMethods:
                 tasks = [per_row(row, client, generation_kwargs) for row in series]
                 return await asyncio.gather(*tasks, return_exceptions=True)
 
+            # Check if there is a running event loop to determine if we need to run in a thread pool
+            # or if we can run the async function directly.
+            run_in_threadpool = False
             try:
                 asyncio.get_running_loop()
+                run_in_threadpool = True
+            except RuntimeError:
+                pass
+            if run_in_threadpool:
                 with ThreadPoolExecutor(1) as pool:
                     return pool.submit(
                         lambda: pd.Series(
                             asyncio.run(all_tasks(series, client, generation_kwargs))
                         )
                     ).result()
-            except RuntimeError:
-                # If no running loop, run the async function directly
+            else:
                 return pd.Series(
                     asyncio.run(all_tasks(series, client, generation_kwargs))
                 )
@@ -1712,16 +1718,22 @@ class BodoSeriesAiMethods:
                 tasks = [per_row(row, client, embedding_kwargs) for row in series]
                 return await asyncio.gather(*tasks, return_exceptions=True)
 
+            # Check if there is a running event loop to determine if we need to run in a thread pool
+            # or if we can run the async function directly.
+            run_in_threadpool = False
             try:
                 asyncio.get_running_loop()
+                run_in_threadpool = True
+            except RuntimeError:
+                pass
+            if run_in_threadpool:
                 with ThreadPoolExecutor(1) as pool:
                     return pool.submit(
                         lambda: pd.Series(
                             asyncio.run(all_tasks(series, client, embedding_kwargs))
                         )
                     ).result()
-            except RuntimeError:
-                # If no running loop, run the async function directly
+            else:
                 return pd.Series(
                     asyncio.run(all_tasks(series, client, embedding_kwargs))
                 )
