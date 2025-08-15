@@ -1,5 +1,6 @@
 #pragma once
 
+#include <object.h>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -51,7 +52,9 @@ stream_udf_t* get_cfunc_from_wrapper(PyObject* cfunc_wrapper) {
             "agg: Expected cfunc wrapper to return an integer.");
     }
 
-    return reinterpret_cast<stream_udf_t*>(PyLong_AsLongLong(result));
+    auto udf_cfunc = reinterpret_cast<stream_udf_t*>(PyLong_AsLongLong(result));
+    Py_DECREF(result);
+    return udf_cfunc;
 }
 
 /**

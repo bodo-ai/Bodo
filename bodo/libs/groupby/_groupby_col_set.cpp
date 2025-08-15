@@ -1579,7 +1579,7 @@ void GeneralUdfColSet::fill_in_columns(
     }
 }
 
-// ############################## StreaminglUDF ##############################
+// ############################## StreamingUDF ##############################
 StreamingUDFColSet::StreamingUDFColSet(std::shared_ptr<array_info> in_col,
                                        std::shared_ptr<table_info> udf_table,
                                        int udf_table_idx, stream_udf_t* func,
@@ -1593,8 +1593,7 @@ StreamingUDFColSet::~StreamingUDFColSet() = default;
 
 std::unique_ptr<bodo::Schema> StreamingUDFColSet::getRunningValueColumnTypes(
     const std::shared_ptr<bodo::Schema>& in_schema) const {
-    std::vector<int> col_idxs;
-    col_idxs.push_back(udf_table_idx);
+    std::vector<int> col_idxs = {udf_table_idx};
     return udf_table->schema()->Project(col_idxs);
 }
 
