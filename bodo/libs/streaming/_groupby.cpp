@@ -3,11 +3,9 @@
 #include <fmt/format.h>
 #include <mpi.h>
 #include <algorithm>
-#include <cassert>
 #include <cstring>
 #include <list>
 #include <memory>
-#include <optional>
 #include <tuple>
 #include "../_array_hash.h"
 #include "../_array_operations.h"
@@ -280,7 +278,6 @@ std::shared_ptr<table_info> get_update_table(
         metrics.colset_update_nrows += in_table->nrows();
         col_set->clear();
     }
-
     return update_table;
 }
 
@@ -2803,7 +2800,8 @@ GroupbyState::GroupbyState(
             }
         }
 
-        // The number of UDFs, used by makeColSet to get output type.
+        // Track number of UDFs i.e. groupby.agg(), used for creating the UDF
+        // Colsets.
         int udf_idx = 0;
 
         // Handle non-window functions.
@@ -2828,6 +2826,10 @@ GroupbyState::GroupbyState(
             auto seperate_out_cols = this->getSeparateOutputColumns(
                 local_input_cols, ftypes[i], 0, udf_out_types, udf_idx);
 
+            if (ftypes[i] == Bodo_FTypes::stream_udf) {
+                udf_idx++;
+            }
+
             std::set<bodo_array_type::arr_type_enum> force_acc_types = {
                 bodo_array_type::STRING, bodo_array_type::DICT,
                 bodo_array_type::ARRAY_ITEM, bodo_array_type::STRUCT,
@@ -2847,16 +2849,13 @@ GroupbyState::GroupbyState(
                     }
                 }
             }
-
-            if (ftypes[i] == Bodo_FTypes::stream_udf) {
-                udf_idx++;
-            }
         }
+
+        udf_idx = 0;
 
         // Finally, now that we know if we need to accumulate all values before
         // update, do one last iteration to actually create each of the col_sets
         bool do_combine = !this->accumulate_before_update;
-        udf_idx = 0;
         for (size_t i = 0; i < ftypes.size(); i++) {
             std::vector<std::shared_ptr<array_info>>& local_input_cols =
                 local_input_cols_vec.at(i);

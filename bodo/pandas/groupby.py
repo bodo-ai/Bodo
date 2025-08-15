@@ -60,7 +60,7 @@ class GroupbyAggFunc:
 
     in_col: str
     func: pt.Callable | str  # The actual function
-    func_name: str  # The function name as it will appear in the output
+    func_name: str  # The function name as it will appear int the output.
 
     def __init__(self, in_col, func):
         self.in_col = in_col

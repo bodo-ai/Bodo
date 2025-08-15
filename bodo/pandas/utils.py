@@ -109,7 +109,7 @@ def schema_has_index_arrays(arrow_schema: pa.Schema) -> bool:
 
 
 def convert_to_pandas_types(obj: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
-    """Returns a DataFrame with the same column name with arrow types cast to
+    """Returns a DataFrame with the same columns with arrow types cast to
     Pandas to avoid limitations in Pandas arrow types casting.
     """
 

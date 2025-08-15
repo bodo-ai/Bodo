@@ -99,7 +99,8 @@ static bodo::tests::suite tests([] {
             Bodo_FTypes::row_number, Bodo_FTypes::min_row_number_filter,
             Bodo_FTypes::ntile, Bodo_FTypes::idxmin_na_first,
             Bodo_FTypes::idxmax_na_first, Bodo_FTypes::idx_n_columns,
-            // stream_udf used in groupy.agg and doesn't make sense to test in
+            // stream_udf is used in groupy.agg and doesn't make sense to test
+            // in
             // this setup.
             Bodo_FTypes::stream_udf};
         std::set<size_t> non_window_function_ftypes = {

@@ -1,13 +1,7 @@
 #pragma once
 
-#include <Python.h>
-#include <abstract.h>
-#include <object.h>
-#include <pytypedefs.h>
-#include <cstddef>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <utility>
 #include "../_util.h"
@@ -34,11 +28,11 @@ struct PhysicalAggregateMetrics {
 };
 
 /**
- * @brief Gets a cfunc for computing the output of all UDFs.
+ * @brief Gets a cfunc for computing the output of a single UDF.
  *
- * @param cfunc_wrapper Python function that takes in a tuple of ints and a
- * tuple of function objects and returns the address of the cfunc.
- * @return udf_general_fn cfunc for applying UDFs on a grouped table.
+ * @param cfunc_wrapper Python function that takes no arguments, called on
+ * workers to compile a cfunc for computing a UDF and expose its address.
+ * @return stream_udf_t* cfunc for applying UDFs on a grouped table.
  */
 stream_udf_t* get_cfunc_from_wrapper(PyObject* cfunc_wrapper) {
     if (cfunc_wrapper == Py_None) {
@@ -82,8 +76,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         std::vector<int32_t> f_in_cols;
         std::optional<bool> dropna = std::nullopt;
 
-        std::vector<stream_udf_t*>
-            udfs;  // Arguments for generating cfunc_wrapper.
+        std::vector<stream_udf_t*> udf_cfuncs;
         std::vector<int> udf_idxs;
 
         for (size_t i = 0; i < op.expressions.size(); i++) {
@@ -131,7 +124,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                 ftypes.push_back(Bodo_FTypes::stream_udf);
                 out_arr_type = arrow_type_to_bodo_data_type(
                     bind_info.out_schema->field(0)->type());
-                udfs.push_back(get_cfunc_from_wrapper(bind_info.py_udf_args));
+                udf_cfuncs.push_back(
+                    get_cfunc_from_wrapper(bind_info.py_udf_args));
                 udf_idxs.push_back(i + this->keys.size());
             } else {
                 ftypes.push_back(function_to_ftype.at(agg_expr.function.name));
@@ -180,7 +174,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             get_streaming_batch_size(), true, -1, getOpId(), -1, false,
             std::nullopt,
             /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value(),
-            udf_table, udfs);
+            udf_table, udf_cfuncs);
         this->metrics.init_time += end_timer(start_init);
     }
 
