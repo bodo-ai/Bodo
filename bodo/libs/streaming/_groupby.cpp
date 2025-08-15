@@ -51,7 +51,7 @@ uint32_t HashGroupbyTable<is_local>::operator()(const int64_t iRow) const {
             is_local ? this->groupby_partition->build_table_groupby_hashes
                      : this->groupby_shuffle_state->groupby_hashes;
 
-        return build_hashes[iRow];
+        return build_hashes[iRow - 1];
     } else {
         const std::shared_ptr<uint32_t[]>& in_hashes =
             is_local ? this->groupby_partition->in_table_hashes
@@ -77,8 +77,8 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
     bool is_build_A = iRowA >= 0;
     bool is_build_B = iRowB >= 0;
 
-    size_t jRowA = is_build_A ? iRowA : -iRowA - 1;
-    size_t jRowB = is_build_B ? iRowB : -iRowB - 1;
+    size_t jRowA = is_build_A ? iRowA - 1 : -iRowA - 1;
+    size_t jRowB = is_build_B ? iRowB - 1 : -iRowB - 1;
 
     const std::shared_ptr<table_info>& table_A =
         is_build_A ? build_table : in_table;
@@ -312,21 +312,16 @@ inline void update_groups_helper(
     bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
     // TODO[BSE-578]: update group_to_first_row, group_to_first_row etc. if
     // necessary
-    int64_t group;
-
-    if (auto group_iter = build_hash_table.find(-i_row - 1);
-        group_iter != build_hash_table.end()) {
-        // update existing group
-        group = group_iter->second;
-    } else {
+    int64_t group = build_hash_table[-i_row - 1];
+    if (group == 0) {
         // add new group
         build_table_buffer.AppendRowKeys(in_table, i_row, n_keys);
         build_table_buffer.IncrementSizeDataColumns(n_keys);
         build_hashes.emplace_back(batch_hashes_groupby[i_row]);
-        group = next_group++;
-        build_hash_table[group] = group;
+        group = ++next_group;
+        // build_hash_table[group] = group;
     }
-    row_to_group[i_row] = group;
+    row_to_group[i_row] = group - 1;
 }
 
 /**
@@ -754,8 +749,8 @@ inline void GroupbyPartition::RebuildHashTableFromBuildBuffer() {
     this->metrics.rebuild_ht_insert_nrows +=
         (build_table_nrows - this->next_group);
     while (this->next_group < static_cast<int64_t>(build_table_nrows)) {
-        (*(this->build_hash_table))[this->next_group] = this->next_group;
         this->next_group++;
+        (*(this->build_hash_table))[this->next_group] = this->next_group;
     }
     insert_timer.finalize();
 }
