@@ -555,6 +555,18 @@ target_link_directories(crypto_funcs PRIVATE ${CONDA_LIB_DIR})
 install(TARGETS crypto_funcs DESTINATION "bodo/libs/")
 
 
+# ---------------------- Native Target - listagg -----------------------
+
+python_add_library(listagg
+  MODULE WITH_SOABI
+  "bodo/libs/_listagg.cpp"
+)
+target_include_directories(listagg PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(listagg PRIVATE ${CONDA_LIB_DIR})
+install(TARGETS listagg DESTINATION "bodo/libs/")
+
+
+
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
@@ -630,7 +642,6 @@ set(sources_list
   "bodo/libs/_table_builder_utils.cpp"
   "bodo/libs/_table_builder.cpp"
   "bodo/libs/_chunked_table_builder.cpp"
-  "bodo/libs/_listagg.cpp"
   "bodo/libs/_operator_pool.cpp"
   "bodo/libs/window/_window_aggfuncs.cpp"
   "bodo/libs/window/_window_calculator.cpp"
