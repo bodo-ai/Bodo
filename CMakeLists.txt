@@ -543,6 +543,18 @@ add_custom_command(
 )
 
 
+# ---------------------- Native Target - crypto_funcs -----------------------
+
+python_add_library(crypto_funcs
+  MODULE WITH_SOABI
+  "bodo/libs/_crypto_funcs.cpp"
+  "bodo/libs/_base64.cpp"
+)
+target_include_directories(crypto_funcs PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(crypto_funcs PRIVATE ${CONDA_LIB_DIR})
+install(TARGETS crypto_funcs DESTINATION "bodo/libs/")
+
+
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
@@ -576,7 +588,6 @@ set(sources_list
   "bodo/libs/_array_hash.cpp"
   "bodo/libs/_array_operations.cpp"
   "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_base64.cpp"
   "bodo/libs/_bodo_common.cpp"
   "bodo/libs/_bodo_tdigest.cpp"
   "bodo/libs/_bodo_to_arrow.cpp"
@@ -601,7 +612,6 @@ set(sources_list
   "bodo/libs/_interval_join.cpp"
   "bodo/libs/_join_hashing.cpp"
   "bodo/libs/_lead_lag.cpp"
-  "bodo/libs/_crypto_funcs.cpp"
   "bodo/libs/_memory.cpp"
   "bodo/libs/_memory_budget.cpp"
   "bodo/libs/_memory_budget_pymod.cpp"
@@ -789,7 +799,7 @@ target_link_libraries(ext PRIVATE
 if (NOT WIN32)
   target_link_libraries(ext PRIVATE pthread)
 else()
-  target_link_libraries(ext PRIVATE
+  target_link_libraries(crypto_funcs PRIVATE
     OpenSSL::SSL
     OpenSSL::Crypto
   )

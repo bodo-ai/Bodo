@@ -2218,7 +2218,6 @@ PyMODINIT_FUNC PyInit_lateral_cpp(void);
 PyMODINIT_FUNC PyInit_theta_sketches(void);
 PyMODINIT_FUNC PyInit_puffin_file(void);
 PyMODINIT_FUNC PyInit_lead_lag(void);
-PyMODINIT_FUNC PyInit_crypto_funcs(void);
 PyMODINIT_FUNC PyInit_hdatetime_ext(void);
 PyMODINIT_FUNC PyInit_hio(void);
 PyMODINIT_FUNC PyInit_array_ext(void);

@@ -2134,7 +2134,6 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, theta_sketches);
     SetAttrStringFromPyInit(m, puffin_file);
     SetAttrStringFromPyInit(m, lead_lag);
-    SetAttrStringFromPyInit(m, crypto_funcs);
     SetAttrStringFromPyInit(m, hdatetime_ext);
     SetAttrStringFromPyInit(m, hio);
     SetAttrStringFromPyInit(m, array_ext);
