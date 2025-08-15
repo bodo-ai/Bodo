@@ -5,8 +5,10 @@ import functools
 import importlib
 import inspect
 import time
+import types as pytypes
 import typing as pt
 import warnings
+from copy import copy
 
 import numba
 import numba.extending
@@ -1146,7 +1148,40 @@ def cpp_table_to_df_jit(
 def get_udf_cfunc_decorator() -> pt.Callable[[pt.Callable], CFunc]:
     """Decorator for creating C callbacks for map/apply that take in a table info and
     return a table info."""
+    # return _cfunc(table_type(table_type))
     return _cfunc(table_type(table_type), cache=True)
+
+
+def clone_function(func, new_name):
+    # Strip the last segment of qualname and append new_name
+    orig_qual_parts = func.__qualname__.split(".")
+    if len(orig_qual_parts) > 1:
+        base_qual = ".".join(orig_qual_parts[:-1])
+        new_qualname = f"{base_qual}.{new_name}"
+    else:
+        new_qualname = new_name
+
+    g = func.__globals__
+    new_func = pytypes.FunctionType(
+        func.__code__,
+        g,
+        new_name,
+        func.__defaults__,
+        func.__closure__,
+    )
+
+    new_func.__kwdefaults__ = (
+        None if func.__kwdefaults__ is None else dict(func.__kwdefaults__)
+    )
+    new_func.__annotations__ = dict(getattr(func, "__annotations__", {}))
+    new_func.__doc__ = func.__doc__
+    new_func.__module__ = func.__module__
+    new_func.__qualname__ = new_qualname
+
+    if hasattr(func, "__dict__"):
+        new_func.__dict__.update(copy(func.__dict__))
+
+    return new_func
 
 
 def compile_cfunc(func, decorator):
@@ -1154,8 +1189,16 @@ def compile_cfunc(func, decorator):
     to the C callback (called once on each worker per cfunc).
     """
     import ctypes
+    # print("compile_cfunc start")
 
-    cfunc = decorator(func)
+    if False:
+        new_name = func.__name__ + str(bodo.libs.distributed_api.get_rank())
+        print("compile_cfunc", func, type(func), new_name)
+        cloned_func = clone_function(func, new_name)
+        cfunc = decorator(cloned_func)
+    else:
+        cfunc = decorator(func)
+        # print("compile_cfunc end")
     return ctypes.c_void_p(cfunc.address).value
 
 

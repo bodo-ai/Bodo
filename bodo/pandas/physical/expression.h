@@ -3,6 +3,9 @@
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
 #include <arrow/type_traits.h>
+#include <future>
+#include <iostream>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include "../libs/_array_utils.h"
@@ -794,6 +797,9 @@ struct PhysicalUDFExpressionMetrics {
     timer_t udf_execution_time = 0;
     timer_t py_to_cpp_time = 0;
 };
+
+#define APPROACH 3
+
 /**
  * @brief Physical expression tree node type for UDF.
  *
@@ -809,7 +815,9 @@ class PhysicalUDFExpression : public PhysicalExpression {
           result_type(_result_type),
           cfunc_ptr(nullptr),
           init_state(nullptr) {
+        // std::cout << "UDF cstr" << std::endl;
         if (scalar_func_data.is_cfunc) {
+#if APPROACH == 0
             PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
 
             if (!bodo_module) {
@@ -839,6 +847,199 @@ class PhysicalUDFExpression : public PhysicalExpression {
 
             Py_DECREF(bodo_module);
             Py_DECREF(result);
+#endif
+#if APPROACH == 1
+            this->cfunc_ptr = (table_udf_t)1;
+            PyObject *future_args = scalar_func_data.args;
+            PyObject *compile_callable = nullptr;
+            {
+                PyObject *bodo_module =
+                    PyImport_ImportModule("bodo.pandas.utils");
+                if (!bodo_module) {
+                    PyErr_Print();
+                    throw std::runtime_error(
+                        "Failed to import bodo.pandas.utils module");
+                }
+                compile_callable =
+                    PyObject_GetAttrString(bodo_module, "compile_cfunc");
+                // Py_DECREF(bodo_module);
+                if (!compile_callable || !PyCallable_Check(compile_callable)) {
+                    // Py_XDECREF(compile_callable);
+                    throw std::runtime_error(
+                        "bodo.pandas.utils.compile_cfunc not callable");
+                }
+                // Keep args alive for the background call
+                Py_XINCREF(future_args);
+                // keep compile_callable alive for background call
+                // (we INCREF'd it by fetching attribute)
+            }
+
+            std::cout << "UDF create async" << std::endl;
+            compile_future = std::async(
+                std::launch::async,
+                [compile_callable, future_args]() -> table_udf_t {
+                    PyGILState_STATE gstate = PyGILState_Ensure();
+                    try {
+                        std::cout << "UDF inside async 0" << std::endl;
+                        table_udf_t ptr = nullptr;
+
+                        std::cout << "UDF inside async 2" << std::endl;
+                        PyObject *result = PyObject_CallFunctionObjArgs(
+                            compile_callable, future_args, nullptr);
+                        // PyObject *result = PyObject_CallMethod(bodo_module,
+                        // "compile_cfunc",
+                        //                                        "O",
+                        //                                        future_args);
+                        if (!result) {
+                            PyErr_Print();
+                            // Py_DECREF(bodo_module);
+                            throw std::runtime_error(
+                                "Error calling compile_cfunc");
+                        }
+                        std::cout << "UDF inside async 3" << std::endl;
+
+                        // Result should be a function pointer
+                        if (!PyLong_Check(result)) {
+                            // Py_DECREF(result);
+                            // Py_DECREF(bodo_module);
+                            throw std::runtime_error(
+                                "Expected an integer from compile_cfunc");
+                        }
+
+                        std::cout << "UDF inside async 4" << std::endl;
+                        ptr = reinterpret_cast<table_udf_t>(
+                            PyLong_AsLongLong(result));
+
+                        // Py_DECREF(bodo_module);
+                        // Py_DECREF(result);
+                        std::cout << "UDF done async" << std::endl;
+                        PyGILState_Release(gstate);
+                        // Py_XDECREF(future_args);
+                        return ptr;
+                    } catch (...) {
+                        PyGILState_Release(gstate);
+                        // Py_XDECREF(future_args);
+                        throw std::runtime_error(
+                            "bodo.pandas.utils.compile_cfunc async failed");
+                    }
+                });
+#endif
+#if APPROACH == 2
+            this->cfunc_ptr = (table_udf_t)1;
+            PyObject *future_args = scalar_func_data.args;
+            PyThreadState *save = PyEval_SaveThread();
+            compile_future =
+                std::async(std::launch::async, [future_args]() -> table_udf_t {
+                    // Ensure we hold the GIL in this thread.
+                    PyGILState_STATE gstate = PyGILState_Ensure();
+                    try {
+                        table_udf_t ptr = nullptr;
+
+                        std::cout << "UDF inside async 0" << std::endl;
+                        PyObject *bodo_module =
+                            PyImport_ImportModule("bodo.pandas.utils");
+                        if (!bodo_module) {
+                            PyErr_Print();
+                            throw std::runtime_error(
+                                "Failed to import bodo.pandas.utils module");
+                        }
+
+                        std::cout << "UDF inside async 1" << std::endl;
+                        PyObject *result = PyObject_CallMethod(
+                            bodo_module, "compile_cfunc", "O", future_args);
+                        if (!result) {
+                            PyErr_Print();
+                            Py_DECREF(bodo_module);
+                            throw std::runtime_error(
+                                "Error calling compile_cfunc");
+                        }
+
+                        std::cout << "UDF inside async 2" << std::endl;
+                        if (!PyLong_Check(result)) {
+                            Py_DECREF(result);
+                            Py_DECREF(bodo_module);
+                            throw std::runtime_error(
+                                "Expected an integer from compile_cfunc");
+                        }
+
+                        std::cout << "UDF inside async 3" << std::endl;
+                        ptr = reinterpret_cast<table_udf_t>(
+                            PyLong_AsLongLong(result));
+
+                        Py_DECREF(result);
+                        Py_DECREF(bodo_module);
+                        Py_XDECREF(future_args);
+                        std::cout << "UDF inside async 4" << std::endl;
+                        PyGILState_Release(gstate);
+                        std::cout << "UDF inside async 5" << std::endl;
+                        return ptr;
+                    } catch (...) {
+                        // Release GIL and DECREF args before propagating.
+                        PyGILState_Release(gstate);
+                        Py_XDECREF(future_args);
+                        throw;
+                    }
+                });
+#endif
+#if APPROACH == 3
+            this->cfunc_ptr = (table_udf_t)1;
+            PyObject *future_args = scalar_func_data.args;
+            PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+            if (!bodo_module) {
+                PyErr_Print();
+                throw std::runtime_error(
+                    "Failed to import bodo.pandas.utils module");
+            }
+            PyThreadState *save = PyEval_SaveThread();
+            // std::cout << "UDF inside async 0" << std::endl;
+
+            compile_future = std::async(
+                std::launch::async,
+                [bodo_module, future_args]() -> table_udf_t {
+                    //    std::cout << "UDF before GIL ensure" << std::endl;
+                    // Ensure we hold the GIL in this thread.
+                    PyGILState_STATE gstate = PyGILState_Ensure();
+                    try {
+                        table_udf_t ptr = nullptr;
+
+                        // std::cout << "UDF inside async 1" << std::endl;
+                        PyObject *result = PyObject_CallMethod(
+                            bodo_module, "compile_cfunc", "O", future_args);
+                        if (!result) {
+                            PyErr_Print();
+                            Py_DECREF(bodo_module);
+                            throw std::runtime_error(
+                                "Error calling compile_cfunc");
+                        }
+
+                        // std::cout << "UDF inside async 2" << std::endl;
+                        if (!PyLong_Check(result)) {
+                            Py_DECREF(result);
+                            Py_DECREF(bodo_module);
+                            throw std::runtime_error(
+                                "Expected an integer from compile_cfunc");
+                        }
+
+                        // std::cout << "UDF inside async 3" << std::endl;
+                        ptr = reinterpret_cast<table_udf_t>(
+                            PyLong_AsLongLong(result));
+
+                        Py_DECREF(result);
+                        Py_DECREF(bodo_module);
+                        Py_XDECREF(future_args);
+                        // std::cout << "UDF inside async 4" << std::endl;
+                        PyGILState_Release(gstate);
+                        // std::cout << "UDF inside async 5" << std::endl;
+                        return ptr;
+                    } catch (...) {
+                        // Release GIL and DECREF args before propagating.
+                        PyGILState_Release(gstate);
+                        Py_XDECREF(future_args);
+                        throw;
+                    }
+                });
+            PyEval_RestoreThread(save);
+#endif
         }
     }
 
@@ -877,6 +1078,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
     BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalUDFExpressionMetrics metrics;
+    std::future<table_udf_t> compile_future;
     table_udf_t cfunc_ptr;
     PyObject *init_state;
 };

@@ -274,8 +274,6 @@ def set_numba_environ_vars():
     # on the shared filesystem.
     in_spawn = "PMI_SIZE" in os.environ or "PMI_RANK" in os.environ
     #print("set_numba_environ_vars", in_spawn)
-    #import traceback
-    #traceback.print_stack()
     from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
@@ -294,8 +292,9 @@ def set_numba_environ_vars():
     cache_loc = (os.environ.get("BODO_PLATFORM_CACHE_LOCATION") or
                  os.environ.get("NUMBA_CACHE_DIR") or "__bodo_pycache__")
 
-    if in_spawn:
-        cache_loc = os.path.join(cache_loc, str(rank))
+    #cache_loc = "/mnt/nfs_client_test1/__bodo_pycache__"
+    #if in_spawn:
+    #    cache_loc = os.path.join(cache_loc, str(rank))
 
     numba.config.CACHE_DIR = cache_loc
     #print("cache_loc", cache_loc)
