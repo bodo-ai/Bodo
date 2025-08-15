@@ -89,8 +89,7 @@ static bodo::tests::suite tests([] {
             Bodo_FTypes::listagg,
             // Untested because it doesn't make sense to test
             // this function with this setup.
-            Bodo_FTypes::nunique,
-        };
+            Bodo_FTypes::nunique, Bodo_FTypes::stream_udf};
         std::set<size_t> non_groupby_function_ftypes = {
             Bodo_FTypes::no_op,
             Bodo_FTypes::ngroup,

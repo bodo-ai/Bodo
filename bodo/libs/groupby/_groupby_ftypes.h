@@ -101,7 +101,9 @@ struct Bodo_FTypes {
         // more explicit ftypes. This is used only in the min_row_number_filter
         // window function path.
         idx_n_columns = 70,
-        n_ftypes = 71,
+        // Streaming UDFs for Bodo DataFrames groupby.agg
+        stream_udf = 71,
+        n_ftypes = 72,
     };
 };
 

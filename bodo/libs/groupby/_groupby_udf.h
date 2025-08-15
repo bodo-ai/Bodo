@@ -74,3 +74,10 @@ struct udfinfo_t {
      */
     udf_general_fn general_udf;
 };
+
+/**
+ * @brief A function that computes the UDF result on a group in streaming
+ * groupby.
+ *
+ */
+using stream_udf_t = array_info*(array_info*);

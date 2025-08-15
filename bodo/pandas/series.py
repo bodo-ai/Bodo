@@ -1035,6 +1035,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 zero_size_self,
                 self._plan,
                 func_name,
+                None,  # udf_args
                 [0],
                 True,  # dropna
             )
@@ -1225,6 +1226,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 zero_size_self,
                 self._plan,
                 func_name,
+                None,  # udf_args
                 [0],
                 True,  # dropna
             )
@@ -2161,6 +2163,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
             zero_size_self,
             bodo_series._plan,
             func_name,
+            None,  # udf_args
             [0],
             True,  # dropna
         )
