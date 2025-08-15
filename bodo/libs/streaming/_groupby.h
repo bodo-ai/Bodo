@@ -191,6 +191,13 @@ struct GroupbyMetrics {
     time_t appends_inactive_time = 0;
     stat_t appends_inactive_nrows = 0;
 
+    // Time spent updating the histogram buckets
+    time_t update_histogram_buckets_time = 0;
+
+    // Time set updating append_row_to_build_table
+    time_t append_row_to_build_table_append_time = 0;
+    time_t append_row_to_build_table_flip_time = 0;
+
     /// FinalizeBuild
     time_t finalize_time = 0;  // Overall
 
