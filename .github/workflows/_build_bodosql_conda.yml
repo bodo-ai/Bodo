@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 240
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # For setuptools_scm to be able to determine version,
           # we need to fetch the entire history
@@ -39,7 +39,7 @@ jobs:
               pkg_format: 2
 
       - name: 'Download the Bodo conda'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: bodo-conda-3.13-linux-x86
           run-id: ${{ github.event.workflow_run.id }}

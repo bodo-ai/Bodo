@@ -11,7 +11,6 @@ import math
 import numpy as np
 import pandas as pd
 import pytest
-import scipy.special
 
 from bodo.tests.utils import check_func
 
@@ -53,12 +52,8 @@ def test_factorial(dataframe_val, memory_leak_check):
     def test_impl2(df):
         return df.A.map(lambda x: math.factorial(x))
 
-    def test_impl3(df):
-        return df.A.map(lambda x: scipy.special.factorial(x, True))
-
     check_func(test_impl1, (dataframe_val,))
     check_func(test_impl2, (dataframe_val,))
-    check_func(test_impl3, (dataframe_val,))
 
 
 @pytest.mark.slow

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pickle
 import random
 import re
@@ -11,6 +12,7 @@ import pyarrow as pa
 import pytest
 import requests
 
+import bodo.ai.backend
 import bodo.pandas as bd
 from bodo.spawn.spawner import spawn_process_on_nodes
 from bodo.tests.utils import _test_equal
@@ -207,7 +209,7 @@ def wait_for_ollama_model(url, model_name):
     )
 
 
-def test_llm_generate():
+def test_llm_generate_ollama():
     prompts = bd.Series(
         [
             "bodo.ai will improve your workflows.",
@@ -240,7 +242,7 @@ def test_llm_generate():
         spawn_process_on_nodes("docker rm bodo_test_ollama -f".split(" "))
 
 
-def test_embed():
+def test_embed_ollama():
     prompts = bd.Series(
         [
             "bodo.ai will improve your workflows.",
@@ -269,3 +271,122 @@ def test_embed():
 
     finally:
         spawn_process_on_nodes("docker rm bodo_test_ollama_embed -f".split(" "))
+
+
+def test_llm_generate_bedrock_custom_formatters():
+    prompts = bd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+            "I am the third entry in this series.",
+            "May the fourth be with you.",
+        ]
+    )
+
+    def request_formatter(row: str) -> str:
+        return json.dumps(
+            {
+                "system": [
+                    {
+                        "text": "Act as a creative writing assistant. When the user provides you with a topic, write a short story about that topic."
+                    }
+                ],
+                "inferenceConfig": {
+                    "maxTokens": 500,
+                    "topP": 0.9,
+                    "topK": 20,
+                    "temperature": 0.7,
+                },
+                "messages": [{"role": "user", "content": [{"text": row}]}],
+            }
+        )
+
+    def response_formatter(response: str) -> str:
+        return json.loads(response)["output"]["message"]["content"][0]["text"]
+
+    res = prompts.ai.llm_generate(
+        model="us.amazon.nova-micro-v1:0",
+        request_formatter=request_formatter,
+        response_formatter=response_formatter,
+        region="us-east-2",
+        backend=bodo.ai.backend.Backend.BEDROCK,
+    ).execute_plan()
+
+    assert len(res) == 4
+    assert all(isinstance(x, str) for x in res)
+
+
+@pytest.mark.parametrize(
+    "modelId",
+    [
+        "us.amazon.nova-lite-v1:0",
+        "anthropic.claude-v2:1",
+        "amazon.titan-text-lite-v1",
+    ],
+)
+def test_llm_generate_bedrock_default_formatter(modelId):
+    prompts = bd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+            "I am the third entry in this series.",
+            "May the fourth be with you.",
+        ]
+    )
+
+    res = prompts.ai.llm_generate(
+        model=modelId,
+        region="us-east-1",
+        backend=bodo.ai.backend.Backend.BEDROCK,
+    ).execute_plan()
+
+    assert len(res) == 4
+    assert all(isinstance(x, str) for x in res)
+
+
+def test_embed_bedrock_custom_formatters():
+    prompts = bd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+            "I am the third entry in this series.",
+            "May the fourth be with you.",
+        ]
+    )
+
+    def request_formatter(row: str) -> str:
+        return json.dumps({"inputText": row})
+
+    def response_formatter(response: str) -> list[float]:
+        return json.loads(response)["embedding"]
+
+    res = prompts.ai.embed(
+        model="amazon.titan-embed-text-v2:0",
+        request_formatter=request_formatter,
+        response_formatter=response_formatter,
+        region="us-east-2",
+        backend=bodo.ai.backend.Backend.BEDROCK,
+    ).execute_plan()
+
+    assert len(res) == 4
+    assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
+
+
+def test_embed_bedrock_default_formatter():
+    prompts = bd.Series(
+        [
+            "bodo.ai will improve your workflows.",
+            "This is a professional sentence.",
+            "I am the third entry in this series.",
+            "May the fourth be with you.",
+        ]
+    )
+
+    res = prompts.ai.embed(
+        model="amazon.titan-embed-text-v2:0",
+        region="us-east-1",
+        backend=bodo.ai.backend.Backend.BEDROCK,
+    ).execute_plan()
+
+    assert len(res) == 4
+    assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))

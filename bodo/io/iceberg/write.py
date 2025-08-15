@@ -57,13 +57,7 @@ except ImportError:
     Transaction = None
 
 this_module = sys.modules[__name__]
-_, iceberg_catalog_type = install_py_obj_class(
-    types_name="iceberg_catalog_type",
-    module=this_module,
-    python_type=Catalog,
-    class_name="IcebergCatalogType",
-    model_name="IcebergCatalogModel",
-)
+
 _, transaction_type = install_py_obj_class(
     types_name="transaction_type",
     module=this_module,

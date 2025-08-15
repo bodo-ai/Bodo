@@ -8,6 +8,7 @@ import numbers
 import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy
 import pandas as pd
@@ -20,6 +21,11 @@ from pandas._typing import (
 )
 
 import bodo
+from bodo.ai.backend import Backend
+from bodo.ai.utils import (
+    get_default_bedrock_request_formatter,
+    get_default_bedrock_response_formatter,
+)
 from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -168,6 +174,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             "to_string",
             "attrs",
             "flags",
+            "iloc",
         ]
 
         cls = object.__getattribute__(self, "__class__")
@@ -183,8 +190,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 f"Series.{name} is not implemented in Bodo Dataframe Library yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
-            warnings.warn(BodoLibFallbackWarning(msg))
-            return fallback_wrapper(self, object.__getattribute__(self, name))
+            return fallback_wrapper(
+                self, object.__getattribute__(self, name), name, msg
+            )
 
         return object.__getattribute__(self, name)
 
@@ -1481,11 +1489,48 @@ class BodoSeriesAiMethods:
     def llm_generate(
         self,
         *,
-        api_key: str,
+        api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,
+        request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], str] | None = None,
+        region: str | None = None,
+        backend: Backend = Backend.OPENAI,
         **generation_kwargs,
     ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+
+        if backend == Backend.BEDROCK:
+            if model is None:
+                raise ValueError(
+                    "Series.ai.llm_generate() requires a model ID when using the Bedrock backend."
+                )
+            if base_url is not None:
+                raise ValueError(
+                    "Series.ai.llm_generate() does not support base_url with the Bedrock backend."
+                )
+            return self._llm_generate_bedrock(
+                modelId=model,
+                request_formatter=request_formatter,
+                response_formatter=response_formatter,
+                region=region,
+                **generation_kwargs,
+            )
+
+        # OpenAI backend
+        api_key = api_key or ""
+        if request_formatter is not None or response_formatter is not None:
+            raise ValueError(
+                "Series.ai.llm_generate() does not support request_formatter or response_formatter with the OpenAI backend."
+            )
+        if region is not None:
+            raise ValueError(
+                "Series.ai.llm_generate() does not support region with the OpenAI backend."
+            )
+
         import importlib
 
         assert importlib.util.find_spec("openai") is not None, (
@@ -1493,10 +1538,6 @@ class BodoSeriesAiMethods:
             "Please install it using 'pip install openai[aiohttp]'."
         )
 
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.llm_generate() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
         if model is not None:
             generation_kwargs["model"] = model
 
@@ -1524,20 +1565,125 @@ class BodoSeriesAiMethods:
                 tasks = [per_row(row, client, generation_kwargs) for row in series]
                 return await asyncio.gather(*tasks, return_exceptions=True)
 
-            return pd.Series(asyncio.run(all_tasks(series, client, generation_kwargs)))
+            # Check if there is a running event loop to determine if we need to run in a thread pool
+            # or if we can run the async function directly.
+            run_in_threadpool = False
+            try:
+                asyncio.get_running_loop()
+                run_in_threadpool = True
+            except RuntimeError:
+                pass
+            if run_in_threadpool:
+                with ThreadPoolExecutor(1) as pool:
+                    return pool.submit(
+                        lambda: pd.Series(
+                            asyncio.run(all_tasks(series, client, generation_kwargs))
+                        )
+                    ).result()
+            else:
+                return pd.Series(
+                    asyncio.run(all_tasks(series, client, generation_kwargs))
+                )
 
         return self._series.map_partitions(
             map_func, api_key, base_url, generation_kwargs=generation_kwargs
         )
 
+    def _llm_generate_bedrock(
+        self,
+        modelId: str,
+        request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], str] | None = None,
+        region: str = None,
+        **generation_kwargs,
+    ) -> BodoSeries:
+        """Generate text using Amazon Bedrock model.
+        Args:
+            modelId (str): The Bedrock model ID to use for text generation.
+            request_formatter (Callable[[str], str], optional): A function that formats the input text
+                into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Nova, Titan, Claude, and OpenAI models.
+            response_formatter (Callable[[str], str], optional): A function that formats the response
+                from the Bedrock model into a string. Defaults to None, which uses a default formatter
+                for Nova, Titan, Claude, and OpenAI models.
+            region (str, optional): The AWS region to use for the Bedrock model. Defaults to None, which uses the default region configured in AWS SDK.
+            **generation_kwargs: Additional keyword arguments to pass to the Bedrock invoke_model API.
+        """
+        if request_formatter is None:
+            request_formatter = get_default_bedrock_request_formatter(modelId)
+        if response_formatter is None:
+            response_formatter = get_default_bedrock_response_formatter(modelId)
+
+        def map_func(series, modelId):
+            import boto3
+            import botocore.config
+
+            client = boto3.client(
+                "bedrock-runtime",
+                config=botocore.config.Config(
+                    connect_timeout=3600,  # 60 minutes
+                    read_timeout=3600,  # 60 minutes
+                    retries={"max_attempts": 1},
+                    region_name=region,
+                ),
+            )
+
+            def per_row(row):
+                response = client.invoke_model(
+                    modelId=modelId,
+                    body=request_formatter(row),
+                    **generation_kwargs,
+                )
+                return response_formatter(response["body"].read().decode("utf-8"))
+
+            return pd.Series([per_row(row) for row in series])
+
+        return self._series.map_partitions(map_func, modelId)
+
     def embed(
         self,
         *,
-        api_key: str,
+        api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,
+        request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], list[float]] | None = None,
+        region: str | None = None,
+        backend: Backend = Backend.OPENAI,
         **embedding_kwargs,
     ) -> BodoSeries:
+        if self._series.dtype != "string[pyarrow]":
+            raise TypeError(
+                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
+            )
+
+        if backend == Backend.BEDROCK:
+            if model is None:
+                raise ValueError(
+                    "Series.ai.embed() requires a model ID when using the Bedrock backend."
+                )
+            if base_url is not None:
+                raise ValueError(
+                    "Series.ai.embed() does not support base_url with the Bedrock backend."
+                )
+            return self._embed_bedrock(
+                modelId=model,
+                request_formatter=request_formatter,
+                response_formatter=response_formatter,
+                region=region,
+                **embedding_kwargs,
+            )
+
+        # OpenAI backend
+        api_key = api_key or ""
+        if request_formatter is not None or response_formatter is not None:
+            raise ValueError(
+                "Series.ai.embed() does not support request_formatter or response_formatter with the OpenAI backend."
+            )
+        if region is not None:
+            raise ValueError(
+                "Series.ai.embed() does not support region with the OpenAI backend."
+            )
+
         import importlib
 
         assert importlib.util.find_spec("openai") is not None, (
@@ -1545,10 +1691,6 @@ class BodoSeriesAiMethods:
             "Please install it using 'pip install openai[aiohttp]'."
         )
 
-        if self._series.dtype != "string[pyarrow]":
-            raise TypeError(
-                f"Series.ai.embed() got unsupported dtype: {self._series.dtype}, expected string[pyarrow]."
-            )
         if model is not None:
             embedding_kwargs["model"] = model
 
@@ -1576,11 +1718,78 @@ class BodoSeriesAiMethods:
                 tasks = [per_row(row, client, embedding_kwargs) for row in series]
                 return await asyncio.gather(*tasks, return_exceptions=True)
 
-            return pd.Series(asyncio.run(all_tasks(series, client, embedding_kwargs)))
+            # Check if there is a running event loop to determine if we need to run in a thread pool
+            # or if we can run the async function directly.
+            run_in_threadpool = False
+            try:
+                asyncio.get_running_loop()
+                run_in_threadpool = True
+            except RuntimeError:
+                pass
+            if run_in_threadpool:
+                with ThreadPoolExecutor(1) as pool:
+                    return pool.submit(
+                        lambda: pd.Series(
+                            asyncio.run(all_tasks(series, client, embedding_kwargs))
+                        )
+                    ).result()
+            else:
+                return pd.Series(
+                    asyncio.run(all_tasks(series, client, embedding_kwargs))
+                )
 
         return self._series.map_partitions(
             map_func, api_key, base_url, embedding_kwargs=embedding_kwargs
         )
+
+    def _embed_bedrock(
+        self,
+        modelId: str,
+        request_formatter: Callable[[str], str] | None = None,
+        response_formatter: Callable[[str], list[float]] | None = None,
+        region: str | None = None,
+        **embedding_kwargs,
+    ) -> BodoSeries:
+        """Embed text using Amazon Bedrock model.
+        Args:
+            modelId (str): The Bedrock model ID to use for embedding.
+            request_formatter (Callable[[str], str], optional): A function that formats the input text
+                into the required JSON format for the Bedrock model. Defaults to None, which uses a default formatter for Titan embeddings models.
+            response_formatter (Callable[[str], list[float]], optional): A function that formats the response
+                from the Bedrock model into a list of floats. Defaults to None, which uses a default formatter for Titan embeddings models.
+            region (str, optional): The AWS region to use for the Bedrock model. Defaults to None, which uses the default region configured in AWS SDK.
+            **embedding_kwargs: Additional keyword arguments to pass to the Bedrock invoke_model API.
+        """
+        if request_formatter is None:
+            request_formatter = get_default_bedrock_request_formatter(modelId)
+        if response_formatter is None:
+            response_formatter = get_default_bedrock_response_formatter(modelId)
+
+        def map_func(series, modelId):
+            import boto3
+            import botocore.config
+
+            client = boto3.client(
+                "bedrock-runtime",
+                config=botocore.config.Config(
+                    connect_timeout=3600,  # 60 minutes
+                    read_timeout=3600,  # 60 minutes
+                    retries={"max_attempts": 1},
+                ),
+                region_name=region,
+            )
+
+            def per_row(row):
+                response = client.invoke_model(
+                    modelId=modelId,
+                    body=request_formatter(row),
+                    **embedding_kwargs,
+                )
+                return response_formatter(response["body"].read())
+
+            return pd.Series([per_row(row) for row in series])
+
+        return self._series.map_partitions(map_func, modelId)
 
     def query_s3_vectors(
         self,
@@ -2336,10 +2545,54 @@ def _get_series_func_plan(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
 
-    if func in {"dt.dayofweek", "dt.day_of_week", "dt.hour", "dt.month", "dt.date"}:
-        if func == "dt.dayofweek":
-            func = "dt.day_of_week"
-        func_name = func.split(".")[1]
+    # List of Series methods to be routed to Arrow Compute
+    arrow_compute_list = (
+        "dt.hour",
+        "dt.month",
+        "dt.dayofweek",
+        "dt.day_of_week",
+        "dt.quarter",
+        "dt.year",
+        "dt.day",
+        "dt.minute",
+        "dt.second",
+        "dt.microsecond",
+        "dt.nanosecond",
+        "dt.weekday",
+        "dt.dayofyear",
+        "dt.day_of_year",
+        # string methods that correspond to utf8_{name}
+        "str.isalnum",
+        "str.isalpha",
+        "str.isdecimal",
+        "str.isdigit",
+        "str.isnumeric",
+        "str.isupper",
+        "str.isspace",
+        "str.capitalize",
+        "str.length",
+        "str.lower",
+        "str.upper",
+        "str.swapcase",
+        "str.title",
+        "str.reverse",
+    )
+
+    def get_arrow_func(name):
+        """Maps method name to its corresponding Arrow Compute Function name."""
+        if name in ("dt.dayofweek", "dt.weekday"):
+            return "day_of_week"
+        if name == "dt.dayofyear":
+            return "day_of_year"
+        if name.startswith("str.is"):
+            body = name.split(".")[1]
+            return "utf8_" + body[:2] + "_" + body[2:]
+        if name.startswith("str."):
+            return "utf8_" + name.split(".")[1]
+        return name.split(".")[1]
+
+    if func in arrow_compute_list:
+        func_name = get_arrow_func(func)
         func_args = ()  # TODO: expand this to enable arrow compute calls with args
         is_cfunc = False
         has_state = False
@@ -2793,19 +3046,13 @@ series_str_methods = [
 dt_accessors = [
     # idx = 0: Series(Int64)
     (
-        # NOTE: The methods below (e.g., hour, month, dayofweek) return int32 in Pandas by default.
+        # NOTE: The methods below return int32 in Pandas by default.
         # In Bodo, the output dtype is int64 because we use PyArrow Compute.
         [
             "hour",
             "month",
             "dayofweek",
             "day_of_week",
-        ],
-        pd.ArrowDtype(pa.int64()),
-    ),
-    # idx = 0: Series(Int32)
-    (
-        [
             "quarter",
             "year",
             "day",
@@ -2815,7 +3062,12 @@ dt_accessors = [
             "nanosecond",
             "weekday",
             "dayofyear",
-            "day_of_year",
+        ],
+        pd.ArrowDtype(pa.int64()),
+    ),
+    # idx = 0: Series(Int32)
+    (
+        [
             "daysinmonth",
             "days_in_month",
             "days",

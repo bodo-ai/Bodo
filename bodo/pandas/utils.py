@@ -465,10 +465,9 @@ def check_args_fallback(
                     )
                     if except_msg:
                         msg += f"\nException: {except_msg}"
-                    warnings.warn(BodoLibFallbackWarning(msg))
-                    py_res = fallback_wrapper(self, getattr(base_class, func.__name__))(
-                        self, *args, **kwargs
-                    )
+                    py_res = fallback_wrapper(
+                        self, getattr(base_class, func.__name__), func.__name__, msg
+                    )(self, *args, **kwargs)
                     return py_res
 
         return wrapper
@@ -1229,7 +1228,7 @@ def ensure_datetime64ns(df):
 
 
 # TODO: further generalize. Currently, this method is only used for BodoSeries and BodoDataFrame.
-def fallback_wrapper(self, attr):
+def fallback_wrapper(self, attr, name, msg):
     """
     Wrap callable attributes with a warning silencer, unless they are known
     accessors or indexers like `.iloc`, `.loc`, `.str`, `.dt`, `.cat`.
@@ -1243,6 +1242,14 @@ def fallback_wrapper(self, attr):
     ):
 
         def silenced_method(*args, **kwargs):
+            jit_fallback = JITFallback(self, name)
+            try:
+                return jit_fallback(*args, **kwargs)
+            except Exception:
+                pass
+
+            nonlocal msg
+            warnings.warn(BodoLibFallbackWarning(msg))
             msg = ""
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
@@ -1275,3 +1282,101 @@ def fallback_wrapper(self, attr):
         return silenced_method
 
     return attr
+
+
+class JITFallback:
+    # Holds a mapping of a tuple of class name and function name to either
+    # False to say that compilation previously failed for that function or
+    # a callable dispatcher for the JIT compiled version of that function.
+    fallback_cache = {}
+    compile_success = 0
+    compile_fail = 0
+    after_success = 0
+    python_fallback = 0
+
+    class JITFallbackFail(Exception):
+        pass
+
+    def __init__(self, base_obj, name):
+        self.base_obj = base_obj if base_obj is not pd else None
+        self.name = name
+
+    def __call__(self, *args, **kwargs):
+        key = (
+            (
+                self.base_obj.__class__.__name__,
+                self.name,
+                *[type(x) for x in args],
+                *list(kwargs.keys()),
+                *[type(x) for x in kwargs.values()],
+            ),
+            None,
+        )
+        # See if we previously tried to compile this function.
+        cache_entry = JITFallback.fallback_cache.get(key, None)
+        # We are using an allow-list strategy below because many of the possible
+        # functions return data-types that don't have equivalents in this
+        # dataframe library yet or we don't have conversions from the Python
+        # type to the corresponding dataframe library type or plain just don't
+        # work for unknown reasons.  So, we will be on the safe side for now and
+        # only JIT fallback for methods that we have tested.
+        if self.name in ("duplicated", "pivot") and cache_entry != False:
+            # None means it wasn't in the cache either way so we can try to
+            # JIT compile it.
+            if cache_entry is None:
+                if self.base_obj is None:
+                    from bodo.numba_compat import is_func_overloaded
+
+                    # Do a better check here if this function appears overloaded.
+                    jit_supported = is_func_overloaded("pandas", self.name)
+                else:
+                    overloads = get_overloads(self.base_obj.__class__.__name__)
+                    jit_supported = self.name in overloads
+
+                if jit_supported:
+                    fname = f"bodo_jitfallback_{self.name}"
+                    self_arg = "self, " if self.base_obj is not None else ""
+                    sig_args = ",".join(
+                        [f"arg{i}" for i in range(len(args))] + list(kwargs.keys())
+                    )
+                    caller_args = ",".join(
+                        [f"arg{i}" for i in range(len(args))]
+                        + [f"{x}={x}" for x in kwargs.keys()]
+                    )
+                    func_text = f"def {fname}({self_arg}{sig_args}):\n"
+                    if self.base_obj is None:
+                        func_text += f"    return pd.{self.name}({caller_args})\n"
+                    else:
+                        func_text += f"    return self.{self.name}({caller_args})\n"
+
+                    new_func = bodo.utils.utils.bodo_spawn_exec(
+                        func_text, {"pd": pd}, {}, __name__
+                    )
+                    compiled_method = bodo.jit(new_func, cache=True)
+                    try:
+                        if self.base_obj is None:
+                            cm_args = args + tuple(kwargs.values())
+                        else:
+                            cm_args = (self.base_obj, *args, *tuple(kwargs.values()))
+                        ret = compiled_method(*cm_args)
+                        # Remember that this compile worked.
+                        JITFallback.fallback_cache[key] = compiled_method
+                        JITFallback.compile_success += 1
+                        return ret
+                    except Exception:
+                        # Remember not to try to compile this again.
+                        JITFallback.fallback_cache[key] = False
+                        JITFallback.compile_fail += 1
+                else:
+                    JITFallback.fallback_cache[key] = False
+            else:
+                JITFallback.after_success += 1
+                # Previous successful compile so just run it.
+                if self.base_obj is None:
+                    cm_args = args + tuple(kwargs.values())
+                else:
+                    cm_args = (self.base_obj, *args, *tuple(kwargs.values()))
+                return cache_entry(*cm_args)
+
+        JITFallback.python_fallback += 1
+        raise JITFallback.JITFallbackFail()
