@@ -1,15 +1,14 @@
 #include "_bodo_common.h"
 
-#include <arrow/array.h>
 #include <complex>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
+#include <arrow/array.h>
 #include <arrow/type.h>
 #include <fmt/format.h>
 #include "_bodo_to_arrow.h"
-#include "_datetime_utils.h"
 #include "_distributed.h"
 #include "arrow/util/key_value_metadata.h"
 
