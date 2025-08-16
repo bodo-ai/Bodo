@@ -552,6 +552,7 @@ python_add_library(crypto_funcs
 )
 target_include_directories(crypto_funcs PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(crypto_funcs PRIVATE ${CONDA_LIB_DIR})
+target_link_libraries(crypto_funcs PRIVATE ssl crypto)
 install(TARGETS crypto_funcs DESTINATION "bodo/libs/")
 
 
