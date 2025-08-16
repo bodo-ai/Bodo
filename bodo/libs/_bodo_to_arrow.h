@@ -23,6 +23,13 @@
     lhs = std::move(res).ValueOrDie();
 #endif
 
+/**
+ * @brief Convert array_info to equivalent Arrow array.
+ *
+ * @return std::shared_ptr<arrow::Array> equivalent Array array
+ */
+std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
+
 std::shared_ptr<arrow::Array> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const std::shared_ptr<array_info> array,
     bool convert_timedelta_to_int64, const std::string &tz,

@@ -1745,3 +1745,11 @@ std::optional<std::shared_ptr<arrow::Buffer>> get_dictionary_hits(
     }
     return null_bitmap;
 }
+
+std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    return bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
+                               false /*convert_timedelta_to_int64*/, "",
+                               time_unit, false /*downcast_time_ns_to_us*/,
+                               bodo::default_buffer_memory_manager());
+}

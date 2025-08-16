@@ -8,7 +8,6 @@
 #include <arrow/array.h>
 #include <arrow/type.h>
 #include <fmt/format.h>
-#include "_bodo_to_arrow.h"
 #include "_distributed.h"
 #include "arrow/util/key_value_metadata.h"
 
@@ -844,14 +843,6 @@ template float __int128_t::int128_to_float<float>() const;
 template double __int128_t::int128_to_float<double>() const;
 
 #endif
-
-std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
-    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    return bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
-                               false /*convert_timedelta_to_int64*/, "",
-                               time_unit, false /*downcast_time_ns_to_us*/,
-                               bodo::default_buffer_memory_manager());
-}
 
 std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
     const int64_t size, bodo::IBufferPool* const pool,

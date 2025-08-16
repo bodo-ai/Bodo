@@ -1350,13 +1350,6 @@ struct array_info {
     }
 };
 
-/**
- * @brief Convert array_info to equivalent Arrow array.
- *
- * @return std::shared_ptr<arrow::Array> equivalent Array array
- */
-std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
-
 std::unique_ptr<array_info> alloc_numpy(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
