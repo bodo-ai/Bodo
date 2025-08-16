@@ -46,7 +46,10 @@ std::string get_aggregation_type_string(AggregationType type) {
 
 template <bool is_local>
 uint32_t HashGroupbyTable<is_local>::operator()(const int64_t iRow) const {
-    if (iRow >= 0) {
+    int64_t next_group = is_local ? this->groupby_partition->next_group
+                                  : this->groupby_shuffle_state->next_group;
+
+    if (iRow < next_group) {
         const bodo::vector<uint32_t>& build_hashes =
             is_local ? this->groupby_partition->build_table_groupby_hashes
                      : this->groupby_shuffle_state->groupby_hashes;
@@ -56,7 +59,7 @@ uint32_t HashGroupbyTable<is_local>::operator()(const int64_t iRow) const {
         const std::shared_ptr<uint32_t[]>& in_hashes =
             is_local ? this->groupby_partition->in_table_hashes
                      : this->groupby_shuffle_state->in_table_hashes;
-        return in_hashes[-iRow - 1];
+        return in_hashes[iRow - next_group];
     }
 }
 
@@ -74,11 +77,13 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
         is_local ? this->groupby_partition->in_table
                  : this->groupby_shuffle_state->in_table;
 
-    bool is_build_A = iRowA >= 0;
-    bool is_build_B = iRowB >= 0;
+    int64_t next_group = is_local ? this->groupby_partition->next_group
+                                  : this->groupby_shuffle_state->next_group;
+    bool is_build_A = iRowA < next_group;
+    bool is_build_B = iRowB < next_group;
 
-    size_t jRowA = is_build_A ? iRowA : -iRowA - 1;
-    size_t jRowB = is_build_B ? iRowB : -iRowB - 1;
+    size_t jRowA = is_build_A ? iRowA : iRowA - next_group;
+    size_t jRowB = is_build_B ? iRowB : iRowB - next_group;
 
     const std::shared_ptr<table_info>& table_A =
         is_build_A ? build_table : in_table;
@@ -314,8 +319,9 @@ inline void update_groups_helper(
     // necessary
     int64_t group;
 
-    if (auto group_iter = build_hash_table.find(-i_row - 1);
-        group_iter != build_hash_table.end()) {
+    if (auto [group_iter, emplaced] =
+            build_hash_table.try_emplace(i_row + next_group);
+        !emplaced) {
         // update existing group
         group = group_iter->second;
     } else {
@@ -324,7 +330,8 @@ inline void update_groups_helper(
         build_table_buffer.IncrementSizeDataColumns(n_keys);
         build_hashes.emplace_back(batch_hashes_groupby[i_row]);
         group = next_group++;
-        build_hash_table[group] = group;
+        // build_hash_table[group] = group;
+        group_iter->second = group;
     }
     row_to_group[i_row] = group;
 }
