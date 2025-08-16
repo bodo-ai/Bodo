@@ -623,6 +623,7 @@ set(sources_list
   "bodo/libs/_array_hash.cpp"
   "bodo/libs/_array_operations.cpp"
   "bodo/libs/_array_utils.cpp"
+  "bodo/libs/_bodo_ext.cpp"
   "bodo/libs/_bodo_common.cpp"
   "bodo/libs/_bodo_tdigest.cpp"
   "bodo/libs/_bodo_to_arrow.cpp"
