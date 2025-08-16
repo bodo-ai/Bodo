@@ -487,7 +487,7 @@ void pq_write_partitioned_py_entry(
     // - write index
     // - write metadata?
     // - convert values to strings for other dtypes like datetime, decimal, etc
-    // (see array_info::val_to_str)
+    // (see array_val_to_str)
 
     try {
         if (!is_parallel) {
@@ -568,8 +568,8 @@ void pq_write_partitioned_py_entry(
                     if (part_col->arr_type == bodo_array_type::CATEGORICAL) {
                         int64_t code = part_col->get_code_as_int64(i);
                         // TODO can code be -1 (NA) for partition columns?
-                        value_str = categories_table->columns[cat_col_idx++]
-                                        ->val_to_str(code);
+                        value_str = array_val_to_str(
+                            categories_table->columns[cat_col_idx++], code);
                     } else if (part_col->arr_type == bodo_array_type::DICT) {
                         // check nullable bitmask and set string to empty
                         // if nan. Since we called
@@ -614,7 +614,7 @@ void pq_write_partitioned_py_entry(
                             value_str = val;
                         }
                     } else {
-                        value_str = part_col->val_to_str(i);
+                        value_str = array_val_to_str(part_col, i);
                     }
                     p.fpath += part_col_names[j] + "=" + value_str + "/";
                 }

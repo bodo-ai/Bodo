@@ -543,6 +543,54 @@ add_custom_command(
 )
 
 
+# ---------------------- Native Target - crypto_funcs -----------------------
+
+python_add_library(crypto_funcs
+  MODULE WITH_SOABI
+  "bodo/libs/_crypto_funcs.cpp"
+  "bodo/libs/_base64.cpp"
+)
+target_include_directories(crypto_funcs PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(crypto_funcs PRIVATE ${CONDA_LIB_DIR})
+target_link_libraries(crypto_funcs PRIVATE ssl crypto)
+install(TARGETS crypto_funcs DESTINATION "bodo/libs/")
+
+
+# ---------------------- Native Target - listagg -----------------------
+
+python_add_library(listagg
+  MODULE WITH_SOABI
+  "bodo/libs/_listagg.cpp"
+  "bodo/libs/_bodo_common.cpp"
+  "bodo/libs/_array_operations.cpp"
+  "bodo/libs/_array_hash.cpp"
+  "bodo/libs/_array_utils.cpp"
+  "bodo/libs/_distributed.cpp"
+  "bodo/libs/_shuffle.cpp"
+  "bodo/libs/_datetime_utils.cpp"
+  "bodo/libs/_table_builder_utils.cpp"
+  "bodo/libs/_table_builder.cpp"
+  "bodo/libs/_chunked_table_builder.cpp"
+  "bodo/libs/_array_build_buffer.cpp"
+  "bodo/libs/_decimal_ext.cpp"
+  "bodo/libs/_dict_builder.cpp"
+  "bodo/libs/_memory.cpp"
+  "bodo/libs/_utils.cpp"
+  "bodo/libs/_storage_manager.cpp"
+  "bodo/libs/streaming/_dict_encoding.cpp"
+  "bodo/libs/vendored/_murmurhash3.cpp"
+  "bodo/libs/groupby/_groupby_do_apply_to_column.cpp"
+  "bodo/libs/groupby/_groupby_agg_funcs.cpp"
+  "bodo/libs/groupby/_groupby_ftypes.cpp"
+  "bodo/libs/groupby/_groupby_common.cpp"
+  "bodo/libs/_bodo_to_arrow.cpp"
+)
+target_include_directories(listagg PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(listagg PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR})
+target_link_libraries(listagg PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
+install(TARGETS listagg DESTINATION "bodo/libs/")
+
+
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
@@ -576,7 +624,7 @@ set(sources_list
   "bodo/libs/_array_hash.cpp"
   "bodo/libs/_array_operations.cpp"
   "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_base64.cpp"
+  "bodo/libs/_bodo_ext.cpp"
   "bodo/libs/_bodo_common.cpp"
   "bodo/libs/_bodo_tdigest.cpp"
   "bodo/libs/_bodo_to_arrow.cpp"
@@ -601,7 +649,6 @@ set(sources_list
   "bodo/libs/_interval_join.cpp"
   "bodo/libs/_join_hashing.cpp"
   "bodo/libs/_lead_lag.cpp"
-  "bodo/libs/_crypto_funcs.cpp"
   "bodo/libs/_memory.cpp"
   "bodo/libs/_memory_budget.cpp"
   "bodo/libs/_memory_budget_pymod.cpp"
@@ -620,7 +667,6 @@ set(sources_list
   "bodo/libs/_table_builder_utils.cpp"
   "bodo/libs/_table_builder.cpp"
   "bodo/libs/_chunked_table_builder.cpp"
-  "bodo/libs/_listagg.cpp"
   "bodo/libs/_operator_pool.cpp"
   "bodo/libs/window/_window_aggfuncs.cpp"
   "bodo/libs/window/_window_calculator.cpp"
@@ -789,7 +835,7 @@ target_link_libraries(ext PRIVATE
 if (NOT WIN32)
   target_link_libraries(ext PRIVATE pthread)
 else()
-  target_link_libraries(ext PRIVATE
+  target_link_libraries(crypto_funcs PRIVATE
     OpenSSL::SSL
     OpenSSL::Crypto
   )

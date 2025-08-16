@@ -1872,3 +1872,8 @@ inline void set_arr_item(array_info& arr, size_t idx, T val) {
     SetBitTo(reinterpret_cast<uint8_t*>(arr.data1<ArrType>()), idx,
              static_cast<bool>(val));
 }
+
+/**
+ * Return string representation of value in position `idx` of this array.
+ */
+std::string array_val_to_str(std::shared_ptr<array_info> arr, size_t idx);

@@ -207,7 +207,8 @@ PyMODINIT_FUNC PyInit_crypto_funcs(void) {
         return nullptr;
     }
 
-    bodo_common_init();
+    // No need to init bodo_common since just using the SetAttrStringFromVoidPtr
+    // macro in this module
 
     SetAttrStringFromVoidPtr(m, run_crypto_function);
     SetAttrStringFromVoidPtr(m, run_base64_encode);
