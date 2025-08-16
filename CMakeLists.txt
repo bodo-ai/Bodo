@@ -561,6 +561,7 @@ python_add_library(listagg
   MODULE WITH_SOABI
   "bodo/libs/_listagg.cpp"
   "bodo/libs/_bodo_common.cpp"
+  "bodo/libs/_array_operations.cpp"
 )
 target_include_directories(listagg PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(listagg PRIVATE ${CONDA_LIB_DIR})

@@ -2144,6 +2144,15 @@ inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
 }
 }
 
+/**
+ * @brief Convert Arrow DataType to Bodo DataType, including nested types
+ *
+ * @param arrow_type input Arrow DataType
+ * @return std::unique_ptr<bodo::DataType> equivalent Bodo DataType
+ */
+std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
+    const std::shared_ptr<arrow::DataType> arrow_type);
+
 // Retrieve the bodo version as a string.
 std::string get_bodo_version();
 

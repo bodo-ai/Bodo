@@ -117,15 +117,6 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
     std::shared_ptr<arrow::Table> table, bodo::IBufferPool *src_pool);
 
 /**
- * @brief Convert Arrow DataType to Bodo DataType, including nested types
- *
- * @param arrow_type input Arrow DataType
- * @return std::unique_ptr<bodo::DataType> equivalent Bodo DataType
- */
-std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
-    const std::shared_ptr<arrow::DataType> arrow_type);
-
-/**
  * @brief Convert Arrow RecordBatch to Bodo table_info with zero-copy as much as
  * possible. Uses arrow_array_to_bodo to zero-copy all Arrow Arrays in the
  * table. Does not support reusing string array references for
