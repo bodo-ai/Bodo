@@ -1,5 +1,5 @@
 #include "_pymemory.h"
-#include "_bodo_common.h"
+#include "_memory.h"
 
 extern "C" {
 
@@ -63,7 +63,8 @@ PyMODINIT_FUNC PyInit_memory_cpp(void) {
         return nullptr;
     }
 
-    bodo_common_init();
+    // Not calling bodo_common_init() since memory_cpp is used inside of it
+
     return m;
 }
 

@@ -103,8 +103,6 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, test_cpp);
 #endif
 
-    SetAttrStringFromPyInit(m, memory_cpp);
-
     // Setup the Cython-generated plan_optimizer module
     PyObject* plan_opt_mod = get_plan_optimizer_module();
     if (!plan_opt_mod) {

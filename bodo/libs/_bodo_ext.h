@@ -33,7 +33,6 @@ PyMODINIT_FUNC PyInit_javascript_udf_cpp(void);
 #endif
 PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void);
 PyMODINIT_FUNC PyInit_uuid_cpp(void);
-PyMODINIT_FUNC PyInit_memory_cpp(void);
 #ifdef IS_TESTING
 PyMODINIT_FUNC PyInit_test_cpp(void);
 #endif
