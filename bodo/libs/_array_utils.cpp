@@ -19,6 +19,7 @@
 #include "_datetime_utils.h"
 #include "_decimal_ext.h"
 #include "_mpi.h"
+#include "_table_builder_utils.h"
 #include "vendored/hyperloglog.hpp"
 
 /**
