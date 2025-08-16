@@ -1212,11 +1212,6 @@ struct array_info {
         }
     }
 
-    /**
-     * Return string representation of value in position `idx` of this array.
-     */
-    std::string val_to_str(size_t idx);
-
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
     void set_null_bit(size_t idx, bool bit) {
