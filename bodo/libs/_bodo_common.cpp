@@ -9,6 +9,7 @@
 #include <arrow/type.h>
 #include <fmt/format.h>
 #include "_distributed.h"
+#include "_memory.h"
 #include "arrow/util/key_value_metadata.h"
 
 // for numpy arrays, this maps dtype to sizeof(dtype)
@@ -53,6 +54,38 @@ void bodo_common_init() {
         return;
     }
     initialized = true;
+
+    // Get the default buffer pool pointer from Python and set the global
+    // pointer
+    PyObject* memory_module = PyImport_ImportModule("bodo.memory_cpp");
+    if (memory_module == nullptr) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Failed to import bodo.memory_cpp module!");
+        return;
+    }
+
+    PyObject* pool_ptr_obj =
+        PyObject_CallMethod(memory_module, "default_buffer_pool_ptr", nullptr);
+    if (pool_ptr_obj == nullptr) {
+        Py_DECREF(memory_module);
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Failed to call default_buffer_pool_ptr()!");
+        return;
+    }
+
+    int64_t memory_pool_ptr = PyLong_AsLongLong(pool_ptr_obj);
+    if (memory_pool_ptr == -1 && PyErr_Occurred()) {
+        Py_DECREF(pool_ptr_obj);
+        Py_DECREF(memory_module);
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Failed to convert pool pointer to integer!");
+        return;
+    }
+
+    bodo::init_buffer_pool_ptr(memory_pool_ptr);
+
+    Py_DECREF(pool_ptr_obj);
+    Py_DECREF(memory_module);
 
     if (numpy_item_size.size() != Bodo_CTypes::_numtypes) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
