@@ -1434,7 +1434,7 @@ class GroupbyState {
         std::vector<std::shared_ptr<array_info>> local_input_cols,
         std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype,
         int window_ftype, std::shared_ptr<table_info> window_args,
-        std::shared_ptr<table_info> udf_output_types, int udf_table_idx);
+        std::shared_ptr<table_info> udf_output_type);
 
     /**
      * Helper function that gets the output column types for a given function.
@@ -1447,8 +1447,7 @@ class GroupbyState {
         std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
     getSeparateOutputColumns(
         std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype,
-        int window_ftype, std::shared_ptr<table_info> udf_output_types,
-        int udf_table_idx);
+        int window_ftype, std::shared_ptr<table_info> udf_output_type);
 
     /*@brief Split the partition at index 'idx' into two partitions.
      * This must only be called in the event of a threshold enforcement error.

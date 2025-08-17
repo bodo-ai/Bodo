@@ -1581,29 +1581,25 @@ void GeneralUdfColSet::fill_in_columns(
 
 // ############################## StreamingUDF ##############################
 StreamingUDFColSet::StreamingUDFColSet(std::shared_ptr<array_info> in_col,
-                                       std::shared_ptr<table_info> udf_table,
-                                       int udf_table_idx, stream_udf_t* func,
-                                       bool use_sql_rules)
+                                       std::shared_ptr<table_info> out_table,
+                                       stream_udf_t* func, bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::stream_udf, false, use_sql_rules),
-      udf_table(std::move(udf_table)),
-      udf_table_idx(udf_table_idx),
+      out_table(std::move(out_table)),
       func(func) {}
 
 StreamingUDFColSet::~StreamingUDFColSet() = default;
 
 std::unique_ptr<bodo::Schema> StreamingUDFColSet::getRunningValueColumnTypes(
     const std::shared_ptr<bodo::Schema>& in_schema) const {
-    std::vector<int> col_idxs = {udf_table_idx};
-    return udf_table->schema()->Project(col_idxs);
+    return out_table->schema();
 }
 
 void StreamingUDFColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Allocate a dummy array column, actual column will be filled in by update
-    bodo_array_type::arr_type_enum arr_type =
-        udf_table->columns[udf_table_idx]->arr_type;
-    Bodo_CTypes::CTypeEnum dtype = udf_table->columns[udf_table_idx]->dtype;
+    bodo_array_type::arr_type_enum arr_type = out_table->columns[0]->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = out_table->columns[0]->dtype;
     auto update_col = alloc_array_top_level(0, 0, 0, arr_type, dtype);
     out_cols.push_back(std::move(update_col));
 }
@@ -2218,9 +2214,8 @@ std::unique_ptr<BasicColSet> makeColSet(
                                           udf_table_idx, use_sql_rules);
             break;
         case Bodo_FTypes::stream_udf:
-            colset =
-                new StreamingUDFColSet(in_cols[0], std::move(udf_table),
-                                       udf_table_idx, udf_cfunc, use_sql_rules);
+            colset = new StreamingUDFColSet(in_cols[0], std::move(udf_table),
+                                            udf_cfunc, use_sql_rules);
             break;
         case Bodo_FTypes::percentile_disc:
         case Bodo_FTypes::percentile_cont:

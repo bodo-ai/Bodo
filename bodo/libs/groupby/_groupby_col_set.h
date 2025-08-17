@@ -1139,7 +1139,7 @@ class GeneralUdfColSet : public UdfColSet {
 class StreamingUDFColSet : public BasicColSet {
    public:
     StreamingUDFColSet(std::shared_ptr<array_info> in_col,
-                       std::shared_ptr<table_info> udf_table, int udf_table_idx,
+                       std::shared_ptr<table_info> out_table,
                        stream_udf_t* func, bool use_sql_rules);
 
     virtual ~StreamingUDFColSet();
@@ -1175,8 +1175,7 @@ class StreamingUDFColSet : public BasicColSet {
 
    private:
     const std::shared_ptr<table_info>
-        udf_table;            // the table containing type info for UDF columns
-    const int udf_table_idx;  // index to my information in the udf table
+        out_table;  // the table containing a single column of UDF output type.
     stream_udf_t* func;  // A callback for computing the UDF on a single group.
 };
 

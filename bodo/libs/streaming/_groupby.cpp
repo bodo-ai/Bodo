@@ -2818,13 +2818,20 @@ GroupbyState::GroupbyState(
                 in_arr_types_copy.push_back(t->copy());
             }
 
+            std::shared_ptr<table_info> udf_out_type = nullptr;
+            if (ftypes[i] == Bodo_FTypes::stream_udf) {
+                std::vector<std::shared_ptr<array_info>> out_col = {
+                    udf_out_types->columns[udf_idx]};
+                udf_out_type = std::make_shared<table_info>(out_col);
+            }
+
             std::unique_ptr<bodo::Schema> running_values_schema =
                 this->getRunningValueColumnTypes(
                     local_input_cols, std::move(in_arr_types_copy), ftypes[i],
-                    0, window_args, udf_out_types, udf_idx);
+                    0, window_args, udf_out_type);
 
             auto seperate_out_cols = this->getSeparateOutputColumns(
-                local_input_cols, ftypes[i], 0, udf_out_types, udf_idx);
+                local_input_cols, ftypes[i], 0, udf_out_type);
 
             if (ftypes[i] == Bodo_FTypes::stream_udf) {
                 udf_idx++;
@@ -2867,19 +2874,23 @@ GroupbyState::GroupbyState(
             }
 
             stream_udf_t* udf_cfunc = nullptr;
+            std::shared_ptr<table_info> udf_out_type = nullptr;
             if (ftypes[i] == Bodo_FTypes::stream_udf) {
                 udf_cfunc = udf_cfuncs[udf_idx];
+                std::vector<std::shared_ptr<array_info>> out_col = {
+                    udf_out_types->columns[udf_idx]};
+                udf_out_type = std::make_shared<table_info>(out_col);
             }
 
-            std::shared_ptr<BasicColSet> col_set = makeColSet(
-                local_input_cols, index_col, ftypes[i], do_combine,
-                skip_na_data, 0,
-                // In the streaming multi-partition scenario, it's
-                // safer to mark things as *not* parallel to avoid
-                // any synchronization and hangs.
-                {}, 0, /*is_parallel*/ false, this->sort_asc, this->sort_na,
-                window_args, 0, nullptr, udf_out_types, udf_idx, nullptr,
-                use_sql_rules, {}, udf_cfunc);
+            std::shared_ptr<BasicColSet> col_set =
+                makeColSet(local_input_cols, index_col, ftypes[i], do_combine,
+                           skip_na_data, 0,
+                           // In the streaming multi-partition scenario, it's
+                           // safer to mark things as *not* parallel to avoid
+                           // any synchronization and hangs.
+                           {}, 0, /*is_parallel*/ false, this->sort_asc,
+                           this->sort_na, window_args, 0, nullptr, udf_out_type,
+                           0, nullptr, use_sql_rules, {}, udf_cfunc);
 
             if (ftypes[i] == Bodo_FTypes::stream_udf) {
                 udf_idx++;
@@ -3023,7 +3034,7 @@ std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
     std::vector<std::shared_ptr<array_info>> local_input_cols,
     std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype,
     int window_ftype, std::shared_ptr<table_info> window_args,
-    std::shared_ptr<table_info> udf_output_types, int udf_table_idx) {
+    std::shared_ptr<table_info> udf_output_type) {
     std::shared_ptr<BasicColSet> col_set =
         makeColSet(local_input_cols,  // in_cols
                    nullptr,           // index_col
@@ -3039,8 +3050,8 @@ std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
                    window_args,       // window_args
                    0,                 // n_input_cols
                    nullptr,           // udf_n_redvars
-                   udf_output_types,  // udf_table
-                   udf_table_idx,     // udf_table_idx
+                   udf_output_type,   // udf_table
+                   0,                 // udf_table_idx
                    nullptr,           // nunique_table
                    true               // use_sql_rules
         );
@@ -3057,8 +3068,7 @@ std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
 std::vector<std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
 GroupbyState::getSeparateOutputColumns(
     std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype,
-    int window_ftype, std::shared_ptr<table_info> udf_output_types,
-    int udf_table_idx) {
+    int window_ftype, std::shared_ptr<table_info> udf_output_type) {
     std::shared_ptr<BasicColSet> col_set =
         makeColSet(local_input_cols,  // in_cols
                    nullptr,           // index_col
@@ -3074,8 +3084,8 @@ GroupbyState::getSeparateOutputColumns(
                    nullptr,           // window_args
                    0,                 // n_input_cols
                    nullptr,           // udf_n_redvars
-                   udf_output_types,  // udf_table
-                   udf_table_idx,     // udf_table_idx
+                   udf_output_type,   // udf_table
+                   0,                 // udf_table_idx
                    nullptr,           // nunique_table
                    true               // use_sql_rules
         );
