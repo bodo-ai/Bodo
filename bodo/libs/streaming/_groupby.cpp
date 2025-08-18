@@ -46,10 +46,18 @@ std::string get_aggregation_type_string(AggregationType type) {
 
 template <bool is_local>
 uint32_t HashGroupbyTable<is_local>::operator()(const int64_t iRow) const {
-    const bodo::vector<uint32_t>& build_hashes =
-        is_local ? this->groupby_partition->build_table_groupby_hashes
-                 : this->groupby_shuffle_state->groupby_hashes;
-    return build_hashes[iRow];
+    if (iRow >= 0) {
+        const bodo::vector<uint32_t>& build_hashes =
+            is_local ? this->groupby_partition->build_table_groupby_hashes
+                     : this->groupby_shuffle_state->groupby_hashes;
+
+        return build_hashes[iRow];
+    } else {
+        const std::shared_ptr<uint32_t[]>& in_hashes =
+            is_local ? this->groupby_partition->in_table_hashes
+                     : this->groupby_shuffle_state->in_table_hashes;
+        return in_hashes[-iRow - 1];
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -66,10 +74,18 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
         is_local ? this->groupby_partition->in_table
                  : this->groupby_shuffle_state->in_table;
 
-    const std::shared_ptr<table_info>& table_A = build_table;
-    const std::shared_ptr<table_info>& table_B = in_table;
+    bool is_build_A = iRowA >= 0;
+    bool is_build_B = iRowB >= 0;
 
-    bool test = TestEqualJoin(table_A, table_B, iRowA, jRowB, this->n_keys,
+    size_t jRowA = is_build_A ? iRowA : -iRowA - 1;
+    size_t jRowB = is_build_B ? iRowB : -iRowB - 1;
+
+    const std::shared_ptr<table_info>& table_A =
+        is_build_A ? build_table : in_table;
+    const std::shared_ptr<table_info>& table_B =
+        is_build_B ? build_table : in_table;
+
+    bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, this->n_keys,
                               /*is_na_equal=*/true);
     return test;
 }
@@ -298,8 +314,7 @@ inline void update_groups_helper(
     // necessary
     int64_t group;
 
-    if (auto [group_iter, emplaced] = build_hash_table.do_try_emplace(
-            batch_hashes_groupby[i_row], next_group, next_group);
+    if (auto group_iter = build_hash_table.find(-i_row - 1);
         group_iter != build_hash_table.end()) {
         // update existing group
         group = group_iter->second;

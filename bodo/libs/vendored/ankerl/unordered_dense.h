@@ -755,7 +755,6 @@ private:
         }
     }
 
-
     template <typename K>
     auto do_find(K const& key) -> iterator {
         if (ANKERL_UNORDERED_DENSE_UNLIKELY(empty())) {
@@ -1246,29 +1245,6 @@ public:
                          bool> = true>
     auto try_emplace(const_iterator /*hint*/, K&& key, Args&&... args) -> iterator {
         return do_try_emplace(std::forward<K>(key), std::forward<Args>(args)...).first;
-    }
-
-    template <typename K, typename... Args>
-    auto do_try_emplace(auto hash, K&& key, Args&&... args) -> std::pair<iterator, bool> {
-        if (ANKERL_UNORDERED_DENSE_UNLIKELY(is_full())) {
-            increase_size();
-        }
-
-        auto dist_and_fingerprint = dist_and_fingerprint_from_hash(hash);
-        auto bucket_idx = bucket_idx_from_hash(hash);
-
-        while (true) {
-            auto* bucket = &at(m_buckets, bucket_idx);
-            if (dist_and_fingerprint == bucket->m_dist_and_fingerprint) {
-                if (m_equal(key, m_values[bucket->m_value_idx].first)) {
-                    return {begin() + static_cast<difference_type>(bucket->m_value_idx), false};
-                }
-            } else if (dist_and_fingerprint > bucket->m_dist_and_fingerprint) {
-                return do_place_element(dist_and_fingerprint, bucket_idx, std::forward<K>(key), std::forward<Args>(args)...);
-            }
-            dist_and_fingerprint = dist_inc(dist_and_fingerprint);
-            bucket_idx = next(bucket_idx);
-        }
     }
 
     auto erase(iterator it) -> iterator {
