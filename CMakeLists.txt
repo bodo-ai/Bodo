@@ -586,7 +586,7 @@ python_add_library(listagg
   "bodo/libs/_bodo_to_arrow.cpp"
 )
 target_include_directories(listagg PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(listagg PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR})
+target_link_directories(listagg PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(listagg PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
 install(TARGETS listagg DESTINATION "bodo/libs/")
 
@@ -601,7 +601,7 @@ python_add_library(memory_cpp
   "bodo/libs/_storage_manager.cpp"
 )
 target_include_directories(memory_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(memory_cpp PRIVATE ${CONDA_LIB_DIR})
+target_link_directories(memory_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(memory_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
 install(TARGETS memory_cpp DESTINATION "bodo/")
 
