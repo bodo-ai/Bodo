@@ -89,7 +89,6 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, stream_sort_cpp);
     SetAttrStringFromPyInit(m, table_builder_cpp);
     SetAttrStringFromPyInit(m, query_profile_collector_cpp);
-    SetAttrStringFromPyInit(m, uuid_cpp);
 #ifdef BUILD_WITH_V8
     SetAttrStringFromPyInit(m, javascript_udf_cpp);
 #endif

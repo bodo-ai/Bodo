@@ -775,6 +775,19 @@ target_link_directories(lateral_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} 
 target_link_libraries(lateral_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
 install(TARGETS lateral_cpp DESTINATION "bodo/libs/")
 
+
+# ---------------------- Native Target - uuid_cpp -----------------------
+
+python_add_library(uuid_cpp
+  MODULE WITH_SOABI
+  "bodo/libs/_uuid.cpp"
+)
+target_include_directories(uuid_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(uuid_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
+target_link_libraries(uuid_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
+install(TARGETS uuid_cpp DESTINATION "bodo/libs/")
+
+
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
@@ -856,7 +869,6 @@ set(sources_list
   "bodo/libs/streaming/_shuffle.cpp"
   "bodo/libs/_storage_manager.cpp"
   "bodo/libs/_utils.cpp"
-  "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
