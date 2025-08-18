@@ -70,7 +70,6 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, hdist);
     SetAttrStringFromPyInit(m, hstr_ext);
     SetAttrStringFromPyInit(m, decimal_ext);
-    SetAttrStringFromPyInit(m, lateral_cpp);
     SetAttrStringFromPyInit(m, hdatetime_ext);
     SetAttrStringFromPyInit(m, hio);
     SetAttrStringFromPyInit(m, array_ext);
