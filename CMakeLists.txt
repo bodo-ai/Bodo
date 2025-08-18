@@ -642,6 +642,22 @@ target_link_libraries(quantile_alg PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
 install(TARGETS quantile_alg DESTINATION "bodo/libs/")
 
 
+# ---------------------- Native Target - lead_lag -----------------------
+
+python_add_library(lead_lag
+  MODULE WITH_SOABI
+  "bodo/libs/_lead_lag.cpp"
+  "bodo/libs/_bodo_common.cpp"
+  "bodo/libs/_memory.cpp"
+  "bodo/libs/_utils.cpp"
+  "bodo/libs/_storage_manager.cpp"
+)
+target_include_directories(lead_lag PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(lead_lag PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
+target_link_libraries(lead_lag PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
+install(TARGETS lead_lag DESTINATION "bodo/libs/")
+
+
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
@@ -698,7 +714,6 @@ set(sources_list
   "bodo/libs/_nested_loop_join.cpp"
   "bodo/libs/_interval_join.cpp"
   "bodo/libs/_join_hashing.cpp"
-  "bodo/libs/_lead_lag.cpp"
   "bodo/libs/_memory.cpp"
   "bodo/libs/_memory_budget.cpp"
   "bodo/libs/_memory_budget_pymod.cpp"

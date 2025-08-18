@@ -73,7 +73,6 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, lateral_cpp);
     SetAttrStringFromPyInit(m, theta_sketches);
     SetAttrStringFromPyInit(m, puffin_file);
-    SetAttrStringFromPyInit(m, lead_lag);
     SetAttrStringFromPyInit(m, hdatetime_ext);
     SetAttrStringFromPyInit(m, hio);
     SetAttrStringFromPyInit(m, array_ext);
