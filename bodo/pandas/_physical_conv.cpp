@@ -171,22 +171,23 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             std::make_shared<PipelineBuilder>(physical_op);                 \
         return;                                                             \
     }
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT8);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT16);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT32);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT64);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT8);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT16);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT32);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT64);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::FLOAT32);
+            // Tried to roughly order by how common the types are
             CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::FLOAT64);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::DECIMAL);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::DATE);
-            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::TIME);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT64);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT32);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::FLOAT32);
             CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::DATETIME);
             CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::TIMEDELTA);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::DATE);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::TIME);
             CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::TIMESTAMPTZ);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT16);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT8);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT16);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT8);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT32);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT64);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::DECIMAL);
             CREATE_QUANTILE(Bodo_CTypes::INT128);
             throw std::runtime_error(
                 "quantile function is not supported for the type: " +
