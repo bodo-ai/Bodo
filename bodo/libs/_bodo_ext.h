@@ -19,7 +19,6 @@ PyMODINIT_FUNC PyInit_stream_join_cpp(void);
 PyMODINIT_FUNC PyInit_stream_sort_cpp(void);
 PyMODINIT_FUNC PyInit_memory_budget_cpp(void);
 PyMODINIT_FUNC PyInit_stream_groupby_cpp(void);
-PyMODINIT_FUNC PyInit_stream_window_cpp(void);
 PyMODINIT_FUNC PyInit_stream_dict_encoding_cpp(void);
 PyMODINIT_FUNC PyInit_table_builder_cpp(void);
 PyMODINIT_FUNC PyInit_fft_cpp(void);
