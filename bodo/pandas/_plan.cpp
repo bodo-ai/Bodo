@@ -6,6 +6,7 @@
 
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/python/api.h>
+#include <object.h>
 #include "../io/arrow_compat.h"
 #include "_bodo_scan_function.h"
 #include "_bodo_write_function.h"
@@ -140,8 +141,8 @@ duckdb::unique_ptr<duckdb::Expression> make_col_ref_expr(
 
 duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    std::string function_name, std::vector<int> input_column_indices,
-    bool dropna) {
+    std::string function_name, PyObject *py_udf_args,
+    std::vector<int> input_column_indices, bool dropna) {
     auto out_schema_res = arrow::py::unwrap_schema(out_schema_py);
     std::shared_ptr<arrow::Schema> out_schema;
     CHECK_ARROW_AND_ASSIGN(
@@ -180,7 +181,7 @@ duckdb::unique_ptr<duckdb::Expression> make_agg_expr(
     // BodoAggFunctionData ensures two different functions applied to the same
     // column are not optimized out.
     auto bind_info = duckdb::make_uniq<BodoAggFunctionData>(
-        dropna, function_name, out_schema);
+        dropna, function_name, py_udf_args, out_schema);
 
     return duckdb::make_uniq<duckdb::BoundAggregateExpression>(
         function, std::move(children), nullptr, std::move(bind_info),
