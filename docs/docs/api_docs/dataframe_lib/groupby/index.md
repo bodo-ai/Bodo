@@ -14,6 +14,7 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 
 - [`DataFrameGroupBy.agg`][frame-agg]
 - [`SeriesGroupBy.agg`][series-agg]
+- [`DataFrameGroupby.apply][frame-apply]
 
 ## DataFrameGroupBy Computations / Descriptive Stats
 

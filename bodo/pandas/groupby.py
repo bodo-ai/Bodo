@@ -288,6 +288,10 @@ class DataFrameGroupBy:
         """
         return _groupby_agg_plan(self, "var")
 
+    @check_args_fallback(supported=["func"])
+    def apply(self, func, *args, include_groups=False, **kwargs):
+        pass
+
 
 class SeriesGroupBy:
     """

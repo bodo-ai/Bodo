@@ -220,3 +220,23 @@ def test_agg_null_keys():
         bdf2 = bdf.groupby("A", dropna=False).agg(lambda x: x.sum())
 
     _test_equal(bdf2, df2, sort_output=True)
+
+
+def test_apply():
+    df = pd.DataFrame(
+        {"B": ["a", "b", "c"] * 4, "A": ["A", "B"] * 6, "C": [1, 2, 3, 4] * 3}
+    )
+
+    bdf = bd.from_pandas(df)
+
+    def udf(df):
+        denom = df["C"].sum()
+        df = df[df["B"] == "c"]
+        numer = df["C"].sum()
+        return numer / denom
+
+    df2 = df.groupby("A").apply(udf)
+    with assert_executed_plan_count(1):
+        bdf2 = bdf.groupby("A").apply(udf)
+
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True)
