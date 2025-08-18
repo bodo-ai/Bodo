@@ -1175,8 +1175,8 @@ class StreamingUDFColSet : public BasicColSet {
 
    private:
     const std::shared_ptr<table_info>
-        out_table;       // table containing a single column of UDF output type.
-    stream_udf_t* func;  // A callback for computing the UDF on a single group.
+        out_table;       // Table containing a single column of UDF output type.
+    stream_udf_t* func;  // Callback for computing the UDF on a single group.
 };
 
 /**
