@@ -21,5 +21,3 @@ enum crypto_function {
  */
 void run_crypto_function(char *in_str, int64_t in_len, crypto_function func,
                          char *output);
-
-#undef _CRYPTO_FUNCS_H_INCLUDED

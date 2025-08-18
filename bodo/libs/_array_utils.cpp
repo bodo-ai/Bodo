@@ -16,8 +16,10 @@
 #include <string>
 #include <unordered_map>
 
+#include "_datetime_utils.h"
 #include "_decimal_ext.h"
 #include "_mpi.h"
+#include "_table_builder_utils.h"
 #include "vendored/hyperloglog.hpp"
 
 /**
@@ -2650,4 +2652,84 @@ std::shared_ptr<table_info> concat_tables(
     }
 
     return table_builder.data_table;
+}
+
+std::string array_val_to_str(std::shared_ptr<array_info> arr, size_t idx) {
+    switch (arr->dtype) {
+        case Bodo_CTypes::INT8:
+            return std::to_string(arr->at<int8_t>(idx));
+        case Bodo_CTypes::UINT8:
+            return std::to_string(arr->at<uint8_t>(idx));
+        case Bodo_CTypes::INT32:
+            return std::to_string(arr->at<int32_t>(idx));
+        case Bodo_CTypes::UINT32:
+            return std::to_string(arr->at<uint32_t>(idx));
+        case Bodo_CTypes::INT64:
+            return std::to_string(arr->at<int64_t>(idx));
+        case Bodo_CTypes::UINT64:
+            return std::to_string(arr->at<uint64_t>(idx));
+        case Bodo_CTypes::FLOAT32:
+            return std::to_string(arr->at<float>(idx));
+        case Bodo_CTypes::FLOAT64:
+            return std::to_string(arr->at<double>(idx));
+        case Bodo_CTypes::INT16:
+            return std::to_string(arr->at<int16_t>(idx));
+        case Bodo_CTypes::UINT16:
+            return std::to_string(arr->at<uint16_t>(idx));
+        case Bodo_CTypes::STRING: {
+            if (arr->arr_type == bodo_array_type::DICT) {
+                // In case of dictionary encoded string array
+                // get the string value by indexing into the dictionary
+                return array_val_to_str(
+                    arr->child_arrays[0],
+                    arr->child_arrays[1]
+                        ->at<dict_indices_t,
+                             bodo_array_type::NULLABLE_INT_BOOL>(idx));
+            }
+            offset_t* offsets =
+                (offset_t*)arr->data2<bodo_array_type::STRING>();
+            return std::string(
+                arr->data1<bodo_array_type::STRING>() + offsets[idx],
+                offsets[idx + 1] - offsets[idx]);
+        }
+        case Bodo_CTypes::DATE: {
+            int64_t day = arr->at<int32_t>(idx);
+            int64_t year = days_to_yearsdays(&day);
+            int64_t month;
+            get_month_day(year, day, &month, &day);
+            std::string date_str;
+            date_str.reserve(10);
+            date_str += std::to_string(year) + "-";
+            if (month < 10) {
+                date_str += "0";
+            }
+            date_str += std::to_string(month) + "-";
+            if (day < 10) {
+                date_str += "0";
+            }
+            date_str += std::to_string(day);
+            return date_str;
+        }
+        case Bodo_CTypes::_BOOL:
+            bool val;
+            if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                val = GetBit(
+                    (uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    idx);
+            } else {
+                val = arr->at<bool>(idx);
+            }
+            if (val) {
+                return "True";
+            } else {
+                return "False";
+            }
+        default: {
+            std::vector<char> error_msg(100);
+            snprintf(error_msg.data(), error_msg.size(),
+                     "array_val_to_str not implemented for dtype %d",
+                     arr->dtype);
+            throw std::runtime_error(error_msg.data());
+        }
+    }
 }

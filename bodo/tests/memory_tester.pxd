@@ -95,7 +95,9 @@ cdef extern from "../libs/_memory.h" namespace "bodo" nogil:
 
         @staticmethod
         shared_ptr[CBufferPool] Default()
-    
+
+    cdef void init_buffer_pool_ptr(int64_t ptr)
+
 
 cdef extern from "../libs/_operator_pool.h" namespace "bodo" nogil:
 

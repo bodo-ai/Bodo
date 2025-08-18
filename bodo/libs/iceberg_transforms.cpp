@@ -751,7 +751,7 @@ std::string transform_val_to_str(std::string transform_name,
     }
     if ((transform_name == "identity" || transform_name == "day") &&
         in_arr->dtype == Bodo_CTypes::DATE) {
-        return in_arr->val_to_str(idx);
+        return array_val_to_str(in_arr, idx);
     }
     if (transform_name == "day") {
         // day transform is only supported for DATETIME and DATE types.
@@ -785,7 +785,7 @@ std::string transform_val_to_str(std::string transform_name,
         date_str += std::to_string(day);
         return date_str;
     }
-    return transformed_arr->val_to_str(idx);
+    return array_val_to_str(transformed_arr, idx);
 }
 
 PyObject* iceberg_transformed_val_to_py(std::shared_ptr<array_info> arr,
