@@ -66,6 +66,8 @@ struct HashGroupbyTable {
     GroupbyPartition* groupby_partition;
     /// This will be a nullptr when is_local=true
     GroupbyIncrementalShuffleState* groupby_shuffle_state;
+    uint64_t in_table_offset = 0;
+    void set_offset(int64_t offset) { this->in_table_offset = offset; }
 };
 
 template <bool is_local>
@@ -94,6 +96,8 @@ struct KeyEqualGroupbyTable {
     /// This will be a nullptr when is_local=true
     GroupbyIncrementalShuffleState* groupby_shuffle_state;
     const uint64_t n_keys;
+    uint64_t in_table_offset = 0;
+    void set_offset(int64_t offset) { this->in_table_offset = offset; }
 };
 
 /**
