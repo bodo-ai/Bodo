@@ -70,7 +70,6 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, hdist);
     SetAttrStringFromPyInit(m, hstr_ext);
     SetAttrStringFromPyInit(m, decimal_ext);
-    SetAttrStringFromPyInit(m, quantile_alg);
     SetAttrStringFromPyInit(m, lateral_cpp);
     SetAttrStringFromPyInit(m, theta_sketches);
     SetAttrStringFromPyInit(m, puffin_file);

@@ -9,5 +9,4 @@ from bodo.ext import (  # noqa
     theta_sketches,
     puffin_file,
     lead_lag,
-    quantile_alg,
 )
