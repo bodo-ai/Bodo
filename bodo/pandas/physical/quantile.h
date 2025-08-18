@@ -51,7 +51,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                    bodo_array_type::NULLABLE_INT_BOOL);
 
         auto col = input_batch->columns[0];
-        for (auto i = 0; i < input_batch->nrows(); i++) {
+        for (uint64_t i = 0; i < input_batch->nrows(); i++) {
             sketch->update(input_batch->columns[0]
                                ->at<T, bodo_array_type::NULLABLE_INT_BOOL>(i));
         }
