@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <mutex>
 #include <span>
 
@@ -26,6 +27,22 @@ class object;
 #define MALLOC_FREE_TRIM_DEFAULT_THRESHOLD 100 * 1024 * 1024
 
 namespace bodo {
+
+class BufferPool;
+
+// Buffer pool pointer that points to the central buffer pool from the
+// memory_cpp module. Initialized in bodo_common_init() which should be called
+// by all extension modules.
+inline BufferPool* global_memory_pool = nullptr;
+inline std::shared_ptr<BufferPool> global_memory_pool_shared = nullptr;
+
+/**
+ * @brief Initialize global BufferPool pointer. Only called in memory_cpp which
+ * creates the global pool.
+ *
+ * @param ptr Pointer to the BufferPool
+ */
+void init_buffer_pool_ptr(int64_t ptr);
 
 // Copied from Velox
 // (https://github.com/facebookincubator/velox/blob/8324ac7f1839db009def00e7450f38c2591dd4bb/velox/common/memory/MemoryAllocator.h#L192)
@@ -749,16 +766,12 @@ class BufferPool final : public IBufferPool {
     /// https://betterprogramming.pub/3-tips-for-using-singletons-in-c-c6822dc42649
     /// @return Singleton instance of the BufferPool
     static std::shared_ptr<BufferPool> Default() {
-        static std::shared_ptr<BufferPool> pool_(new BufferPool());
-        return pool_;
+        return global_memory_pool_shared;
     }
 
     /// @brief Simple wrapper for getting a pointer to the BufferPool singleton
     /// @return Pointer to Singleton BufferPool
-    static BufferPool* DefaultPtr() {
-        static BufferPool* pool = BufferPool::Default().get();
-        return pool;
-    }
+    static BufferPool* DefaultPtr() { return global_memory_pool; }
 
     /// Override the copy constructor and = operator as per the
     /// singleton pattern.

@@ -23,6 +23,13 @@
     lhs = std::move(res).ValueOrDie();
 #endif
 
+/**
+ * @brief Convert array_info to equivalent Arrow array.
+ *
+ * @return std::shared_ptr<arrow::Array> equivalent Array array
+ */
+std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
+
 std::shared_ptr<arrow::Array> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const std::shared_ptr<array_info> array,
     bool convert_timedelta_to_int64, const std::string &tz,
@@ -108,15 +115,6 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
  */
 std::shared_ptr<table_info> arrow_table_to_bodo(
     std::shared_ptr<arrow::Table> table, bodo::IBufferPool *src_pool);
-
-/**
- * @brief Convert Arrow DataType to Bodo DataType, including nested types
- *
- * @param arrow_type input Arrow DataType
- * @return std::unique_ptr<bodo::DataType> equivalent Bodo DataType
- */
-std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
-    const std::shared_ptr<arrow::DataType> arrow_type);
 
 /**
  * @brief Convert Arrow RecordBatch to Bodo table_info with zero-copy as much as

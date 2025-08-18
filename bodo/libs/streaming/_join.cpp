@@ -1192,29 +1192,6 @@ void JoinState::InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
         DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
 }
 
-std::shared_ptr<table_info> unify_dictionary_arrays_helper(
-    const std::shared_ptr<table_info>& in_table,
-    std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    uint64_t n_keys, bool only_transpose_existing_on_key_cols) {
-    std::vector<std::shared_ptr<array_info>> out_arrs;
-    out_arrs.reserve(in_table->ncols());
-    for (size_t i = 0; i < in_table->ncols(); i++) {
-        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
-        std::shared_ptr<array_info> out_arr;
-        if (dict_builders[i] == nullptr) {
-            out_arr = in_arr;
-        } else {
-            if (only_transpose_existing_on_key_cols && (i < n_keys)) {
-                out_arr = dict_builders[i]->TransposeExisting(in_arr);
-            } else {
-                out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
-            }
-        }
-        out_arrs.emplace_back(out_arr);
-    }
-    return std::make_shared<table_info>(out_arrs);
-}
-
 std::shared_ptr<table_info> JoinState::UnifyBuildTableDictionaryArrays(
     const std::shared_ptr<table_info>& in_table) {
     return unify_dictionary_arrays_helper(
