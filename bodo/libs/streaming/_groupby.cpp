@@ -45,22 +45,11 @@ std::string get_aggregation_type_string(AggregationType type) {
 /* --------------------------- HashGroupbyTable --------------------------- */
 
 template <bool is_local>
-uint32_t HashGroupbyTable<is_local>::operator()(const int64_t groupNum) const {
-    int64_t next_group = is_local ? this->groupby_partition->next_group
-                                  : this->groupby_shuffle_state->next_group;
-
-    if (groupNum < next_group) {
-        const bodo::vector<uint32_t>& build_hashes =
-            is_local ? this->groupby_partition->build_table_groupby_hashes
-                     : this->groupby_shuffle_state->groupby_hashes;
-
-        return build_hashes[groupNum];
-    } else {
-        const std::shared_ptr<uint32_t[]>& in_hashes =
-            is_local ? this->groupby_partition->in_table_hashes
-                     : this->groupby_shuffle_state->in_table_hashes;
-        return in_hashes[this->in_table_offset];
-    }
+uint32_t HashGroupbyTable<is_local>::operator()(const int64_t iRow) const {
+    const bodo::vector<uint32_t>& build_hashes =
+        is_local ? this->groupby_partition->build_table_groupby_hashes
+                 : this->groupby_shuffle_state->groupby_hashes;
+    return build_hashes[iRow];
 }
 
 /* ------------------------------------------------------------------------ */
@@ -68,8 +57,8 @@ uint32_t HashGroupbyTable<is_local>::operator()(const int64_t groupNum) const {
 /* ------------------------- KeyEqualGroupbyTable ------------------------- */
 
 template <bool is_local>
-bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t groupNumA,
-                                                const int64_t groupNumB) const {
+bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
+                                                const int64_t iRowB) const {
     const std::shared_ptr<table_info>& build_table =
         is_local ? this->groupby_partition->build_table_buffer->data_table
                  : this->groupby_shuffle_state->table_buffer->data_table;
@@ -77,20 +66,10 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t groupNumA,
         is_local ? this->groupby_partition->in_table
                  : this->groupby_shuffle_state->in_table;
 
-    int64_t next_group = is_local ? this->groupby_partition->next_group
-                                  : this->groupby_shuffle_state->next_group;
-    bool is_build_A = groupNumA < next_group;
-    bool is_build_B = groupNumB < next_group;
+    const std::shared_ptr<table_info>& table_A = build_table;
+    const std::shared_ptr<table_info>& table_B = in_table;
 
-    size_t jRowA = is_build_A ? groupNumA : this->in_table_offset;
-    size_t jRowB = is_build_B ? groupNumB : this->in_table_offset;
-
-    const std::shared_ptr<table_info>& table_A =
-        is_build_A ? build_table : in_table;
-    const std::shared_ptr<table_info>& table_B =
-        is_build_B ? build_table : in_table;
-
-    bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, this->n_keys,
+    bool test = TestEqualJoin(table_A, table_B, iRowA, jRowB, this->n_keys,
                               /*is_na_equal=*/true);
     return test;
 }
@@ -313,17 +292,15 @@ inline void update_groups_helper(
     grpby_hash_table_t<is_local>& build_hash_table, int64_t& next_group,
     const uint64_t n_keys, grouping_info& grp_info,
     const std::shared_ptr<table_info>& in_table,
-    const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
-    const size_t i_row) {
+    const std::shared_ptr<uint32_t[]>& batch_hashes_groupby, size_t i_row) {
     bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
     // TODO[BSE-578]: update group_to_first_row, group_to_first_row etc. if
     // necessary
     int64_t group;
-    build_hash_table.m_hash.in_table_offset = i_row;
-    build_hash_table.m_equal.in_table_offset = i_row;
 
-    if (auto [group_iter, emplaced] = build_hash_table.try_emplace(next_group);
-        !emplaced) {
+    if (auto [group_iter, emplaced] = build_hash_table.do_try_emplace(
+            batch_hashes_groupby[i_row], next_group, next_group);
+        group_iter != build_hash_table.end()) {
         // update existing group
         group = group_iter->second;
     } else {
@@ -332,8 +309,7 @@ inline void update_groups_helper(
         build_table_buffer.IncrementSizeDataColumns(n_keys);
         build_hashes.emplace_back(batch_hashes_groupby[i_row]);
         group = next_group++;
-        // build_hash_table[group] = group;
-        group_iter->second = group;
+        build_hash_table[group] = group;
     }
     row_to_group[i_row] = group;
 }
@@ -1616,7 +1592,6 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
     // set state batch input
     this->in_table = in_table;
     this->in_table_hashes = batch_hashes_groupby;
-    time_pt start = start_timer();
     // Reserve space in buffers for potential new groups.
     // Note that if any of the running values are strings, they always
     // go through the accumulate path.
@@ -1636,6 +1611,7 @@ void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
     // so we need to cache it beforehand.
     int64_t shuffle_init_start_row = this->next_group;
 
+    time_pt start = start_timer();
     // Add new groups and get group mappings for input batch
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         update_groups_helper(*(this->table_buffer), this->groupby_hashes,

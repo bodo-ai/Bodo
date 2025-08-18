@@ -483,8 +483,6 @@ public:
     using const_iterator = typename value_container_type::const_iterator;
     using iterator = std::conditional_t<is_map_v<T>, typename value_container_type::iterator, const_iterator>;
     using bucket_type = Bucket;
-    Hash m_hash{};
-    KeyEqual m_equal{};
 
 private:
     using value_idx_type = decltype(Bucket::m_value_idx);
@@ -498,6 +496,8 @@ private:
     size_t m_num_buckets = 0;
     size_t m_max_bucket_capacity = 0;
     float m_max_load_factor = default_max_load_factor;
+    Hash m_hash{};
+    KeyEqual m_equal{};
     uint8_t m_shifts = initial_shifts;
 
     [[nodiscard]] auto next(value_idx_type bucket_idx) const -> value_idx_type {
@@ -755,6 +755,7 @@ private:
         }
     }
 
+
     template <typename K>
     auto do_find(K const& key) -> iterator {
         if (ANKERL_UNORDERED_DENSE_UNLIKELY(empty())) {
@@ -821,9 +822,9 @@ public:
                    Hash const& hash = Hash(),
                    KeyEqual const& equal = KeyEqual(),
                    allocator_type const& alloc_or_container = allocator_type())
-        : m_hash(hash)
-        , m_equal(equal) 
-        , m_values(alloc_or_container) {
+        : m_values(alloc_or_container)
+        , m_hash(hash)
+        , m_equal(equal) {
         if (0 != bucket_count) {
             reserve(bucket_count);
         }
@@ -1245,6 +1246,29 @@ public:
                          bool> = true>
     auto try_emplace(const_iterator /*hint*/, K&& key, Args&&... args) -> iterator {
         return do_try_emplace(std::forward<K>(key), std::forward<Args>(args)...).first;
+    }
+
+    template <typename K, typename... Args>
+    auto do_try_emplace(auto hash, K&& key, Args&&... args) -> std::pair<iterator, bool> {
+        if (ANKERL_UNORDERED_DENSE_UNLIKELY(is_full())) {
+            increase_size();
+        }
+
+        auto dist_and_fingerprint = dist_and_fingerprint_from_hash(hash);
+        auto bucket_idx = bucket_idx_from_hash(hash);
+
+        while (true) {
+            auto* bucket = &at(m_buckets, bucket_idx);
+            if (dist_and_fingerprint == bucket->m_dist_and_fingerprint) {
+                if (m_equal(key, m_values[bucket->m_value_idx].first)) {
+                    return {begin() + static_cast<difference_type>(bucket->m_value_idx), false};
+                }
+            } else if (dist_and_fingerprint > bucket->m_dist_and_fingerprint) {
+                return do_place_element(dist_and_fingerprint, bucket_idx, std::forward<K>(key), std::forward<Args>(args)...);
+            }
+            dist_and_fingerprint = dist_inc(dist_and_fingerprint);
+            bucket_idx = next(bucket_idx);
+        }
     }
 
     auto erase(iterator it) -> iterator {
