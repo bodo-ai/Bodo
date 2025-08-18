@@ -5,8 +5,6 @@ PyMODINIT_FUNC PyInit_hdist(void);
 PyMODINIT_FUNC PyInit_hstr_ext(void);
 PyMODINIT_FUNC PyInit_decimal_ext(void);
 PyMODINIT_FUNC PyInit_lateral_cpp(void);
-PyMODINIT_FUNC PyInit_theta_sketches(void);
-PyMODINIT_FUNC PyInit_puffin_file(void);
 PyMODINIT_FUNC PyInit_hdatetime_ext(void);
 PyMODINIT_FUNC PyInit_hio(void);
 PyMODINIT_FUNC PyInit_array_ext(void);

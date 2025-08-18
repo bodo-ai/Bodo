@@ -6,6 +6,4 @@ from bodo.ext import (  # noqa
     hio,
     hstr_ext,
     lateral_cpp,
-    theta_sketches,
-    puffin_file,
 )
