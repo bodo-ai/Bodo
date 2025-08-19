@@ -16,7 +16,13 @@ from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
 import bodo
 from bodo.decorators import _cfunc
-from bodo.libs.array import array_info_type, array_to_info, info_to_array
+from bodo.libs.array import (
+    array_from_cpp_table,
+    array_info_type,
+    array_to_info,
+    delete_table,
+    table_type,
+)
 from bodo.pandas.plan import (
     AggregateExpression,
     LogicalAggregate,
@@ -325,12 +331,14 @@ class DataFrameGroupBy:
             self._obj.columns.get_loc(col) for col in self.selection_for_plan
         ]
 
+        selected_self = zero_size_self[self.selection_for_plan]
+
         exprs = [
             AggregateExpression(
                 pd.Series([], dtype=pd.ArrowDtype(out_arrow_type)),
                 self._obj._plan,
                 "udf",
-                _get_cfunc_apply_wrapper(jitted_func, zero_size_self),
+                _get_cfunc_apply_wrapper(jitted_func, selected_self, out_arrow_type),
                 selected_cols,
                 self._dropna,
             )
@@ -361,41 +369,67 @@ class DataFrameGroupBy:
         return wrap_plan(plan)
 
 
-def _get_cfunc_apply_wrapper(func: pt.Callable, empty_data: pd.DataFrame):
+def _get_cfunc_apply_wrapper(
+    func: pt.Callable, empty_data: pd.DataFrame, out_type: pa.DataType
+):
+    import numba
     import numpy as np
 
     from bodo.hiframes.table import TableType
-    from bodo.libs.array import arr_info_list_to_table
     from bodo.pandas.utils import cpp_table_to_df_jit
 
     # TODO: refactor into overload?
-    df_type = bodo.typeof(
-        pd.DataFrame({"A": pd.array([], dtype=pd.ArrowDtype(pa.int64()))})
-    )
-    index_type = df_type.index
+    df_type = bodo.typeof(empty_data)
+    # trivial index, input table does not have an index
+    index_type = bodo.typeof(pd.RangeIndex(0))
     py_table_type = TableType(df_type.data)
-    cols = ("A",)
+
+    cols = tuple(empty_data.columns)
     out_cols_arr = np.array(range(len(cols)), dtype=np.int64)
     column_names = bodo.utils.typing.ColNamesMetaType(cols)
-    out_col_type = bodo.typeof(pd.array([], dtype=pd.ArrowDtype(pa.int64())))
+
+    out_col_type = bodo.typeof(pd.array([], dtype=pd.ArrowDtype(out_type)))
+
+    if isinstance(out_col_type, bodo.ArrayItemArrayType):
+
+        @numba.njit
+        def coerce_to_array_impl(scalar):
+            # ArrayItemArrayType expects an Array Dtype, so we first have to
+            # coerce the type to Array before converting the Array to a nested array.
+            out_arr = coerce_to_array(scalar, use_nullable_array=True)
+            out_arr = coerce_scalar_to_array(
+                out_arr, 1, out_col_type, dict_encode=False
+            )
+            return out_arr
+    else:
+
+        @numba.njit
+        def coerce_to_array_impl(scalar):
+            out_arr = coerce_scalar_to_array(scalar, 1, out_col_type, dict_encode=False)
+            # coerce_scalar_to_array doesn't respect nullable types, so using coerce_to_array
+            # to cast output to nullable if it isn't already.
+            out_arr = coerce_to_array(out_arr, use_nullable_array=True)
+            return out_arr
 
     # TODO: refactor repeated code with _get_cfunc_wrapper
     def wrapper():
-        def apply_func_impl(in_cpp_arr):
-            in_table = arr_info_list_to_table([in_cpp_arr])
+        def apply_func_impl(in_cpp_table):
             df = cpp_table_to_df_jit(
-                in_table, out_cols_arr, column_names, py_table_type, index_type
+                in_cpp_table, out_cols_arr, column_names, py_table_type, index_type
             )
             result = func(df)
-            out_arr = coerce_scalar_to_array(result, 1, out_col_type, dict_encode=False)
-            out_arr = coerce_to_array(out_arr, use_nullable_array=True)
+            out_arr = coerce_to_array_impl(result)
             return array_to_info(out_arr)
 
-        c_sig = array_info_type(array_info_type)
+        c_sig = array_info_type(table_type)
         cfunc = _cfunc(c_sig, cache=False)(apply_func_impl)
         return ctypes.c_void_p(cfunc.address).value
 
     return wrapper
+
+
+def get_apply_out_type():
+    return py_to_arrow_type(None)
 
 
 def py_to_arrow_type(typ):
@@ -693,13 +727,14 @@ def _get_cfunc_wrapper(
                 out_arr = coerce_to_array(out_arr, use_nullable_array=True)
                 return out_arr
 
-        def agg_func_impl(in_cpp_arr):
-            in_arr = info_to_array(in_cpp_arr, in_col_type)
+        def agg_func_impl(in_cpp_table):
+            in_arr = array_from_cpp_table(in_cpp_table, 0, in_col_type)
+            delete_table(in_cpp_table)
             out = jitted_func(pd.Series(in_arr))
             out_arr = coerce_to_array_impl(out)
             return array_to_info(out_arr)
 
-        c_sig = array_info_type(array_info_type)
+        c_sig = array_info_type(table_type)
         cfunc = _cfunc(c_sig, cache=False)(agg_func_impl)
         return ctypes.c_void_p(cfunc.address).value
 

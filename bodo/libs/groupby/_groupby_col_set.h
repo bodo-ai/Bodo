@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include "../_bodo_common.h"
 #include "../_dict_builder.h"
 #include "_groupby.h"
@@ -1173,9 +1174,15 @@ class StreamingUDFColSet : public BasicColSet {
                 std::shared_ptr<::arrow::MemoryManager> mm =
                     bodo::default_buffer_memory_manager()) override;
 
+    void setInCol(std::vector<std::shared_ptr<array_info>>) override;
+
+    void clear() override;
+
    private:
     const std::shared_ptr<table_info>
-        out_table;       // Table containing a single column of UDF output type.
+        out_table;  // Table containing a single column of UDF output type.
+    std::shared_ptr<table_info>
+        in_table;        // Table containing input columns for the UDF.
     stream_udf_t* func;  // Callback for computing the UDF on a single group.
 };
 

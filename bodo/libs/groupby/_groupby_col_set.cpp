@@ -3,8 +3,10 @@
 #include <iostream>
 #include <memory>
 #include <numeric>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
@@ -1611,12 +1613,12 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
     std::shared_ptr<array_info> in_col = this->in_col;
     bodo::vector<bodo::vector<int64_t>> group_rows(grp_info.num_groups, pool);
 
-    if (!in_col->length) {
+    if (!in_table->nrows()) {
         return;
     }
 
     // get the rows in each group
-    for (size_t i = 0; i < in_col->length; i++) {
+    for (size_t i = 0; i < in_table->nrows(); i++) {
         int64_t i_grp = grp_info.row_to_group[i];
         group_rows[i_grp].push_back(i);
     }
@@ -1625,10 +1627,10 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
     std::vector<std::shared_ptr<array_info>> out_arrs(grp_info.num_groups);
     for (size_t i = 0; i < grp_info.num_groups; i++) {
         bodo::vector<int64_t> row_idxs = group_rows[i];
-        std::shared_ptr<array_info> in_group_arr =
-            RetrieveArray_SingleColumn(in_col, row_idxs);
-        array_info* in_group_arr_arg = new array_info(*in_group_arr);
-        array_info* out_arr_result = func(in_group_arr_arg);
+        std::shared_ptr<table_info> in_group_table =
+            RetrieveTable(in_table, row_idxs);
+        table_info* in_table_arg = new table_info(*in_group_table);
+        array_info* out_arr_result = func(in_table_arg);
 
         if (!out_arr_result) {
             throw std::runtime_error(
@@ -1645,6 +1647,16 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
     // Replace the dummy update column.
     std::shared_ptr<array_info> out_col = this->update_cols[0];
     *out_col = std::move(*real_out_col);
+}
+
+void StreamingUDFColSet::setInCol(
+    std::vector<std::shared_ptr<array_info>> in_cols) {
+    this->in_table = std::make_shared<table_info>(in_cols);
+}
+
+void StreamingUDFColSet::clear() {
+    BasicColSet::clear();
+    this->in_table.reset();
 }
 
 // ############################## Percentile ##############################
