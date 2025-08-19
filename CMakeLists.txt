@@ -806,8 +806,7 @@ install(TARGETS uuid_cpp DESTINATION "bodo/libs/")
 
 # ---------------------- Native Target - stream_window_cpp -----------------------
 
-python_add_library(stream_window_cpp
-  MODULE WITH_SOABI
+set(stream_window_cpp_sources
   "bodo/libs/streaming/_window.cpp"
   "bodo/libs/window/_window_aggfuncs.cpp"
   "bodo/libs/window/_window_calculator.cpp"
@@ -852,6 +851,28 @@ python_add_library(stream_window_cpp
   "bodo/io/_fs_io.cpp"
   "bodo/io/arrow_compat.cpp"
 )
+
+if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
+  list(APPEND stream_window_cpp_sources
+  "bodo/tests/test_window.cpp"
+  "bodo/tests/test_sorted_window_computation.cpp"
+  "bodo/tests/test_framework.cpp"
+  )
+endif()
+
+python_add_library(stream_window_cpp
+  MODULE WITH_SOABI
+  "${stream_window_cpp_sources}"
+)
+
+if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
+  target_compile_definitions(
+    stream_window_cpp
+    PRIVATE
+      "IS_TESTING=1"
+  )
+endif()
+
 target_include_directories(stream_window_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(stream_window_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(stream_window_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
@@ -926,7 +947,6 @@ set(sources_list
   "bodo/libs/streaming/_nested_loop_join.cpp"
   "bodo/libs/streaming/_groupby.cpp"
   "bodo/libs/streaming/_sort.cpp"
-  "bodo/libs/streaming/_window.cpp"
   "bodo/libs/_dict_builder.cpp"
   "bodo/libs/_table_builder_utils.cpp"
   "bodo/libs/_table_builder.cpp"
@@ -969,7 +989,6 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_dict_builder.cpp"
     "bodo/tests/test_groupby_common.cpp"
     "bodo/tests/test_groupby.cpp"
-    "bodo/tests/test_window.cpp"
     "bodo/tests/test_json_col_reader.cpp"
     "bodo/tests/test_memory_budget.cpp"
     "bodo/tests/test_pinnable.cpp"
@@ -984,7 +1003,6 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_timestamptz_array.cpp"
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
-    "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
   )
