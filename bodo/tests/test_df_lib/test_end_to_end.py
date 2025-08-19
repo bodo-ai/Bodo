@@ -2393,7 +2393,6 @@ def test_series_describe_numeric(percentiles):
         ):
             describe_pd = df[c].describe(percentiles=percentiles)
             describe_bodo = bdf[c].describe(percentiles=percentiles)
-            print(describe_bodo)
 
         # For quantile columns, check approximate bounds instead of strict equality
         # Iterate from idx=4 to second-to-last element, which is the quantile portion.
