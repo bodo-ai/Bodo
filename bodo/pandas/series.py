@@ -1208,10 +1208,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Drop Index columns since not necessary for reduction output.
         pa_type = self.dtype.pyarrow_dtype
-        if not (pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type)):
-            raise BodoLibNotImplementedException(
-                "BodoSeries.quantile() is not supported for non-numeric dtypes."
-            )
 
         if pa.types.is_null(pa_type):
             return (
@@ -1220,6 +1216,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 )
                 if is_list
                 else pd.NA
+            )
+
+        if not (pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type)):
+            raise BodoLibNotImplementedException(
+                "BodoSeries.quantile() is not supported for non-numeric dtypes."
             )
 
         new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])

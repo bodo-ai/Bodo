@@ -3246,8 +3246,8 @@ def test_series_quantile_scalar(q):
 def test_series_quantile_empty():
     """Tests that quantile on an empty BodoSeries returns either a scalar pd.NA or a BodoSeries of pd.NA."""
 
-    pds = pd.Series([], dtype=int)
-    bds = bd.Series([], dtype=int)
+    pds = pd.Series([])
+    bds = bd.Series([])
 
     with assert_executed_plan_count(0):
         pd_quantile = pds.quantile([0.5])
