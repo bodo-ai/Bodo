@@ -290,7 +290,117 @@ class DataFrameGroupBy:
 
     @check_args_fallback(supported=["func"])
     def apply(self, func, *args, include_groups=False, **kwargs):
-        pass
+        from bodo.pandas.base import _empty_like
+        from bodo.utils.typing import BodoError
+        # TODO: refactor repeated code in _get_agg_plan
+
+        # NOTE: assumes no key columns are being aggregated e.g:
+        # df1.groupby("C", as_index=False)[["C"]].agg("sum")
+        if set(self._keys) & set(self.selection_for_plan):
+            raise BodoLibNotImplementedException(
+                "GroupBy.agg(): Aggregation on key columns not supported yet."
+            )
+
+        zero_size_self: pd.DataFrame = _empty_like(self._obj)
+        deco = bodo.jit(cache=False, spawn=False, distributed=False)
+        jitted_func = deco(func)
+
+        try:
+            result = jitted_func(zero_size_self)
+        except BodoError as e:
+            raise BodoLibNotImplementedException(e)
+
+        if isinstance(result, (pd.Series, pd.DataFrame)):
+            raise BodoLibNotImplementedException(
+                "DataFrameGroupby.apply(): func returning Series or DataFrame not implemented yet."
+            )
+
+        out_arrow_type = py_to_arrow_type(result)
+
+        empty_data = zero_size_self.groupby(self._keys, as_index=self._as_index)[
+            self.selection_for_plan
+        ].apply(func, *args, **kwargs)
+
+        selected_cols = [
+            self._obj.columns.get_loc(col) for col in self.selection_for_plan
+        ]
+
+        exprs = [
+            AggregateExpression(
+                pd.Series([], dtype=pd.ArrowDtype(out_arrow_type)),
+                self._obj._plan,
+                "udf",
+                _get_cfunc_apply_wrapper(jitted_func, zero_size_self),
+                selected_cols,
+                self._dropna,
+            )
+        ]
+
+        key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
+
+        plan = LogicalAggregate(
+            empty_data,
+            self._obj._plan,
+            key_indices,
+            exprs,
+        )
+
+        # Add the data column then the keys since they become Index columns in output.
+        # DuckDB generates keys first in output so we need to reverse the order.
+        if self._as_index:
+            col_indices = list(range(len(self._keys), len(self._keys) + 1))
+            col_indices += list(range(len(self._keys)))
+
+            exprs = make_col_ref_exprs(col_indices, plan)
+            plan = LogicalProjection(
+                empty_data,
+                plan,
+                exprs,
+            )
+
+        return wrap_plan(plan)
+
+
+def _get_cfunc_apply_wrapper(func: pt.Callable, empty_data: pd.DataFrame):
+    import numpy as np
+
+    from bodo.hiframes.table import TableType
+    from bodo.libs.array import arr_info_list_to_table
+    from bodo.pandas.utils import cpp_table_to_df_jit
+
+    # TODO: refactor into overload?
+    df_type = bodo.typeof(
+        pd.DataFrame({"A": pd.array([], dtype=pd.ArrowDtype(pa.int64()))})
+    )
+    index_type = df_type.index
+    py_table_type = TableType(df_type.data)
+    cols = ("A",)
+    out_cols_arr = np.array(range(len(cols)), dtype=np.int64)
+    column_names = bodo.utils.typing.ColNamesMetaType(cols)
+    out_col_type = bodo.typeof(pd.array([], dtype=pd.ArrowDtype(pa.int64())))
+
+    # TODO: refactor repeated code with _get_cfunc_wrapper
+    def wrapper():
+        def apply_func_impl(in_cpp_arr):
+            in_table = arr_info_list_to_table([in_cpp_arr])
+            df = cpp_table_to_df_jit(
+                in_table, out_cols_arr, column_names, py_table_type, index_type
+            )
+            result = func(df)
+            out_arr = coerce_scalar_to_array(result, 1, out_col_type, dict_encode=False)
+            out_arr = coerce_to_array(out_arr, use_nullable_array=True)
+            return array_to_info(out_arr)
+
+        c_sig = array_info_type(array_info_type)
+        cfunc = _cfunc(c_sig, cache=False)(apply_func_impl)
+        return ctypes.c_void_p(cfunc.address).value
+
+    return wrapper
+
+
+def py_to_arrow_type(typ):
+    # TODO: implement me
+    return pa.int64()
 
 
 class SeriesGroupBy:

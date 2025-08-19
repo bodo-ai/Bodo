@@ -1627,7 +1627,8 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
         bodo::vector<int64_t> row_idxs = group_rows[i];
         std::shared_ptr<array_info> in_group_arr =
             RetrieveArray_SingleColumn(in_col, row_idxs);
-        array_info* out_arr_result = func(in_group_arr.get());
+        array_info* in_group_arr_arg = new array_info(*in_group_arr);
+        array_info* out_arr_result = func(in_group_arr_arg);
 
         if (!out_arr_result) {
             throw std::runtime_error(

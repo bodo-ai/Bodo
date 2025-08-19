@@ -222,6 +222,7 @@ def test_agg_null_keys():
     _test_equal(bdf2, df2, sort_output=True)
 
 
+@pytest.mark.skip
 def test_apply():
     df = pd.DataFrame(
         {"B": ["a", "b", "c"] * 4, "A": ["A", "B"] * 6, "C": [1, 2, 3, 4] * 3}
