@@ -1,11 +1,9 @@
 #include <Python.h>
 #include <datetime.h>
 #include <iostream>
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
-#include <numpy/arrayobject.h>
 
 #include "_array_hash.h"
 #include "_array_operations.h"
@@ -966,9 +964,6 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
 
     // init datetime APIs
     PyDateTime_IMPORT;
-
-    // init numpy
-    import_array();
 
     bodo_common_init();
 

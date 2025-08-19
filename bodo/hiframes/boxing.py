@@ -7,7 +7,6 @@ import decimal
 import warnings
 from enum import Enum
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -44,7 +43,6 @@ from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType, TimeType
 from bodo.hiframes.timestamptz_ext import timestamptz_type
-from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
@@ -71,9 +69,6 @@ from bodo.utils.typing import (
     raise_bodo_error,
     to_nullable_type,
 )
-
-ll.add_symbol("array_size", hstr_ext.array_size)
-ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 
 # the number of dataframe columns above which we use table format in unboxing
 TABLE_FORMAT_THRESHOLD = 0

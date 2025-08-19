@@ -89,7 +89,6 @@ void str_from_float64(char* s, double in);
 void inplace_int64_to_str(char* str, int64_t l, int64_t value);
 
 void del_str(std::string* in_str);
-npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s);
 void bool_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* bool_arr, int64_t n);
@@ -162,7 +161,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     SetAttrStringFromVoidPtr(m, inplace_int64_to_str);
     SetAttrStringFromVoidPtr(m, is_na);
     SetAttrStringFromVoidPtr(m, del_str);
-    SetAttrStringFromVoidPtr(m, array_size);
     SetAttrStringFromVoidPtr(m, unicode_to_utf8);
     SetAttrStringFromVoidPtr(m, array_getptr1);
     SetAttrStringFromVoidPtr(m, array_setitem);
@@ -574,8 +572,6 @@ void* pd_pyarrow_array_from_string_array(array_info* str_arr,
 }
 
 // helper functions for call Numpy APIs
-
-npy_intp array_size(PyArrayObject* arr) { return PyArray_SIZE(arr); }
 
 void* array_getptr1(PyArrayObject* arr, npy_intp ind) {
     return PyArray_GETPTR1(arr, ind);
