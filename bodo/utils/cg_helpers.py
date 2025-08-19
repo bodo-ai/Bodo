@@ -7,11 +7,6 @@ from numba.extending import intrinsic
 
 import bodo
 
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hdist  # noqa: F401
-
-ll.add_symbol("is_na_value", array_ext.is_na_value)
-
 
 @intrinsic
 def set_bit_to(typingctx, null_bitmap_ptr_t, ind_t, val_t):
@@ -75,6 +70,9 @@ def is_na_value(builder, context, val, C_NA):
     """check if Python object 'val' is an NA value (None, or np.nan or pd.NA).
     passing pd.NA in as C_NA to avoid getattr overheads inside loops.
     """
+    from bodo.libs import array_ext
+
+    ll.add_symbol("is_na_value", array_ext.is_na_value)
     pyobj = context.get_argument_type(types.pyobject)
     arr_isna_fnty = lir.FunctionType(lir.IntType(32), [pyobj, pyobj])
     arr_isna_fn = cgutils.get_or_insert_function(
