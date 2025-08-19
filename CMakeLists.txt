@@ -753,7 +753,7 @@ python_add_library(theta_sketches
 )
 target_include_directories(theta_sketches PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(theta_sketches PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(theta_sketches PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
+target_link_libraries(theta_sketches PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
 install(TARGETS theta_sketches DESTINATION "bodo/libs/")
 
 
