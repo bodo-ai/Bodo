@@ -120,51 +120,6 @@ def set_bit_to(typingctx, null_bitmap_ptr_t, ind_t, val_t):
     return types.void(types.voidptr, types.int64, types.bool_), codegen
 
 
-def pyarray_check(builder, context, obj):
-    """check if obj is a Numpy array"""
-
-    pyobj = context.get_argument_type(types.pyobject)
-    arr_check_fnty = lir.FunctionType(lir.IntType(32), [pyobj])
-    arr_check_fn = cgutils.get_or_insert_function(
-        builder.module, arr_check_fnty, name="is_np_array"
-    )
-    return builder.call(arr_check_fn, [obj])
-
-
-def pyarray_getitem(builder, context, arr_obj, ind):
-    """getitem of 1D Numpy array"""
-    pyobj = context.get_argument_type(types.pyobject)
-    py_ssize_t = context.get_value_type(types.intp)
-    arr_get_fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [pyobj, py_ssize_t])
-    arr_get_fn = cgutils.get_or_insert_function(
-        builder.module, arr_get_fnty, name="array_getptr1"
-    )
-    arr_getitem_fnty = lir.FunctionType(pyobj, [pyobj, lir.IntType(8).as_pointer()])
-    arr_getitem_fn = cgutils.get_or_insert_function(
-        builder.module, arr_getitem_fnty, name="array_getitem"
-    )
-    arr_ptr = builder.call(arr_get_fn, [arr_obj, ind])
-    return builder.call(arr_getitem_fn, [arr_obj, arr_ptr])
-
-
-def pyarray_setitem(builder, context, arr_obj, ind, val_obj):
-    """setitem of 1D Numpy array"""
-    pyobj = context.get_argument_type(types.pyobject)
-    py_ssize_t = context.get_value_type(types.intp)
-    arr_get_fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [pyobj, py_ssize_t])
-    arr_get_fn = cgutils.get_or_insert_function(
-        builder.module, arr_get_fnty, name="array_getptr1"
-    )
-    arr_setitem_fnty = lir.FunctionType(
-        lir.VoidType(), [pyobj, lir.IntType(8).as_pointer(), pyobj]
-    )
-    arr_setitem_fn = cgutils.get_or_insert_function(
-        builder.module, arr_setitem_fnty, name="array_setitem"
-    )
-    arr_ptr = builder.call(arr_get_fn, [arr_obj, ind])
-    builder.call(arr_setitem_fn, [arr_obj, arr_ptr, val_obj])
-
-
 def seq_getitem(builder, context, obj, ind):
     """getitem for a sequence object (e.g. list/array)"""
     pyobj = context.get_argument_type(types.pyobject)

@@ -72,7 +72,6 @@ from bodo.utils.typing import (
     to_nullable_type,
 )
 
-ll.add_symbol("is_np_array", hstr_ext.is_np_array)
 ll.add_symbol("array_size", hstr_ext.array_size)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 
