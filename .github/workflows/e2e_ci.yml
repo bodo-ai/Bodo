@@ -102,6 +102,7 @@ jobs:
         pleias_ocr_correction_inference.py
         pleias_ocr_correction_tokenization.py
         #Tutorials/*.py
+        #GettingStarted/dataframes.py
     steps:
       - uses: actions/checkout@v5
       - uses: prefix-dev/setup-pixi@v0.9.0
