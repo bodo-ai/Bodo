@@ -759,8 +759,7 @@ install(TARGETS theta_sketches DESTINATION "bodo/libs/")
 
 # ---------------------- Native Target - lateral_cpp -----------------------
 
-python_add_library(lateral_cpp
-  MODULE WITH_SOABI
+set(lateral_cpp_sources
   "bodo/libs/_lateral.cpp"
   "bodo/libs/_array_utils.cpp"
   "bodo/libs/_bodo_common.cpp"
@@ -786,6 +785,27 @@ python_add_library(lateral_cpp
   "bodo/libs/_utils.cpp"
   "bodo/libs/_storage_manager.cpp"
 )
+
+if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
+  list(APPEND lateral_cpp_sources
+  "bodo/tests/test_lateral.cpp"
+  "bodo/tests/test_framework.cpp"
+  )
+endif()
+
+python_add_library(lateral_cpp
+  MODULE WITH_SOABI
+  "${lateral_cpp_sources}"
+)
+
+if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
+  target_compile_definitions(
+    lateral_cpp
+    PRIVATE
+      "IS_TESTING=1"
+  )
+endif()
+
 target_include_directories(lateral_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(lateral_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(lateral_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
@@ -939,7 +959,6 @@ set(sources_list
   "bodo/libs/_memory_budget.cpp"
   "bodo/libs/_memory_budget_pymod.cpp"
   "bodo/libs/vendored/_murmurhash3.cpp"
-  "bodo/libs/_lateral.cpp"
   "bodo/libs/_shuffle.cpp"
   "bodo/libs/_str_ext.cpp"
   "bodo/libs/iceberg_transforms.cpp"

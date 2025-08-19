@@ -791,19 +791,21 @@ def pytest_collect_file(parent, file_path: Path):
     """
     try:
         from bodo.ext import test_cpp
+        from bodo.libs.lateral_cpp import test_cpp as lateral_cpp_test_cpp
         from bodo.libs.puffin_file import test_cpp as puffin_test_cpp
         from bodo.libs.stream_window_cpp import test_cpp as stream_window_cpp_test_cpp
     except ImportError:
         test_cpp = None
         puffin_test_cpp = None
         stream_window_cpp_test_cpp = None
+        lateral_cpp_test_cpp = None
 
     if (
         file_path.suffix == ".cpp"
         and file_path.name.startswith("test_")
         and file_path.name != "test_framework.cpp"
     ):
-        if test_cpp is None or puffin_test_cpp is None:
+        if test_cpp is None:
             import warnings
 
             warnings.warn(
@@ -825,6 +827,11 @@ def pytest_collect_file(parent, file_path: Path):
             + [
                 test
                 for test in stream_window_cpp_test_cpp.tests
+                if file_path.name == os.path.basename(test.filename)
+            ]
+            + [
+                test
+                for test in lateral_cpp_test_cpp.tests
                 if file_path.name == os.path.basename(test.filename)
             ]
         )
