@@ -1208,12 +1208,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Drop Index columns since not necessary for reduction output.
         pa_type = self.dtype.pyarrow_dtype
-        if not (
-            pa_type.is_integer()
-            or pa_type.is_floating()
-            or pa_type.is_decimal()
-            or pa_type.is_temporal()
-        ):
+        if not (pa_type.is_integer() or pa_type.is_floating()):
             raise BodoLibNotImplementedException(
                 "BodoSeries.quantile() is not supported for non-numeric dtypes."
             )
