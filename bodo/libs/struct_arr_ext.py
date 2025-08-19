@@ -32,7 +32,6 @@ from numba.parfors.array_analysis import ArrayAnalysis
 from numba.typed.typedobjectutils import _cast
 
 import bodo
-from bodo.libs import array_ext  # noqa: F401
 from bodo.utils.cg_helpers import (
     gen_allocate_array,
     is_na_value,
