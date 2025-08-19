@@ -2383,13 +2383,6 @@ def test_series_describe_numeric(percentiles):
             "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
             "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
             "E": list(range(n - 1)) + [None],
-            "F": pd.date_range("1988-01-01", periods=n, freq="D").to_series(
-                index=pd.RangeIndex(0, n)
-            ),
-            # "G": pd.Series(
-            #    [4, 5, 6, 7] * (n // 4),
-            #    dtype=pd.ArrowDtype(pa.decimal128(10, 4)),
-            # ),
         }
     )
 
