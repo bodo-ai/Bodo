@@ -808,7 +808,7 @@ endif()
 
 target_include_directories(lateral_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(lateral_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(lateral_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
+target_link_libraries(lateral_cpp PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
 install(TARGETS lateral_cpp DESTINATION "bodo/libs/")
 
 
