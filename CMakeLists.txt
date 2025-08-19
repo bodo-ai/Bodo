@@ -692,10 +692,26 @@ set(puffin_file_sources
   "bodo/io/arrow_compat.cpp"
 )
 
+if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
+  list(APPEND puffin_file_sources
+  "bodo/tests/test_puffin.cpp"
+  "bodo/tests/test_framework.cpp"
+  )
+endif()
+
 python_add_library(puffin_file
   MODULE WITH_SOABI
   "${puffin_file_sources}"
 )
+
+if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
+  target_compile_definitions(
+    puffin_file
+    PRIVATE
+      "IS_TESTING=1"
+  )
+endif()
+
 target_include_directories(puffin_file PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(puffin_file PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(puffin_file PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
@@ -925,7 +941,6 @@ set(sources_list
   "bodo/libs/_utils.cpp"
   "bodo/libs/_query_profile_collector.cpp"
   "bodo/libs/_theta_sketches.cpp"
-  "bodo/libs/_puffin.cpp"
   "bodo/libs/_io_cpu_thread_pool.cpp"
 )
 
@@ -969,7 +984,6 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_timestamptz_array.cpp"
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
-    "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
