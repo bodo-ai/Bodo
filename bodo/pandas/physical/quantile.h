@@ -3,16 +3,13 @@
 #include <arrow/compute/expression.h>
 #include <arrow/scalar.h>
 #include <arrow/type_fwd.h>
+#include <DataSketches/kll_sketch.hpp>
 #include <memory>
 #include <stdexcept>
 #include <utility>
 #include "../../libs/_distributed.h"
-#include "../libs/_bodo_to_arrow.h"
-#include "/tmp/datasketches-prefix/include/DataSketches/kll_sketch.hpp"
 #include "operator.h"
 #include "physical/expression.h"
-
-using KLLDoubleSketch = datasketches::kll_sketch<double>;
 
 #undef CHECK_ARROW
 #define CHECK_ARROW(expr, msg)                                             \
@@ -31,53 +28,31 @@ struct PhysicalQuantileMetrics {
     time_t finalize_time = 0;
 };
 
+template <typename T>
 class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
+    using KllSketch = datasketches::kll_sketch<T>;
+
    public:
     explicit PhysicalQuantile(
         std::shared_ptr<bodo::Schema> out_schema, std::vector<double> quantiles,
         uint16_t k = datasketches::kll_constants::DEFAULT_K)
-        : out_schema(out_schema),
-          quantiles(quantiles),
-          sketch(std::make_shared<KLLDoubleSketch>(k)) {}
+        : out_schema(std::move(out_schema)),
+          quantiles(std::move(quantiles)),
+          sketch(std::make_shared<KllSketch>(k)) {
+        assert(this->out_schema->ncols() == 1);
+    }
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
         time_pt start_consume_time = start_timer();
-        auto col = input_batch->columns[0];
-        arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-        std::shared_ptr<arrow::Array> in_arrow_array = bodo_array_to_arrow(
-            bodo::BufferPool::DefaultPtr(), input_batch->columns[0],
-            false /*convert_timedelta_to_int64*/, "", time_unit,
-            false, /*downcast_time_ns_to_us*/
-            bodo::default_buffer_memory_manager());
+        assert(input_batch->ncols() == 1 &&
+               input_batch->columns[0]->arr_type ==
+                   bodo_array_type::NULLABLE_INT_BOOL);
 
-        for (auto i = 0; i < in_arrow_array->length(); i++) {
-            auto elem_result = in_arrow_array->GetScalar(i);
-            CHECK_ARROW(elem_result.status(),
-                        "Error getting scalar from Arrow array");
-            auto scalar = elem_result.ValueOrDie();
-            if (scalar->is_valid) {
-                // Cast to DoubleScalar and extract value
-                auto double_scalar =
-                    std::dynamic_pointer_cast<arrow::DoubleScalar>(scalar);
-                if (!double_scalar) {
-                    auto casted_result = arrow::compute::Cast(
-                        scalar, arrow::float64(),
-                        arrow::compute::CastOptions::Safe(),
-                        bodo::default_buffer_exec_context());
-                    CHECK_ARROW(casted_result.status(),
-                                "Failed to cast scalar to double");
-                    auto casted_scalar = casted_result.ValueOrDie().scalar();
-                    double_scalar =
-                        std::dynamic_pointer_cast<arrow::DoubleScalar>(
-                            casted_scalar);
-                    if (!double_scalar) {
-                        throw std::runtime_error(
-                            "Expected DoubleScalar after cast");
-                    }
-                }
-                sketch->update(double_scalar->value);
-            }
+        auto col = input_batch->columns[0];
+        for (uint64_t i = 0; i < input_batch->nrows(); i++) {
+            sketch->update(input_batch->columns[0]
+                               ->at<T, bodo_array_type::NULLABLE_INT_BOOL>(i));
         }
 
         this->metrics.consume_time += end_timer(start_consume_time);
@@ -130,11 +105,10 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
                   "quantile.h::Finalize(): MPI error on MPI_Gatherv:");
 
         if (rank == 0) {
-            auto merged_sketch = KLLDoubleSketch();
+            auto merged_sketch = KllSketch();
             for (int i = 0; i < size; i++) {
                 auto start = all_bytes.data() + displs[i];
-                auto other =
-                    KLLDoubleSketch::deserialize(start, recv_counts[i]);
+                auto other = KllSketch::deserialize(start, recv_counts[i]);
                 merged_sketch.merge(std::move(other));
             }
 
@@ -195,7 +169,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
    private:
     std::shared_ptr<bodo::Schema> out_schema;
     const std::vector<double> quantiles;
-    std::shared_ptr<KLLDoubleSketch> sketch;
+    std::shared_ptr<KllSketch> sketch;
     std::shared_ptr<table_info> final_result;
     bool collected{false};
     PhysicalQuantileMetrics metrics;
