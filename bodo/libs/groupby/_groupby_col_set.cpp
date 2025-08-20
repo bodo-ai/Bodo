@@ -2209,11 +2209,13 @@ std::unique_ptr<BasicColSet> makeColSet(
          ftype != Bodo_FTypes::array_agg_distinct &&
          ftype != Bodo_FTypes::percentile_cont &&
          ftype != Bodo_FTypes::percentile_disc &&
-         ftype != Bodo_FTypes::object_agg) &&
+         ftype != Bodo_FTypes::object_agg &&
+         ftype != Bodo_FTypes::stream_udf) &&
         in_cols.size() > 1) {
         throw std::runtime_error(
             "Only listagg, array_agg, percentile_cont, percentile_disc, "
-            "object_agg, window functions and min_row_number_filter can have "
+            "object_agg, stream_udfs, window functions and "
+            "min_row_number_filter can have "
             "multiple input columns.");
     }
     switch (ftype) {

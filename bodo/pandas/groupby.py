@@ -9,6 +9,8 @@ import typing as pt
 import warnings
 from typing import Any, Literal
 
+import numba
+import numba.extending
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
@@ -30,6 +32,7 @@ from bodo.pandas.plan import (
     make_col_ref_exprs,
 )
 from bodo.pandas.utils import (
+    BODO_NONE_DUMMY,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
     _empty_pd_array,
@@ -39,8 +42,11 @@ from bodo.pandas.utils import (
     wrap_plan,
 )
 from bodo.utils.conversion import coerce_scalar_to_array, coerce_to_array
+from bodo.utils.typing import unwrap_typeref
 
 if pt.TYPE_CHECKING:
+    from numba.core.registry import CPUDispatcher
+
     from bodo.pandas import BodoDataFrame, BodoSeries
 
 
@@ -59,6 +65,36 @@ BUILTIN_AGG_FUNCS = {
     "size",
     "nunique",
 }
+
+
+def coerce_group_value_to_array(scalar, out_col):
+    pass
+
+
+@numba.extending.overload(coerce_group_value_to_array)
+def overload_coerce_group_value_to_array(scalar, out_col):
+    out_col_type = unwrap_typeref(out_col)
+
+    if isinstance(out_col_type, bodo.ArrayItemArrayType):
+
+        def impl(scalar, out_col):
+            # ArrayItemArrayType expects an Array Dtype, so we first have to
+            # coerce the type to Array before converting the Array to a nested array.
+            out_arr = coerce_to_array(scalar, use_nullable_array=True)
+            out_arr = coerce_scalar_to_array(
+                out_arr, 1, out_col_type, dict_encode=False
+            )
+            return out_arr
+    else:
+
+        def impl(scalar, out_col):
+            out_arr = coerce_scalar_to_array(scalar, 1, out_col_type, dict_encode=False)
+            # coerce_scalar_to_array doesn't respect nullable types, so using coerce_to_array
+            # to cast output to nullable if it isn't already.
+            out_arr = coerce_to_array(out_arr, use_nullable_array=True)
+            return out_arr
+
+    return impl
 
 
 class GroupbyAggFunc:
@@ -297,7 +333,6 @@ class DataFrameGroupBy:
     @check_args_fallback(supported=["func"])
     def apply(self, func, *args, include_groups=False, **kwargs):
         from bodo.pandas.base import _empty_like
-        from bodo.utils.typing import BodoError
         # TODO: refactor repeated code in _get_agg_plan
 
         # NOTE: assumes no key columns are being aggregated e.g:
@@ -311,31 +346,29 @@ class DataFrameGroupBy:
         deco = bodo.jit(cache=False, spawn=False, distributed=False)
         jitted_func = deco(func)
 
-        try:
-            result = jitted_func(zero_size_self)
-        except BodoError as e:
-            raise BodoLibNotImplementedException(e)
+        selected_self = zero_size_self[self.selection_for_plan]
 
-        if isinstance(result, (pd.Series, pd.DataFrame)):
+        out_type = get_apply_out_type(jitted_func, selected_self)
+
+        if isinstance(out_type, (bodo.DataFrameType, bodo.SeriesType)):
             raise BodoLibNotImplementedException(
                 "DataFrameGroupby.apply(): func returning Series or DataFrame not implemented yet."
             )
 
-        out_arrow_type = py_to_arrow_type(result)
-
-        empty_data = zero_size_self.groupby(self._keys, as_index=self._as_index)[
-            self.selection_for_plan
-        ].apply(func, *args, **kwargs)
+        out_arrow_type = numba_type_to_pyarrow_type(out_type)
+        if out_arrow_type is None:
+            raise BodoLibNotImplementedException(
+                "DataFrameGroupby.apply(): Unsupported UDF output type:", out_type
+            )
 
         selected_cols = [
             self._obj.columns.get_loc(col) for col in self.selection_for_plan
         ]
-
-        selected_self = zero_size_self[self.selection_for_plan]
+        empty_out_col = pd.Series([], dtype=pd.ArrowDtype(out_arrow_type))
 
         exprs = [
             AggregateExpression(
-                pd.Series([], dtype=pd.ArrowDtype(out_arrow_type)),
+                empty_out_col,
                 self._obj._plan,
                 "udf",
                 _get_cfunc_apply_wrapper(jitted_func, selected_self, out_arrow_type),
@@ -345,6 +378,15 @@ class DataFrameGroupBy:
         ]
 
         key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
+        empty_data = pd.DataFrame() if self._as_index else zero_size_self[self._keys]
+        empty_data[BODO_NONE_DUMMY] = empty_out_col
+
+        if self._as_index:
+            # Convert output to series
+            empty_data = empty_data.set_index(
+                *(zero_size_self[col] for col in self._keys)
+            )
+            empty_data = empty_data[BODO_NONE_DUMMY]
 
         plan = LogicalAggregate(
             empty_data,
@@ -372,7 +414,6 @@ class DataFrameGroupBy:
 def _get_cfunc_apply_wrapper(
     func: pt.Callable, empty_data: pd.DataFrame, out_type: pa.DataType
 ):
-    import numba
     import numpy as np
 
     from bodo.hiframes.table import TableType
@@ -390,27 +431,6 @@ def _get_cfunc_apply_wrapper(
 
     out_col_type = bodo.typeof(pd.array([], dtype=pd.ArrowDtype(out_type)))
 
-    if isinstance(out_col_type, bodo.ArrayItemArrayType):
-
-        @numba.njit
-        def coerce_to_array_impl(scalar):
-            # ArrayItemArrayType expects an Array Dtype, so we first have to
-            # coerce the type to Array before converting the Array to a nested array.
-            out_arr = coerce_to_array(scalar, use_nullable_array=True)
-            out_arr = coerce_scalar_to_array(
-                out_arr, 1, out_col_type, dict_encode=False
-            )
-            return out_arr
-    else:
-
-        @numba.njit
-        def coerce_to_array_impl(scalar):
-            out_arr = coerce_scalar_to_array(scalar, 1, out_col_type, dict_encode=False)
-            # coerce_scalar_to_array doesn't respect nullable types, so using coerce_to_array
-            # to cast output to nullable if it isn't already.
-            out_arr = coerce_to_array(out_arr, use_nullable_array=True)
-            return out_arr
-
     # TODO: refactor repeated code with _get_cfunc_wrapper
     def wrapper():
         def apply_func_impl(in_cpp_table):
@@ -418,7 +438,7 @@ def _get_cfunc_apply_wrapper(
                 in_cpp_table, out_cols_arr, column_names, py_table_type, index_type
             )
             result = func(df)
-            out_arr = coerce_to_array_impl(result)
+            out_arr = coerce_group_value_to_array(result, out_col_type)
             return array_to_info(out_arr)
 
         c_sig = array_info_type(table_type)
@@ -428,13 +448,60 @@ def _get_cfunc_apply_wrapper(
     return wrapper
 
 
-def get_apply_out_type():
-    return py_to_arrow_type(None)
+def numba_type_to_pyarrow_type(typ):
+    """Convert the numba type to corresponding Pyarrow type.
+    NOTE: in the context of groupby/apply, the result is always coerced to scalar
+    so it is not necessarily a 1-1 mapping.
+    """
+    from numba import types
+
+    numba_to_arrow_map = {
+        types.bool_: pa.bool_(),
+        # Signed Int Types
+        types.int8: pa.int8(),
+        types.int16: pa.int16(),
+        types.int32: pa.int32(),
+        types.int64: pa.int64(),
+        # Unsigned Int Types
+        types.uint8: pa.uint8(),
+        types.uint16: pa.uint16(),
+        types.uint32: pa.uint32(),
+        types.uint64: pa.uint64(),
+        # Float Types
+        types.float16: pa.float16(),
+        types.float32: pa.float32(),
+        types.float64: pa.float64(),
+        # Date and Time
+        types.NPDatetime("ns"): pa.date64(),
+    }
+
+    return numba_to_arrow_map.get(typ, None)
 
 
-def py_to_arrow_type(typ):
-    # TODO: implement me
-    return pa.int64()
+def get_apply_out_type(func: CPUDispatcher, input_df: pd.DataFrame) -> pa.DataType:
+    import numba
+    from numba.core.target_extension import dispatcher_registry
+
+    from bodo.utils.transform import get_const_func_output_type
+
+    disp = dispatcher_registry[numba.core.target_extension.CPU]
+    typing_ctx = disp.targetdescr.typing_context
+    typing_ctx.refresh()
+
+    target_ctx = (numba.core.registry.cpu_target.target_context,)
+
+    in_type = bodo.typeof(input_df)
+
+    try:
+        return_type = get_const_func_output_type(
+            func, (in_type,), (), typing_ctx, target_ctx
+        )
+    except Exception as e:
+        raise BodoLibNotImplementedException(
+            f"Groupby.apply(): An error occured while compiling user function, {e}"
+        )
+
+    return return_type
 
 
 class SeriesGroupBy:
