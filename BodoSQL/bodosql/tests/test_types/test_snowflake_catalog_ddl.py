@@ -1789,9 +1789,10 @@ def _show_views_snowflake_sample_data_output(terse=True):
     if terse:
         return pd.DataFrame(
             {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 48,
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 52,
                 "NAME": [
                     "APPLICABLE_ROLES",
+                    "APPLICATION_SPECIFICATIONS",
                     "CLASSES",
                     "CLASS_INSTANCES",
                     "CLASS_INSTANCE_FUNCTIONS",
@@ -1831,6 +1832,9 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "SEMANTIC_VIEWS",
                     "SEQUENCES",
                     "SERVICES",
+                    "SNAPSHOTS",
+                    "SNAPSHOT_POLICIES",
+                    "SNAPSHOT_SETS",
                     "STAGES",
                     "STREAMLITS",
                     "TABLES",
@@ -1840,16 +1844,17 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "USAGE_PRIVILEGES",
                     "VIEWS",
                 ],
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 48,
-                "KIND": ["VIEW"] * 48,
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 52,
+                "KIND": ["VIEW"] * 52,
             }
         )
     else:
         return pd.DataFrame(
             {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 48,
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 52,
                 "NAME": [
                     "APPLICABLE_ROLES",
+                    "APPLICATION_SPECIFICATIONS",
                     "CLASSES",
                     "CLASS_INSTANCES",
                     "CLASS_INSTANCE_FUNCTIONS",
@@ -1889,6 +1894,9 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "SEMANTIC_VIEWS",
                     "SEQUENCES",
                     "SERVICES",
+                    "SNAPSHOTS",
+                    "SNAPSHOT_POLICIES",
+                    "SNAPSHOT_SETS",
                     "STAGES",
                     "STREAMLITS",
                     "TABLES",
@@ -1898,10 +1906,11 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "USAGE_PRIVILEGES",
                     "VIEWS",
                 ],
-                "RESERVED": [""] * 48,
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 48,
+                "RESERVED": [""] * 52,
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 52,
                 "COMMENT": [
                     "The roles that can be applied to the current user.",
+                    "The specification requests currently defined in the current application that are accessible to the current user's role.",
                     "The BUNDLE CLASS that the current user has privileges to view.",
                     "The BUNDLE INSTANCE that the current user has privileges to view.",
                     "The functions defined in a bundle that are accessible to the current user's role.",
@@ -1941,6 +1950,9 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "The Semantic Views defined in this database that are accessible to the current user's role.",
                     "The sequences defined in this database that are accessible to the current user's role.",
                     "The services in this database that are accessible to the current user's role.",
+                    "All snapshots within an account",
+                    "All snapshot policies within an account",
+                    "All snapshot sets within an account",
                     "Stages in this database that are accessible by the current user's role",
                     "Streamlits in this database that are accessible by the current user's role",
                     "The tables defined in this database that are accessible to the current user's role.",
@@ -1950,12 +1962,12 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "The usage privileges on sequences defined in this database that are accessible to the current user's role.",
                     "The views defined in this database that are accessible to the current user's role.",
                 ],
-                "OWNER": [""] * 48,
-                "TEXT": [""] * 48,
-                "IS_SECURE": ["false"] * 48,
-                "IS_MATERIALIZED": ["false"] * 48,
-                "OWNER_ROLE_TYPE": [""] * 48,
-                "CHANGE_TRACKING": ["OFF"] * 48,
+                "OWNER": [""] * 52,
+                "TEXT": [""] * 52,
+                "IS_SECURE": ["false"] * 52,
+                "IS_MATERIALIZED": ["false"] * 52,
+                "OWNER_ROLE_TYPE": [""] * 52,
+                "CHANGE_TRACKING": ["OFF"] * 52,
             }
         )
 
@@ -1967,7 +1979,6 @@ def test_show_views_terse(test_db_snowflake_catalog, memory_leak_check):
     bodo_output = bc.execute_ddl(
         "SHOW TERSE VIEWS in SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"
     )
-
     expected_output = _show_views_snowflake_sample_data_output()
     passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
     # count how many pes passed the test, since throwing exceptions directly
