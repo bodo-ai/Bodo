@@ -178,9 +178,8 @@ def test_unsupported_metadata_error_udtf(test_db_snowflake_catalog, memory_leak_
         impl(bc, query)
 
 
-# TODO: fix memory leak and add back memory_leak_check
 @pytest_mark_one_rank
-def test_udtf_multiple_definitions(test_db_snowflake_catalog):
+def test_udtf_multiple_definitions(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDTFs with multiple definitions can be properly
     inlined and select the correct implementation.
@@ -440,8 +439,7 @@ def test_udtf_comma_join(test_db_snowflake_catalog, memory_leak_check):
     )
 
 
-# TODO: fix memory leak and add back memory_leak_check
-def test_udtf_lateral_join(test_db_snowflake_catalog):
+def test_udtf_lateral_join(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that a UDTF can be inlined when used in a lateral join.
     """
@@ -480,8 +478,7 @@ def test_udtf_lateral_join(test_db_snowflake_catalog):
     )
 
 
-# TODO: fix memory leak and add back memory_leak_check
-def test_lateral_join_correlated(test_db_snowflake_catalog):
+def test_lateral_join_correlated(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that a UDTF used in a lateral join with correlated arguments
     can be fully inlined.
@@ -528,8 +525,7 @@ def test_lateral_join_correlated(test_db_snowflake_catalog):
     )
 
 
-# TODO: fix memory leak and add back memory_leak_check
-def test_nested_lateral_join_correlated(test_db_snowflake_catalog):
+def test_nested_lateral_join_correlated(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that a UDTF used in a nested lateral join with correlated arguments
     can be fully inlined.
@@ -574,8 +570,7 @@ def test_nested_lateral_join_correlated(test_db_snowflake_catalog):
     )
 
 
-# TODO: fix memory leak and add back memory_leak_check
-def test_nested_lateral_function(test_db_snowflake_catalog):
+def test_nested_lateral_function(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that a UDTF that contains a lateral can be fully inlined.
     """
@@ -610,8 +605,7 @@ def test_nested_lateral_function(test_db_snowflake_catalog):
     )
 
 
-# TODO: fix memory leak and add back memory_leak_check
-def test_lateral_with_lateral_udtf(test_db_snowflake_catalog):
+def test_lateral_with_lateral_udtf(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that a UDTF used in a lateral that also contains a lateral can be successfully
     inlined.
@@ -655,8 +649,7 @@ def test_lateral_with_lateral_udtf(test_db_snowflake_catalog):
     )
 
 
-# TODO: fix memory leak and add back memory_leak_check
-def test_exploding_function(test_db_snowflake_catalog):
+def test_exploding_function(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that a UDTF containing a row exploding function can be inlined.
 
