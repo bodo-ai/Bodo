@@ -1115,7 +1115,7 @@ if (NOT WIN32)
 endif()
 
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
-target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
+target_include_directories(ext SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
 target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(ext PRIVATE
   npymath

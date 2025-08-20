@@ -1218,6 +1218,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 else pd.NA
             )
 
+        if not (pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type)):
+            raise BodoLibNotImplementedException(
+                "BodoSeries.quantile() is not supported for non-numeric dtypes."
+            )
+
         new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])
         zero_size_self = arrow_to_empty_df(new_arrow_schema)
 
