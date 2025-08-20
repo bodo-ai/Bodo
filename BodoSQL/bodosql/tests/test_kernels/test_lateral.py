@@ -160,7 +160,6 @@ def simulate_lateral_flatten_json(
         pytest.param(3, id="explode_string"),
     ],
 )
-# TODO: fix memory leak and add back memory_leak_check
 def test_lateral_flatten_array(
     explode_col,
     keep_cols,
@@ -168,6 +167,7 @@ def test_lateral_flatten_array(
     output_val,
     output_this,
     outer,
+    memory_leak_check,
 ):
     """
     Tests the lateral_flatten kernel with exploding array columns.
@@ -386,7 +386,6 @@ def test_lateral_flatten_array(
         ),
     ],
 )
-# TODO: fix memory leak and add back memory_leak_check
 def test_lateral_flatten_json(
     explode_col_values,
     val_type,
@@ -395,6 +394,7 @@ def test_lateral_flatten_json(
     output_val,
     output_this,
     outer,
+    memory_leak_check,
 ):
     """
     Tests the lateral_flatten kernel with exploding array columns.
@@ -451,8 +451,7 @@ def test_lateral_flatten_json(
     )
 
 
-# TODO: fix memory leak and add back memory_leak_check
-def test_lateral_flatten_with_array_agg():
+def test_lateral_flatten_with_array_agg(memory_leak_check):
     """
     Tests mixing the lateral_flatten kernel with array_agg
     in the following manner:
@@ -559,8 +558,7 @@ def test_lateral_flatten_with_array_agg():
     )
 
 
-# TODO: fix memory leak and add back memory_leak_check
-def test_lateral_streaming():
+def test_lateral_streaming(memory_leak_check):
     global_1 = MetaType((0, 1))
     global_2 = MetaType((0,))
     global_3 = MetaType(

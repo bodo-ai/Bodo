@@ -1,4 +1,5 @@
 #include "_pymemory.h"
+#include "_meminfo.h"
 #include "_memory.h"
 
 /// @brief Default Singleton Pool Object
@@ -18,6 +19,13 @@ static std::shared_ptr<bodo::BufferPool> BufferPoolDefault() {
 static bodo::BufferPool* BufferPoolDefaultPtr() {
     static bodo::BufferPool* pool = BufferPoolDefault().get();
     return pool;
+}
+
+/// @brief Default singleton MemSys object, used for tracking memory allocations
+/// in unit tests
+static NRT_MemSys* MemSysDefaultPtr() {
+    static NRT_MemSys memsys(malloc, realloc, free);
+    return &memsys;
 }
 
 extern "C" {
@@ -56,6 +64,11 @@ PyObject* default_buffer_pool_cleanup(PyObject* self,
     Py_RETURN_NONE;
 }
 
+/// @brief Returns the pointer to the default MemSys
+PyObject* default_memsys_ptr(PyObject* self, PyObject* Py_UNUSED(args)) {
+    return PyLong_FromVoidPtr(MemSysDefaultPtr());
+}
+
 PyMODINIT_FUNC PyInit_memory_cpp(void) {
     static PyMethodDef SpamMethods[] = {
         {"default_buffer_pool_ptr", default_buffer_pool_ptr, METH_NOARGS,
@@ -68,6 +81,7 @@ PyMODINIT_FUNC PyInit_memory_cpp(void) {
          METH_NOARGS, "No Docs"},
         {"default_buffer_pool_cleanup", default_buffer_pool_cleanup,
          METH_NOARGS, "No Docs"},
+        {"default_memsys_ptr", default_memsys_ptr, METH_NOARGS, "No Docs"},
 
         // Sentinel required, otherwise segfault?
         {nullptr, nullptr, 0, nullptr}};
