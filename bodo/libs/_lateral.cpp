@@ -942,6 +942,10 @@ table_info *lateral_flatten_py_entrypt(table_info *in_table, int64_t *n_rows,
     }
 }
 
+#ifdef IS_TESTING
+PyMODINIT_FUNC PyInit_test_cpp(void);
+#endif
+
 PyMODINIT_FUNC PyInit_lateral_cpp(void) {
     PyObject *m;
     MOD_DEF(m, "lateral_cpp", "No docs", nullptr);
@@ -952,6 +956,10 @@ PyMODINIT_FUNC PyInit_lateral_cpp(void) {
     bodo_common_init();
 
     SetAttrStringFromVoidPtr(m, lateral_flatten_py_entrypt);
+
+#ifdef IS_TESTING
+    SetAttrStringFromPyInit(m, test_cpp);
+#endif
 
     return m;
 }

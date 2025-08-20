@@ -10,7 +10,6 @@ from numba.core import types
 from numba.extending import intrinsic
 
 import bodo
-from bodo.libs import lead_lag
 from bodo.libs.array import array_to_info, delete_info, info_to_array
 from bodo.utils.typing import (
     dtype_to_array_type,
@@ -21,25 +20,6 @@ from bodo.utils.typing import (
 from bodosql.kernels.array_kernel_utils import (
     is_valid_binary_arg,
     is_valid_string_arg,
-)
-
-# lead_lag_seq
-
-# load lead_lag_seq_py_entry function from C++
-ll.add_symbol(
-    "lead_lag_seq_py_entry",
-    lead_lag.lead_lag_seq_py_entry,
-)
-
-_lead_lag_seq_py_entry = types.ExternalFunction(
-    "lead_lag_seq_py_entry",
-    bodo.libs.array.array_info_type(
-        bodo.libs.array.array_info_type,
-        types.int64,
-        types.voidptr,
-        types.int64,
-        types.boolean,
-    ),
 )
 
 
@@ -69,6 +49,24 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
     Returns:
         pd.series: a single column with the lead/lag operation performed on it.
     """
+    from bodo.libs import lead_lag
+
+    # load lead_lag_seq_py_entry function from C++
+    ll.add_symbol(
+        "lead_lag_seq_py_entry",
+        lead_lag.lead_lag_seq_py_entry,
+    )
+
+    _lead_lag_seq_py_entry = types.ExternalFunction(
+        "lead_lag_seq_py_entry",
+        bodo.libs.array.array_info_type(
+            bodo.libs.array.array_info_type,
+            types.int64,
+            types.voidptr,
+            types.int64,
+            types.boolean,
+        ),
+    )
 
     # Create substitutions dictionary for func_text
     ctx = {}
