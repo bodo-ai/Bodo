@@ -8,6 +8,24 @@ from numba.extending import intrinsic
 import bodo
 
 
+def get_bitmap_bit(builder, null_bitmap_ptr, ind):
+    """get bit number 'ind' of bitmap array 'null_bitmap_ptr'"""
+    # (null_bitmap[i / 8] & kBitmask[i % 8])
+    byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
+    bit_ind = builder.urem(ind, lir.Constant(lir.IntType(64), 8))
+    byte = builder.load(builder.gep(null_bitmap_ptr, [byte_ind], inbounds=True))
+    ll_typ_mask = lir.ArrayType(lir.IntType(8), 8)
+    mask_tup = cgutils.alloca_once_value(
+        builder, lir.Constant(ll_typ_mask, (1, 2, 4, 8, 16, 32, 64, 128))
+    )
+    mask = builder.load(
+        builder.gep(
+            mask_tup, [lir.Constant(lir.IntType(64), 0), bit_ind], inbounds=True
+        )
+    )
+    return builder.and_(byte, mask)
+
+
 @intrinsic
 def set_bit_to(typingctx, null_bitmap_ptr_t, ind_t, val_t):
     """intrinsic equivalent of SetBitTo() in C++. Sets bitmap array's bit to value.
