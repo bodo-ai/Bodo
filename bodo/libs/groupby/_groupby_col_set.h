@@ -17,6 +17,20 @@
  *
  */
 
+/**
+ * Function pointer for window computation operations.
+ */
+typedef void (*window_computation_fn)(
+    std::vector<std::shared_ptr<array_info>>& orderby_arrs,
+    std::vector<int64_t> window_funcs,
+    std::vector<std::shared_ptr<array_info>>& out_arrs,
+    std::vector<std::shared_ptr<DictionaryBuilder>>& out_dict_builders,
+    grouping_info const& grp_info, const std::vector<bool>& asc_vect,
+    const std::vector<bool>& na_pos_vect,
+    const std::shared_ptr<table_info> window_args, int n_input_cols,
+    bool is_parallel, bool use_sql_rules, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm);
+
 /*
  * This is the base column set class which is used by most operations (like
  * sum, prod, count, etc.). Several subclasses also rely on some of the methods
@@ -552,6 +566,11 @@ class WindowColSet : public BasicColSet {
     const std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
         in_arr_types_vec;
     std::vector<std::shared_ptr<DictionaryBuilder>> out_dict_builders;
+
+    // Function pointer for window_computation() from stream_window_cpp
+    // module. Loaded lazily only when needed to avoid loading a large
+    // binary that slows down import and worker spin up time.
+    window_computation_fn window_computation_func;
 };
 
 /**

@@ -2017,7 +2017,50 @@ WindowColSet::WindowColSet(
       window_args(std::move(_window_args)),
       n_input_cols(_n_input_cols),
       is_parallel(_is_parallel),
-      in_arr_types_vec(std::move(_in_arr_types_vec)) {}
+      in_arr_types_vec(std::move(_in_arr_types_vec)) {
+    // Import the stream_window_cpp module and get the window_computation
+    // function pointer. Loaded lazily to avoid loading a large binary that
+    // slows down import and worker spin up time.
+    PyObject* stream_window_module =
+        PyImport_ImportModule("bodo.libs.stream_window_cpp");
+    if (!stream_window_module) {
+        PyErr_Print();
+        throw std::runtime_error("Failed to import stream_window_cpp module");
+    }
+
+    PyObject* window_computation_obj =
+        PyObject_GetAttrString(stream_window_module, "window_computation");
+    if (!window_computation_obj) {
+        Py_DECREF(stream_window_module);
+        PyErr_Print();
+        throw std::runtime_error(
+            "Failed to get window_computation from stream_window_cpp module");
+    }
+
+    // Extract the function pointer from the Python object
+    // Assuming window_computation_obj is a Python int containing the function
+    // pointer address
+    if (!PyLong_Check(window_computation_obj)) {
+        Py_DECREF(window_computation_obj);
+        Py_DECREF(stream_window_module);
+        throw std::runtime_error("window_computation is not a valid integer");
+    }
+
+    int64_t func_ptr_addr = PyLong_AsLongLong(window_computation_obj);
+    if (func_ptr_addr == -1 && PyErr_Occurred()) {
+        Py_DECREF(window_computation_obj);
+        Py_DECREF(stream_window_module);
+        PyErr_Print();
+        throw std::runtime_error(
+            "Failed to extract function pointer address from Python integer");
+    }
+
+    window_computation_func =
+        reinterpret_cast<window_computation_fn>(func_ptr_addr);
+    // Clean up Python references
+    Py_DECREF(window_computation_obj);
+    Py_DECREF(stream_window_module);
+}
 
 WindowColSet::~WindowColSet() = default;
 
@@ -2091,10 +2134,10 @@ void WindowColSet::setOutDictBuilders(
 void WindowColSet::update(const std::vector<grouping_info>& grp_infos,
                           bodo::IBufferPool* const pool,
                           std::shared_ptr<::arrow::MemoryManager> mm) {
-    window_computation(this->input_cols, window_funcs, this->update_cols,
-                       this->out_dict_builders, grp_infos[0], asc, na_pos,
-                       window_args, n_input_cols, is_parallel, use_sql_rules,
-                       pool, mm);
+    window_computation_func(this->input_cols, window_funcs, this->update_cols,
+                            this->out_dict_builders, grp_infos[0], asc, na_pos,
+                            window_args, n_input_cols, is_parallel,
+                            use_sql_rules, pool, mm);
 }
 
 std::vector<std::unique_ptr<bodo::DataType>> WindowColSet::getOutputTypes() {

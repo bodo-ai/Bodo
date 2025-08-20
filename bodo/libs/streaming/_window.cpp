@@ -808,6 +808,7 @@ PyMODINIT_FUNC PyInit_stream_window_cpp(void) {
     SetAttrStringFromVoidPtr(m, window_build_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, window_produce_output_batch_py_entry);
     SetAttrStringFromVoidPtr(m, delete_window_state);
+    SetAttrStringFromVoidPtr(m, window_computation);
 
 #ifdef IS_TESTING
     SetAttrStringFromPyInit(m, test_cpp);
