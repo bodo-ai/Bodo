@@ -155,16 +155,26 @@ def test_agg_mix_udf_builtin(groupby_df):
         ),
     ],
 )
-def test_agg_udf_types(val_col, func):
-    """Test agg with custom funcs of different types."""
+@pytest.mark.parametrize(
+    "expr",
+    [
+        pytest.param(lambda df, func: df.groupby(by=["A"]).agg({"B": func}), id="agg"),
+        pytest.param(
+            lambda df, func: df.groupby(by=["A"]).apply(func, include_groups=False),
+            id="apply",
+        ),
+    ],
+)
+def test_groupby_udf_types(expr, val_col, func):
+    """Test agg and apply with custom funcs of different types."""
 
     df = pd.DataFrame({"A": ["A", "B", "C"] * 4, "B": val_col})
     bdf = bd.from_pandas(df)
     pdf = convert_to_pandas_types(df)
 
-    df2 = pdf.groupby(by=["A"]).agg({"B": func})
+    df2 = expr(pdf, func)
     with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby(by=["A"]).agg({"B": func})
+        bdf2 = expr(bdf, func)
 
     _test_equal(bdf2, df2, check_pandas_types=False)
 
@@ -222,7 +232,8 @@ def test_agg_null_keys():
     _test_equal(bdf2, df2, sort_output=True)
 
 
-def test_apply():
+def test_apply_basic():
+    """Test basic groupby apply example similar to TPCH Q08"""
     df = pd.DataFrame(
         {"B": ["a", "b", "c"] * 4, "A": ["A", "B"] * 6, "C": [1, 2, 3, 4] * 3}
     )

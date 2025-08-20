@@ -455,6 +455,8 @@ def numba_type_to_pyarrow_type(typ):
     """
     from numba import types
 
+    from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
+
     numba_to_arrow_map = {
         types.bool_: pa.bool_(),
         # Signed Int Types
@@ -473,7 +475,28 @@ def numba_type_to_pyarrow_type(typ):
         types.float64: pa.float64(),
         # Date and Time
         types.NPDatetime("ns"): pa.date64(),
+        # TODO: properly support timedelta type precision
+        pd_timedelta_type: pa.duration("ns"),
+        # String / Binary
+        types.unicode_type: pa.large_string(),
     }
+
+    if isinstance(typ, types.Literal):
+        return numba_type_to_pyarrow_type(typ.literal_type)
+
+    elif isinstance(typ, types.List):
+        inner_type = numba_type_to_pyarrow_type(typ.dtype)
+        return pa.large_list(inner_type)
+
+    elif isinstance(typ, bodo.PandasTimestampType):
+        return pa.timestamp("ns", tz=typ.tz)
+
+    elif isinstance(typ, bodo.StructType):
+        inner_types = [numba_type_to_pyarrow_type(typ_) for typ_ in typ.data]
+        fields = [pa.field(name, typ_) for name, typ_ in zip(typ.names, inner_types)]
+        return pa.struct(fields)
+
+    # TODO: Support more types
 
     return numba_to_arrow_map.get(typ, None)
 
