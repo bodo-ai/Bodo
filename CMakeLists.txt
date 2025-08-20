@@ -638,7 +638,7 @@ python_add_library(quantile_alg
 )
 target_include_directories(quantile_alg PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(quantile_alg PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(quantile_alg PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
+target_link_libraries(quantile_alg PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
 install(TARGETS quantile_alg DESTINATION "bodo/libs/")
 
 
@@ -898,7 +898,7 @@ endif()
 
 target_include_directories(stream_window_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(stream_window_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(stream_window_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
+target_link_libraries(stream_window_cpp PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
 install(TARGETS stream_window_cpp DESTINATION "bodo/libs/")
 
 
