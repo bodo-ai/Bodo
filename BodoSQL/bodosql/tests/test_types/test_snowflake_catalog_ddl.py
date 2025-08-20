@@ -1792,7 +1792,7 @@ def _show_views_snowflake_sample_data_output(terse: bool = True) -> pd.DataFrame
     conn = snowflake.connector.connect(
         user=os.environ["SF_USERNAME"],
         password=os.environ["SF_PASSWORD"],
-        account=os.environ["SF_ACCOUNT"],
+        account="bodopartner.us-east-1",
         warehouse="DEMO_WH",
     )
     try:
