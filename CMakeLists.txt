@@ -712,6 +712,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
   )
 endif()
 
+target_include_directories(puffin_file SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
 target_include_directories(puffin_file PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(puffin_file PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(puffin_file PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
@@ -751,6 +752,8 @@ python_add_library(theta_sketches
   "bodo/libs/_array_build_buffer.cpp"
   "bodo/io/arrow_compat.cpp"
 )
+
+target_include_directories(theta_sketches SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
 target_include_directories(theta_sketches PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(theta_sketches PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
 target_link_libraries(theta_sketches PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
