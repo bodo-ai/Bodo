@@ -1961,6 +1961,116 @@ void HeadColSet::set_head_row_list(bodo::vector<int64_t>& row_list) {
 
 // ########################## Streaming MRNF ##########################
 
+std::tuple<int64_t, bodo_array_type::arr_type_enum>
+get_update_ftype_idx_arr_type_for_mrnf(size_t n_orderby_arrs,
+                                       const std::vector<bool>& asc_vec,
+                                       const std::vector<bool>& na_pos_vec) {
+    int64_t update_ftype;
+    bodo_array_type::arr_type_enum update_idx_arr_type;
+    if (n_orderby_arrs == 1) {
+        bool asc = asc_vec[0];
+        bool na_pos = na_pos_vec[0];
+        if (asc) {
+            // The first value of an array in ascending order is the
+            // min.
+            if (na_pos) {
+                update_ftype = Bodo_FTypes::idxmin;
+                // We don't need null values for indices
+                update_idx_arr_type = bodo_array_type::NUMPY;
+            } else {
+                update_ftype = Bodo_FTypes::idxmin_na_first;
+                // We need null values to signal we found an NA
+                // value.
+                update_idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+            }
+        } else {
+            // The first value of an array in descending order is the
+            // max.
+            if (na_pos) {
+                update_ftype = Bodo_FTypes::idxmax;
+                // We don't need null values for indices
+                update_idx_arr_type = bodo_array_type::NUMPY;
+            } else {
+                update_ftype = Bodo_FTypes::idxmax_na_first;
+                // We need null values to signal we found an NA
+                // value.
+                update_idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+            }
+        }
+    } else {
+        update_ftype = Bodo_FTypes::idx_n_columns;
+        // We don't need null for indices
+        update_idx_arr_type = bodo_array_type::NUMPY;
+    }
+    return std::make_tuple(update_ftype, update_idx_arr_type);
+}
+
+void min_row_number_filter_no_sort(
+    const std::shared_ptr<array_info>& idx_col,
+    std::vector<std::shared_ptr<array_info>>& orderby_cols,
+    grouping_info const& grp_info, const std::vector<bool>& asc,
+    const std::vector<bool>& na_pos, int update_ftype, bool use_sql_rules,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    // To compute min_row_number_filter we want to find the
+    // idxmin/idxmax based on the orderby columns. Then in the output
+    // array those locations will have the value true. We have already
+    // initialized all other locations to false.
+
+    // We initialize the indices to the first row in group. There *must* be one
+    // output per partition, so initializing with any row in the  group is
+    // correct since we will eventually end up with the correct value once we go
+    // over all the rows. This initialization also handles the all tie case,
+    // i.e. the value in data_col never needs to get "updated". e.g. If we are
+    // doing this on a boolean column and all boolean values for a group are the
+    // same as the initial value, we'd never end up updating the row-id in
+    // idx_col. If we had initialized all entries in idx-col with say 0, that
+    // would give the incorrect output since we'd just end up with all 0s.
+    // However, initializing all partitions with a valid row in the partition
+    // leads to the correct result.
+    if (idx_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        // Set all entries to NOT NA since we will be setting all of them
+        // to valid values.
+        InitializeBitMask((uint8_t*)(idx_col->null_bitmask<
+                                     bodo_array_type::NULLABLE_INT_BOOL>()),
+                          idx_col->length, true);
+    }
+    for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
+        getv<int64_t>(idx_col, group_idx) =
+            grp_info.group_to_first_row[group_idx];
+    }
+
+    if (orderby_cols.size() == 0) {
+        // Special case: if there are no columns to order by, use the
+        // defaults where each group is mapped to an arbitrary row
+        // number from that group.
+        return;
+    } else if (orderby_cols.size() == 1) {
+        /// We generate an optimized and templated path for 1 column.
+        // Create an array to store min/max value
+        std::shared_ptr<array_info> orderby_arr = orderby_cols[0];
+        std::shared_ptr<array_info> data_col = alloc_array_top_level(
+            grp_info.num_groups, 1, 1, orderby_arr->arr_type,
+            orderby_arr->dtype, -1, 0, 0, false, false, false, pool, mm);
+        // Initialize the min/max column
+        if (update_ftype == Bodo_FTypes::idxmax ||
+            update_ftype == Bodo_FTypes::idxmax_na_first) {
+            aggfunc_output_initialize(data_col, Bodo_FTypes::max,
+                                      use_sql_rules);
+        } else {
+            aggfunc_output_initialize(data_col, Bodo_FTypes::min,
+                                      use_sql_rules);
+        }
+        std::vector<std::shared_ptr<array_info>> aux_cols = {idx_col};
+        // Compute the idxmin/idxmax
+        do_apply_to_column(orderby_arr, data_col, aux_cols, grp_info,
+                           update_ftype, pool, std::move(mm));
+    } else {
+        // Call the idx_n_columns function path.
+        idx_n_columns_apply(idx_col, orderby_cols, asc, na_pos, grp_info,
+                            update_ftype);
+    }
+}
+
 StreamingMRNFColSet::StreamingMRNFColSet(std::vector<bool>& _asc,
                                          std::vector<bool>& _na_pos,
                                          bool use_sql_rules)
@@ -2017,7 +2127,50 @@ WindowColSet::WindowColSet(
       window_args(std::move(_window_args)),
       n_input_cols(_n_input_cols),
       is_parallel(_is_parallel),
-      in_arr_types_vec(std::move(_in_arr_types_vec)) {}
+      in_arr_types_vec(std::move(_in_arr_types_vec)) {
+    // Import the stream_window_cpp module and get the window_computation
+    // function pointer. Loaded lazily to avoid loading a large binary that
+    // slows down import and worker spin up time.
+    PyObject* stream_window_module =
+        PyImport_ImportModule("bodo.libs.stream_window_cpp");
+    if (!stream_window_module) {
+        PyErr_Print();
+        throw std::runtime_error("Failed to import stream_window_cpp module");
+    }
+
+    PyObject* window_computation_obj =
+        PyObject_GetAttrString(stream_window_module, "window_computation");
+    if (!window_computation_obj) {
+        Py_DECREF(stream_window_module);
+        PyErr_Print();
+        throw std::runtime_error(
+            "Failed to get window_computation from stream_window_cpp module");
+    }
+
+    // Extract the function pointer from the Python object
+    // Assuming window_computation_obj is a Python int containing the function
+    // pointer address
+    if (!PyLong_Check(window_computation_obj)) {
+        Py_DECREF(window_computation_obj);
+        Py_DECREF(stream_window_module);
+        throw std::runtime_error("window_computation is not a valid integer");
+    }
+
+    int64_t func_ptr_addr = PyLong_AsLongLong(window_computation_obj);
+    if (func_ptr_addr == -1 && PyErr_Occurred()) {
+        Py_DECREF(window_computation_obj);
+        Py_DECREF(stream_window_module);
+        PyErr_Print();
+        throw std::runtime_error(
+            "Failed to extract function pointer address from Python integer");
+    }
+
+    window_computation_func =
+        reinterpret_cast<window_computation_fn>(func_ptr_addr);
+    // Clean up Python references
+    Py_DECREF(window_computation_obj);
+    Py_DECREF(stream_window_module);
+}
 
 WindowColSet::~WindowColSet() = default;
 
@@ -2091,10 +2244,10 @@ void WindowColSet::setOutDictBuilders(
 void WindowColSet::update(const std::vector<grouping_info>& grp_infos,
                           bodo::IBufferPool* const pool,
                           std::shared_ptr<::arrow::MemoryManager> mm) {
-    window_computation(this->input_cols, window_funcs, this->update_cols,
-                       this->out_dict_builders, grp_infos[0], asc, na_pos,
-                       window_args, n_input_cols, is_parallel, use_sql_rules,
-                       pool, mm);
+    window_computation_func(this->input_cols, window_funcs, this->update_cols,
+                            this->out_dict_builders, grp_infos[0], asc, na_pos,
+                            window_args, n_input_cols, is_parallel,
+                            use_sql_rules, pool, mm);
 }
 
 std::vector<std::unique_ptr<bodo::DataType>> WindowColSet::getOutputTypes() {
