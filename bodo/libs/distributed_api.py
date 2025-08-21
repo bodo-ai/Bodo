@@ -119,7 +119,6 @@ ll.add_symbol("get_cpu_id", hdist.get_cpu_id)
 
 
 DEFAULT_ROOT = 0
-ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
 
 # Wrapper for getting process rank from C (MPI rank currently)
 get_rank = hdist.get_rank_py_wrapper
@@ -1658,6 +1657,8 @@ def overload_transform_str_getitem_output(data, length):
 
 @overload(int_getitem, no_unliteral=True)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
+    ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+
     if is_str_arr_type(arr) or arr == bodo.binary_array_type:
         # TODO: other kinds, unicode
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
@@ -1993,6 +1994,8 @@ def int_optional_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
 @overload(int_isna, no_unliteral=True)
 def int_isn_overload(arr, ind, arr_start, total_len, is_1D):
+    ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+
     def impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
         if ind >= total_len:
             raise IndexError("index out of bounds")
