@@ -38,8 +38,10 @@ variables:
   bodo_1p_total: 22
   bodo_2p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30"
   bodo_2p_total: 30
-  bodo_df_2p_each: "1,2"
-  bodo_df_2p_total: 2
+  bodo_df_1p_each: "1,2"
+  bodo_df_1p_total: 2
+  bodo_df_2p_each: "1,2,3"
+  bodo_df_2p_total: 3
   bodosql_1p_each: "1,2,3,4,5,6,7,8,9,10,11,12"
   bodosql_1p_total: 12
   bodosql_2p_each: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22"
@@ -97,7 +99,7 @@ stages:
       matrix:
         TEST_1P:
           NP: 1
-          PYTEST_MARKER: "df_lib and not weekly and not iceberg"
+          PYTEST_MARKER: "df_lib and not weekly and not iceberg and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_1p_total, parameters.PYTEST_MARKER) }}"
         ${{ each slice in split(variables.bodo_df_2p_each, ',') }}:
           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_df_2p_total) }}:
             NP: 2
