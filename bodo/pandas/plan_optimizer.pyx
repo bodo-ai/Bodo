@@ -14,12 +14,6 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 import bodo
-from bodo.io.fs_io import (
-    expand_path_globs,
-    getfs,
-    parse_fpath,
-)
-from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
 
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
@@ -810,6 +804,13 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return self.nrows
 
     def _get_nrows(self):
+        from bodo.io.fs_io import (
+            expand_path_globs,
+            getfs,
+            parse_fpath,
+        )
+        from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
+
         fpath, parsed_url, protocol = parse_fpath(self.path)
         fs = getfs(fpath, protocol, self.storage_options, parallel=False)
 
