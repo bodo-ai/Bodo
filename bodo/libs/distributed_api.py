@@ -118,9 +118,6 @@ ll.add_symbol("gather_array_py_entry", hdist.gather_array_py_entry)
 ll.add_symbol("get_cpu_id", hdist.get_cpu_id)
 
 
-# get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
-mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
-
 DEFAULT_ROOT = 0
 ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
 
@@ -251,17 +248,23 @@ def recv(dtype, rank, tag):  # pragma: no cover
     return recv_arr[0]
 
 
-_isend = types.ExternalFunction(
-    "dist_isend",
-    mpi_req_numba_type(
-        types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_
-    ),
-)
-
-
 @numba.generated_jit(nopython=True)
 def isend(arr, size, pe, tag, cond=True):
     """call MPI isend with input data"""
+    # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
+    mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
+    _isend = types.ExternalFunction(
+        "dist_isend",
+        mpi_req_numba_type(
+            types.voidptr,
+            types.int32,
+            types.int32,
+            types.int32,
+            types.int32,
+            types.bool_,
+        ),
+    )
+
     # Numpy array
     if isinstance(arr, types.Array):
 
@@ -2331,12 +2334,16 @@ def overload_print_if_not_empty(*args):
     return impl
 
 
-_wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
-
-
 @numba.generated_jit(nopython=True)
 def wait(req, cond=True):
     """wait on MPI request"""
+
+    # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
+    mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
+    _wait = types.ExternalFunction(
+        "dist_wait", types.void(mpi_req_numba_type, types.bool_)
+    )
+
     # Tuple of requests (e.g. nullable arrays)
     if isinstance(req, types.BaseTuple):
         count = len(req.types)
