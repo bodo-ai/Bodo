@@ -6,6 +6,8 @@ import warnings
 from collections import defaultdict
 from enum import Enum
 
+t0 = time.perf_counter()
+
 import llvmlite.binding as ll
 import numba
 import numpy as np
@@ -117,6 +119,8 @@ ll.add_symbol("gather_table_py_entry", hdist.gather_table_py_entry)
 ll.add_symbol("gather_array_py_entry", hdist.gather_array_py_entry)
 ll.add_symbol("get_cpu_id", hdist.get_cpu_id)
 
+
+t1 = time.perf_counter()
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
 mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
@@ -1360,6 +1364,9 @@ c_bcast = types.ExternalFunction(
     "c_bcast",
     types.void(types.voidptr, types.int32, types.int32, types.int32, types.int64),
 )
+
+
+t2 = time.perf_counter()
 
 
 @numba.njit(cache=True)
@@ -2888,3 +2895,10 @@ init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
 )
+
+t3 = time.perf_counter()
+
+print("overall:", t3 - t0)
+print("imports:", t1 - t0)
+print("first half:", t2 - t1)
+print("second half:", t3 - t2)
