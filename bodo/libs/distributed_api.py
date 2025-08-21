@@ -393,6 +393,18 @@ def gather_scalar_impl_jit(
     typ_val = numba_to_c_type(data)
     dtype = data
 
+    c_gather_scalar = types.ExternalFunction(
+        "c_gather_scalar",
+        types.void(
+            types.voidptr,
+            types.voidptr,
+            types.int32,
+            types.bool_,
+            types.int32,
+            types.int64,
+        ),
+    )
+
     def gather_scalar_impl(
         data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
     ):  # pragma: no cover
@@ -413,14 +425,6 @@ def gather_scalar_impl_jit(
         return res
 
     return gather_scalar_impl
-
-
-c_gather_scalar = types.ExternalFunction(
-    "c_gather_scalar",
-    types.void(
-        types.voidptr, types.voidptr, types.int32, types.bool_, types.int32, types.int64
-    ),
-)
 
 
 @intrinsic
