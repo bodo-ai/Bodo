@@ -647,6 +647,7 @@ set(sources_list
   "bodo/libs/_table_builder_utils.cpp"
   "bodo/libs/_table_builder.cpp"
   "bodo/libs/_chunked_table_builder.cpp"
+  "bodo/libs/_listagg.cpp"
   "bodo/libs/_operator_pool.cpp"
   "bodo/libs/window/_window_aggfuncs.cpp"
   "bodo/libs/window/_window_calculator.cpp"
