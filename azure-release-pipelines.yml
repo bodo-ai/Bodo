@@ -97,9 +97,10 @@ stages:
       test_type: DF_LIB
       pool_name: ${{ parameters.AGENT_POOL }}
       matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "df_lib and not weekly and not iceberg and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_1p_total, parameters.PYTEST_MARKER) }}"
+        ${{ each slice in split(variables.bodo_df_1p_each, ',') }}:
+          ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_df_1p_total) }}:
+            NP: 1
+            PYTEST_MARKER: "df_lib and not weekly and not iceberg and ${{ format('bodo_df_{0}of{1} and ({2})', slice, variables.bodo_df_1p_total, parameters.PYTEST_MARKER) }}"
         ${{ each slice in split(variables.bodo_df_2p_each, ',') }}:
           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_df_2p_total) }}:
             NP: 2
