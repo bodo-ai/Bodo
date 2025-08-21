@@ -115,6 +115,8 @@ ll.add_symbol("decimal_reduce", hdist.decimal_reduce)
 ll.add_symbol("gather_table_py_entry", hdist.gather_table_py_entry)
 ll.add_symbol("gather_array_py_entry", hdist.gather_array_py_entry)
 ll.add_symbol("get_cpu_id", hdist.get_cpu_id)
+ll.add_symbol("broadcast_array_py_entry", hdist.broadcast_array_py_entry)
+ll.add_symbol("broadcast_table_py_entry", hdist.broadcast_table_py_entry)
 
 
 DEFAULT_ROOT = 0
@@ -2514,18 +2516,6 @@ atexit.register(call_finalize)
 atexit.register(flush_stdout)
 
 
-ll.add_symbol("broadcast_array_py_entry", hdist.broadcast_array_py_entry)
-c_broadcast_array = ExternalFunctionErrorChecked(
-    "broadcast_array_py_entry",
-    array_info_type(array_info_type, array_info_type, types.int32, types.int64),
-)
-ll.add_symbol("broadcast_table_py_entry", hdist.broadcast_table_py_entry)
-c_broadcast_table = ExternalFunctionErrorChecked(
-    "broadcast_table_py_entry",
-    table_type(table_type, array_info_type, types.int32, types.int64),
-)
-
-
 def bcast(data, comm_ranks=None, root=DEFAULT_ROOT, comm=None):  # pragma: no cover
     """bcast() sends data from rank 0 to comm_ranks."""
     from bodo.mpi4py import MPI
@@ -2573,6 +2563,10 @@ def bcast_overload(data, comm_ranks, root=DEFAULT_ROOT, comm=0):
 def bcast_impl(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
     """nopython implementation of bcast()"""
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(data, "bodo.bcast()")
+    c_broadcast_array = ExternalFunctionErrorChecked(
+        "broadcast_array_py_entry",
+        array_info_type(array_info_type, array_info_type, types.int32, types.int64),
+    )
 
     if isinstance(data, types.Array) and data.ndim > 1:
         ndim = data.ndim
@@ -2668,6 +2662,10 @@ def bcast_impl(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
     if isinstance(data, bodo.hiframes.table.TableType):
         data_type = data
         out_cols_arr = np.arange(len(data.arr_types), dtype=np.int64)
+        c_broadcast_table = ExternalFunctionErrorChecked(
+            "broadcast_table_py_entry",
+            table_type(table_type, array_info_type, types.int32, types.int64),
+        )
 
         def impl_table(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
             data_cpp = py_table_to_cpp_table(data, data_type)
