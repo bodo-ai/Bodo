@@ -791,10 +791,6 @@ table_info* window_produce_output_batch_py_entry(WindowState* window_state,
  */
 void delete_window_state(WindowState* window_state) { delete window_state; }
 
-#ifdef IS_TESTING
-PyMODINIT_FUNC PyInit_test_cpp(void);
-#endif
-
 PyMODINIT_FUNC PyInit_stream_window_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "stream_window_cpp", "No docs", nullptr);
@@ -808,11 +804,5 @@ PyMODINIT_FUNC PyInit_stream_window_cpp(void) {
     SetAttrStringFromVoidPtr(m, window_build_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, window_produce_output_batch_py_entry);
     SetAttrStringFromVoidPtr(m, delete_window_state);
-    SetAttrStringFromVoidPtr(m, window_computation);
-
-#ifdef IS_TESTING
-    SetAttrStringFromPyInit(m, test_cpp);
-#endif
-
     return m;
 }
