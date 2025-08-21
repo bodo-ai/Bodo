@@ -65,7 +65,7 @@ PyMODINIT_FUNC PyInit_ext(void) {
         return nullptr;
     }
 
-    bodo_common_init();
+    // bodo_common_init();
 
     SetAttrStringFromPyInit(m, hdist);
     SetAttrStringFromPyInit(m, hstr_ext);
