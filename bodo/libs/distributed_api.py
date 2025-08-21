@@ -6,6 +6,8 @@ import warnings
 from collections import defaultdict
 from enum import Enum
 
+t0 = time.perf_counter()
+
 import llvmlite.binding as ll
 import numba
 import numpy as np
@@ -2901,3 +2903,6 @@ init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
 )
+
+
+print("dist api import time:", time.perf_counter() - t0)
