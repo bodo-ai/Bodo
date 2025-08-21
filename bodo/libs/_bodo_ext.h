@@ -29,5 +29,5 @@ PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void);
 #ifdef IS_TESTING
 PyMODINIT_FUNC PyInit_test_cpp(void);
 #endif
-PyMODINIT_FUNC PyInit_plan_optimizer(void);
+// PyMODINIT_FUNC PyInit_plan_optimizer(void);
 }  // extern "C"

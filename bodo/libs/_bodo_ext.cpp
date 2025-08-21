@@ -13,7 +13,7 @@ PyObject* get_plan_optimizer_module() {
     // Cython uses multi-phase initialization which needs
     // PyModule_FromDefAndSpec(). See:
     // https://docs.python.org/3/c-api/module.html#c.PyModuleDef
-    PyModuleDef* moddef = (PyModuleDef*)PyInit_plan_optimizer();
+    PyModuleDef* moddef = nullptr;  // (PyModuleDef*)PyInit_plan_optimizer();
 
     PyObject* machinery = PyImport_ImportModule("importlib.machinery");
     if (!machinery) {
@@ -96,18 +96,18 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, test_cpp);
 #endif
 
-    // Setup the Cython-generated plan_optimizer module
-    PyObject* plan_opt_mod = get_plan_optimizer_module();
-    if (!plan_opt_mod) {
-        PyErr_Print();
-        return nullptr;
-    }
-    if (PyObject_SetAttrString(m, "plan_optimizer", plan_opt_mod) < 0) {
-        PyErr_Print();
-        Py_DECREF(plan_opt_mod);
-        return nullptr;
-    }
-    Py_DECREF(plan_opt_mod);
+    // // Setup the Cython-generated plan_optimizer module
+    // PyObject* plan_opt_mod = get_plan_optimizer_module();
+    // if (!plan_opt_mod) {
+    //     PyErr_Print();
+    //     return nullptr;
+    // }
+    // if (PyObject_SetAttrString(m, "plan_optimizer", plan_opt_mod) < 0) {
+    //     PyErr_Print();
+    //     Py_DECREF(plan_opt_mod);
+    //     return nullptr;
+    // }
+    // Py_DECREF(plan_opt_mod);
 
     return m;
 }

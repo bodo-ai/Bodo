@@ -75,14 +75,14 @@ FetchContent_MakeAvailable(fmt)
 set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 #Prevent symbol collisions
-add_compile_definitions(duckdb=bododuckdb)
-FetchContent_Declare(
-    duckdb
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/bodo/pandas/vendor/duckdb
-    EXCLUDE_FROM_ALL
-)
+# add_compile_definitions(duckdb=bododuckdb)
+# FetchContent_Declare(
+#     duckdb
+#     SOURCE_DIR ${CMAKE_SOURCE_DIR}/bodo/pandas/vendor/duckdb
+#     EXCLUDE_FROM_ALL
+# )
 
-FetchContent_MakeAvailable(duckdb)
+# FetchContent_MakeAvailable(duckdb)
 
 # If we're building dependencies (not getting them from conda), we need to build AWS SDK
 if("$ENV{CONDA_PREFIX}" STREQUAL "")
@@ -904,16 +904,16 @@ install(TARGETS stream_window_cpp DESTINATION "bodo/libs/")
 
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
-  "bodo/pandas/plan_optimizer.cpp"
-  "bodo/pandas/_bodo_scan_function.cpp"
-  "bodo/pandas/_bodo_write_function.cpp"
-  "bodo/pandas/_plan.cpp"
-  "bodo/pandas/_pipeline.cpp"
-  "bodo/pandas/_physical_conv.cpp"
-  "bodo/pandas/_util.cpp"
-  "bodo/pandas/physical/expression.cpp"
-  "bodo/pandas/physical/operator.cpp"
-  "bodo/pandas/physical/read_iceberg.cpp"
+  # "bodo/pandas/plan_optimizer.cpp"
+  # "bodo/pandas/_bodo_scan_function.cpp"
+  # "bodo/pandas/_bodo_write_function.cpp"
+  # "bodo/pandas/_plan.cpp"
+  # "bodo/pandas/_pipeline.cpp"
+  # "bodo/pandas/_physical_conv.cpp"
+  # "bodo/pandas/_util.cpp"
+  # "bodo/pandas/physical/expression.cpp"
+  # "bodo/pandas/physical/operator.cpp"
+  # "bodo/pandas/physical/read_iceberg.cpp"
   "bodo/io/_csv_json_writer.cpp"
   "bodo/io/_fs_io.cpp"
   "bodo/io/_hdfs_reader.cpp"
@@ -1056,9 +1056,9 @@ target_include_directories(ext PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOU
 )
 target_link_directories(ext PRIVATE ${CONDA_LIB_DIR}
 )
-target_link_libraries(ext PRIVATE
-  duckdb_static
-)
+# target_link_libraries(ext PRIVATE
+#   duckdb_static
+# )
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   if (NOT WIN32)
