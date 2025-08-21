@@ -10,6 +10,7 @@ from numba.extending import intrinsic
 import bodo
 import bodo.ir.connector
 import bodo.user_logging
+from bodo.io import csv_json_reader
 from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
@@ -20,6 +21,11 @@ from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.utils.utils import (
     check_java_installation,
     sanitize_varname,
+)
+
+ll.add_symbol(
+    "json_file_chunk_reader",
+    csv_json_reader.get_function_address("json_file_chunk_reader"),
 )
 
 
@@ -78,13 +84,6 @@ def json_file_chunk_reader(
     Interface to json_file_chunk_reader function in C++ library for creating
     the json file reader.
     """
-
-    from bodo.io import csv_json_reader
-
-    ll.add_symbol(
-        "json_file_chunk_reader",
-        csv_json_reader.get_function_address("json_file_chunk_reader"),
-    )
     # TODO: Update storage options to pyobject once the type is updated to do refcounting
     # properly.
     assert storage_options_t == storage_options_dict_type, (
