@@ -68,6 +68,8 @@ BUILTIN_AGG_FUNCS = {
 
 
 def coerce_group_value_to_array(scalar, out_col):
+    """Coerce *scalar*, returned from applying a function to a group into an Array
+    with type matching *out_col* with a single element."""
     pass
 
 
@@ -332,112 +334,53 @@ class DataFrameGroupBy:
 
     @check_args_fallback(supported=["func"])
     def apply(self, func, *args, include_groups=False, **kwargs):
-        from bodo.pandas.base import _empty_like
-        # TODO: refactor repeated code in _get_agg_plan
-
-        # NOTE: assumes no key columns are being aggregated e.g:
-        # df1.groupby("C", as_index=False)[["C"]].agg("sum")
-        if set(self._keys) & set(self.selection_for_plan):
-            raise BodoLibNotImplementedException(
-                "GroupBy.agg(): Aggregation on key columns not supported yet."
-            )
-
-        zero_size_self: pd.DataFrame = _empty_like(self._obj)
-        deco = bodo.jit(cache=False, spawn=False, distributed=False)
-        jitted_func = deco(func)
-
-        selected_self = zero_size_self[self.selection_for_plan]
-
-        out_type = get_apply_out_type(jitted_func, selected_self)
-
-        if isinstance(out_type, (bodo.DataFrameType, bodo.SeriesType)):
-            raise BodoLibNotImplementedException(
-                "DataFrameGroupby.apply(): func returning Series or DataFrame not implemented yet."
-            )
-
-        out_arrow_type = numba_type_to_pyarrow_type(out_type)
-        if out_arrow_type is None:
-            raise BodoLibNotImplementedException(
-                "DataFrameGroupby.apply(): Unsupported UDF output type:", out_type
-            )
-
-        selected_cols = [
-            self._obj.columns.get_loc(col) for col in self.selection_for_plan
-        ]
-        empty_out_col = pd.Series([], dtype=pd.ArrowDtype(out_arrow_type))
-
-        exprs = [
-            AggregateExpression(
-                empty_out_col,
-                self._obj._plan,
-                "udf",
-                _get_cfunc_apply_wrapper(jitted_func, selected_self, out_arrow_type),
-                selected_cols,
-                self._dropna,
-            )
-        ]
-
-        key_indices = [self._obj.columns.get_loc(c) for c in self._keys]
-        empty_data = pd.DataFrame() if self._as_index else zero_size_self[self._keys]
-        empty_data[BODO_NONE_DUMMY] = empty_out_col
-
-        if self._as_index:
-            # Convert output to series
-            empty_data = empty_data.set_index(
-                *(zero_size_self[col] for col in self._keys)
-            )
-            empty_data = empty_data[BODO_NONE_DUMMY]
-
-        plan = LogicalAggregate(
-            empty_data,
-            self._obj._plan,
-            key_indices,
-            exprs,
-        )
-
-        # Add the data column then the keys since they become Index columns in output.
-        # DuckDB generates keys first in output so we need to reverse the order.
-        if self._as_index:
-            col_indices = list(range(len(self._keys), len(self._keys) + 1))
-            col_indices += list(range(len(self._keys)))
-
-            exprs = make_col_ref_exprs(col_indices, plan)
-            plan = LogicalProjection(
-                empty_data,
-                plan,
-                exprs,
-            )
-
-        return wrap_plan(plan)
+        return _groupby_apply_plan(self, func, *args, **kwargs)
 
 
 def _get_cfunc_apply_wrapper(
-    func: pt.Callable, empty_data: pd.DataFrame, out_type: pa.DataType
+    func: pt.Callable, empty_data: pd.DataFrame | pd.Series, out_type: pa.DataType
 ):
     import numpy as np
 
     from bodo.hiframes.table import TableType
-    from bodo.pandas.utils import cpp_table_to_df_jit
+    from bodo.pandas.utils import cpp_table_to_df_jit, cpp_table_to_series_jit
 
     # TODO: refactor into overload?
-    df_type = bodo.typeof(empty_data)
-    # trivial index, input table does not have an index
-    index_type = bodo.typeof(pd.RangeIndex(0))
-    py_table_type = TableType(df_type.data)
+    in_type = bodo.typeof(empty_data)
 
-    cols = tuple(empty_data.columns)
-    out_cols_arr = np.array(range(len(cols)), dtype=np.int64)
-    column_names = bodo.utils.typing.ColNamesMetaType(cols)
+    if isinstance(in_type, bodo.DataFrameType):
+        # trivial index, input table does not have an index
+        index_type = bodo.typeof(pd.RangeIndex(0))
+        py_table_type = TableType(in_type.data)
 
-    out_col_type = bodo.typeof(pd.array([], dtype=pd.ArrowDtype(out_type)))
+        cols = tuple(empty_data.columns)
+        out_cols_arr = np.array(range(len(cols)), dtype=np.int64)
+        column_names = bodo.utils.typing.ColNamesMetaType(cols)
+
+        @numba.njit
+        def cpp_table_to_py_impl(in_cpp_table):
+            return cpp_table_to_df_jit(
+                in_cpp_table, out_cols_arr, column_names, py_table_type, index_type
+            )
+
+    else:
+        assert isinstance(in_type, bodo.SeriesType), (
+            "expected in_type to be either SeriesType or DataFrameType."
+        )
+
+        in_col_type = in_type.data
+
+        @numba.njit
+        def cpp_table_to_py_impl(in_cpp_table):
+            return cpp_table_to_series_jit(in_cpp_table, in_col_type)
+
+    out_col_type = bodo.typeof(_empty_pd_array(out_type))
 
     # TODO: refactor repeated code with _get_cfunc_wrapper
     def wrapper():
         def apply_func_impl(in_cpp_table):
-            df = cpp_table_to_df_jit(
-                in_cpp_table, out_cols_arr, column_names, py_table_type, index_type
-            )
-            result = func(df)
+            py_in = cpp_table_to_py_impl(in_cpp_table)
+            result = func(py_in)
             out_arr = coerce_group_value_to_array(result, out_col_type)
             return array_to_info(out_arr)
 
@@ -683,6 +626,10 @@ class SeriesGroupBy:
         """
         return _groupby_agg_plan(self, "var")
 
+    @check_args_fallback(supported=["func"])
+    def apply(self, func, *args, include_groups=False, **kwargs):
+        return _groupby_apply_plan(self, func, *args, **kwargs)
+
 
 def _groupby_agg_plan(
     grouped: SeriesGroupBy | DataFrameGroupBy, func, *args, **kwargs
@@ -718,8 +665,6 @@ def _groupby_agg_plan(
         normalized_func, zero_size_df, empty_data_pandas, n_key_cols
     )
 
-    key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
-
     out_types = empty_data
     if isinstance(empty_data, pd.DataFrame) and not grouped._as_index:
         out_types = empty_data.iloc[:, n_key_cols:]
@@ -735,8 +680,18 @@ def _groupby_agg_plan(
         for i, func in enumerate(normalized_func)
     ]
 
+    return _make_logical_agg_plan(grouped, exprs, empty_data)
+
+
+def _make_logical_agg_plan(
+    grouped: DataFrameGroupBy | SeriesGroupBy,
+    exprs: list[AggregateExpression],
+    empty_out_data: pd.DataFrame | pd.Series,
+) -> BodoDataFrame | BodoSeries:
+    key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
+
     plan = LogicalAggregate(
-        empty_data,
+        empty_out_data,
         grouped._obj._plan,
         key_indices,
         exprs,
@@ -745,14 +700,12 @@ def _groupby_agg_plan(
     # Add the data column then the keys since they become Index columns in output.
     # DuckDB generates keys first in output so we need to reverse the order.
     if grouped._as_index:
-        col_indices = list(
-            range(len(grouped._keys), len(grouped._keys) + len(normalized_func))
-        )
+        col_indices = list(range(len(grouped._keys), len(grouped._keys) + len(exprs)))
         col_indices += list(range(len(grouped._keys)))
 
         exprs = make_col_ref_exprs(col_indices, plan)
         plan = LogicalProjection(
-            empty_data,
+            empty_out_data,
             plan,
             exprs,
         )
@@ -1028,3 +981,74 @@ def _cast_groupby_agg_columns(
         out_data[out_col_name] = pd.Series([], dtype=pd.ArrowDtype(new_type))
 
     return out_data
+
+
+def _groupby_apply_plan(
+    grouped: SeriesGroupBy | DataFrameGroupBy, func, *args, **kwargs
+) -> BodoSeries | BodoDataFrame:
+    from bodo.pandas.base import _empty_like
+
+    # NOTE: assumes no key columns are being aggregated e.g:
+    # df1.groupby("C", as_index=False)[["C"]].agg("sum")
+    if set(grouped._keys) & set(grouped.selection_for_plan):
+        raise BodoLibNotImplementedException(
+            "GroupBy.agg(): Aggregation on key columns not supported yet."
+        )
+
+    zero_size_self = _empty_like(grouped._obj)
+    deco = bodo.jit(cache=False, spawn=False, distributed=False)
+    jitted_func = deco(func)
+
+    selected_self = (
+        zero_size_self[grouped.selection_for_plan]
+        if isinstance(grouped, DataFrameGroupBy)
+        else zero_size_self[grouped.selection_for_plan[0]]
+    )
+
+    out_type = get_apply_out_type(jitted_func, selected_self)
+
+    if isinstance(out_type, (bodo.DataFrameType, bodo.SeriesType)):
+        raise BodoLibNotImplementedException(
+            "DataFrameGroupby.apply(): func returning Series or DataFrame not implemented yet."
+        )
+
+    out_arrow_type = numba_type_to_pyarrow_type(out_type)
+    if out_arrow_type is None:
+        raise BodoLibNotImplementedException(
+            "DataFrameGroupby.apply(): Unsupported UDF output type:", out_type
+        )
+
+    selected_cols = [
+        grouped._obj.columns.get_loc(col) for col in grouped.selection_for_plan
+    ]
+    empty_out_col = pd.Series([], dtype=pd.ArrowDtype(out_arrow_type))
+
+    exprs = [
+        AggregateExpression(
+            empty_out_col,
+            grouped._obj._plan,
+            "udf",
+            _get_cfunc_apply_wrapper(jitted_func, selected_self, out_arrow_type),
+            selected_cols,
+            grouped._dropna,
+        )
+    ]
+
+    empty_data = pd.DataFrame() if grouped._as_index else zero_size_self[grouped._keys]
+
+    out_name = (
+        BODO_NONE_DUMMY if isinstance(grouped, DataFrameGroupBy) else selected_self.name
+    )
+    empty_data[out_name] = empty_out_col
+
+    if grouped._as_index:
+        # Convert output to series
+        empty_data = empty_data.set_index(
+            *(zero_size_self[col] for col in grouped._keys)
+        )
+        empty_data = empty_data[out_name]
+    elif out_name == BODO_NONE_DUMMY:
+        # TODO: support as_index=False case output column is None
+        empty_data = empty_data.rename(columns={out_name: "None"})
+
+    return _make_logical_agg_plan(grouped, exprs, empty_data)

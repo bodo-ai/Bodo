@@ -232,10 +232,28 @@ def test_agg_null_keys():
     _test_equal(bdf2, df2, sort_output=True)
 
 
-def test_apply_basic():
+@pytest.mark.parametrize(
+    "dropna",
+    [
+        pytest.param(True, id="dropna"),
+        pytest.param(False, id="no_dropna"),
+    ],
+)
+@pytest.mark.parametrize(
+    "as_index",
+    [
+        pytest.param(True, id="as_index"),
+        pytest.param(False, id="no_as_index"),
+    ],
+)
+def test_apply_basic(dropna, as_index):
     """Test basic groupby apply example similar to TPCH Q08"""
     df = pd.DataFrame(
-        {"B": ["a", "b", "c"] * 4, "A": ["A", "B"] * 6, "C": [1, 2, 3, 4] * 3}
+        {
+            "B": ["a", "c", "b", "c"] * 3,
+            "A": ["A", "B", None] * 4,
+            "C": [1, 2, 3, 4, 5, 6] * 2,
+        }
     )
 
     bdf = bd.from_pandas(df)
@@ -246,8 +264,56 @@ def test_apply_basic():
         numer = df["C"].sum()
         return numer / denom
 
-    df2 = df.groupby("A").apply(udf)
+    df2 = df.groupby("A", dropna=dropna, as_index=as_index).apply(
+        udf, include_groups=False
+    )
     with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby("A").apply(udf)
+        bdf2 = bdf.groupby("A", dropna=dropna, as_index=as_index).apply(
+            udf, include_groups=False
+        )
 
-    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True)
+    # Pandas/BD returns None column when as_index=False
+    # Bodo DataFrames just returns "None" for now,
+    if not as_index:
+        df2 = df2.rename(columns={None: "None"})
+
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "dropna",
+    [
+        pytest.param(True, id="dropna"),
+        pytest.param(False, id="no_dropna"),
+    ],
+)
+@pytest.mark.parametrize(
+    "as_index",
+    [
+        pytest.param(True, id="as_index"),
+        pytest.param(False, id="no_as_index"),
+    ],
+)
+def test_series_apply_udf(dropna, as_index):
+    df = pd.DataFrame(
+        {
+            "B": ["a", "c", "b", "c"] * 3,
+            "A": ["A", "B", None] * 4,
+            "C": [1, 2, 3, 4, 5, 6] * 2,
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+
+    def udf(x):
+        return x.max() - x.min()
+
+    df2 = df.groupby("A", dropna=dropna, as_index=as_index)["C"].apply(
+        udf, include_groups=False
+    )
+    with assert_executed_plan_count(0):
+        bdf2 = bdf.groupby("A", dropna=dropna, as_index=as_index)["C"].apply(
+            udf, include_groups=False
+        )
+
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
