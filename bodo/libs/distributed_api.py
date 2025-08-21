@@ -185,9 +185,6 @@ def get_cpu_id():  # pragma: no cover
     return _get_cpu_id()
 
 
-_get_time = types.ExternalFunction("get_time", types.float64())
-
-
 @infer_global(time.time)
 class TimeInfer(ConcreteTemplate):
     cases = [signature(types.float64)]
@@ -195,6 +192,8 @@ class TimeInfer(ConcreteTemplate):
 
 @lower_builtin(time.time)
 def lower_time_time(context, builder, sig, args):
+    _get_time = types.ExternalFunction("get_time", types.float64())
+
     return cached_call_internal(context, builder, lambda: _get_time(), sig, args)
 
 
