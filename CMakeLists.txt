@@ -1036,6 +1036,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_theta_sketches.cpp")
 endif()
 
+set(NO_HDF5 TRUE)
 # TODO [BSE-4554] HDF5 support on Windows
 if(DEFINED ENV{NO_HDF5} AND "$ENV{NO_HDF5}" STREQUAL "1")
     set(NO_HDF5 TRUE)
