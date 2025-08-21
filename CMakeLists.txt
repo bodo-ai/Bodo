@@ -508,28 +508,28 @@ endif()
 install(TARGETS memory_tester DESTINATION "bodo/tests/")
 
 # ---------------------- Cython Target - bodo.transforms.type_inference.native_typer -----------------------
-add_custom_command(
-  OUTPUT bodo/transforms/type_inference/native_typer.cpp
-  DEPENDS bodo/transforms/type_inference/native_typer.pyx
-  VERBATIM
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/transforms/type_inference/native_typer.cpp" "bodo/transforms/type_inference/native_typer.pyx"
-  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/transforms/type_inference/native_typer.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/native_typer.cpp"
-  COMMENT "Cythonizing Source bodo/transforms/type_inference/native_typer.pyx into bodo/transforms/type_inference/native_typer.cpp"
-)
+# add_custom_command(
+#   OUTPUT bodo/transforms/type_inference/native_typer.cpp
+#   DEPENDS bodo/transforms/type_inference/native_typer.pyx
+#   VERBATIM
+#   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+#   COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/transforms/type_inference/native_typer.cpp" "bodo/transforms/type_inference/native_typer.pyx"
+#   COMMAND "${CMAKE_COMMAND}" -E copy "bodo/transforms/type_inference/native_typer.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/native_typer.cpp"
+#   COMMENT "Cythonizing Source bodo/transforms/type_inference/native_typer.pyx into bodo/transforms/type_inference/native_typer.cpp"
+# )
 
-python_add_library(
-  native_typer
-  MODULE WITH_SOABI
-    "bodo/transforms/type_inference/native_typer.cpp"
-    "bodo/transforms/type_inference/type.cpp"
-    "bodo/transforms/type_inference/typeinfer.cpp"
-    "bodo/transforms/type_inference/ir.cpp"
-)
-target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/type_inference/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/")
-target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
-target_link_libraries(native_typer PRIVATE fmt::fmt)
-install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
+# python_add_library(
+#   native_typer
+#   MODULE WITH_SOABI
+#     "bodo/transforms/type_inference/native_typer.cpp"
+#     "bodo/transforms/type_inference/type.cpp"
+#     "bodo/transforms/type_inference/typeinfer.cpp"
+#     "bodo/transforms/type_inference/ir.cpp"
+# )
+# target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/type_inference/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/")
+# target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
+# target_link_libraries(native_typer PRIVATE fmt::fmt)
+# install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
 # ---------------------- Cython Target - plan_optimizer -----------------------
 add_custom_command(
