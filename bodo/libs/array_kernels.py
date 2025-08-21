@@ -42,6 +42,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.timestamptz_ext import TimestampTZArrayType, timestamptz_array_type
+from bodo.libs import quantile_alg
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_from_cpp_table,
@@ -98,6 +99,9 @@ from bodo.utils.utils import (
     numba_to_c_type,
     unliteral_all,
 )
+
+ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
+ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
 
 DEFAULT_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
@@ -603,55 +607,48 @@ def first_last_valid_index(arr, index_arr, is_first=True, parallel=False):
 ################################ median ####################################
 
 
-@numba.generated_jit(nopython=True, no_unliteral=True)
-def median_series_computation(res, arr, is_parallel, skipna):
-    from bodo.libs import quantile_alg
+ll.add_symbol(
+    "median_series_computation_py_entry",
+    quantile_alg.median_series_computation_py_entry,
+)
 
-    ll.add_symbol(
-        "median_series_computation_py_entry",
-        quantile_alg.median_series_computation_py_entry,
-    )
 
-    _median_series_computation = types.ExternalFunction(
-        "median_series_computation_py_entry",
-        types.void(
-            types.voidptr, bodo.libs.array.array_info_type, types.bool_, types.bool_
-        ),
-    )
+_median_series_computation = types.ExternalFunction(
+    "median_series_computation_py_entry",
+    types.void(
+        types.voidptr, bodo.libs.array.array_info_type, types.bool_, types.bool_
+    ),
+)
 
-    def impl(res, arr, is_parallel, skipna):  # pragma: no cover
-        arr_info = array_to_info(arr)
-        _median_series_computation(res, arr_info, is_parallel, skipna)
-        check_and_propagate_cpp_exception()
 
-    return impl
+@numba.njit
+def median_series_computation(res, arr, is_parallel, skipna):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    _median_series_computation(res, arr_info, is_parallel, skipna)
+    check_and_propagate_cpp_exception()
 
 
 ################################ autocorr ####################################
 
+ll.add_symbol(
+    "autocorr_series_computation_py_entry",
+    quantile_alg.autocorr_series_computation_py_entry,
+)
 
-@numba.generated_jit(nopython=True, no_unliteral=True)
-def autocorr_series_computation(res, arr, lag, is_parallel):
-    from bodo.libs import quantile_alg
 
-    ll.add_symbol(
-        "autocorr_series_computation_py_entry",
-        quantile_alg.autocorr_series_computation_py_entry,
-    )
+_autocorr_series_computation = types.ExternalFunction(
+    "autocorr_series_computation_py_entry",
+    types.void(
+        types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
+    ),
+)
 
-    _autocorr_series_computation = types.ExternalFunction(
-        "autocorr_series_computation_py_entry",
-        types.void(
-            types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
-        ),
-    )
 
-    def impl(res, arr, lag, is_parallel):  # pragma: no cover
-        arr_info = array_to_info(arr)
-        _autocorr_series_computation(res, arr_info, lag, is_parallel)
-        check_and_propagate_cpp_exception()
-
-    return impl
+@numba.njit
+def autocorr_series_computation(res, arr, lag, is_parallel):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    _autocorr_series_computation(res, arr_info, lag, is_parallel)
+    check_and_propagate_cpp_exception()
 
 
 @numba.njit
@@ -664,29 +661,25 @@ def autocorr(arr, lag=1, parallel=False):  # pragma: no cover
 
 ####################### series monotonicity ####################################
 
+ll.add_symbol(
+    "compute_series_monotonicity_py_entry",
+    quantile_alg.compute_series_monotonicity_py_entry,
+)
 
-@numba.generated_jit(nopython=True, no_unliteral=True)
-def series_monotonicity_call(res, arr, inc_dec, is_parallel):
-    from bodo.libs import quantile_alg
 
-    ll.add_symbol(
-        "compute_series_monotonicity_py_entry",
-        quantile_alg.compute_series_monotonicity_py_entry,
-    )
+_compute_series_monotonicity = types.ExternalFunction(
+    "compute_series_monotonicity_py_entry",
+    types.void(
+        types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
+    ),
+)
 
-    _compute_series_monotonicity = types.ExternalFunction(
-        "compute_series_monotonicity_py_entry",
-        types.void(
-            types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
-        ),
-    )
 
-    def impl(res, arr, inc_dec, is_parallel):  # pragma: no cover
-        arr_info = array_to_info(arr)
-        _compute_series_monotonicity(res, arr_info, inc_dec, is_parallel)
-        check_and_propagate_cpp_exception()
-
-    return impl
+@numba.njit
+def series_monotonicity_call(res, arr, inc_dec, is_parallel):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    _compute_series_monotonicity(res, arr_info, inc_dec, is_parallel)
+    check_and_propagate_cpp_exception()
 
 
 @numba.njit
@@ -768,81 +761,60 @@ def get_valid_entries_from_date_offset(
 ############################ approx_percentile ################################
 
 
-@numba.generated_jit(nopython=True, no_unliteral=True)
-def approx_percentile(arr, percentile, parallel=False):
-    from bodo.libs import quantile_alg
-
-    ll.add_symbol(
-        "approx_percentile_py_entrypt",
-        quantile_alg.approx_percentile_py_entrypt,
-    )
-
-    _approx_percentile_ = types.ExternalFunction(
-        "approx_percentile_py_entrypt",
-        types.float64(bodo.libs.array.array_info_type, types.float64, types.bool_),
-    )
-
-    def impl(arr, percentile, parallel=False):  # pragma: no cover
-        arr_info = array_to_info(arr)
-        result = _approx_percentile_(arr_info, percentile, parallel)
-        check_and_propagate_cpp_exception()
-        return result
-
-    return impl
+def approx_percentile(A, q, parallel=False):  # pragma: no cover
+    pass
 
 
-@numba.generated_jit(nopython=True, no_unliteral=True)
-def percentile_cont(arr, percentile, parallel=False):
-    from bodo.libs import quantile_alg
+ll.add_symbol(
+    "approx_percentile_py_entrypt",
+    quantile_alg.approx_percentile_py_entrypt,
+)
 
-    ll.add_symbol(
-        "percentile_py_entrypt",
-        quantile_alg.percentile_py_entrypt,
-    )
-
-    _percentile = types.ExternalFunction(
-        "percentile_py_entrypt",
-        types.float64(
-            bodo.libs.array.array_info_type, types.float64, types.bool_, types.bool_
-        ),
-    )
-
-    def impl(arr, percentile, parallel=False):  # pragma: no cover
-        arr_info = array_to_info(arr)
-        result = _percentile(arr_info, percentile, True, parallel)
-        check_and_propagate_cpp_exception()
-        if np.isnan(result):
-            return None
-        return result
-
-    return impl
+_approx_percentile_ = types.ExternalFunction(
+    "approx_percentile_py_entrypt",
+    types.float64(bodo.libs.array.array_info_type, types.float64, types.bool_),
+)
 
 
-@numba.generated_jit(nopython=True, no_unliteral=True)
-def percentile_disc(arr, percentile, parallel=False):
-    from bodo.libs import quantile_alg
+@numba.njit
+def approx_percentile(arr, percentile, parallel=False):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    result = _approx_percentile_(arr_info, percentile, parallel)
+    check_and_propagate_cpp_exception()
+    return result
 
-    ll.add_symbol(
-        "percentile_py_entrypt",
-        quantile_alg.percentile_py_entrypt,
-    )
 
-    _percentile = types.ExternalFunction(
-        "percentile_py_entrypt",
-        types.float64(
-            bodo.libs.array.array_info_type, types.float64, types.bool_, types.bool_
-        ),
-    )
+ll.add_symbol(
+    "percentile_py_entrypt",
+    quantile_alg.percentile_py_entrypt,
+)
 
-    def impl(arr, percentile, parallel=False):  # pragma: no cover
-        arr_info = array_to_info(arr)
-        result = _percentile(arr_info, percentile, False, parallel)
-        check_and_propagate_cpp_exception()
-        if np.isnan(result):
-            return None
-        return result
+_percentile = types.ExternalFunction(
+    "percentile_py_entrypt",
+    types.float64(
+        bodo.libs.array.array_info_type, types.float64, types.bool_, types.bool_
+    ),
+)
 
-    return impl
+
+@numba.njit
+def percentile_cont(arr, percentile, parallel=False):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    result = _percentile(arr_info, percentile, True, parallel)
+    check_and_propagate_cpp_exception()
+    if np.isnan(result):
+        return None
+    return result
+
+
+@numba.njit
+def percentile_disc(arr, percentile, parallel=False):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    result = _percentile(arr_info, percentile, False, parallel)
+    check_and_propagate_cpp_exception()
+    if np.isnan(result):
+        return None
+    return result
 
 
 ################################ quantile ####################################
@@ -870,9 +842,6 @@ class QuantileType(AbstractTemplate):
 @lower_builtin(quantile, FloatingArrayType, types.float64)
 @lower_builtin(quantile, BooleanArrayType, types.float64)
 def lower_dist_quantile_seq(context, builder, sig, args):
-    from bodo.libs import quantile_alg
-
-    ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
     # store an int to specify data type
     typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(
@@ -920,9 +889,6 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 @lower_builtin(quantile_parallel, FloatingArrayType, types.float64, types.intp)
 @lower_builtin(quantile_parallel, BooleanArrayType, types.float64, types.intp)
 def lower_dist_quantile_parallel(context, builder, sig, args):
-    from bodo.libs import quantile_alg
-
-    ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
     # store an int to specify data type
     typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(

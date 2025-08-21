@@ -5,6 +5,11 @@ from numba.core import cgutils, types
 from numba.extending import intrinsic, overload
 
 import bodo.utils.utils
+from bodo.ext import uuid_cpp
+
+ll.add_symbol("uuidV4", uuid_cpp.uuidV4)
+ll.add_symbol("uuidV5", uuid_cpp.uuidV5)
+
 
 string_type = types.unicode_type
 
@@ -12,9 +17,6 @@ string_type = types.unicode_type
 @intrinsic
 def uuidV4_wrapper(typingctx, output):
     """Wrapper for uuidV4 in _uuid.cpp"""
-    from bodo.libs import uuid_cpp
-
-    ll.add_symbol("uuidV4", uuid_cpp.uuidV4)
 
     def codegen(context, builder, sig, args):
         output = args[0]
@@ -34,9 +36,6 @@ def uuidV4_wrapper(typingctx, output):
 @intrinsic
 def uuidV5_wrapper(typingctx, output, namespace, name):
     """Wrapper for uuidV5 in _uuid.cpp"""
-    from bodo.libs import uuid_cpp
-
-    ll.add_symbol("uuidV5", uuid_cpp.uuidV5)
 
     def codegen(context, builder, sig, args):
         output, namespace, name = args

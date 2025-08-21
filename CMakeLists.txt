@@ -606,302 +606,6 @@ target_link_libraries(memory_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
 install(TARGETS memory_cpp DESTINATION "bodo/")
 
 
-# ---------------------- Native Target - quantile_alg -----------------------
-
-python_add_library(quantile_alg
-  MODULE WITH_SOABI
-  "bodo/libs/_quantile_alg.cpp"
-  "bodo/libs/_bodo_tdigest.cpp"
-  "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_bodo_common.cpp"
-  "bodo/libs/_datetime_utils.cpp"
-  "bodo/libs/_decimal_ext.cpp"
-  "bodo/libs/_bodo_to_arrow.cpp"
-  "bodo/libs/_dict_builder.cpp"
-  "bodo/libs/_table_builder_utils.cpp"
-  "bodo/libs/_table_builder.cpp"
-  "bodo/libs/_chunked_table_builder.cpp"
-  "bodo/libs/_array_operations.cpp"
-  "bodo/libs/_array_hash.cpp"
-  "bodo/libs/_distributed.cpp"
-  "bodo/libs/_shuffle.cpp"
-  "bodo/libs/_array_build_buffer.cpp"
-  "bodo/libs/streaming/_dict_encoding.cpp"
-  "bodo/libs/vendored/_murmurhash3.cpp"
-  "bodo/libs/groupby/_groupby_do_apply_to_column.cpp"
-  "bodo/libs/groupby/_groupby_agg_funcs.cpp"
-  "bodo/libs/groupby/_groupby_ftypes.cpp"
-  "bodo/libs/groupby/_groupby_common.cpp"
-  "bodo/libs/_memory.cpp"
-  "bodo/libs/_utils.cpp"
-  "bodo/libs/_storage_manager.cpp"
-)
-target_include_directories(quantile_alg PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(quantile_alg PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(quantile_alg PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
-install(TARGETS quantile_alg DESTINATION "bodo/libs/")
-
-
-# ---------------------- Native Target - lead_lag -----------------------
-
-python_add_library(lead_lag
-  MODULE WITH_SOABI
-  "bodo/libs/_lead_lag.cpp"
-  "bodo/libs/_bodo_common.cpp"
-  "bodo/libs/_memory.cpp"
-  "bodo/libs/_utils.cpp"
-  "bodo/libs/_storage_manager.cpp"
-)
-target_include_directories(lead_lag PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(lead_lag PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(lead_lag PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
-install(TARGETS lead_lag DESTINATION "bodo/libs/")
-
-
-# ---------------------- Native Target - puffin_file -----------------------
-
-set(puffin_file_sources
-  "bodo/libs/_puffin.cpp"
-  "bodo/libs/_theta_sketches.cpp"
-  "bodo/libs/_bodo_common.cpp"
-  "bodo/libs/_bodo_to_arrow.cpp"
-  "bodo/libs/_array_hash.cpp"
-  "bodo/io/_fs_io.cpp"
-  "bodo/io/iceberg_helpers.cpp"
-  "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_array_operations.cpp"
-  "bodo/libs/_distributed.cpp"
-  "bodo/libs/_shuffle.cpp"
-  "bodo/libs/_memory.cpp"
-  "bodo/libs/_utils.cpp"
-  "bodo/libs/_storage_manager.cpp"
-  "bodo/libs/_datetime_utils.cpp"
-  "bodo/libs/_decimal_ext.cpp"
-  "bodo/libs/_bodo_to_arrow.cpp"
-  "bodo/libs/_dict_builder.cpp"
-  "bodo/libs/_table_builder_utils.cpp"
-  "bodo/libs/_table_builder.cpp"
-  "bodo/libs/_chunked_table_builder.cpp"
-  "bodo/libs/streaming/_dict_encoding.cpp"
-  "bodo/libs/vendored/_murmurhash3.cpp"
-  "bodo/libs/groupby/_groupby_do_apply_to_column.cpp"
-  "bodo/libs/groupby/_groupby_agg_funcs.cpp"
-  "bodo/libs/groupby/_groupby_ftypes.cpp"
-  "bodo/libs/groupby/_groupby_common.cpp"
-  "bodo/libs/_array_build_buffer.cpp"
-  "bodo/io/arrow_compat.cpp"
-)
-
-if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
-  list(APPEND puffin_file_sources
-  "bodo/tests/test_puffin.cpp"
-  "bodo/tests/test_framework.cpp"
-  )
-endif()
-
-python_add_library(puffin_file
-  MODULE WITH_SOABI
-  "${puffin_file_sources}"
-)
-
-if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
-  target_compile_definitions(
-    puffin_file
-    PRIVATE
-      "IS_TESTING=1"
-  )
-endif()
-
-target_include_directories(puffin_file SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
-target_include_directories(puffin_file PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(puffin_file PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(puffin_file PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
-install(TARGETS puffin_file DESTINATION "bodo/libs/")
-
-
-# ---------------------- Native Target - theta_sketches -----------------------
-
-python_add_library(theta_sketches
-  MODULE WITH_SOABI
-  "bodo/libs/_theta_sketches.cpp"
-  "bodo/libs/_bodo_common.cpp"
-  "bodo/libs/_bodo_to_arrow.cpp"
-  "bodo/libs/_array_hash.cpp"
-  "bodo/io/_fs_io.cpp"
-  "bodo/io/iceberg_helpers.cpp"
-  "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_array_operations.cpp"
-  "bodo/libs/_distributed.cpp"
-  "bodo/libs/_shuffle.cpp"
-  "bodo/libs/_memory.cpp"
-  "bodo/libs/_utils.cpp"
-  "bodo/libs/_storage_manager.cpp"
-  "bodo/libs/_datetime_utils.cpp"
-  "bodo/libs/_decimal_ext.cpp"
-  "bodo/libs/_bodo_to_arrow.cpp"
-  "bodo/libs/_dict_builder.cpp"
-  "bodo/libs/_table_builder_utils.cpp"
-  "bodo/libs/_table_builder.cpp"
-  "bodo/libs/_chunked_table_builder.cpp"
-  "bodo/libs/streaming/_dict_encoding.cpp"
-  "bodo/libs/vendored/_murmurhash3.cpp"
-  "bodo/libs/groupby/_groupby_do_apply_to_column.cpp"
-  "bodo/libs/groupby/_groupby_agg_funcs.cpp"
-  "bodo/libs/groupby/_groupby_ftypes.cpp"
-  "bodo/libs/groupby/_groupby_common.cpp"
-  "bodo/libs/_array_build_buffer.cpp"
-  "bodo/io/arrow_compat.cpp"
-)
-
-target_include_directories(theta_sketches SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
-target_include_directories(theta_sketches PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(theta_sketches PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(theta_sketches PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
-install(TARGETS theta_sketches DESTINATION "bodo/libs/")
-
-
-# ---------------------- Native Target - lateral_cpp -----------------------
-
-set(lateral_cpp_sources
-  "bodo/libs/_lateral.cpp"
-  "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_bodo_common.cpp"
-  "bodo/libs/_datetime_utils.cpp"
-  "bodo/libs/_decimal_ext.cpp"
-  "bodo/libs/_bodo_to_arrow.cpp"
-  "bodo/libs/_dict_builder.cpp"
-  "bodo/libs/_table_builder_utils.cpp"
-  "bodo/libs/_table_builder.cpp"
-  "bodo/libs/_chunked_table_builder.cpp"
-  "bodo/libs/_array_operations.cpp"
-  "bodo/libs/_array_hash.cpp"
-  "bodo/libs/_distributed.cpp"
-  "bodo/libs/_shuffle.cpp"
-  "bodo/libs/_array_build_buffer.cpp"
-  "bodo/libs/streaming/_dict_encoding.cpp"
-  "bodo/libs/vendored/_murmurhash3.cpp"
-  "bodo/libs/groupby/_groupby_do_apply_to_column.cpp"
-  "bodo/libs/groupby/_groupby_agg_funcs.cpp"
-  "bodo/libs/groupby/_groupby_ftypes.cpp"
-  "bodo/libs/groupby/_groupby_common.cpp"
-  "bodo/libs/_memory.cpp"
-  "bodo/libs/_utils.cpp"
-  "bodo/libs/_storage_manager.cpp"
-)
-
-if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
-  list(APPEND lateral_cpp_sources
-  "bodo/tests/test_lateral.cpp"
-  "bodo/tests/test_framework.cpp"
-  )
-endif()
-
-python_add_library(lateral_cpp
-  MODULE WITH_SOABI
-  "${lateral_cpp_sources}"
-)
-
-if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
-  target_compile_definitions(
-    lateral_cpp
-    PRIVATE
-      "IS_TESTING=1"
-  )
-endif()
-
-target_include_directories(lateral_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(lateral_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(lateral_cpp PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
-install(TARGETS lateral_cpp DESTINATION "bodo/libs/")
-
-
-# ---------------------- Native Target - uuid_cpp -----------------------
-
-python_add_library(uuid_cpp
-  MODULE WITH_SOABI
-  "bodo/libs/_uuid.cpp"
-)
-target_include_directories(uuid_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(uuid_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(uuid_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
-install(TARGETS uuid_cpp DESTINATION "bodo/libs/")
-
-
-# ---------------------- Native Target - stream_window_cpp -----------------------
-
-set(stream_window_cpp_sources
-  "bodo/libs/streaming/_window.cpp"
-  "bodo/libs/window/_window_aggfuncs.cpp"
-  "bodo/libs/window/_window_calculator.cpp"
-  "bodo/libs/window/_window_compute.cpp"
-  "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_bodo_common.cpp"
-  "bodo/libs/_datetime_utils.cpp"
-  "bodo/libs/_decimal_ext.cpp"
-  "bodo/libs/_bodo_to_arrow.cpp"
-  "bodo/libs/_dict_builder.cpp"
-  "bodo/libs/_table_builder_utils.cpp"
-  "bodo/libs/_table_builder.cpp"
-  "bodo/libs/_chunked_table_builder.cpp"
-  "bodo/libs/_array_operations.cpp"
-  "bodo/libs/_array_hash.cpp"
-  "bodo/libs/_distributed.cpp"
-  "bodo/libs/_shuffle.cpp"
-  "bodo/libs/_array_build_buffer.cpp"
-  "bodo/libs/streaming/_dict_encoding.cpp"
-  "bodo/libs/vendored/_murmurhash3.cpp"
-  "bodo/libs/groupby/_groupby_do_apply_to_column.cpp"
-  "bodo/libs/groupby/_groupby_agg_funcs.cpp"
-  "bodo/libs/groupby/_groupby_ftypes.cpp"
-  "bodo/libs/groupby/_groupby_common.cpp"
-  "bodo/libs/groupby/_groupby_update.cpp"
-  "bodo/libs/groupby/_groupby.cpp"
-  "bodo/libs/groupby/_groupby_col_set.cpp"
-  "bodo/libs/groupby/_groupby_groups.cpp"
-  "bodo/libs/groupby/_groupby_mode.cpp"
-  "bodo/libs/groupby/_groupby_eval.cpp"
-  "bodo/libs/groupby/_groupby_mpi_exscan.cpp"
-  "bodo/libs/_memory.cpp"
-  "bodo/libs/_utils.cpp"
-  "bodo/libs/_storage_manager.cpp"
-  "bodo/libs/_operator_pool.cpp"
-  "bodo/libs/streaming/_groupby.cpp"
-  "bodo/libs/streaming/_sort.cpp"
-  "bodo/libs/streaming/_shuffle.cpp"
-  "bodo/libs/_memory_budget.cpp"
-  "bodo/libs/_query_profile_collector.cpp"
-  "bodo/io/_io.cpp"
-  "bodo/io/_fs_io.cpp"
-  "bodo/io/arrow_compat.cpp"
-)
-
-if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
-  list(APPEND stream_window_cpp_sources
-  "bodo/tests/test_window.cpp"
-  "bodo/tests/test_sorted_window_computation.cpp"
-  "bodo/tests/test_framework.cpp"
-  )
-endif()
-
-python_add_library(stream_window_cpp
-  MODULE WITH_SOABI
-  "${stream_window_cpp_sources}"
-)
-
-if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
-  target_compile_definitions(
-    stream_window_cpp
-    PRIVATE
-      "IS_TESTING=1"
-  )
-endif()
-
-target_include_directories(stream_window_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(stream_window_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(stream_window_cpp PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
-install(TARGETS stream_window_cpp DESTINATION "bodo/libs/")
-
-
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/pandas/plan_optimizer.cpp"
@@ -937,6 +641,7 @@ set(sources_list
   "bodo/libs/_array_utils.cpp"
   "bodo/libs/_bodo_ext.cpp"
   "bodo/libs/_bodo_common.cpp"
+  "bodo/libs/_bodo_tdigest.cpp"
   "bodo/libs/_bodo_to_arrow.cpp"
   "bodo/libs/_datetime_ext.cpp"
   "bodo/libs/_datetime_utils.cpp"
@@ -958,10 +663,13 @@ set(sources_list
   "bodo/libs/_nested_loop_join.cpp"
   "bodo/libs/_interval_join.cpp"
   "bodo/libs/_join_hashing.cpp"
+  "bodo/libs/_lead_lag.cpp"
   "bodo/libs/_memory.cpp"
   "bodo/libs/_memory_budget.cpp"
   "bodo/libs/_memory_budget_pymod.cpp"
   "bodo/libs/vendored/_murmurhash3.cpp"
+  "bodo/libs/_quantile_alg.cpp"
+  "bodo/libs/_lateral.cpp"
   "bodo/libs/_shuffle.cpp"
   "bodo/libs/_str_ext.cpp"
   "bodo/libs/iceberg_transforms.cpp"
@@ -969,6 +677,7 @@ set(sources_list
   "bodo/libs/streaming/_nested_loop_join.cpp"
   "bodo/libs/streaming/_groupby.cpp"
   "bodo/libs/streaming/_sort.cpp"
+  "bodo/libs/streaming/_window.cpp"
   "bodo/libs/_dict_builder.cpp"
   "bodo/libs/_table_builder_utils.cpp"
   "bodo/libs/_table_builder.cpp"
@@ -981,8 +690,10 @@ set(sources_list
   "bodo/libs/streaming/_shuffle.cpp"
   "bodo/libs/_storage_manager.cpp"
   "bodo/libs/_utils.cpp"
+  "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
   "bodo/libs/_theta_sketches.cpp"
+  "bodo/libs/_puffin.cpp"
   "bodo/libs/_io_cpu_thread_pool.cpp"
 )
 
@@ -1011,6 +722,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_dict_builder.cpp"
     "bodo/tests/test_groupby_common.cpp"
     "bodo/tests/test_groupby.cpp"
+    "bodo/tests/test_window.cpp"
     "bodo/tests/test_json_col_reader.cpp"
     "bodo/tests/test_memory_budget.cpp"
     "bodo/tests/test_pinnable.cpp"
@@ -1025,6 +737,8 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_timestamptz_array.cpp"
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
+    "bodo/tests/test_puffin.cpp"
+    "bodo/tests/test_sorted_window_computation.cpp"
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
   )
