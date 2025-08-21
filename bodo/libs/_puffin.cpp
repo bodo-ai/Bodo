@@ -765,6 +765,10 @@ array_info *read_puffin_file_ndvs_py_entrypt(
     }
 }
 
+#ifdef IS_TESTING
+PyMODINIT_FUNC PyInit_test_cpp(void);
+#endif
+
 PyMODINIT_FUNC PyInit_puffin_file(void) {
     PyObject *m;
     MOD_DEF(m, "puffin_file", "No docs", nullptr);
@@ -776,6 +780,10 @@ PyMODINIT_FUNC PyInit_puffin_file(void) {
 
     SetAttrStringFromVoidPtr(m, write_puffin_file_py_entrypt);
     SetAttrStringFromVoidPtr(m, read_puffin_file_ndvs_py_entrypt);
+
+#ifdef IS_TESTING
+    SetAttrStringFromPyInit(m, test_cpp);
+#endif
 
     return m;
 }

@@ -1,11 +1,9 @@
 #include <Python.h>
 #include <datetime.h>
 #include <iostream>
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
-#include <numpy/arrayobject.h>
 
 #include "_array_hash.h"
 #include "_array_operations.h"
@@ -889,83 +887,6 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
 }
 
 /**
- * @brief call PyArray_GETITEM() of Numpy C-API
- *
- * @param arr array object
- * @param p pointer in array object
- * @return PyObject* value returned by getitem
- */
-PyObject* array_getitem(PyArrayObject* arr, const char* p) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-    PyObject* s = PyArray_GETITEM(arr, p);
-    CHECK(s, "getting item in numpy array failed");
-    return s;
-#undef CHECK
-}
-
-/**
- * @brief call PySequence_GetItem() of Python C-API
- *
- * @param obj sequence object (e.g. list)
- * @param i index
- * @return PyObject* value returned by getitem
- */
-PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-    PyObject* s = PySequence_GetItem(obj, i);
-    CHECK(s, "getting item failed");
-    return s;
-#undef CHECK
-}
-
-/**
- * @brief check if obj is a list
- *
- * @param obj object to check
- * @return int 1 if a list, 0 otherwise
- */
-int list_check(PyArrayObject* obj) { return PyList_Check(obj); }
-
-/**
- * @brief return key list of dict
- *
- * @param obj dict object
- * @return list of keys object
- */
-PyObject* dict_keys(PyObject* obj) { return PyDict_Keys(obj); }
-
-/**
- * @brief return values list of dict
- *
- * @param obj dict object
- * @return list of values object
- */
-PyObject* dict_values(PyObject* obj) { return PyDict_Values(obj); }
-
-/**
- * @brief call PyDict_MergeFromSeq2() to fill a dict
- *
- * @param dict_obj dict object
- * @param seq2 iterator of key/value pairs
- */
-void dict_merge_from_seq2(PyObject* dict_obj, PyObject* seq2) {
-    int err = PyDict_MergeFromSeq2(dict_obj, seq2, 0);
-    if (err != 0) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError, "PyDict_MergeFromSeq2 failed");
-    }
-}
-
-/**
  * @brief check if object is an NA value like None or np.nan
  *
  * @param s Python object to check
@@ -1044,9 +965,6 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // init datetime APIs
     PyDateTime_IMPORT;
 
-    // init numpy
-    import_array();
-
     bodo_common_init();
 
     // DEC_MOD_METHOD(string_array_to_info);
@@ -1121,21 +1039,6 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, bodo_array_from_pyarrow_py_entry);
     SetAttrStringFromVoidPtr(m, pd_pyarrow_array_from_bodo_array_py_entry);
     SetAttrStringFromVoidPtr(m, string_array_from_sequence);
-    SetAttrStringFromVoidPtr(m, array_getitem);
-    SetAttrStringFromVoidPtr(m, list_check);
-    SetAttrStringFromVoidPtr(m, dict_keys);
-    SetAttrStringFromVoidPtr(m, dict_values);
-    // This function calls PyErr_Set_String, but the function is called inside
-    // box/unbox functions in Python, where we don't yet know how best to
-    // detect and raise errors. Once we do, we should raise an error in Python
-    // if this function calls PyErr_Set_String. TODO
-    SetAttrStringFromVoidPtr(m, dict_merge_from_seq2);
-    // This function is C, but it has components that can fail, in which case
-    // we should call PyErr_Set_String and detect this and raise it in Python.
-    // We currently don't know the best way to detect and raise exceptions
-    // in box/unbox functions which is where this function is called.
-    // Once we do, we should handle this appropriately. TODO
-    SetAttrStringFromVoidPtr(m, seq_getitem);
     SetAttrStringFromVoidPtr(m, is_na_value);
     SetAttrStringFromVoidPtr(m, get_stats_alloc);
     SetAttrStringFromVoidPtr(m, get_stats_free);

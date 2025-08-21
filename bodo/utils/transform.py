@@ -33,6 +33,7 @@ from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import fold_arguments
 
 import bodo
+import bodo.libs.distributed_api
 from bodo.decorators import WrapPythonDispatcher, WrapPythonDispatcherType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.map_arr_ext import MapArrayType
@@ -1781,6 +1782,13 @@ def replace_func(
     run_full_pipeline=False,
 ):
     """"""
+    # We can't leave globals updated outside this function so we save, update, then restore.
+    saved = {
+        name: func.__globals__[name]
+        for name in ("numba", "np", "bodo", "pd")
+        if name in func.__globals__
+    }
+
     glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd}
     if extra_globals is not None:
         glbls.update(extra_globals)
@@ -1823,9 +1831,11 @@ def replace_func(
             else:
                 new_args.append(arg_typs[i])
         arg_typs = tuple(new_args)
-    return ReplaceFunc(
+    ret = ReplaceFunc(
         func, arg_typs, args, glbls, inline_bodo_calls, run_full_pipeline, pre_nodes
     )
+    func.__globals__.update(saved)
+    return ret
 
 
 ############################# UDF utils ############################

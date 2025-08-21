@@ -35,9 +35,6 @@ from bodo.utils.typing import (
     unwrap_typeref,
 )
 
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hdist  # noqa: F401  # isort:skip
-
 
 class MapScalarType(types.Type):
     """Data type for map elements taken as scalars from map arrays. A regular

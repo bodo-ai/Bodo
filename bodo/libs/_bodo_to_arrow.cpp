@@ -749,7 +749,7 @@ void arrow_buffer_dtor(void *ptr, size_t size, void *dtor_info_raw) {
     delete arrow_buf;
 
     // Free the DtorInfo struct
-    NRT_MemSys::instance()->mi_allocator.free(dtor_info);
+    global_memsys->mi_allocator.free(dtor_info);
 }
 
 }  // extern "C"

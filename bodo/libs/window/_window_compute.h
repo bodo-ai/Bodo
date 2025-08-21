@@ -5,59 +5,6 @@
 #include "../groupby/_groupby.h"
 
 /**
- * @brief Helper function to determine the correct ftype and array-type for
- * index column to use during the update step of Min Row-Number Filter.
- *
- * @param n_orderby_arrs Number of order-by columns for the MRNF.
- * @param asc_vec Bitmask specifying the sort direction for the order-by
- * columns.
- * @param na_pos_vec Bitmask specifying whether nulls should be considered
- * 'last' in the order-by columns.
- * @return std::tuple<int64_t, bodo_array_type::arr_type_enum> Tuple of the
- * ftype and array-type for the index column.
- */
-std::tuple<int64_t, bodo_array_type::arr_type_enum>
-get_update_ftype_idx_arr_type_for_mrnf(size_t n_orderby_arrs,
-                                       const std::vector<bool>& asc_vec,
-                                       const std::vector<bool>& na_pos_vec);
-
-/**
- * @brief Primary implementation of MRNF.
- * The function updates 'idx_col' in place and writes the index
- * of the output row corresponding to each group.
- * This is used by both the streaming MRNF implementation as well
- * as the non-streaming window implementation.
- * Note that this doesn't make any assumptions about the sorted-ness
- * of the data, i.e. it computes the minimum row per group based on
- * the order-by columns. If the data is known to be already sorted, use
- * the specialized 'min_row_number_filter_window_computation_already_sorted'
- * implementation instead.
- *
- * @param[in, out] idx_col Column with indices of the output rows. This will be
- * updated in place.
- * @param orderby_cols The columns used in the order by clause of the query.
- * @param grp_info Grouping information for the rows in the table.
- * @param asc Bitmask specifying the sort direction for the order-by
- * columns.
- * @param na_pos Bitmask specifying whether nulls should be considered
- * 'last' in the order-by columns.
- * @param update_ftype The ftype to use for update. This is the output
- * from 'get_update_ftype_idx_arr_type_for_mrnf'.
- * @param use_sql_rules Should initialization functions obey SQL semantics?
- * @param pool Memory pool to use for allocations during the execution of
- * this function.
- * @param mm Memory manager associated with the pool.
- */
-void min_row_number_filter_no_sort(
-    const std::shared_ptr<array_info>& idx_col,
-    std::vector<std::shared_ptr<array_info>>& orderby_cols,
-    grouping_info const& grp_info, const std::vector<bool>& asc,
-    const std::vector<bool>& na_pos, int update_ftype, bool use_sql_rules,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-    std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
-
-/**
  * @brief Handles the update step for the supported window functions.
  * These functions are not simple reductions and require additional
  * functionality to operate over a "window" of values (possibly a sort
