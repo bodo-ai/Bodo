@@ -462,26 +462,6 @@ def load_val_ptr(typingctx, ptr_tp, val_tp=None):
     return val_tp(ptr_tp, val_tp), codegen
 
 
-_dist_reduce = types.ExternalFunction(
-    "dist_reduce",
-    types.void(types.voidptr, types.voidptr, types.int32, types.int32, types.int64),
-)
-
-_dist_arr_reduce = types.ExternalFunction(
-    "dist_arr_reduce", types.void(types.voidptr, types.int64, types.int32, types.int32)
-)
-
-_timestamptz_reduce = types.ExternalFunction(
-    "timestamptz_reduce",
-    types.void(types.int64, types.int64, types.voidptr, types.voidptr, types.boolean),
-)
-
-_decimal_reduce = types.ExternalFunction(
-    "decimal_reduce",
-    types.void(types.int64, types.voidptr, types.voidptr, types.int32, types.int32),
-)
-
-
 @numba.njit(cache=True)
 def dist_reduce(value, reduce_op, comm=0):
     return dist_reduce_impl(value, reduce_op, comm)
@@ -491,6 +471,11 @@ def dist_reduce(value, reduce_op, comm=0):
 def dist_reduce_impl(value, reduce_op, comm):
     if isinstance(value, types.Array):
         typ_enum = np.int32(numba_to_c_type(value.dtype))
+
+        _dist_arr_reduce = types.ExternalFunction(
+            "dist_arr_reduce",
+            types.void(types.voidptr, types.int64, types.int32, types.int32),
+        )
 
         def impl_arr(value, reduce_op, comm):  # pragma: no cover
             assert comm == 0, "dist_reduce_impl: intercomm not supported for arrays"
@@ -530,6 +515,14 @@ def dist_reduce_impl(value, reduce_op, comm):
     if isinstance(target_typ, bodo.Decimal128Type):
         # For index-value types, the data pointed to has different amounts of padding depending on machine type.
         # as a workaround, we can pass the index separately.
+
+        _decimal_reduce = types.ExternalFunction(
+            "decimal_reduce",
+            types.void(
+                types.int64, types.voidptr, types.voidptr, types.int32, types.int32
+            ),
+        )
+
         if isinstance(types.unliteral(value), IndexValueType):
 
             def impl(value, reduce_op, comm):  # pragma: no cover
@@ -576,6 +569,14 @@ def dist_reduce_impl(value, reduce_op, comm):
         # portable).
         # TODO(aneesh): unify array and scalar representations of TimestampTZ to
         # avoid this.
+
+        _timestamptz_reduce = types.ExternalFunction(
+            "timestamptz_reduce",
+            types.void(
+                types.int64, types.int64, types.voidptr, types.voidptr, types.boolean
+            ),
+        )
+
         def impl(value, reduce_op, comm):  # pragma: no cover
             assert comm == 0, "dist_reduce_impl: intercomm not supported for arrays"
             if reduce_op not in {Reduce_Type.Min.value, Reduce_Type.Max.value}:
@@ -599,6 +600,11 @@ def dist_reduce_impl(value, reduce_op, comm):
             return bodo.TimestampTZ(pd.Timestamp(out_ts), out_offset)
 
         return impl
+
+    _dist_reduce = types.ExternalFunction(
+        "dist_reduce",
+        types.void(types.voidptr, types.voidptr, types.int32, types.int32, types.int64),
+    )
 
     def impl(value, reduce_op, comm):  # pragma: no cover
         in_ptr = value_to_ptr(value)
