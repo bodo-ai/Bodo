@@ -211,8 +211,6 @@ def get_type_enum(arr):
     return lambda arr: np.int32(typ_val)
 
 
-INT_MAX = np.iinfo(np.int32).max
-
 _send = types.ExternalFunction(
     "c_send",
     types.void(types.voidptr, types.int32, types.int32, types.int32, types.int32),
@@ -1288,6 +1286,8 @@ def bcast_preallocated_overload(data, root=DEFAULT_ROOT):
     ranks.
     Only supports basic numeric and string data types (e.g. no nested arrays).
     """
+    INT_MAX = np.iinfo(np.int32).max
+
     # Numpy arrays
     if isinstance(data, types.Array):
 
