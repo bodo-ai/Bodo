@@ -82,7 +82,6 @@ from bodo.utils.utils import (
     numba_to_c_type,
 )
 
-ll.add_symbol("dist_get_time", hdist.dist_get_time)
 ll.add_symbol("get_time", hdist.get_time)
 ll.add_symbol("dist_reduce", hdist.dist_reduce)
 ll.add_symbol("dist_arr_reduce", hdist.dist_arr_reduce)
@@ -187,7 +186,6 @@ def get_cpu_id():  # pragma: no cover
 
 
 _get_time = types.ExternalFunction("get_time", types.float64())
-dist_time = types.ExternalFunction("dist_get_time", types.float64())
 
 
 @infer_global(time.time)

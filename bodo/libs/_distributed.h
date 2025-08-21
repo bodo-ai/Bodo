@@ -83,7 +83,6 @@ static int64_t dist_get_start(int64_t total, int num_pes,
 static int64_t dist_get_end(int64_t total, int num_pes, int node_id) __UNUSED__;
 static int64_t dist_get_node_portion(int64_t total, int num_pes,
                                      int node_id) __UNUSED__;
-static double dist_get_time() __UNUSED__;
 static double get_time() __UNUSED__;
 static int barrier() __UNUSED__;
 
@@ -285,14 +284,6 @@ static int64_t index_rank(int64_t total, int num_pes, int64_t index) {
     } else {
         return res + (index - crit_index) / blk_size;
     }
-}
-
-static double dist_get_time() {
-    double wtime;
-    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
-              "dist_get_time: MPI error on MPI_Barrier:");
-    wtime = MPI_Wtime();
-    return wtime;
 }
 
 static double get_time() {
