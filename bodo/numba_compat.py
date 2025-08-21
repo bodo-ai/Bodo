@@ -3052,15 +3052,15 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     self._add_refine_map(typeinfer, typevars, sig)
 
 
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.typeinfer.CallConstraint.resolve)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "d987a5c642549f6fa0218faa3cb9356bc51459a34303b2a9227d37b5fb96aec4"
-    ):  # pragma: no cover
-        warnings.warn("numba.core.typeinfer.CallConstraint.resolve has changed")
+# if _check_numba_change:  # pragma: no cover
+#     lines = inspect.getsource(numba.core.typeinfer.CallConstraint.resolve)
+#     if (
+#         hashlib.sha256(lines.encode()).hexdigest()
+#         != "d987a5c642549f6fa0218faa3cb9356bc51459a34303b2a9227d37b5fb96aec4"
+#     ):  # pragma: no cover
+#         warnings.warn("numba.core.typeinfer.CallConstraint.resolve has changed")
 
-numba.core.typeinfer.CallConstraint.resolve = CallConstraint_resolve
+# numba.core.typeinfer.CallConstraint.resolve = CallConstraint_resolve
 
 
 def ForceLiteralArg__init__(
@@ -6603,16 +6603,16 @@ def type_inference_stage(
         )
 
 
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.typed_passes.type_inference_stage)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "813ca762e544d8e70506cac5031581d7a2bf725c2af5321feed1b344459fd486"
-    ):
-        warnings.warn("numba.core.typed_passes.type_inference_stage has changed")
+# if _check_numba_change:  # pragma: no cover
+#     lines = inspect.getsource(numba.core.typed_passes.type_inference_stage)
+#     if (
+#         hashlib.sha256(lines.encode()).hexdigest()
+#         != "813ca762e544d8e70506cac5031581d7a2bf725c2af5321feed1b344459fd486"
+#     ):
+#         warnings.warn("numba.core.typed_passes.type_inference_stage has changed")
 
 
-numba.core.typed_passes.type_inference_stage = type_inference_stage
+# numba.core.typed_passes.type_inference_stage = type_inference_stage
 
 
 # Add a hook for Bodo TypeManager in Numba's TypeManager to initialize Bodo native
@@ -6640,23 +6640,23 @@ def set_compatible(self, fromty, toty, by):
     self._types.add(toty)
 
 
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.typeconv.typeconv.TypeManager.set_compatible)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "c88bb5e21b2916c86f9c040ab9611afde9eacb8b3be21b48f446c576562eab51"
-    ):
-        warnings.warn(
-            "numba.core.typeconv.typeconv.TypeManager.set_compatible has changed"
-        )
+# if _check_numba_change:  # pragma: no cover
+#     lines = inspect.getsource(numba.core.typeconv.typeconv.TypeManager.set_compatible)
+#     if (
+#         hashlib.sha256(lines.encode()).hexdigest()
+#         != "c88bb5e21b2916c86f9c040ab9611afde9eacb8b3be21b48f446c576562eab51"
+#     ):
+#         warnings.warn(
+#             "numba.core.typeconv.typeconv.TypeManager.set_compatible has changed"
+#         )
 
 
-numba.core.typeconv.typeconv.TypeManager.set_compatible = set_compatible
+# numba.core.typeconv.typeconv.TypeManager.set_compatible = set_compatible
 
-# Reinitialize cast rules after installing hook (since first run is at Numba startup)
-numba.core.typeconv.rules._init_casting_rules(
-    numba.core.typeconv.rules.default_type_manager
-)
+# # Reinitialize cast rules after installing hook (since first run is at Numba startup)
+# numba.core.typeconv.rules._init_casting_rules(
+#     numba.core.typeconv.rules.default_type_manager
+# )
 
 def _dict_rebuild(vals: dict, key_type: types.Type, value_type: types.Type):
     """Rebuild typed Dict using regular dictionary values and key/value types"""
