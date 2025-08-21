@@ -1625,9 +1625,6 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len):
     return getitem_impl
 
 
-dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
-
-
 def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
     return arr[ind]
 
@@ -1664,6 +1661,7 @@ def overload_transform_str_getitem_output(data, length):
 @overload(int_getitem, no_unliteral=True)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+    dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
 
     if is_str_arr_type(arr) or arr == bodo.binary_array_type:
         # TODO: other kinds, unicode
@@ -1999,8 +1997,9 @@ def int_optional_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
 
 @overload(int_isna, no_unliteral=True)
-def int_isn_overload(arr, ind, arr_start, total_len, is_1D):
+def int_isna_overload(arr, ind, arr_start, total_len, is_1D):
     ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+    dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
 
     def impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
         if ind >= total_len:
