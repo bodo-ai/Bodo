@@ -76,9 +76,9 @@ jobs:
   #         cd e2e-tests
   #         pytest -s -v --durations=0
 
-  #         # TODO: reenable tests when dependency issue is resolved.
-  #         # cd ..
-  #         # pytest -s -v --durations=0 bodo/tests/test_javascript*
+  #
+  #         cd ..
+  #         pytest -s -v --durations=0 bodo/tests/test_javascript*
 
   #       env:
   #         PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
