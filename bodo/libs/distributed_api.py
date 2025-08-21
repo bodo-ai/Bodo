@@ -142,7 +142,6 @@ class Reduce_Type(Enum):
     No_Op = 13
 
 
-_get_rank = types.ExternalFunction("c_get_rank", types.int32())
 _get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
 _dist_transpose_comm = types.ExternalFunction(
