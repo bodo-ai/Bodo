@@ -201,19 +201,22 @@ def test_agg_udf_errorchecking(groupby_df):
             return 0
 
     # Series output not supported raises ValueError to match Pandas
-    with pytest.raises(ValueError, match="Must produce aggregated value"):
+    with pytest.raises(
+        ValueError, match="User defined function must produce aggregated value"
+    ):
         bdf.groupby("A").agg(udf1).execute_plan()
 
     with pytest.raises(
         Exception,
-        match=r"Groupby.agg\(\): An error occured while executing user defined function.",
+        match=r"Groupby.agg\(\) \| Groupby.apply\(\): An error occured while executing user defined function.",
     ):
         bdf.groupby("A").agg(udf2).execute_plan()
 
     # UDF cannot be compiled, fallback to Pandas
     df2 = groupby_df.groupby("A").agg(udf3)
     with pytest.warns(
-        BodoLibFallbackWarning, match=r"Groupby.agg\(\): unable to compile udf3"
+        BodoLibFallbackWarning,
+        match="An error occured while compiling user defined function",
     ):
         bdf2 = bdf.groupby("A").agg(udf3)
 

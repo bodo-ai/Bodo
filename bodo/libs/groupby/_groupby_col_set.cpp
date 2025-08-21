@@ -1634,7 +1634,8 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
 
         if (!out_arr_result) {
             throw std::runtime_error(
-                "Groupby.agg(): An error occured while executing user defined "
+                "Groupby.agg() | Groupby.apply(): An error occured while "
+                "executing user defined "
                 "function.");
         }
         std::shared_ptr<array_info> out_arr(out_arr_result);

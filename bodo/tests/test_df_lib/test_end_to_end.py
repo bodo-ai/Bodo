@@ -2485,7 +2485,7 @@ def test_groupby_getattr_fallback_behavior():
 
     # Accessing an implemented Pandas GroupBy method: should raise fallback warning
     with pytest.warns(BodoLibFallbackWarning) as record:
-        _ = grouped.apply
+        _ = grouped.transform
     assert len(record) == 1
 
     # Accessing unknown attribute: should raise AttributeError
@@ -2533,7 +2533,8 @@ def test_groupby_apply():
         return ret
 
     pd_out = impl(df)
-    bodo_out = impl(bd.from_pandas(df))
+    with assert_executed_plan_count(0):
+        bodo_out = impl(bd.from_pandas(df))
 
     _test_equal(
         bodo_out,
