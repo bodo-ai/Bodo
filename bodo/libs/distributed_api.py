@@ -615,11 +615,6 @@ def dist_reduce_impl(value, reduce_op, comm):
     return impl
 
 
-_dist_exscan = types.ExternalFunction(
-    "dist_exscan", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
-)
-
-
 @numba.njit(cache=True)
 def dist_exscan(value, reduce_op):
     return dist_exscan_impl(value, reduce_op)
@@ -630,6 +625,11 @@ def dist_exscan_impl(value, reduce_op):
     target_typ = types.unliteral(value)
     typ_enum = np.int32(numba_to_c_type(target_typ))
     zero = target_typ(0)
+
+    _dist_exscan = types.ExternalFunction(
+        "dist_exscan",
+        types.void(types.voidptr, types.voidptr, types.int32, types.int32),
+    )
 
     def impl(value, reduce_op):  # pragma: no cover
         in_ptr = value_to_ptr(value)
