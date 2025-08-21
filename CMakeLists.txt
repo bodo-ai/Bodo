@@ -556,41 +556,6 @@ target_link_libraries(crypto_funcs PRIVATE ssl crypto)
 install(TARGETS crypto_funcs DESTINATION "bodo/libs/")
 
 
-# ---------------------- Native Target - listagg -----------------------
-
-python_add_library(listagg
-  MODULE WITH_SOABI
-  "bodo/libs/_listagg.cpp"
-  "bodo/libs/_bodo_common.cpp"
-  "bodo/libs/_array_operations.cpp"
-  "bodo/libs/_array_hash.cpp"
-  "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_distributed.cpp"
-  "bodo/libs/_shuffle.cpp"
-  "bodo/libs/_datetime_utils.cpp"
-  "bodo/libs/_table_builder_utils.cpp"
-  "bodo/libs/_table_builder.cpp"
-  "bodo/libs/_chunked_table_builder.cpp"
-  "bodo/libs/_array_build_buffer.cpp"
-  "bodo/libs/_decimal_ext.cpp"
-  "bodo/libs/_dict_builder.cpp"
-  "bodo/libs/_memory.cpp"
-  "bodo/libs/_utils.cpp"
-  "bodo/libs/_storage_manager.cpp"
-  "bodo/libs/streaming/_dict_encoding.cpp"
-  "bodo/libs/vendored/_murmurhash3.cpp"
-  "bodo/libs/groupby/_groupby_do_apply_to_column.cpp"
-  "bodo/libs/groupby/_groupby_agg_funcs.cpp"
-  "bodo/libs/groupby/_groupby_ftypes.cpp"
-  "bodo/libs/groupby/_groupby_common.cpp"
-  "bodo/libs/_bodo_to_arrow.cpp"
-)
-target_include_directories(listagg PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
-target_link_directories(listagg PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(listagg PRIVATE fmt::fmt arrow arrow_python ${MPI_LIBRARIES})
-install(TARGETS listagg DESTINATION "bodo/libs/")
-
-
 # ---------------------- Native Target - memory_cpp -----------------------
 
 python_add_library(memory_cpp
