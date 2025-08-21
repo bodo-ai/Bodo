@@ -144,10 +144,6 @@ class Reduce_Type(Enum):
 
 _get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
-_dist_transpose_comm = types.ExternalFunction(
-    "_dist_transpose_comm",
-    types.void(types.voidptr, types.voidptr, types.int32, types.int64, types.int64),
-)
 _get_cpu_id = types.ExternalFunction("get_cpu_id", types.int32())
 get_remote_size = types.ExternalFunction("c_get_remote_size", types.int32(types.int64))
 
@@ -726,6 +722,10 @@ def overload_distributed_transpose(arr):
         "distributed_transpose: 2D array expected"
     )
     c_type = numba_to_c_type(arr.dtype)
+    _dist_transpose_comm = types.ExternalFunction(
+        "_dist_transpose_comm",
+        types.void(types.voidptr, types.voidptr, types.int32, types.int64, types.int64),
+    )
 
     def impl(arr):  # pragma: no cover
         n_loc_rows, n_cols = arr.shape
