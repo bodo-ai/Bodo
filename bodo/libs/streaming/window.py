@@ -217,7 +217,7 @@ class WindowStateType(StreamingStateType):
         if len(args_arr_types) == 0:
             args_arr_types.append(scalar_to_arrtype(None))
 
-        return bodo.TableType(tuple(build_table_arr_types)), bodo.TableType(
+        return bodo.types.TableType(tuple(build_table_arr_types)), bodo.types.TableType(
             tuple(args_arr_types)
         )
 
@@ -553,7 +553,7 @@ class WindowStateType(StreamingStateType):
             else:
                 raise BodoError(func_name + " is not a supported window function.")
 
-        return bodo.TableType(tuple(input_arr_types))
+        return bodo.types.TableType(tuple(input_arr_types))
 
     @staticmethod
     def _derive_cpp_indices(partition_indices, order_by_indices, num_cols):

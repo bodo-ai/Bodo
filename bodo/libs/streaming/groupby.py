@@ -478,7 +478,7 @@ class GroupbyStateType(StreamingStateType):
                     )
                 assert err_msg == "ok", "Function typing failed in streaming groupby"
                 out_arr_types.append(out_type)
-            return bodo.TableType(tuple(self.key_types + out_arr_types))
+            return bodo.types.TableType(tuple(self.key_types + out_arr_types))
         else:
             # In the MRNF case, it will simply be all the indices in
             # 'self.mrnf_col_inds_keep'.
@@ -492,7 +492,7 @@ class GroupbyStateType(StreamingStateType):
             for i in range(len(self.build_table_type.arr_types)):
                 if i in self.mrnf_col_inds_keep:
                     out_arr_types.append(self.build_table_type.arr_types[i])
-            return bodo.TableType(tuple(out_arr_types))
+            return bodo.types.TableType(tuple(out_arr_types))
 
     @cached_property
     def cpp_output_table_to_py_table_idx_map(self) -> list[int]:

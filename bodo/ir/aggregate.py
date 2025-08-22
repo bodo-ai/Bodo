@@ -2636,7 +2636,7 @@ def create_dummy_table(data_types):
     arr_types = tuple(
         unwrap_typeref(data_types.types[i]) for i in range(len(data_types.types))
     )
-    table_type = bodo.TableType(arr_types)
+    table_type = bodo.types.TableType(arr_types)
     glbls = {"table_type": table_type}
 
     func_text = "def impl(data_types):\n"

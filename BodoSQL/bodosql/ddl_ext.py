@@ -34,11 +34,11 @@ def overload_execute_ddl(bodo_sql_context, query, column_types):
         columnTypes (MetaType): The column types for the output DataFrame.
 
     Returns:
-        bodo.TableType: A Table based upon column_names and column_types.
+        bodo.types.TableType: A Table based upon column_names and column_types.
     """
     column_types = unwrap_typeref(column_types).meta
     # Note: A DDL operation always returns a replicated DataFrame.
-    output_type = bodo.TableType(
+    output_type = bodo.types.TableType(
         column_types,
         dist=Distribution.REP,
     )

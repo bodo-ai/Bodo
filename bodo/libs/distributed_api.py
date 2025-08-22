@@ -1098,7 +1098,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return df
 
     # Table
-    if isinstance(dtype, bodo.TableType):
+    if isinstance(dtype, bodo.types.TableType):
         arrs = tuple(get_value_for_type(t) for t in dtype.arr_types)
         return bodo.hiframes.table.Table(arrs)
 

@@ -1224,7 +1224,7 @@ def scatterv_impl_jit(
         impl_df = loc_vars["impl_df"]
         return impl_df
 
-    if isinstance(data, bodo.TableType):
+    if isinstance(data, bodo.types.TableType):
         func_text = f"def impl_table(data, send_counts=None, warn_if_dist=True, root={DEFAULT_ROOT}, comm=0):\n"
         func_text += "  T = data\n"
         func_text += "  T2 = init_table(T, False)\n"

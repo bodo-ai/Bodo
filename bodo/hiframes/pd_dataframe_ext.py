@@ -2524,7 +2524,7 @@ class LenTemplate(AbstractTemplate):
         assert not kws
         assert len(args) == 1
         # TODO: Fuse more templates
-        if isinstance(args[0], (DataFrameType, bodo.TableType)):
+        if isinstance(args[0], (DataFrameType, bodo.types.TableType)):
             return types.int64(*args)
 
 
@@ -5084,7 +5084,7 @@ def overload_union_dataframes(
     func_text = "def impl(df_tup, drop_duplicates, output_colnames):\n"
     glbls = {
         "bodo": bodo,
-        "py_table_typ": bodo.TableType(col_types),
+        "py_table_typ": bodo.types.TableType(col_types),
     }
     # Step 2 generate code to convert each DataFrame to C++.
     for i, df_type in enumerate(df_types):

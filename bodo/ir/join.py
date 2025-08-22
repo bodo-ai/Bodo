@@ -3310,7 +3310,7 @@ def _gen_join_cpp_call(
         if table_changed:
             func_text += "    T = bodo.utils.table_utils.table_astype(T, cast_table_type, False, _bodo_nan_to_str=False, used_cols=used_cols)\n"
             # Determine the types that must be loaded.
-            pre_cast_table_type = bodo.TableType(tuple(table_arrs))
+            pre_cast_table_type = bodo.types.TableType(tuple(table_arrs))
             # Update the table types
             glbs["py_table_type"] = pre_cast_table_type
             glbs["cast_table_type"] = out_table_type

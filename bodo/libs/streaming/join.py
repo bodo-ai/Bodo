@@ -482,7 +482,7 @@ class JoinStateType(StreamingStateType):
                 arr_types.append(keys_map[i])
             else:
                 arr_types.append(table_type.arr_types[i])
-        return bodo.TableType(tuple(arr_types))
+        return bodo.types.TableType(tuple(arr_types))
 
     @property
     def key_casted_build_table_type(self):
@@ -700,10 +700,10 @@ class JoinStateType(StreamingStateType):
         be in the front.
 
         Returns:
-            bodo.TableType: The type of the output table.
+            bodo.types.TableType: The type of the output table.
         """
         arr_types = self.probe_output_arrays + self.build_output_arrays
-        out_table_type = bodo.TableType(tuple(arr_types))
+        out_table_type = bodo.types.TableType(tuple(arr_types))
         return out_table_type
 
     def _get_table_live_col_arrs(
@@ -1507,7 +1507,7 @@ def _get_runtime_join_filter_info(
                     # If not a key column, then preserve the original type
                     cast_arr_types.append(input_table_t.arr_types[j])
 
-            cast_table_types.append(bodo.TableType(tuple(cast_arr_types)))
+            cast_table_types.append(bodo.types.TableType(tuple(cast_arr_types)))
         cast_table_types_tuple = tuple(cast_table_types)
 
     return (

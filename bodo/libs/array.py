@@ -2190,7 +2190,7 @@ def cpp_table_to_py_data(
 
     func_text = "def bodo_cpp_table_to_py_data(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
 
-    if isinstance(py_table_type, bodo.TableType):
+    if isinstance(py_table_type, bodo.types.TableType):
         func_text += "  py_table = init_table(py_table_type, False)\n"
         func_text += "  py_table = set_table_len(py_table, n_rows_t)\n"
 
@@ -2432,7 +2432,7 @@ class PyDataToCppTableInfer(AbstractTemplate):
         assert len(args) == 4
         py_table, extra_arrs_tup, _, n_table_cols_t = args
 
-        assert py_table == types.none or isinstance(py_table, bodo.TableType)
+        assert py_table == types.none or isinstance(py_table, bodo.types.TableType)
         assert isinstance(extra_arrs_tup, types.BaseTuple)
         assert all(
             isinstance(t, types.ArrayCompatible) or t == types.none
@@ -2649,7 +2649,7 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     table_typs = table_tup.types
     # All inputs have the same number of columns, so generate info from the first input.
     base_typ = table_typs[0]
-    if isinstance(base_typ, bodo.TableType):
+    if isinstance(base_typ, bodo.types.TableType):
         n_cols = len(base_typ.arr_types)
     else:
         # Input must be a tuple of arrays.
@@ -2666,7 +2666,7 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     )
     # Step 1: Convert each of the inputs to a C++ table.
     for i, table_typ in enumerate(table_typs):
-        if isinstance(table_typ, bodo.TableType):
+        if isinstance(table_typ, bodo.types.TableType):
             func_text += f"  table{i} = table_tup[{i}]\n"
             func_text += f"  arrs{i} = ()\n"
             table_cols = n_cols

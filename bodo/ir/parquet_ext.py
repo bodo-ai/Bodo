@@ -808,7 +808,7 @@ def _gen_pq_reader_py(
     if is_dead_table:
         py_table_type = types.none
 
-    # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
+    # table_idx is a list of index values for each array in the bodo.types.TableType being loaded from C++.
     # For a list column, the value is an integer which is the location of the column in the C++ Table.
     # Dead columns have the value -1.
 

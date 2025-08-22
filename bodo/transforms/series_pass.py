@@ -399,7 +399,7 @@ class SeriesPass:
 
         # Start of Table Operations
 
-        if isinstance(target_typ, bodo.TableType):
+        if isinstance(target_typ, bodo.types.TableType):
             # Inline all table getitems
             impl = bodo.hiframes.table.overload_table_getitem(target_typ, idx_typ)
             return nodes + compile_func_single_block(
@@ -838,7 +838,7 @@ class SeriesPass:
 
         # Replace T.shape to optimize out T.shape[1] (can be generated in BodoSQL)
         if (
-            isinstance(rhs_type, bodo.TableType)
+            isinstance(rhs_type, bodo.types.TableType)
             and rhs.attr == "shape"
             and not rhs_type.has_runtime_cols
         ):

@@ -117,7 +117,7 @@ def type_has_unknown_cats(typ):
         isinstance(typ, bodo.types.CategoricalArrayType)
         and typ.dtype.categories is None
     ) or (
-        isinstance(typ, bodo.TableType)
+        isinstance(typ, bodo.types.TableType)
         and any(type_has_unknown_cats(t) for t in typ.type_to_blk.keys())
     )
 
@@ -210,9 +210,9 @@ def to_str_arr_if_dict_array(t):
             [to_str_arr_if_dict_array(a) for a in t.types]
         )
 
-    if isinstance(t, bodo.TableType):
+    if isinstance(t, bodo.types.TableType):
         new_arr_types = tuple(to_str_arr_if_dict_array(t) for t in t.arr_types)
-        return bodo.TableType(new_arr_types, t.has_runtime_cols)
+        return bodo.types.TableType(new_arr_types, t.has_runtime_cols)
 
     if isinstance(t, bodo.types.DataFrameType):
         return t.copy(data=tuple(to_str_arr_if_dict_array(t) for t in t.data))
@@ -3236,7 +3236,7 @@ def error_on_unsupported_streaming_arrays(table_type):
     if table_type in (None, types.unknown, types.undefined):
         return
 
-    assert isinstance(table_type, bodo.TableType), (
+    assert isinstance(table_type, bodo.types.TableType), (
         "error_on_unsupported_streaming_arrays: TableType expected"
     )
 

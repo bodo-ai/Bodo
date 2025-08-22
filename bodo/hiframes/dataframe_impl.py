@@ -505,7 +505,7 @@ def overload_dataframe_astype(
                 for i in range(len(df.columns))
             )
     if df.is_table_format:
-        table_type = bodo.TableType(tuple(arr_typ_list))
+        table_type = bodo.types.TableType(tuple(arr_typ_list))
         extra_globals["out_table_typ"] = table_type
         data_args = "bodo.utils.table_utils.table_astype(table, out_table_typ, copy, _bodo_nan_to_str)"
 

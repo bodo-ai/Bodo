@@ -70,3 +70,4 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
     CategoricalArrayType,
 )
+from bodo.hiframes.table import TableType
