@@ -328,7 +328,6 @@ import bodo.io.stream_parquet_write
 from bodo.libs.distributed_api import (
     allgatherv,
     barrier,
-    dist_time,
     gatherv,
     get_rank,
     get_size,
