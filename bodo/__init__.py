@@ -371,8 +371,3 @@ COMPLEX_CASE_THRESHOLD = 100
 # Set our Buffer Pool as the default memory pool for PyArrow.
 # Note that this will initialize the Buffer Pool.
 import bodo.memory
-
-# Check for addition of new methods and attributes in pandas documentation for Series. Needs to be checked for every new Pandas release.
-# New methods and attributes need to be added to the unsupported_xxx list in the appropriate _ext.py file.
-# NOTE: This check needs to happen last.
-import bodo.utils.pandas_coverage_tracking

@@ -76,6 +76,11 @@ import bodo.transforms.type_inference
 import bodo.transforms.type_inference.typeinfer  # noqa # side effect: initialize Numba extensions
 import bodo.transforms.untyped_pass
 import bodo.utils
+
+# Check for addition of new methods and attributes in pandas documentation for Series. Needs to be checked for every new Pandas release.
+# New methods and attributes need to be added to the unsupported_xxx list in the appropriate _ext.py file.
+# NOTE: This check needs to happen last.
+import bodo.utils.pandas_coverage_tracking  # noqa # side effect
 import bodo.utils.table_utils  # noqa # side effect
 import bodo.utils.typing
 from bodo.transforms.series_pass import SeriesPass
