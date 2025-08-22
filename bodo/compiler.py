@@ -56,6 +56,8 @@ import bodo.io.np_io
 import bodo.io.stream_parquet_write
 import bodo.ir.object_mode  # noqa
 import bodo.libs
+import bodo.libs.array_ops
+import bodo.libs.binops_ext
 import bodo.libs.csr_matrix_ext
 import bodo.libs.distributed_api
 import bodo.libs.int_arr_ext  # noqa # side effect

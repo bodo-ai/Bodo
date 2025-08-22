@@ -126,7 +126,7 @@ from bodo.utils.testing import ensure_clean
 )
 def test_time_parsing(time_str, answer):
     def impl(time_str):
-        hr, mi, sc, ns, succeeded = bodo.parse_time_string(time_str)
+        hr, mi, sc, ns, succeeded = bodo.hiframes.time_ext.parse_time_string(time_str)
         if succeeded:
             return bodo.Time(hr, mi, sc, nanosecond=ns, precision=9)
         else:

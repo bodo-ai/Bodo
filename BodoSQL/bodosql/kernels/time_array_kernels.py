@@ -65,7 +65,7 @@ def to_time_util(
 
     if is_valid_string_arg(arr) or is_overload_none(arr):
         if is_overload_none(format_str):
-            scalar_text = "hr, mi, sc, ns, succeeded = bodo.parse_time_string(arg0)\n"
+            scalar_text = "hr, mi, sc, ns, succeeded = bodo.hiframes.time_ext.parse_time_string(arg0)\n"
         else:
             scalar_text = "py_format_str = bodosql.kernels.snowflake_conversion_array_kernels.convert_snowflake_date_format_str_to_py_format(arg1)\n"
             scalar_text += "succeeded, val = bodosql.kernels.snowflake_conversion_array_kernels.pd_to_datetime_error_checked(arg0, format=py_format_str)\n"
