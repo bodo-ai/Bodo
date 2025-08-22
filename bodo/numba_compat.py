@@ -7036,3 +7036,37 @@ numba.core.inline_closurecall.find_callname = find_callname
 numba.parfors.array_analysis.find_callname = find_callname
 numba.parfors.parfor.find_callname = find_callname
 numba.stencils.stencilparfor.find_callname = find_callname
+
+
+def set_numba_environ_vars():
+    """
+    Set environment variables so that the Numba configuration can persist after reloading by re-setting config
+    variables directly from environment variables.
+    These should be tested in `test_numba_warn_config.py`.
+    """
+    # This env variable is set by the platform and points to the central cache directory
+    # on the shared filesystem.
+    if (cache_loc := os.environ.get("BODO_PLATFORM_CACHE_LOCATION")) is not None:
+        if ("NUMBA_CACHE_DIR" in os.environ) and (
+            os.environ["NUMBA_CACHE_DIR"] != cache_loc
+        ):
+            import warnings
+
+            warnings.warn(
+                "Since BODO_PLATFORM_CACHE_LOC is set, the value set for NUMBA_CACHE_DIR will be ignored"
+            )
+        numba.config.CACHE_DIR = cache_loc
+        # In certain cases, numba reloads its config variables from the
+        # environment. In those cases, the above line would be overridden.
+        # Therefore, we also set it to the env var that numba reloads from.
+        os.environ["NUMBA_CACHE_DIR"] = cache_loc
+
+    # avoid Numba parallel performance warning when there is no Parfor in the IR
+    numba.config.DISABLE_PERFORMANCE_WARNINGS = 1
+    bodo_env_vars = {
+        "NUMBA_DISABLE_PERFORMANCE_WARNINGS": "1",
+    }
+    os.environ.update(bodo_env_vars)
+
+
+set_numba_environ_vars()
