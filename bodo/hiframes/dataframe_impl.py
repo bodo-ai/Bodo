@@ -1288,7 +1288,7 @@ def overload_dataframe_abs(df):
     for arr_typ in df.data:
         if not (
             isinstance(arr_typ.dtype, types.Number)
-            or arr_typ.dtype == bodo.timedelta64ns
+            or arr_typ.dtype == bodo.types.timedelta64ns
         ):
             raise_bodo_error(
                 f"DataFrame.abs(): Only supported for numeric and Timedelta. Encountered array with dtype {arr_typ.dtype}"
@@ -1667,7 +1667,7 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
         if not (
             bodo.utils.utils.is_np_array_typ(coltype)
             and (
-                coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
             or isinstance(
@@ -1711,7 +1711,7 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
         if not (
             bodo.utils.utils.is_np_array_typ(coltype)
             and (
-                coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                coltype.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
             or isinstance(
@@ -2030,7 +2030,7 @@ def _is_describe_type(data):
     return (
         isinstance(data, (IntegerArrayType, FloatingArrayType))
         or (isinstance(data, types.Array) and isinstance(data.dtype, (types.Number)))
-        or data.dtype == bodo.datetime64ns
+        or data.dtype == bodo.types.datetime64ns
     )
 
 
@@ -2069,7 +2069,8 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
 
     # number of datetime columns
     num_dt = sum(
-        df.data[df.column_index[c]].dtype == bodo.datetime64ns for c in numeric_cols
+        df.data[df.column_index[c]].dtype == bodo.types.datetime64ns
+        for c in numeric_cols
     )
 
     def _get_describe(col_ind):
@@ -2077,7 +2078,7 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
         columns to match Pandas.
         https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L179
         """
-        is_dt = df.data[col_ind].dtype == bodo.datetime64ns
+        is_dt = df.data[col_ind].dtype == bodo.types.datetime64ns
         if num_dt and num_dt != len(numeric_cols):
             if is_dt:
                 return f"des_{col_ind} + (np.nan,)"
@@ -2207,7 +2208,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
             isinstance(column_type, (types.Array, IntegerArrayType, FloatingArrayType))
             and (
                 isinstance(column_type.dtype, (types.Number))
-                or column_type.dtype == bodo.datetime64ns
+                or column_type.dtype == bodo.types.datetime64ns
             )
         ):
             # TODO: Link to supported Column input types.
@@ -2227,7 +2228,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
     data_args = ", ".join(
         # NOTE: using our sub function for dt64 due to bug in Numba (TODO: fix)
         f"bodo.hiframes.series_impl.dt64_arr_sub(data_{i}, bodo.hiframes.rolling.shift(data_{i}, periods, False))"
-        if df.data[i] == types.Array(bodo.datetime64ns, 1, "C")
+        if df.data[i] == types.Array(bodo.types.datetime64ns, 1, "C")
         else f"data_{i} - bodo.hiframes.rolling.shift(data_{i}, periods, False)"
         for i in range(len(df.columns))
     )
@@ -5980,7 +5981,7 @@ def is_df_values_numpy_supported_dftyp(df_typ):
         if not (
             isinstance(col_typ, (IntegerArrayType, FloatingArrayType))
             or isinstance(col_typ.dtype, types.Number)
-            or col_typ.dtype in (bodo.datetime64ns, bodo.timedelta64ns)
+            or col_typ.dtype in (bodo.types.datetime64ns, bodo.types.timedelta64ns)
         ):
             return False
     return True

@@ -99,12 +99,12 @@ class SeriesCmpOpTemplate(AbstractTemplate):
         if lhs_arr in (
             bodo.pd_timestamp_tz_naive_type,
             bodo.pd_timedelta_type,
-        ) and rhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
+        ) and rhs_arr.dtype in (bodo.types.datetime64ns, bodo.types.timedelta64ns):
             lhs_arr = rhs_arr.dtype
         elif rhs_arr in (
             bodo.pd_timestamp_tz_naive_type,
             bodo.pd_timedelta_type,
-        ) and lhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
+        ) and lhs_arr.dtype in (bodo.types.datetime64ns, bodo.types.timedelta64ns):
             rhs_arr = lhs_arr.dtype
 
         recursed_args = (lhs_arr, rhs_arr)
@@ -491,12 +491,12 @@ def create_overload_cmp_operator(op):
         # Timezone-naive timestamp array
         if (
             isinstance(lhs, types.Array)
-            and lhs.dtype == bodo.datetime64ns
+            and lhs.dtype == bodo.types.datetime64ns
             and rhs in (datetime_date_array_type, datetime_date_type)
         ) or (
             lhs in (datetime_date_array_type, datetime_date_type)
             and isinstance(rhs, types.Array)
-            and rhs.dtype == bodo.datetime64ns
+            and rhs.dtype == bodo.types.datetime64ns
         ):
             return bodo.hiframes.datetime_date_ext.create_datetime_array_date_cmp_op_overload(
                 op
@@ -782,11 +782,11 @@ def cmp_timestamp_or_date(lhs, rhs):
     # Timestamp + dt64
     ts_and_dt64 = (
         isinstance(lhs, bodo.hiframes.pd_timestamp_ext.PandasTimestampType)
-        and rhs == bodo.datetime64ns
+        and rhs == bodo.types.datetime64ns
     )
     dt64_and_ts = (
         isinstance(rhs, bodo.hiframes.pd_timestamp_ext.PandasTimestampType)
-        and lhs == bodo.datetime64ns
+        and lhs == bodo.types.datetime64ns
     )
 
     return ts_and_date or date_and_ts or ts_and_ts or ts_and_dt64 or dt64_and_ts
@@ -801,11 +801,11 @@ def cmp_date_or_datetime64(lhs, rhs):
     )
     date_and_dt64 = (
         lhs == bodo.hiframes.datetime_date_ext.datetime_date_type
-        and rhs == bodo.datetime64ns
+        and rhs == bodo.types.datetime64ns
     )
     dt64_and_date = (
         rhs == bodo.hiframes.datetime_date_ext.datetime_date_type
-        and lhs == bodo.datetime64ns
+        and lhs == bodo.types.datetime64ns
     )
 
     return date_and_date or date_and_dt64 or dt64_and_date
@@ -832,13 +832,13 @@ def get_series_tz(val):
     elif isinstance(val, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType):
         # We have a Timezone array grab the tz.
         tz = val.tz
-    elif isinstance(val, types.Array) and val.dtype == bodo.datetime64ns:
+    elif isinstance(val, types.Array) and val.dtype == bodo.types.datetime64ns:
         # We are timezone naive.
         tz = None
     elif isinstance(val, bodo.PandasTimestampType):
         # If we have a timezone it will be in tz. Naive will be None
         tz = val.tz
-    elif val == bodo.datetime64ns:
+    elif val == bodo.types.datetime64ns:
         # We are timezone naive.
         tz = None
     else:
@@ -869,11 +869,11 @@ def cmp_timeseries(lhs, rhs):
     )
     is_tz_naive_dt64s = (
         bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
-        and rhs.dtype == bodo.datetime64ns
+        and rhs.dtype == bodo.types.datetime64ns
         and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
     ) or (
         bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
-        and lhs.dtype == bodo.datetime64ns
+        and lhs.dtype == bodo.types.datetime64ns
         and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
     )
     dt64_series_ops = dt64s_with_string or string_with_dt64s or is_tz_naive_dt64s
@@ -894,7 +894,7 @@ def cmp_timeseries(lhs, rhs):
 def cmp_timedeltas(lhs, rhs):
     """Helper function to check types supported in datetime_timedelta_ext by cmp op overload."""
 
-    deltas = [pd_timedelta_type, bodo.timedelta64ns]
+    deltas = [pd_timedelta_type, bodo.types.timedelta64ns]
     return lhs in deltas and rhs in deltas
 
 

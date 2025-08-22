@@ -224,7 +224,7 @@ def array_op_describe_dt_impl(arr):  # pragma: no cover
 def overload_array_op_describe(arr):
     # Pandas doesn't return std for describe of datetime64 data
     # https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L328
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
         return array_op_describe_dt_impl
 
     return array_op_describe_impl
@@ -246,7 +246,7 @@ def array_op_min(arr):  # pragma: no cover
 
 @overload(array_op_min)
 def overload_array_op_min(arr):
-    if arr.dtype == bodo.timedelta64ns:
+    if arr.dtype == bodo.types.timedelta64ns:
 
         def impl_td64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -264,7 +264,7 @@ def overload_array_op_min(arr):
 
         return impl_td64
 
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def impl_dt64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -374,7 +374,7 @@ def array_op_max(arr):  # pragma: no cover
 
 @overload(array_op_max, jit_options={"cache": True})
 def overload_array_op_max(arr):
-    if arr.dtype == bodo.timedelta64ns:
+    if arr.dtype == bodo.types.timedelta64ns:
 
         def impl_td64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -392,7 +392,7 @@ def overload_array_op_max(arr):
 
         return impl_td64
 
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def impl_dt64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -500,7 +500,7 @@ def array_op_mean(arr):  # pragma: no cover
 @overload(array_op_mean, jit_options={"cache": True})
 def overload_array_op_mean(arr):
     # datetime
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def impl(arr):  # pragma: no cover
             return pd.Timestamp(
@@ -577,7 +577,7 @@ def array_op_std(arr, skipna=True, ddof=1):  # pragma: no cover
 @overload(array_op_std, jit_options={"cache": True})
 def overload_array_op_std(arr, skipna=True, ddof=1):
     # datetime
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def impl_dt64(arr, skipna=True, ddof=1):  # pragma: no cover
             return pd.Timedelta(
@@ -598,7 +598,7 @@ def array_op_quantile(arr, q):  # pragma: no cover
 @overload(array_op_quantile, jit_options={"cache": True})
 def overload_array_op_quantile(arr, q):
     if is_iterable_type(q):
-        if arr.dtype == bodo.datetime64ns:
+        if arr.dtype == bodo.types.datetime64ns:
 
             def _impl_list_dt(arr, q):  # pragma: no cover
                 out_arr = np.empty(len(q), np.int64)
@@ -639,7 +639,7 @@ def overload_array_op_quantile(arr, q):
 
         return impl_list
 
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def _impl_dt(arr, q):  # pragma: no cover
             return pd.Timestamp(

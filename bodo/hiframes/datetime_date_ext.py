@@ -1051,7 +1051,7 @@ def create_cmp_op_overload(op):
             return impl
 
         # datetime.date and datetime64
-        if lhs == datetime_date_type and rhs == bodo.datetime64ns:
+        if lhs == datetime_date_type and rhs == bodo.types.datetime64ns:
             # Convert both to integers (ns) for comparison.
             return lambda lhs, rhs: op(
                 cast_datetime_date_to_int_ns(lhs),
@@ -1059,7 +1059,7 @@ def create_cmp_op_overload(op):
             )  # pragma: no cover
 
         # datetime64 and datetime.date
-        if rhs == datetime_date_type and lhs == bodo.datetime64ns:
+        if rhs == datetime_date_type and lhs == bodo.types.datetime64ns:
             # Convert both to integers (ns) for comparison.
             return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.dt64_to_integer(lhs),
@@ -1091,7 +1091,7 @@ def create_datetime_array_date_cmp_op_overload(op):
     and date types."""
 
     def overload_arr_cmp(lhs, rhs):
-        if isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns:
+        if isinstance(lhs, types.Array) and lhs.dtype == bodo.types.datetime64ns:
             # datetime64 + date scalar
             if rhs == datetime_date_type:
 
@@ -1136,7 +1136,7 @@ def create_datetime_array_date_cmp_op_overload(op):
 
                 return impl
 
-        elif isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns:
+        elif isinstance(rhs, types.Array) and rhs.dtype == bodo.types.datetime64ns:
             # date scalar + datetime64
             if lhs == datetime_date_type:
 

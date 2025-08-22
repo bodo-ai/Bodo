@@ -501,8 +501,8 @@ def dist_reduce_impl(value, reduce_op, comm):
             types.float32,
             types.float64,
             types.int64,
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
             bodo.datetime_date_type,
             bodo.TimeType,
         ]
@@ -1403,8 +1403,8 @@ class BcastScalarInfer(AbstractTemplate):
             )
             or val
             in [
-                bodo.datetime64ns,
-                bodo.timedelta64ns,
+                bodo.types.datetime64ns,
+                bodo.types.timedelta64ns,
                 bodo.string_type,
                 types.none,
                 types.bool_,

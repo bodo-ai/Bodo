@@ -194,7 +194,7 @@ def get_arrow_timestamp_type(pa_ts_typ):
     if pa_ts_typ.unit not in supported_units:
         # Unsupported units get typed as numpy dt64 array but
         # marked not supported.
-        return types.Array(bodo.datetime64ns, 1, "C"), False
+        return types.Array(bodo.types.datetime64ns, 1, "C"), False
     elif pa_ts_typ.tz is not None:
         # Timezones use the PandasDatetimeArrayType. Timezone information
         # is stored in the Pandas type.
@@ -206,7 +206,7 @@ def get_arrow_timestamp_type(pa_ts_typ):
         return bodo.DatetimeArrayType(tz_val), True
     else:
         # Without timezones Arrow ts arrays are converted to dt64 arrays.
-        return types.Array(bodo.datetime64ns, 1, "C"), True
+        return types.Array(bodo.types.datetime64ns, 1, "C"), True
 
 
 def _get_numba_typ_from_pa_typ(
@@ -371,7 +371,7 @@ def is_nullable_arrow_out(numba_type: types.ArrayCompatible) -> bool:
         or isinstance(numba_type, bodo.DatetimeArrayType)
         or (
             isinstance(numba_type, types.Array)
-            and numba_type.dtype == bodo.datetime64ns
+            and numba_type.dtype == bodo.types.datetime64ns
         )
     )
 
@@ -447,7 +447,8 @@ def _numba_to_pyarrow_type(
     elif numba_type == datetime_date_array_type:
         dtype = pa.date32()
     elif isinstance(numba_type, bodo.DatetimeArrayType) or (
-        isinstance(numba_type, types.Array) and numba_type.dtype == bodo.datetime64ns
+        isinstance(numba_type, types.Array)
+        and numba_type.dtype == bodo.types.datetime64ns
     ):
         # For Iceberg, all timestamp data needs to be written
         # as microseconds, so that's the type we
@@ -468,7 +469,8 @@ def _numba_to_pyarrow_type(
 
     # TODO: Figure out how to raise an error here for Iceberg (is_iceberg is set to True).
     elif numba_type == bodo.timedelta_array_type or (
-        isinstance(numba_type, types.Array) and numba_type.dtype == bodo.timedelta64ns
+        isinstance(numba_type, types.Array)
+        and numba_type.dtype == bodo.types.timedelta64ns
     ):
         dtype = pa.duration("ns")
     elif (

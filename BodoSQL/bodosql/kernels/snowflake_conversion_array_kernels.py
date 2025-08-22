@@ -559,7 +559,7 @@ def create_timestamp_cast_util(func, error_on_fail):
         if time_zone is not None:
             out_dtype = bodo.DatetimeArrayType(time_zone)
         else:
-            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+            out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
 
         extra_globals = {
             "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
@@ -1718,7 +1718,7 @@ def overload_cast_tz_aware_to_tz_naive_util(arr):
     )
     scalar_text = "ts = arg0.tz_localize(None)\n"
     scalar_text += f"res[i] = {unbox_str}(ts)"
-    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -2367,7 +2367,7 @@ def overload_convert_timezone_ntz_util(source_tz, target_tz, data):
         else ""
     )
 
-    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
     scalar_text = f"res[i] = {unbox_str}({box_str}(arg2).tz_localize(None).tz_localize(arg0).tz_convert(arg1).tz_localize(None))\n"
 
     return gen_vectorized(

@@ -1037,7 +1037,9 @@ def test_objmode_types():
     f = lambda A: (A.view("datetime64[ns]"), A.view("timedelta64[ns]"))
 
     def impl3(A):
-        with numba.objmode(B=bodo.datetime64ns[::1], C=bodo.timedelta64ns[::1]):
+        with numba.objmode(
+            B=bodo.types.datetime64ns[::1], C=bodo.types.timedelta64ns[::1]
+        ):
             B, C = f(A)
         return B, C
 

@@ -619,7 +619,7 @@ def overload_series_all(S, axis=0, bool_only=None, skipna=True, level=None):
 def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=None):
     # Mean is supported for integer, float, datetime, and boolean Series
     if not isinstance(S.dtype, (types.Number)) and S.dtype not in [
-        bodo.datetime64ns,
+        bodo.types.datetime64ns,
         types.bool_,
     ]:
         raise BodoError(f"Series.mean(): Series with type '{S}' not supported")
@@ -1404,7 +1404,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
         or (
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
-                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                S.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
@@ -1464,7 +1464,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         or (
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
-                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                S.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
@@ -1517,7 +1517,7 @@ def check_argmax_min_args(func_name, S):
         or (
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
-                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                S.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
@@ -1739,7 +1739,7 @@ def overload_series_clip(
         (
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
-                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                S.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
@@ -2551,8 +2551,10 @@ def overload_get_bin_labels(bins, right=True, include_lowest=True):
     dtype = np.float64 if isinstance(bins.dtype, types.Integer) else bins.dtype
 
     # datetime64 case
-    if dtype == bodo.datetime64ns:
-        td64_1 = bodo.timedelta64ns(1)  # pandas subtracts 1ns in case of datetime64
+    if dtype == bodo.types.datetime64ns:
+        td64_1 = bodo.types.timedelta64ns(
+            1
+        )  # pandas subtracts 1ns in case of datetime64
 
         def impl_dt64(bins, right=True, include_lowest=True):  # pragma: no cover
             breaks = bins.copy()
@@ -2772,12 +2774,12 @@ def _gen_bins_handling(bins, dtype):
     if isinstance(bins, types.Integer):
         func_text += "    min_val = bodo.libs.array_ops.array_op_min(arr)\n"
         func_text += "    max_val = bodo.libs.array_ops.array_op_max(arr)\n"
-        if dtype == bodo.datetime64ns:
+        if dtype == bodo.types.datetime64ns:
             # Timestamp to int
             func_text += "    min_val = min_val.value\n"
             func_text += "    max_val = max_val.value\n"
         func_text += "    bins = compute_bins(bins, min_val, max_val, right)\n"
-        if dtype == bodo.datetime64ns:
+        if dtype == bodo.types.datetime64ns:
             # compute_bins() returns float values, should be converted to datetime64
             func_text += (
                 "    bins = bins.astype(np.int64).view(np.dtype('datetime64[ns]'))\n"
@@ -3262,7 +3264,7 @@ def overload_series_describe(S, percentiles=None, include=None, exclude=None):
         isinstance(S.data, types.Array)
         and (
             isinstance(S.data.dtype, (types.Number))
-            or S.data.dtype == bodo.datetime64ns
+            or S.data.dtype == bodo.types.datetime64ns
         )
     ) and not isinstance(S.data, (IntegerArrayType, FloatingArrayType)):
         raise BodoError(f"describe() column input type {S.data} not supported.")
@@ -3272,7 +3274,7 @@ def overload_series_describe(S, percentiles=None, include=None, exclude=None):
     # TODO: compute unique, top (most common value), freq (how many times the most common value is found)
 
     # datetime case doesn't return std
-    if S.data.dtype == bodo.datetime64ns:
+    if S.data.dtype == bodo.types.datetime64ns:
 
         def impl_dt(
             S, percentiles=None, include=None, exclude=None
@@ -3681,8 +3683,8 @@ def overload_series_fillna(
             valid_obj_types = (
                 types.unicode_type,
                 types.bool_,
-                bodo.datetime64ns,
-                bodo.timedelta64ns,
+                bodo.types.datetime64ns,
+                bodo.types.timedelta64ns,
             )
             if (
                 not isinstance(series_type, (types.Integer, types.Float))
@@ -3762,8 +3764,8 @@ def create_fillna_specific_method_overload(overload_name):
         valid_obj_types = (
             types.unicode_type,
             types.bool_,
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
         )
         if (
             not isinstance(series_type, (types.Integer, types.Float))
@@ -4100,7 +4102,7 @@ def overload_series_diff(S, periods=1):
         isinstance(S.data, (types.Array, IntegerArrayType, FloatingArrayType))
         and (
             isinstance(S.data.dtype, (types.Number))
-            or S.data.dtype == bodo.datetime64ns
+            or S.data.dtype == bodo.types.datetime64ns
         )
     ):
         # TODO: Link to supported Column input types.
@@ -4111,7 +4113,7 @@ def overload_series_diff(S, periods=1):
         raise BodoError("Series.diff(): 'periods' input must be an integer.")
 
     # NOTE: using our sub function for dt64 due to bug in Numba (TODO: fix)
-    if S.data == types.Array(bodo.datetime64ns, 1, "C"):
+    if S.data == types.Array(bodo.types.datetime64ns, 1, "C"):
 
         def impl_datetime(S, periods=1):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -4537,8 +4539,8 @@ def _validate_self_other_mask_where(
             isinstance(arr, bodo.CategoricalArrayType)
             and arr.dtype.elem_type
             not in [
-                bodo.datetime64ns,
-                bodo.timedelta64ns,
+                bodo.types.datetime64ns,
+                bodo.types.timedelta64ns,
                 bodo.pd_timestamp_tz_naive_type,
                 bodo.pd_timedelta_type,
             ]
@@ -4677,16 +4679,20 @@ def create_explicit_binary_op_overload(op):
         )
 
         # TODO: Add pd.Timedelta
-        is_series_timedelta = S.dtype == bodo.timedelta64ns
-        is_series_datetime = S.dtype == bodo.datetime64ns
+        is_series_timedelta = S.dtype == bodo.types.timedelta64ns
+        is_series_datetime = S.dtype == bodo.types.datetime64ns
         is_other_timedelta_iter = is_iterable_type(other) and (
             other.dtype
-            in (datetime_timedelta_type, bodo.timedelta64ns, bodo.pd_timedelta_type)
+            in (
+                datetime_timedelta_type,
+                bodo.types.timedelta64ns,
+                bodo.pd_timedelta_type,
+            )
         )
         is_other_datetime_iter = is_iterable_type(other) and (
             other.dtype == datetime_datetime_type
             or other.dtype == pd_timestamp_tz_naive_type
-            or other.dtype == bodo.datetime64ns
+            or other.dtype == bodo.types.datetime64ns
         )
 
         is_legal_timedelta = (
@@ -4957,8 +4963,8 @@ def create_binary_op_overload(op):
         if (
             isinstance(lhs, SeriesType)
             and isinstance(rhs, SeriesType)
-            and lhs.dtype == bodo.datetime64ns
-            and rhs.dtype == bodo.datetime64ns
+            and lhs.dtype == bodo.types.datetime64ns
+            and rhs.dtype == bodo.types.datetime64ns
             and op == operator.sub
         ):
 
@@ -4977,7 +4983,7 @@ def create_binary_op_overload(op):
         if (
             op in [operator.add, operator.sub]
             and isinstance(lhs, SeriesType)
-            and lhs.dtype == bodo.datetime64ns
+            and lhs.dtype == bodo.types.datetime64ns
             and is_offsets_type(rhs)
         ):
 
@@ -5009,7 +5015,7 @@ def create_binary_op_overload(op):
             op == operator.add
             and is_offsets_type(lhs)
             and isinstance(rhs, SeriesType)
-            and rhs.dtype == bodo.datetime64ns
+            and rhs.dtype == bodo.types.datetime64ns
         ):
 
             def impl(lhs, rhs):  # pragma: no cover
@@ -5020,7 +5026,7 @@ def create_binary_op_overload(op):
         # left arg is series
         if isinstance(lhs, SeriesType):
             # left arg is dt64/td64 series, may need to unbox RHS
-            if lhs.dtype in [bodo.datetime64ns, bodo.timedelta64ns]:
+            if lhs.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]:
 
                 def impl(lhs, rhs):  # pragma: no cover
                     arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
@@ -5048,7 +5054,7 @@ def create_binary_op_overload(op):
         # right arg is Series
         if isinstance(rhs, SeriesType):
             # right arg is dt64/td64 series, may need to unbox LHS
-            if rhs.dtype in [bodo.datetime64ns, bodo.timedelta64ns]:
+            if rhs.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]:
 
                 def impl(lhs, rhs):  # pragma: no cover
                     arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
@@ -5105,8 +5111,8 @@ def dt64_arr_sub(arg1, arg2):  # pragma: no cover
 
 @overload(dt64_arr_sub, no_unliteral=True, jit_options={"cache": True})
 def overload_dt64_arr_sub(arg1, arg2):
-    assert arg1 == types.Array(bodo.datetime64ns, 1, "C") and arg2 == types.Array(
-        bodo.datetime64ns, 1, "C"
+    assert arg1 == types.Array(bodo.types.datetime64ns, 1, "C") and arg2 == types.Array(
+        bodo.types.datetime64ns, 1, "C"
     )
     td64_dtype = np.dtype("timedelta64[ns]")
 
@@ -5499,9 +5505,9 @@ def overload_np_where(condition, x, y):
     elif isinstance(x_dtype, bodo.PDCategoricalDtype):
         out_dtype = None
     # Support conversion between Timestamp/dt64 and Timedelta/td64.
-    elif x_dtype in [bodo.timedelta64ns, bodo.datetime64ns]:
+    elif x_dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]:
         out_dtype = types.Array(x_dtype, 1, "C")
-    elif y_dtype in [bodo.timedelta64ns, bodo.datetime64ns]:
+    elif y_dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]:
         out_dtype = types.Array(y_dtype, 1, "C")
     else:
         # similar to np.where typer of Numba

@@ -70,7 +70,7 @@ def is_timedelta_type(in_type):
             bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type,
             bodo.hiframes.datetime_date_ext.datetime_timedelta_type,
         ]
-        or in_type == bodo.timedelta64ns
+        or in_type == bodo.types.timedelta64ns
     )
 
 
@@ -1326,7 +1326,7 @@ def get_index_type_from_dtype(t):
 
     if t in [
         bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type,
-        bodo.datetime64ns,
+        bodo.types.datetime64ns,
     ]:
         return DatetimeIndexType(types.none)
 
@@ -1341,7 +1341,7 @@ def get_index_type_from_dtype(t):
 
     if t in [
         bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type,
-        bodo.timedelta64ns,
+        bodo.types.timedelta64ns,
     ]:
         return TimedeltaIndexType(types.none)
 
@@ -1798,14 +1798,14 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         bodo.pd_timestamp_tz_naive_type,
         bodo.hiframes.datetime_datetime_ext.datetime_datetime_type,
     ):
-        return types.Array(bodo.datetime64ns, 1, "C")
+        return types.Array(bodo.types.datetime64ns, 1, "C")
 
     # pd.Timedelta/datetime.timedelta values are stored as td64 arrays
     if dtype in (
         bodo.pd_timedelta_type,
         bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type,
     ):
-        return types.Array(bodo.timedelta64ns, 1, "C")
+        return types.Array(bodo.types.timedelta64ns, 1, "C")
 
     # regular numpy array
     if isinstance(dtype, (types.Number, types.NPDatetime, types.NPTimedelta)):
@@ -1896,8 +1896,8 @@ def is_hashable_type(t):
     )
     whitelist_instances = (
         types.bool_,
-        bodo.datetime64ns,
-        bodo.timedelta64ns,
+        bodo.types.datetime64ns,
+        bodo.types.timedelta64ns,
         bodo.pd_timedelta_type,
     )
 
@@ -2002,8 +2002,8 @@ def is_scalar_type(t: types.Type) -> bool:
             bodo.Decimal128Type,
         ),
     ) or t in (
-        bodo.datetime64ns,
-        bodo.timedelta64ns,
+        bodo.types.datetime64ns,
+        bodo.types.timedelta64ns,
         bodo.string_type,
         bodo.bytes_type,
         bodo.datetime_date_type,
@@ -2090,7 +2090,7 @@ def get_common_scalar_dtype(
     if all(
         t
         in (
-            bodo.datetime64ns,
+            bodo.types.datetime64ns,
             bodo.pd_timestamp_tz_naive_type,
             bodo.pd_datetime_tz_naive_type,
         )
@@ -2101,12 +2101,12 @@ def get_common_scalar_dtype(
     if all(
         t
         in (
-            bodo.timedelta64ns,
+            bodo.types.timedelta64ns,
             bodo.pd_timedelta_type,
         )
         for t in scalar_types
     ):
-        return (bodo.timedelta64ns, False)
+        return (bodo.types.timedelta64ns, False)
 
     # Datetime+timezone-aware and timestamp+timezone-aware can be converted to be the same
     # if they both have the same timezone value.
@@ -2766,16 +2766,28 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
     # All tests except lhs: date are currently marked as slow
     if lhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between string and timestamp
-        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
+        return rhs_scalar_typ in (
+            bodo.types.datetime64ns,
+            bodo.pd_timestamp_tz_naive_type,
+        )
     elif rhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between timestamp and string
-        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
+        return lhs_scalar_typ in (
+            bodo.types.datetime64ns,
+            bodo.pd_timestamp_tz_naive_type,
+        )
     elif lhs_scalar_typ == bodo.datetime_date_type:
         # Cast is supported between date and timestamp
-        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
+        return rhs_scalar_typ in (
+            bodo.types.datetime64ns,
+            bodo.pd_timestamp_tz_naive_type,
+        )
     elif rhs_scalar_typ == bodo.datetime_date_type:  # pragma: no cover
         # Cast is supported between date and timestamp
-        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
+        return lhs_scalar_typ in (
+            bodo.types.datetime64ns,
+            bodo.pd_timestamp_tz_naive_type,
+        )
     return False  # pragma: no cover
 
 

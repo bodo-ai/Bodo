@@ -1568,7 +1568,7 @@ def is_supported_shift_array_type(arr_type):
             isinstance(arr_type, types.Array)
             and (
                 isinstance(arr_type.dtype, types.Number)
-                or arr_type.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                or arr_type.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
             )
         )
         or isinstance(

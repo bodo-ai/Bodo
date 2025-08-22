@@ -604,13 +604,13 @@ def array_to_info_codegen(context, builder, sig, args):
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
         elif isinstance(arr_type, DatetimeArrayType):
-            np_dtype = bodo.datetime64ns
+            np_dtype = bodo.types.datetime64ns
         elif arr_type == datetime_date_array_type:
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             np_dtype = types.int8
         elif arr_type == bodo.timedelta_array_type:
-            np_dtype = bodo.timedelta64ns
+            np_dtype = bodo.types.timedelta64ns
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
             context, builder, arr.data
         )
@@ -1347,14 +1347,14 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
         elif isinstance(arr_type, DatetimeArrayType):
-            np_dtype = bodo.datetime64ns
+            np_dtype = bodo.types.datetime64ns
         elif arr_type == datetime_date_array_type:
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             # Boolean array stores bits so we can't use boolean.
             np_dtype = types.uint8
         elif arr_type == bodo.timedelta_array_type:
-            np_dtype = bodo.timedelta64ns
+            np_dtype = bodo.types.timedelta64ns
         data_arr_type = types.Array(np_dtype, 1, "C")
         data_arr = context.make_array(data_arr_type)(context, builder)
         nulls_arr_type = types.Array(types.uint8, 1, "C")

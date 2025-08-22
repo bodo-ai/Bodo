@@ -24,7 +24,7 @@ Python types and Bodo data types.
 | `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(None)`     |
 | `TIMESTAMP_LTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(local_tz)` |
 | `TIMESTAMP_TZ`        | `bodo.TimestampTZ`     | `bodo.timestamptz_type`              |
-| `INTERVAL(day-time)`  | `np.timedelta64[ns]`   | `bodo.timedelta64ns`                 |
+| `INTERVAL(day-time)`  | `np.timedelta64[ns]`   | `bodo.types.timedelta64ns`                 |
 | `ARRAY`               | `pyarrow.large_list`   | `bodo.ArrayItemArray`                |
 | `MAP`                 | `pyarrow.map`          | `bodo.MapScalarType`                 |
 | `NULL`                | `pyarrow.NA`           | `bodo.null_dtype`                    |

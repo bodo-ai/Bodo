@@ -231,8 +231,8 @@ def get_sql_data_type(arr_type):
     # We currently treat NaT as nullable in BodoSQL, so for any array that has timestamp elements
     # type, we treat it as nullable.
     dtype_has_nullable = arr_type.dtype in (
-        bodo.datetime64ns,
-        bodo.timedelta64ns,
+        bodo.types.datetime64ns,
+        bodo.types.timedelta64ns,
     )
     nullable = dtype_has_nullable or bodo.utils.typing.is_nullable_type(arr_type)
     if isinstance(arr_type, bodo.DatetimeArrayType):

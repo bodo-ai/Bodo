@@ -1824,7 +1824,7 @@ class TypingTransforms:
         list_set_typ = self.typemap.get(list_set_arg.name, None)
         require(
             isinstance(list_set_typ, (types.List, types.Set))
-            and list_set_typ.dtype != bodo.datetime64ns
+            and list_set_typ.dtype != bodo.types.datetime64ns
             and not isinstance(
                 list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
@@ -1865,7 +1865,7 @@ class TypingTransforms:
         # TODO: check if this requirement needs to be enforced
         require(
             is_arg1_global
-            and arg1_arr_type.dtype != bodo.datetime64ns
+            and arg1_arr_type.dtype != bodo.types.datetime64ns
             and not isinstance(
                 arg1_arr_type.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
@@ -6009,7 +6009,7 @@ class TypingTransforms:
             # filter pushdown in that situation.
             return (
                 isinstance(list_set_typ, (types.List, types.Set))
-                and list_set_typ.dtype != bodo.datetime64ns
+                and list_set_typ.dtype != bodo.types.datetime64ns
                 and not isinstance(
                     list_set_typ.dtype,
                     bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
@@ -6035,7 +6035,7 @@ class TypingTransforms:
             # series isin implementation does.
             return (
                 is_arg1_global
-                and arg1_arr_type.dtype != bodo.datetime64ns
+                and arg1_arr_type.dtype != bodo.types.datetime64ns
                 and not isinstance(
                     arg1_arr_type.dtype,
                     bodo.hiframes.pd_timestamp_ext.PandasTimestampType,

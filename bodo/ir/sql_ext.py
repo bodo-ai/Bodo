@@ -1260,7 +1260,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
         return (
             lambda filter_value: f"date '{filter_value.strftime('%Y-%m-%d')}'"
         )  # pragma: no cover
-    elif filter_type == bodo.datetime64ns:
+    elif filter_type == bodo.types.datetime64ns:
         # datetime64 needs to be a Timestamp literal
         return lambda filter_value: bodo.ir.sql_ext._get_snowflake_sql_literal_scalar(
             pd.Timestamp(filter_value)
@@ -1285,7 +1285,7 @@ def _get_snowflake_sql_literal(filter_value):
         bodo.datetime_date_type,
         types.unicode_type,
         types.bool_,
-        bodo.datetime64ns,
+        bodo.types.datetime64ns,
         types.none,
     )
     filter_type = types.unliteral(filter_value)

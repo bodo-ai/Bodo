@@ -281,7 +281,7 @@ def setna_overload(arr, ind, int_nan_const=0):
         return _setnan_impl
 
     if isinstance(arr, DatetimeArrayType):
-        nat = bodo.datetime64ns("NaT")
+        nat = bodo.types.datetime64ns("NaT")
 
         def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
             arr._data[ind] = nat
@@ -2311,7 +2311,7 @@ def concat_overload(arr_list):
         # Generate a simpler error message for multiple timezones.
         all_timestamp_data = all(
             isinstance(typ, bodo.DatetimeArrayType)
-            or (isinstance(typ, types.Array) and typ.dtype == bodo.datetime64ns)
+            or (isinstance(typ, types.Array) and typ.dtype == bodo.types.datetime64ns)
             for typ in arr_list.types
         )
         if all_timestamp_data:
@@ -3133,11 +3133,11 @@ def ffill_bfill_overload(A, method, parallel=False):
         null_value = "False"
     elif isinstance(_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
         null_value = f"pd.Timestamp(0, tz='{_dtype.tz}')"
-    elif _dtype == bodo.datetime64ns:
+    elif _dtype == bodo.types.datetime64ns:
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_datetime(0))"
         )
-    elif _dtype == bodo.timedelta64ns:
+    elif _dtype == bodo.types.timedelta64ns:
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_timedelta(0))"
         )
@@ -4448,7 +4448,7 @@ def _overload_nan_argmin(arr):
             (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
         )
         or arr in [boolean_array_type, datetime_date_array_type]
-        or arr.dtype in [bodo.timedelta64ns, bodo.datetime64ns]
+        or arr.dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]
         # Recent Numpy versions treat NA as min while pandas
         # skips NA values
         or isinstance(arr.dtype, types.Float)
@@ -4530,7 +4530,7 @@ def _overload_nan_argmax(arr):
             (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
         )
         or arr in [boolean_array_type, datetime_date_array_type]
-        or arr.dtype == bodo.timedelta64ns
+        or arr.dtype == bodo.types.timedelta64ns
         # Recent Numpy versions treat NA as max while pandas
         # skips NA values
         or isinstance(arr.dtype, types.Float)

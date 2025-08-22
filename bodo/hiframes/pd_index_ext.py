@@ -240,7 +240,9 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible, SingleIndexTy
         # TODO: support other properties like freq/dtype/yearfirst?
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
-        self.data = types.Array(bodo.datetime64ns, 1, "C") if data is None else data
+        self.data = (
+            types.Array(bodo.types.datetime64ns, 1, "C") if data is None else data
+        )
         super().__init__(name=f"DatetimeIndex({name_typ}, {self.data})")
 
     ndim = 1
@@ -1356,7 +1358,9 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible, SingleIndexT
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
         # NOTE: data array can have flags like readonly
-        self.data = types.Array(bodo.timedelta64ns, 1, "C") if data is None else data
+        self.data = (
+            types.Array(bodo.types.timedelta64ns, 1, "C") if data is None else data
+        )
         super().__init__(name=f"TimedeltaIndexType({name_typ}, {self.data})")
 
     ndim = 1
@@ -3806,9 +3810,9 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
         I, "DatetimeIndex.get_loc"
     )
     if key == pd_timestamp_tz_naive_type:
-        key = bodo.datetime64ns
+        key = bodo.types.datetime64ns
     if key == pd_timedelta_type:
-        key = bodo.timedelta64ns
+        key = bodo.types.timedelta64ns
 
     if key != I.dtype:  # pragma: no cover
         raise_bodo_error("Index.get_loc(): invalid label type in Index.get_loc()")

@@ -741,7 +741,8 @@ def check_cross_join_coltypes(
     """
     for col_type in chain(left_col_types, right_col_types):
         if col_type == bodo.timedelta_array_type or (
-            isinstance(col_type, types.Array) and col_type.dtype == bodo.timedelta64ns
+            isinstance(col_type, types.Array)
+            and col_type.dtype == bodo.types.timedelta64ns
         ):
             raise BodoError(
                 "The Timedelta column data type is not supported for Cross Joins or Joins with Inequality Conditions"
@@ -2476,15 +2477,15 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     elif isinstance(col_array_dtype, (types.Array, bodo.DatetimeArrayType)):
         col_dtype = col_array_dtype.dtype
         if col_dtype in [
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
         ] or isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
             # Note: PandasDatetimeTZDtype is not the return type for scalar data.
             # In C++ the data is just a datetime64ns
             if isinstance(
                 col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
             ):
-                col_dtype = bodo.datetime64ns
+                col_dtype = bodo.types.datetime64ns
 
             # Datetime arrays represent NULL by using pd._libs.iNaT
             @intrinsic
@@ -2586,14 +2587,14 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
         ),
     ) or col_dtype in [
         bodo.datetime_date_type,
-        bodo.datetime64ns,
-        bodo.timedelta64ns,
+        bodo.types.datetime64ns,
+        bodo.types.timedelta64ns,
         types.bool_,
     ]:
         # Note: PandasDatetimeTZDtype is not the return type for scalar data.
         # In C++ the data is just a datetime64ns
         if isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
-            col_dtype = bodo.datetime64ns
+            col_dtype = bodo.types.datetime64ns
 
         # This code path just returns the data.
         @intrinsic
@@ -3440,7 +3441,11 @@ def _get_interval_join_info(
             ),
         )
         or dtype
-        in (bodo.datetime64ns, bodo.datetime_date_type, bodo.datetime_timedelta_type)
+        in (
+            bodo.types.datetime64ns,
+            bodo.datetime_date_type,
+            bodo.datetime_timedelta_type,
+        )
     )
     # TODO: We should eventually handle joins between nullable and non-nullable arrays
     require(all(left_other_types[k] == key_type for k in left_col_nums))

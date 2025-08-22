@@ -166,7 +166,7 @@ public class BodoArrayHelpers {
         break;
       case TIMESTAMP:
         // TODO: Add nullable support
-        typeName = "numba.core.types.Array(bodo.datetime64ns, 1, 'C')";
+        typeName = "numba.core.types.Array(bodo.types.datetime64ns, 1, 'C')";
         break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         // TODO: Add nullable support
@@ -205,7 +205,7 @@ public class BodoArrayHelpers {
       case INTERVAL_SECOND:
       case INTERVAL_DAY:
         // TODO: Add nullable support
-        typeName = "numba.core.types.Array(bodo.timedelta64ns, 1, 'C')";
+        typeName = "numba.core.types.Array(bodo.types.timedelta64ns, 1, 'C')";
         break;
       case INTERVAL_YEAR:
       case INTERVAL_MONTH:

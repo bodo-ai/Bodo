@@ -362,7 +362,7 @@ def detect_coalesce_casting(arg_types, arg_names):
         return default_result
     # Case 1: mix of tz-naive and date
     if np.all(tz_naive | date):
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
         casts = [
             f"{arg_names[i]} = bodosql.kernels.to_timestamp({arg_names[i]}, None, None, 0)\n"
             for i in range(n)

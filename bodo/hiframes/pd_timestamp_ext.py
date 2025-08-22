@@ -1627,7 +1627,7 @@ def timedelta64_to_integer(typingctx, val=None):
     return types.int64(val), codegen
 
 
-@lower_cast(bodo.timedelta64ns, types.int64)
+@lower_cast(bodo.types.timedelta64ns, types.int64)
 def cast_td64_to_integer(context, builder, fromty, toty, val):
     # td64 is stored as int64 so just return value
     return val
@@ -1688,7 +1688,7 @@ def datetime_datetime_to_dt64(val):  # pragma: no cover
 def datetime_date_arr_to_dt64_arr(arr):  # pragma: no cover
     """convert array of datetime.date to np.datetime64"""
     n = len(arr)
-    res = np.empty(n, bodo.datetime64ns)
+    res = np.empty(n, bodo.types.datetime64ns)
     for i in range(n):
         if bodo.libs.array_kernels.isna(arr, i):
             bodo.libs.array_kernels.setna(res, i)
@@ -2132,7 +2132,7 @@ def overload_to_datetime(
 
     # np datetime input. This ignores other fields and just returns value wrapped
     # in a timestamp
-    if arg_a == bodo.datetime64ns:
+    if arg_a == bodo.types.datetime64ns:
 
         def impl_np_datetime(
             arg_a,
@@ -2289,7 +2289,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
 
             return impl_int
 
-        if arg_a.dtype == bodo.timedelta64ns:
+        if arg_a.dtype == bodo.types.timedelta64ns:
 
             def impl_td64(arg_a, unit="ns", errors="raise"):  # pragma: no cover
                 arr = bodo.utils.conversion.coerce_to_ndarray(arg_a)
@@ -2448,7 +2448,7 @@ def create_timestamp_cmp_op_overload(op):
                 )
 
         # Timestamp/dt64 scalar
-        if isinstance(lhs, PandasTimestampType) and rhs == bodo.datetime64ns:
+        if isinstance(lhs, PandasTimestampType) and rhs == bodo.types.datetime64ns:
             if lhs.tz is not None:
                 return lambda lhs, rhs: op(
                     bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
@@ -2462,7 +2462,7 @@ def create_timestamp_cmp_op_overload(op):
                 )  # pragma: no cover
 
         # dt64 scalar/Timestamp
-        if lhs == bodo.datetime64ns and isinstance(rhs, PandasTimestampType):
+        if lhs == bodo.types.datetime64ns and isinstance(rhs, PandasTimestampType):
             if rhs.tz is not None:
                 return lambda lhs, rhs: op(
                     lhs,
@@ -3003,7 +3003,7 @@ def typeof_python_calendar(val, c):
 
 @overload_method(types.NPDatetime, "__str__", jit_options={"cache": True})
 def overload_datetime64_str(val):
-    if val == bodo.datetime64ns:
+    if val == bodo.types.datetime64ns:
         # for right now, just going to use isoformat. This will omit fractional values,
         # similar to how the current str(timestamp) implementation omits fractional values.
         # see BE-1407

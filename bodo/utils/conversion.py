@@ -107,14 +107,14 @@ class CoerceToNdarrayInfer(AbstractTemplate):
         if isinstance(data, types.Array):
             if not is_overload_none(use_nullable_array) and (
                 isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
-                or data.dtype == bodo.timedelta64ns
-                or data.dtype == bodo.datetime64ns
+                or data.dtype == bodo.types.timedelta64ns
+                or data.dtype == bodo.types.datetime64ns
             ):
                 if data.dtype == types.bool_:
                     output = bodo.boolean_array_type
-                elif data.dtype == bodo.timedelta64ns:
+                elif data.dtype == bodo.types.timedelta64ns:
                     output = bodo.timedelta_array_type
-                elif data.dtype == bodo.datetime64ns:
+                elif data.dtype == bodo.types.datetime64ns:
                     output = bodo.DatetimeArrayType(None)
                 elif isinstance(data.dtype, types.Float):
                     output = bodo.FloatingArrayType(data.dtype)
@@ -165,9 +165,9 @@ class CoerceToNdarrayInfer(AbstractTemplate):
                     data.precision, data.scale
                 )
             elif data == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
-                output = types.Array(bodo.datetime64ns, 1, "C")
+                output = types.Array(bodo.types.datetime64ns, 1, "C")
             elif data == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
-                output = types.Array(bodo.timedelta64ns, 1, "C")
+                output = types.Array(bodo.types.timedelta64ns, 1, "C")
             elif data == bodo.hiframes.datetime_date_ext.datetime_date_type:
                 output = bodo.datetime_date_array_type
             elif isinstance(data, bodo.hiframes.time_ext.TimeType):
@@ -243,7 +243,7 @@ def overload_np_to_nullable_array(data):
             return lambda data: bodo.libs.int_arr_ext.init_integer_array(
                 data, np.full((len(data) + 7) >> 3, 255, np.uint8)
             )  # pragma: no cover
-    elif data.dtype == bodo.timedelta64ns:
+    elif data.dtype == bodo.types.timedelta64ns:
         if data.layout != "C":
             return (
                 lambda data: bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
@@ -257,7 +257,7 @@ def overload_np_to_nullable_array(data):
                     data, np.full((len(data) + 7) >> 3, 255, np.uint8)
                 )
             )  # pragma: no cover
-    elif data.dtype == bodo.datetime64ns:
+    elif data.dtype == bodo.types.datetime64ns:
         if data.layout != "C":
             return lambda data: bodo.libs.pd_datetime_arr_ext.init_datetime_array(
                 np.ascontiguousarray(data),
@@ -334,8 +334,8 @@ def overload_coerce_to_ndarray(
     if isinstance(data, types.Array):
         if not is_overload_none(use_nullable_array) and (
             isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
-            or data.dtype == bodo.timedelta64ns
-            or data.dtype == bodo.datetime64ns
+            or data.dtype == bodo.types.timedelta64ns
+            or data.dtype == bodo.types.datetime64ns
         ):
             return (
                 lambda data,
@@ -1551,8 +1551,8 @@ def overload_fix_arr_dtype(
             types.uint64: np.uint64(0),
             types.float32: np.float32(0),
             types.float64: np.float64(0),
-            bodo.datetime64ns: pd.Timestamp(0),
-            bodo.timedelta64ns: pd.Timedelta(0),
+            bodo.types.datetime64ns: pd.Timestamp(0),
+            bodo.types.timedelta64ns: pd.Timedelta(0),
         }
 
         convert_func_dict = {
@@ -1569,8 +1569,8 @@ def overload_fix_arr_dtype(
             types.uint64: np.uint64,
             types.float32: np.float32,
             types.float64: np.float64,
-            bodo.datetime64ns: pd.to_datetime,
-            bodo.timedelta64ns: pd.to_timedelta,
+            bodo.types.datetime64ns: pd.to_datetime,
+            bodo.types.timedelta64ns: pd.to_timedelta,
         }
 
         # If NA values properly done this should suffice for default_value_dict:
@@ -1582,22 +1582,22 @@ def overload_fix_arr_dtype(
         if nb_dtype not in valid_types:
             raise BodoError(f"type conversion to {nb_dtype} types unsupported.")
         for typ in scalar_types:
-            if typ == bodo.datetime64ns:
+            if typ == bodo.types.datetime64ns:
                 if nb_dtype not in (
                     types.unicode_type,
                     types.int64,
                     types.uint64,
-                    bodo.datetime64ns,
+                    bodo.types.datetime64ns,
                 ):
                     raise BodoError(
                         f"invalid type conversion from {typ} to {nb_dtype}."
                     )
-            elif typ == bodo.timedelta64ns:
+            elif typ == bodo.types.timedelta64ns:
                 if nb_dtype not in (
                     types.unicode_type,
                     types.int64,
                     types.uint64,
-                    bodo.timedelta64ns,
+                    bodo.types.timedelta64ns,
                 ):
                     raise BodoError(
                         f"invalid type conversion from {typ} to {nb_dtype}."
@@ -1696,8 +1696,8 @@ def overload_fix_arr_dtype(
             return impl_binary
 
         if is_overload_true(from_series) and data.dtype in (
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
         ):
 
             def impl_str_dt_series(
@@ -1996,7 +1996,7 @@ def overload_fix_arr_dtype(
     # Note astype(datetime.date) isn't possible in Pandas because its treated
     # as an object type. We support it to maintain parity with Spark's cast.
     if nb_dtype == bodo.datetime_date_type and (
-        data.dtype == bodo.datetime64ns or data_is_tz_aware
+        data.dtype == bodo.types.datetime64ns or data_is_tz_aware
     ):
         # This operation isn't defined in Pandas, so we opt to implement it as
         # truncating to the date, which best resembles a cast.
@@ -2021,7 +2021,7 @@ def overload_fix_arr_dtype(
         return impl_date
 
     # Datetime64 case
-    if nb_dtype == bodo.datetime64ns:
+    if nb_dtype == bodo.types.datetime64ns:
         if data.dtype == bodo.string_type:
             # Support String Arrays using objmode
             def impl_str(
@@ -2055,7 +2055,7 @@ def overload_fix_arr_dtype(
             return impl_tz_ts
 
         if isinstance(data.dtype, types.Number) or data.dtype in [
-            bodo.timedelta64ns,
+            bodo.types.timedelta64ns,
             types.bool_,
         ]:
             # Nullable Integer/boolean/timedelta64 arrays
@@ -2077,7 +2077,7 @@ def overload_fix_arr_dtype(
             return impl_numeric
 
     # Timedelta64 case
-    if nb_dtype == bodo.timedelta64ns:
+    if nb_dtype == bodo.types.timedelta64ns:
         if data.dtype == bodo.string_type:
             # Support String Arrays using objmode
             def impl_str(
@@ -2090,7 +2090,7 @@ def overload_fix_arr_dtype(
             return impl_str
 
         if isinstance(data.dtype, types.Number) or data.dtype in [
-            bodo.datetime64ns,
+            bodo.types.datetime64ns,
             types.bool_,
         ]:
             if do_copy:
@@ -2125,7 +2125,8 @@ def overload_fix_arr_dtype(
 
     # Pandas currently only supports dt64/td64 -> int64
     if (nb_dtype == types.int64) and (
-        data.dtype in [bodo.datetime64ns, bodo.timedelta64ns] or data_is_tz_aware
+        data.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
+        or data_is_tz_aware
     ):
 
         def impl_datelike_to_integer(

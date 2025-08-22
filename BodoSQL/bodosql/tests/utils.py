@@ -1610,8 +1610,8 @@ def create_pyspark_schema_from_dataframe(df):
         types.uint64: LongType(),
         types.float32: FloatType(),
         types.float64: DoubleType(),
-        bodo.datetime64ns: TimestampType(),
-        bodo.timedelta64ns: DayTimeIntervalType(),
+        bodo.types.datetime64ns: TimestampType(),
+        bodo.types.timedelta64ns: DayTimeIntervalType(),
     }
 
     df_type = bodo.typeof(df)

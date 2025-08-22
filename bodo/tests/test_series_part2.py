@@ -3402,11 +3402,11 @@ def test_series_np_select(series_val):
     infered_typ = bodo.hiframes.boxing._infer_series_arr_type(series_val).dtype
     if not (infered_typ == bodo.types.bool_ or isinstance(infered_typ, types.Number)):
         py_out = na_impl(A1, A2, cond1, cond2)
-        if infered_typ == bodo.datetime64ns:
+        if infered_typ == bodo.types.datetime64ns:
             # need to do a bit of conversion in this case, as numpy by default casts the dt64 to int
             # when the np output is an object array
             py_out = np.array(pd.Series(py_out).astype("datetime64[ns]"))
-        if infered_typ == bodo.timedelta64ns:
+        if infered_typ == bodo.types.timedelta64ns:
             # need to do a bit of conversion in this case, numpy does a cast to int
             # when the np output is an object array
             py_out = np.array(
@@ -3472,10 +3472,10 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
     if not (infered_typ == bodo.types.bool_ or isinstance(infered_typ, types.Number)):
         py_out = na_impl(A1, A2, cond1, cond2)
 
-        if infered_typ == bodo.datetime64ns:
+        if infered_typ == bodo.types.datetime64ns:
             # need to do a bit of conversion in this case, as numpy by default casts the dt64 to int
             py_out = np.array(pd.Series(py_out).astype("datetime64[ns]"))
-        if infered_typ == bodo.timedelta64ns:
+        if infered_typ == bodo.types.timedelta64ns:
             # need to do a bit of conversion in this case, again, numpy does a wierd conversion
             py_out = np.array(
                 pd.Series(py_out).replace(pd.NA, np.nan).astype("timedelta64[ns]")

@@ -730,13 +730,13 @@ def pd_create_cmp_op_overload(op):
             return impl
 
         # Timedelta/td64
-        if lhs == pd_timedelta_type and rhs == bodo.timedelta64ns:
+        if lhs == pd_timedelta_type and rhs == bodo.types.timedelta64ns:
             return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(lhs.value), rhs
             )  # pragma: no cover
 
         # td64/Timedelta
-        if lhs == bodo.timedelta64ns and rhs == pd_timedelta_type:
+        if lhs == bodo.types.timedelta64ns and rhs == pd_timedelta_type:
             return lambda lhs, rhs: op(
                 lhs, bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(rhs.value)
             )  # pragma: no cover
@@ -1263,7 +1263,7 @@ def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
 
 @numba.njit(no_cpython_wrapper=True)
 def alloc_timedelta_array(n):  # pragma: no cover
-    data_arr = np.empty(n, dtype=bodo.timedelta64ns)
+    data_arr = np.empty(n, dtype=bodo.types.timedelta64ns)
     # XXX: set all bits to not null since datetime.timedelta array operations do not support
     # NA yet. TODO: use 'empty' when all operations support NA
     # nulls = np.empty((n + 7) >> 3, dtype=np.uint8)

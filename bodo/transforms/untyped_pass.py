@@ -3515,7 +3515,9 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
         # Column is alive if its in the dtype_map or date_cols
         if col_name in dtype_map or i in date_cols or col_name in date_cols:
             # Pandas prioritizes dtype_map over date_cols
-            col_type = dtype_map.get(col_name, types.Array(bodo.datetime64ns, 1, "C"))
+            col_type = dtype_map.get(
+                col_name, types.Array(bodo.types.datetime64ns, 1, "C")
+            )
             columns.append(col_name)
             out_types.append(col_type)
             data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))

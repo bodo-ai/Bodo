@@ -994,7 +994,7 @@ def is_valid_timedelta_arg(arg):
             and (
                 is_timedelta64_series_typ(arg)
                 or isinstance(arg, PDTimeDeltaType)
-                or arg.dtype == bodo.timedelta64ns
+                or arg.dtype == bodo.types.timedelta64ns
             )
         )
     )
@@ -1204,10 +1204,13 @@ def is_valid_tz_naive_datetime_arg(arg):
         bool: Is this type one of the tz-naive datetime types.
     """
     return arg in (
-        bodo.datetime64ns,
+        bodo.types.datetime64ns,
         bodo.pd_timestamp_tz_naive_type,
         bodo.pd_datetime_tz_naive_type,
-    ) or (bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.datetime64ns)
+    ) or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and arg.dtype == bodo.types.datetime64ns
+    )
 
 
 def is_valid_tz_aware_datetime_arg(arg):

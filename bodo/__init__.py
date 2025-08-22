@@ -244,12 +244,7 @@ from numba import (  # re-export from Numba
     typeof,
 )
 
-
 from bodo.numba_compat import jitclass
-
-datetime64ns = numba.core.types.NPDatetime("ns")
-timedelta64ns = numba.core.types.NPTimedelta("ns")
-
 
 
 from bodo.libs.distributed_api import (

@@ -402,7 +402,7 @@ def overload_pd_datetime_dtype(A):
     if A.tz is None:
 
         def impl(A):  # pragma: no cover
-            return bodo.datetime64ns
+            return bodo.types.datetime64ns
 
         return impl
     else:
@@ -480,7 +480,7 @@ def overload_timestamp_to_dt64(val):
             return bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
 
         return impl
-    elif val == bodo.datetime64ns:  # pragma: no cover
+    elif val == bodo.types.datetime64ns:  # pragma: no cover
 
         def impl(val):  # pragma: no cover
             return val
@@ -500,7 +500,7 @@ def overload_setitem(A, ind, val):
     if not (
         isinstance(val, DatetimeArrayType)
         or isinstance(val, bodo.PandasTimestampType)
-        or val == bodo.datetime64ns
+        or val == bodo.types.datetime64ns
     ):  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires a Timestamp value or DatetimeArrayType"
@@ -653,12 +653,12 @@ def numpy_arr_setitem(A, idx, val):
     """Support setitem of Numpy arrays with nullable datetime arrays"""
     if not (
         isinstance(A, types.Array)
-        and (A.dtype == bodo.datetime64ns)
+        and (A.dtype == bodo.types.datetime64ns)
         and isinstance(val, DatetimeArrayType)
     ):
         return
 
-    nat = bodo.datetime64ns("NaT")
+    nat = bodo.types.datetime64ns("NaT")
 
     def impl_np_setitem_datetime_arr(A, idx, val):  # pragma: no cover
         # Make sure data elements of NA values are NaT to pass the NAs to output
@@ -767,9 +767,9 @@ def create_cmp_op_overload_arr(op):
         # Tz-Aware timestamp + Tz-Naive timestamp
         elif (
             isinstance(lhs, DatetimeArrayType)
-            and (isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns)
+            and (isinstance(rhs, types.Array) and rhs.dtype == bodo.types.datetime64ns)
         ) or (
-            (isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns)
+            (isinstance(lhs, types.Array) and lhs.dtype == bodo.types.datetime64ns)
             and isinstance(rhs, DatetimeArrayType)
         ):
 

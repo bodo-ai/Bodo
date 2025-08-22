@@ -1259,13 +1259,13 @@ class SeriesPass:
             rhs.fn in cmp_ops
             and (
                 isinstance(typ1, types.Array)
-                and typ1.dtype == bodo.datetime64ns
+                and typ1.dtype == bodo.types.datetime64ns
                 and typ2 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
             )
             or (
                 typ1 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
                 and isinstance(typ2, types.Array)
-                and typ2.dtype == bodo.datetime64ns
+                and typ2.dtype == bodo.types.datetime64ns
             )
         ):
             impl = bodo.hiframes.datetime_date_ext.create_datetime_array_date_cmp_op_overload(
