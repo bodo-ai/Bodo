@@ -119,7 +119,7 @@ _numba_to_sql_param_type_map = {
     bodo.types.string_type: SqlTypeEnum.String.value,
     # Scalar datetime and timedelta are assumed
     # to be scalar Pandas Timestamp/Timedelta
-    bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Timestamp_Ntz.value,
+    bodo.types.pd_timestamp_tz_naive_type: SqlTypeEnum.Timestamp_Ntz.value,
     bodo.types.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
@@ -334,7 +334,7 @@ def get_sql_param_column_type_info(param_type: types.Type):
     # non-null.
     nullable = False
     if (
-        isinstance(unliteral_type, bodo.PandasTimestampType)
+        isinstance(unliteral_type, bodo.types.PandasTimestampType)
         and unliteral_type.tz != None
     ):
         return construct_tz_aware_array_type(param_type, nullable)

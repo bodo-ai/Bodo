@@ -1231,7 +1231,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
     ):
         # Numeric and boolean values can just return the string representation
         return lambda filter_value: str(filter_value)  # pragma: no cover
-    elif isinstance(filter_type, bodo.PandasTimestampType):
+    elif isinstance(filter_type, bodo.types.PandasTimestampType):
         if filter_type.tz is None:
             tz_str = "TIMESTAMP_NTZ"
         else:
@@ -1280,7 +1280,7 @@ def _get_snowflake_sql_literal(filter_value):
     returns a string representation of the filter value
     that could be used in a Snowflake SQL query.
     """
-    scalar_isinstance = (types.Integer, types.Float, bodo.PandasTimestampType)
+    scalar_isinstance = (types.Integer, types.Float, bodo.types.PandasTimestampType)
     scalar_equals = (
         bodo.types.datetime_date_type,
         types.unicode_type,

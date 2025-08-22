@@ -21,8 +21,8 @@ Python types and Bodo data types.
 | `VARBINARY`, `BINARY` | `bytes`                | `bodo.types.bytes_type`                    |
 | `DATE`                | `datetime.date`        | `bodo.types.datetime_date_type`            |
 | `TIME`                | `bodo.types.Time`            | `bodo.types.TimeType`                      |
-| `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(None)`     |
-| `TIMESTAMP_LTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(local_tz)` |
+| `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.types.PandasTimestampType(None)`     |
+| `TIMESTAMP_LTZ`       | `pd.Timestamp`         | `bodo.types.PandasTimestampType(local_tz)` |
 | `TIMESTAMP_TZ`        | `bodo.types.TimestampTZ`     | `bodo.types.timestamptz_type`              |
 | `INTERVAL(day-time)`  | `np.timedelta64[ns]`   | `bodo.types.timedelta64ns`                 |
 | `ARRAY`               | `pyarrow.large_list`   | `bodo.ArrayItemArray`                |

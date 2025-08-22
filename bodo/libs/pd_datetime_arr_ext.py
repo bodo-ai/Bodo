@@ -474,7 +474,7 @@ def timestamp_to_dt64(val):
 
 @overload(timestamp_to_dt64)
 def overload_timestamp_to_dt64(val):
-    if isinstance(val, bodo.PandasTimestampType):
+    if isinstance(val, bodo.types.PandasTimestampType):
 
         def impl(val):  # pragma: no cover
             return bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
@@ -499,7 +499,7 @@ def overload_setitem(A, ind, val):
     # Check the possible values
     if not (
         isinstance(val, DatetimeArrayType)
-        or isinstance(val, bodo.PandasTimestampType)
+        or isinstance(val, bodo.types.PandasTimestampType)
         or val == bodo.types.datetime64ns
     ):  # pragma: no cover
         raise BodoError(
@@ -519,7 +519,7 @@ def overload_setitem(A, ind, val):
         )
 
     if isinstance(ind, types.Integer):
-        if isinstance(val, bodo.PandasTimestampType):
+        if isinstance(val, bodo.types.PandasTimestampType):
 
             def impl(A, ind, val):  # pragma: no cover
                 dt64_val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)

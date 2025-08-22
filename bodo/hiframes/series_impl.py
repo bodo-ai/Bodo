@@ -4541,7 +4541,7 @@ def _validate_self_other_mask_where(
             not in [
                 bodo.types.datetime64ns,
                 bodo.types.timedelta64ns,
-                bodo.pd_timestamp_tz_naive_type,
+                bodo.types.pd_timestamp_tz_naive_type,
                 bodo.types.pd_timedelta_type,
             ]
         )

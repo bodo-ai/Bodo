@@ -1163,7 +1163,7 @@ def parse_dtype(dtype, func_name=None):
         bodo.types.datetime_date_type,
         bodo.types.datetime_timedelta_type,
         bodo.types.null_dtype,
-        bodo.pd_timestamp_tz_naive_type,
+        bodo.types.pd_timestamp_tz_naive_type,
         bodo.types.pd_timedelta_type,
     ):
         return dtype
@@ -1790,12 +1790,12 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     if isinstance(dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
         return bodo.DatetimeArrayType(dtype.tz)
 
-    if isinstance(dtype, bodo.PandasTimestampType) and dtype.tz is not None:
+    if isinstance(dtype, bodo.types.PandasTimestampType) and dtype.tz is not None:
         return bodo.DatetimeArrayType(dtype.tz)
 
     # Timestamp/datetime are stored as dt64 array
     if dtype in (
-        bodo.pd_timestamp_tz_naive_type,
+        bodo.types.pd_timestamp_tz_naive_type,
         bodo.hiframes.datetime_datetime_ext.datetime_datetime_type,
     ):
         return types.Array(bodo.types.datetime64ns, 1, "C")
@@ -2007,7 +2007,7 @@ def is_scalar_type(t: types.Type) -> bool:
         bodo.types.string_type,
         bodo.types.bytes_type,
         bodo.types.datetime_date_type,
-        bodo.datetime_datetime_type,
+        bodo.types.datetime_datetime_type,
         bodo.types.datetime_timedelta_type,
         bodo.types.pd_timedelta_type,
         bodo.month_end_type,
@@ -2091,7 +2091,7 @@ def get_common_scalar_dtype(
         t
         in (
             bodo.types.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
             bodo.pd_datetime_tz_naive_type,
         )
         for t in scalar_types
@@ -2112,14 +2112,14 @@ def get_common_scalar_dtype(
     # if they both have the same timezone value.
     if all(
         isinstance(t, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
-        or (isinstance(t, bodo.PandasTimestampType) and t.tz is not None)
+        or (isinstance(t, bodo.types.PandasTimestampType) and t.tz is not None)
         for t in scalar_types
     ):
         timezones = [t.tz for t in scalar_types]
         for tz in timezones:
             if tz != timezones[0]:
                 return (None, False)
-        return (bodo.PandasTimestampType(timezones[0]), False)
+        return (bodo.types.PandasTimestampType(timezones[0]), False)
     # If all are Numeric types and one is Decimal128Type, then:
     # - We attempt to combine lossless-ly and reduce to closest non-Decimal type
     # - If too large, we default to closes Decimal128 type expecting lossy conversion
@@ -2768,25 +2768,25 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
         # Cast is supported between string and timestamp
         return rhs_scalar_typ in (
             bodo.types.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
         )
     elif rhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between timestamp and string
         return lhs_scalar_typ in (
             bodo.types.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
         )
     elif lhs_scalar_typ == bodo.types.datetime_date_type:
         # Cast is supported between date and timestamp
         return rhs_scalar_typ in (
             bodo.types.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
         )
     elif rhs_scalar_typ == bodo.types.datetime_date_type:  # pragma: no cover
         # Cast is supported between date and timestamp
         return lhs_scalar_typ in (
             bodo.types.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
         )
     return False  # pragma: no cover
 
@@ -3137,7 +3137,7 @@ def get_array_getitem_scalar_type(t):
     # Scalar type of most arrays is the same as dtype (e.g. int64), except
     # DatetimeArrayType and null_array_type which have different dtype objects.
     if isinstance(t, bodo.DatetimeArrayType):
-        return bodo.PandasTimestampType(t.tz)
+        return bodo.types.PandasTimestampType(t.tz)
 
     if t == bodo.types.null_array_type:
         return types.none

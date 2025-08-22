@@ -850,12 +850,12 @@ def determine_filter_cast(
         # Only supported types should be string and timestamp or timestamp + date
         if lhs_scalar_typ == types.unicode_type and rhs_scalar_typ in (
             bodo.types.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
             return ".cast(pa.timestamp('ns'), safe=False)", ""
         elif rhs_scalar_typ == types.unicode_type and lhs_scalar_typ in (
             bodo.types.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
             if isinstance(rhs_typ, (types.List, types.Set)):  # pragma: no cover
                 # This path should never be reached because we checked that
@@ -867,12 +867,12 @@ def determine_filter_cast(
             return col_cast, ".cast(pa.timestamp('ns'), safe=False)"
         elif lhs_scalar_typ == bodo.types.datetime_date_type and rhs_scalar_typ in (
             bodo.types.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
         ):
             return ".cast(pa.timestamp('ns'), safe=False)", ""
         elif rhs_scalar_typ == bodo.types.datetime_date_type and lhs_scalar_typ in (
             bodo.types.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
             return col_cast, ".cast(pa.timestamp('ns'), safe=False)"
     return col_cast, ""

@@ -1264,12 +1264,12 @@ def overload_coerce_to_array(
 
     # Timestamp/Timedelta scalars to array
     if not is_overload_none(scalar_to_arr_len) and data in [
-        bodo.pd_timestamp_tz_naive_type,
+        bodo.types.pd_timestamp_tz_naive_type,
         bodo.types.pd_timedelta_type,
     ]:
         _dtype = (
             "datetime64[ns]"
-            if data == bodo.pd_timestamp_tz_naive_type
+            if data == bodo.types.pd_timestamp_tz_naive_type
             else "timedelta64[ns]"
         )
 

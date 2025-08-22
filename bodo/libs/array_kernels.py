@@ -719,9 +719,7 @@ def get_valid_entries_from_date_offset(
         "def impl(index_arr, offset, initial_date, is_last, is_parallel=False):\n"
     )
     if types.unliteral(offset) == types.unicode_type:
-        func_text += (
-            "  with numba.objmode(threshhold_date=bodo.pd_timestamp_tz_naive_type):\n"
-        )
+        func_text += "  with numba.objmode(threshhold_date=bodo.types.pd_timestamp_tz_naive_type):\n"
         func_text += "    date_offset = pd.tseries.frequencies.to_offset(offset)\n"
         if not get_overload_const_bool(is_last):
             func_text += "    if not isinstance(date_offset, pd._libs.tslibs.Tick) and date_offset.is_on_offset(index_arr[0]):\n"

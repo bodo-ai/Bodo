@@ -629,7 +629,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         nullable_dtype = bodo.NullableTupleType(data_type, null_tup_type)
         name_dtype = df.index.dtype
         if name_dtype == types.NPDatetime("ns"):
-            name_dtype = bodo.pd_timestamp_tz_naive_type
+            name_dtype = bodo.types.pd_timestamp_tz_naive_type
         if name_dtype == types.NPTimedelta("ns"):
             name_dtype = bodo.types.pd_timedelta_type
         if is_heterogeneous_tuple_type(data_type):

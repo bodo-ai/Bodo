@@ -508,7 +508,7 @@ def dist_reduce_impl(value, reduce_op, comm):
         ]
 
         if target_typ not in supported_typs and not isinstance(
-            target_typ, (bodo.Decimal128Type, bodo.PandasTimestampType)
+            target_typ, (bodo.Decimal128Type, bodo.types.PandasTimestampType)
         ):  # pragma: no cover
             raise BodoError(f"argmin/argmax not supported for type {target_typ}")
 
@@ -1399,7 +1399,7 @@ class BcastScalarInfer(AbstractTemplate):
                 (
                     types.Integer,
                     types.Float,
-                    bodo.PandasTimestampType,
+                    bodo.types.PandasTimestampType,
                 ),
             )
             or val
@@ -1450,7 +1450,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
         return impl
 
-    if isinstance(val, bodo.PandasTimestampType):
+    if isinstance(val, bodo.types.PandasTimestampType):
         c_type = numba_to_c_type(types.int64)
         tz = val.tz
 

@@ -97,12 +97,12 @@ class SeriesCmpOpTemplate(AbstractTemplate):
         rhs_arr = rhs.data if isinstance(rhs, SeriesType) else rhs
         # Timestamp and Timestamp need to be unboxed if compared to dt64/td64 array
         if lhs_arr in (
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
             bodo.types.pd_timedelta_type,
         ) and rhs_arr.dtype in (bodo.types.datetime64ns, bodo.types.timedelta64ns):
             lhs_arr = rhs_arr.dtype
         elif rhs_arr in (
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.pd_timestamp_tz_naive_type,
             bodo.types.pd_timedelta_type,
         ) and lhs_arr.dtype in (bodo.types.datetime64ns, bodo.types.timedelta64ns):
             rhs_arr = lhs_arr.dtype
@@ -282,13 +282,13 @@ def overload_sub_operator_scalars(lhs, rhs):
 
     # The order matters here: make sure offset types are before datetime types
     # Datetime types
-    if isinstance(lhs, bodo.PandasTimestampType) and (
+    if isinstance(lhs, bodo.types.PandasTimestampType) and (
         rhs
         in (
             datetime_timedelta_type,
             pd_timedelta_type,
         )
-        or isinstance(rhs, bodo.PandasTimestampType)
+        or isinstance(rhs, bodo.types.PandasTimestampType)
     ):
         # Note we don't support sub between two Timestamps with timezones,
         # but we do with Timestamp and Timedelta
@@ -619,8 +619,12 @@ def add_dt_td_and_dt_date(lhs, rhs):
 def add_timestamp(lhs, rhs):
     """Helper function to check types supported in pd_timestamp_ext overload."""
 
-    ts_and_td = isinstance(lhs, bodo.PandasTimestampType) and is_timedelta_type(rhs)
-    td_and_ts = is_timedelta_type(lhs) and isinstance(rhs, bodo.PandasTimestampType)
+    ts_and_td = isinstance(lhs, bodo.types.PandasTimestampType) and is_timedelta_type(
+        rhs
+    )
+    td_and_ts = is_timedelta_type(lhs) and isinstance(
+        rhs, bodo.types.PandasTimestampType
+    )
 
     return ts_and_td or td_and_ts
 
@@ -680,11 +684,11 @@ def sub_offset_to_datetime_or_timestamp(lhs, rhs):
         datetime_date_type,
         pd_timestamp_tz_naive_type,
     ]
-    tz_aware_classes = (bodo.PandasTimestampType,)
+    tz_aware_classes = (bodo.types.PandasTimestampType,)
     # offsets
     tz_aware_offset_types = (week_type, month_begin_type, month_end_type)
     tz_naive_offset_types = (date_offset_type,)
-    # Here we support all bodo.PandasTimestampType only with tz_aware_offset_types and
+    # Here we support all bodo.types.PandasTimestampType only with tz_aware_offset_types and
     # all other types with all offset types.
     return (rhs in tz_aware_offset_types and isinstance(lhs, tz_aware_classes)) or (
         (rhs in tz_naive_offset_types or rhs in tz_aware_offset_types)
@@ -835,7 +839,7 @@ def get_series_tz(val):
     elif isinstance(val, types.Array) and val.dtype == bodo.types.datetime64ns:
         # We are timezone naive.
         tz = None
-    elif isinstance(val, bodo.PandasTimestampType):
+    elif isinstance(val, bodo.types.PandasTimestampType):
         # If we have a timezone it will be in tz. Naive will be None
         tz = val.tz
     elif val == bodo.types.datetime64ns:

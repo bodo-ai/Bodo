@@ -79,7 +79,7 @@ bodo_pd_types_dict = {
         bodo.PeriodIndexType(1),
     ],
     # scalar/array types
-    "Timestamp": [bodo.PandasTimestampType(1)],
+    "Timestamp": [bodo.types.PandasTimestampType(1)],
     "Timedelta": [bodo.types.pd_timedelta_type],
     # dateoffset, dates
     "DateOffset": [DateOffsetType()],

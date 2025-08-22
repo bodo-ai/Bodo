@@ -154,7 +154,7 @@ def overload_series_iat_setitem(I, idx, val):
         # unbox dt64 from datetime.datetime
         if (
             I.stype.dtype == types.NPDatetime("ns")
-            and val == bodo.datetime_datetime_type
+            and val == bodo.types.datetime_datetime_type
         ):
 
             def impl_dt(I, idx, val):  # pragma: no cover
@@ -340,7 +340,7 @@ def overload_series_iloc_setitem(I, idx, val):
 
             if (
                 I.stype.dtype == types.NPDatetime("ns")
-                and val == bodo.datetime_datetime_type
+                and val == bodo.types.datetime_datetime_type
             ):
 
                 def impl_dt(I, idx, val):  # pragma: no cover
@@ -409,7 +409,7 @@ def overload_series_iloc_setitem(I, idx, val):
 
                 if (
                     I.stype.dtype == types.NPDatetime("ns")
-                    and val == bodo.datetime_datetime_type
+                    and val == bodo.types.datetime_datetime_type
                 ):
 
                     def impl_dt(I, idx, val):  # pragma: no cover

@@ -1639,7 +1639,7 @@ def overload_update_timedelta_with_transition(ts, td):
     and end time have different UTC offsets.
 
     Args:
-        ts (bodo.PandasTimestampType): Original Timestamp used for updating the timedelta.
+        ts (bodo.types.PandasTimestampType): Original Timestamp used for updating the timedelta.
         td (pd_timedelta_type): Timedelta to move assuming we never change UTC offsets.
 
     Returns:

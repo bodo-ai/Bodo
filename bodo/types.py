@@ -27,3 +27,8 @@ from bodo.hiframes.datetime_timedelta_ext import (
     timedelta_array_type,
     pd_timedelta_type,
 )
+from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.hiframes.pd_timestamp_ext import (
+    PandasTimestampType,
+    pd_timestamp_tz_naive_type,
+)

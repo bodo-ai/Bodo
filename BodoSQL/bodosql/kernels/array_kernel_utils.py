@@ -1207,7 +1207,7 @@ def is_valid_tz_naive_datetime_arg(arg):
     """
     return arg in (
         bodo.types.datetime64ns,
-        bodo.pd_timestamp_tz_naive_type,
+        bodo.types.pd_timestamp_tz_naive_type,
         bodo.pd_datetime_tz_naive_type,
     ) or (
         bodo.utils.utils.is_array_typ(arg, True)
@@ -1227,7 +1227,7 @@ def is_valid_tz_aware_datetime_arg(arg):
     Returns:
         bool: Is this type one of the tz-aware datetime types.
     """
-    return (isinstance(arg, bodo.PandasTimestampType) and arg.tz is not None) or (
+    return (isinstance(arg, bodo.types.PandasTimestampType) and arg.tz is not None) or (
         bodo.utils.utils.is_array_typ(arg, True)
         and isinstance(arg.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
     )

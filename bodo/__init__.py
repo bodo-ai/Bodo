@@ -260,13 +260,6 @@ from bodo.libs.distributed_api import (
     scatterv,
 )
 
-
-
-from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.hiframes.pd_timestamp_ext import (
-    PandasTimestampType,
-    pd_timestamp_tz_naive_type,
-)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
