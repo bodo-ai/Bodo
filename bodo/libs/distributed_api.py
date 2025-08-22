@@ -121,8 +121,10 @@ ll.add_symbol("broadcast_table_py_entry", hdist.broadcast_table_py_entry)
 
 DEFAULT_ROOT = 0
 
+
 # Wrapper for getting process rank from C (MPI rank currently)
-get_rank = hdist.get_rank_py_wrapper
+def get_rank():
+    return hdist.get_rank_py_wrapper()
 
 
 # XXX same as _distributed.h::BODO_ReduceOps::ReduceOpsEnum
@@ -147,6 +149,11 @@ _get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
 _get_cpu_id = types.ExternalFunction("get_cpu_id", types.int32())
 get_remote_size = types.ExternalFunction("c_get_remote_size", types.int32(types.int64))
+
+
+@infer_global(get_rank)
+class GetRankInfer(ConcreteTemplate):
+    cases = [signature(types.int32)]
 
 
 @lower_builtin(
