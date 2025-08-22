@@ -379,6 +379,7 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
 
 
 jit.__pandas_udf__ = bodo_pandas_udf_execution_engine
+bodo.jit = jit
 
 
 def _jit(signature_or_function=None, pipeline_class=None, **options):
