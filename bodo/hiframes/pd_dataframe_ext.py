@@ -2801,8 +2801,8 @@ class JoinTyper(AbstractTemplate):
         if indicator_value:
             columns.append("_merge")
             data.append(
-                bodo.CategoricalArrayType(
-                    bodo.PDCategoricalDtype(
+                bodo.types.CategoricalArrayType(
+                    bodo.types.PDCategoricalDtype(
                         ("left_only", "right_only", "both"),
                         bodo.types.string_type,
                         False,

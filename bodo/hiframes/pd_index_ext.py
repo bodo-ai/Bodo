@@ -919,7 +919,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                 )
 
         # Categorical index:
-        elif isinstance(elem_type, bodo.PDCategoricalDtype):
+        elif isinstance(elem_type, bodo.types.PDCategoricalDtype):
             if dtype_provided:
 
                 def impl(
@@ -3239,7 +3239,7 @@ def array_type_to_index(arr_typ, name_typ=None):
             types.Array,
             IntegerArrayType,
             FloatingArrayType,
-            bodo.CategoricalArrayType,
+            bodo.types.CategoricalArrayType,
             bodo.types.DecimalArrayType,
             bodo.types.TimeArrayType,
             bodo.types.DatetimeArrayType,
@@ -3258,7 +3258,7 @@ def array_type_to_index(arr_typ, name_typ=None):
         return DatetimeIndexType(name_typ, arr_typ)
 
     # categorical array
-    if isinstance(arr_typ, bodo.CategoricalArrayType):
+    if isinstance(arr_typ, bodo.types.CategoricalArrayType):
         return CategoricalIndexType(arr_typ, name_typ)
 
     if arr_typ.dtype in (types.NPTimedelta("ns"), bodo.types.pd_timedelta_type):

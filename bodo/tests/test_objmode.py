@@ -144,7 +144,7 @@ def test_df_table_format():
     n_cols = max(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD, 1)
     df_type = bodo.types.DataFrameType(
         tuple(bodo.types.int64[::1] for _ in range(n_cols)),
-        bodo.RangeIndexType(),
+        bodo.types.RangeIndexType(),
         tuple(i for i in range(n_cols)),
     )
 

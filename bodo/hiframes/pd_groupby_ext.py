@@ -502,7 +502,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
                     f"column type of strings or list of strings is not supported in groupby built-in function {func_name}",
                 )
         else:
-            if isinstance(in_dtype, bodo.PDCategoricalDtype):
+            if isinstance(in_dtype, bodo.types.PDCategoricalDtype):
                 if func_name in ("min", "max") and not in_dtype.ordered:
                     return (
                         None,

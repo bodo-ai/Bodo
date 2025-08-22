@@ -1140,7 +1140,7 @@ def test_df_dtypes(df_value):
             py_output.iloc[i] = pd.BooleanDtype()
         # Bodo boxes string arrays of categories as ArrowStringArray
         if (
-            isinstance(df_type.data[i], bodo.CategoricalArrayType)
+            isinstance(df_type.data[i], bodo.types.CategoricalArrayType)
             and df_type.data[i].dtype.elem_type == bodo.types.string_type
         ):
             py_output.iloc[i] = pd.CategoricalDtype(

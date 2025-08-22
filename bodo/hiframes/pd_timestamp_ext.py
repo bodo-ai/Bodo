@@ -161,7 +161,7 @@ def check_tz_aware_unsupported(val, func_name):
             f"{func_name} on Timezone-aware array not yet supported. Please convert to timezone naive with arr.tz_convert(None)"
         )
     elif (
-        isinstance(val, bodo.DatetimeIndexType)
+        isinstance(val, bodo.types.DatetimeIndexType)
         and isinstance(val.data, bodo.types.DatetimeArrayType)
         and val.data.tz is not None
     ):

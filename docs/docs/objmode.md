@@ -65,7 +65,7 @@ This is equivalent to creating the `DataFrameType` directly:
 ``` py
 df_type = bodo.types.DataFrameType(
     (bodo.types.int64[::1], bodo.types.string_array_type),
-    bodo.NumericIndexType(bodo.types.int64),
+    bodo.types.NumericIndexType(bodo.types.int64),
     ("A", "B"),
 )
 ```

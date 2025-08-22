@@ -1413,7 +1413,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
             (
                 bodo.types.IntegerArrayType,
                 bodo.types.FloatingArrayType,
-                bodo.CategoricalArrayType,
+                bodo.types.CategoricalArrayType,
                 bodo.types.DatetimeArrayType,
             ),
         )
@@ -1423,7 +1423,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
         raise BodoError(
             f"Series.idxmin() only supported for numeric array types. Array type: {S.data} not supported."
         )
-    if isinstance(S.data, bodo.CategoricalArrayType) and not S.dtype.ordered:
+    if isinstance(S.data, bodo.types.CategoricalArrayType) and not S.dtype.ordered:
         raise BodoError("Series.idxmin(): only ordered categoricals are possible")
 
     # TODO: other types like strings
@@ -1474,7 +1474,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
             (
                 bodo.types.IntegerArrayType,
                 bodo.types.FloatingArrayType,
-                bodo.CategoricalArrayType,
+                bodo.types.CategoricalArrayType,
                 bodo.types.DatetimeArrayType,
             ),
         )
@@ -1484,7 +1484,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         raise BodoError(
             f"Series.idxmax() only supported for numeric array types. Array type: {S.data} not supported."
         )
-    if isinstance(S.data, bodo.CategoricalArrayType) and not S.dtype.ordered:
+    if isinstance(S.data, bodo.types.CategoricalArrayType) and not S.dtype.ordered:
         raise BodoError("Series.idxmax(): only ordered categoricals are possible")
 
     # TODO: other types like strings
@@ -1528,7 +1528,7 @@ def check_argmax_min_args(func_name, S):
             (
                 bodo.types.IntegerArrayType,
                 bodo.types.FloatingArrayType,
-                bodo.CategoricalArrayType,
+                bodo.types.CategoricalArrayType,
                 bodo.types.DecimalArrayType,
                 bodo.types.DatetimeArrayType,
             ),
@@ -1539,7 +1539,7 @@ def check_argmax_min_args(func_name, S):
         raise BodoError(
             f"Series.{func_name}() only supported for numeric array types. Array type: {S.data} not supported."
         )
-    if isinstance(S.data, bodo.CategoricalArrayType) and not S.dtype.ordered:
+    if isinstance(S.data, bodo.types.CategoricalArrayType) and not S.dtype.ordered:
         raise BodoError(f"Series.{func_name}(): only ordered categoricals are possible")
 
 
@@ -1906,10 +1906,10 @@ def overload_series_tail(S, n=5):
 def overload_series_first(S, offset):
     supp_types = (
         types.unicode_type,
-        bodo.month_begin_type,
-        bodo.month_end_type,
-        bodo.week_type,
-        bodo.date_offset_type,
+        bodo.types.month_begin_type,
+        bodo.types.month_end_type,
+        bodo.types.week_type,
+        bodo.types.date_offset_type,
     )
     if types.unliteral(offset) not in supp_types:
         raise BodoError("Series.first(): 'offset' must be a string or a DateOffset")
@@ -1939,10 +1939,10 @@ def overload_series_first(S, offset):
 def overload_series_last(S, offset):
     supp_types = (
         types.unicode_type,
-        bodo.month_begin_type,
-        bodo.month_end_type,
-        bodo.week_type,
-        bodo.date_offset_type,
+        bodo.types.month_begin_type,
+        bodo.types.month_end_type,
+        bodo.types.week_type,
+        bodo.types.date_offset_type,
     )
     if types.unliteral(offset) not in supp_types:
         raise BodoError("Series.last(): 'offset' must be a string or a DateOffset")
@@ -4539,7 +4539,7 @@ def _validate_self_other_mask_where(
         )
         # TODO: Support categorical of Timestamp/Timedelta
         or (
-            isinstance(arr, bodo.CategoricalArrayType)
+            isinstance(arr, bodo.types.CategoricalArrayType)
             and arr.dtype.elem_type
             not in [
                 bodo.types.datetime64ns,
@@ -4589,7 +4589,7 @@ def _validate_self_other_mask_where(
             is_str_arr_type(other)
             and (
                 arr.dtype == bodo.types.string_type
-                or isinstance(arr, bodo.CategoricalArrayType)
+                or isinstance(arr, bodo.types.CategoricalArrayType)
                 and arr.dtype.elem_type == bodo.types.string_type
             )
         )
@@ -4597,7 +4597,7 @@ def _validate_self_other_mask_where(
             isinstance(other, BinaryArrayType)
             and (
                 arr.dtype == bodo.types.bytes_type
-                or isinstance(arr, bodo.CategoricalArrayType)
+                or isinstance(arr, bodo.types.CategoricalArrayType)
                 and arr.dtype.elem_type == bodo.types.bytes_type
             )
         )
@@ -4639,7 +4639,7 @@ def _validate_self_other_mask_where(
 
     # Check that the types match if not replacing with default value
     if not is_default:
-        if isinstance(arr.dtype, bodo.PDCategoricalDtype):
+        if isinstance(arr.dtype, bodo.types.PDCategoricalDtype):
             arr_typ = arr.dtype.elem_type
         else:
             arr_typ = arr.dtype
@@ -5505,7 +5505,7 @@ def overload_np_where(condition, x, y):
     # TODO: Support 2 categorical arrays
     # If the dtype is categorical, we need to use an actual
     # dtype from runtime.
-    elif isinstance(x_dtype, bodo.PDCategoricalDtype):
+    elif isinstance(x_dtype, bodo.types.PDCategoricalDtype):
         out_dtype = None
     # Support conversion between Timestamp/dt64 and Timedelta/td64.
     elif x_dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]:
@@ -5525,7 +5525,7 @@ def overload_np_where(condition, x, y):
             out_dtype = bodo.utils.typing.to_nullable_type(out_dtype)
     # If x_dtype is Categorical is_x_arr must be a true
     # (Categorical Array or Series)
-    if isinstance(x_dtype, bodo.PDCategoricalDtype):
+    if isinstance(x_dtype, bodo.types.PDCategoricalDtype):
         arr_typ_ref = "x"
     else:
         arr_typ_ref = "out_dtype"
@@ -5534,7 +5534,7 @@ def overload_np_where(condition, x, y):
     # This works because we know the input and output categories match.
     # If x_dtype is Categorical is_x_arr must be a true
     # (Categorical Array or Series)
-    if isinstance(x_dtype, bodo.PDCategoricalDtype):
+    if isinstance(x_dtype, bodo.types.PDCategoricalDtype):
         func_text += "  out_codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(out_arr)\n"
         func_text += "  x_codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(x)\n"
     func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
@@ -5549,7 +5549,7 @@ def overload_np_where(condition, x, y):
     # This works because we know the input and output categories match.
     # If x_dtype is Categorical is_x_arr must be a true
     # (Categorical Array or Series)
-    if isinstance(x_dtype, bodo.PDCategoricalDtype):
+    if isinstance(x_dtype, bodo.types.PDCategoricalDtype):
         func_text += "      out_codes[j] = x_codes[j]\n"
     else:
         func_text += "      out_arr[j] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({})\n".format(
@@ -5561,7 +5561,7 @@ def overload_np_where(condition, x, y):
         func_text += "        setna(out_arr, j)\n"
         func_text += "        continue\n"
     if y_data == types.none:
-        if isinstance(x_dtype, bodo.PDCategoricalDtype):
+        if isinstance(x_dtype, bodo.types.PDCategoricalDtype):
             func_text += "      out_codes[j] = -1\n"
         else:
             func_text += "      setna(out_arr, j)\n"
@@ -5617,7 +5617,7 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
             dtyp = typ.data.dtype
         else:
             dtyp = typ.dtype
-        if isinstance(dtyp, bodo.PDCategoricalDtype):  # pragma: no cover
+        if isinstance(dtyp, bodo.types.PDCategoricalDtype):  # pragma: no cover
             raise BodoError(
                 "np.select(): data with choicelist of type Categorical not yet supported"
             )
@@ -5636,7 +5636,7 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
             else:
                 dtyp = typ.dtype
             # not handling categorical types
-            if isinstance(dtyp, bodo.PDCategoricalDtype):  # pragma: no cover
+            if isinstance(dtyp, bodo.types.PDCategoricalDtype):  # pragma: no cover
                 raise BodoError(
                     "np.select(): data with choicelist of type Categorical not yet supported"
                 )
@@ -5721,7 +5721,7 @@ def overload_np_select(condlist, choicelist, default=0):
             else:
                 dtyp = typ.dtype
             # not handling categorical types
-            if isinstance(dtyp, bodo.PDCategoricalDtype):  # pragma: no cover
+            if isinstance(dtyp, bodo.types.PDCategoricalDtype):  # pragma: no cover
                 raise BodoError(
                     "np.select(): data with choicelist of type Categorical not yet supported"
                 )

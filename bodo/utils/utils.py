@@ -316,7 +316,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         ),
     ):
         return CArrayTypeEnum.NULLABLE_INT_BOOL.value
-    elif isinstance(arr_type, bodo.CategoricalArrayType):
+    elif isinstance(arr_type, bodo.types.CategoricalArrayType):
         return CArrayTypeEnum.CATEGORICAL.value
     elif isinstance(arr_type, bodo.types.IntervalArrayType):
         return CArrayTypeEnum.INTERVAL.value

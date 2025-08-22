@@ -3480,7 +3480,7 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
             py_out = np.array(
                 pd.Series(py_out).replace(pd.NA, np.nan).astype("timedelta64[ns]")
             )
-        if isinstance(infered_typ, bodo.PDCategoricalDtype):
+        if isinstance(infered_typ, bodo.types.PDCategoricalDtype):
             if isinstance(
                 series_val.dtype.categories, (pd.TimedeltaIndex, pd.DatetimeIndex)
             ):

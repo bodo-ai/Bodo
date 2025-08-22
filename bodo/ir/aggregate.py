@@ -1641,11 +1641,11 @@ def agg_distributed_run(
     }
     # TODO: Support for Categories not known at compile time
     for i, in_col_typ in enumerate(in_col_typs):
-        if isinstance(in_col_typ, bodo.CategoricalArrayType):
+        if isinstance(in_col_typ, bodo.types.CategoricalArrayType):
             glbs.update({f"in_cat_dtype_{i}": in_col_typ})
 
     for i, out_col_typ in enumerate(out_col_typs):
-        if isinstance(out_col_typ, bodo.CategoricalArrayType):
+        if isinstance(out_col_typ, bodo.types.CategoricalArrayType):
             glbs.update({f"out_cat_dtype_{i}": out_col_typ})
 
     udf_func_struct = get_udf_func_struct(
@@ -1766,7 +1766,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         return f"alloc_decimal_array(1, {t.precision}, {t.scale})"
     elif isinstance(t, DatetimeDateArrayType):
         return "bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))"
-    elif isinstance(t, bodo.CategoricalArrayType):
+    elif isinstance(t, bodo.types.CategoricalArrayType):
         if t.dtype.categories is None:
             raise BodoError(
                 "Groupby agg operations on Categorical types require constant categories"
@@ -2529,7 +2529,7 @@ def gen_top_level_agg_func(
         # as_index=True (part of Index)
         out_key_offset = (
             0
-            if isinstance(agg_node.out_type.index, bodo.RangeIndexType)
+            if isinstance(agg_node.out_type.index, bodo.types.RangeIndexType)
             # number of data columns is all logical columns minus keys minus Index
             else agg_node.n_out_cols - len(agg_node.in_key_inds) - 1
         )

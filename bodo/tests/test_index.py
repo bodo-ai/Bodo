@@ -3003,7 +3003,7 @@ def test_index_where_putmask(args):
     )
     check_func(impl1, (idx, con), dist_test=dist_test)
     if isinstance(idx, pd.RangeIndex) or isinstance(
-        bodo.typeof(idx), bodo.NumericIndexType
+        bodo.typeof(idx), bodo.types.NumericIndexType
     ):
         check_func(impl2, (idx, con, np.nan), dist_test=dist_test)
     check_func(impl2, (idx, con, oth), dist_test=dist_test)

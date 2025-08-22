@@ -1063,10 +1063,10 @@ def overload_dataframe_first(df, offset):
     check_runtime_cols_unsupported(df, "DataFrame.first()")
     supp_types = (
         types.unicode_type,
-        bodo.month_begin_type,
-        bodo.month_end_type,
-        bodo.week_type,
-        bodo.date_offset_type,
+        bodo.types.month_begin_type,
+        bodo.types.month_end_type,
+        bodo.types.week_type,
+        bodo.types.date_offset_type,
     )
     if not isinstance(df.index, DatetimeIndexType):
         raise BodoError("DataFrame.first(): only supports a DatetimeIndex index")
@@ -1100,10 +1100,10 @@ def overload_dataframe_last(df, offset):
     check_runtime_cols_unsupported(df, "DataFrame.last()")
     supp_types = (
         types.unicode_type,
-        bodo.month_begin_type,
-        bodo.month_end_type,
-        bodo.week_type,
-        bodo.date_offset_type,
+        bodo.types.month_begin_type,
+        bodo.types.month_end_type,
+        bodo.types.week_type,
+        bodo.types.date_offset_type,
     )
     if not isinstance(df.index, DatetimeIndexType):
         raise BodoError("DataFrame.last(): only supports a DatetimeIndex index")
@@ -1675,7 +1675,7 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                 (
                     bodo.types.IntegerArrayType,
                     bodo.types.FloatingArrayType,
-                    bodo.CategoricalArrayType,
+                    bodo.types.CategoricalArrayType,
                 ),
             )
             or coltype
@@ -1684,7 +1684,10 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
             raise BodoError(
                 f"DataFrame.idxmax() only supported for numeric column types. Column type: {coltype} not supported."
             )
-        if isinstance(coltype, bodo.CategoricalArrayType) and not coltype.dtype.ordered:
+        if (
+            isinstance(coltype, bodo.types.CategoricalArrayType)
+            and not coltype.dtype.ordered
+        ):
             raise BodoError("DataFrame.idxmax(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmax", axis=axis)
@@ -1720,7 +1723,7 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                 (
                     bodo.types.IntegerArrayType,
                     bodo.types.FloatingArrayType,
-                    bodo.CategoricalArrayType,
+                    bodo.types.CategoricalArrayType,
                 ),
             )
             or coltype
@@ -1729,7 +1732,10 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
             raise BodoError(
                 f"DataFrame.idxmin() only supported for numeric column types. Column type: {coltype} not supported."
             )
-        if isinstance(coltype, bodo.CategoricalArrayType) and not coltype.dtype.ordered:
+        if (
+            isinstance(coltype, bodo.types.CategoricalArrayType)
+            and not coltype.dtype.ordered
+        ):
             raise BodoError("DataFrame.idxmin(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmin", axis=axis)
@@ -4310,7 +4316,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
             )
 
         # TODO: Support
-        if isinstance(index_column, bodo.CategoricalArrayType):
+        if isinstance(index_column, bodo.types.CategoricalArrayType):
             raise BodoError(
                 f"{func_name}(): 'index' DataFrame column does not support categorical data"
             )
@@ -4351,7 +4357,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
 
     # TODO: Support and generate a DataFrame with column known at compile time if the
     # categories are known at compile time.
-    if isinstance(columns_column, bodo.CategoricalArrayType):
+    if isinstance(columns_column, bodo.types.CategoricalArrayType):
         raise BodoError(
             f"{func_name}(): 'columns' DataFrame column does not support categorical data"
         )
@@ -5657,7 +5663,7 @@ def overload_dataframe_info(
             func_text += f"    non_null_count[{i}] = str(bodo.libs.array_ops.array_op_count(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})))\n"
             # Get type of column and rename Categorical and nullable int to match Pandas
             dtype_name = f"{df.data[i].dtype}"
-            if isinstance(df.data[i], bodo.CategoricalArrayType):
+            if isinstance(df.data[i], bodo.types.CategoricalArrayType):
                 dtype_name = "category"
             elif isinstance(df.data[i], bodo.types.IntegerArrayType):
                 int_typ_name = bodo.libs.int_arr_ext.IntDtype(df.data[i].dtype).name

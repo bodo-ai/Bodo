@@ -260,27 +260,6 @@ from bodo.libs.distributed_api import (
     scatterv,
 )
 
-from bodo.hiframes.pd_index_ext import (
-    DatetimeIndexType,
-    NumericIndexType,
-    PeriodIndexType,
-    IntervalIndexType,
-    CategoricalIndexType,
-    RangeIndexType,
-    StringIndexType,
-    BinaryIndexType,
-    TimedeltaIndexType,
-)
-from bodo.hiframes.pd_offsets_ext import (
-    month_begin_type,
-    month_end_type,
-    week_type,
-    date_offset_type,
-)
-from bodo.hiframes.pd_categorical_ext import (
-    PDCategoricalDtype,
-    CategoricalArrayType,
-)
 from bodo.utils.typing import register_type
 from bodo.libs.logging_ext import LoggingLoggerType
 from bodo.hiframes.table import TableType

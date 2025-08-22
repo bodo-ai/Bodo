@@ -46,15 +46,17 @@ series_types = [
     bodo.types.SeriesType(types.NPDatetime("ns")),
     bodo.types.SeriesType(types.NPTimedelta("ns")),
     bodo.types.SeriesType(bodo.types.StructArrayType((int_arr_typ,))),
-    bodo.types.SeriesType(bodo.PDCategoricalDtype(None, None, None, data=int_arr_typ)),
+    bodo.types.SeriesType(
+        bodo.types.PDCategoricalDtype(None, None, None, data=int_arr_typ)
+    ),
 ]
 
 dataframe_types = [bodo.types.DataFrameType(data=(int_arr_typ,), columns=("A",))]
 
 index_types = [
-    bodo.NumericIndexType(bodo.types.int64),
-    bodo.StringIndexType(),
-    bodo.BinaryIndexType(),
+    bodo.types.NumericIndexType(bodo.types.int64),
+    bodo.types.StringIndexType(),
+    bodo.types.BinaryIndexType(),
 ]
 
 # Only keeping track of Pandas types for now.
@@ -63,20 +65,22 @@ bodo_pd_types_dict = {
     "DataFrame": dataframe_types,
     # Index types
     "Index": index_types,
-    "RangeIndex": [bodo.RangeIndexType()],
+    "RangeIndex": [bodo.types.RangeIndexType()],
     "IntervalIndex": [
-        bodo.IntervalIndexType(bodo.types.IntervalArrayType(int_arr_typ)),
+        bodo.types.IntervalIndexType(bodo.types.IntervalArrayType(int_arr_typ)),
     ],
     "CategoricalIndex": [
-        bodo.CategoricalIndexType(bodo.CategoricalArrayType(bodo.types.int64)),
+        bodo.types.CategoricalIndexType(
+            bodo.types.CategoricalArrayType(bodo.types.int64)
+        ),
     ],
     "MultiIndex": [MultiIndexType([int_arr_typ])],
     "DatetimeIndex": [
-        bodo.DatetimeIndexType(),
+        bodo.types.DatetimeIndexType(),
     ],
-    "TimedeltaIndex": [bodo.TimedeltaIndexType()],
+    "TimedeltaIndex": [bodo.types.TimedeltaIndexType()],
     "PeriodIndex": [
-        bodo.PeriodIndexType(1),
+        bodo.types.PeriodIndexType(1),
     ],
     # scalar/array types
     "Timestamp": [bodo.types.PandasTimestampType(1)],

@@ -3848,7 +3848,7 @@ def _get_sql_df_type_from_db(
                 # so it will fall in the else-stmt
                 if db_type == "mysql" and sql_word in ("DESCRIBE", "DESC"):
                     colnames = ("Field", "Type", "Null", "Key", "Default", "Extra")
-                    index_type = bodo.RangeIndexType(bodo.types.none)
+                    index_type = bodo.types.RangeIndexType(bodo.types.none)
                     data_type = (
                         bodo.types.string_type,
                         bodo.types.string_type,

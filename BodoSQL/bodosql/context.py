@@ -264,7 +264,7 @@ def get_sql_data_type(arr_type):
             _numba_to_sql_column_type_map[arr_type.dtype]
         )
         return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
-    elif isinstance(arr_type.dtype, bodo.PDCategoricalDtype):
+    elif isinstance(arr_type.dtype, bodo.types.PDCategoricalDtype):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Categorical.value
         )
@@ -417,7 +417,7 @@ def compute_df_types(df_list, is_bodo_type):
                         index_col_name = types.StringLiteral(index_col["name"])
                     else:
                         index_col_name = None
-                    index_typ = bodo.RangeIndexType(index_col_name)
+                    index_typ = bodo.types.RangeIndexType(index_col_name)
 
                 # Otherwise the index is a specific set of columns
                 # Multiple for MultiIndex, single for single index
@@ -493,7 +493,7 @@ def compute_df_types(df_list, is_bodo_type):
 
                 # Generate the index type. We don't support an index column,
                 # so this is always a RangeIndex.
-                index_typ = bodo.RangeIndexType(None)
+                index_typ = bodo.types.RangeIndexType(None)
             else:
                 raise BodoError(
                     "Internal error, 'compute_df_types' found a TablePath with an invalid file type"

@@ -814,7 +814,7 @@ def overload_add_operator_datetime_arr(lhs, rhs):
     """
     if isinstance(lhs, DatetimeArrayType):
         # TODO: Support more types
-        if rhs == bodo.week_type:
+        if rhs == bodo.types.week_type:
             tz_literal = lhs.tz
 
             def impl(lhs, rhs):  # pragma: no cover
@@ -839,7 +839,7 @@ def overload_add_operator_datetime_arr(lhs, rhs):
     else:
         # Note this function is only called if at least one input is a DatetimeArrayType
         # TODO: Support more types
-        if lhs == bodo.week_type:
+        if lhs == bodo.types.week_type:
             tz_literal = rhs.tz
 
             def impl(lhs, rhs):  # pragma: no cover

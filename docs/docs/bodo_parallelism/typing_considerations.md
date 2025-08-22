@@ -52,17 +52,17 @@ desired Python, Numpy, or Pandas type.
 | `bodo.types.StructArrayType(data_types, field_names)`| Array of a user defined struct with the given tuple of data types and field names. <br> *e.g.*, `bodo.types.StructArrayType((bodo.types.int32[:], bodo.types.datetime64ns[:]), ("a", "b"))`|
 | `bodo.types.TupleArrayType(data_types)`| Array of a user defined tuple with the given tuple of data types. <br> *e.g.*, `bodo.types.TupleArrayType((bodo.types.int32[:], bodo.types.datetime64ns[:]))`|
 | `bodo.types.MapArrayType(key_arr_type, value_arr_type)`| Array of Python dictionaries with the given key and value array types. <br> *e.g.*, `bodo.types.MapArrayType(bodo.types.uint16[:], bodo.types.string_array_type)`|
-| `bodo.PDCategoricalDtype(cat_tuple, cat_elem_type, is_ordered_cat)`| Pandas categorical type with the possible categories, each category's type, and if the categories are ordered. <br> *e.g.*, `bodo.PDCategoricalDtype(("A", "B", "AA"), bodo.types.string_type, True)`|
-| `bodo.CategoricalArrayType(categorical_type)`| Array of Pandas categorical values. <br> *e.g.*, `bodo.CategoricalArrayType(bodo.PDCategoricalDtype(("A", "B", "AA"), bodo.types.string_type, True))`|
-| `bodo.DatetimeIndexType(name_type)`|Index of datetime64 values with a given name type. <br> *e.g.*, `bodo.DatetimeIndexType(bodo.types.string_type)`|
-| `bodo.NumericIndexType(data_type, name_type)`| Index of `pd.Int64`, `pd.Uint64`, or `Float64` objects, based upon the given data_type and name type. <br> *e.g.*, `bodo.NumericIndexType(bodo.types.float64, bodo.types.string_type)`|
-| `bodo.PeriodIndexType(freq, name_type)`| pd.PeriodIndex with a given frequency and name type. <br> *e.g.*, `bodo.PeriodIndexType('A', bodo.types.string_type)`|
-| `bodo.RangeIndexType(name_type)`| RangeIndex with a given name type. <br> *e.g.*, `bodo.RangeIndexType(bodo.types.string_type)`|
-| `bodo.StringIndexType(name_type)`| Index of strings with a given name type. <br> *e.g.*, `bodo.StringIndexType(bodo.types.string_type)`|
-| `bodo.BinaryIndexType(name_type)`| Index of binary values with a given name type. <br> *e.g.*, `bodo.BinaryIndexType(bodo.types.string_type)`|
-| `bodo.TimedeltaIndexType(name_type)`| Index of timedelta64 values with a given name type.<br> *e.g.*, `bodo.TimedeltaIndexType(bodo.types.string_type)`|
-| `bodo.types.SeriesType(dtype=data_type, index=index_type, name_typ=name_type)`| Series with a given data type, index type, and name type. <br> *e.g.*, `bodo.types.SeriesType(bodo.types.float32, bodo.DatetimeIndexType(bodo.types.string_type), bodo.types.string_type)`|
-| `bodo.types.DataFrameType(data_types_tuple, index_type, column_names)`| DataFrame with a tuple of data types, an index type, and the names of the columns. <br> *e.g.*, `bodo.types.DataFrameType((bodo.types.int64[::1], bodo.types.float64[::1]), bodo.RangeIndexType(bodo.types.none), ("A", "B"))`|
+| `bodo.types.PDCategoricalDtype(cat_tuple, cat_elem_type, is_ordered_cat)`| Pandas categorical type with the possible categories, each category's type, and if the categories are ordered. <br> *e.g.*, `bodo.types.PDCategoricalDtype(("A", "B", "AA"), bodo.types.string_type, True)`|
+| `bodo.types.CategoricalArrayType(categorical_type)`| Array of Pandas categorical values. <br> *e.g.*, `bodo.types.CategoricalArrayType(bodo.types.PDCategoricalDtype(("A", "B", "AA"), bodo.types.string_type, True))`|
+| `bodo.types.DatetimeIndexType(name_type)`|Index of datetime64 values with a given name type. <br> *e.g.*, `bodo.types.DatetimeIndexType(bodo.types.string_type)`|
+| `bodo.types.NumericIndexType(data_type, name_type)`| Index of `pd.Int64`, `pd.Uint64`, or `Float64` objects, based upon the given data_type and name type. <br> *e.g.*, `bodo.types.NumericIndexType(bodo.types.float64, bodo.types.string_type)`|
+| `bodo.types.PeriodIndexType(freq, name_type)`| pd.PeriodIndex with a given frequency and name type. <br> *e.g.*, `bodo.types.PeriodIndexType('A', bodo.types.string_type)`|
+| `bodo.types.RangeIndexType(name_type)`| RangeIndex with a given name type. <br> *e.g.*, `bodo.types.RangeIndexType(bodo.types.string_type)`|
+| `bodo.types.StringIndexType(name_type)`| Index of strings with a given name type. <br> *e.g.*, `bodo.types.StringIndexType(bodo.types.string_type)`|
+| `bodo.types.BinaryIndexType(name_type)`| Index of binary values with a given name type. <br> *e.g.*, `bodo.types.BinaryIndexType(bodo.types.string_type)`|
+| `bodo.types.TimedeltaIndexType(name_type)`| Index of timedelta64 values with a given name type.<br> *e.g.*, `bodo.types.TimedeltaIndexType(bodo.types.string_type)`|
+| `bodo.types.SeriesType(dtype=data_type, index=index_type, name_typ=name_type)`| Series with a given data type, index type, and name type. <br> *e.g.*, `bodo.types.SeriesType(bodo.types.float32, bodo.types.DatetimeIndexType(bodo.types.string_type), bodo.types.string_type)`|
+| `bodo.types.DataFrameType(data_types_tuple, index_type, column_names)`| DataFrame with a tuple of data types, an index type, and the names of the columns. <br> *e.g.*, `bodo.types.DataFrameType((bodo.types.int64[::1], bodo.types.float64[::1]), bodo.types.RangeIndexType(bodo.types.none), ("A", "B"))`|
 
 
 

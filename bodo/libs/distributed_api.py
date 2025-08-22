@@ -1064,7 +1064,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
             return pd.RangeIndex(1, name=name)
         arr_type = bodo.utils.typing.get_index_data_arr_types(dtype)[0]
         arr = get_value_for_type(arr_type)
-        if isinstance(dtype, bodo.PeriodIndexType):
+        if isinstance(dtype, bodo.types.PeriodIndexType):
             return pd.period_range(
                 start="2023-01-01", periods=1, freq=dtype.freq, name=name
             )
@@ -1740,7 +1740,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return str_getitem_impl
 
-    if isinstance(arr, bodo.CategoricalArrayType):
+    if isinstance(arr, bodo.types.CategoricalArrayType):
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def cat_getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover

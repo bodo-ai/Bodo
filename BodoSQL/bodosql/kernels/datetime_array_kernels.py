@@ -744,7 +744,7 @@ def add_interval_util(start_dt, interval):
     elif time_zone is not None:
         if (
             bodo.hiframes.pd_timestamp_ext.tz_has_transition_times(time_zone)
-            and interval != bodo.date_offset_type
+            and interval != bodo.types.date_offset_type
         ):
             tz_obj = pytz.timezone(time_zone)
             trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
@@ -3032,7 +3032,7 @@ def overload_tz_aware_interval_add_util(tz_arg, interval_arg):
         out_dtype = bodo.types.datetime64ns
     # Note: We don't have support for TZAware + pd.DateOffset yet.
     # As a result we must compute a Timedelta from the DateOffset instead.
-    if interval_arg == bodo.date_offset_type:
+    if interval_arg == bodo.types.date_offset_type:
         # Although the pd.DateOffset should just have months and n, its unclear if
         # months >= 12 can ever roll over into months and years. As a result we convert
         # the years into months to be more robust (via years * 12).
@@ -3114,12 +3114,12 @@ def overload_interval_multiply_util(interval_arg, integer_arg):
     is_interval_arr = bodo.utils.utils.is_array_typ(interval_arg, True)
     is_integer_arr = bodo.utils.utils.is_array_typ(integer_arg, True)
 
-    if interval_arg == bodo.date_offset_type:
+    if interval_arg == bodo.types.date_offset_type:
         if is_integer_arr:
             raise BodoError(
                 "interval_multiply(): Integer array cannot be provided if multiplying a date offset."
             )
-        out_dtype = bodo.date_offset_type
+        out_dtype = bodo.types.date_offset_type
         # all year to month intervals are based on month
         scalar_text = "res[i] = pd.DateOffset(months=arg0._months * arg1)\n"
     else:

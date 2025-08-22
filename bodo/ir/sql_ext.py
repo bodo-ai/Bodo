@@ -1904,7 +1904,7 @@ def _gen_sql_reader_py(
                 "psycopg2_check": psycopg2_check,
                 "df_typeref": bodo.types.DataFrameType(
                     tuple(used_col_types),
-                    bodo.RangeIndexType(None),
+                    bodo.types.RangeIndexType(None),
                     tuple(used_col_names),
                 ),
                 "Table": Table,

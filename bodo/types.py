@@ -49,3 +49,24 @@ from bodo.libs.matrix_ext import MatrixType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType, pd_datetime_tz_naive_type
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_index_ext import (
+    DatetimeIndexType,
+    NumericIndexType,
+    PeriodIndexType,
+    IntervalIndexType,
+    CategoricalIndexType,
+    RangeIndexType,
+    StringIndexType,
+    BinaryIndexType,
+    TimedeltaIndexType,
+)
+from bodo.hiframes.pd_offsets_ext import (
+    month_begin_type,
+    month_end_type,
+    week_type,
+    date_offset_type,
+)
+from bodo.hiframes.pd_categorical_ext import (
+    PDCategoricalDtype,
+    CategoricalArrayType,
+)

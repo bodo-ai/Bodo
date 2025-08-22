@@ -1112,7 +1112,7 @@ def overload_extract_cpp_index(cpp_table, n_cols, index_type, length):
 
     index_type = unwrap_typeref(index_type)
 
-    if isinstance(index_type, bodo.RangeIndexType):
+    if isinstance(index_type, bodo.types.RangeIndexType):
 
         def impl(cpp_table, n_cols, index_type, length):  # pragma: no cover
             return bodo.hiframes.pd_index_ext.init_range_index(0, length, 1, None)

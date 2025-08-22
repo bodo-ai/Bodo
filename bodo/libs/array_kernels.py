@@ -1560,7 +1560,7 @@ def overload_dropna(data, how, thresh, subset):
     # allocate new arrays
     for i, out in enumerate(out_names):
         # Add a check for categorical, if so use data[{i}].dtype
-        if isinstance(data[i], bodo.CategoricalArrayType):
+        if isinstance(data[i], bodo.types.CategoricalArrayType):
             func_text += (
                 f"  {out} = bodo.utils.utils.alloc_type(new_len, data[{i}], (-1,))\n"
             )

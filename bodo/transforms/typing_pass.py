@@ -4088,7 +4088,7 @@ class TypingTransforms:
 
         df_type = DataFrameType(
             tuple(arr_types),
-            bodo.RangeIndexType(None),
+            bodo.types.RangeIndexType(None),
             tuple(col_names),
             is_table_format=True,
         )

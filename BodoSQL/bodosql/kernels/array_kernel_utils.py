@@ -1374,7 +1374,7 @@ def verify_sql_interval(arg, f_name, a_name):  # pragma: no cover
     if not (
         is_overload_none(arg)
         or is_valid_timedelta_arg(arg)
-        or arg == bodo.date_offset_type
+        or arg == bodo.types.date_offset_type
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a Timedelta scalar/column, DateOffset, or null, but was {arg}"
