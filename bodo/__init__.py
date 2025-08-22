@@ -250,7 +250,6 @@ from bodo.numba_compat import jitclass
 datetime64ns = numba.core.types.NPDatetime("ns")
 timedelta64ns = numba.core.types.NPTimedelta("ns")
 
-from numba.core.types import List
 
 
 from bodo.libs.distributed_api import (
