@@ -1455,7 +1455,7 @@ def test_dist_dict_getitem1(memory_leak_check):
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n)})
-    v = bodo.typed.Dict.empty(bodo.types.int64, bodo.typeof(df))
+    v = numba.typed.Dict.empty(bodo.types.int64, bodo.typeof(df))
     v[0] = df
     v[1] = df
     bodo.jit(distributed_block={"v", "df"})(impl1)(v)
@@ -1470,7 +1470,7 @@ def test_dist_dict_setitem1(memory_leak_check):
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n)})
-    v = bodo.typed.Dict.empty(bodo.types.int64, bodo.typeof(df))
+    v = numba.typed.Dict.empty(bodo.types.int64, bodo.typeof(df))
     v[0] = df
     v[1] = df
     bodo.jit(distributed_block={"v", "df"})(impl1)(v, df)

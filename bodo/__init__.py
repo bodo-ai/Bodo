@@ -240,7 +240,6 @@ import bodo.pandas_compat
 import numba
 from numba import (  # re-export from Numba
     prange,
-    typed,
     typeof,
 )
 
