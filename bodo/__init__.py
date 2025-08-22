@@ -237,9 +237,6 @@ os.environ["MKL_NUM_THREADS"] = "1"
 # patches are applied before Bodo's use.
 import bodo.pandas_compat
 
-# NOTE: 'numba_compat' has to be imported first in bodo package to make sure all Numba
-# patches are applied before Bodo's Numba use (e.g. 'overload' is replaced properly)
-import bodo.numba_compat  # isort:skip
 import numba
 from numba import (  # re-export from Numba
     prange,

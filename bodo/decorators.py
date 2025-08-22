@@ -10,6 +10,10 @@ import os
 import types as pytypes
 import warnings
 
+# NOTE: 'numba_compat' has to be imported first in bodo package to make sure all Numba
+# patches are applied before Bodo's Numba use (e.g. 'overload' is replaced properly)
+import bodo.numba_compat  # isort:skip
+
 import numba
 from numba.core import cgutils, cpu, serialize, types
 from numba.core.options import _mapping
