@@ -237,9 +237,22 @@ os.environ["MKL_NUM_THREADS"] = "1"
 # patches are applied before Bodo's use.
 import bodo.pandas_compat
 
+
+def jit(*args, **kwargs):
+    # Import compiler lazily
+    from bodo.decorators import jit as _jit
+    return _jit(*args, **kwargs)
+
+
+class prange:
+    """Dummy prange that is replaced in bodo.compiler when JIT is imported.
+    """
+    def __new__(cls, *args):
+        return range(*args)
+
+
 import numba
 from numba import (  # re-export from Numba
-    prange,
     typeof,
 )
 
@@ -262,7 +275,7 @@ from bodo.libs.distributed_api import (
 from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 
 
-from bodo.decorators import is_jit_execution, jit, wrap_python
+from bodo.decorators import is_jit_execution, wrap_python
 
 parquet_validate_schema = True
 

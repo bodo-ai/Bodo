@@ -108,6 +108,9 @@ warnings.simplefilter("ignore", category=NumbaPendingDeprecationWarning)
 # global flag for whether all Bodo functions should be inlined
 inline_all_calls = False
 
+# Replace prange with proper Numba class when JIT is imported
+bodo.prange = numba.prange
+
 
 class BodoCompiler(numba.core.compiler.CompilerBase):
     """Bodo compiler pipeline which adds the following passes to Numba's pipeline:

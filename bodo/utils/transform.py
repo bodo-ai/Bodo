@@ -325,7 +325,7 @@ no_side_effect_call_tuples = {
     ("str_isdecimal", "dict_arr_ext", "libs", bodo),
     ("str_match", "dict_arr_ext", "libs", bodo),
     ("prange", bodo),
-    (bodo.prange,),
+    (numba.prange,),
     ("objmode", bodo),
     (numba.objmode,),
     ("no_warning_objmode", bodo),
