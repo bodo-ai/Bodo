@@ -79,7 +79,7 @@ def test_javascript_udf_no_args_return_int(memory_leak_check):
     """
     body = MetaType("return 2 + 1")
     args = MetaType(())
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f():
         f = create_javascript_udf(body, args, ret_type)
@@ -98,7 +98,7 @@ def test_javascript_interleaved_execution(memory_leak_check):
     body_a = MetaType("return 2 + 1")
     body_b = MetaType("return 2 + 2")
     args = MetaType(())
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f():
         a = create_javascript_udf(body_a, args, ret_type)
@@ -121,7 +121,7 @@ def test_javascript_udf_single_arg_return_int(memory_leak_check):
     """
     body = MetaType("return A + 1")
     args = MetaType(("A",))
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f(arr):
         f = create_javascript_udf(body, args, ret_type)
@@ -180,7 +180,7 @@ def test_javascript_udf_multiple_args_return_int(inputs, answer, memory_leak_che
     """
     body = MetaType("return (A == null || B == null) ? null : Math.sqrt(A * A + B * B)")
     args = MetaType(("A", "B"))
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f(arr0, arr1):
         f = create_javascript_udf(body, args, ret_type)
@@ -206,7 +206,7 @@ def test_javascript_udf_optional_args_return_int(flags, answer, memory_leak_chec
     """
     body = MetaType("return (x == null || y == null) ? null : x * y")
     args = MetaType(("x", "y"))
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f(flag0, flag1):
         arg0 = 6 if flag0 else None
@@ -256,7 +256,7 @@ def test_javascript_udf_string_args_return_int(arr, answer, memory_leak_check):
     return longest;"""
     )
     args = MetaType(("sentence",))
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f(arr):
         f = create_javascript_udf(body, args, ret_type)
@@ -374,7 +374,7 @@ def test_javascript_invalid_body(memory_leak_check):
     """
     body = MetaType("return 2 + '")
     args = MetaType(())
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     @bodo.jit
     def f():
@@ -393,7 +393,7 @@ def test_javascript_throws_exception(memory_leak_check):
     """
     body = MetaType("throw 'error_string'")
     args = MetaType(())
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     @bodo.jit
     def f():
@@ -744,19 +744,19 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
         ),
         pytest.param(
             "return 2 ** 8 / 2 - 1",
-            IntegerArrayType(bodo.int8),
+            IntegerArrayType(bodo.types.int8),
             127,
             id="int8",
         ),
         pytest.param(
             "return 2 ** 16 / 2 - 1",
-            IntegerArrayType(bodo.int16),
+            IntegerArrayType(bodo.types.int16),
             2**16 / 2 - 1,
             id="int16",
         ),
         pytest.param(
             "return 2 ** 32 / 2 - 1",
-            IntegerArrayType(bodo.int32),
+            IntegerArrayType(bodo.types.int32),
             2**32 / 2 - 1,
             id="int32",
         ),

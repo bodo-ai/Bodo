@@ -11,9 +11,9 @@ Python types and Bodo data types.
 | SQL Type(s)           | Equivalent Python Type | Bodo Data Type                       |
 |-----------------------|------------------------|--------------------------------------|
 | `BOOLEAN`             | `np.bool_`             | `bodo.bool_`                         |
-| `TINYINT`             | `np.int8`              | `bodo.int8`                          |
-| `SMALLINT`            | `np.int16`             | `bodo.int16`                         |
-| `INT`                 | `np.int32`             | `bodo.int32`                         |
+| `TINYINT`             | `np.int8`              | `bodo.types.int8`                          |
+| `SMALLINT`            | `np.int16`             | `bodo.types.int16`                         |
+| `INT`                 | `np.int32`             | `bodo.types.int32`                         |
 | `BIGINT`              | `np.int64`             | `bodo.int64`                         |
 | `FLOAT`               | `np.float32`           | `bodo.float32`                       |
 | `DOUBLE`              | `np.float64`           | `bodo.float64`                       |

@@ -243,7 +243,6 @@ from numba import (  # re-export from Numba
     typed,
     typeof,
 )
-from numba.core.types import *
 
 
 from bodo.numba_compat import jitclass

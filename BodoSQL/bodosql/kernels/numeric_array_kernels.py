@@ -1833,7 +1833,7 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
                             # we know 0 <= arr1 <= 2^(15) - 1, however the output is based off
                             # the  sign of arr0 and thus we need to support signed ints
                             # of _double_ the bitwidth, -2^(15) <= arr <= 2^(15) - 1, so
-                            # we use out_dtype = bodo.int32.
+                            # we use out_dtype = bodo.types.int32.
                             out_dtype = _int[min(64, dtype2.bitwidth * 2)]
                     else:
                         # if arr0 is unsigned, we will use the dtype of arr1

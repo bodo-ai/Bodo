@@ -42,6 +42,8 @@ from numba.core.untyped_passes import (
 
 import bodo
 import bodo.decorators
+
+import bodo.types  # isort:skip
 import bodo.ext
 import bodo.hiframes.boxing
 import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions

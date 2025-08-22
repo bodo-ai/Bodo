@@ -116,25 +116,25 @@ public class BodoArrayHelpers {
       case TINYINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.int8)";
+          typeName = "bodo.IntegerArrayType(bodo.types.int8)";
         } else {
-          typeName = "numba.core.types.Array(bodo.int8, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.int8, 1, 'C')";
         }
         break;
       case SMALLINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.int16)";
+          typeName = "bodo.IntegerArrayType(bodo.types.int16)";
         } else {
-          typeName = "numba.core.types.Array(bodo.int16, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.int16, 1, 'C')";
         }
         break;
       case INTEGER:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.int32)";
+          typeName = "bodo.IntegerArrayType(bodo.types.int32)";
         } else {
-          typeName = "numba.core.types.Array(bodo.int32, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.int32, 1, 'C')";
         }
         break;
       case BIGINT:

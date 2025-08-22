@@ -210,7 +210,9 @@ def parse_json_util(arr):
 
     scalar_text = "jmap = bodosql.kernels.json_array_kernels.parse_single_json_map(arg0) if arg0 is not None else None\n"
     if bodo.utils.utils.is_array_typ(arr, True):
-        prefix_code = "lengths = bodo.utils.utils.alloc_type(n, bodo.int32, (-1,))\n"
+        prefix_code = (
+            "lengths = bodo.utils.utils.alloc_type(n, bodo.types.int32, (-1,))\n"
+        )
         scalar_text += "res.append(jmap)\n"
         scalar_text += "if jmap is None:\n"
         scalar_text += "   lengths[i] = 0\n"

@@ -395,8 +395,8 @@ def test_groupby_cumsum_dist(memory_leak_check):
     """
     from bodo.utils.typing import ColNamesMetaType, MetaType
 
-    global_2 = bodo.int32[::1]
-    global_1 = bodo.int32[::1]
+    global_2 = bodo.types.int32[::1]
+    global_1 = bodo.types.int32[::1]
     global_6 = ColNamesMetaType(("EXPR$0", "EXPR$1", "__bodo_dummy__"))
     global_5 = MetaType((0, 1, 2))
 
@@ -3104,7 +3104,10 @@ def test_dist_scalar_struct_to_arr(memory_leak_check):
     """Make sure coerce_scalar_to_array for struct array works for distributed output"""
 
     global_1 = bodo.StructArrayType(
-        (bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.int32)),
+        (
+            bodo.IntegerArrayType(bodo.int64),
+            bodo.bodo.IntegerArrayType(bodo.types.int32),
+        ),
         ("A", "B"),
     )
 
@@ -3126,7 +3129,7 @@ def test_dist_scalar_map_to_arr(memory_leak_check):
     """Make sure coerce_scalar_to_array for map array works for distributed output"""
 
     global_1 = bodo.MapArrayType(
-        bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.int32)
+        bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.types.int32)
     )
 
     def impl(a, n):
@@ -3235,7 +3238,8 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
             (
                 bodo.ArrayItemArrayType(bodo.dict_str_arr_type),
                 bodo.MapArrayType(
-                    bodo.IntegerArrayType(bodo.int32), bodo.DatetimeArrayType(None)
+                    bodo.IntegerArrayType(bodo.types.int32),
+                    bodo.DatetimeArrayType(None),
                 ),
             ),
             ("A", "B"),

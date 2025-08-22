@@ -39,7 +39,7 @@ desired Python, Numpy, or Pandas type.
 
 | Bodo Type Name| Equivalent Python, Numpy, or Pandas type|
 |---------------|-----------------------------------------|
-| `bodo.bool_[:]`, `bodo.int8[:]`, ..., `bodo.int64[:]`, `bodo.uint8[:]`, ..., `bodo.uint64[:]`, `bodo.float32[:]`, `bodo.float64[:]` | One-dimensional Numpy array of the given type. A full list of supported Numpy types can be found [here](https://numba.readthedocs.io/en/stable/reference/types.html#numbers){target="blank"}. A multidimensional can be specified by adding additional colons (*e.g.*, `bodo.int32[:, :, :]` for a three-dimensional array).|
+| `bodo.bool_[:]`, `bodo.types.int8[:]`, ..., `bodo.int64[:]`, `bodo.uint8[:]`, ..., `bodo.uint64[:]`, `bodo.float32[:]`, `bodo.float64[:]` | One-dimensional Numpy array of the given type. A full list of supported Numpy types can be found [here](https://numba.readthedocs.io/en/stable/reference/types.html#numbers){target="blank"}. A multidimensional can be specified by adding additional colons (*e.g.*, `bodo.types.int32[:, :, :]` for a three-dimensional array).|
 | `bodo.string_array_type`| Array of nullable strings|
 | `bodo.IntegerArrayType(integer_type)`|  Array of Pandas nullable integers of the given integer type. <br> *e.g.*, `bodo.IntegerArrayType(bodo.int64)`|
 | `bodo.boolean_array_type`| Array of Pandas nullable booleans|
@@ -49,8 +49,8 @@ desired Python, Numpy, or Pandas type.
 | `bodo.timedelta_array_type`|Array of datetime.timedelta types|
 | `bodo.DecimalArrayType(precision, scale)`| Array of Apache Arrow Decimal128 values with the given precision and scale. <br> *e.g.*, `bodo.DecimalArrayType(38, 18)`|
 | `bodo.binary_array_type`|Array of nullable bytes values|
-| `bodo.StructArrayType(data_types, field_names)`| Array of a user defined struct with the given tuple of data types and field names. <br> *e.g.*, `bodo.StructArrayType((bodo.int32[:], bodo.datetime64ns[:]), ("a", "b"))`|
-| `bodo.TupleArrayType(data_types)`| Array of a user defined tuple with the given tuple of data types. <br> *e.g.*, `bodo.TupleArrayType((bodo.int32[:], bodo.datetime64ns[:]))`|
+| `bodo.StructArrayType(data_types, field_names)`| Array of a user defined struct with the given tuple of data types and field names. <br> *e.g.*, `bodo.StructArrayType((bodo.types.int32[:], bodo.datetime64ns[:]), ("a", "b"))`|
+| `bodo.TupleArrayType(data_types)`| Array of a user defined tuple with the given tuple of data types. <br> *e.g.*, `bodo.TupleArrayType((bodo.types.int32[:], bodo.datetime64ns[:]))`|
 | `bodo.MapArrayType(key_arr_type, value_arr_type)`| Array of Python dictionaries with the given key and value array types. <br> *e.g.*, `bodo.MapArrayType(bodo.uint16[:], bodo.string_array_type)`|
 | `bodo.PDCategoricalDtype(cat_tuple, cat_elem_type, is_ordered_cat)`| Pandas categorical type with the possible categories, each category's type, and if the categories are ordered. <br> *e.g.*, `bodo.PDCategoricalDtype(("A", "B", "AA"), bodo.string_type, True)`|
 | `bodo.CategoricalArrayType(categorical_type)`| Array of Pandas categorical values. <br> *e.g.*, `bodo.CategoricalArrayType(bodo.PDCategoricalDtype(("A", "B", "AA"), bodo.string_type, True))`|
