@@ -585,21 +585,28 @@ def _groupby_agg_plan(
     out_types = empty_data
     if isinstance(empty_data, pd.DataFrame) and not grouped._as_index:
         out_types = empty_data.iloc[:, n_key_cols:]
-    exprs = [
-        AggregateExpression(
-            out_types.iloc[:, i] if isinstance(out_types, pd.DataFrame) else out_types,
-            grouped._obj._plan,
-            f"udf_{i}" if func.is_custom_aggfunc else func.func_name,
-            _get_cfunc_wrapper(
-                func.func, zero_size_df[func.in_col], out_types.iloc[:, i]
-            )
-            if func.is_custom_aggfunc
-            else None,
-            [grouped._obj.columns.get_loc(func.in_col)],
-            grouped._dropna,
+
+    exprs = []
+    for i, func in enumerate(normalized_func):
+        out_type = (
+            out_types.iloc[:, i] if isinstance(out_types, pd.DataFrame) else out_types
         )
-        for i, func in enumerate(normalized_func)
-    ]
+        func_name = f"udf_{i}" if func.is_custom_aggfunc else func.func_name
+        cfunc_wrapper = (
+            _get_cfunc_wrapper(func.func, zero_size_df[func.in_col], out_type)
+            if func.is_custom_aggfunc
+            else None
+        )
+        exprs.append(
+            AggregateExpression(
+                out_type,
+                grouped._obj._plan,
+                func_name,
+                cfunc_wrapper,
+                [grouped._obj.columns.get_loc(func.in_col)],
+                grouped._dropna,
+            )
+        )
 
     return _make_logical_agg_plan(grouped, exprs, empty_data)
 
@@ -609,6 +616,9 @@ def _make_logical_agg_plan(
     exprs: list[AggregateExpression],
     empty_out_data: pd.DataFrame | pd.Series,
 ) -> BodoDataFrame | BodoSeries:
+    """Wrap exprs in a LogicalAggregate lazy plan do additional column reshuffling
+    if necessary.
+    """
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
 
     plan = LogicalAggregate(
@@ -637,14 +647,14 @@ def _make_logical_agg_plan(
 def _get_cfunc_wrapper(
     func: pt.Callable, empty_data: pd.DataFrame | pd.Series, out_type: pd.Series
 ) -> pt.Callable[[], int]:
-    """Create a wrapper around compiling a cfunc on all workers for computing
-    UDFs results for groupby.apply/agg on a single group.
+    """Create a wrapper around compiling a cfunc on individual workers which computes
+    UDF results on a single group.
 
     Args:
         func (pt.Callable): The UDF
         empty_data (pd.DataFrame | pd.Series): Input column or DataFrame. Will be a
-          DataFrame in the case of apply.
-        out_type (pd.Series): The type of the output column.
+          DataFrame in the case of DataFrameGroupby.apply().
+        out_type (pd.Series): Empty Series of the same type as the output column.
 
     Returns:
         Callable: A function that takes no arguments and compiles the cfunc and returns
@@ -663,7 +673,7 @@ def _get_cfunc_wrapper(
         out_col_type = bodo.typeof(out_type).data
 
     if isinstance(in_type, bodo.DataFrameType):
-        # trivial index, input table does not have an index
+        # Input table does not have an index
         index_type = bodo.typeof(pd.RangeIndex(0))
         py_table_type = TableType(in_type.data)
 
@@ -679,7 +689,7 @@ def _get_cfunc_wrapper(
 
     else:
         assert isinstance(in_type, bodo.SeriesType), (
-            "expected in_type to be either SeriesType or DataFrameType."
+            "Expected in_type to be either SeriesType or DataFrameType."
         )
 
         in_col_type = in_type.data
@@ -725,7 +735,7 @@ def _get_cfunc_wrapper(
 
 def _numba_type_to_pyarrow_type(typ):
     """Convert the numba type to corresponding Pyarrow type or
-    return None (fallback to Pandas).
+    return None.
 
     Similar to io/helpers.py::_numba_type_to_pyarrow_type except
     converts any scalar type and not just arrays.
@@ -782,6 +792,7 @@ def _numba_type_to_pyarrow_type(typ):
 
 
 def _get_scalar_udf_out_type(func: pt.Callable, empty_input: pd.DataFrame | pd.Series):
+    """Use compiler utilities to determine the output type of func given it's input types."""
     import numba
     from numba.core.target_extension import dispatcher_registry
 

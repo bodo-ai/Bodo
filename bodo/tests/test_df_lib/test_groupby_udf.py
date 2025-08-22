@@ -183,7 +183,7 @@ def test_agg_mix_udf_builtin(groupby_df):
     ],
 )
 @pytest.mark.parametrize(
-    "expr",
+    "impl",
     [
         pytest.param(lambda df, func: df.groupby(by=["A"]).agg({"B": func}), id="agg"),
         pytest.param(
@@ -192,16 +192,16 @@ def test_agg_mix_udf_builtin(groupby_df):
         ),
     ],
 )
-def test_groupby_udf_types(expr, val_col, func):
+def test_groupby_udf_types(impl, val_col, func):
     """Test agg and apply with custom funcs of different types."""
 
     df = pd.DataFrame({"A": ["A", "B", "C"] * 4, "B": val_col})
     bdf = bd.from_pandas(df)
     pdf = convert_to_pandas_types(df)
 
-    df2 = expr(pdf, func)
+    df2 = impl(pdf, func)
     with assert_executed_plan_count(0):
-        bdf2 = expr(bdf, func)
+        bdf2 = impl(bdf, func)
 
     _test_equal(bdf2, df2, check_pandas_types=False)
 
@@ -297,7 +297,24 @@ def test_apply_basic(dropna, as_index):
     _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
 
 
-def test_series_apply_udf(dropna, as_index):
+@pytest.mark.parametrize(
+    "impl",
+    [
+        pytest.param(
+            lambda df, func: df.groupby("A", dropna=dropna, as_index=as_index)["C"].agg(
+                func
+            ),
+            id="agg",
+        ),
+        pytest.param(
+            lambda df, func: df.groupby("A", dropna=dropna, as_index=as_index)[
+                "C"
+            ].apply(func, include_groups=False),
+            id="apply",
+        ),
+    ],
+)
+def test_series_udf(dropna, as_index, impl):
     df = pd.DataFrame(
         {
             "B": ["a", "c", "b", "c"] * 3,
@@ -311,13 +328,9 @@ def test_series_apply_udf(dropna, as_index):
     def udf(x):
         return x.max() - x.min()
 
-    df2 = df.groupby("A", dropna=dropna, as_index=as_index)["C"].apply(
-        udf, include_groups=False
-    )
+    df2 = impl(df, udf)
     with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby("A", dropna=dropna, as_index=as_index)["C"].apply(
-            udf, include_groups=False
-        )
+        bdf2 = impl(bdf, udf)
 
     _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
 
