@@ -409,11 +409,8 @@ from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 
 import bodo.compiler  # isort:skip
 
-use_pandas_join = False
-use_cpp_drop_duplicates = True
 from bodo.decorators import is_jit_execution, jit, wrap_python
 
-multithread_mode = False
 parquet_validate_schema = True
 
 import bodo.utils.tracing

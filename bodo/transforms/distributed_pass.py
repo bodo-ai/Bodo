@@ -36,7 +36,6 @@ from numba.core.ir_utils import (
 from numba.parfors.parfor import (
     Parfor,
     _lower_parfor_sequential_block,
-    get_parfor_params,
     unwrap_parfor_blocks,
     wrap_parfor_blocks,
 )
@@ -272,13 +271,6 @@ class DistributedPass:
         lower_parfor_sequential(
             self.typingctx, self.func_ir, self.typemap, self.calltypes, self.metadata
         )
-        if bodo.multithread_mode:
-            # parfor params need to be updated for multithread_mode since some
-            # new variables like alloc_start are introduced by distributed pass
-            # and are used in later parfors
-            _parfor_ids = get_parfor_params(
-                self.func_ir.blocks, True, defaultdict(list)
-            )
 
         # save data for debug and test
         global dist_analysis
@@ -3920,13 +3912,6 @@ class DistributedPass:
         return out
 
     def _run_parfor(self, parfor, equiv_set, avail_vars):
-        # Thread and 1D parfors turn to gufunc in multithread mode
-        if (
-            bodo.multithread_mode
-            and self._dist_analysis.parfor_dists[parfor.id] != Distribution.REP
-        ):
-            parfor.no_sequential_lowering = True
-
         if self._dist_analysis.parfor_dists[parfor.id] == Distribution.OneD_Var:
             return self._run_parfor_1D_Var(parfor, equiv_set, avail_vars)
 
