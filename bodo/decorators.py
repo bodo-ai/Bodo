@@ -331,6 +331,9 @@ def is_jit_execution_overload():
     return lambda: True  # pragma: no cover
 
 
+bodo.is_jit_execution = is_jit_execution
+
+
 def jit(signature_or_function=None, pipeline_class=None, **options):
     # Use spawn mode if specified in decorator or enabled globally (decorator takes
     # precedence)

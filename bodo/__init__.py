@@ -259,6 +259,10 @@ def typeof(*args, **kwargs):
     return numba.typeof(*args, **kwargs)
 
 
+def is_jit_execution():  # pragma: no cover
+    return False
+
+
 from bodo.numba_compat import jitclass
 
 
@@ -278,7 +282,7 @@ from bodo.libs.distributed_api import (
 from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 
 
-from bodo.decorators import is_jit_execution, wrap_python
+from bodo.decorators import wrap_python
 
 parquet_validate_schema = True
 
