@@ -253,7 +253,6 @@ timedelta64ns = numba.core.types.NPTimedelta("ns")
 
 from numba.core.types import List
 
-import bodo.decorators
 
 from bodo.libs.distributed_api import (
     allgatherv,
