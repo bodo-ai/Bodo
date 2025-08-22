@@ -1631,7 +1631,7 @@ def timedelta64_to_integer(typingctx, val=None):
     return types.int64(val), codegen
 
 
-@lower_cast(bodo.types.timedelta64ns, types.int64)
+@lower_cast(numba.core.types.NPTimedelta("ns"), types.int64)
 def cast_td64_to_integer(context, builder, fromty, toty, val):
     # td64 is stored as int64 so just return value
     return val

@@ -246,7 +246,9 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible, SingleIndexTy
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
         self.data = (
-            types.Array(bodo.types.datetime64ns, 1, "C") if data is None else data
+            types.Array(numba.core.types.NPDatetime("ns"), 1, "C")
+            if data is None
+            else data
         )
         super().__init__(name=f"DatetimeIndex({name_typ}, {self.data})")
 
@@ -1368,7 +1370,9 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible, SingleIndexT
         # Add a .data field for consistency with other index types
         # NOTE: data array can have flags like readonly
         self.data = (
-            types.Array(bodo.types.timedelta64ns, 1, "C") if data is None else data
+            types.Array(numba.core.types.NPTimedelta("ns"), 1, "C")
+            if data is None
+            else data
         )
         super().__init__(name=f"TimedeltaIndexType({name_typ}, {self.data})")
 
