@@ -242,13 +242,7 @@ import bodo.pandas_compat
 import bodo.numba_compat  # isort:skip
 import numba
 from numba import (  # re-export from Numba
-    gdb,
-    gdb_breakpoint,
-    gdb_init,
-    pndindex,
     prange,
-    stencil,
-    threading_layer,
     typed,
     typeof,
 )
