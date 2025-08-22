@@ -1856,7 +1856,7 @@ def test_dist_objmode(memory_leak_check):
         s = 0
         for i in bodo.prange(len(A)):
             x = A[i]
-            with bodo.objmode(y="float64"):
+            with numba.objmode(y="float64"):
                 y = sc.entr(x)  # call entropy function on each data element
             s += y
         return s
@@ -1889,7 +1889,7 @@ def test_dist_objmode_dist(memory_leak_check):
 
     def impl(n):
         A = np.arange(n)
-        with bodo.objmode(B="int64[:]"):
+        with numba.objmode(B="int64[:]"):
             B = A[:3]
         return B
 

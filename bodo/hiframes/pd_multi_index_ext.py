@@ -246,7 +246,7 @@ def from_product_overload(iterables, sortorder=None, names=None):
     setattr(types, t_name, multiindex_type)
     func_text = f"""
 def impl(iterables, sortorder=None, names=None):
-    with bodo.objmode(mi='{t_name}'):
+    with numba.objmode(mi='{t_name}'):
         mi = pd.MultiIndex.from_product(iterables, names=names)
     return mi
 """

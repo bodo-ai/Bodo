@@ -1,5 +1,6 @@
 """Support scikit-learn using object mode of Numba"""
 
+import numba
 import numpy as np
 from scipy import stats  # noqa
 
@@ -14,7 +15,7 @@ def parallel_predict_regression(m, X):
     """
 
     def _model_predict_impl(m, X):  # pragma: no cover
-        with bodo.objmode(result="float64[:]"):
+        with numba.objmode(result="float64[:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
             if len(X) == 0:
@@ -36,7 +37,7 @@ def parallel_predict(m, X):
     """
 
     def _model_predict_impl(m, X):  # pragma: no cover
-        with bodo.objmode(result="int64[:]"):
+        with numba.objmode(result="int64[:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
             # len cannot be used with csr
@@ -59,7 +60,7 @@ def parallel_predict_proba(m, X):
     """
 
     def _model_predict_proba_impl(m, X):  # pragma: no cover
-        with bodo.objmode(result="float64[:,:]"):
+        with numba.objmode(result="float64[:,:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
             # len cannot be used with csr
@@ -82,7 +83,7 @@ def parallel_predict_log_proba(m, X):
     """
 
     def _model_predict_log_proba_impl(m, X):  # pragma: no cover
-        with bodo.objmode(result="float64[:,:]"):
+        with numba.objmode(result="float64[:,:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
             # len cannot be used with csr
@@ -114,7 +115,7 @@ def parallel_score(
     def _model_score_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
-        with bodo.objmode(result="float64[:]"):
+        with numba.objmode(result="float64[:]"):
             result = m.score(X, y, sample_weight=sample_weight)
             if _is_data_distributed:
                 # replicate result so that the average is weighted based on

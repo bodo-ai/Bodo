@@ -49,6 +49,7 @@ account (specifically in TEST_DB.PUBLIC). To do so, follow the steps below in or
 
 import os
 
+import numba
 import pandas as pd
 
 import bodo
@@ -60,7 +61,7 @@ def upload_pq_to_sf(conn_str, df, pq_str, table_name):
     try:
 
         def test_impl_execute_copy_into(cursor, stage_name, location, sf_schema, df_in):
-            with bodo.objmode():
+            with numba.objmode():
                 execute_copy_into(
                     cursor,
                     stage_name,

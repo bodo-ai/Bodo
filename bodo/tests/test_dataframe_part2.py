@@ -1106,7 +1106,7 @@ def test_df_apply_udf_inline_objmode(memory_leak_check):
 
     @bodo.jit
     def g(a):
-        with bodo.objmode(out="int64"):
+        with numba.objmode(out="int64"):
             out = a + 1
         return out
 

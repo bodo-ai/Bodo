@@ -57,7 +57,7 @@ string_type = types.unicode_type
 
 @numba.njit
 def contains_regex(e, in_str):  # pragma: no cover
-    with bodo.objmode(res="bool_"):
+    with numba.objmode(res="bool_"):
         res = bool(e.search(in_str))
     return res
 
@@ -65,7 +65,7 @@ def contains_regex(e, in_str):  # pragma: no cover
 @numba.generated_jit
 def str_findall_count(regex, in_str):
     def _str_findall_count_impl(regex, in_str):
-        with bodo.objmode(res="int64"):
+        with numba.objmode(res="int64"):
             res = len(regex.findall(in_str))
         return res
 
@@ -663,7 +663,7 @@ def overload_format(value, format_spec=""):
 
     # use Python's format() in objmode
     def impl(value, format_spec=""):  # pragma: no cover
-        with bodo.objmode(res="string"):
+        with numba.objmode(res="string"):
             res = format(value, format_spec)
         return res
 

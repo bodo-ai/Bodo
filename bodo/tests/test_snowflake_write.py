@@ -14,6 +14,7 @@ import uuid
 from decimal import Decimal
 from tempfile import TemporaryDirectory
 
+import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -70,7 +71,7 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_create_internal_stage(cursor):
-        with bodo.objmode(stage_name="unicode_type"):
+        with numba.objmode(stage_name="unicode_type"):
             stage_name = create_internal_stage(cursor, is_temporary=is_temporary)
         return stage_name
 
@@ -128,7 +129,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_drop_internal_stage(cursor, stage_name):
-        with bodo.objmode():
+        with numba.objmode():
             drop_internal_stage(cursor, stage_name)
 
     bodo_impl = bodo.jit(distributed=False)(test_impl_drop_internal_stage)
@@ -191,7 +192,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_do_upload_and_cleanup(cursor, chunk_path, stage_name):
-        with bodo.objmode():
+        with numba.objmode():
             do_upload_and_cleanup(cursor, 0, chunk_path, stage_name)
 
     bodo_impl = bodo.jit()(test_impl_do_upload_and_cleanup)
@@ -320,7 +321,7 @@ def test_snowflake_write_create_table_handle_exists():
     def test_impl_create_table_handle_exists(
         cursor, location, sf_schema, if_exists, table_type=""
     ):
-        with bodo.objmode():
+        with numba.objmode():
             create_table_handle_exists(
                 cursor, location, sf_schema, if_exists, table_type
             )
@@ -538,7 +539,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_execute_copy_into(cursor, stage_name, location, sf_schema, df_in):
-        with bodo.objmode(
+        with numba.objmode(
             nsuccess="int64",
             nchunks="int64",
             nrows="int64",

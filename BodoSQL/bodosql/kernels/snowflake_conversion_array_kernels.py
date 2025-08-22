@@ -997,7 +997,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
     elif is_valid_binary_arg(inner_type):
         # TODO(Yipeng): Support all binary encoding. Currently only hex encoding is supported.
         # Using bodosql.kernels.hex_encode(arg0, 0) here will break test_cast_char_other[Bytes]
-        scalar_text = "with bodo.objmode(r=bodo.string_type):\n"
+        scalar_text = "with numba.objmode(r=bodo.string_type):\n"
         scalar_text += "  r = arg0.hex()\n"
         scalar_text += "res[i] = r"
     elif is_valid_time_arg(inner_type):
@@ -1012,7 +1012,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
         scalar_text += f"  res[i] = arg0.strftime({convert_func_str}(arg1))"
     elif is_valid_timedelta_arg(inner_type):
         scalar_text = "arg0 = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg0)\n"
-        scalar_text += "with bodo.objmode(r=bodo.string_type):\n"
+        scalar_text += "with numba.objmode(r=bodo.string_type):\n"
         scalar_text += "  r = str(arg0)\n"
         scalar_text += "res[i] = r"
     elif is_valid_datetime_or_date_arg(inner_type):
@@ -1402,7 +1402,7 @@ def pd_to_datetime_error_checked(
             if not (is_date_format_1 or is_date_format_2):
                 return (False, pd.Timestamp(0))
 
-    with bodo.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
+    with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
         ret_val = pd.Timestamp(0)
 
@@ -1438,7 +1438,7 @@ def to_date_error_checked(val, format):  # pragma: no cover
     py_format = convert_snowflake_date_format_str_to_py_format(format)
     if py_format == "":
         return (False, None)
-    with bodo.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
+    with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
         ret_val = pd.Timestamp(0)
 

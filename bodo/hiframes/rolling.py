@@ -737,7 +737,7 @@ def overload_offset_to_nanos(w):
         return lambda w: w  # pragma: no cover
 
     def impl(w):  # pragma: no cover
-        with bodo.objmode(out="int64", status="int64"):
+        with numba.objmode(out="int64", status="int64"):
             out, status = get_offset_nanos(w)
         if status != 0:
             raise ValueError("Invalid offset value")

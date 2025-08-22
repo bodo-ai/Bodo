@@ -1175,7 +1175,7 @@ def to_string_overload(
         max_colwidth=None,
         encoding=None,
     ):  # pragma: no cover
-        with bodo.objmode(res="string"):
+        with numba.objmode(res="string"):
             res = df.to_string(
                 buf=buf,
                 columns=columns,

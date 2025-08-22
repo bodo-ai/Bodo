@@ -628,7 +628,7 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-            with bodo.objmode(res=typ):
+            with numba.objmode(res=typ):
                 res = pd.Timestamp(ts_input, tz=tz)
             return res
 
@@ -1638,7 +1638,7 @@ def parse_datetime_str(val):  # pragma: no cover
     """Parse datetime string value to dt64
     Just calling Pandas since the Pandas code is complex
     """
-    with bodo.objmode(res="int64"):
+    with numba.objmode(res="int64"):
         res = pd.Timestamp(val).value
     return integer_to_dt64(res)
 
@@ -1646,7 +1646,7 @@ def parse_datetime_str(val):  # pragma: no cover
 @numba.njit(cache=True)
 def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
     """convert datetime.timedelta to np.timedelta64"""
-    with bodo.objmode(res='NPTimedelta("ns")'):
+    with numba.objmode(res='NPTimedelta("ns")'):
         res = pd.to_timedelta(val)
         # Pandas 2 returns us precision for some reason
         res = res.to_timedelta64().astype(np.dtype("timedelta64[ns]"))
@@ -1657,7 +1657,7 @@ def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
 def series_str_dt64_astype(data):  # pragma: no cover
     """convert string array to datetime64 array using
     objmode and Series implementation."""
-    with bodo.objmode(res="NPDatetime('ns')[::1]"):
+    with numba.objmode(res="NPDatetime('ns')[::1]"):
         # Convert to series to enable Pandas str parsing.
         # This enables conversions not supported in just Numba.
         # call ArrowStringArray.to_numpy() since PyArrow can't convert all datetime
@@ -1670,7 +1670,7 @@ def series_str_dt64_astype(data):  # pragma: no cover
 def series_str_td64_astype(data):  # pragma: no cover
     """convert string array to timedelta64 array using
     objmode."""
-    with bodo.objmode(res="NPTimedelta('ns')[::1]"):
+    with numba.objmode(res="NPTimedelta('ns')[::1]"):
         # No need to use Series because Timedelta doesn't
         # have extra parsing.
         # NOTE: Pandas 2 returns a TimedeltaArray so to_numpy is needed
@@ -1717,7 +1717,7 @@ def to_datetime_scalar(
     """call pd.to_datetime() with scalar value 'a'
     separate call to avoid adding extra basic blocks to user function for simplicity
     """
-    with bodo.objmode(t="pd_timestamp_tz_naive_type"):
+    with numba.objmode(t="pd_timestamp_tz_naive_type"):
         # A `tz_localize(None)` is required to handle inputs with a tz offset
         # because the return type is a naive timestamp.
         t = pd.to_datetime(
@@ -1748,7 +1748,7 @@ def pandas_string_array_to_datetime(
     origin,
     cache,
 ):  # pragma: no cover
-    with bodo.objmode(result="datetime_index"):
+    with numba.objmode(result="datetime_index"):
         # pd.to_datetime(string_array) returns DatetimeIndex
         result = pd.to_datetime(
             arr,
@@ -2374,7 +2374,7 @@ def float_to_timedelta_val(data, precision, multiplier):  # pragma: no cover
 def pandas_string_array_to_timedelta(
     arg_a, unit="ns", errors="raise"
 ):  # pragma: no cover
-    with bodo.objmode(result="timedelta_index"):
+    with numba.objmode(result="timedelta_index"):
         # pd.to_timedelta(string_array) returns TimedeltaIndex
         # Cannot pass in a unit if args are strings
         result = pd.to_timedelta(arg_a, errors=errors)
@@ -2900,7 +2900,7 @@ def strftime(ts, format):
         raise BodoError(f"{cls_name}.strftime(): 'strftime' argument must be a string")
 
     def impl(ts, format):  # pragma: no cover
-        with bodo.objmode(res="unicode_type"):
+        with numba.objmode(res="unicode_type"):
             res = ts.strftime(format)
         return res
 
@@ -2938,7 +2938,7 @@ def now_impl_overload(tz=None):
         )
 
     def impl(tz=None):  # pragma: no cover
-        with bodo.objmode(d=tz_typ):
+        with numba.objmode(d=tz_typ):
             d = pd.Timestamp.now(tz)
         return d
 

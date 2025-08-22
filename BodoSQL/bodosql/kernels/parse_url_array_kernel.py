@@ -5,6 +5,7 @@ of helper functions needed.
 
 import re
 
+import numba
 import numpy as np
 from numba.core import types
 from numba.extending import overload
@@ -234,7 +235,7 @@ def parse_url_wrapper_overload(data):
     from urllib.parse import urlparse
 
     def impl(data):  # pragma: no cover
-        with bodo.objmode(
+        with numba.objmode(
             scheme="string",
             netloc="string",
             path="string",

@@ -2,6 +2,7 @@
 
 import sys
 
+import numba
 import numpy as np
 import sklearn.naive_bayes
 from numba.extending import (
@@ -55,7 +56,7 @@ def sklearn_naive_bayes_multinomialnb_overload(
         fit_prior=True,
         class_prior=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="multinomial_nb_type"):
+        with numba.objmode(m="multinomial_nb_type"):
             m = sklearn.naive_bayes.MultinomialNB(
                 alpha=alpha,
                 fit_prior=fit_prior,
@@ -82,7 +83,7 @@ def overload_multinomial_nb_model_fit(
         def _naive_bayes_multinomial_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode():
+            with numba.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -125,7 +126,7 @@ def overload_multinomial_nb_model_fit(
         func_text += "            bodo.gatherv(X[:, start:end:1], root=i)\n"
         # Replicate y in all ranks
         func_text += "    y_train = bodo.allgatherv(y, False)\n"
-        func_text += '    with bodo.objmode(m="multinomial_nb_type"):\n'
+        func_text += '    with numba.objmode(m="multinomial_nb_type"):\n'
         func_text += "        m = fit_multinomial_nb(\n"
         func_text += "            m, X_train, y_train, sample_weight, total_cols, _is_data_distributed\n"
         func_text += "        )\n"

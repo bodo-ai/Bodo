@@ -559,21 +559,21 @@ def overload_str_method_partition(S, sep=" ", expand=True):
 
 @numba.njit
 def series_contains_regex(S, pat, case, flags, na, regex):  # pragma: no cover
-    with bodo.objmode(out_arr=bodo.boolean_array_type):
+    with numba.objmode(out_arr=bodo.boolean_array_type):
         out_arr = pd.array(S.array, "string")._str_contains(pat, case, flags, na, regex)
     return out_arr
 
 
 @numba.njit
 def series_match_regex(S, pat, case, flags, na):  # pragma: no cover
-    with bodo.objmode(out_arr=bodo.boolean_array_type):
+    with numba.objmode(out_arr=bodo.boolean_array_type):
         out_arr = S.array._str_match(pat, case, flags, na)
     return out_arr
 
 
 @numba.njit
 def series_fullmatch_regex(S, pat, case, flags, na):  # pragma: no cover
-    with bodo.objmode(out_arr=bodo.boolean_array_type):
+    with numba.objmode(out_arr=bodo.boolean_array_type):
         out_arr = S.array._str_fullmatch(pat, case, flags, na)
     return out_arr
 

@@ -2839,7 +2839,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = ( 
 @overload(glob.glob, no_unliteral=True, jit_options={"cache": True})
 def overload_glob_glob(pathname, recursive=False):
     def _glob_glob_impl(pathname, recursive=False):  # pragma: no cover
-        with bodo.objmode(l="list_str_type"):
+        with numba.objmode(l="list_str_type"):
             l = glob.glob(pathname, recursive=recursive)
         return l
 

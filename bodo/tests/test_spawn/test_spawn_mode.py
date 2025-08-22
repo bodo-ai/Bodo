@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 
+import numba
 import numpy as np
 import pandas as pd
 import psutil
@@ -349,7 +350,7 @@ def test_spawn_type_register():
     bodo.register_type("my_type1", df_type1)
 
     def impl():
-        with bodo.objmode(df="my_type1"):
+        with numba.objmode(df="my_type1"):
             df = pd.DataFrame({"A": [1, 2, 5]})
         return df
 

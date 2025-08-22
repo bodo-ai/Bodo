@@ -3628,7 +3628,7 @@ def test_groupby_apply_objmode():
     )
 
     def apply_func(df):
-        with bodo.objmode(df2="test_df_type"):
+        with numba.objmode(df2="test_df_type"):
             df2 = df[["B", "C"]]
         return df2
 
@@ -3649,7 +3649,7 @@ def test_groupby_apply_objmode():
         return 3
 
     def apply_func(df):
-        with bodo.objmode(out="int64"):
+        with numba.objmode(out="int64"):
             out = analysis_func(df)
         return pd.Series([out])
 
@@ -3669,7 +3669,7 @@ def test_groupby_apply_objmode():
 
     @bodo.jit
     def objmode_wrapper(df):
-        with bodo.objmode(out="int64[::1]"):
+        with numba.objmode(out="int64[::1]"):
             out = analysis_func2(df)
         return out
 

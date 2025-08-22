@@ -327,7 +327,7 @@ no_side_effect_call_tuples = {
     ("prange", bodo),
     (bodo.prange,),
     ("objmode", bodo),
-    (bodo.objmode,),
+    (numba.objmode,),
     ("no_warning_objmode", bodo),
     (bodo.ir.object_mode.no_warning_objmode,),
     # Helper functions, inlined in astype

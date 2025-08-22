@@ -2407,7 +2407,7 @@ def _gen_objmode_overload(
     else:
         extra_indent = ""
     # TODO: Should we add a parameter to avoid the objmode warning?
-    func_text += f"        {extra_indent}with bodo.objmode(res='{type_name}'):\n"
+    func_text += f"        {extra_indent}with numba.objmode(res='{type_name}'):\n"
     if is_function:
         func_text += f"            {extra_indent}res = {call_str}({args})\n"
     else:

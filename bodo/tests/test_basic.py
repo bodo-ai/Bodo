@@ -940,7 +940,7 @@ def test_pure_func(datapath):
 
     # objmode
     def impl3():
-        with bodo.objmode():
+        with numba.objmode():
             impl1()
 
     # pq read
@@ -1018,13 +1018,13 @@ def test_objmode_types():
     """
 
     def impl(A):
-        with bodo.objmode(B=bodo.int64[::1]):
+        with numba.objmode(B=bodo.int64[::1]):
             B = 2 * A
         return B
 
     # complex type
     def impl2():
-        with bodo.objmode(
+        with numba.objmode(
             df=bodo.DataFrameType(
                 (bodo.float64[::1], bodo.string_array_type),
                 bodo.RangeIndexType(bodo.none),
@@ -1037,7 +1037,7 @@ def test_objmode_types():
     f = lambda A: (A.view("datetime64[ns]"), A.view("timedelta64[ns]"))
 
     def impl3(A):
-        with bodo.objmode(B=bodo.datetime64ns[::1], C=bodo.timedelta64ns[::1]):
+        with numba.objmode(B=bodo.datetime64ns[::1], C=bodo.timedelta64ns[::1]):
             B, C = f(A)
         return B, C
 
@@ -1368,7 +1368,7 @@ def test_df_set_col_rename_bug(memory_leak_check):
 
 
 def test_objmode_warning(memory_leak_check):
-    """Test that bodo.objmode raises a warning when used
+    """Test that numba.objmode raises a warning when used
     and that bodo.ir.object_mode.no_warning_objmode does not."""
 
     def g():
@@ -1376,7 +1376,7 @@ def test_objmode_warning(memory_leak_check):
 
     @bodo.jit
     def impl1():
-        with bodo.objmode(a="int64"):
+        with numba.objmode(a="int64"):
             a = g()
         return a
 

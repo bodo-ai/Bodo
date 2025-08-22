@@ -423,7 +423,7 @@ def today_impl():  # pragma: no cover
     Untyped pass replaces datetime.date.today() with this call since class methods are
     not supported in Numba's typing
     """
-    with bodo.objmode(d="datetime_date_type"):
+    with numba.objmode(d="datetime_date_type"):
         d = datetime.date.today()
     return d
 
@@ -1295,7 +1295,7 @@ def now_date_wrapper(tz_value_or_none=None):
     """
 
     def impl(tz_value_or_none=None):  # pragma: no cover
-        with bodo.objmode(d="datetime_date_type"):
+        with numba.objmode(d="datetime_date_type"):
             d = now_date_python(tz_value_or_none)
         return d
 
