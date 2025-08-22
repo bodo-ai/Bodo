@@ -5,7 +5,7 @@ from enum import Enum
 import llvmlite.binding as ll
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.extending import intrinsic, lower_builtin
+from numba.extending import intrinsic
 
 import bodo
 from bodo.ext import memory_budget_cpp
@@ -78,36 +78,33 @@ def init_operator_comptroller_with_budget(typingctx, budget):
     return sig, codegen
 
 
+@intrinsic
 def register_operator(
-    operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
+    typingctx, operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
 ):
-    pass
+    """Wrapper for register_operator in _memory_budget.cpp"""
 
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
+        )
+        fn_typ = cgutils.get_or_insert_function(
+            builder.module, fnty, name="register_operator"
+        )
+        builder.call(fn_typ, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
-@lower_builtin(
-    register_operator,
-    types.int64,
-    types.EnumMember(OperatorType, types.int64),
-    types.int64,
-    types.int64,
-    types.int64,
-)
-def lower_register_operator(context, builder, sig, args):
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(64),
-            lir.IntType(64),
-            lir.IntType(64),
-            lir.IntType(64),
-            lir.IntType(64),
-        ],
+    sig = types.none(
+        operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
     )
-    fn_typ = cgutils.get_or_insert_function(
-        builder.module, fnty, name="register_operator"
-    )
-    builder.call(fn_typ, args)
-    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return sig, codegen
 
 
 @intrinsic
