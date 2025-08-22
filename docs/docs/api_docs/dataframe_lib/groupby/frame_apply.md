@@ -1,31 +1,30 @@
 # DataFrameGroupBy.apply {#frame-apply}
 ```
-DataFrameGroupBy.apply(self, func, *args, include_groups=False, **kwargs)
+DataFrameGroupBy.apply(self, func, *args, include_groups=True, **kwargs)
 ```
 
 Apply a function group-wise and combine results together.
 
 The function must take a dataframe as the first argument and return a scalar, dataframe or series.
-Currently, Bodo DataFrames will fallback to Pandas' [DataFrameGroupBy.apply](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.apply.html) if the function returns a DataFrame or Series.
+Currently, Bodo DataFrames will fallback to [pandas.core.groupby.DataFrameGroupBy.apply](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.apply.html) if the function returns a dataFrame or series.
 
 <p class="api-header">Parameters</p>
 
 : __func : *callable*__: A callable that takes a dataframe as a first arguemnt.
 Currently only scalar return types are supported in Bodo DataFrames,
-if *func* returns a Series or DataFrame, a fallback to `DataFrameGroupBy.apply` will be triggered.
+if *func* returns a series or dataframe, a fallback to pandas.core.groupby.DataFrameGroupBy.apply will be triggered.
 
-: __include_groups : *bool, default False*__ Whether to include grouping keys in the input to *func*,
-Bodo DataFrames only supports False, if *include_groups*, a fallback to `DataFrameGroupBy.apply` will be triggered.
+: __include_groups : *bool, default True*__ Whether to include grouping keys in the input to *func*,
+Bodo DataFrames only supports False, if *include_groups*, a fallback to pandas.core.groupby.DataFrameGroupBy.apply will be triggered.
 
-: __args : tuple__ Positional arguments to pass to *func*.
-
-: __kwargs : dict__ Keyword arguments to pass to *func*.
+: __args, kwargs__ Positional and keyword arguments to pass to *func*.
+Currently, passing arguments to *func* is not supported and will trigger a fallback to pandas.core.groupby.DataFrameGroupBy.apply.
 
 <p class="api-header">Returns</p>
 
-: __BodoSeries__ or __pandas.DataFrame__ if *func* returns a Series or DataFrame.
+: __BodoSeries__ or __pandas.DataFrame__ depending on the value of *as_index*.
 
-<p class="api-header">Examples</p>
+<p class="api-header">Example</p>
 
 ``` py
 import bodo.pandas as bd
@@ -45,5 +44,5 @@ Output:
 A
 a   -5
 b   -2
-dtype: int64
+dtype: int64[pyarrow]
 ```

@@ -2535,6 +2535,8 @@ def test_groupby_apply():
     pd_out = impl(df)
     with assert_executed_plan_count(0):
         bodo_out = impl(bd.from_pandas(df))
+        # Setting columns is not supported yet in Bodo DataFrames
+        bodo_out = bodo_out.rename(columns={"None": "Q"})
 
     _test_equal(
         bodo_out,

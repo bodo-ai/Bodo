@@ -19,6 +19,28 @@ def groupby_df():
     )
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(True, id="dropna-True"),
+        pytest.param(False, id="dropna-False"),
+    ],
+    scope="module",
+)
+def dropna(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(True, id="as_index-True"),
+        pytest.param(False, id="as_index-False"),
+    ],
+    scope="module",
+)
+def as_index(request):
+    return request.param
+
+
 def test_basic_agg_udf(groupby_df):
     df = groupby_df
     bdf = bd.from_pandas(df)
@@ -104,7 +126,11 @@ def test_agg_mix_udf_builtin(groupby_df):
             lambda x: pd.Timedelta(3), id="timedelta_ret", marks=pytest.mark.slow
         ),
         pytest.param(lambda x: "A", id="string_ret"),
-        pytest.param(lambda x: {"id": 1, "text": "hello"}, id="struct_ret"),
+        pytest.param(
+            lambda x: {"id": 1, "text": "hello"},
+            id="struct_ret",
+            marks=pytest.mark.slow,
+        ),
         pytest.param(lambda x: [1, 2], id="list_ret"),
     ],
 )
@@ -152,6 +178,7 @@ def test_agg_mix_udf_builtin(groupby_df):
                 ),
             ),
             id="struct_col",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -223,39 +250,26 @@ def test_agg_udf_errorchecking(groupby_df):
     _test_equal(bdf2, df2)
 
 
-def test_agg_null_keys():
+def test_agg_null_keys(dropna, as_index):
     df = pd.DataFrame({"A": [None, None, None, 1, 2, 3], "B": [1, 2, 3, 4, 5, 6]})
 
     bdf = bd.from_pandas(df)
 
-    df2 = df.groupby("A", dropna=False).agg(lambda x: x.sum())
+    df2 = df.groupby("A", dropna=dropna, as_index=as_index).agg(lambda x: x.sum())
     with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby("A", dropna=False).agg(lambda x: x.sum())
+        bdf2 = bdf.groupby("A", dropna=dropna, as_index=as_index).agg(lambda x: x.sum())
 
     _test_equal(bdf2, df2, sort_output=True)
 
 
-@pytest.mark.parametrize(
-    "dropna",
-    [
-        pytest.param(True, id="dropna"),
-        pytest.param(False, id="no_dropna"),
-    ],
-)
-@pytest.mark.parametrize(
-    "as_index",
-    [
-        pytest.param(True, id="as_index"),
-        pytest.param(False, id="no_as_index"),
-    ],
-)
 def test_apply_basic(dropna, as_index):
-    """Test basic groupby apply example similar to TPCH Q08"""
+    """Test basic groupby apply example"""
     df = pd.DataFrame(
         {
             "B": ["a", "c", "b", "c"] * 3,
             "A": ["A", "B", None] * 4,
             "C": [1, 2, 3, 4, 5, 6] * 2,
+            "BB": ["a", "b"] * 6,
         }
     )
 
@@ -267,11 +281,11 @@ def test_apply_basic(dropna, as_index):
         numer = df["C"].sum()
         return numer / denom
 
-    df2 = df.groupby("A", dropna=dropna, as_index=as_index).apply(
+    df2 = df.groupby(["A", "BB"], dropna=dropna, as_index=as_index).apply(
         udf, include_groups=False
     )
     with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby("A", dropna=dropna, as_index=as_index).apply(
+        bdf2 = bdf.groupby(["A", "BB"], dropna=dropna, as_index=as_index).apply(
             udf, include_groups=False
         )
 
@@ -283,20 +297,6 @@ def test_apply_basic(dropna, as_index):
     _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
 
 
-@pytest.mark.parametrize(
-    "dropna",
-    [
-        pytest.param(True, id="dropna"),
-        pytest.param(False, id="no_dropna"),
-    ],
-)
-@pytest.mark.parametrize(
-    "as_index",
-    [
-        pytest.param(True, id="as_index"),
-        pytest.param(False, id="no_as_index"),
-    ],
-)
 def test_series_apply_udf(dropna, as_index):
     df = pd.DataFrame(
         {
@@ -318,5 +318,45 @@ def test_series_apply_udf(dropna, as_index):
         bdf2 = bdf.groupby("A", dropna=dropna, as_index=as_index)["C"].apply(
             udf, include_groups=False
         )
+
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+
+
+def test_apply_fallback(groupby_df: pd.DataFrame, as_index):
+    # DataFrame return value
+    def udf1(x):
+        return x
+
+    # Unsupported operation in JIT (string Series sum)
+    def udf2(x):
+        return x.A.sum()
+
+    bdf = bd.from_pandas(groupby_df)
+
+    df2 = groupby_df.groupby("C", as_index=as_index).apply(udf1, include_groups=False)
+    with pytest.warns(
+        BodoLibFallbackWarning,
+        match="functions returning Series or DataFrame not implemented yet",
+    ):
+        bdf2 = bdf.groupby("C", as_index=as_index).apply(udf1, include_groups=False)
+
+    if not as_index:
+        df2 = df2.rename(columns={None: "None"})
+        bdf2 = df2.rename(columns={None: "None"})
+
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+
+    bdf = bd.from_pandas(groupby_df)
+
+    df2 = groupby_df.groupby("C", as_index=as_index).apply(udf2, include_groups=False)
+    with pytest.warns(
+        BodoLibFallbackWarning,
+        match="An error occured while compiling user defined function 'udf2'",
+    ):
+        bdf2 = bdf.groupby("C", as_index=as_index).apply(udf2, include_groups=False)
+
+    if not as_index:
+        df2 = df2.rename(columns={None: "None"})
+        bdf2 = df2.rename(columns={None: "None"})
 
     _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)

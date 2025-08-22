@@ -10,7 +10,6 @@ import warnings
 from typing import Any, Literal
 
 import numba
-import numba.extending
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
@@ -36,9 +35,13 @@ from bodo.pandas.utils import (
     _empty_pd_array,
     check_args_fallback,
     convert_to_pandas_types,
+    cpp_table_to_df_jit,
+    cpp_table_to_series_jit,
     wrap_plan,
 )
 from bodo.utils.conversion import coerce_scalar_to_array, coerce_to_array
+from bodo.utils.typing import BodoWarning
+from bodo.utils.utils import is_array_typ
 
 if pt.TYPE_CHECKING:
     from bodo.pandas import BodoDataFrame, BodoSeries
@@ -157,9 +160,9 @@ class DataFrameGroupBy:
 
             raise AttributeError(e)
 
-    @check_args_fallback(supported=["func"])
-    def apply(self, func, *args, include_groups=False, **kwargs):
-        return _groupby_apply_plan(self, func, *args, **kwargs)
+    @check_args_fallback(supported=["func", "include_groups"])
+    def apply(self, func, *args, include_groups=True, **kwargs):
+        return _groupby_apply_plan(self, func, include_groups, *args, **kwargs)
 
     @check_args_fallback(supported="func")
     def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
@@ -340,9 +343,9 @@ class SeriesGroupBy:
             gb = pd.DataFrame(self._obj).groupby(self._keys)[self._selection[0]]
             return object.__getattribute__(gb, name)
 
-    @check_args_fallback(supported=["func"])
-    def apply(self, func, *args, include_groups=False, **kwargs):
-        return _groupby_apply_plan(self, func, *args, **kwargs)
+    @check_args_fallback(supported=["func", "include_groups"])
+    def apply(self, func, *args, include_groups=True, **kwargs):
+        return _groupby_apply_plan(self, func, include_groups, *args, **kwargs)
 
     @check_args_fallback(supported="func")
     def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
@@ -461,16 +464,29 @@ class SeriesGroupBy:
 
 
 def _groupby_apply_plan(
-    grouped: SeriesGroupBy | DataFrameGroupBy, func, *args, **kwargs
+    grouped: SeriesGroupBy | DataFrameGroupBy, func, include_groups, *args, **kwargs
 ) -> BodoSeries | BodoDataFrame:
     """Implementation of SeriesGroupby/DataFrameGroupby.apply."""
     from bodo.pandas.base import _empty_like
 
+    # TODO: support passing kwargs and args
+    if include_groups:
+        raise BodoLibNotImplementedException(
+            "Groupby.apply(): include_groups=True not supported yet."
+        )
+
+    # TODO: support passing kwargs and args
+    if args or kwargs:
+        raise BodoLibNotImplementedException(
+            "Groupby.apply(): passing positional or keyword arguments "
+            "to func is not supported yet."
+        )
+
     # NOTE: assumes no key columns are being aggregated e.g:
-    # df1.groupby("C", as_index=False)[["C"]].agg("sum")
+    # df1.groupby("C", as_index=False)[["C"]].apply(...)
     if set(grouped._keys) & set(grouped.selection_for_plan):
         raise BodoLibNotImplementedException(
-            "GroupBy.agg(): Aggregation on key columns not supported yet."
+            "Applying a function on key columns not supported yet."
         )
 
     zero_size_self = _empty_like(grouped._obj)
@@ -485,7 +501,7 @@ def _groupby_apply_plan(
 
     if isinstance(out_type, (bodo.DataFrameType, bodo.SeriesType)):
         raise BodoLibNotImplementedException(
-            "DataFrameGroupby.apply(): func returning Series or DataFrame not implemented yet."
+            "DataFrameGroupby.apply(): functions returning Series or DataFrame not implemented yet."
         )
 
     out_arrow_type = _numba_type_to_pyarrow_type(out_type)
@@ -504,13 +520,13 @@ def _groupby_apply_plan(
             empty_out_col,
             grouped._obj._plan,
             "udf",
-            _get_cfunc_apply_wrapper(func, selected_self, empty_out_col),
+            _get_cfunc_wrapper(func, selected_self, empty_out_col),
             selected_cols,
             grouped._dropna,
         )
     ]
 
-    empty_data = pd.DataFrame() if grouped._as_index else zero_size_self[grouped._keys]
+    empty_data = zero_size_self[grouped._keys]
 
     out_name = (
         BODO_NONE_DUMMY if isinstance(grouped, DataFrameGroupBy) else selected_self.name
@@ -519,9 +535,7 @@ def _groupby_apply_plan(
 
     if grouped._as_index:
         # Convert output to series
-        empty_data = empty_data.set_index(
-            *(zero_size_self[col] for col in grouped._keys)
-        )
+        empty_data = empty_data.set_index(grouped._keys)
         empty_data = empty_data[out_name]
     elif out_name == BODO_NONE_DUMMY:
         # TODO: support as_index=False case output column is None
@@ -572,7 +586,7 @@ def _groupby_agg_plan(
             out_types.iloc[:, i] if isinstance(out_types, pd.DataFrame) else out_types,
             grouped._obj._plan,
             f"udf_{i}" if func.is_custom_aggfunc else func.func_name,
-            _get_cfunc_apply_wrapper(
+            _get_cfunc_wrapper(
                 func.func, zero_size_df[func.in_col], out_types.iloc[:, i]
             )
             if func.is_custom_aggfunc
@@ -616,28 +630,33 @@ def _make_logical_agg_plan(
     return wrap_plan(plan)
 
 
-def _get_cfunc_apply_wrapper(
+def _get_cfunc_wrapper(
     func: pt.Callable, empty_data: pd.DataFrame | pd.Series, out_type: pd.Series
-):
-    """_summary_
+) -> pt.Callable[[], int]:
+    """Create a wrapper around compiling a cfunc on all workers for computing
+    UDFs results for groupby.apply/agg on a single group.
 
     Args:
-        func (pt.Callable): _description_
-        empty_data (pd.DataFrame | pd.Series): _description_
-        out_type (pd.Series): _description_
+        func (pt.Callable): The UDF
+        empty_data (pd.DataFrame | pd.Series): Input column or DataFrame. Will be a
+          DataFrame in the case of apply.
+        out_type (pd.Series): The type of the output column.
 
     Returns:
-        _type_: _description_
+        Callable: A function that takes no arguments and compiles the cfunc and returns
+          the address.
     """
     import numpy as np
 
     from bodo.hiframes.table import TableType
-    from bodo.pandas.utils import cpp_table_to_df_jit, cpp_table_to_series_jit
 
-    # TODO: refactor into overload?
     jitted_func = bodo.jit(cache=False, spawn=False, distributed=False)(func)
-    in_type = bodo.typeof(empty_data)
-    out_col_type = bodo.typeof(out_type).data
+
+    # ignore warning "Empty object array passed to Bodo"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", BodoWarning)
+        in_type = bodo.typeof(empty_data)
+        out_col_type = bodo.typeof(out_type).data
 
     if isinstance(in_type, bodo.DataFrameType):
         # trivial index, input table does not have an index
@@ -701,10 +720,17 @@ def _get_cfunc_apply_wrapper(
 
 
 def _numba_type_to_pyarrow_type(typ):
-    """Convert the numba type to corresponding Pyarrow type."""
+    """Convert the numba type to corresponding Pyarrow type or
+    return None (fallback to Pandas).
+
+    Similar to io/helpers.py::_numba_type_to_pyarrow_type except
+    converts any scalar type and not just arrays.
+    """
     from numba import types
 
     from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
+    from bodo.libs.binary_arr_ext import bytes_type
+    from bodo.utils.utils import is_array_typ
 
     numba_to_arrow_map = {
         types.bool_: pa.bool_(),
@@ -724,10 +750,10 @@ def _numba_type_to_pyarrow_type(typ):
         types.float64: pa.float64(),
         # Date and Time
         types.NPDatetime("ns"): pa.date64(),
-        # TODO: properly support timedelta type precision
         pd_timedelta_type: pa.duration("ns"),
         # String / Binary
         types.unicode_type: pa.large_string(),
+        bytes_type: pa.large_binary(),
     }
 
     if isinstance(typ, types.Literal):
@@ -736,7 +762,7 @@ def _numba_type_to_pyarrow_type(typ):
     elif isinstance(typ, types.Optional):
         return _numba_type_to_pyarrow_type(typ.type)
 
-    elif isinstance(typ, types.List):
+    elif isinstance(typ, types.List) or is_array_typ(typ, include_index_series=False):
         inner_type = _numba_type_to_pyarrow_type(typ.dtype)
         return pa.large_list(inner_type)
 
@@ -747,8 +773,6 @@ def _numba_type_to_pyarrow_type(typ):
         inner_types = [_numba_type_to_pyarrow_type(typ_) for typ_ in typ.data]
         fields = [pa.field(name, typ_) for name, typ_ in zip(typ.names, inner_types)]
         return pa.struct(fields)
-
-    # TODO: Expand cases.
 
     return numba_to_arrow_map.get(typ, None)
 
@@ -770,7 +794,6 @@ def _get_scalar_udf_out_type(func: pt.Callable, empty_input: pd.DataFrame | pd.S
     in_type = bodo.typeof(empty_input)
 
     try:
-        # TODO: support passing args and kwargs to UDFs
         return_type = get_const_func_output_type(
             jitted_func, (in_type,), (), typing_ctx, target_ctx
         )
@@ -872,7 +895,11 @@ def _get_agg_output_type(
         empty_in_col = pd.Series(_empty_pd_array(pa_type))
         out_numba_type = _get_scalar_udf_out_type(func.func, empty_in_col)
 
-        if isinstance(out_numba_type, (bodo.SeriesType, bodo.DataFrameType)):
+        # Matches Pandas error without needint to falling back
+        if (
+            isinstance(out_numba_type, (bodo.SeriesType, bodo.DataFrameType))
+            or is_array_typ(out_numba_type)
+        ) and not pa.types.is_list(pa_type):
             raise ValueError(
                 "Groupby.agg(): User defined function must produce aggregated value."
             )

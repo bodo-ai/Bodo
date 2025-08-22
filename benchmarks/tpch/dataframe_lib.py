@@ -494,7 +494,6 @@ def tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd=pd):
     total = total.groupby("O_YEAR", as_index=False).apply(udf)
     total.columns = ["O_YEAR", "MKT_SHARE"]
     total = total.sort_values(by=["O_YEAR"], ascending=[True])
-
     return total
 
 
