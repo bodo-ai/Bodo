@@ -89,7 +89,7 @@ public class BodoArrayHelpers {
         typeName = "numba.types.unknown";
         break;
       case NULL:
-        typeName = "bodo.null_array_type";
+        typeName = "bodo.types.null_array_type";
         break;
       case MAP:
         typeName =
@@ -162,7 +162,7 @@ public class BodoArrayHelpers {
         }
         break;
       case DATE:
-        typeName = "bodo.datetime_date_array_type";
+        typeName = "bodo.types.datetime_date_array_type";
         break;
       case TIMESTAMP:
         // TODO: Add nullable support

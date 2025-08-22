@@ -4124,7 +4124,7 @@ def add_months_util(dt0, num_months):
         scalar_text += "res[i] = new_arg\n"
     else:
         if is_valid_date_arg(dt0):
-            out_dtype = bodo.datetime_date_array_type
+            out_dtype = bodo.types.datetime_date_array_type
             scalar_text += f"res[i] = {unbox_str}(new_arg.date())\n"
         else:
             out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")

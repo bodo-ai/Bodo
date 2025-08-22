@@ -1036,7 +1036,7 @@ def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
         a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not a array scalar, array column, or null
     """
-    if arg == bodo.types.none or arg == bodo.null_array_type:
+    if arg == bodo.types.none or arg == bodo.types.null_array_type:
         return
     if is_scalar:
         if not bodo.utils.utils.is_array_typ(arg, False):
@@ -1186,9 +1186,9 @@ def is_valid_date_arg(arg):
     Returns:
         bool: Is this type one of the date types.
     """
-    return arg == bodo.datetime_date_type or (
+    return arg == bodo.types.datetime_date_type or (
         bodo.utils.utils.is_array_typ(arg, True)
-        and arg.dtype == bodo.datetime_date_type
+        and arg.dtype == bodo.types.datetime_date_type
     )
 
 

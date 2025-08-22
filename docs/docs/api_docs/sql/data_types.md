@@ -19,7 +19,7 @@ Python types and Bodo data types.
 | `DOUBLE`              | `np.float64`           | `bodo.types.float64`                       |
 | `VARCHAR`, `CHAR`     | `str`                  | `bodo.types.string_type`                   |
 | `VARBINARY`, `BINARY` | `bytes`                | `bodo.types.bytes_type`                    |
-| `DATE`                | `datetime.date`        | `bodo.datetime_date_type`            |
+| `DATE`                | `datetime.date`        | `bodo.types.datetime_date_type`            |
 | `TIME`                | `bodo.Time`            | `bodo.TimeType`                      |
 | `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(None)`     |
 | `TIMESTAMP_LTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(local_tz)` |
@@ -27,7 +27,7 @@ Python types and Bodo data types.
 | `INTERVAL(day-time)`  | `np.timedelta64[ns]`   | `bodo.types.timedelta64ns`                 |
 | `ARRAY`               | `pyarrow.large_list`   | `bodo.ArrayItemArray`                |
 | `MAP`                 | `pyarrow.map`          | `bodo.MapScalarType`                 |
-| `NULL`                | `pyarrow.NA`           | `bodo.null_dtype`                    |
+| `NULL`                | `pyarrow.NA`           | `bodo.types.null_dtype`                    |
 
 </center>
 

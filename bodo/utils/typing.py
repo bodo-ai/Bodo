@@ -1160,9 +1160,9 @@ def parse_dtype(dtype, func_name=None):
     ) or dtype in (
         bodo.types.string_type,
         bodo.types.bytes_type,
-        bodo.datetime_date_type,
+        bodo.types.datetime_date_type,
         bodo.datetime_timedelta_type,
-        bodo.null_dtype,
+        bodo.types.null_dtype,
         bodo.pd_timestamp_tz_naive_type,
         bodo.pd_timedelta_type,
     ):
@@ -1353,7 +1353,7 @@ def get_index_type_from_dtype(t):
 
     if (
         isinstance(t, (types.Integer, types.Float, types.Boolean))
-        or t == bodo.datetime_date_type
+        or t == bodo.types.datetime_date_type
     ):
         return NumericIndexType(t, types.none)
 
@@ -1719,8 +1719,8 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         dtype = dtype_to_array_type(dtype.dtype, convert_nullable)
 
     # null array
-    if dtype == bodo.null_dtype or dtype == bodo.types.none:
-        return bodo.null_array_type
+    if dtype == bodo.types.null_dtype or dtype == bodo.types.none:
+        return bodo.types.null_array_type
 
     # string array
     if dtype == bodo.types.string_type:
@@ -1746,7 +1746,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     if dtype == types.boolean:
         return bodo.boolean_array_type
 
-    if dtype == bodo.datetime_date_type:
+    if dtype == bodo.types.datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
     if isinstance(dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
@@ -2006,7 +2006,7 @@ def is_scalar_type(t: types.Type) -> bool:
         bodo.types.timedelta64ns,
         bodo.types.string_type,
         bodo.types.bytes_type,
-        bodo.datetime_date_type,
+        bodo.types.datetime_date_type,
         bodo.datetime_datetime_type,
         bodo.datetime_timedelta_type,
         bodo.pd_timedelta_type,
@@ -2014,7 +2014,7 @@ def is_scalar_type(t: types.Type) -> bool:
         bodo.week_type,
         bodo.date_offset_type,
         types.none,
-        bodo.null_dtype,
+        bodo.types.null_dtype,
         bodo.timestamptz_type,
     )
 
@@ -2063,10 +2063,10 @@ def get_common_scalar_dtype(
         raise_bodo_error(
             "Internal error, length of argument passed to get_common_scalar_dtype scalar_types is 0"
         )
-    if all(t == bodo.null_dtype for t in scalar_types):
-        return (bodo.null_dtype, False)
-    # bodo.null_dtype can be cast to any type so remove it from the list.
-    scalar_types = [t for t in scalar_types if t != bodo.null_dtype]
+    if all(t == bodo.types.null_dtype for t in scalar_types):
+        return (bodo.types.null_dtype, False)
+    # bodo.types.null_dtype can be cast to any type so remove it from the list.
+    scalar_types = [t for t in scalar_types if t != bodo.types.null_dtype]
     try:
         common_dtype = np.result_type(
             *[numba.np.numpy_support.as_dtype(t) for t in scalar_types]
@@ -2776,13 +2776,13 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
             bodo.types.datetime64ns,
             bodo.pd_timestamp_tz_naive_type,
         )
-    elif lhs_scalar_typ == bodo.datetime_date_type:
+    elif lhs_scalar_typ == bodo.types.datetime_date_type:
         # Cast is supported between date and timestamp
         return rhs_scalar_typ in (
             bodo.types.datetime64ns,
             bodo.pd_timestamp_tz_naive_type,
         )
-    elif rhs_scalar_typ == bodo.datetime_date_type:  # pragma: no cover
+    elif rhs_scalar_typ == bodo.types.datetime_date_type:  # pragma: no cover
         # Cast is supported between date and timestamp
         return lhs_scalar_typ in (
             bodo.types.datetime64ns,
@@ -3139,7 +3139,7 @@ def get_array_getitem_scalar_type(t):
     if isinstance(t, bodo.DatetimeArrayType):
         return bodo.PandasTimestampType(t.tz)
 
-    if t == bodo.null_array_type:
+    if t == bodo.types.null_array_type:
         return types.none
 
     return t.dtype

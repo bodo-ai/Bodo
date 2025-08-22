@@ -80,7 +80,7 @@ def overload_object_construct_keep_null(values, names, scalars):
         if scalars[i]:
             # Represent null as a dummy type in the struct
             if arr_typ == bodo.types.none:
-                arr_typ = bodo.null_array_type
+                arr_typ = bodo.types.null_array_type
             if isinstance(arr_typ, types.optional):
                 arr_typ = arr_typ.type
                 is_optional = True
@@ -170,7 +170,7 @@ def overload_object_construct(values, names, scalars):
         if scalars[i]:
             # Represent null as a dummy type in the struct
             if arr_typ == bodo.types.none:
-                arr_typ = bodo.null_array_type
+                arr_typ = bodo.types.null_array_type
             if isinstance(arr_typ, types.optional):
                 arr_typ = arr_typ.type
                 is_optional = True
@@ -885,7 +885,7 @@ def overload_object_filter_keys_util(A, keep_keys, scalars):
     json_data = A[0]
 
     # If the input is null, just return it.
-    if json_data == bodo.types.none or json_data == bodo.null_array_type:
+    if json_data == bodo.types.none or json_data == bodo.types.null_array_type:
         return lambda A, keep_keys, scalars: A[0]  # pragma: no cover
 
     json_type = json_data
@@ -1461,7 +1461,7 @@ def overload_array_construct(A, scalar_tup):
     if inner_arr_type == bodo.dict_str_arr_type:
         inner_arr_type = bodo.types.string_array_type
     if inner_arr_type == bodo.types.none:
-        inner_arr_type = bodo.null_array_type
+        inner_arr_type = bodo.types.null_array_type
     out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
 
     if all(are_scalars) and any(

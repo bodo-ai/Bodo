@@ -4666,7 +4666,7 @@ class DistributedPass:
                     f"val, _ = _str_to_decimal_scalar({dec_str_setup}, prec, scale)"
                 )
                 init_val = "val"
-            elif el_typ == bodo.datetime_date_type:
+            elif el_typ == bodo.types.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_max_value()"
             elif isinstance(el_typ, TimeType):
                 init_val = "bodo.hiframes.series_kernels._get_time_max_value()"
@@ -4690,7 +4690,7 @@ class DistributedPass:
                     f"val, _ = _str_to_decimal_scalar({dec_str_setup}, prec, scale)"
                 )
                 init_val = "val"
-            elif el_typ == bodo.datetime_date_type:
+            elif el_typ == bodo.types.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_min_value()"
             elif isinstance(el_typ, TimeType):
                 init_val = "bodo.hiframes.series_kernels._get_time_min_value()"

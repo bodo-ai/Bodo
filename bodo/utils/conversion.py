@@ -169,7 +169,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
             elif data == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
                 output = types.Array(bodo.types.timedelta64ns, 1, "C")
             elif data == bodo.hiframes.datetime_date_ext.datetime_date_type:
-                output = bodo.datetime_date_array_type
+                output = bodo.types.datetime_date_array_type
             elif isinstance(data, bodo.hiframes.time_ext.TimeType):
                 output = bodo.TimeArrayType(data.precision)
             elif data == bodo.timestamptz_type:
@@ -707,7 +707,7 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
     if _arr_typ == types.unknown:
         _arr_typ = to_nullable_type(dtype_to_array_type(scalar))
 
-    if _arr_typ == bodo.null_array_type:
+    if _arr_typ == bodo.types.null_array_type:
         return (
             lambda scalar,
             length,
@@ -1635,7 +1635,7 @@ def overload_fix_arr_dtype(
         return impl
 
     # null array input case
-    if data == bodo.null_array_type:
+    if data == bodo.types.null_array_type:
 
         def impl_null_array(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -1995,7 +1995,7 @@ def overload_fix_arr_dtype(
 
     # Note astype(datetime.date) isn't possible in Pandas because its treated
     # as an object type. We support it to maintain parity with Spark's cast.
-    if nb_dtype == bodo.datetime_date_type and (
+    if nb_dtype == bodo.types.datetime_date_type and (
         data.dtype == bodo.types.datetime64ns or data_is_tz_aware
     ):
         # This operation isn't defined in Pandas, so we opt to implement it as
@@ -2033,7 +2033,7 @@ def overload_fix_arr_dtype(
 
             return impl_str
 
-        if data == bodo.datetime_date_array_type:
+        if data == bodo.types.datetime_date_array_type:
             # Support Date Arrays using objmode
             # TODO: Replace with a native impl
             def impl_date(
@@ -2364,7 +2364,7 @@ def overload_index_from_array(data, name=None):
                 bodo.Decimal128Type,
             ),
         )
-        or data.dtype == bodo.datetime_date_type
+        or data.dtype == bodo.types.datetime_date_type
     ):
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_numeric_index(
             data, name

@@ -527,7 +527,7 @@ def create_timestamp_cast_util(func, error_on_fail):
                 scalar_text = f"res[i] = {unbox_str}(arg0.utc_timestamp.tz_localize('UTC').tz_convert('{time_zone}'))\n"
             else:
                 scalar_text = f"res[i] = {unbox_str}(arg0.local_timestamp())\n"
-        elif conversion_val == bodo.null_array_type:
+        elif conversion_val == bodo.types.null_array_type:
             # Note: We could just pass a null array, but this adds typing information
             # + validates the other arguments.
             scalar_text = "res[i] = None\n"
@@ -1467,7 +1467,7 @@ def to_date_strings_conversion(year_str, month_str, day_str):  # pragma: no cove
         val (types.unicode_type): An input string to convert to a date.
 
     Returns:
-        types.Tuple(types.bool_, bodo.datetime_date_type): A tuple of where the conversion
+        types.Tuple(types.bool_, bodo.types.datetime_date_type): A tuple of where the conversion
         was a success and the resulting date. If the success is false the date is garbage.
     """
     # Initialize date_val for an invalid value.
@@ -1522,7 +1522,7 @@ def to_date_auto_error_checked(val):  # pragma: no cover
         val (types.unicode_type): An input string to convert to a date.
 
     Returns:
-        types.Tuple(types.bool_, bodo.datetime_date_type): A tuple of where the conversion
+        types.Tuple(types.bool_, bodo.types.datetime_date_type): A tuple of where the conversion
         was a success and the resulting date. If the success is false the date is garbage.
     """
     is_valid = False
@@ -2177,7 +2177,7 @@ def to_number_util_overload(
     scale = get_overload_const_int(scale)
     outputs_decimal = get_overload_const_bool(outputs_decimal)
 
-    is_null_arg = is_overload_none(expr) or expr == bodo.null_array_type
+    is_null_arg = is_overload_none(expr) or expr == bodo.types.null_array_type
     is_string = is_valid_string_arg(expr)
     if not is_string:
         verify_numeric_arg(expr, "TO_NUMBER", "expr")

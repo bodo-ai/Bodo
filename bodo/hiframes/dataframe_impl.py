@@ -1678,7 +1678,7 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                     bodo.CategoricalArrayType,
                 ),
             )
-            or coltype in [bodo.boolean_array_type, bodo.datetime_date_array_type]
+            or coltype in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmax() only supported for numeric column types. Column type: {coltype} not supported."
@@ -1722,7 +1722,7 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                     bodo.CategoricalArrayType,
                 ),
             )
-            or coltype in [bodo.boolean_array_type, bodo.datetime_date_array_type]
+            or coltype in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmin() only supported for numeric column types. Column type: {coltype} not supported."

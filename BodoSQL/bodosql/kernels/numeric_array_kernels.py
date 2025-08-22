@@ -724,7 +724,7 @@ def floor_util(data, precision):  # pragma: no cover
     arg_names = ["data", "precision"]
     arg_types = [data, precision]
     propagate_null = [True] * 2
-    if data == bodo.types.none or data == bodo.null_array_type:
+    if data == bodo.types.none or data == bodo.types.null_array_type:
         scalar_text = "res[i] = 0"
     elif is_valid_int_arg(data):
         data_dtype = data.dtype if is_array_typ(data) else data

@@ -142,8 +142,8 @@ def typeof_pd_index(val, c):
             arr_type,
         )
     if val.inferred_type == "date" or pd._libs.lib.infer_dtype(val, True) == "date":
-        dtype = bodo.datetime_date_type
-        arr_type = bodo.datetime_date_array_type
+        dtype = bodo.types.datetime_date_type
+        arr_type = bodo.types.datetime_date_array_type
         return NumericIndexType(
             dtype,
             get_val_type_maybe_str_literal(val.name),
@@ -196,7 +196,7 @@ def typeof_pd_index(val, c):
 
     # catch-all for all remaining Index types
     arr_typ = bodo.hiframes.boxing._infer_series_arr_type(val)
-    if arr_typ == bodo.datetime_date_array_type or isinstance(
+    if arr_typ == bodo.types.datetime_date_array_type or isinstance(
         arr_typ, (bodo.DecimalArrayType, bodo.DatetimeArrayType, bodo.TimeArrayType)
     ):
         return NumericIndexType(
@@ -878,7 +878,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                     bodo.Decimal128Type,
                 ),
             )
-            or elem_type == bodo.datetime_date_type
+            or elem_type == bodo.types.datetime_date_type
         ):
             if dtype_provided:
 
@@ -3234,7 +3234,7 @@ def array_type_to_index(arr_typ, name_typ=None):
             bodo.DatetimeArrayType,
         ),
     ) or arr_typ in (
-        bodo.datetime_date_array_type,
+        bodo.types.datetime_date_array_type,
         bodo.boolean_array_type,
     ), f"Converting array type {arr_typ} to index not supported"
 
@@ -3257,7 +3257,7 @@ def array_type_to_index(arr_typ, name_typ=None):
         isinstance(
             arr_typ.dtype, (types.Integer, types.Float, types.Boolean, bodo.TimeType)
         )
-        or arr_typ == bodo.datetime_date_array_type
+        or arr_typ == bodo.types.datetime_date_array_type
     ):
         return NumericIndexType(arr_typ.dtype, name_typ, arr_typ)
 

@@ -91,7 +91,7 @@ def _get_type_max_value_overload(dtype):
         )  # pragma: no cover
 
     # datetime.date array
-    if dtype == bodo.datetime_date_array_type:
+    if dtype == bodo.types.datetime_date_array_type:
         return lambda dtype: _get_date_max_value()  # pragma: no cover
 
     # bodo.Time array
@@ -183,7 +183,7 @@ def _get_type_min_value_overload(dtype):
         )  # pragma: no cover
 
     # datetime.date array
-    if dtype == bodo.datetime_date_array_type:
+    if dtype == bodo.types.datetime_date_array_type:
         return lambda dtype: _get_date_min_value()  # pragma: no cover
 
     # bodo.Time array

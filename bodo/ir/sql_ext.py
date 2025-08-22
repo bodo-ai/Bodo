@@ -1253,7 +1253,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
             return f"timestamp '{filter_value.strftime('%Y-%m-%d %H:%M:%S.%f')}{nanosecond_prepend}{nanosecond}'::{tz_str}"  # pragma: no cover
 
         return impl
-    elif filter_type == bodo.datetime_date_type:
+    elif filter_type == bodo.types.datetime_date_type:
         # datetime.date needs to be converted to a date literal
         # Just return the string wrapped in quotes.
         # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#date
@@ -1282,7 +1282,7 @@ def _get_snowflake_sql_literal(filter_value):
     """
     scalar_isinstance = (types.Integer, types.Float, bodo.PandasTimestampType)
     scalar_equals = (
-        bodo.datetime_date_type,
+        bodo.types.datetime_date_type,
         types.unicode_type,
         types.bool_,
         bodo.types.datetime64ns,
@@ -1305,7 +1305,7 @@ def _get_snowflake_sql_literal(filter_value):
             bodo.types.string_array_type,
             bodo.dict_str_arr_type,
             bodo.boolean_array_type,
-            bodo.datetime_date_array_type,
+            bodo.types.datetime_date_array_type,
         )
     ) and (
         isinstance(filter_type.dtype, scalar_isinstance)

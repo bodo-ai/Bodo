@@ -261,7 +261,7 @@ def gen_snowflake_schema(
         elif col_type == bodo.datetime_datetime_type:
             precision = get_precision(col_idx)
             sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
-        elif col_type == bodo.datetime_date_array_type:
+        elif col_type == bodo.types.datetime_date_array_type:
             sf_schema[col_name] = "DATE"
         elif isinstance(col_type, bodo.TimeArrayType):
             # Note: The actual result may not match the precision
@@ -353,7 +353,7 @@ def gen_snowflake_schema(
                 raise_bodo_error("Nested MapArrayType is not supported.")
             sf_schema[col_name] = "OBJECT"
         # See https://bodo.atlassian.net/browse/BSE-1525
-        elif col_type == bodo.null_array_type:
+        elif col_type == bodo.types.null_array_type:
             sf_schema[col_name] = "VARCHAR"
         else:
             raise BodoError(

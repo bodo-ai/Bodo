@@ -930,7 +930,7 @@ def overload_array_compact_util(arr, is_scalar):
     arg_types = [arr, is_scalar]
     propagate_null = [True, False]
     if is_scalar_bool:
-        out_dtype = bodo.null_array_type
+        out_dtype = bodo.types.null_array_type
     else:
         out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(arr.dtype)
     scalar_text = "elems_to_keep = np.ones(len(arg0), dtype=np.bool_)\n"
@@ -1009,7 +1009,7 @@ def overload_array_remove_util(
     arg_types = [arr, to_remove, is_scalar_0, is_scalar_1]
     propagate_null = [True, True, False, False]
     if is_overload_none(arr):
-        out_dtype = bodo.null_array_type
+        out_dtype = bodo.types.null_array_type
     else:
         out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(
             arr.dtype if are_arrays[0] else arr
@@ -1138,7 +1138,7 @@ def overload_array_slice_util(arr, from_, to, is_scalar):  # pragma: no cover
     arg_types = [arr, from_, to, is_scalar]
     propagate_null = [True, True, True, False]
     if is_overload_none(arr):
-        out_dtype = bodo.null_array_type
+        out_dtype = bodo.types.null_array_type
     else:
         inner_arr_type = arr if is_scalar_bool else arr.dtype
         out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
@@ -1191,7 +1191,7 @@ def overload_to_object(data):  # pragma: no cover
                 types.DictType,
             ),
         )
-        or (data in (bodo.types.none, bodo.null_array_type))
+        or (data in (bodo.types.none, bodo.types.null_array_type))
         or (
             isinstance(data, types.optional)
             and isinstance(

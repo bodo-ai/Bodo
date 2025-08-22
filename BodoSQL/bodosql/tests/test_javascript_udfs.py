@@ -794,7 +794,7 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
         ),
         pytest.param(
             "return new Date('2021-01-01')",
-            bodo.datetime_date_array_type,
+            bodo.types.datetime_date_array_type,
             datetime.date(2021, 1, 1),
             id="date",
         ),

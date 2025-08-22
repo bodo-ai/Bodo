@@ -968,7 +968,7 @@ def dt_date_arr_setitem(A, idx, val):
             raise BodoError(typ_err_msg)
 
     if not (
-        (is_iterable_type(val) and val.dtype == bodo.datetime_date_type)
+        (is_iterable_type(val) and val.dtype == bodo.types.datetime_date_type)
         or types.unliteral(val) == datetime_date_type
     ):
         raise BodoError(typ_err_msg)

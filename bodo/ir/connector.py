@@ -865,12 +865,12 @@ def determine_filter_cast(
                     f"Cannot cast {type_name} values with isin filter pushdown."
                 )
             return col_cast, ".cast(pa.timestamp('ns'), safe=False)"
-        elif lhs_scalar_typ == bodo.datetime_date_type and rhs_scalar_typ in (
+        elif lhs_scalar_typ == bodo.types.datetime_date_type and rhs_scalar_typ in (
             bodo.types.datetime64ns,
             bodo.pd_timestamp_tz_naive_type,
         ):
             return ".cast(pa.timestamp('ns'), safe=False)", ""
-        elif rhs_scalar_typ == bodo.datetime_date_type and lhs_scalar_typ in (
+        elif rhs_scalar_typ == bodo.types.datetime_date_type and lhs_scalar_typ in (
             bodo.types.datetime64ns,
             bodo.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover

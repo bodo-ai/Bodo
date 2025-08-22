@@ -560,7 +560,7 @@ def array_to_info_codegen(context, builder, sig, args):
             )
 
     # null array
-    if arr_type == bodo.null_array_type:
+    if arr_type == bodo.types.null_array_type:
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         # TODO: Add a null dtype in C++. Since adding C++ support enables
         # passing the null array anywhere, including places where null arrays
@@ -1199,7 +1199,7 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         return context.get_constant_null(arr_type)
 
     # null array
-    if arr_type == bodo.null_array_type:
+    if arr_type == bodo.types.null_array_type:
         arr = cgutils.create_struct_proxy(arr_type)(context, builder)
         # Set the array as not empty
         arr.not_empty = lir.Constant(lir.IntType(1), 1)

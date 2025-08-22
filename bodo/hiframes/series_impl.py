@@ -1417,7 +1417,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
                 bodo.DatetimeArrayType,
             ),
         )
-        or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
+        or S.data in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmin() only supported for numeric array types. Array type: {S.data} not supported."
@@ -1477,7 +1477,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
                 bodo.DatetimeArrayType,
             ),
         )
-        or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
+        or S.data in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmax() only supported for numeric array types. Array type: {S.data} not supported."
@@ -1531,7 +1531,7 @@ def check_argmax_min_args(func_name, S):
                 bodo.DatetimeArrayType,
             ),
         )
-        or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
+        or S.data in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.{func_name}() only supported for numeric array types. Array type: {S.data} not supported."

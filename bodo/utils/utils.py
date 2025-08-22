@@ -300,8 +300,8 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
     ):
         return CArrayTypeEnum.STRING.value
     elif arr_type in (
-        bodo.null_array_type,
-        bodo.datetime_date_array_type,
+        bodo.types.null_array_type,
+        bodo.types.datetime_date_array_type,
         bodo.boolean_array_type,
     ) or isinstance(
         arr_type,
@@ -977,7 +977,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             dict_ref_arr=None: bodo.libs.str_arr_ext.pre_alloc_string_array(n, s[0])
         )  # pragma: no cover
 
-    if typ == bodo.null_array_type:
+    if typ == bodo.types.null_array_type:
         return (
             lambda n,
             t,

@@ -45,7 +45,7 @@ desired Python, Numpy, or Pandas type.
 | `bodo.boolean_array_type`| Array of Pandas nullable booleans|
 | `bodo.types.datetime64ns[:]`| Array of Numpy datetime64 values|
 | `bodo.types.timedelta64ns[:]`|Array of Numpy timedelta64 values|
-| `bodo.datetime_date_array_type`|Array of datetime.date types|
+| `bodo.types.datetime_date_array_type`|Array of datetime.date types|
 | `bodo.timedelta_array_type`|Array of datetime.timedelta types|
 | `bodo.DecimalArrayType(precision, scale)`| Array of Apache Arrow Decimal128 values with the given precision and scale. <br> *e.g.*, `bodo.DecimalArrayType(38, 18)`|
 | `bodo.types.binary_array_type`|Array of nullable bytes values|

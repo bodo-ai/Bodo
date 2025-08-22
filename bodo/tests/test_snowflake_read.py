@@ -987,7 +987,7 @@ def test_snowflake_runtime_downcasting_timestamp_fail(mocker: "MockerFixture"):
         return_value=(
             bodo.DataFrameType(
                 data=(
-                    bodo.datetime_date_array_type,
+                    bodo.types.datetime_date_array_type,
                     types.Array(bodo.types.datetime64ns, 1, "C"),
                     bodo.DatetimeArrayType("UTC"),
                 ),

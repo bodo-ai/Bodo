@@ -490,7 +490,7 @@ def _numba_to_pyarrow_type(
             dtype = pa.time64("us")
         elif numba_type.precision == 9:
             dtype = pa.time64("ns")
-    elif numba_type == bodo.null_array_type:
+    elif numba_type == bodo.types.null_array_type:
         dtype = pa.null()
     else:
         raise BodoError(
@@ -594,7 +594,7 @@ def pyarrow_type_to_numba(arrow_type):
         return bodo.DatetimeArrayType(arrow_type.tz)
 
     if pa.types.is_null(arrow_type):
-        return bodo.null_array_type
+        return bodo.types.null_array_type
 
     if pa.types.is_time64(arrow_type):
         precision = 9 if arrow_type.unit == "ns" else 6

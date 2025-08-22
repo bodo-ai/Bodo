@@ -805,7 +805,7 @@ def overload_get_field_util(data, field, is_scalar, ignore_case):
                     field_pos = i
                     break
         if field_pos == None:
-            out_dtype = bodo.null_array_type
+            out_dtype = bodo.types.null_array_type
             scalar_text += "bodo.libs.array_kernels.setna(res, i)\n"
         else:
             out_dtype = json_type.data[field_pos]
@@ -848,7 +848,7 @@ def overload_get_field_util(data, field, is_scalar, ignore_case):
             scalar_text += "else:\n"
             scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
     else:
-        out_dtype = bodo.null_array_type
+        out_dtype = bodo.types.null_array_type
         scalar_text += "bodo.libs.array_kernels.setna(res, i)\n"
 
     return gen_vectorized(
@@ -915,7 +915,7 @@ def overload_object_insert_util(
         json_type = json_type.data
 
     # If the input is null, just return it.
-    if json_type == bodo.types.none or json_type == bodo.null_array_type:
+    if json_type == bodo.types.none or json_type == bodo.types.null_array_type:
         return (
             lambda data, new_field_name, new_field_value, update, is_scalar: data
         )  # pragma: no cover
@@ -966,7 +966,7 @@ def overload_object_insert_util(
         # Determine whether the newly injected field is null.
         inserting_null = (
             new_field_value == bodo.types.none
-            or new_field_value == bodo.null_array_type
+            or new_field_value == bodo.types.null_array_type
         )
         if inserting_null:
             new_null_check = "True"
@@ -1015,7 +1015,7 @@ def overload_object_insert_util(
                     nulls.append(new_null_check)
                     if (
                         new_field_value == bodo.types.none
-                        or new_field_value == bodo.null_array_type
+                        or new_field_value == bodo.types.null_array_type
                     ):
                         # If replacing with null, keep the same dtype as before.
                         dtypes.append(original_types[i])

@@ -245,7 +245,7 @@ def overload_isna(arr, i):
         return lambda arr, i: np.isnat(arr._data[i])  # pragma: no cover
 
     # NullArrayType
-    if arr == bodo.null_array_type:
+    if arr == bodo.types.null_array_type:
         return lambda arr, i: True  # pragma: no cover
 
     # TODO: extend to other types (which ones are missing?)
@@ -1665,7 +1665,7 @@ def concat_overload(arr_list):
 
     if (
         isinstance(arr_list, (types.UniTuple, types.List))
-        and arr_list.dtype == bodo.null_array_type
+        and arr_list.dtype == bodo.types.null_array_type
     ):
 
         def null_array_concat_impl(arr_list):  # pragma: no cover
@@ -2829,7 +2829,9 @@ ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_gen_na_array = gen_na_arr
 
 def cast_null_arr(context, builder, fromty, toty, val):
     """Cast null array to any other nullable array"""
-    assert fromty == bodo.null_array_type, "cast_null_arr: null_array_type expected"
+    assert fromty == bodo.types.null_array_type, (
+        "cast_null_arr: null_array_type expected"
+    )
 
     if toty != bodo.utils.typing.to_nullable_type(toty):  # pragma: no cover
         raise BodoError(
@@ -2848,7 +2850,7 @@ def cast_null_arr(context, builder, fromty, toty, val):
 def _install_null_array_casts():
     """Install casting all Bodo arrays to null array"""
     for t in BODO_ARRAY_TYPE_CLASSES:
-        lower_cast(bodo.null_array_type, t)(cast_null_arr)
+        lower_cast(bodo.types.null_array_type, t)(cast_null_arr)
 
 
 _install_null_array_casts()

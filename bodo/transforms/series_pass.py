@@ -1260,10 +1260,12 @@ class SeriesPass:
             and (
                 isinstance(typ1, types.Array)
                 and typ1.dtype == bodo.types.datetime64ns
-                and typ2 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
+                and typ2
+                in (bodo.types.datetime_date_array_type, bodo.types.datetime_date_type)
             )
             or (
-                typ1 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
+                typ1
+                in (bodo.types.datetime_date_array_type, bodo.types.datetime_date_type)
                 and isinstance(typ2, types.Array)
                 and typ2.dtype == bodo.types.datetime64ns
             )

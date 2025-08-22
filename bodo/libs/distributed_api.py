@@ -503,7 +503,7 @@ def dist_reduce_impl(value, reduce_op, comm):
             types.int64,
             bodo.types.datetime64ns,
             bodo.types.timedelta64ns,
-            bodo.datetime_date_type,
+            bodo.types.datetime_date_type,
             bodo.TimeType,
         ]
 
@@ -1149,7 +1149,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return np.array([bodo.Time(3, precision=precision)], object)
 
     # NullArray
-    if dtype == bodo.null_array_type:
+    if dtype == bodo.types.null_array_type:
         return pd.arrays.ArrowExtensionArray(pa.nulls(1))
 
     # StructArray
@@ -1408,7 +1408,7 @@ class BcastScalarInfer(AbstractTemplate):
                 bodo.types.string_type,
                 types.none,
                 types.bool_,
-                bodo.datetime_date_type,
+                bodo.types.datetime_date_type,
                 bodo.timestamptz_type,
             ]
         ):
@@ -1436,7 +1436,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
         return impl
 
-    if val == bodo.datetime_date_type:
+    if val == bodo.types.datetime_date_type:
         c_type = numba_to_c_type(types.int32)
 
         # Note: There are issues calling this function with recursion.
@@ -1815,7 +1815,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return tz_aware_getitem_impl
 
-    if arr == bodo.null_array_type:
+    if arr == bodo.types.null_array_type:
 
         def null_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -1826,7 +1826,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return null_getitem_impl
 
-    if arr == bodo.datetime_date_array_type:
+    if arr == bodo.types.datetime_date_array_type:
 
         def date_getitem_impl(
             arr, ind, arr_start, total_len, is_1D

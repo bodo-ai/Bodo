@@ -1210,7 +1210,7 @@ def overload_arr_get_util(arr, ind, is_scalar_arr, is_scalar_idx):
 
     else:
         # In all other cases, return null
-        out_dtype = bodo.null_array_type
+        out_dtype = bodo.types.null_array_type
         scalar_text = "bodo.libs.array_kernels.setna(res, i)\n"
 
     return gen_vectorized(
@@ -1293,7 +1293,7 @@ def overload_get_ignore_case_util(arr, ind, is_scalar_arr, is_scalar_idx):
         return impl
     else:
         # In all other cases, return null
-        out_dtype = bodo.null_array_type
+        out_dtype = bodo.types.null_array_type
         scalar_text = "bodo.libs.array_kernels.setna(res, i)\n"
         return gen_vectorized(
             arg_names,

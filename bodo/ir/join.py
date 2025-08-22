@@ -2439,7 +2439,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
         in (
             bodo.libs.bool_arr_ext.boolean_array_type,
             bodo.types.binary_array_type,
-            bodo.datetime_date_array_type,
+            bodo.types.datetime_date_array_type,
         )
         or is_str_arr_type(col_array_dtype)
     ):
@@ -2586,7 +2586,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
             bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
         ),
     ) or col_dtype in [
-        bodo.datetime_date_type,
+        bodo.types.datetime_date_type,
         bodo.types.datetime64ns,
         bodo.types.timedelta64ns,
         types.bool_,
@@ -2840,7 +2840,7 @@ def _replace_column_accesses(
                 in (
                     bodo.libs.bool_arr_ext.boolean_array_type,
                     bodo.types.binary_array_type,
-                    bodo.datetime_date_array_type,
+                    bodo.types.datetime_date_array_type,
                 )
                 or is_str_arr_type(array_typ)
             ):
@@ -3443,7 +3443,7 @@ def _get_interval_join_info(
         or dtype
         in (
             bodo.types.datetime64ns,
-            bodo.datetime_date_type,
+            bodo.types.datetime_date_type,
             bodo.datetime_timedelta_type,
         )
     )

@@ -80,7 +80,7 @@ class SqlTypeEnum(Enum):
 
 # Scalar dtypes for supported Bodo Arrays
 _numba_to_sql_column_type_map = {
-    bodo.null_dtype: SqlTypeEnum.Null.value,
+    bodo.types.null_dtype: SqlTypeEnum.Null.value,
     types.int8: SqlTypeEnum.Int8.value,
     types.uint8: SqlTypeEnum.UInt8.value,
     types.int16: SqlTypeEnum.Int16.value,
@@ -98,7 +98,7 @@ _numba_to_sql_column_type_map = {
     bodo.types.bytes_type: SqlTypeEnum.Binary.value,
     # Note date doesn't have native support yet, but the code to
     # cast to datetime64 is handled in the Java code.
-    bodo.datetime_date_type: SqlTypeEnum.Date.value,
+    bodo.types.datetime_date_type: SqlTypeEnum.Date.value,
     bodo.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
 }
 

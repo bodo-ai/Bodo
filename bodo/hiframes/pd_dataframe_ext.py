@@ -5055,10 +5055,10 @@ def overload_union_dataframes(
                 ):
                     if col_typ not in (
                         bodo.types.string_array_type,
-                        bodo.null_array_type,
+                        bodo.types.null_array_type,
                     ) and other_col_typ not in (
                         bodo.types.string_array_type,
-                        bodo.null_array_type,
+                        bodo.types.null_array_type,
                     ):
                         # If one column is dict encoded the other column must be a string
                         # or null array.

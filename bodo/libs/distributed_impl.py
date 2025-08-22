@@ -1013,7 +1013,7 @@ def scatterv_impl_jit(
         return impl_interval_arr
 
     # NullArray
-    if data == bodo.null_array_type:
+    if data == bodo.types.null_array_type:
 
         def impl_null_arr(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
