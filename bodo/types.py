@@ -1,4 +1,6 @@
 import numba
+import bodo.numba_compat
+
 from numba.core.types import *  # noqa
 
 from numba.core.types import List

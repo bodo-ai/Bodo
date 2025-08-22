@@ -7,6 +7,7 @@ import operator
 
 import llvmlite.binding as ll
 import numba
+import numba.np.arrayobj
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types

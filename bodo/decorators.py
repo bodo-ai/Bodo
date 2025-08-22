@@ -594,6 +594,9 @@ def wrap_python(return_type: str | types.Type):
     return wrapper
 
 
+bodo.wrap_python = wrap_python
+
+
 class WrapPythonDispatcherType(numba.types.Callable, numba.types.Opaque):
     """Data type for JIT wrapper dispatcher."""
 

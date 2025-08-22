@@ -263,6 +263,12 @@ def is_jit_execution():  # pragma: no cover
     return False
 
 
+def wrap_python(*args, **kwargs):
+    # Import compiler lazily
+    from bodo.decorators import wrap_python as _wrap_python
+    return _wrap_python(*args, **kwargs)
+
+
 from bodo.numba_compat import jitclass
 
 
@@ -281,8 +287,6 @@ from bodo.libs.distributed_api import (
 
 from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 
-
-from bodo.decorators import wrap_python
 
 parquet_validate_schema = True
 
