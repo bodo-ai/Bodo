@@ -631,7 +631,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         if name_dtype == types.NPDatetime("ns"):
             name_dtype = bodo.pd_timestamp_tz_naive_type
         if name_dtype == types.NPTimedelta("ns"):
-            name_dtype = bodo.pd_timedelta_type
+            name_dtype = bodo.types.pd_timedelta_type
         if is_heterogeneous_tuple_type(data_type):
             row_typ = HeterogeneousSeriesType(nullable_dtype, index_type, name_dtype)
         else:

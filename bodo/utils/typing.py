@@ -1161,10 +1161,10 @@ def parse_dtype(dtype, func_name=None):
         bodo.types.string_type,
         bodo.types.bytes_type,
         bodo.types.datetime_date_type,
-        bodo.datetime_timedelta_type,
+        bodo.types.datetime_timedelta_type,
         bodo.types.null_dtype,
         bodo.pd_timestamp_tz_naive_type,
-        bodo.pd_timedelta_type,
+        bodo.types.pd_timedelta_type,
     ):
         return dtype
 
@@ -1802,7 +1802,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
 
     # pd.Timedelta/datetime.timedelta values are stored as td64 arrays
     if dtype in (
-        bodo.pd_timedelta_type,
+        bodo.types.pd_timedelta_type,
         bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type,
     ):
         return types.Array(bodo.types.timedelta64ns, 1, "C")
@@ -1898,7 +1898,7 @@ def is_hashable_type(t):
         types.bool_,
         bodo.types.datetime64ns,
         bodo.types.timedelta64ns,
-        bodo.pd_timedelta_type,
+        bodo.types.pd_timedelta_type,
     )
 
     if isinstance(t, whitelist_types) or (t in whitelist_instances):
@@ -2008,8 +2008,8 @@ def is_scalar_type(t: types.Type) -> bool:
         bodo.types.bytes_type,
         bodo.types.datetime_date_type,
         bodo.datetime_datetime_type,
-        bodo.datetime_timedelta_type,
-        bodo.pd_timedelta_type,
+        bodo.types.datetime_timedelta_type,
+        bodo.types.pd_timedelta_type,
         bodo.month_end_type,
         bodo.week_type,
         bodo.date_offset_type,
@@ -2102,7 +2102,7 @@ def get_common_scalar_dtype(
         t
         in (
             bodo.types.timedelta64ns,
-            bodo.pd_timedelta_type,
+            bodo.types.pd_timedelta_type,
         )
         for t in scalar_types
     ):

@@ -113,7 +113,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
                 if data.dtype == types.bool_:
                     output = bodo.boolean_array_type
                 elif data.dtype == bodo.types.timedelta64ns:
-                    output = bodo.timedelta_array_type
+                    output = bodo.types.timedelta_array_type
                 elif data.dtype == bodo.types.datetime64ns:
                     output = bodo.DatetimeArrayType(None)
                 elif isinstance(data.dtype, types.Float):
@@ -1214,7 +1214,7 @@ def overload_coerce_to_array(
         return impl_list_timestamp
 
     # Convert list of Timedeltas to td64 array
-    if isinstance(data, types.List) and data.dtype == bodo.pd_timedelta_type:
+    if isinstance(data, types.List) and data.dtype == bodo.types.pd_timedelta_type:
 
         def impl_list_timedelta(
             data,
@@ -1265,7 +1265,7 @@ def overload_coerce_to_array(
     # Timestamp/Timedelta scalars to array
     if not is_overload_none(scalar_to_arr_len) and data in [
         bodo.pd_timestamp_tz_naive_type,
-        bodo.pd_timedelta_type,
+        bodo.types.pd_timedelta_type,
     ]:
         _dtype = (
             "datetime64[ns]"
@@ -2253,7 +2253,7 @@ def overload_convert_to_td64ns(data):
 
     if (
         is_np_arr_typ(data, types.NPTimedelta("ns"))
-        or data == bodo.timedelta_array_type
+        or data == bodo.types.timedelta_array_type
     ):
         return lambda data: data  # pragma: no cover
 
@@ -2348,7 +2348,7 @@ def overload_index_from_array(data, name=None):
             data, name=name
         )  # pragma: no cover
 
-    if data.dtype in (types.NPTimedelta("ns"), bodo.pd_timedelta_type):
+    if data.dtype in (types.NPTimedelta("ns"), bodo.types.pd_timedelta_type):
         return lambda data, name=None: pd.TimedeltaIndex(
             data, name=name
         )  # pragma: no cover

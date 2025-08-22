@@ -4542,7 +4542,7 @@ def _validate_self_other_mask_where(
                 bodo.types.datetime64ns,
                 bodo.types.timedelta64ns,
                 bodo.pd_timestamp_tz_naive_type,
-                bodo.pd_timedelta_type,
+                bodo.types.pd_timedelta_type,
             ]
         )
     ):
@@ -4686,7 +4686,7 @@ def create_explicit_binary_op_overload(op):
             in (
                 datetime_timedelta_type,
                 bodo.types.timedelta64ns,
-                bodo.pd_timedelta_type,
+                bodo.types.pd_timedelta_type,
             )
         )
         is_other_datetime_iter = is_iterable_type(other) and (

@@ -740,7 +740,7 @@ def check_cross_join_coltypes(
     column is used in the condition.
     """
     for col_type in chain(left_col_types, right_col_types):
-        if col_type == bodo.timedelta_array_type or (
+        if col_type == bodo.types.timedelta_array_type or (
             isinstance(col_type, types.Array)
             and col_type.dtype == bodo.types.timedelta64ns
         ):
@@ -3444,7 +3444,7 @@ def _get_interval_join_info(
         in (
             bodo.types.datetime64ns,
             bodo.types.datetime_date_type,
-            bodo.datetime_timedelta_type,
+            bodo.types.datetime_timedelta_type,
         )
     )
     # TODO: We should eventually handle joins between nullable and non-nullable arrays

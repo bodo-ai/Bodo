@@ -98,12 +98,12 @@ class SeriesCmpOpTemplate(AbstractTemplate):
         # Timestamp and Timestamp need to be unboxed if compared to dt64/td64 array
         if lhs_arr in (
             bodo.pd_timestamp_tz_naive_type,
-            bodo.pd_timedelta_type,
+            bodo.types.pd_timedelta_type,
         ) and rhs_arr.dtype in (bodo.types.datetime64ns, bodo.types.timedelta64ns):
             lhs_arr = rhs_arr.dtype
         elif rhs_arr in (
             bodo.pd_timestamp_tz_naive_type,
-            bodo.pd_timedelta_type,
+            bodo.types.pd_timedelta_type,
         ) and lhs_arr.dtype in (bodo.types.datetime64ns, bodo.types.timedelta64ns):
             rhs_arr = lhs_arr.dtype
 

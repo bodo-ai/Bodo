@@ -1387,7 +1387,7 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible, SingleIndexT
     def iterator_type(self):
         # The underlying array is a timedelta64, but the data is
         # (and should be) boxed as a pd.Timedelta
-        return bodo.utils.typing.BodoArrayIterator(self, bodo.pd_timedelta_type)
+        return bodo.utils.typing.BodoArrayIterator(self, bodo.types.pd_timedelta_type)
 
     @property
     def pandas_type_name(self):
@@ -3251,7 +3251,7 @@ def array_type_to_index(arr_typ, name_typ=None):
     if isinstance(arr_typ, bodo.CategoricalArrayType):
         return CategoricalIndexType(arr_typ, name_typ)
 
-    if arr_typ.dtype in (types.NPTimedelta("ns"), bodo.pd_timedelta_type):
+    if arr_typ.dtype in (types.NPTimedelta("ns"), bodo.types.pd_timedelta_type):
         return TimedeltaIndexType(name_typ, arr_typ)
 
     if (
@@ -3664,7 +3664,9 @@ def overload_init_engine(I, ban_unique=True):
                         I._dict[val] = i
 
         return impl
-    elif isinstance(I, TimedeltaIndexType) and I.data == bodo.timedelta_array_type:
+    elif (
+        isinstance(I, TimedeltaIndexType) and I.data == bodo.types.timedelta_array_type
+    ):
 
         def impl(I, ban_unique=True):  # pragma: no cover
             if len(I) > 0 and not I._dict:

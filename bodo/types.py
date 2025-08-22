@@ -22,3 +22,8 @@ from bodo.hiframes.timestamptz_ext import (
     timestamptz_type,
     timestamptz_array_type,
 )
+from bodo.hiframes.datetime_timedelta_ext import (
+    datetime_timedelta_type,
+    timedelta_array_type,
+    pd_timedelta_type,
+)

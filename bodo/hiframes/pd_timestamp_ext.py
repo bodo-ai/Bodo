@@ -2332,7 +2332,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
 
             return impl_datetime_timedelta
 
-        if arg_a == bodo.timedelta_array_type:
+        if arg_a == bodo.types.timedelta_array_type:
 
             def impl_timedelta_arr(
                 arg_a, unit="ns", errors="raise"
