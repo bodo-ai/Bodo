@@ -915,7 +915,7 @@ def _get_agg_output_type(
         empty_in_col = pd.Series(_empty_pd_array(pa_type))
         out_numba_type = _get_scalar_udf_out_type(func.func, empty_in_col)
 
-        # Matches Pandas error without needint to falling back
+        # Matches Pandas error without the need to fall back.
         if (
             isinstance(out_numba_type, (bodo.SeriesType, bodo.DataFrameType))
             or is_array_typ(out_numba_type)
@@ -924,7 +924,8 @@ def _get_agg_output_type(
                 "Groupby.agg(): User defined function must produce aggregated value."
             )
 
-        # if result is None (due to gaps in numba to pyarrow type conversion, fallback to Pandas)
+        # If result is None (could not convert output type to pyarrow),
+        # fall back to Pandas.
         fallback = True
         new_type = _numba_type_to_pyarrow_type(out_numba_type)
     else:
