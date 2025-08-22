@@ -611,7 +611,7 @@ def overload_array_op_quantile(arr, q):
 
             return _impl_list_dt
 
-        if isinstance(arr, bodo.DatetimeArrayType):
+        if isinstance(arr, bodo.types.DatetimeArrayType):
             tz = arr.tz
 
             def _impl_list_dt_tz(arr, q):  # pragma: no cover
@@ -648,7 +648,7 @@ def overload_array_op_quantile(arr, q):
 
         return _impl_dt
 
-    if isinstance(arr, bodo.DatetimeArrayType):
+    if isinstance(arr, bodo.types.DatetimeArrayType):
         tz = arr.tz
 
         def _impl_dt_tz(arr, q):  # pragma: no cover

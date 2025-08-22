@@ -350,7 +350,7 @@ def _gen_json_reader_py(
             "pd": pd,
             "np": np,
             "check_java_installation": check_java_installation,
-            "df_typeref": bodo.DataFrameType(
+            "df_typeref": bodo.types.DataFrameType(
                 tuple(col_typs), bodo.RangeIndexType(None), tuple(col_names)
             ),
             "get_storage_options_pyobject": get_storage_options_pyobject,

@@ -115,7 +115,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
                 elif data.dtype == bodo.types.timedelta64ns:
                     output = bodo.types.timedelta_array_type
                 elif data.dtype == bodo.types.datetime64ns:
-                    output = bodo.DatetimeArrayType(None)
+                    output = bodo.types.DatetimeArrayType(None)
                 elif isinstance(data.dtype, types.Float):
                     output = bodo.types.FloatingArrayType(data.dtype)
                 else:  # Integer case
@@ -738,14 +738,14 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
 
         return impl
 
-    if isinstance(_arr_typ, bodo.MapArrayType):
+    if isinstance(_arr_typ, bodo.types.MapArrayType):
 
         def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
             return bodo.libs.map_arr_ext.scalar_to_map_array(scalar, length, _arr_typ)
 
         return impl
 
-    if isinstance(_arr_typ, bodo.StructArrayType):
+    if isinstance(_arr_typ, bodo.types.StructArrayType):
 
         def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
             return bodo.libs.struct_arr_ext.scalar_to_struct_array(
@@ -857,9 +857,9 @@ def overload_coerce_to_array(
                 data.data,
                 (
                     ArrayItemArrayType,
-                    bodo.TupleArrayType,
-                    bodo.StructArrayType,
-                    bodo.MapArrayType,
+                    bodo.types.TupleArrayType,
+                    bodo.types.StructArrayType,
+                    bodo.types.MapArrayType,
                 ),
             )
             or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(data)
@@ -913,7 +913,7 @@ def overload_coerce_to_array(
 
         return impl_array_item_array_to_nullable
 
-    if isinstance(data, bodo.StructArrayType) and not is_overload_none(
+    if isinstance(data, bodo.types.StructArrayType) and not is_overload_none(
         use_nullable_array
     ):
         # Convert inner types to nullable
@@ -966,7 +966,7 @@ def overload_coerce_to_array(
 
         return bodo.utils.utils.bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
 
-    if isinstance(data, bodo.TupleArrayType) and not is_overload_none(
+    if isinstance(data, bodo.types.TupleArrayType) and not is_overload_none(
         use_nullable_array
     ):
         # Convert inner types to nullable
@@ -985,7 +985,9 @@ def overload_coerce_to_array(
 
         return impl_tuple_array_to_nullable
 
-    if isinstance(data, bodo.MapArrayType) and not is_overload_none(use_nullable_array):
+    if isinstance(data, bodo.types.MapArrayType) and not is_overload_none(
+        use_nullable_array
+    ):
         # Convert inner types to nullable
 
         def impl_map_array_to_nullable(
@@ -1433,9 +1435,9 @@ def overload_fix_arr_dtype(
                 return new_data
 
             return impl
-    elif isinstance(data, bodo.StructArrayType):
+    elif isinstance(data, bodo.types.StructArrayType):
         nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
-        if not isinstance(nb_dtype, bodo.StructArrayType):
+        if not isinstance(nb_dtype, bodo.types.StructArrayType):
             raise BodoError(
                 f"Both source and target types must be StructArrayType! Got {data} and {nb_dtype} instead."
             )
@@ -1504,10 +1506,10 @@ def overload_fix_arr_dtype(
         )
         return loc_vars["impl"]
 
-    elif isinstance(data, bodo.MapArrayType):
+    elif isinstance(data, bodo.types.MapArrayType):
         nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
 
-        if not isinstance(nb_dtype, bodo.MapArrayType):
+        if not isinstance(nb_dtype, bodo.types.MapArrayType):
             raise BodoError(
                 f"Both source and target types must be MapArrayType! Got {data} and {nb_dtype} instead."
             )

@@ -769,7 +769,7 @@ def add_interval_util(start_dt, interval):
             scalar_text += "offset = deltas[start_trans] - deltas[end_trans]\n"
             scalar_text += "arg1 = pd.Timedelta(end_value - start_value + offset)\n"
         scalar_text += "res[i] = arg0 + arg1\n"
-        out_dtype = bodo.DatetimeArrayType(time_zone)
+        out_dtype = bodo.types.DatetimeArrayType(time_zone)
     elif is_valid_timestamptz_arg(start_dt):
         # For TIMESTAMP_TZ, add the timedelta to the local timestamp, then create
         # a new TIMESTAMP_TZ from that local timestamp and the original offset.
@@ -1093,7 +1093,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
             # Add the calculated timedelta to the original timestamp
             scalar_text += "res[i] = arg1 + td\n"
 
-            out_dtype = bodo.DatetimeArrayType(time_zone)
+            out_dtype = bodo.types.DatetimeArrayType(time_zone)
 
         # Code path generated for timezone-native data by directly adding to
         # a DateOffset or TimeDelta with the corresponding units
@@ -1957,7 +1957,7 @@ def overload_date_trunc_util(
             out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
         else:
             scalar_text += "in_val = arg1\n"
-            out_dtype = bodo.DatetimeArrayType(tz_literal)
+            out_dtype = bodo.types.DatetimeArrayType(tz_literal)
 
         scalar_text += "if part_str == 'quarter':\n"
         scalar_text += "    out_val = pd.Timestamp(year=in_val.year, month= (3*(in_val.quarter - 1)) + 1, day=1, tz=tz_literal)\n"
@@ -2114,7 +2114,7 @@ def construct_timestamp_util(
     if tz is None:
         out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
     else:
-        out_dtype = bodo.DatetimeArrayType(tz)
+        out_dtype = bodo.types.DatetimeArrayType(tz)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -2284,7 +2284,7 @@ def timestamp_from_date_and_time_util(date_expr, time_expr):
     ts += ", nanosecond=arg1.nanosecond)"
     scalar_text += f"res[i] = {ts}\n"
 
-    out_dtype = bodo.DatetimeArrayType(None)
+    out_dtype = bodo.types.DatetimeArrayType(None)
 
     return gen_vectorized(
         arg_names,
@@ -3025,7 +3025,7 @@ def overload_tz_aware_interval_add_util(tz_arg, interval_arg):
     arg_types = [tz_arg, interval_arg]
     propagate_null = [True, True]
     if timezone is not None:
-        out_dtype = bodo.DatetimeArrayType(timezone)
+        out_dtype = bodo.types.DatetimeArrayType(timezone)
     else:
         # Handle a default case if the timezone value is NA.
         # Note this doesn't matter because we will output NA.
@@ -4120,7 +4120,7 @@ def add_months_util(dt0, num_months):
     scalar_text += "  new_arg = arg0 + pd.DateOffset(months=arg1)\n"
 
     if time_zone is not None:
-        out_dtype = bodo.DatetimeArrayType(time_zone)
+        out_dtype = bodo.types.DatetimeArrayType(time_zone)
         scalar_text += "res[i] = new_arg\n"
     else:
         if is_valid_date_arg(dt0):

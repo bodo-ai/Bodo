@@ -314,8 +314,8 @@ class JoinStateType(StreamingStateType):
         if all(t == input_types[0] for t in input_types):
             return input_types[0]
 
-        if isinstance(input_types[0], bodo.MapArrayType):
-            assert all(isinstance(t, bodo.MapArrayType) for t in input_types), (
+        if isinstance(input_types[0], bodo.types.MapArrayType):
+            assert all(isinstance(t, bodo.types.MapArrayType) for t in input_types), (
                 f"StreamingHashJoin: Cannot unify Map array with non-Map arrays! {input_types=}"
             )
             common_key_arr_type = JoinStateType._derive_common_key_type(
@@ -324,7 +324,7 @@ class JoinStateType(StreamingStateType):
             common_value_arr_types = JoinStateType._derive_common_key_type(
                 [t.value_arr_type for t in input_types]
             )
-            return bodo.MapArrayType(common_key_arr_type, common_value_arr_types)
+            return bodo.types.MapArrayType(common_key_arr_type, common_value_arr_types)
 
         if isinstance(input_types[0], bodo.types.ArrayItemArrayType):
             assert all(
@@ -338,8 +338,10 @@ class JoinStateType(StreamingStateType):
             )
             return bodo.types.ArrayItemArrayType(common_element_type)
 
-        if isinstance(input_types[0], bodo.StructArrayType):
-            assert all(isinstance(t, bodo.StructArrayType) for t in input_types), (
+        if isinstance(input_types[0], bodo.types.StructArrayType):
+            assert all(
+                isinstance(t, bodo.types.StructArrayType) for t in input_types
+            ), (
                 f"StreamingHashJoin: Cannot unify Struct array with non-Struct arrays! {input_types=}"
             )
             n_fields = len(input_types[0].data)
@@ -354,7 +356,7 @@ class JoinStateType(StreamingStateType):
                         [t.data[i] for t in input_types]
                     )
                 )
-            return bodo.StructArrayType(tuple(common_field_types), field_names)
+            return bodo.types.StructArrayType(tuple(common_field_types), field_names)
 
         # Handle non-nested types:
         are_bodosql_integer_arr_types = [
@@ -1620,7 +1622,7 @@ def overload_runtime_join_filter(
             or isinstance(
                 arr_type,
                 (
-                    bodo.MapArrayType,
+                    bodo.types.MapArrayType,
                     bodo.types.ArrayItemArrayType,
                 ),
             )

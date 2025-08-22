@@ -557,7 +557,7 @@ def create_timestamp_cast_util(func, error_on_fail):
         # Determine the output dtype. If a timezone is provided then we have a
         # tz-aware output. Otherwise we output datetime64ns.
         if time_zone is not None:
-            out_dtype = bodo.DatetimeArrayType(time_zone)
+            out_dtype = bodo.types.DatetimeArrayType(time_zone)
         else:
             out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
 
@@ -1077,7 +1077,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
         scalar_text += f"  res[i] = '{np.iinfo(int_types[inner_type.bitwidth]).min}'\n"
         scalar_text += "else:\n"
         scalar_text += "  res[i] = str(arg0)"
-    elif isinstance(inner_type, bodo.StructType):
+    elif isinstance(inner_type, bodo.types.StructType):
         scalar_text = "arr_str = ''\n"
         for i in range(len(inner_type.names)):
             name_w_quotes = '"' + inner_type.names[i] + '"'
@@ -1625,7 +1625,7 @@ def overload_cast_tz_naive_to_tz_aware_util(arr, tz):
     )
     scalar_text = f"res[i] = {box_str}(arg0).tz_localize(arg1)"
     tz = get_literal_value(tz)
-    out_dtype = bodo.DatetimeArrayType(tz)
+    out_dtype = bodo.types.DatetimeArrayType(tz)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1671,7 +1671,7 @@ def overload_cast_date_to_tz_aware_util(arr, tz):
     propagate_null = [True, False]
     scalar_text = "res[i] = pd.Timestamp(arg0).tz_localize(arg1)"
     tz = get_literal_value(tz)
-    out_dtype = bodo.DatetimeArrayType(tz)
+    out_dtype = bodo.types.DatetimeArrayType(tz)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1770,7 +1770,7 @@ def overload_cast_str_to_tz_aware_util(arr, tz, dict_encoding_state, func_id):
     # Note: pd.to_datetime doesn't support tz as an argument.
     scalar_text = "res[i] = pd.to_datetime(arg0).tz_localize(arg1)"
     tz = get_literal_value(tz)
-    out_dtype = bodo.DatetimeArrayType(tz)
+    out_dtype = bodo.types.DatetimeArrayType(tz)
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,

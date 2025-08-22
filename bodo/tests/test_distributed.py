@@ -3103,7 +3103,7 @@ def test_dist_flag_info_propagation(memory_leak_check):
 def test_dist_scalar_struct_to_arr(memory_leak_check):
     """Make sure coerce_scalar_to_array for struct array works for distributed output"""
 
-    global_1 = bodo.StructArrayType(
+    global_1 = bodo.types.StructArrayType(
         (
             bodo.types.IntegerArrayType(bodo.types.int64),
             bodo.bodo.types.IntegerArrayType(bodo.types.int32),
@@ -3128,7 +3128,7 @@ def test_dist_scalar_struct_to_arr(memory_leak_check):
 def test_dist_scalar_map_to_arr(memory_leak_check):
     """Make sure coerce_scalar_to_array for map array works for distributed output"""
 
-    global_1 = bodo.MapArrayType(
+    global_1 = bodo.types.MapArrayType(
         bodo.types.IntegerArrayType(bodo.types.int64),
         bodo.bodo.types.IntegerArrayType(bodo.types.int32),
     )
@@ -3234,16 +3234,16 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
 @pytest.mark.parametrize(
     "dtype",
     [
-        bodo.MapArrayType(
+        bodo.types.MapArrayType(
             bodo.types.dict_str_arr_type,
             bodo.types.FloatingArrayType(bodo.types.float32),
         ),
-        bodo.StructArrayType(
+        bodo.types.StructArrayType(
             (
                 bodo.types.ArrayItemArrayType(bodo.types.dict_str_arr_type),
-                bodo.MapArrayType(
+                bodo.types.MapArrayType(
                     bodo.types.IntegerArrayType(bodo.types.int32),
-                    bodo.DatetimeArrayType(None),
+                    bodo.types.DatetimeArrayType(None),
                 ),
             ),
             ("A", "B"),

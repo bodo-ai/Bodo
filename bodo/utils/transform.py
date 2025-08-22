@@ -1081,7 +1081,7 @@ def get_const_value_inner(
         }
         return getattr(val, call_name[0])(*args, **kws)
 
-    # bodo data type calls like bodo.DataFrameType()
+    # bodo data type calls like bodo.types.DataFrameType()
     if (
         call_name is not None
         and len(call_name) == 2

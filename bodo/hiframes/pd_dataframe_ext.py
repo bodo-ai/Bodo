@@ -626,7 +626,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         )
         data_type = types.BaseTuple.from_types(dtypes)
         null_tup_type = types.Tuple([types.bool_] * len(data_type))
-        nullable_dtype = bodo.NullableTupleType(data_type, null_tup_type)
+        nullable_dtype = bodo.types.NullableTupleType(data_type, null_tup_type)
         name_dtype = df.index.dtype
         if name_dtype == types.NPDatetime("ns"):
             name_dtype = bodo.types.pd_timestamp_tz_naive_type
@@ -1901,7 +1901,7 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
     data_arrs = []
     for i in range(n_cols):
         col = pyval.iloc[:, i]
-        if isinstance(df_type.data[i], bodo.DatetimeArrayType):
+        if isinstance(df_type.data[i], bodo.types.DatetimeArrayType):
             # TODO [BE-2441]: Unify?
             py_arr = col.array
         else:

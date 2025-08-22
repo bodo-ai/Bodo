@@ -64,14 +64,16 @@ def overload_parse_url_util(data, permissive_flag):
     child_types = (
         bodo.types.string_array_type,
         bodo.types.string_array_type,
-        bodo.MapArrayType(bodo.types.string_array_type, bodo.types.string_array_type),
+        bodo.types.MapArrayType(
+            bodo.types.string_array_type, bodo.types.string_array_type
+        ),
         bodo.types.string_array_type,
         bodo.types.string_array_type,
         bodo.types.string_array_type,
         bodo.types.string_array_type,
     )
 
-    out_dtype = bodo.StructArrayType(tuple(child_types), field_names)
+    out_dtype = bodo.types.StructArrayType(tuple(child_types), field_names)
     arg_names = ["data", "permissive_flag"]
     arg_types = [data, permissive_flag]
     propagate_null = [True, False]

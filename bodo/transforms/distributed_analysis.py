@@ -555,10 +555,12 @@ class DistributedAnalysis:
                     else:
                         code_expr = "is not None"
                         pandas_fn = "notna"
-                    if isinstance(arg1_typ, (bodo.DataFrameType, bodo.SeriesType)):
+                    if isinstance(
+                        arg1_typ, (bodo.types.DataFrameType, bodo.types.SeriesType)
+                    ):
                         obj_name = (
                             "DataFrame"
-                            if isinstance(arg1_typ, bodo.DataFrameType)
+                            if isinstance(arg1_typ, bodo.types.DataFrameType)
                             else "Series"
                         )
                         warning_msg = f"User code checks if a {obj_name} {code_expr} at {arg1.loc}. This checks that the {obj_name} object {code_expr}, not the contents, and is a common bug. To check the contents, please use '{obj_name}.{pandas_fn}()'."
@@ -3503,7 +3505,7 @@ class DistributedAnalysis:
                 array_dists[in_list] = out_dist
             return
 
-        if isinstance(in_type, bodo.NullableTupleType):
+        if isinstance(in_type, bodo.types.NullableTupleType):
             nullable_tup_def = guard(get_definition, self.func_ir, args[0])
             assert (
                 isinstance(nullable_tup_def, ir.Expr) and nullable_tup_def.op == "call"

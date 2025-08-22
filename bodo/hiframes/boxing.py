@@ -1377,7 +1377,7 @@ def box_series(typ, val, c):
 
     # call pd.Series()
     if isinstance(typ, HeterogeneousSeriesType) and isinstance(
-        typ.data, bodo.NullableTupleType
+        typ.data, bodo.types.NullableTupleType
     ):
         # Use object value to preserve NA values (i.e None)
         dtype = c.pyapi.unserialize(c.pyapi.serialize_object(object))
@@ -1391,7 +1391,7 @@ def box_series(typ, val, c):
     c.pyapi.decref(name_obj)
     # Decref object if used.
     if isinstance(typ, HeterogeneousSeriesType) and isinstance(
-        typ.data, bodo.NullableTupleType
+        typ.data, bodo.types.NullableTupleType
     ):
         c.pyapi.decref(dtype)
 
@@ -1749,7 +1749,7 @@ def _infer_ndarray_obj_dtype(val):
             dtype = bodo.types.dict_str_arr_type
         return ArrayItemArrayType(dtype)
     if isinstance(first_val, pd.Timestamp):
-        return bodo.DatetimeArrayType(first_val.tz)
+        return bodo.types.DatetimeArrayType(first_val.tz)
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
     if isinstance(first_val, datetime.timedelta):

@@ -3229,8 +3229,8 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
                 raise BodoError(
                     (
                         f"objmode type annotations require full data types, not just data type "
-                        f"classes. For example, 'bodo.DataFrameType((bodo.types.float64[::1],), "
-                        f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
+                        f"classes. For example, 'bodo.types.DataFrameType((bodo.types.float64[::1],), "
+                        f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.types.DataFrameType' is not.\n"
                         f"Variable {k} is annotated as type class {v_const}."
                     )
                 )

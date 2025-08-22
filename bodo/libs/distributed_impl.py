@@ -485,7 +485,7 @@ def gatherv_impl_jit(
 
         return impl_cat
 
-    if isinstance(data, bodo.MatrixType):
+    if isinstance(data, bodo.types.MatrixType):
 
         def impl_matrix(
             data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
@@ -1367,7 +1367,7 @@ def scatterv_impl_jit(
         return impl_dict
 
     # StructArray
-    if isinstance(data, bodo.StructArrayType):
+    if isinstance(data, bodo.types.StructArrayType):
         n_fields = len(data.data)
         func_text = f"def impl_struct(data, send_counts=None, warn_if_dist=True, root={DEFAULT_ROOT}, comm=0):\n"
         func_text += "  inner_data_arrs = bodo.libs.struct_arr_ext.get_data(data)\n"
@@ -1403,7 +1403,7 @@ def scatterv_impl_jit(
         return impl_struct
 
     # MapArrayType
-    if isinstance(data, bodo.MapArrayType):
+    if isinstance(data, bodo.types.MapArrayType):
 
         def impl(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
@@ -1419,7 +1419,7 @@ def scatterv_impl_jit(
         return impl
 
     # TupleArray
-    if isinstance(data, bodo.TupleArrayType):
+    if isinstance(data, bodo.types.TupleArrayType):
 
         def impl_tuple(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
@@ -1440,7 +1440,7 @@ def scatterv_impl_jit(
             comm=0: None
         )
 
-    if isinstance(data, bodo.MatrixType):
+    if isinstance(data, bodo.types.MatrixType):
 
         def impl_matrix(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0

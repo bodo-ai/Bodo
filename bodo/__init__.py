@@ -260,16 +260,6 @@ from bodo.libs.distributed_api import (
     scatterv,
 )
 
-
-from bodo.libs.map_arr_ext import MapArrayType, MapScalarType
-from bodo.libs.nullable_tuple_ext import NullableTupleType
-from bodo.libs.struct_arr_ext import StructArrayType, StructType
-from bodo.libs.tuple_arr_ext import TupleArrayType
-from bodo.libs.csr_matrix_ext import CSRMatrixType
-from bodo.libs.matrix_ext import MatrixType
-from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType, pd_datetime_tz_naive_type
-from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,
     NumericIndexType,

@@ -189,7 +189,7 @@ def overload_object_construct(values, names, scalars):
     )
 
     # TODO: optimize so the keys are dictionary encoded
-    out_dtype = bodo.MapArrayType(bodo.types.string_array_type, combined_dtype)
+    out_dtype = bodo.types.MapArrayType(bodo.types.string_array_type, combined_dtype)
 
     propagate_null = [False] * len(arg_names)
 
@@ -237,7 +237,7 @@ def overload_object_construct(values, names, scalars):
     scalar_text += "write_idx = 0\n"
     for i in range(len(values)):
         scalar_text += f"if pairs_to_keep[{i}]:\n"
-        if isinstance(values[i], bodo.MapArrayType):
+        if isinstance(values[i], bodo.types.MapArrayType):
             prefix_code += f"  in_offsets_{i} = bodo.libs.array_item_arr_ext.get_offsets(v{i}._data)\n"
             prefix_code += f"  in_struct_arr_{i} = bodo.libs.array_item_arr_ext.get_data(v{i}._data)\n"
             scalar_text += f"  start_offset_{i} = in_offsets_{i}[np.int64(i)]\n"
@@ -371,7 +371,7 @@ def detect_coalesce_casting(arg_types, arg_names):
         return (True, out_dtype, "".join(casts))
     # Case 2: mix of tz-aware and date
     if np.all(tz_aware | date):
-        out_dtype = bodo.DatetimeArrayType(time_zone)
+        out_dtype = bodo.types.DatetimeArrayType(time_zone)
         casts = [
             f"{arg_names[i]} = bodosql.kernels.to_timestamp({arg_names[i]}, None, {repr(time_zone)}, 0)\n"
             for i in range(n)
@@ -454,7 +454,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
                 typ == bodo.types.string_type
                 or typ == bodo.types.dict_str_arr_type
                 or (
-                    isinstance(typ, bodo.SeriesType)
+                    isinstance(typ, bodo.types.SeriesType)
                     and typ.data == bodo.types.dict_str_arr_type
                 )
             )
@@ -906,7 +906,7 @@ def overload_object_filter_keys_util(A, keep_keys, scalars):
     extra_globals = {}
 
     if isinstance(
-        json_type, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+        json_type, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
     ):
         # Generated code for when the json data is a struct array or struct scalar.
 
@@ -952,10 +952,10 @@ def overload_object_filter_keys_util(A, keep_keys, scalars):
         else:
             scalar_text = "null_vector = np.empty(0, dtype=np.bool_)\n"
         scalar_text += f"res[i] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({', '.join(data)}{',' if len(data) else ''}), null_vector, names)"
-        out_dtype = bodo.StructArrayType(tuple(dtypes), tuple(names))
+        out_dtype = bodo.types.StructArrayType(tuple(dtypes), tuple(names))
         extra_globals["names"] = bodo.utils.typing.ColNamesMetaType(tuple(names))
 
-    elif isinstance(json_type, (bodo.MapArrayType, bodo.MapScalarType)):
+    elif isinstance(json_type, (bodo.types.MapArrayType, bodo.types.MapScalarType)):
         keep_condition = "in" if keep_mode else "not in"
 
         # Generated code for when the json data comes from a MapArray or a scalar dictionary.

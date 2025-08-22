@@ -242,7 +242,7 @@ def gen_pandas_parquet_metadata_template(
             continue
         # Currently only timezone types contain metadata
         metadata = None
-        if isinstance(col_type, bodo.DatetimeArrayType):
+        if isinstance(col_type, bodo.types.DatetimeArrayType):
             pandas_type = "datetimetz"
             numpy_type = "datetime64[ns]"
             # Reuse pyarrow to construct the metadata.
@@ -295,8 +295,8 @@ def gen_pandas_parquet_metadata_template(
             col_type,
             (
                 bodo.types.ArrayItemArrayType,
-                bodo.StructArrayType,
-                bodo.MapArrayType,
+                bodo.types.StructArrayType,
+                bodo.types.MapArrayType,
             ),
         ):
             # TODO: provide meaningful pandas_type when possible.

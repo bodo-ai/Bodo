@@ -260,11 +260,13 @@ def numba_to_c_types(
     """
     c_types = []
     for arr_type in arr_types:
-        if isinstance(arr_type, (bodo.StructArrayType, bodo.TupleArrayType)):
+        if isinstance(
+            arr_type, (bodo.types.StructArrayType, bodo.types.TupleArrayType)
+        ):
             c_types.append(CTypeEnum.STRUCT.value)
             c_types.append(len(arr_type.data))
             c_types.extend(numba_to_c_types(arr_type.data))
-        elif isinstance(arr_type, bodo.MapArrayType):
+        elif isinstance(arr_type, bodo.types.MapArrayType):
             c_types.append(CTypeEnum.Map.value)
             c_types.extend(
                 numba_to_c_types((arr_type.key_arr_type, arr_type.value_arr_type))
@@ -310,7 +312,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
             bodo.types.FloatingArrayType,
             bodo.types.TimeArrayType,
             bodo.types.DecimalArrayType,
-            bodo.DatetimeArrayType,
+            bodo.types.DatetimeArrayType,
         ),
     ):
         return CArrayTypeEnum.NULLABLE_INT_BOOL.value
@@ -340,11 +342,13 @@ def numba_to_c_array_types(
     """
     c_arr_types = []
     for arr_type in arr_types:
-        if isinstance(arr_type, (bodo.StructArrayType, bodo.TupleArrayType)):
+        if isinstance(
+            arr_type, (bodo.types.StructArrayType, bodo.types.TupleArrayType)
+        ):
             c_arr_types.append(CArrayTypeEnum.STRUCT.value)
             c_arr_types.append(len(arr_type.data))
             c_arr_types.extend(numba_to_c_array_types(arr_type.data))
-        elif isinstance(arr_type, bodo.MapArrayType):
+        elif isinstance(arr_type, bodo.types.MapArrayType):
             c_arr_types.append(CArrayTypeEnum.MAP.value)
             c_arr_types.extend(
                 numba_to_c_array_types((arr_type.key_arr_type, arr_type.value_arr_type))
@@ -1133,7 +1137,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             )
         )  # pragma: no cover
 
-    if isinstance(typ, bodo.DatetimeArrayType) or isinstance(
+    if isinstance(typ, bodo.types.DatetimeArrayType) or isinstance(
         type,
         (
             PandasTimestampType,

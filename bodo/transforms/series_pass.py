@@ -563,7 +563,7 @@ class SeriesPass:
         # optimize out getitem on build_nullable_tuple,
         # important for df.apply since the row is converted
         # to a nullable tuple.
-        if isinstance(target_typ, bodo.NullableTupleType) and isinstance(
+        if isinstance(target_typ, bodo.types.NullableTupleType) and isinstance(
             idx_typ, types.IntegerLiteral
         ):
             val_def = guard(get_definition, self.func_ir, rhs.value)
@@ -1160,8 +1160,8 @@ class SeriesPass:
 
         # Add for tz-aware
         if rhs.fn == operator.add and (
-            isinstance(typ1, bodo.DatetimeArrayType)
-            or isinstance(typ2, bodo.DatetimeArrayType)
+            isinstance(typ1, bodo.types.DatetimeArrayType)
+            or isinstance(typ2, bodo.types.DatetimeArrayType)
         ):
             impl = bodo.libs.pd_datetime_arr_ext.overload_add_operator_datetime_arr(
                 typ1, typ2
@@ -2112,7 +2112,9 @@ class SeriesPass:
             # TODO: Remove static_getitem from Numba
             if (is_expr(obj_def, "getitem") or is_expr(obj_def, "static_getitem")) and (
                 is_array_typ(self.typemap[obj_def.value.name], False)
-                or isinstance(self.typemap[obj_def.value.name], bodo.NullableTupleType)
+                or isinstance(
+                    self.typemap[obj_def.value.name], bodo.types.NullableTupleType
+                )
             ):
                 if is_expr(obj_def, "getitem"):
                     index_var = obj_def.index
@@ -2135,7 +2137,7 @@ class SeriesPass:
                 impl = bodo.libs.array_kernels.overload_isna(*arg_typs)
                 return replace_func(self, impl, rhs.args)
             # Optimize out the nullable tuple if using a static index
-            if isinstance(arr_typ, bodo.NullableTupleType) and isinstance(
+            if isinstance(arr_typ, bodo.types.NullableTupleType) and isinstance(
                 self.typemap[rhs.args[1].name], types.IntegerLiteral
             ):
                 val_def = guard(get_definition, self.func_ir, arr)
@@ -2510,7 +2512,7 @@ class SeriesPass:
                     self,
                     extra_globals={"_precision": precision, "_scale": scale},
                 )
-            elif isinstance(typ, bodo.DatetimeArrayType):
+            elif isinstance(typ, bodo.types.DatetimeArrayType):
                 tz = typ.tz
                 return nodes + compile_func_single_block(
                     eval(

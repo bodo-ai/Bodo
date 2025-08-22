@@ -2491,11 +2491,11 @@ def overload_dataframe_drop_duplicates(
     dict_cols = []
     if subset_idx:
         for col_idx in subset_idx:
-            if isinstance(df.data[col_idx], bodo.MapArrayType):
+            if isinstance(df.data[col_idx], bodo.types.MapArrayType):
                 dict_cols.append(df.columns[col_idx])
     else:
         for i, col_name in enumerate(df.columns):
-            if isinstance(df.data[i], bodo.MapArrayType):
+            if isinstance(df.data[i], bodo.types.MapArrayType):
                 dict_cols.append(col_name)
     if dict_cols:
         raise BodoError(
@@ -3622,7 +3622,7 @@ def common_validate_merge_merge_asof_spec(
         FloatingArrayType,
         DecimalArrayType,
         IntervalArrayType,
-        bodo.DatetimeArrayType,
+        bodo.types.DatetimeArrayType,
         TimeArrayType,
     )
     valid_dataframe_column_insts = {
@@ -4299,9 +4299,9 @@ def pivot_error_checking(df, index, columns, values, func_name):
             index_column,
             (
                 bodo.types.ArrayItemArrayType,
-                bodo.MapArrayType,
-                bodo.StructArrayType,
-                bodo.TupleArrayType,
+                bodo.types.MapArrayType,
+                bodo.types.StructArrayType,
+                bodo.types.TupleArrayType,
                 bodo.types.IntervalArrayType,
             ),
         ):
@@ -4339,9 +4339,9 @@ def pivot_error_checking(df, index, columns, values, func_name):
         columns_column,
         (
             bodo.types.ArrayItemArrayType,
-            bodo.MapArrayType,
-            bodo.StructArrayType,
-            bodo.TupleArrayType,
+            bodo.types.MapArrayType,
+            bodo.types.StructArrayType,
+            bodo.types.TupleArrayType,
             bodo.types.IntervalArrayType,
         ),
     ):
@@ -4365,9 +4365,9 @@ def pivot_error_checking(df, index, columns, values, func_name):
                 values_column,
                 (
                     bodo.types.ArrayItemArrayType,
-                    bodo.MapArrayType,
-                    bodo.StructArrayType,
-                    bodo.TupleArrayType,
+                    bodo.types.MapArrayType,
+                    bodo.types.StructArrayType,
+                    bodo.types.TupleArrayType,
                 ),
             )
             or values_column == bodo.types.binary_array_type
@@ -5999,7 +5999,7 @@ def typeref_to_type(v):
 
 def _install_typer_for_type(type_name, typ):
     """install typer for a bodo type call to be used inside jit
-    e.g. bodo.DataFrameType()
+    e.g. bodo.types.DataFrameType()
     """
 
     @type_callable(typ)
@@ -6020,7 +6020,7 @@ def _install_typer_for_type(type_name, typ):
 
 def _install_type_call_typers():
     """install typers for all bodo type calls to be used inside jit
-    e.g. bodo.DataFrameType()
+    e.g. bodo.types.DataFrameType()
     """
     for type_name in bodo_types_with_params:
         typ = getattr(bodo, type_name)

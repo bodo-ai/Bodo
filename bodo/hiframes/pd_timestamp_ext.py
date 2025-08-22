@@ -156,29 +156,32 @@ def check_tz_aware_unsupported(val, func_name):
         raise BodoError(
             f"{func_name} on Timezone-aware timestamp not yet supported. Please convert to timezone naive with ts.tz_convert(None)"
         )
-    elif isinstance(val, bodo.DatetimeArrayType) and val.tz is not None:
+    elif isinstance(val, bodo.types.DatetimeArrayType) and val.tz is not None:
         raise BodoError(
             f"{func_name} on Timezone-aware array not yet supported. Please convert to timezone naive with arr.tz_convert(None)"
         )
     elif (
         isinstance(val, bodo.DatetimeIndexType)
-        and isinstance(val.data, bodo.DatetimeArrayType)
+        and isinstance(val.data, bodo.types.DatetimeArrayType)
         and val.data.tz is not None
     ):
         raise BodoError(
             f"{func_name} on Timezone-aware index not yet supported. Please convert to timezone naive with index.tz_convert(None)"
         )
     elif (
-        isinstance(val, bodo.SeriesType)
-        and isinstance(val.data, bodo.DatetimeArrayType)
+        isinstance(val, bodo.types.SeriesType)
+        and isinstance(val.data, bodo.types.DatetimeArrayType)
         and val.data.tz is not None
     ):
         raise BodoError(
             f"{func_name} on Timezone-aware series not yet supported. Please convert to timezone naive with series.dt.tz_convert(None)"
         )
-    elif isinstance(val, bodo.DataFrameType):
+    elif isinstance(val, bodo.types.DataFrameType):
         for arr_typ in val.data:
-            if isinstance(arr_typ, bodo.DatetimeArrayType) and arr_typ.tz is not None:
+            if (
+                isinstance(arr_typ, bodo.types.DatetimeArrayType)
+                and arr_typ.tz is not None
+            ):
                 raise BodoError(
                     f"{func_name} on Timezone-aware columns not yet supported. Please convert each column to timezone naive with series.dt.tz_convert(None)"
                 )

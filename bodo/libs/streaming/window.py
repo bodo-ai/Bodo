@@ -137,15 +137,15 @@ class WindowStateType(StreamingStateType):
         if is_nullable(arr_type2):
             common_arr_type = to_nullable_type(common_arr_type)
 
-        if isinstance(common_arr_type, bodo.MapArrayType):
-            assert isinstance(arr_type2, bodo.MapArrayType)
+        if isinstance(common_arr_type, bodo.types.MapArrayType):
+            assert isinstance(arr_type2, bodo.types.MapArrayType)
             common_key_type = WindowStateType.derive_common_arr_types(
                 common_arr_type.key_arr_type, arr_type2.key_arr_type
             )
             common_value_type = WindowStateType.derive_common_arr_types(
                 common_arr_type.value_arr_type, arr_type2.value_arr_type
             )
-            return bodo.MapArrayType(common_key_type, common_value_type)
+            return bodo.types.MapArrayType(common_key_type, common_value_type)
 
         if isinstance(common_arr_type, bodo.types.ArrayItemArrayType):
             assert isinstance(arr_type2, bodo.types.ArrayItemArrayType)
@@ -154,8 +154,8 @@ class WindowStateType(StreamingStateType):
             )
             return bodo.types.ArrayItemArrayType(common_element_type)
 
-        if isinstance(common_arr_type, bodo.StructArrayType):
-            assert isinstance(arr_type2, bodo.StructArrayType)
+        if isinstance(common_arr_type, bodo.types.StructArrayType):
+            assert isinstance(arr_type2, bodo.types.StructArrayType)
             n_fields = len(common_arr_type.data)
             field_names = common_arr_type.names
             assert len(arr_type2.data) == n_fields and arr_type2.names == field_names
@@ -164,7 +164,7 @@ class WindowStateType(StreamingStateType):
                 common_field_types.append(
                     WindowStateType.derive_common_arr_types(arr1_field, arr2_field)
                 )
-            return bodo.StructArrayType(tuple(common_field_types))
+            return bodo.types.StructArrayType(tuple(common_field_types))
 
         valid_str_types = (bodo.types.string_array_type, bodo.types.dict_str_arr_type)
         if common_arr_type in valid_str_types:

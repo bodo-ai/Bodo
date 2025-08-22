@@ -233,7 +233,7 @@ def parse_json_util(arr):
     suffix_code += "     res2[i] = res[i]\n"
     suffix_code += "res = res2\n"
 
-    struct_type = bodo.StructArrayType(
+    struct_type = bodo.types.StructArrayType(
         (bodo.types.string_array_type, bodo.types.string_array_type), ("key", "value")
     )
     out_dtype = bodo.utils.typing.to_nullable_type(struct_type)
@@ -771,11 +771,11 @@ def overload_get_field_util(data, field, is_scalar, ignore_case):
     struct_mode = False
     map_mode = False
     if isinstance(
-        json_type, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+        json_type, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
     ):
         struct_mode = True
     elif isinstance(
-        json_type, (bodo.MapArrayType, bodo.libs.map_arr_ext.MapScalarType)
+        json_type, (bodo.types.MapArrayType, bodo.libs.map_arr_ext.MapScalarType)
     ):
         map_mode = True
 
@@ -945,7 +945,7 @@ def overload_object_insert_util(
     ]
 
     if isinstance(
-        json_type, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+        json_type, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
     ):
         # Codepath for calling OBJECT_INSERT on a STRUCT.
         if bodo.hiframes.pd_series_ext.is_series_type(new_field_value):
@@ -986,7 +986,7 @@ def overload_object_insert_util(
 
         # Keep track of the original struct field types as array types.
         original_types = list(json_type.data)
-        if isinstance(data, bodo.StructType):
+        if isinstance(data, bodo.types.StructType):
             original_types = [
                 bodo.utils.typing.to_nullable_type(
                     bodo.utils.typing.dtype_to_array_type(typ)
@@ -1051,9 +1051,9 @@ def overload_object_insert_util(
         extra_globals["names"] = bodo.utils.typing.ColNamesMetaType(tuple(names))
         scalar_text += f"null_vector = np.array([{', '.join(nulls)}], dtype=np.bool_)\n"
         scalar_text += f"res[i] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({', '.join(values)},), null_vector, names)"
-        out_dtype = bodo.StructArrayType(tuple(dtypes), tuple(names))
+        out_dtype = bodo.types.StructArrayType(tuple(dtypes), tuple(names))
 
-    elif isinstance(json_type, (bodo.MapArrayType, bodo.MapScalarType)):
+    elif isinstance(json_type, (bodo.types.MapArrayType, bodo.types.MapScalarType)):
         # Codepath for calling OBJECT_INSERT on a MAP.
         key_type = json_type.key_arr_type
         val_type = json_type.value_arr_type
@@ -1078,7 +1078,7 @@ def overload_object_insert_util(
         ):
             common_dtype = bodo.utils.typing.to_nullable_type(common_dtype)
 
-        out_dtype = bodo.MapArrayType(key_type, common_dtype)
+        out_dtype = bodo.types.MapArrayType(key_type, common_dtype)
 
         extra_globals["struct_typ_tuple"] = (key_type, common_dtype)
         extra_globals["map_struct_names"] = bodo.utils.typing.ColNamesMetaType(

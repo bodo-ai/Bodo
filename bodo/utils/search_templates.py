@@ -41,15 +41,15 @@ unsupported_overload_exception_msg = "not supported yet"
 int_arr_typ = bodo.types.IntegerArrayType(bodo.types.int64)
 
 series_types = [
-    bodo.SeriesType(int_arr_typ),
-    bodo.SeriesType(bodo.types.string_array_type),
-    bodo.SeriesType(types.NPDatetime("ns")),
-    bodo.SeriesType(types.NPTimedelta("ns")),
-    bodo.SeriesType(bodo.StructArrayType((int_arr_typ,))),
-    bodo.SeriesType(bodo.PDCategoricalDtype(None, None, None, data=int_arr_typ)),
+    bodo.types.SeriesType(int_arr_typ),
+    bodo.types.SeriesType(bodo.types.string_array_type),
+    bodo.types.SeriesType(types.NPDatetime("ns")),
+    bodo.types.SeriesType(types.NPTimedelta("ns")),
+    bodo.types.SeriesType(bodo.types.StructArrayType((int_arr_typ,))),
+    bodo.types.SeriesType(bodo.PDCategoricalDtype(None, None, None, data=int_arr_typ)),
 ]
 
-dataframe_types = [bodo.DataFrameType(data=(int_arr_typ,), columns=("A",))]
+dataframe_types = [bodo.types.DataFrameType(data=(int_arr_typ,), columns=("A",))]
 
 index_types = [
     bodo.NumericIndexType(bodo.types.int64),
@@ -157,7 +157,7 @@ def lookup_template(typing_ctx: Context, typ: pt.Any, path: list[str]) -> bool |
     Example:
         To look up whether `Series.str.decode` was supported:
         ```
-        ser_typ = bodo.SeriesType(bodo.types.string_array_type)
+        ser_typ = bodo.types.SeriesType(bodo.types.string_array_type)
         result = lookup_template(ser_typ, ["str", "decode"])
         ```
 

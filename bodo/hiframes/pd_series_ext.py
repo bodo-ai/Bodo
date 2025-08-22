@@ -751,7 +751,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
                 arrs = tuple(
                     to_nullable_type(dtype_to_array_type(t)) for t in scalar_types
                 )
-                ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+                ret_type = bodo.types.DataFrameType(arrs, ary.index, index_vals)
             elif isinstance(f_return_type, SeriesType):
                 n_cols, index_vals = f_return_type.const_info
                 # Note: For homogenous Series we return a regular tuple, so
@@ -762,7 +762,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
                     to_nullable_type(dtype_to_array_type(f_return_type.dtype))
                     for _ in range(n_cols)
                 )
-                ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+                ret_type = bodo.types.DataFrameType(arrs, ary.index, index_vals)
             else:
                 data_arr = get_udf_out_arr_type(f_return_type, return_nullable)
                 ret_type = SeriesType(data_arr.dtype, data_arr, ary.index, ary.name_typ)
@@ -1300,7 +1300,7 @@ def lower_constant_series(context, builder, series_type, pyval):
     """embed constant Series value by getting constant values for data array and
     Index.
     """
-    if isinstance(series_type.data, bodo.DatetimeArrayType):
+    if isinstance(series_type.data, bodo.types.DatetimeArrayType):
         # TODO [BE-2441]: Unify?
         py_arr = pyval.array
     else:

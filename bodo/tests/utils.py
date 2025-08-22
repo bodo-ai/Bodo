@@ -525,7 +525,7 @@ def check_func(
 
     # test non-table format case if there is any dataframe in input
     if use_table_format is None and any(
-        isinstance(_typeof(a), bodo.DataFrameType) for a in args
+        isinstance(_typeof(a), bodo.types.DataFrameType) for a in args
     ):
         inner_funcs = check_func(
             func,
@@ -645,9 +645,12 @@ def _type_has_str_array(t):
     """
     return (
         (t == bodo.types.string_array_type)
-        or (isinstance(t, bodo.SeriesType) and t.data == bodo.types.string_array_type)
         or (
-            isinstance(t, bodo.DataFrameType)
+            isinstance(t, bodo.types.SeriesType)
+            and t.data == bodo.types.string_array_type
+        )
+        or (
+            isinstance(t, bodo.types.DataFrameType)
             and any(a == bodo.types.string_array_type for a in t.data)
         )
     )
@@ -1644,11 +1647,11 @@ def _typeof(val):
         col_typs = (dtype_to_array_type(typ) for typ in col_typs)
         col_names = tuple(val.columns.to_list())
         index_typ = numba.typeof(val.index)
-        return bodo.DataFrameType(col_typs, index_typ, col_names)
+        return bodo.types.DataFrameType(col_typs, index_typ, col_names)
     elif isinstance(val, pd.Series) and isinstance(
         val.dtype, pd.core.arrays.floating.FloatingDtype
     ):
-        return bodo.SeriesType(
+        return bodo.types.SeriesType(
             bodo.libs.float_arr_ext.typeof_pd_float_dtype(val.dtype, None),
             index=numba.typeof(val.index),
             name_typ=numba.typeof(val.name),

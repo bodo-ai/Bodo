@@ -119,7 +119,7 @@ def overload_series_index(s):
 @overload_attribute(SeriesType, "values", inline="always", jit_options={"cache": True})
 def overload_series_values(s):
     # Series.values returns the underlying dt64 array for tz-aware series
-    if isinstance(s.data, bodo.DatetimeArrayType):
+    if isinstance(s.data, bodo.types.DatetimeArrayType):
 
         def impl(s):  # pragma: no cover
             data = bodo.hiframes.pd_series_ext.get_series_data(s)
@@ -1414,7 +1414,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
                 bodo.types.IntegerArrayType,
                 bodo.types.FloatingArrayType,
                 bodo.CategoricalArrayType,
-                bodo.DatetimeArrayType,
+                bodo.types.DatetimeArrayType,
             ),
         )
         or S.data
@@ -1475,7 +1475,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
                 bodo.types.IntegerArrayType,
                 bodo.types.FloatingArrayType,
                 bodo.CategoricalArrayType,
-                bodo.DatetimeArrayType,
+                bodo.types.DatetimeArrayType,
             ),
         )
         or S.data
@@ -1530,7 +1530,7 @@ def check_argmax_min_args(func_name, S):
                 bodo.types.FloatingArrayType,
                 bodo.CategoricalArrayType,
                 bodo.types.DecimalArrayType,
-                bodo.DatetimeArrayType,
+                bodo.types.DatetimeArrayType,
             ),
         )
         or S.data
@@ -1754,7 +1754,7 @@ def overload_series_clip(
                 FloatingArrayType,
                 DecimalArrayType,
                 DatetimeDateArrayType,
-                bodo.DatetimeArrayType,
+                bodo.types.DatetimeArrayType,
                 BooleanArrayType,
                 StringArrayType,
                 BinaryArrayType,

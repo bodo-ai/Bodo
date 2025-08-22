@@ -72,7 +72,7 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
 
     # Create substitutions dictionary for func_text
     ctx = {}
-    if isinstance(in_col, bodo.SeriesType):  # pragma: no cover
+    if isinstance(in_col, bodo.types.SeriesType):  # pragma: no cover
         in_col = in_col.data
         ctx["array_conv"] = "in_col = bodo.utils.conversion.coerce_to_array(in_col)"
     else:
@@ -113,7 +113,7 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
                 in_col,
                 (
                     bodo.types.DecimalArrayType,
-                    bodo.DatetimeArrayType,
+                    bodo.types.DatetimeArrayType,
                     bodo.types.TimeArrayType,
                 ),
             )

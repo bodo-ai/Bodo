@@ -24,12 +24,14 @@ def overload_sql_null_equal_column(arg0, arg1):
     """Function that replicates the behavior of MYSQL's <=> operator on at
     least one column input"""
     # 2 columns
-    if isinstance(arg0, bodo.SeriesType) and isinstance(arg1, bodo.SeriesType):
+    if isinstance(arg0, bodo.types.SeriesType) and isinstance(
+        arg1, bodo.types.SeriesType
+    ):
         return lambda arg0, arg1: (arg0.isna() & arg1.isna()) | (arg0 == arg1).fillna(
             False
         )
     # 1 column and 1 scalar
-    elif isinstance(arg0, bodo.SeriesType):
+    elif isinstance(arg0, bodo.types.SeriesType):
         if arg1 == bodo.types.none:
             return lambda arg0, arg1: arg0.isna()
         elif isinstance(arg1, bodo.types.optional):
@@ -49,7 +51,7 @@ def overload_sql_null_equal_column(arg0, arg1):
             return impl
         else:
             return lambda arg0, arg1: (arg0 == arg1).fillna(False)
-    elif isinstance(arg1, bodo.SeriesType):
+    elif isinstance(arg1, bodo.types.SeriesType):
         return lambda arg0, arg1: sql_null_equal_column(arg1, arg0)
 
 

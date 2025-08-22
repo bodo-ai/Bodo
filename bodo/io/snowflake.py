@@ -249,7 +249,7 @@ def gen_snowflake_schema(
         if col_name == "":
             raise BodoError("Column name cannot be empty when writing to Snowflake.")
         # [BE-3587] need specific tz for each column type.
-        if isinstance(col_type, bodo.DatetimeArrayType):
+        if isinstance(col_type, bodo.types.DatetimeArrayType):
             precision = get_precision(col_idx)
             if col_type.tz is not None:
                 sf_schema[col_name] = f"TIMESTAMP_LTZ({precision})"
@@ -334,13 +334,13 @@ def gen_snowflake_schema(
 
         elif isinstance(
             col_type,
-            (bodo.StructArrayType,),
+            (bodo.types.StructArrayType,),
         ):
             if contains_map_array(col_type):
                 raise_bodo_error("Nested MapArrayType is not supported.")
             sf_schema[col_name] = "OBJECT"
 
-        elif isinstance(col_type, bodo.MapArrayType):
+        elif isinstance(col_type, bodo.types.MapArrayType):
             if (
                 not col_type.key_arr_type == bodo.types.string_array_type
                 and bodo.get_rank() == 0
@@ -2446,7 +2446,7 @@ def gen_flatten_sql(
     # If there are any map arrays they need flattened
     def map_needs_flattened(column_datatype):
         return (
-            isinstance(column_datatype, bodo.MapArrayType)
+            isinstance(column_datatype, bodo.types.MapArrayType)
             and column_datatype.key_arr_type == bodo.types.string_array_type
         )
 
@@ -2467,7 +2467,7 @@ def gen_flatten_sql(
             # Map columns need a variant column in the temp table
             temp_schema[c] = (
                 typ
-                if not isinstance(column_datatypes[c], bodo.MapArrayType)
+                if not isinstance(column_datatypes[c], bodo.types.MapArrayType)
                 else "VARIANT"
             )
         flatten_table = f"bodo_temp_{str(uuid4()).replace('-', '_')}"

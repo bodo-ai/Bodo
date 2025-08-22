@@ -71,7 +71,7 @@ def null_ignoring_shift(input_arr, shift_amount, default_value):
     no_default = default_value == bodo.types.none
 
     func_text = "def impl(input_arr, shift_amount, default_value):\n"
-    if isinstance(input_arr, bodo.SeriesType):
+    if isinstance(input_arr, bodo.types.SeriesType):
         func_text += (
             "    input_arr = bodo.utils.conversion.coerce_to_array(input_arr)\n"
         )
@@ -615,7 +615,7 @@ def windowed_median(S, lower_bound, upper_bound):
 def windowed_mode(S, lower_bound, upper_bound):
     if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
         raise_bodo_error("Input must be an array type")
-    if isinstance(S, bodo.SeriesType):  # pragma: no cover
+    if isinstance(S, bodo.types.SeriesType):  # pragma: no cover
         out_dtype = S.data
     else:
         out_dtype = S
@@ -1005,7 +1005,8 @@ def make_windowed_min_max_function(func, cmp):
         # Dictionary encoded arrays have a special procedure to find the
         # min/max string within each slice
         if S == bodo.types.dict_str_arr_type or (
-            isinstance(S, bodo.SeriesType) and S.data == bodo.types.dict_str_arr_type
+            isinstance(S, bodo.types.SeriesType)
+            and S.data == bodo.types.dict_str_arr_type
         ):
             setup_block += "dictionary = arr0._data\n"
             setup_block += "indices = arr0._indices\n"
@@ -1058,7 +1059,7 @@ def make_windowed_min_max_function(func, cmp):
             "dict_index_dtype": bodo.libs.dict_arr_ext.dict_indices_arr_type
         }
 
-        if isinstance(S, bodo.SeriesType):  # pragma: no cover
+        if isinstance(S, bodo.types.SeriesType):  # pragma: no cover
             out_dtype = S.data
         else:
             out_dtype = S
@@ -1180,7 +1181,7 @@ def overload_windowed_object_agg(K, V):
     val_type = V.data if bodo.hiframes.pd_series_ext.is_series_type else V
     struct_typ_tuple = (key_type, val_type)
     map_struct_names = bodo.utils.typing.ColNamesMetaType(("key", "value"))
-    map_arr = bodo.MapArrayType(key_type, val_type)
+    map_arr = bodo.types.MapArrayType(key_type, val_type)
 
     def impl(K, V):  # pragma: no cover
         # Convert series to arrays

@@ -203,7 +203,7 @@ def get_arrow_timestamp_type(pa_ts_typ):
         # https://www.iana.org/time-zones
         tz_type = pa_ts_typ.to_pandas_dtype().tz
         tz_val = bodo.libs.pd_datetime_arr_ext.get_tz_type_info(tz_type)
-        return bodo.DatetimeArrayType(tz_val), True
+        return bodo.types.DatetimeArrayType(tz_val), True
     else:
         # Without timezones Arrow ts arrays are converted to dt64 arrays.
         return types.Array(bodo.types.datetime64ns, 1, "C"), True
@@ -368,7 +368,7 @@ def is_nullable_arrow_out(numba_type: types.ArrayCompatible) -> bool:
 
     return (
         is_nullable_ignore_sentinels(numba_type)
-        or isinstance(numba_type, bodo.DatetimeArrayType)
+        or isinstance(numba_type, bodo.types.DatetimeArrayType)
         or (
             isinstance(numba_type, types.Array)
             and numba_type.dtype == bodo.types.datetime64ns
@@ -409,14 +409,14 @@ def _numba_to_pyarrow_type(
             fields.append(pa.field(name, pa_type, True))
         dtype = pa.struct(fields)
 
-    elif isinstance(numba_type, bodo.TupleArrayType):
+    elif isinstance(numba_type, bodo.types.TupleArrayType):
         fields = []
         for i, inner_type in enumerate(numba_type.data):
             pa_type, _ = _numba_to_pyarrow_type(inner_type, is_iceberg, use_dict_arr)
             fields.append(pa.field(f"{TUPLE_ARRAY_SENTINEL}{i}", pa_type, True))
         dtype = pa.struct(fields)
 
-    elif isinstance(numba_type, bodo.MapArrayType):
+    elif isinstance(numba_type, bodo.types.MapArrayType):
         key_type, _ = _numba_to_pyarrow_type(
             numba_type.key_arr_type, is_iceberg, use_dict_arr
         )
@@ -446,7 +446,7 @@ def _numba_to_pyarrow_type(
         dtype = pa.large_binary()
     elif numba_type == datetime_date_array_type:
         dtype = pa.date32()
-    elif isinstance(numba_type, bodo.DatetimeArrayType) or (
+    elif isinstance(numba_type, bodo.types.DatetimeArrayType) or (
         isinstance(numba_type, types.Array)
         and numba_type.dtype == bodo.types.datetime64ns
     ):
@@ -462,7 +462,11 @@ def _numba_to_pyarrow_type(
         # The underlying already is in UTC already
         # for timezone aware types, and for timezone
         # naive, it won't matter.
-        tz = numba_type.tz if isinstance(numba_type, bodo.DatetimeArrayType) else None
+        tz = (
+            numba_type.tz
+            if isinstance(numba_type, bodo.types.DatetimeArrayType)
+            else None
+        )
         if isinstance(tz, int):
             tz = bodo.libs.pd_datetime_arr_ext.nanoseconds_to_offset(tz)
         dtype = pa.timestamp("us", "UTC") if is_iceberg else pa.timestamp("ns", tz)
@@ -596,7 +600,7 @@ def pyarrow_type_to_numba(arrow_type):
         return DecimalArrayType(arrow_type.precision, arrow_type.scale)
 
     if pa.types.is_timestamp(arrow_type):
-        return bodo.DatetimeArrayType(arrow_type.tz)
+        return bodo.types.DatetimeArrayType(arrow_type.tz)
 
     if pa.types.is_null(arrow_type):
         return bodo.types.null_array_type

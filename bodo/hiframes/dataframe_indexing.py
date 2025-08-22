@@ -157,7 +157,9 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                     data_type = df.data[col_num]
                     dtype = data_type.dtype
                     name_typ = types.literal(df.columns[col_num])
-                    ret = bodo.SeriesType(dtype, data_type, new_index_type, name_typ)
+                    ret = bodo.types.SeriesType(
+                        dtype, data_type, new_index_type, name_typ
+                    )
                     return ret(*args)
 
                 if isinstance(df_columns_indexer_type, types.UnicodeType):
@@ -263,7 +265,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                 dtype = data_type.dtype
                 index_type = df.index
                 name_typ = types.literal(df.columns[col_num])
-                ret = bodo.SeriesType(dtype, data_type, index_type, name_typ)
+                ret = bodo.types.SeriesType(dtype, data_type, index_type, name_typ)
                 return ret(*args)
 
         if isinstance(ind, types.Integer) or isinstance(ind, types.UnicodeType):

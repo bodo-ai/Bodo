@@ -1154,9 +1154,9 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return pd.arrays.ArrowExtensionArray(pa.nulls(1))
 
     # StructArray
-    if isinstance(dtype, bodo.StructArrayType):
+    if isinstance(dtype, bodo.types.StructArrayType):
         # Handle empty struct corner case which can have typing issues
-        if dtype == bodo.StructArrayType((), ()):
+        if dtype == bodo.types.StructArrayType((), ()):
             return pd.array([{}], pd.ArrowDtype(pa.struct([])))
 
         pa_arr = pa.StructArray.from_arrays(
@@ -1165,7 +1165,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # TupleArray
-    if isinstance(dtype, bodo.TupleArrayType):
+    if isinstance(dtype, bodo.types.TupleArrayType):
         # TODO[BSE-4213]: Use Arrow arrays
         return pd.array(
             [
@@ -1178,7 +1178,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         )._ndarray
 
     # MapArrayType
-    if isinstance(dtype, bodo.MapArrayType):
+    if isinstance(dtype, bodo.types.MapArrayType):
         pa_arr = pa.MapArray.from_arrays(
             [0, 1],
             get_value_for_type(dtype.key_arr_type, True),
@@ -1187,7 +1187,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # Numpy Matrix
-    if isinstance(dtype, bodo.MatrixType):
+    if isinstance(dtype, bodo.types.MatrixType):
         return np.asmatrix(
             get_value_for_type(types.Array(dtype.dtype, 2, dtype.layout))
         )

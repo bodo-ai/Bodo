@@ -2478,7 +2478,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
 
         return checkna_func
 
-    elif isinstance(col_array_dtype, (types.Array, bodo.DatetimeArrayType)):
+    elif isinstance(col_array_dtype, (types.Array, bodo.types.DatetimeArrayType)):
         col_dtype = col_array_dtype.dtype
         if col_dtype in [
             bodo.types.datetime64ns,

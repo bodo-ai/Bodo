@@ -1208,7 +1208,7 @@ def is_valid_tz_naive_datetime_arg(arg):
     return arg in (
         bodo.types.datetime64ns,
         bodo.types.pd_timestamp_tz_naive_type,
-        bodo.pd_datetime_tz_naive_type,
+        bodo.types.pd_datetime_tz_naive_type,
     ) or (
         bodo.utils.utils.is_array_typ(arg, True)
         and arg.dtype == bodo.types.datetime64ns
@@ -2070,15 +2070,16 @@ def get_combined_type(in_types, calling_func):
         return bodo.types.ArrayItemArrayType(combined_inner_dtype)
 
     # For map arrays, recursively ensure the two child arrays match
-    if isinstance(seed_type, (bodo.MapArrayType, types.DictType)):
+    if isinstance(seed_type, (bodo.types.MapArrayType, types.DictType)):
         if not all(
-            isinstance(typ, (bodo.MapArrayType, types.DictType)) for typ in in_types
+            isinstance(typ, (bodo.types.MapArrayType, types.DictType))
+            for typ in in_types
         ):  # pragma: no cover
             raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
         key_types = []
         val_types = []
         for typ in in_types:
-            if isinstance(typ, bodo.MapArrayType):
+            if isinstance(typ, bodo.types.MapArrayType):
                 key_types.append(typ.key_arr_type)
                 val_types.append(typ.value_arr_type)
             else:
@@ -2086,14 +2087,16 @@ def get_combined_type(in_types, calling_func):
                 val_types.append(bodo.utils.typing.dtype_to_array_type(typ.value_type))
         combined_key_type = get_combined_type(key_types, calling_func)
         combined_val_type = get_combined_type(val_types, calling_func)
-        return bodo.MapArrayType(combined_key_type, combined_val_type)
+        return bodo.types.MapArrayType(combined_key_type, combined_val_type)
 
     # For struct arrays, match the names recursively ensure the all child arrays match
     if isinstance(
-        seed_type, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+        seed_type, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
     ):
         if not all(
-            isinstance(typ, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType))
+            isinstance(
+                typ, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+            )
             and typ.names == seed_type.names
             for typ in in_types
         ):  # pragma: no cover
@@ -2102,14 +2105,14 @@ def get_combined_type(in_types, calling_func):
         for i in range(len(seed_type.names)):
             field_types = []
             for typ in in_types:
-                if isinstance(typ, bodo.StructArrayType):
+                if isinstance(typ, bodo.types.StructArrayType):
                     field_types.append(typ.data[i])
                 else:
                     field_types.append(
                         bodo.utils.typing.dtype_to_array_type(typ.data[i])
                     )
             data_types.append(get_combined_type(field_types, calling_func))
-        return bodo.StructArrayType(tuple(data_types), seed_type.names)
+        return bodo.types.StructArrayType(tuple(data_types), seed_type.names)
 
     # For all other array types, get the common scalar type if possible
     dtypes = [typ.dtype for typ in in_types]

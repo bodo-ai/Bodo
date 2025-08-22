@@ -94,7 +94,7 @@ public class BodoArrayHelpers {
       case MAP:
         typeName =
             String.format(
-                "bodo.MapArrayType(%s, %s)",
+                "bodo.types.MapArrayType(%s, %s)",
                 sqlTypeToBodoArrayType(
                         Objects.requireNonNull(type.getKeyType()), false, defaultTzExpr)
                     .emit(),
@@ -170,7 +170,7 @@ public class BodoArrayHelpers {
         break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         // TODO: Add nullable support
-        typeName = String.format("bodo.DatetimeArrayType(%s)", defaultTzExpr.emit());
+        typeName = String.format("bodo.types.DatetimeArrayType(%s)", defaultTzExpr.emit());
         break;
       case TIMESTAMP_TZ:
         typeName = "bodo.types.timestamptz_array_type";

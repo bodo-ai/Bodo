@@ -3621,7 +3621,7 @@ def test_groupby_apply_objmode():
     Test Groupby.apply() with objmode inside UDF
     """
 
-    bodo.numba.types.test_df_type = bodo.DataFrameType(
+    bodo.numba.types.test_df_type = bodo.types.DataFrameType(
         (bodo.types.string_array_type, bodo.types.float64[::1]),
         bodo.NumericIndexType(bodo.types.int64, bodo.types.none),
         ("B", "C"),

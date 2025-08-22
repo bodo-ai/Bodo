@@ -819,7 +819,7 @@ def get_rtjf_cols_extra_info(column_types, desired_indices):
         if isinstance(column_types[col_idx], bodo.types.TimeArrayType):
             precisions.append(column_types[col_idx].precision)
             time_zones.append(None)
-        elif isinstance(column_types[col_idx], bodo.DatetimeArrayType):
+        elif isinstance(column_types[col_idx], bodo.types.DatetimeArrayType):
             precisions.append(-1)
             time_zones.append(column_types[col_idx].tz)
         else:
@@ -1297,7 +1297,7 @@ def _get_snowflake_sql_literal(filter_value):
                 types.Array,
                 bodo.types.IntegerArrayType,
                 bodo.types.FloatingArrayType,
-                bodo.DatetimeArrayType,
+                bodo.types.DatetimeArrayType,
             ),
         )
         or filter_type
@@ -1902,7 +1902,7 @@ def _gen_sql_reader_py(
                 "pymysql_check": pymysql_check,
                 "cx_oracle_check": cx_oracle_check,
                 "psycopg2_check": psycopg2_check,
-                "df_typeref": bodo.DataFrameType(
+                "df_typeref": bodo.types.DataFrameType(
                     tuple(used_col_types),
                     bodo.RangeIndexType(None),
                     tuple(used_col_names),

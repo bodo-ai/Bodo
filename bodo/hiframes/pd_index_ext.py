@@ -198,7 +198,11 @@ def typeof_pd_index(val, c):
     arr_typ = bodo.hiframes.boxing._infer_series_arr_type(val)
     if arr_typ == bodo.types.datetime_date_array_type or isinstance(
         arr_typ,
-        (bodo.types.DecimalArrayType, bodo.DatetimeArrayType, bodo.types.TimeArrayType),
+        (
+            bodo.types.DecimalArrayType,
+            bodo.types.DatetimeArrayType,
+            bodo.types.TimeArrayType,
+        ),
     ):
         return NumericIndexType(
             arr_typ.dtype,
@@ -259,7 +263,11 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible, SingleIndexTy
 
     @property
     def tzval(self):
-        return self.data.tz if isinstance(self.data, bodo.DatetimeArrayType) else None
+        return (
+            self.data.tz
+            if isinstance(self.data, bodo.types.DatetimeArrayType)
+            else None
+        )
 
     def copy(self):
         return DatetimeIndexType(self.name_typ, self.data)
@@ -3234,7 +3242,7 @@ def array_type_to_index(arr_typ, name_typ=None):
             bodo.CategoricalArrayType,
             bodo.types.DecimalArrayType,
             bodo.types.TimeArrayType,
-            bodo.DatetimeArrayType,
+            bodo.types.DatetimeArrayType,
         ),
     ) or arr_typ in (
         bodo.types.datetime_date_array_type,
@@ -3246,7 +3254,7 @@ def array_type_to_index(arr_typ, name_typ=None):
     if arr_typ.dtype == types.NPDatetime("ns"):
         return DatetimeIndexType(name_typ)
 
-    if isinstance(arr_typ, bodo.DatetimeArrayType):
+    if isinstance(arr_typ, bodo.types.DatetimeArrayType):
         return DatetimeIndexType(name_typ, arr_typ)
 
     # categorical array
@@ -7112,7 +7120,7 @@ def overload_heter_index_getitem(I, ind):  # pragma: no cover
 @lower_constant(TimedeltaIndexType)
 def lower_constant_time_index(context, builder, ty, pyval):
     """Constant lowering for DatetimeIndexType and TimedeltaIndexType."""
-    if isinstance(ty.data, bodo.DatetimeArrayType):
+    if isinstance(ty.data, bodo.types.DatetimeArrayType):
         # TODO [BE-2441]: Unify?
         data = context.get_constant_generic(builder, ty.data, pyval.array)
     else:

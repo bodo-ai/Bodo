@@ -26,7 +26,7 @@ Python types and Bodo data types.
 | `TIMESTAMP_TZ`        | `bodo.types.TimestampTZ`     | `bodo.types.timestamptz_type`              |
 | `INTERVAL(day-time)`  | `np.timedelta64[ns]`   | `bodo.types.timedelta64ns`                 |
 | `ARRAY`               | `pyarrow.large_list`   | `bodo.ArrayItemArray`                |
-| `MAP`                 | `pyarrow.map`          | `bodo.MapScalarType`                 |
+| `MAP`                 | `pyarrow.map`          | `bodo.types.MapScalarType`                 |
 | `NULL`                | `pyarrow.NA`           | `bodo.types.null_dtype`                    |
 
 </center>

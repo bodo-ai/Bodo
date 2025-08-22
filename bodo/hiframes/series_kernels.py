@@ -111,7 +111,7 @@ def _get_type_max_value_overload(dtype):
         )  # pragma: no cover
 
     # tz-aware timestamp array
-    if isinstance(dtype, bodo.DatetimeArrayType):
+    if isinstance(dtype, bodo.types.DatetimeArrayType):
         tz = dtype.tz
 
         def impl(dtype):  # pragma: no cover

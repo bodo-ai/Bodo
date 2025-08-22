@@ -479,7 +479,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
                 None,
                 f"Unsupported array type for {func_name}: {arr_type}",
             )
-        return bodo.MapArrayType(key_arr_type, arr_type), "ok"
+        return bodo.types.MapArrayType(key_arr_type, arr_type), "ok"
 
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if (

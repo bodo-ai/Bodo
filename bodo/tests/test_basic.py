@@ -1025,7 +1025,7 @@ def test_objmode_types():
     # complex type
     def impl2():
         with numba.objmode(
-            df=bodo.DataFrameType(
+            df=bodo.types.DataFrameType(
                 (bodo.types.float64[::1], bodo.types.string_array_type),
                 bodo.RangeIndexType(bodo.types.none),
                 ("A", "B"),
@@ -1427,7 +1427,7 @@ def test_wrap_python_error_handling(memory_leak_check):
 
     with pytest.raises(BodoError, match="wrap_python requires full data types"):
 
-        @bodo.wrap_python(bodo.DataFrameType)
+        @bodo.wrap_python(bodo.types.DataFrameType)
         def g(df):
             return df
 

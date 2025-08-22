@@ -137,7 +137,7 @@ BODO_ARRAY_TYPE_CLASSES = (
     bodo.libs.map_arr_ext.MapArrayType,
     bodo.libs.matrix_ext.MatrixType,
     bodo.libs.csr_matrix_ext.CSRMatrixType,
-    bodo.DatetimeArrayType,
+    bodo.types.DatetimeArrayType,
     TimeArrayType,
     TimestampTZArrayType,
 )
@@ -229,7 +229,7 @@ def overload_isna(arr, i):
             return lambda arr, i: False
 
     # Nullable tuple support
-    if isinstance(arr, bodo.NullableTupleType):
+    if isinstance(arr, bodo.types.NullableTupleType):
         return lambda arr, i: arr._null_values[i]  # pragma: no cover
 
     # dictionary encoded array
@@ -1656,7 +1656,7 @@ def concat(arr_list):  # pragma: no cover
 @overload(concat, no_unliteral=True)
 def concat_overload(arr_list):
     # TODO: Support actually handling the possibles null values
-    if isinstance(arr_list, bodo.NullableTupleType):
+    if isinstance(arr_list, bodo.types.NullableTupleType):
         return lambda arr_list: bodo.libs.array_kernels.concat(
             arr_list._data
         )  # pragma: no cover
@@ -1721,7 +1721,7 @@ def concat_overload(arr_list):
 
     # Struct Array
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
-        arr_list.dtype, bodo.StructArrayType
+        arr_list.dtype, bodo.types.StructArrayType
     ):
         struct_keys = arr_list.dtype.names
         func_text = "def struct_array_concat_impl(arr_list):\n"
@@ -1768,7 +1768,7 @@ def concat_overload(arr_list):
 
     # TZ-Aware arrays
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
-        arr_list.dtype, bodo.DatetimeArrayType
+        arr_list.dtype, bodo.types.DatetimeArrayType
     ):
         tz_literal = arr_list.dtype.tz
 
@@ -2280,7 +2280,7 @@ def concat_overload(arr_list):
         )  # pragma: no cover
 
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
-        arr_list.dtype, bodo.MapArrayType
+        arr_list.dtype, bodo.types.MapArrayType
     ):
 
         def impl_map_arr_list(arr_list):  # pragma: no cover
@@ -2293,7 +2293,7 @@ def concat_overload(arr_list):
 
         return impl_map_arr_list
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
-        arr_list.dtype, bodo.TupleArrayType
+        arr_list.dtype, bodo.types.TupleArrayType
     ):
 
         def impl_tuple_arr_list(arr_list):  # pragma: no cover
@@ -2309,7 +2309,7 @@ def concat_overload(arr_list):
     if isinstance(arr_list, types.Tuple):
         # Generate a simpler error message for multiple timezones.
         all_timestamp_data = all(
-            isinstance(typ, bodo.DatetimeArrayType)
+            isinstance(typ, bodo.types.DatetimeArrayType)
             or (isinstance(typ, types.Array) and typ.dtype == bodo.types.datetime64ns)
             for typ in arr_list.types
         )
@@ -3142,7 +3142,7 @@ def ffill_bfill_overload(A, method, parallel=False):
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_timedelta(0))"
         )
-    elif _dtype == bodo.pd_datetime_tz_naive_type:  # pragma: no cover
+    elif _dtype == bodo.types.pd_datetime_tz_naive_type:  # pragma: no cover
         null_value = "NOT_A_TIME"
         global_vars["NOT_A_TIME"] = pd.Timestamp("NaT")
     else:
@@ -4166,8 +4166,11 @@ def np_hstack(tup):
     # Verify that arr_iter is a tuple, list of arrays, or Series of Arrays
     is_sequence = isinstance(tup, (types.BaseTuple, types.List))
     is_series = isinstance(
-        tup, (bodo.SeriesType, bodo.hiframes.pd_series_ext.HeterogeneousSeriesType)
-    ) and isinstance(tup.data, (types.BaseTuple, types.List, bodo.NullableTupleType))
+        tup,
+        (bodo.types.SeriesType, bodo.hiframes.pd_series_ext.HeterogeneousSeriesType),
+    ) and isinstance(
+        tup.data, (types.BaseTuple, types.List, bodo.types.NullableTupleType)
+    )
     if isinstance(tup, types.BaseTuple):
         # Determine that each type is an array type
         for typ in tup.types:
@@ -4186,7 +4189,7 @@ def np_hstack(tup):
         # Replace nullable tuples with the underlying type
         tup_data_val = (
             tup.data.tuple_typ
-            if isinstance(tup.data, bodo.NullableTupleType)
+            if isinstance(tup.data, bodo.types.NullableTupleType)
             else tup.data
         )
         for typ in tup_data_val.types:

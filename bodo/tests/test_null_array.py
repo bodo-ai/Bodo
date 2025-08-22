@@ -168,7 +168,7 @@ def test_nullarray_cast():
                 [{"A": 1, "B": 2}] * n,
                 pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64())),
             )
-        elif t == bodo.DatetimeArrayType:
+        elif t == bodo.types.DatetimeArrayType:
             A = pd.array([pd.Timestamp("2000-01-01", tz="UTC")] * 5)
             py_output = pd.array([pd.NaT] * n, pd.DatetimeTZDtype(tz="UTC"))
         elif t == bodo.types.TimeArrayType:

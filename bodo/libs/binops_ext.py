@@ -379,8 +379,8 @@ def create_overload_arith_op(op):
 
         # TODO: Timezone Aware Datetime Arrays
         if op == operator.add and (
-            isinstance(lhs, bodo.DatetimeArrayType)
-            or isinstance(rhs, bodo.DatetimeArrayType)
+            isinstance(lhs, bodo.types.DatetimeArrayType)
+            or isinstance(rhs, bodo.types.DatetimeArrayType)
         ):
             return bodo.libs.pd_datetime_arr_ext.overload_add_operator_datetime_arr(
                 lhs, rhs
