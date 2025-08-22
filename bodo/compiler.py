@@ -91,6 +91,7 @@ import bodo.utils.table_utils  # noqa # side effect
 import bodo.utils.tracing
 import bodo.utils.tracing_py
 import bodo.utils.typing
+import bodo.utils.user_logging_ext
 from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.table_column_del_pass import TableColumnDelPass
 from bodo.transforms.typing_pass import BodoTypeInference
