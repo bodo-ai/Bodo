@@ -110,6 +110,7 @@ inline_all_calls = False
 
 # Replace prange with proper Numba class when JIT is imported
 bodo.prange = numba.prange
+bodo.typeof = numba.typeof
 
 
 class BodoCompiler(numba.core.compiler.CompilerBase):

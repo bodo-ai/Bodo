@@ -1483,7 +1483,7 @@ def compile(self, sig):
             else:
                 # Even when not on platform, it's best to minimize I/O contention, so we
                 # write cache files from one rank on each node.
-                first_ranks = bodo.get_nodes_first_ranks()
+                first_ranks = bodo.libs.distributed_api.get_nodes_first_ranks()
                 if bodo.get_rank() in first_ranks:
                     self._cache.save_overload(sig, cres)
             return cres.entry_point

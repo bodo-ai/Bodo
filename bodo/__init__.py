@@ -251,10 +251,13 @@ class prange:
         return range(*args)
 
 
-import numba
-from numba import (  # re-export from Numba
-    typeof,
-)
+def typeof(*args, **kwargs):
+    import numba
+    # Import compiler lazily
+    import bodo.decorators
+
+    return numba.typeof(*args, **kwargs)
+
 
 from bodo.numba_compat import jitclass
 
