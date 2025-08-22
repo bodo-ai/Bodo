@@ -20,11 +20,20 @@ import bodo.ir.csv_ext
 from bodo import objmode  # noqa
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
+from bodo.io import csv_json_reader
 from bodo.ir.csv_ext import _gen_read_csv_objmode, astype  # noqa
 from bodo.utils.typing import ColNamesMetaType
 from bodo.utils.utils import (
     check_java_installation,  # noqa
     sanitize_varname,
+)
+
+ll.add_symbol(
+    "update_csv_reader", csv_json_reader.get_function_address("update_csv_reader")
+)
+ll.add_symbol(
+    "initialize_csv_reader",
+    csv_json_reader.get_function_address("initialize_csv_reader"),
 )
 
 
@@ -96,12 +105,6 @@ def getiter_csv_iterator(context, builder, sig, args):
     Iternext call for CSVIterator. This generates the code to
     initialize the csv_reader and the index.
     """
-    from bodo.io import csv_json_reader
-
-    ll.add_symbol(
-        "initialize_csv_reader",
-        csv_json_reader.get_function_address("initialize_csv_reader"),
-    )
     # Initialize the CSV_reader. This is used to indicate that
     # update_csv_reader is being called the first time.
     iterator_struct = cgutils.create_struct_proxy(sig.args[0])(
@@ -135,11 +138,6 @@ def iternext_csv_iterator(context, builder, sig, args, result):
     return the dataframe, sets the output into result, and
     updates the index.
     """
-    from bodo.io import csv_json_reader
-
-    ll.add_symbol(
-        "update_csv_reader", csv_json_reader.get_function_address("update_csv_reader")
-    )
     [iterty] = sig.args
     [iter_arg] = args
 

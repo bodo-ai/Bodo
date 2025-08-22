@@ -1626,7 +1626,10 @@ def _get_scatterv_send_counts(send_counts, n_pes, n):
 
 def irecv_impl(arr, size, pe, tag, cond):
     """Implementation for distributed_api.irecv()"""
-    from bodo.libs.distributed_api import get_type_enum, mpi_req_numba_type
+    from bodo.libs import hdist
+    from bodo.libs.distributed_api import get_type_enum
+
+    mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
 
     _irecv = types.ExternalFunction(
         "dist_irecv",

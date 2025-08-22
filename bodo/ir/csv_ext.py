@@ -168,6 +168,16 @@ def check_node_typing(node, typemap):
             )
 
 
+import llvmlite.binding as ll
+
+from bodo.io import csv_json_reader
+
+ll.add_symbol(
+    "csv_file_chunk_reader",
+    csv_json_reader.get_function_address("csv_file_chunk_reader"),
+)
+
+
 @intrinsic
 def csv_file_chunk_reader(
     typingctx,
@@ -188,14 +198,6 @@ def csv_file_chunk_reader(
     Interface to csv_file_chunk_reader function in C++ library for creating
     the csv file reader.
     """
-    import llvmlite.binding as ll
-
-    from bodo.io import csv_json_reader
-
-    ll.add_symbol(
-        "csv_file_chunk_reader",
-        csv_json_reader.get_function_address("csv_file_chunk_reader"),
-    )
     # TODO: Update storage options to pyobject once the type is updated to do refcounting
     # properly.
     assert storage_options_t == storage_options_dict_type, (

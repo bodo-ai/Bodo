@@ -19,6 +19,7 @@ from numba.core.typing.templates import (
 from numba.extending import intrinsic, lower_builtin, models, overload, register_model
 
 import bodo
+from bodo.ext import stream_window_cpp
 from bodo.hiframes.pd_groupby_ext import get_window_func_types
 from bodo.ir.aggregate import supported_agg_funcs
 from bodo.libs.array import (
@@ -44,6 +45,19 @@ from bodo.utils.typing import (
     to_nullable_type,
     unwrap_typeref,
 )
+
+ll.add_symbol(
+    "window_state_init_py_entry", stream_window_cpp.window_state_init_py_entry
+)
+ll.add_symbol(
+    "window_build_consume_batch_py_entry",
+    stream_window_cpp.window_build_consume_batch_py_entry,
+)
+ll.add_symbol(
+    "window_produce_output_batch_py_entry",
+    stream_window_cpp.window_produce_output_batch_py_entry,
+)
+ll.add_symbol("delete_window_state", stream_window_cpp.delete_window_state)
 
 null_array_type = bodo.libs.null_arr_ext.NullArrayType()
 
@@ -657,11 +671,6 @@ def _init_window_state(
         parallel_t (bool): Is this executed in parallel.
         allow_work_stealing_t (bool): Is work stealing allowed?
     """
-    from bodo.libs import stream_window_cpp
-
-    ll.add_symbol(
-        "window_state_init_py_entry", stream_window_cpp.window_state_init_py_entry
-    )
     output_type = unwrap_typeref(output_state_type)
 
     def codegen(context, builder, sig, args):
@@ -1078,13 +1087,6 @@ def _window_build_consume_batch(
     cpp_table,
     is_last,
 ):
-    from bodo.libs import stream_window_cpp
-
-    ll.add_symbol(
-        "window_build_consume_batch_py_entry",
-        stream_window_cpp.window_build_consume_batch_py_entry,
-    )
-
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(1),
@@ -1208,12 +1210,6 @@ def _window_produce_output_batch(
     produce_output,
 ):
     def codegen(context, builder, sig, args):
-        from bodo.libs import stream_window_cpp
-
-        ll.add_symbol(
-            "window_produce_output_batch_py_entry",
-            stream_window_cpp.window_produce_output_batch_py_entry,
-        )
         out_is_last = cgutils.alloca_once(builder, lir.IntType(1))
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -1300,9 +1296,6 @@ def _delete_window_state(
     window_state,
 ):
     def codegen(context, builder, sig, args):
-        from bodo.libs import stream_window_cpp
-
-        ll.add_symbol("delete_window_state", stream_window_cpp.delete_window_state)
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
