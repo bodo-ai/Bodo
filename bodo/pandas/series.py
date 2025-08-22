@@ -1561,12 +1561,10 @@ class BodoSeriesAiMethods:
             )
 
             async def per_row(row, client, generation_kwargs):
-                print("Generating for row:", row)
                 response = await client.chat.completions.create(
                     messages=[{"role": "user", "content": row}],
                     **generation_kwargs,
                 )
-                print("Response:", response)
                 return response.choices[0].message.content
 
             async def all_tasks(series, client, generation_kwargs):
