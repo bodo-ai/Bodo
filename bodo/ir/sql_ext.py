@@ -1295,8 +1295,8 @@ def _get_snowflake_sql_literal(filter_value):
             (
                 types.List,
                 types.Array,
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
                 bodo.DatetimeArrayType,
             ),
         )

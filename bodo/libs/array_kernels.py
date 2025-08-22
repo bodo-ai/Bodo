@@ -4319,7 +4319,7 @@ def np_tile(A, reps):
     if not isinstance(reps, (types.Tuple, types.UniTuple)):  # pragma: no cover
         raise_bodo_error("np.tile: reps argument must be a tuple")
     if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
-        A, bodo.FloatingArrayType
+        A, bodo.types.FloatingArrayType
     ):  # pragma: no cover
         raise_bodo_error("np.tile: A argument must be a numpy array")
     ndims = A.ndim

@@ -279,7 +279,7 @@ def gen_pandas_parquet_metadata_template(
                     f"to_parquet(): unknown dtype in nullable Integer column {col_name} {col_type}"
                 )
             pandas_type = col_type.dtype.name
-        elif isinstance(col_type, bodo.FloatingArrayType):
+        elif isinstance(col_type, bodo.types.FloatingArrayType):
             dtype_name = col_type.dtype.name
             # Pandas dtype is float32/float64
             # numpy dtype is Float32/Float64 (capitalize to specify nullable array)

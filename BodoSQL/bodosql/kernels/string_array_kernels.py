@@ -2330,7 +2330,7 @@ def create_one_arg_str_fn_util_overload(fn_name):
         if fn_name == "length":
             # Length also supports binary data.
             verify_string_binary_arg(arr, fn_name, "arr")
-            out_dtype = bodo.IntegerArrayType(types.int64)
+            out_dtype = bodo.types.IntegerArrayType(types.int64)
             may_cause_duplicate_dict_array_values = False
             fn_call = "len(arg0)"
         else:

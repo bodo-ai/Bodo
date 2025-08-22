@@ -396,7 +396,9 @@ def cast_float_to_nullable(df, df_type):
 
     col_map = defaultdict(list)
     for i, coltype in enumerate(df_type.data):
-        if isinstance(coltype, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
+        if isinstance(
+            coltype, (bodo.types.IntegerArrayType, bodo.types.FloatingArrayType)
+        ):
             dtype = coltype.get_pandas_scalar_type_instance
             col_map[dtype].append(df.columns[i])
     for typ, cols in col_map.items():

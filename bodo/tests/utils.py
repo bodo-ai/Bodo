@@ -1214,7 +1214,7 @@ def _to_pa_array(py_out, bodo_arr_type):
     if isinstance(py_out, np.ndarray) and isinstance(py_out.dtype, np.dtypes.StrDType):
         py_out = py_out.astype(object)
     if (
-        isinstance(bodo_arr_type, bodo.IntegerArrayType)
+        isinstance(bodo_arr_type, bodo.types.IntegerArrayType)
         and isinstance(py_out, np.ndarray)
         and np.issubdtype(py_out.dtype, np.floating)
     ):

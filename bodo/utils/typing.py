@@ -1213,7 +1213,7 @@ def is_list_like_index_type(
         or (isinstance(t, types.Array) and t.ndim == 1)
         or isinstance(t, (NumericIndexType, RangeIndexType))
         or isinstance(t, SeriesType)
-        or isinstance(t, bodo.IntegerArrayType)
+        or isinstance(t, bodo.types.IntegerArrayType)
         or t == boolean_array_type
     )
 
@@ -1738,10 +1738,10 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         return bodo.CategoricalArrayType(dtype)
 
     if isinstance(dtype, bodo.libs.int_arr_ext.IntDtype):
-        return bodo.IntegerArrayType(dtype.dtype)
+        return bodo.types.IntegerArrayType(dtype.dtype)
 
     if isinstance(dtype, bodo.libs.float_arr_ext.FloatDtype):  # pragma: no cover
-        return bodo.FloatingArrayType(dtype.dtype)
+        return bodo.types.FloatingArrayType(dtype.dtype)
 
     if dtype == types.boolean:
         return bodo.types.boolean_array_type
@@ -3161,7 +3161,9 @@ def get_castable_arr_dtype(arr_type: types.Type):
         (bodo.types.ArrayItemArrayType, bodo.MapArrayType, bodo.StructArrayType),
     ):
         cast_typ = arr_type
-    elif isinstance(arr_type, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
+    elif isinstance(
+        arr_type, (bodo.types.IntegerArrayType, bodo.types.FloatingArrayType)
+    ):
         cast_typ = arr_type.get_pandas_scalar_type_instance.name
     elif arr_type == bodo.types.boolean_array_type:
         cast_typ = bodo.libs.bool_arr_ext.boolean_dtype
@@ -3232,7 +3234,7 @@ def error_on_unsupported_streaming_arrays(table_type):
     )
 
     for arr_type in table_type.arr_types:
-        if isinstance(arr_type, bodo.IntervalArrayType):
+        if isinstance(arr_type, bodo.types.IntervalArrayType):
             raise BodoError(f"Array type {arr_type} not supported in streaming yet")
 
 

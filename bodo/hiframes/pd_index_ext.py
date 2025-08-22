@@ -2148,7 +2148,7 @@ class PeriodIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         # TODO: nullable integer array?
         members = [
-            ("data", bodo.IntegerArrayType(types.int64)),
+            ("data", bodo.types.IntegerArrayType(types.int64)),
             ("name", fe_type.name_typ),
             ("dict", types.DictType(types.int64, types.int64)),
         ]
@@ -2232,9 +2232,11 @@ def box_period_index(typ, val, c):
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
-    c.context.nrt.incref(c.builder, bodo.IntegerArrayType(types.int64), index_val.data)
+    c.context.nrt.incref(
+        c.builder, bodo.types.IntegerArrayType(types.int64), index_val.data
+    )
     data_obj = c.pyapi.from_native_value(
-        bodo.IntegerArrayType(types.int64), index_val.data, c.env_manager
+        bodo.types.IntegerArrayType(types.int64), index_val.data, c.env_manager
     )
     c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
@@ -2262,7 +2264,7 @@ def box_period_index(typ, val, c):
 @unbox(PeriodIndexType)
 def unbox_period_index(typ, val, c):
     # get data and name attributes
-    arr_typ = bodo.IntegerArrayType(types.int64)
+    arr_typ = bodo.types.IntegerArrayType(types.int64)
     asi8_obj = c.pyapi.object_getattr_string(val, "asi8")
     isna_obj = c.pyapi.call_method(val, "isna", ())
     name_obj = c.pyapi.object_getattr_string(val, "name")
@@ -7130,7 +7132,7 @@ def lower_constant_period_index(context, builder, ty, pyval):
     """Constant lowering for PeriodIndexType."""
     data = context.get_constant_generic(
         builder,
-        bodo.IntegerArrayType(types.int64),
+        bodo.types.IntegerArrayType(types.int64),
         pd.arrays.IntegerArray(pyval.asi8, pyval.isna()),
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)

@@ -1411,8 +1411,8 @@ def overload_series_idxmin(S, axis=0, skipna=True):
         or isinstance(
             S.data,
             (
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
                 bodo.CategoricalArrayType,
                 bodo.DatetimeArrayType,
             ),
@@ -1472,8 +1472,8 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         or isinstance(
             S.data,
             (
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
                 bodo.CategoricalArrayType,
                 bodo.DatetimeArrayType,
             ),
@@ -1526,8 +1526,8 @@ def check_argmax_min_args(func_name, S):
         or isinstance(
             S.data,
             (
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
                 bodo.CategoricalArrayType,
                 bodo.types.DecimalArrayType,
                 bodo.DatetimeArrayType,

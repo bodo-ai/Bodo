@@ -258,7 +258,7 @@ def overload_iceberg_writer_fetch_theta(writer):
     that does not have a theta sketch, returns null instead. Largely
     used for testing purposes.
     """
-    arr_type = bodo.FloatingArrayType(types.float64)
+    arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(writer):  # pragma: no cover
         res_info = _iceberg_writer_fetch_theta(writer["theta_sketches"])
@@ -304,7 +304,7 @@ def overload_read_puffin_file_ndvs(puffin_file_loc, iceberg_schema):
     Reads the NDV values from a puffin file. This is used for testing purposes
     to verify that the theta sketches are being written correctly.
     """
-    arr_type = bodo.FloatingArrayType(types.float64)
+    arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(puffin_file_loc, iceberg_schema):  # pragma: no cover
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(

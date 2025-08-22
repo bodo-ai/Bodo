@@ -177,12 +177,14 @@ def test_getitem_slice(map_arr_value):
             True,
             id="simple_map_array",
         ),
-        pytest.param(bodo.IntegerArrayType(bodo.types.int64), False, id="simple_false"),
+        pytest.param(
+            bodo.types.IntegerArrayType(bodo.types.int64), False, id="simple_false"
+        ),
         pytest.param(
             bodo.types.ArrayItemArrayType(
                 bodo.MapArrayType(
-                    bodo.IntegerArrayType(bodo.types.int64),
-                    bodo.FloatingArrayType(bodo.types.float64),
+                    bodo.types.IntegerArrayType(bodo.types.int64),
+                    bodo.types.FloatingArrayType(bodo.types.float64),
                 )
             ),
             True,
@@ -190,7 +192,9 @@ def test_getitem_slice(map_arr_value):
         ),
         pytest.param(
             bodo.types.ArrayItemArrayType(
-                bodo.types.ArrayItemArrayType(bodo.IntegerArrayType(bodo.types.int64))
+                bodo.types.ArrayItemArrayType(
+                    bodo.types.IntegerArrayType(bodo.types.int64)
+                )
             ),
             False,
             id="array_false",
@@ -198,10 +202,10 @@ def test_getitem_slice(map_arr_value):
         pytest.param(
             bodo.StructArrayType(
                 (
-                    bodo.IntegerArrayType(bodo.types.int64),
+                    bodo.types.IntegerArrayType(bodo.types.int64),
                     bodo.MapArrayType(
-                        bodo.IntegerArrayType(bodo.types.int64),
-                        bodo.FloatingArrayType(bodo.types.float64),
+                        bodo.types.IntegerArrayType(bodo.types.int64),
+                        bodo.types.FloatingArrayType(bodo.types.float64),
                     ),
                 ),
                 ("ints", "map"),
@@ -212,9 +216,9 @@ def test_getitem_slice(map_arr_value):
         pytest.param(
             bodo.StructArrayType(
                 (
-                    bodo.IntegerArrayType(bodo.types.int64),
+                    bodo.types.IntegerArrayType(bodo.types.int64),
                     bodo.types.ArrayItemArrayType(
-                        bodo.IntegerArrayType(bodo.types.int64)
+                        bodo.types.IntegerArrayType(bodo.types.int64)
                     ),
                 ),
                 ("ints", "array"),

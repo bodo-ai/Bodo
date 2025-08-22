@@ -1673,8 +1673,8 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
             or isinstance(
                 coltype,
                 (
-                    bodo.IntegerArrayType,
-                    bodo.FloatingArrayType,
+                    bodo.types.IntegerArrayType,
+                    bodo.types.FloatingArrayType,
                     bodo.CategoricalArrayType,
                 ),
             )
@@ -1718,8 +1718,8 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
             or isinstance(
                 coltype,
                 (
-                    bodo.IntegerArrayType,
-                    bodo.FloatingArrayType,
+                    bodo.types.IntegerArrayType,
+                    bodo.types.FloatingArrayType,
                     bodo.CategoricalArrayType,
                 ),
             )
@@ -4302,7 +4302,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
                 bodo.MapArrayType,
                 bodo.StructArrayType,
                 bodo.TupleArrayType,
-                bodo.IntervalArrayType,
+                bodo.types.IntervalArrayType,
             ),
         ):
             raise BodoError(
@@ -4342,7 +4342,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
             bodo.MapArrayType,
             bodo.StructArrayType,
             bodo.TupleArrayType,
-            bodo.IntervalArrayType,
+            bodo.types.IntervalArrayType,
         ),
     ):
         raise BodoError(
@@ -5659,7 +5659,7 @@ def overload_dataframe_info(
             dtype_name = f"{df.data[i].dtype}"
             if isinstance(df.data[i], bodo.CategoricalArrayType):
                 dtype_name = "category"
-            elif isinstance(df.data[i], bodo.IntegerArrayType):
+            elif isinstance(df.data[i], bodo.types.IntegerArrayType):
                 int_typ_name = bodo.libs.int_arr_ext.IntDtype(df.data[i].dtype).name
                 dtype_name = int_typ_name[:-7]  # remove trailing "Dtype()"
             elif isinstance(df.data[i], FloatingArrayType):

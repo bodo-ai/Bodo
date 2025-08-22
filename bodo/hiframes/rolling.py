@@ -1574,8 +1574,8 @@ def is_supported_shift_array_type(arr_type):
         or isinstance(
             arr_type,
             (
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
                 bodo.types.DecimalArrayType,
                 bodo.DatetimeArrayType,
                 bodo.types.TimeArrayType,

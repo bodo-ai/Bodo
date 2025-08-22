@@ -888,7 +888,7 @@ def overload_windowed_approx_percentile(data, q):
         of the data (or null if data is all null/empty) used to fill
         an array the same size as data.
     """
-    arr_type = bodo.FloatingArrayType(types.float64)
+    arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(data, q):  # pragma: no cover
         data = bodo.utils.conversion.coerce_to_array(data)

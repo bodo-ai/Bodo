@@ -83,7 +83,7 @@ def _get_type_max_value(dtype):  # pragma: no cover
 def _get_type_max_value_overload(dtype):
     # nullable float and int data
     if isinstance(
-        dtype, (bodo.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
+        dtype, (bodo.types.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
     ):
         _dtype = dtype.dtype
         return lambda dtype: numba.cpython.builtins.get_type_max_value(
@@ -175,7 +175,7 @@ def _get_type_min_value(dtype):  # pragma: no cover
 def _get_type_min_value_overload(dtype):
     # nullable float and int data
     if isinstance(
-        dtype, (bodo.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
+        dtype, (bodo.types.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
     ):
         _dtype = dtype.dtype
         return lambda dtype: numba.cpython.builtins.get_type_min_value(

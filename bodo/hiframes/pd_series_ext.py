@@ -1052,9 +1052,9 @@ def pd_series_overload(
         else:
             nb_dtype = bodo.utils.typing.parse_dtype(dtype, "pandas.Series")
             if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
-                _arr_dtype = bodo.IntegerArrayType(nb_dtype.dtype)
+                _arr_dtype = bodo.types.IntegerArrayType(nb_dtype.dtype)
             elif isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype):
-                _arr_dtype = bodo.FloatingArrayType(nb_dtype.dtype)
+                _arr_dtype = bodo.types.FloatingArrayType(nb_dtype.dtype)
             elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
                 _arr_dtype = bodo.types.boolean_array_type
             elif nb_dtype == bodo.types.datetime64ns:  # pragma: no cover

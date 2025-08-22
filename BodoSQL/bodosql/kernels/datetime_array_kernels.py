@@ -2746,7 +2746,7 @@ def overload_to_days_util(arr):
     prefix_code = "unix_days_to_year_zero = 719528\n"
     # divisor to convert value -> days
     prefix_code += "nanoseconds_divisor = 86400000000000\n"
-    out_dtype = bodo.IntegerArrayType(types.int64)
+    out_dtype = bodo.types.IntegerArrayType(types.int64)
     # Note if the input is an array then we just operate directly on datetime64
     # to avoid Timestamp boxing.
     is_input_arr = bodo.utils.utils.is_array_typ(arr, False)
@@ -2901,7 +2901,7 @@ def overload_to_seconds_util(arr):
     # divisor to convert value -> seconds.
     # Note: This function does a floordiv for < seconds
     prefix_code += "nanoseconds_divisor = 1000000000\n"
-    out_dtype = bodo.IntegerArrayType(types.int64)
+    out_dtype = bodo.types.IntegerArrayType(types.int64)
     is_input_arr = bodo.utils.utils.is_array_typ(arr, False)
     if is_input_arr and not timezone:
         # Note if the input is an array then we just operate directly on datetime64
@@ -3474,7 +3474,7 @@ def dayofweek_util(arr, week_start):
     scalar_text = "start_day = max(0, arg1 - 1)\n"
     scalar_text += f"res[i] = ({dayofweek_str} - start_day + 1) % 7\n"
 
-    out_dtype = bodo.IntegerArrayType(numba.int64)
+    out_dtype = bodo.types.IntegerArrayType(numba.int64)
 
     return gen_vectorized(
         arg_names,
@@ -3553,7 +3553,7 @@ def overload_get_epoch_util(arr, unit):
     propagate_null = [True, False] * 2
     unwrap_str = get_timestamp_unwrapping_str(arr, tz_to_utc=True)
     scalar_text = f"res[i] = {unwrap_str}(arg0).value // {divisor}\n"
-    out_dtype = bodo.IntegerArrayType(numba.int64)
+    out_dtype = bodo.types.IntegerArrayType(numba.int64)
 
     return gen_vectorized(
         arg_names,
@@ -3733,7 +3733,7 @@ def overload_get_timezone_offset_util(arr, unit):
     # Note: This might be smaller but snowflake bound it at a Number(9, 0), which is
     # an int32. Since they/we may need to support out dated transition times, we will
     # be conservative and match Snowflake.
-    out_dtype = bodo.IntegerArrayType(numba.int32)
+    out_dtype = bodo.types.IntegerArrayType(numba.int32)
 
     return gen_vectorized(
         arg_names,
@@ -3815,7 +3815,7 @@ def months_between_util(dt0, dt1):
     scalar_text += "  months_frac_count = round((arg0.day - arg1.day)/31.0, 6)\n"
     scalar_text += "res[i] = months_int_count + months_frac_count\n"
 
-    out_dtype = bodo.FloatingArrayType(bodo.types.float64)
+    out_dtype = bodo.types.FloatingArrayType(bodo.types.float64)
 
     return gen_vectorized(
         arg_names,
@@ -3938,7 +3938,7 @@ def weekofyear_util(arr, week_start, week_of_year_policy):
         )
         scalar_text += "res[i] = offset_date.isocalendar()[1]\n"
 
-    out_dtype = bodo.IntegerArrayType(numba.int64)
+    out_dtype = bodo.types.IntegerArrayType(numba.int64)
 
     return gen_vectorized(
         arg_names,
@@ -4043,7 +4043,7 @@ def yearofweek_util(arr, week_start, week_of_year_policy):
         scalar_text += "year_of_week = offset_date.isocalendar()[0]\n"
     scalar_text += "res[i] = year_of_week\n"
 
-    out_dtype = bodo.IntegerArrayType(numba.int64)
+    out_dtype = bodo.types.IntegerArrayType(numba.int64)
 
     return gen_vectorized(
         arg_names,

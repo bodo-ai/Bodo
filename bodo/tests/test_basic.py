@@ -1288,7 +1288,7 @@ def test_int_scalar_to_array(memory_leak_check):
     """
     Tests that coerce_scalar_to_array keeps integers as non-nullable.
     """
-    arr_type = bodo.IntegerArrayType(types.int64)
+    arr_type = bodo.types.IntegerArrayType(types.int64)
 
     def impl(arg, len):
         return bodo.utils.conversion.coerce_scalar_to_array(arg, len, arr_type)

@@ -616,7 +616,7 @@ def overload_array_position_util(elem, container, elem_is_scalar, container_is_s
     arg_names = ["elem", "container", "elem_is_scalar", "container_is_scalar"]
     arg_types = [elem, container, elem_is_scalar, container_is_scalar]
     propagate_null = [False, True, False, False]
-    out_dtype = bodo.IntegerArrayType(types.int32)
+    out_dtype = bodo.types.IntegerArrayType(types.int32)
     are_arrays = [not elem_is_scalar_bool, not container_is_scalar_bool, False, False]
     scalar_text = "match = -1\n"
     if elem == bodo.types.none:
@@ -880,7 +880,7 @@ def overload_array_size_util(arr, is_scalar):  # pragma: no cover
         is_scalar,
     ]
     propagate_null = [True, False, False, False]
-    out_dtype = bodo.IntegerArrayType(types.int32)
+    out_dtype = bodo.types.IntegerArrayType(types.int32)
     are_arrays = [arr_is_array] + [False] * 3
     return gen_vectorized(
         arg_names,

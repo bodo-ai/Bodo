@@ -756,7 +756,7 @@ def array_to_info_codegen(context, builder, sig, args):
     # calls itself on string array data which generates an unnecessary CPython wrapper
     # for a nested array. Boxing of nested array uses info_to_array().
     # See test_scatterv_gatherv_allgatherv_df_jit"[df_value2]"
-    if isinstance(arr_type, bodo.PrimitiveArrayType):
+    if isinstance(arr_type, bodo.types.PrimitiveArrayType):
         return context.get_constant_null(array_info_type)
 
     raise_bodo_error(f"array_to_info(): array type {arr_type} is not supported")
@@ -1195,7 +1195,7 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
     # calls itself on string array data which generates an unnecessary CPython wrapper
     # for a nested array. Unboxing of nested array uses info_to_array().
     # See test_scatterv_gatherv_allgatherv_df_jit"[df_value2]"
-    if isinstance(arr_type, bodo.PrimitiveArrayType):
+    if isinstance(arr_type, bodo.types.PrimitiveArrayType):
         return context.get_constant_null(arr_type)
 
     # null array

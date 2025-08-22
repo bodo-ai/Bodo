@@ -2433,7 +2433,11 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     if (
         isinstance(
             col_array_dtype,
-            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.types.TimeArrayType),
+            (
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
+                bodo.types.TimeArrayType,
+            ),
         )
         or col_array_dtype
         in (
@@ -2832,7 +2836,7 @@ def _replace_column_accesses(
                     array_typ,
                     (
                         bodo.libs.int_arr_ext.IntegerArrayType,
-                        bodo.FloatingArrayType,
+                        bodo.types.FloatingArrayType,
                         bodo.types.TimeArrayType,
                     ),
                 )

@@ -199,7 +199,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
     # If the index column is included in the output, add an extra column to store it
     output_index_bool = get_overload_const_bool(output_index)
     if output_index_bool:
-        out_typs += (bodo.IntegerArrayType(types.int64),)
+        out_typs += (bodo.types.IntegerArrayType(types.int64),)
 
     # If the value column is included in the output, add an extra column to store it
     output_val_bool = get_overload_const_bool(output_val)

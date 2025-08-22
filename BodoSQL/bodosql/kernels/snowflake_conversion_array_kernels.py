@@ -2220,9 +2220,9 @@ def to_number_util_overload(
         output_scalar_int_type = types.int64
 
     if scale == 0:
-        out_dtype = bodo.IntegerArrayType(output_scalar_int_type)
+        out_dtype = bodo.types.IntegerArrayType(output_scalar_int_type)
     else:
-        out_dtype = bodo.FloatingArrayType(types.float64)
+        out_dtype = bodo.types.FloatingArrayType(types.float64)
 
     # NOTE: we can't use continue/early return with gen vectorized,
     # so we use a flag to indicate if we've already seen an invalid value/should skip

@@ -937,7 +937,7 @@ def overload_decimal_arr_to_float64(arr):
         "decimal_arr_to_float64: decimal array expected"
     )
 
-    output_arr_type = bodo.FloatingArrayType(types.float64)
+    output_arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(arr):  # pragma: no cover
         arr_info = array_to_info(arr)
@@ -1596,7 +1596,7 @@ def overload_decimal_array_sign(arr):
         "decimal_array_sign: DecimalArrayType expected"
     )
 
-    output_arr_type = bodo.IntegerArrayType(types.int8)
+    output_arr_type = bodo.types.IntegerArrayType(types.int8)
 
     def impl(arr):  # pragma: no cover
         arr_info = array_to_info(arr)
@@ -3815,8 +3815,8 @@ def create_cmp_op_overload(op):
         if isinstance(lhs, DecimalArrayType) or isinstance(rhs, DecimalArrayType):
             allowed_types = (
                 DecimalArrayType,
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
                 types.Array,
                 types.Integer,
                 types.Float,

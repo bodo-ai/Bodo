@@ -117,7 +117,7 @@ public class BodoArrayHelpers {
       case TINYINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.types.int8)";
+          typeName = "bodo.types.IntegerArrayType(bodo.types.int8)";
         } else {
           typeName = "numba.core.types.Array(bodo.types.int8, 1, 'C')";
         }
@@ -125,7 +125,7 @@ public class BodoArrayHelpers {
       case SMALLINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.types.int16)";
+          typeName = "bodo.types.IntegerArrayType(bodo.types.int16)";
         } else {
           typeName = "numba.core.types.Array(bodo.types.int16, 1, 'C')";
         }
@@ -133,7 +133,7 @@ public class BodoArrayHelpers {
       case INTEGER:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.types.int32)";
+          typeName = "bodo.types.IntegerArrayType(bodo.types.int32)";
         } else {
           typeName = "numba.core.types.Array(bodo.types.int32, 1, 'C')";
         }
@@ -141,14 +141,14 @@ public class BodoArrayHelpers {
       case BIGINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.types.int64)";
+          typeName = "bodo.types.IntegerArrayType(bodo.types.int64)";
         } else {
           typeName = "numba.core.types.Array(bodo.types.int64, 1, 'C')";
         }
         break;
       case FLOAT:
         if (nullable) {
-          typeName = "bodo.FloatingArrayType(bodo.types.float32)";
+          typeName = "bodo.types.FloatingArrayType(bodo.types.float32)";
         } else {
           typeName = "numba.core.types.Array(bodo.types.float32, 1, 'C')";
         }
@@ -156,7 +156,7 @@ public class BodoArrayHelpers {
       case DOUBLE:
       case DECIMAL:
         if (nullable) {
-          typeName = "bodo.FloatingArrayType(bodo.types.float64)";
+          typeName = "bodo.types.FloatingArrayType(bodo.types.float64)";
         } else {
           typeName = "numba.core.types.Array(bodo.types.float64, 1, 'C')";
         }

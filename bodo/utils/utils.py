@@ -306,8 +306,8 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
     ) or isinstance(
         arr_type,
         (
-            bodo.IntegerArrayType,
-            bodo.FloatingArrayType,
+            bodo.types.IntegerArrayType,
+            bodo.types.FloatingArrayType,
             bodo.types.TimeArrayType,
             bodo.types.DecimalArrayType,
             bodo.DatetimeArrayType,
@@ -316,7 +316,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         return CArrayTypeEnum.NULLABLE_INT_BOOL.value
     elif isinstance(arr_type, bodo.CategoricalArrayType):
         return CArrayTypeEnum.CATEGORICAL.value
-    elif isinstance(arr_type, bodo.IntervalArrayType):
+    elif isinstance(arr_type, bodo.types.IntervalArrayType):
         return CArrayTypeEnum.INTERVAL.value
     elif arr_type == timestamptz_array_type:
         return CArrayTypeEnum.TIMESTAMPTZ.value

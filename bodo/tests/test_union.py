@@ -139,11 +139,11 @@ def test_stream_union_integer_promotion(memory_leak_check):
     """
 
     nn_int8_arr = types.Array(types.int8, 1, "C")
-    null_int8_arr = bodo.IntegerArrayType(types.int8)
+    null_int8_arr = bodo.types.IntegerArrayType(types.int8)
     nn_int32_arr = types.Array(types.int32, 1, "C")
-    null_int32_arr = bodo.IntegerArrayType(types.int32)
+    null_int32_arr = bodo.types.IntegerArrayType(types.int32)
     nn_int64_arr = types.Array(types.int64, 1, "C")
-    null_int64_arr = bodo.IntegerArrayType(types.int64)
+    null_int64_arr = bodo.types.IntegerArrayType(types.int64)
 
     state = UnionStateType(
         in_table_types=(
@@ -177,10 +177,10 @@ def test_stream_union_float_promotion(memory_leak_check):
 
     # Float and Integer + Float Tests
     nn_int8_arr = types.Array(types.int8, 1, "C")
-    null_int32_arr = bodo.IntegerArrayType(types.int32)
-    null_int64_arr = bodo.IntegerArrayType(types.int64)
+    null_int32_arr = bodo.types.IntegerArrayType(types.int32)
+    null_int64_arr = bodo.types.IntegerArrayType(types.int64)
     nn_f32_arr = types.Array(types.float32, 1, "C")
-    null_f64_arr = bodo.FloatingArrayType(types.float64)
+    null_f64_arr = bodo.types.FloatingArrayType(types.float64)
 
     state = UnionStateType(
         in_table_types=(
@@ -224,16 +224,16 @@ def test_stream_union_decimal_promotion(memory_leak_check):
                     bodo.types.DecimalArrayType(12, 5),
                     bodo.types.DecimalArrayType(15, 6),
                     bodo.types.DecimalArrayType(16, 0),
-                    bodo.IntegerArrayType(types.int32),
+                    bodo.types.IntegerArrayType(types.int32),
                     types.Array(types.float32, 1, "C"),
-                    bodo.FloatingArrayType(types.float64),
+                    bodo.types.FloatingArrayType(types.float64),
                 )
             ),
             TableType(
                 (
                     bodo.types.DecimalArrayType(15, 6),
                     bodo.types.DecimalArrayType(12, 5),
-                    bodo.IntegerArrayType(types.int64),
+                    bodo.types.IntegerArrayType(types.int64),
                     bodo.types.DecimalArrayType(26, 0),
                     bodo.types.DecimalArrayType(15, 6),
                     bodo.types.DecimalArrayType(38, 18),
@@ -245,7 +245,7 @@ def test_stream_union_decimal_promotion(memory_leak_check):
                     bodo.types.DecimalArrayType(15, 14),
                     types.Array(types.int32, 1, "C"),
                     types.Array(types.int8, 1, "C"),
-                    bodo.IntegerArrayType(types.int32),
+                    bodo.types.IntegerArrayType(types.int32),
                     bodo.types.DecimalArrayType(38, 4),
                 )
             ),
@@ -262,16 +262,16 @@ def test_stream_union_decimal_promotion(memory_leak_check):
             bodo.types.DecimalArrayType(23, 14),
             # All are decimal with 0 scale or integer
             # Scale=0, Max Non-Scale=16 => int64
-            bodo.IntegerArrayType(types.int64),
+            bodo.types.IntegerArrayType(types.int64),
             # All are decimal with 0 scale or integer
             # Scale=0, Max Non-Scale=26 which is above max int size
             bodo.types.DecimalArrayType(26, 0),
             # Merging a float, so must cast to float at end
             # Max Precision=15 => float64
-            bodo.FloatingArrayType(types.float64),
+            bodo.types.FloatingArrayType(types.float64),
             # Merging a float, so must cast to float at end
             # Max Precision=38 => overflow but truncate to float64
-            bodo.FloatingArrayType(types.float64),
+            bodo.types.FloatingArrayType(types.float64),
         )
     )
 

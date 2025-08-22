@@ -218,7 +218,7 @@ def check_series_typing_metadata(orig_series, output_series):
     orig_arr_type = _infer_series_arr_type(orig_series)
     orig_dtype = (
         bodo.libs.int_arr_ext.IntDtype(orig_arr_type.dtype)
-        if isinstance(orig_arr_type, bodo.IntegerArrayType)
+        if isinstance(orig_arr_type, bodo.types.IntegerArrayType)
         else orig_arr_type.dtype
     )
     return (

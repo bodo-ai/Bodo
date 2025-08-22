@@ -316,9 +316,9 @@ def gen_snowflake_schema(
         elif col_type == bodo.types.boolean_array_type:
             sf_schema[col_name] = "BOOLEAN"
         # TODO: differentiate between unsigned vs. signed, 8, 16, 32, 64
-        elif isinstance(col_type, bodo.IntegerArrayType):
+        elif isinstance(col_type, bodo.types.IntegerArrayType):
             sf_schema[col_name] = "NUMBER(38, 0)"
-        elif isinstance(col_type, bodo.FloatingArrayType):
+        elif isinstance(col_type, bodo.types.FloatingArrayType):
             sf_schema[col_name] = "REAL"
         elif isinstance(col_type, bodo.types.DecimalArrayType):
             # TODO(njriasan): Integrate column_precisions when we have accurate

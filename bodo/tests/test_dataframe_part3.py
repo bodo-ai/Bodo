@@ -534,7 +534,7 @@ def test_update_df_type(memory_leak_check):
     new_dtype = infered_dtype.replace_col_type(
         "B",
         bodo.MapArrayType(
-            bodo.types.string_array_type, bodo.IntegerArrayType(types.int64)
+            bodo.types.string_array_type, bodo.types.IntegerArrayType(types.int64)
         ),
     )
 

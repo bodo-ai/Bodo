@@ -41,7 +41,7 @@ desired Python, Numpy, or Pandas type.
 |---------------|-----------------------------------------|
 | `bodo.types.bool_[:]`, `bodo.types.int8[:]`, ..., `bodo.types.int64[:]`, `bodo.types.uint8[:]`, ..., `bodo.types.uint64[:]`, `bodo.types.float32[:]`, `bodo.types.float64[:]` | One-dimensional Numpy array of the given type. A full list of supported Numpy types can be found [here](https://numba.readthedocs.io/en/stable/reference/types.html#numbers){target="blank"}. A multidimensional can be specified by adding additional colons (*e.g.*, `bodo.types.int32[:, :, :]` for a three-dimensional array).|
 | `bodo.types.string_array_type`| Array of nullable strings|
-| `bodo.IntegerArrayType(integer_type)`|  Array of Pandas nullable integers of the given integer type. <br> *e.g.*, `bodo.IntegerArrayType(bodo.types.int64)`|
+| `bodo.types.IntegerArrayType(integer_type)`|  Array of Pandas nullable integers of the given integer type. <br> *e.g.*, `bodo.types.IntegerArrayType(bodo.types.int64)`|
 | `bodo.types.boolean_array_type`| Array of Pandas nullable booleans|
 | `bodo.types.datetime64ns[:]`| Array of Numpy datetime64 values|
 | `bodo.types.timedelta64ns[:]`|Array of Numpy timedelta64 values|

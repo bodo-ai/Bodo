@@ -117,9 +117,9 @@ class CoerceToNdarrayInfer(AbstractTemplate):
                 elif data.dtype == bodo.types.datetime64ns:
                     output = bodo.DatetimeArrayType(None)
                 elif isinstance(data.dtype, types.Float):
-                    output = bodo.FloatingArrayType(data.dtype)
+                    output = bodo.types.FloatingArrayType(data.dtype)
                 else:  # Integer case
-                    output = bodo.IntegerArrayType(data.dtype)
+                    output = bodo.types.IntegerArrayType(data.dtype)
                 return signature(output, *folded_args).replace(pysig=pysig)
             if data.layout != "C":
                 return signature(data.copy(layout="C"), *folded_args).replace(
@@ -130,7 +130,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
         if isinstance(data, RangeIndexType):
             if not is_overload_none(use_nullable_array):
                 return signature(
-                    bodo.IntegerArrayType(data.dtype), *folded_args
+                    bodo.types.IntegerArrayType(data.dtype), *folded_args
                 ).replace(pysig=pysig)
             return signature(types.Array(data.dtype, 1, "C"), *folded_args).replace(
                 pysig=pysig
@@ -151,11 +151,11 @@ class CoerceToNdarrayInfer(AbstractTemplate):
             ):
                 if isinstance(data.dtype, types.Integer):
                     return signature(
-                        bodo.IntegerArrayType(data.dtype), *folded_args
+                        bodo.types.IntegerArrayType(data.dtype), *folded_args
                     ).replace(pysig=pysig)
                 else:
                     return signature(
-                        bodo.FloatingArrayType(data.dtype), *folded_args
+                        bodo.types.FloatingArrayType(data.dtype), *folded_args
                     ).replace(pysig=pysig)
             return signature(data.data, *folded_args).replace(pysig=pysig)
 
@@ -180,9 +180,9 @@ class CoerceToNdarrayInfer(AbstractTemplate):
             elif not is_overload_none(use_nullable_array):
                 dtype = types.unliteral(data)
                 if isinstance(dtype, types.Integer):
-                    output = bodo.IntegerArrayType(dtype)
+                    output = bodo.types.IntegerArrayType(dtype)
                 elif isinstance(dtype, types.Float):
-                    output = bodo.FloatingArrayType(dtype)
+                    output = bodo.types.FloatingArrayType(dtype)
                 elif dtype == types.bool_:
                     output = bodo.types.boolean_array_type
             else:

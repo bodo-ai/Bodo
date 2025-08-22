@@ -3105,8 +3105,8 @@ def test_dist_scalar_struct_to_arr(memory_leak_check):
 
     global_1 = bodo.StructArrayType(
         (
-            bodo.IntegerArrayType(bodo.types.int64),
-            bodo.bodo.IntegerArrayType(bodo.types.int32),
+            bodo.types.IntegerArrayType(bodo.types.int64),
+            bodo.bodo.types.IntegerArrayType(bodo.types.int32),
         ),
         ("A", "B"),
     )
@@ -3129,8 +3129,8 @@ def test_dist_scalar_map_to_arr(memory_leak_check):
     """Make sure coerce_scalar_to_array for map array works for distributed output"""
 
     global_1 = bodo.MapArrayType(
-        bodo.IntegerArrayType(bodo.types.int64),
-        bodo.bodo.IntegerArrayType(bodo.types.int32),
+        bodo.types.IntegerArrayType(bodo.types.int64),
+        bodo.bodo.types.IntegerArrayType(bodo.types.int32),
     )
 
     def impl(a, n):
@@ -3235,13 +3235,14 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     "dtype",
     [
         bodo.MapArrayType(
-            bodo.types.dict_str_arr_type, bodo.FloatingArrayType(bodo.types.float32)
+            bodo.types.dict_str_arr_type,
+            bodo.types.FloatingArrayType(bodo.types.float32),
         ),
         bodo.StructArrayType(
             (
                 bodo.types.ArrayItemArrayType(bodo.types.dict_str_arr_type),
                 bodo.MapArrayType(
-                    bodo.IntegerArrayType(bodo.types.int32),
+                    bodo.types.IntegerArrayType(bodo.types.int32),
                     bodo.DatetimeArrayType(None),
                 ),
             ),
