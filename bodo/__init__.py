@@ -267,8 +267,6 @@ from bodo.decorators import is_jit_execution, jit, wrap_python
 
 parquet_validate_schema = True
 
-import bodo.utils.tracing
-import bodo.utils.tracing_py
 from bodo.user_logging import set_bodo_verbose_logger, set_verbose_level
 
 # Restore thread limit. We don't want to limit other libraries like Arrow.
