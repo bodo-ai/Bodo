@@ -344,10 +344,10 @@ def test_results_deleted_after_collection(datapath):
 
 
 def test_spawn_type_register():
-    """test bodo.register_type() support in spawn mode"""
+    """test bodo.types.register_type() support in spawn mode"""
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df_type1 = bodo.typeof(df1)
-    bodo.register_type("my_type1", df_type1)
+    bodo.types.register_type("my_type1", df_type1)
 
     def impl():
         with numba.objmode(df="my_type1"):

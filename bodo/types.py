@@ -72,3 +72,4 @@ from bodo.hiframes.pd_categorical_ext import (
 )
 from bodo.hiframes.table import TableType
 from bodo.libs.logging_ext import LoggingLoggerType
+from bodo.utils.typing import register_type

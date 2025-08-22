@@ -15,10 +15,10 @@ pytestmark = pytest_pandas
 
 
 def test_type_register():
-    """test bodo.register_type() including error checking"""
+    """test bodo.types.register_type() including error checking"""
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df_type1 = bodo.typeof(df1)
-    bodo.register_type("my_type1", df_type1)
+    bodo.types.register_type("my_type1", df_type1)
 
     def impl():
         with numba.objmode(df="my_type1"):
@@ -34,11 +34,11 @@ def test_type_register():
 
     # error checking
     with pytest.raises(BodoError, match="type name 'my_type1' already exists"):
-        bodo.register_type("my_type1", df_type1)
+        bodo.types.register_type("my_type1", df_type1)
     with pytest.raises(BodoError, match="type name should be a string"):
-        bodo.register_type(3, df_type1)
+        bodo.types.register_type(3, df_type1)
     with pytest.raises(BodoError, match="type value should be a valid data type"):
-        bodo.register_type("mt", 3)
+        bodo.types.register_type("mt", 3)
 
 
 def test_type_check():

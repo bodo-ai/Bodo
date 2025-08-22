@@ -260,7 +260,6 @@ from bodo.libs.distributed_api import (
     scatterv,
 )
 
-from bodo.utils.typing import register_type
 from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 
 

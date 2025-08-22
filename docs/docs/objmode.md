@@ -75,7 +75,7 @@ string name later:
 
 ``` py
 df_sample = pd.DataFrame({"A": [0], "B": ["AB"]}, index=[0])
-bodo.register_type("my_df_type", bodo.typeof(df_sample))
+bodo.types.register_type("my_df_type", bodo.typeof(df_sample))
 
 
 @bodo.wrap_python("my_df_type")
