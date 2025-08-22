@@ -201,7 +201,7 @@ def create_date_method_overload(method, is_str_method):
     func_text += "        numba.parfors.parfor.init_prange()\n"
     func_text += "        n = len(arr)\n"
     if is_str_method:
-        func_text += "        out_arr = bodo.utils.utils.alloc_type(n, bodo.string_array_type, (-1,))\n"
+        func_text += "        out_arr = bodo.utils.utils.alloc_type(n, bodo.types.string_array_type, (-1,))\n"
     else:
         func_text += "        out_arr = np.empty(n, np.dtype('datetime64[ns]'))\n"
     func_text += "        for i in numba.parfors.parfor.internal_prange(n):\n"

@@ -47,14 +47,14 @@ def is_valid_SQL_object_arg(arg):
         or (
             isinstance(arg, bodo.libs.map_arr_ext.MapArrayType)
             and (
-                arg.key_arr_type == bodo.string_array_type
+                arg.key_arr_type == bodo.types.string_array_type
                 or arg.key_arr_type == bodo.dict_str_arr_type
             )
         )
         or (
             isinstance(arg, bodo.libs.map_arr_ext.MapScalarType)
             and (
-                arg.key_arr_type == bodo.string_array_type
+                arg.key_arr_type == bodo.types.string_array_type
                 or arg.key_arr_type == bodo.dict_str_arr_type
             )
         )
@@ -287,7 +287,7 @@ def gen_vectorized(
     # the arguments with null propagation is a scalar NULL
     use_null_flushing = (
         use_dict_encoding
-        and out_dtype == bodo.string_array_type
+        and out_dtype == bodo.types.string_array_type
         and (
             any(
                 arg_types[i] == bodo.types.none and propagate_null[i]
@@ -360,7 +360,7 @@ def gen_vectorized(
             # array. Alternatively if we have not propagate_null[dict_encoded_arg] then we
             # will be modifying the indices in place so we must make a copy.
             if (
-                out_dtype == bodo.string_array_type
+                out_dtype == bodo.types.string_array_type
                 or not propagate_null[dict_encoded_arg]
             ):
                 func_text += (
@@ -368,7 +368,7 @@ def gen_vectorized(
                 )
             else:
                 func_text += f"   indices = {arg_names[dict_encoded_arg]}._indices\n"
-            if out_dtype == bodo.string_array_type:
+            if out_dtype == bodo.types.string_array_type:
                 # In Bodo, if has _has_unique_local_dictionary is True, there are no duplicate values in the
                 # dictionary. Therefore, if we're performing an operation that may create duplicate values,
                 # we need to set the values appropriately.
@@ -389,7 +389,7 @@ def gen_vectorized(
                 )
 
         # If dictionary encoded outputs are not being used, then the output is
-        # still bodo.string_array_type, the number of loop iterations is still the
+        # still bodo.types.string_array_type, the number of loop iterations is still the
         # length of the indices, and scalar_text/propagate_null should work the
         # same because isna checks the data & indices, and scalar_text uses the
         # arguments extracted by getitem.
@@ -429,7 +429,7 @@ def gen_vectorized(
             non_cached_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
 
         # If dictionary encoded outputs are not being used, then the output is
-        # still bodo.string_array_type, the number of loop iterations is still the
+        # still bodo.types.string_array_type, the number of loop iterations is still the
         # length of the indices, and scalar_text/propagate_null should work the
         # same because isna checks the data & indices, and scalar_text uses the
         # arguments extracted by getitem.
@@ -477,7 +477,7 @@ def gen_vectorized(
                 if not propagate_null[dict_encoded_arg]:
                     non_cached_text += f"   {arr_name} = bodo.libs.array_kernels.concat([bodo.libs.array_kernels.gen_na_array(1, {arr_name}), {arr_name}])\n"
             # adding one extra element in dictionary for null output if necessary
-            if out_dtype == bodo.string_array_type:
+            if out_dtype == bodo.types.string_array_type:
                 non_cached_text += "   res = bodo.libs.str_arr_ext.pre_alloc_string_array(vec_iter_end, -1)\n"
             else:
                 non_cached_text += "   res = bodo.utils.utils.alloc_type(vec_iter_end, out_dtype, (-1,))\n"
@@ -551,7 +551,7 @@ def gen_vectorized(
             # and insert the set_array call. This populates the cache with the
             # result for the next time this kernel is called.
             non_cached_text += "   else:\n"
-            if out_dtype == bodo.string_array_type:
+            if out_dtype == bodo.types.string_array_type:
                 non_cached_text += (
                     "      new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(n)\n"
                 )
@@ -575,7 +575,7 @@ def gen_vectorized(
         if use_dict_encoding:
             if not propagate_null[dict_encoded_arg]:
                 # If NULL was transformed to a non-NULL value, then we need to
-                # update `indices` (which is a copy for bodo.string_array_type
+                # update `indices` (which is a copy for bodo.types.string_array_type
                 # and therefore safe to modify) so that NULL entries map to the
                 # newly added transformed NULL value.
                 # TODO(aneesh) in the case where NULL was mapped to NULL, it
@@ -600,7 +600,7 @@ def gen_vectorized(
                 func_text += "         if bodo.libs.array_kernels.isna(res, loc):\n"
                 func_text += "            bodo.libs.array_kernels.setna(indices, i)\n"
             # If the output dtype is a string array, create the new dictionary encoded array
-            if out_dtype == bodo.string_array_type:
+            if out_dtype == bodo.types.string_array_type:
                 dict_id = "new_dict_id" if cache_dict_arrays else "None"
                 func_text += f"   res = bodo.libs.dict_arr_ext.init_dict_arr(res, indices, has_global, is_dict_unique, {dict_id})\n"
             # Otherwise, use the indices to copy the values from the smaller array
@@ -948,9 +948,10 @@ def is_valid_binary_arg(arg):  # pragma: no cover
     returns: False if the argument is not binary data
     """
     return not (
-        arg not in (types.none, bodo.bytes_type)
+        arg not in (types.none, bodo.types.bytes_type)
         and not (
-            bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.bytes_type
+            bodo.utils.utils.is_array_typ(arg, True)
+            and arg.dtype == bodo.types.bytes_type
         )
         and not is_overload_constant_bytes(arg)
         and not isinstance(arg, types.Bytes)
@@ -2052,7 +2053,7 @@ def get_combined_type(in_types, calling_func):
             bodo.utils.typing.is_str_arr_type(typ) for typ in in_types
         ):  # pragma: no cover
             raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
-        return bodo.string_array_type
+        return bodo.types.string_array_type
 
     # If the first type is is an array item array, verify that all of
     # the other types are also array item arrays and then recursively

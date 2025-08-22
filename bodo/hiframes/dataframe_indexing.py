@@ -202,7 +202,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                         )
                         return ret(*args)
 
-                    elif unliteral_lst_typ.dtype == bodo.string_type:
+                    elif unliteral_lst_typ.dtype == bodo.types.string_type:
                         (new_cols, new_data) = get_df_getitem_kept_cols_and_data(
                             df, df_col_inds_literal
                         )

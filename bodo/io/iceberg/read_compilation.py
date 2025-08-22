@@ -295,7 +295,7 @@ def get_orig_and_runtime_schema(
             raise BodoError(
                 f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not in table columns {col_names}"
             )
-        if orig_col_name_to_type[c] != bodo.string_array_type:
+        if orig_col_name_to_type[c] != bodo.types.string_array_type:
             raise BodoError(
                 f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not a string column"
             )

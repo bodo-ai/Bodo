@@ -3219,7 +3219,7 @@ def array_type_to_index(arr_typ, name_typ=None):
     """convert array type to a corresponding Index type"""
     if is_str_arr_type(arr_typ):
         return StringIndexType(name_typ, arr_typ)
-    if arr_typ == bodo.binary_array_type:
+    if arr_typ == bodo.types.binary_array_type:
         return BinaryIndexType(name_typ)
 
     assert isinstance(

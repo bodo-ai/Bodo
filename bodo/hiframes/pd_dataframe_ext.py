@@ -2502,7 +2502,7 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
 
     # object array of NaNs if dtype not specified
     if is_overload_none(dtype):
-        dtype = "bodo.string_array_type"
+        dtype = "bodo.types.string_array_type"
     else:
         dtype = "bodo.utils.conversion.array_type_from_dtype(dtype)"
 
@@ -2719,12 +2719,12 @@ class JoinTyper(AbstractTemplate):
                 columns.append(right_key)
                 if (
                     right_key_type == bodo.dict_str_arr_type
-                    and left_key_type == bodo.string_array_type
+                    and left_key_type == bodo.types.string_array_type
                 ):
                     # If we have a merge between a dict_array and a regular string
                     # array, the output needs to be a string array. This is because
                     # we will fall back to a string array for the join.
-                    out_col = bodo.string_array_type
+                    out_col = bodo.types.string_array_type
                 else:
                     out_col = right_key_type
                 data.append(out_col)
@@ -2737,12 +2737,12 @@ class JoinTyper(AbstractTemplate):
                 columns.append(left_key)
                 if (
                     left_key_type == bodo.dict_str_arr_type
-                    and right_key_type == bodo.string_array_type
+                    and right_key_type == bodo.types.string_array_type
                 ):
                     # If we have a merge between a dict_array and a regular string
                     # array, the output needs to be a string array. This is because
                     # we will fall back to a string array for the join.
-                    out_col = bodo.string_array_type
+                    out_col = bodo.types.string_array_type
                 else:
                     out_col = left_key_type
                 data.append(out_col)
@@ -2803,7 +2803,9 @@ class JoinTyper(AbstractTemplate):
             data.append(
                 bodo.CategoricalArrayType(
                     bodo.PDCategoricalDtype(
-                        ("left_only", "right_only", "both"), bodo.string_type, False
+                        ("left_only", "right_only", "both"),
+                        bodo.types.string_type,
+                        False,
                     )
                 )
             )
@@ -3997,7 +3999,7 @@ def to_sql_exception_guard(
                     if col_dtype == datetime_date_array_type:
                         dtyp[c] = sa.types.Date
                     elif col_dtype in (
-                        bodo.string_array_type,
+                        bodo.types.string_array_type,
                         bodo.dict_str_arr_type,
                     ) and (not disable_varchar2 or disable_varchar2 == "0"):
                         dtyp[c] = VARCHAR2(4000)
@@ -5052,10 +5054,10 @@ def overload_union_dataframes(
                     or other_col_typ == bodo.dict_str_arr_type
                 ):
                     if col_typ not in (
-                        bodo.string_array_type,
+                        bodo.types.string_array_type,
                         bodo.null_array_type,
                     ) and other_col_typ not in (
-                        bodo.string_array_type,
+                        bodo.types.string_array_type,
                         bodo.null_array_type,
                     ):
                         # If one column is dict encoded the other column must be a string

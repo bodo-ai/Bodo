@@ -872,7 +872,7 @@ def regexp_replace_util(
         scalar_text += "r = re.compile(posix_to_re(arg1), flag_bit_vector)\n"
         scalar_text += _gen_regex_replace_body()
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1011,7 +1011,7 @@ def regexp_substr_util(
             scalar_text += "      res[i] = arg0[start:end]\n"
             scalar_text += "   else:\n"
             scalar_text += "      arg0 = arg0[end:]\n"
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(

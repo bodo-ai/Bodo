@@ -1903,7 +1903,7 @@ def get_type_alloc_counts(t):
     if isinstance(t, (StructArrayType, TupleArrayType)):
         return 1 + sum(get_type_alloc_counts(d.dtype) for d in t.data)
 
-    if t == string_array_type or t == bodo.binary_array_type:
+    if t == string_array_type or t == bodo.types.binary_array_type:
         return 2
 
     if isinstance(t, ArrayItemArrayType):
@@ -1916,7 +1916,7 @@ def get_type_alloc_counts(t):
             t.value_arr_type
         )
 
-    if bodo.utils.utils.is_array_typ(t, False) or t == bodo.string_type:
+    if bodo.utils.utils.is_array_typ(t, False) or t == bodo.types.string_type:
         return 1
 
     if isinstance(t, StructType):

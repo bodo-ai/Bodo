@@ -63,7 +63,9 @@ def object_keys_util(arr):
     arg_types = [arr]
     propagate_null = [True]
     # TODO: see if we can optimize this for dictionary encoding, at least for the struct cases?
-    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(bodo.string_array_type)
+    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(
+        bodo.types.string_array_type
+    )
     typ = arr
     if bodo.hiframes.pd_series_ext.is_series_type(typ):
         typ = typ.data
@@ -82,7 +84,7 @@ def object_keys_util(arr):
         or (isinstance(typ, types.DictType) and typ.key_type == types.unicode_type)
         or (
             isinstance(typ, bodo.libs.map_arr_ext.MapScalarType)
-            and typ.key_arr_type == bodo.string_array_type
+            and typ.key_arr_type == bodo.types.string_array_type
         )
     ):
         scalar_text = "res[i] = bodo.libs.str_arr_ext.str_list_to_array(list(arg0))\n"
@@ -783,7 +785,7 @@ def overload_array_to_string_util(arr, separator, is_scalar):  # pragma: no cove
     arg_names = ["arr", "separator", "is_scalar"]
     arg_types = [arr, separator, is_scalar]
     propagate_null = [True, True, False]
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
     scalar_text = "arr_str = ''\n"
     scalar_text += "for idx0 in range(len(arg0)):\n"
     scalar_text += "   arr_str += arg1 + ('' if bodo.libs.array_kernels.isna(arg0, idx0) else bodosql.kernels.to_char(arg0[idx0], None, True))\n"

@@ -189,7 +189,7 @@ def overload_object_construct(values, names, scalars):
     )
 
     # TODO: optimize so the keys are dictionary encoded
-    out_dtype = bodo.MapArrayType(bodo.string_array_type, combined_dtype)
+    out_dtype = bodo.MapArrayType(bodo.types.string_array_type, combined_dtype)
 
     propagate_null = [False] * len(arg_names)
 
@@ -451,7 +451,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
         for j, typ in enumerate(arg_types):
             # all arrays must be dictionaries or a scalar
             dict_encode_data = dict_encode_data and (
-                typ == bodo.string_type
+                typ == bodo.types.string_type
                 or typ == bodo.dict_str_arr_type
                 or (
                     isinstance(typ, bodo.SeriesType)
@@ -478,7 +478,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
             if i in dead_cols:
                 dead_offset += 1
                 continue
-            elif arg_types[i - dead_offset] != bodo.string_type:
+            elif arg_types[i - dead_offset] != bodo.types.string_type:
                 # Dictionary encoding will directly access the indices and data arrays.
                 prefix_code += f"old_indices{i - dead_offset} = A{i}._indices\n"
                 prefix_code += f"old_data{i - dead_offset} = A{i}._data\n"
@@ -563,7 +563,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
             suffix_code += f"dict_lens = [{arr_lens}]\n"
             suffix_code += "if bodo.libs.streaming.dict_encoding.state_contains_multi_input_dict_array(dict_encoding_state, func_id, dict_ids, dict_lens):\n"
             suffix_code += "  dict_data, new_dict_id = bodo.libs.streaming.dict_encoding.get_array_multi_input(\n"
-            suffix_code += "    dict_encoding_state, func_id, dict_ids, dict_lens, bodo.string_array_type\n"
+            suffix_code += "    dict_encoding_state, func_id, dict_ids, dict_lens, bodo.types.string_array_type\n"
             suffix_code += "  )\n"
             suffix_code += "else:\n"
             indent = "  "
@@ -578,7 +578,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
         for i in range(len(A)):
             if i in dead_cols:
                 dead_offset += 1
-            elif arg_types[i - dead_offset] != bodo.string_type:
+            elif arg_types[i - dead_offset] != bodo.types.string_type:
                 # Copy the old dictionary into the new dictionary
                 suffix_code += f"{indent}section_len = len(old_data{i - dead_offset})\n"
                 # TODO: Add a kernel to copy everything at once?
@@ -1110,9 +1110,9 @@ def overload_concat_ws_util(A, sep, dict_encoding_state, func_id):
     arg_types.append(sep)
     propagate_null = [True] * len(arg_names)
     out_dtype = (
-        bodo.string_array_type
+        bodo.types.string_array_type
         if out_dtype is None or out_dtype is True
-        else bodo.binary_array_type
+        else bodo.types.binary_array_type
     )
 
     # Create the mapping from the tuple to the local variable.
@@ -1459,7 +1459,7 @@ def overload_array_construct(A, scalar_tup):
     # Currently not able to support writing a dictionary encoded inner array
     # [BSE-1831] TODO: see if we can optimize ARRAY_CONSTRUCT for dictionary encoding
     if inner_arr_type == bodo.dict_str_arr_type:
-        inner_arr_type = bodo.string_array_type
+        inner_arr_type = bodo.types.string_array_type
     if inner_arr_type == bodo.types.none:
         inner_arr_type = bodo.null_array_type
     out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)

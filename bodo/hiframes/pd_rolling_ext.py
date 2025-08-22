@@ -686,7 +686,7 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
     if not (
         is_overload_int(window)
         or is_overload_constant_str(window)
-        or window == bodo.string_type
+        or window == bodo.types.string_type
         or window in (pd_timedelta_type, datetime_timedelta_type)
     ):
         raise BodoError(

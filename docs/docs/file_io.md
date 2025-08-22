@@ -1277,10 +1277,10 @@ For example:
 
 ```py
 @bodo.jit(locals={"df":{"one": bodo.types.float64[:],
-                  "two": bodo.string_array_type,
+                  "two": bodo.types.string_array_type,
                   "three": bodo.types.bool_[:],
                   "four": bodo.types.float64[:],
-                  "five": bodo.string_array_type,
+                  "five": bodo.types.string_array_type,
                   }})
 def example_df_schema(fname1, fname2, flag):
     if flag:

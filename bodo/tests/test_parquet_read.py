@@ -1827,10 +1827,10 @@ def test_pq_non_constant_filepath_error(datapath):
         locals={
             "df": {
                 "one": bodo.types.float64[:],
-                "two": bodo.string_array_type,
+                "two": bodo.types.string_array_type,
                 "three": bodo.boolean_array_type,
                 "four": bodo.types.float64[:],
-                "five": bodo.string_array_type,
+                "five": bodo.types.string_array_type,
                 "__index_level_0__": bodo.types.int64[:],
             }
         }
@@ -2675,10 +2675,10 @@ def test_pq_schema(datapath, memory_leak_check):
         locals={
             "df": {
                 "one": bodo.types.float64[:],
-                "two": bodo.string_array_type,
+                "two": bodo.types.string_array_type,
                 "three": bodo.types.bool_[:],
                 "four": bodo.types.float64[:],
-                "five": bodo.string_array_type,
+                "five": bodo.types.string_array_type,
                 "__index_level_0__": bodo.types.int64[:],
             }
         },

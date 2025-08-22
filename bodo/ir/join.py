@@ -2438,7 +2438,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
         or col_array_dtype
         in (
             bodo.libs.bool_arr_ext.boolean_array_type,
-            bodo.binary_array_type,
+            bodo.types.binary_array_type,
             bodo.datetime_date_array_type,
         )
         or is_str_arr_type(col_array_dtype)
@@ -2636,7 +2636,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
 
         return getitem_func
 
-    if col_array_typ in (bodo.string_array_type, bodo.binary_array_type):
+    if col_array_typ in (bodo.types.string_array_type, bodo.types.binary_array_type):
         # If we have a unicode type we want to leave the raw
         # data pointer as a void* because we don't have a full
         # string yet.
@@ -2667,7 +2667,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 size = cgutils.alloca_once(builder, lir.IntType(64))
                 args = (col_ptr, row_ind, size)
                 data_ptr = builder.call(getitem_fn, args)
-                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                decode_sig = bodo.types.string_type(types.voidptr, types.int64)
                 return context.compile_internal(
                     builder,
                     lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
@@ -2678,7 +2678,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 )
 
             return (
-                bodo.string_type(types.voidptr, types.int64),
+                bodo.types.string_type(types.voidptr, types.int64),
                 codegen,
             )
 
@@ -2751,7 +2751,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 size = cgutils.alloca_once(builder, lir.IntType(64))
                 args = (dictionary_ptr, dict_loc, size)
                 data_ptr = builder.call(getitem_fn, args)
-                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                decode_sig = bodo.types.string_type(types.voidptr, types.int64)
                 return context.compile_internal(
                     builder,
                     lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
@@ -2762,7 +2762,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 )
 
             return (
-                bodo.string_type(types.voidptr, types.int64),
+                bodo.types.string_type(types.voidptr, types.int64),
                 codegen,
             )
 
@@ -2808,7 +2808,7 @@ def _replace_column_accesses(
         # Not creating intermediate variables for val_varname to avoid invalid access of
         # NA locations (null checks should run before getitems)
         # see https://bodo.atlassian.net/browse/BE-4146
-        if is_str_arr_type(array_typ) or array_typ == bodo.binary_array_type:
+        if is_str_arr_type(array_typ) or array_typ == bodo.types.binary_array_type:
             # If we have unicode we pass the table variable which is an array info
             val_varname = f"{getitem_fname}({table_name}_table, {table_name}_ind)\n"
         else:
@@ -2839,7 +2839,7 @@ def _replace_column_accesses(
                 or array_typ
                 in (
                     bodo.libs.bool_arr_ext.boolean_array_type,
-                    bodo.binary_array_type,
+                    bodo.types.binary_array_type,
                     bodo.datetime_date_array_type,
                 )
                 or is_str_arr_type(array_typ)
@@ -2867,7 +2867,7 @@ def _match_join_key_types(t1, t2, loc):
     # Matching string + dictionary encoded arrays produces
     # a string key.
     if is_str_arr_type(t1) and is_str_arr_type(t2):
-        return bodo.string_array_type
+        return bodo.types.string_array_type
 
     try:
         arr = dtype_to_array_type(find_common_np_dtype([t1, t2]))

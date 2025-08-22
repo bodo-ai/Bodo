@@ -2320,7 +2320,7 @@ def dayname_util(arr):
         scalar_text = f"val = {unwrap_str}(arg0).day_name()\n"
     scalar_text += "res[i] = val[:3]\n"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     # If the input is an array, make the output dictionary encoded
     synthesize_dict_if_vector = ["V"]
@@ -2447,7 +2447,7 @@ def monthname_util(arr):
     else:
         scalar_text = f"val = {unwrap_str}(arg0).month_name()\n"
     scalar_text += "res[i] = val[:3]\n"
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     # If the input is an array or date object, make the output dictionary encoded
     synthesize_dict_if_vector = ["V"]
@@ -3330,7 +3330,7 @@ def date_format_util(arr0, arr1):
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
     propagate_null = [True, True]
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     box_str = (
         "bodo.utils.conversion.box_if_dt64"

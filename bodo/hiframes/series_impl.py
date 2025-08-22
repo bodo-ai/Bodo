@@ -133,7 +133,7 @@ def overload_series_values(s):
 @overload_attribute(SeriesType, "dtype", inline="always", jit_options={"cache": True})
 def overload_series_dtype(s):
     # TODO: check other dtypes like tuple, etc.
-    if s.dtype == bodo.string_type:
+    if s.dtype == bodo.types.string_type:
         raise BodoError("Series.dtype not supported for string Series yet")
 
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(
@@ -1039,7 +1039,7 @@ def overload_series_rename(
     # TODO: Pandas has * after index, so only index should be able to be provided
     # without kwargs.
 
-    if not (index == bodo.string_type or isinstance(index, types.StringLiteral)):
+    if not (index == bodo.types.string_type or isinstance(index, types.StringLiteral)):
         raise BodoError("Series.rename() 'index' can only be a string")
 
     unsupported_args = {
@@ -3550,7 +3550,7 @@ def overload_series_fillna(
         raise BodoError('Series.fillna(): "value" parameter cannot be a list')
     # Pandas doesn't support fillna for non-scalar values as of 1.1.0
     # TODO(ehsan): revisit when supported in Pandas
-    elif is_var_size_item_array_type(S.data) and not S.dtype == bodo.string_type:
+    elif is_var_size_item_array_type(S.data) and not S.dtype == bodo.types.string_type:
         raise BodoError(
             f"Series.fillna() with inplace=True not supported for {S.dtype} values yet."
         )
@@ -3587,7 +3587,7 @@ def overload_series_fillna(
         )
 
     if is_overload_true(inplace):
-        if S.dtype == bodo.string_type:
+        if S.dtype == bodo.types.string_type:
             if S.data == bodo.dict_str_arr_type:
                 raise_bodo_error(
                     "Series.fillna(): 'inplace' not supported for dictionary-encoded string arrays yet."
@@ -3612,7 +3612,7 @@ def overload_series_fillna(
                 return binary_str_fillna_inplace_series_impl(is_binary=False)
 
             return binary_str_fillna_inplace_impl(is_binary=False)
-        if S.dtype == bodo.bytes_type:
+        if S.dtype == bodo.types.bytes_type:
             # optimization: just set null bit if fill is empty
             if (
                 is_overload_constant_bytes(value)
@@ -4003,12 +4003,12 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
     # TODO: replace with something that captures all scalars
     is_scalar_replace = isinstance(
         to_replace, (types.Number, Decimal128Type)
-    ) or to_replace in [bodo.string_type, types.boolean, bodo.bytes_type]
+    ) or to_replace in [bodo.types.string_type, types.boolean, bodo.types.bytes_type]
     is_iterable_replace = is_iterable_type(to_replace)
 
     is_scalar_value = isinstance(value, (types.Number, Decimal128Type)) or value in [
-        bodo.string_type,
-        bodo.bytes_type,
+        bodo.types.string_type,
+        bodo.types.bytes_type,
         types.boolean,
     ]
     is_iterable_value = is_iterable_type(value)
@@ -4293,7 +4293,7 @@ def overload_series_dropna(S, axis=0, inplace=False, how=None):
         module_name="Series",
     )
 
-    if S.dtype == bodo.string_type:
+    if S.dtype == bodo.types.string_type:
 
         def dropna_str_impl(S, axis=0, inplace=False, how=None):  # pragma: no cover
             in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -4532,7 +4532,7 @@ def _validate_self_other_mask_where(
         or isinstance(arr, FloatingArrayType)
         or (
             bodo.utils.utils.is_array_typ(arr, False)
-            and (arr.dtype in [bodo.string_type, bodo.bytes_type])
+            and (arr.dtype in [bodo.types.string_type, bodo.types.bytes_type])
         )
         # TODO: Support categorical of Timestamp/Timedelta
         or (
@@ -4577,7 +4577,7 @@ def _validate_self_other_mask_where(
             isinstance(other, SeriesType)
             and (
                 isinstance(arr, types.Array)
-                or (arr.dtype in [bodo.string_type, bodo.bytes_type])
+                or (arr.dtype in [bodo.types.string_type, bodo.types.bytes_type])
             )
         )
         # support S.where(A) where A is a binary/string array.
@@ -4585,17 +4585,17 @@ def _validate_self_other_mask_where(
         or (
             is_str_arr_type(other)
             and (
-                arr.dtype == bodo.string_type
+                arr.dtype == bodo.types.string_type
                 or isinstance(arr, bodo.CategoricalArrayType)
-                and arr.dtype.elem_type == bodo.string_type
+                and arr.dtype.elem_type == bodo.types.string_type
             )
         )
         or (
             isinstance(other, BinaryArrayType)
             and (
-                arr.dtype == bodo.bytes_type
+                arr.dtype == bodo.types.bytes_type
                 or isinstance(arr, bodo.CategoricalArrayType)
-                and arr.dtype.elem_type == bodo.bytes_type
+                and arr.dtype.elem_type == bodo.types.bytes_type
             )
         )
         or (
@@ -5491,7 +5491,7 @@ def overload_np_where(condition, x, y):
         )
     # output is string if any input is string
     elif x_dtype == string_type or y_dtype == string_type:
-        out_dtype = bodo.string_array_type
+        out_dtype = bodo.types.string_array_type
     # For binary, we support y/x being bytes type, or array/series of bytes
     elif (
         x_data == bytes_type
@@ -5678,7 +5678,10 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
         or isinstance(choicelist_array_typ, FloatingArrayType)
         or (
             bodo.utils.utils.is_array_typ(choicelist_array_typ, False)
-            and (choicelist_array_typ.dtype in [bodo.string_type, bodo.bytes_type])
+            and (
+                choicelist_array_typ.dtype
+                in [bodo.types.string_type, bodo.types.bytes_type]
+            )
         )
     ):
         raise BodoError(

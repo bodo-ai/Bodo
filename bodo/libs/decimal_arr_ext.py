@@ -342,7 +342,7 @@ def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
     """convert string to decimal128. This returns a tuple of
     (Decimal128Type, bool) where the bool indicates if the value
     errored in parsing or fitting in the final decimal value."""
-    assert val == bodo.string_type or is_overload_constant_str(val)
+    assert val == bodo.types.string_type or is_overload_constant_str(val)
     assert_bodo_error(is_overload_constant_int(precision_tp))
     assert_bodo_error(is_overload_constant_int(scale_tp))
 
@@ -487,7 +487,7 @@ def overload_decimal_array_to_str_array(arr):
     def impl(arr):  # pragma: no cover
         input_info = array_to_info(arr)
         out_info = _decimal_array_to_str_array(input_info)
-        out_arr = info_to_array(out_info, bodo.string_array_type)
+        out_arr = info_to_array(out_info, bodo.types.string_array_type)
         delete_info(out_info)
         return out_arr
 
@@ -577,7 +577,7 @@ def _decimal_scalar_to_str(typingctx, arr_t, remove_trailing_zeros_t):
         uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
         return uni_str._getvalue()
 
-    return bodo.string_type(arr_t, remove_trailing_zeros_t), codegen
+    return bodo.types.string_type(arr_t, remove_trailing_zeros_t), codegen
 
 
 # We cannot have exact matching between Python and Bodo
@@ -834,7 +834,7 @@ def decimal_constructor_overload(value="0", context=None):
     if not is_overload_none(context):  # pragma: no cover
         raise BodoError("decimal.Decimal() context argument not supported yet")
 
-    if is_overload_constant_str(value) or value == bodo.string_type:
+    if is_overload_constant_str(value) or value == bodo.types.string_type:
 
         def impl(value="0", context=None):  # pragma: no cover
             return str_to_decimal_scalar(value, 38, 18, False)

@@ -234,7 +234,7 @@ def parse_json_util(arr):
     suffix_code += "res = res2\n"
 
     struct_type = bodo.StructArrayType(
-        (bodo.string_array_type, bodo.string_array_type), ("key", "value")
+        (bodo.types.string_array_type, bodo.types.string_array_type), ("key", "value")
     )
     out_dtype = bodo.utils.typing.to_nullable_type(struct_type)
 
@@ -337,7 +337,7 @@ def json_extract_path_text_util(data, path):
     scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
     scalar_text += "else:\n"
     scalar_text += "   res[i] = result"
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     return gen_vectorized(
         arg_names,

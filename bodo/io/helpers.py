@@ -280,7 +280,7 @@ def _get_numba_typ_from_pa_typ(
         int_type = _pyarrow_numba_type_map[pa_typ.type.index_type]
         cat_dtype = PDCategoricalDtype(
             category_info[pa_typ.name],
-            bodo.string_type,
+            bodo.types.string_type,
             pa_typ.type.ordered,
             int_type=int_type,
         )

@@ -288,13 +288,21 @@ def test_stream_union_dict_encoding_combo(memory_leak_check):
     state = UnionStateType(
         in_table_types=(
             TableType(
-                (bodo.string_array_type, bodo.dict_str_arr_type, bodo.string_array_type)
+                (
+                    bodo.types.string_array_type,
+                    bodo.dict_str_arr_type,
+                    bodo.types.string_array_type,
+                )
             ),
             TableType(
                 (bodo.dict_str_arr_type, bodo.null_array_type, bodo.dict_str_arr_type)
             ),
             TableType(
-                (bodo.string_array_type, bodo.null_array_type, bodo.string_array_type)
+                (
+                    bodo.types.string_array_type,
+                    bodo.null_array_type,
+                    bodo.types.string_array_type,
+                )
             ),
         )
     )
@@ -325,7 +333,7 @@ def test_stream_union_null(memory_leak_check):
             TableType(
                 (
                     non_null_bool_arr,
-                    bodo.string_array_type,
+                    bodo.types.string_array_type,
                     bodo.boolean_array_type,
                     bodo.null_array_type,
                 )
@@ -344,7 +352,7 @@ def test_stream_union_null(memory_leak_check):
     assert state.out_table_type == TableType(
         (
             bodo.boolean_array_type,
-            bodo.string_array_type,
+            bodo.types.string_array_type,
             bodo.boolean_array_type,
             bodo.null_array_type,
         )

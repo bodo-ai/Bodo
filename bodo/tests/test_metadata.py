@@ -477,7 +477,7 @@ def test_df_return_metadata(gen_func, use_func):
     if out["A"].dtype == object:
         is_str = (
             _dtype_from_type_enum_list(out._bodo_meta["type_metadata"][1][0])
-            == bodo.string_array_type
+            == bodo.types.string_array_type
         )
 
         # if the dtype is str, it would be infered corectly, as the default is str
@@ -588,7 +588,7 @@ def test_series_return_metadata(gen_func, use_func):
     if out.dtype == object:
         is_str = (
             _dtype_from_type_enum_list(out._bodo_meta["type_metadata"][1])
-            == bodo.string_type
+            == bodo.types.string_type
         )
 
         # if the dtype is str, it would be infered corectly, as the default is str

@@ -316,7 +316,7 @@ def test_javascript_udf_complex_function(arr, answer, memory_leak_check):
     return sequence[idx-1].toString()"""
     )
     args = MetaType(("x",))
-    ret_type = bodo.string_array_type
+    ret_type = bodo.types.string_array_type
 
     def f(arr):
         f = create_javascript_udf(body, args, ret_type)
@@ -409,7 +409,7 @@ def test_javascript_throws_exception(memory_leak_check):
 def test_javascript_unicode_in_body(memory_leak_check):
     body = MetaType("return 'hëllo'")
     args = MetaType(())
-    ret_type = bodo.string_array_type
+    ret_type = bodo.types.string_array_type
 
     def f():
         f = create_javascript_udf(body, args, ret_type)
@@ -674,7 +674,7 @@ if ( P_MASK_TYPE2 == true )
 return upc;
 """
     args = ("P_BARCODE", "P_LENGTH", "P_HAS_CHECK", "P_MASK_TYPE2")
-    return body, args, bodo.string_array_type
+    return body, args, bodo.types.string_array_type
 
 
 def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
@@ -788,7 +788,7 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
         ),
         pytest.param(
             "return 'hello'",
-            bodo.string_array_type,
+            bodo.types.string_array_type,
             "hello",
             id="string",
         ),
@@ -800,7 +800,7 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
         ),
         pytest.param(
             "return new Uint8Array([1, 2, 3])",
-            bodo.binary_array_type,
+            bodo.types.binary_array_type,
             b"\x01\x02\x03",
             id="binary",
         ),

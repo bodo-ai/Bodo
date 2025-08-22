@@ -1439,7 +1439,7 @@ def conv_util(arr, old_base, new_base):
     scalar_text += "else:\n"
     scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 

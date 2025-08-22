@@ -983,7 +983,7 @@ def alloc_empty_bytes_or_string_data(typ, kind, length, is_ascii=0):  # pragma: 
 @overload(alloc_empty_bytes_or_string_data)
 def overload_alloc_empty_bytes_or_string_data(typ, kind, length, is_ascii=0):
     typ = typ.instance_type if isinstance(typ, types.TypeRef) else typ
-    if typ == bodo.bytes_type:
+    if typ == bodo.types.bytes_type:
         return lambda typ, kind, length, is_ascii=0: np.empty(length, np.uint8)
     if typ == string_type:
         return (

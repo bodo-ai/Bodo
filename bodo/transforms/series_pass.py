@@ -2989,7 +2989,7 @@ class SeriesPass:
 
         # Replace str.format because we need to expand kwargs
         if isinstance(func_mod, ir.Var) and (
-            self.typemap[func_mod.name] == bodo.string_type
+            self.typemap[func_mod.name] == bodo.types.string_type
             or is_overload_constant_str(self.typemap[func_mod.name])
         ):
             return self._run_call_string(

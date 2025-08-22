@@ -928,9 +928,9 @@ def make_str_arr_min_max_overload(func):
         """
         # Parametrize the starting value and comparison operation based on
         # the dtype and whether the function is min or max
-        if arr == bodo.string_array_type:
+        if arr == bodo.types.string_array_type:
             starting_value = '""'
-        elif arr == bodo.binary_array_type:
+        elif arr == bodo.types.binary_array_type:
             starting_value = 'b""'
         else:
             return None

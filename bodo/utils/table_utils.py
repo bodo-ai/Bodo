@@ -264,7 +264,7 @@ def table_concat(table, col_nums_meta, arr_type):
         "  col_num_to_ind_in_blk = {c : i for i, c in enumerate(col_indices)}\n"
     )
     func_text += "  n = len(table)\n"
-    is_string = arr_type == bodo.string_array_type
+    is_string = arr_type == bodo.types.string_array_type
     if is_string:
         func_text += "  total_chars = 0\n"
         func_text += "  for c in col_nums:\n"

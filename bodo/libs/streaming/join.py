@@ -371,9 +371,9 @@ class JoinStateType(StreamingStateType):
             common_type = get_common_bodosql_integer_arr_type(input_types)
         else:
             # If the inputs are all string or dict, return string.
-            valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+            valid_str_types = (bodo.types.string_array_type, bodo.dict_str_arr_type)
             if all(t in valid_str_types for t in input_types):
-                common_type = bodo.string_array_type
+                common_type = bodo.types.string_array_type
             else:
                 raise BodoError(
                     f"StreamingHashJoin: Build and probe keys must have the same types. {input_types=}"
@@ -1459,7 +1459,7 @@ def _get_runtime_join_filter_info(
             cast_table_types.append(input_table_t)
         else:
             cast_arr_types = []
-            valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+            valid_str_types = (bodo.types.string_array_type, bodo.dict_str_arr_type)
             for j in range(n_cols):
                 if j in input_idx_to_join_key_idxs[i]:
                     # If this is a key column, cast it to the join key type.
@@ -1477,7 +1477,7 @@ def _get_runtime_join_filter_info(
                         and (input_col_t in valid_str_types)
                         and (join_key_t in valid_str_types)
                     ):
-                        casted_type = bodo.string_array_type
+                        casted_type = bodo.types.string_array_type
                     else:
                         casted_type = join_key_types[input_idx_to_join_key_idxs[i][j]]
                     cast_arr_types.append(casted_type)
@@ -1607,8 +1607,8 @@ def overload_runtime_join_filter(
     num_var_type_columns = 0
     for arr_type in input_table_t.arr_types:
         if (
-            arr_type == bodo.string_array_type
-            or arr_type == bodo.binary_array_type
+            arr_type == bodo.types.string_array_type
+            or arr_type == bodo.types.binary_array_type
             or isinstance(
                 arr_type,
                 (

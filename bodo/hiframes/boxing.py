@@ -1037,7 +1037,7 @@ def _get_df_columns_obj(c, builder, context, pyapi, df_typ, dataframe_payload):
 
     # avoid ArrowStringArray for column names due to Pandas bug for df column getattr
     # see test_jit_inside_prange
-    if columns_typ == bodo.string_array_type:
+    if columns_typ == bodo.types.string_array_type:
         prev_columns_obj = columns_obj
         columns_obj = pyapi.call_method(columns_obj, "to_numpy", ())
         pyapi.decref(prev_columns_obj)

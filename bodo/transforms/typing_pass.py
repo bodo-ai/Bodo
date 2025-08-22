@@ -598,7 +598,7 @@ class TypingTransforms:
             isinstance(target_typ, (DataFrameType, DataFrameGroupByType, RollingType))
             and not is_literal_type(idx_typ)
             and (
-                idx_typ == bodo.string_type
+                idx_typ == bodo.types.string_type
                 or isinstance(idx_typ, types.Integer)
                 or (
                     isinstance(idx_typ, types.List) and not idx_typ.dtype == types.bool_

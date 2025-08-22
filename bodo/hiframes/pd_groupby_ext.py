@@ -485,7 +485,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         if (
             is_list_string
             or in_dtype == types.unicode_type
-            or arr_type == bodo.binary_array_type
+            or arr_type == bodo.types.binary_array_type
         ):
             if func_name not in {
                 "count",

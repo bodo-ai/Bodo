@@ -684,21 +684,21 @@ def get_binary_op_overload(op, lhs, rhs):
     """
     # NOTE: equality/inequality between two arrays is implemented in str_arr_ext.py
     if op == operator.eq:
-        if lhs == dict_str_arr_type and types.unliteral(rhs) == bodo.string_type:
+        if lhs == dict_str_arr_type and types.unliteral(rhs) == bodo.types.string_type:
             return lambda lhs, rhs: bodo.libs.dict_arr_ext.dict_arr_eq(
                 lhs, rhs
             )  # pragma: no cover
-        if rhs == dict_str_arr_type and types.unliteral(lhs) == bodo.string_type:
+        if rhs == dict_str_arr_type and types.unliteral(lhs) == bodo.types.string_type:
             return lambda lhs, rhs: bodo.libs.dict_arr_ext.dict_arr_eq(
                 rhs, lhs
             )  # pragma: no cover
 
     if op == operator.ne:
-        if lhs == dict_str_arr_type and types.unliteral(rhs) == bodo.string_type:
+        if lhs == dict_str_arr_type and types.unliteral(rhs) == bodo.types.string_type:
             return lambda lhs, rhs: bodo.libs.dict_arr_ext.dict_arr_ne(
                 lhs, rhs
             )  # pragma: no cover
-        if rhs == dict_str_arr_type and types.unliteral(lhs) == bodo.string_type:
+        if rhs == dict_str_arr_type and types.unliteral(lhs) == bodo.types.string_type:
             return lambda lhs, rhs: bodo.libs.dict_arr_ext.dict_arr_ne(
                 rhs, lhs
             )  # pragma: no cover
@@ -1638,7 +1638,7 @@ def is_dict_encoded(t):
             return True
 
     else:
-        assert t == bodo.string_array_type
+        assert t == bodo.types.string_array_type
 
         def impl(t):
             return False

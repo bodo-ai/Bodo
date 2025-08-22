@@ -127,9 +127,9 @@ def overload_series_iat_setitem(I, idx, val):
         if not isinstance(idx, types.Integer):
             raise BodoError("iAt based indexing can only have integer indexers")
         # check string/binary setitem
-        if I.stype.dtype == bodo.string_type and val is not types.none:
+        if I.stype.dtype == bodo.types.string_type and val is not types.none:
             raise BodoError("Series string setitem not supported yet")
-        if I.stype.dtype == bodo.bytes_type and val is not types.none:
+        if I.stype.dtype == bodo.types.bytes_type and val is not types.none:
             raise BodoError("Series binary setitem not supported yet")
 
         # Bodo Restriction, cannot set item with immutable array.
@@ -306,11 +306,11 @@ def overload_series_iloc_getitem(I, idx):
 def overload_series_iloc_setitem(I, idx, val):
     if isinstance(I, SeriesIlocType):
         # check string/binary setitem
-        if I.stype.dtype == bodo.string_type and val is not types.none:
+        if I.stype.dtype == bodo.types.string_type and val is not types.none:
             raise BodoError(
                 "Series string setitem not supported yet"
             )  # pragma: no cover
-        if I.stype.dtype == bodo.bytes_type and val is not types.none:
+        if I.stype.dtype == bodo.types.bytes_type and val is not types.none:
             raise BodoError(
                 "Series binary setitem not supported yet"
             )  # pragma: no cover
@@ -663,7 +663,9 @@ def overload_series_getitem(S, idx):
 
         # pragma is needed, because we don't check the immediately
         # following error in a non-slow test.
-        if idx == bodo.string_type or is_overload_constant_str(idx):  # pragma: no cover
+        if idx == bodo.types.string_type or is_overload_constant_str(
+            idx
+        ):  # pragma: no cover
             # TODO: throw an error if not distributed, BE-1535/BE-1536
             if isinstance(S.index, bodo.hiframes.pd_index_ext.StringIndexType):
 
@@ -700,12 +702,12 @@ def overload_series_setitem(S, idx, val):
     if isinstance(S, SeriesType):
         # check string setitem
         if (
-            S.dtype == bodo.string_type
+            S.dtype == bodo.types.string_type
             and val is not types.none
             and not (is_list_like_index_type(idx) and idx.dtype == types.bool_)
         ):
             raise BodoError("Series string setitem not supported yet")
-        elif S.dtype == bodo.bytes_type:
+        elif S.dtype == bodo.types.bytes_type:
             # NOTE: we can loosen the above restriction to be the same as the string
             # array restriction, if we implement boolean list index setitem
             # on the underlying binary array type.

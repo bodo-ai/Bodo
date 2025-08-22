@@ -42,7 +42,7 @@ int_arr_typ = bodo.IntegerArrayType(bodo.types.int64)
 
 series_types = [
     bodo.SeriesType(int_arr_typ),
-    bodo.SeriesType(bodo.string_array_type),
+    bodo.SeriesType(bodo.types.string_array_type),
     bodo.SeriesType(types.NPDatetime("ns")),
     bodo.SeriesType(types.NPTimedelta("ns")),
     bodo.SeriesType(bodo.StructArrayType((int_arr_typ,))),
@@ -157,7 +157,7 @@ def lookup_template(typing_ctx: Context, typ: pt.Any, path: list[str]) -> bool |
     Example:
         To look up whether `Series.str.decode` was supported:
         ```
-        ser_typ = bodo.SeriesType(bodo.string_array_type)
+        ser_typ = bodo.SeriesType(bodo.types.string_array_type)
         result = lookup_template(ser_typ, ["str", "decode"])
         ```
 

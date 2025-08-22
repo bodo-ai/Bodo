@@ -344,7 +344,7 @@ def overload_count_vectorizer_get_feature_names_out(m):
     """Array mapping from feature integer indices to feature name."""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result=bodo.string_array_type):
+        with numba.objmode(result=bodo.types.string_array_type):
             result = m.get_feature_names_out()
         return result
 

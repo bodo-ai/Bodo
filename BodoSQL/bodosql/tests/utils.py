@@ -712,7 +712,9 @@ def check_query_jit(
 
     # test dict-encoded string type if there is any string array in input
     if use_dict_encoded_strings is None and any(
-        any(t == bodo.string_array_type for t in bodo.tests.utils._typeof(df).data)
+        any(
+            t == bodo.types.string_array_type for t in bodo.tests.utils._typeof(df).data
+        )
         for df in dataframe_dict.values()
     ):
         check_query_jit(
@@ -1625,7 +1627,7 @@ def create_pyspark_schema_from_dataframe(df):
             or arr_type == bodo.boolean_array_type
         ):
             pyspark_type = bodo_to_pyspark_dtype_map[arr_type.dtype]
-        elif arr_type == bodo.string_array_type:
+        elif arr_type == bodo.types.string_array_type:
             pyspark_type = StringType()
         else:
             raise TypeError("Type mapping to Pyspark Schema not implemented yet.")

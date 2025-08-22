@@ -186,13 +186,13 @@ public class BodoArrayHelpers {
         if (strAsDict) {
           typeName = "bodo.dict_str_arr_type";
         } else {
-          typeName = "bodo.string_array_type";
+          typeName = "bodo.types.string_array_type";
         }
         break;
       case VARBINARY:
       case BINARY:
         // TODO: Add nullable support
-        typeName = "bodo.binary_array_type";
+        typeName = "bodo.types.binary_array_type";
         break;
       case INTERVAL_DAY_HOUR:
       case INTERVAL_DAY_MINUTE:

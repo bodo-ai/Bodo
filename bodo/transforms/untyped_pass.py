@@ -2121,7 +2121,7 @@ class UntypedPass:
             dtype_map_cpy = dtype_map.copy()
             for c, t in dtype_map_cpy.items():
                 if c in _bodo_read_as_dict:
-                    if dtype_map[c] != bodo.string_array_type:
+                    if dtype_map[c] != bodo.types.string_array_type:
                         raise BodoError(
                             f"pandas.read_csv(): column name '{c}' in _bodo_read_as_dict is not a string column"
                         )
@@ -3251,7 +3251,7 @@ def _dtype_val_to_arr_type(t, func_name, loc):
     # categorical type
     if isinstance(t, pd.CategoricalDtype):
         cats = tuple(t.categories)
-        elem_typ = bodo.string_type if len(cats) == 0 else bodo.typeof(cats[0])
+        elem_typ = bodo.types.string_type if len(cats) == 0 else bodo.typeof(cats[0])
         typ = PDCategoricalDtype(cats, elem_typ, t.ordered)
         return CategoricalArrayType(typ)
 
@@ -3850,12 +3850,12 @@ def _get_sql_df_type_from_db(
                     colnames = ("Field", "Type", "Null", "Key", "Default", "Extra")
                     index_type = bodo.RangeIndexType(bodo.types.none)
                     data_type = (
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
                     )
                     df_type = DataFrameType(data_type, index_type, colnames)
                 else:

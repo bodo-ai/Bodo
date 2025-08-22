@@ -971,7 +971,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
         False,
     ]
     inner_type = arr.dtype if are_arrays[0] else arr
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
     convert_func_str = "bodosql.kernels.snowflake_conversion_array_kernels.convert_snowflake_date_format_str_to_py_format"
     # Check if we can use one of our array kernels to handle the conversion.
     if is_array_typ(arr) and isinstance(arr, bodo.DecimalArrayType):
@@ -997,7 +997,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
     elif is_valid_binary_arg(inner_type):
         # TODO(Yipeng): Support all binary encoding. Currently only hex encoding is supported.
         # Using bodosql.kernels.hex_encode(arg0, 0) here will break test_cast_char_other[Bytes]
-        scalar_text = "with numba.objmode(r=bodo.string_type):\n"
+        scalar_text = "with numba.objmode(r=bodo.types.string_type):\n"
         scalar_text += "  r = arg0.hex()\n"
         scalar_text += "res[i] = r"
     elif is_valid_time_arg(inner_type):
@@ -1012,7 +1012,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
         scalar_text += f"  res[i] = arg0.strftime({convert_func_str}(arg1))"
     elif is_valid_timedelta_arg(inner_type):
         scalar_text = "arg0 = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg0)\n"
-        scalar_text += "with numba.objmode(r=bodo.string_type):\n"
+        scalar_text += "with numba.objmode(r=bodo.types.string_type):\n"
         scalar_text += "  r = str(arg0)\n"
         scalar_text += "res[i] = r"
     elif is_valid_datetime_or_date_arg(inner_type):
@@ -1819,7 +1819,7 @@ def create_to_binary_util_overload(fn_name, error_on_fail):
         arg_names = ["arr", "dict_encoding_state", "func_id"]
         arg_types = [arr, dict_encoding_state, func_id]
         propagate_null = [True, False, False]
-        out_dtype = bodo.binary_array_type
+        out_dtype = bodo.types.binary_array_type
         use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
@@ -1949,7 +1949,7 @@ def string_to_decimal_overload(expr, precision, scale, null_on_error):
 
         return impl
 
-    elif expr == bodo.string_type or is_overload_constant_str(expr):
+    elif expr == bodo.types.string_type or is_overload_constant_str(expr):
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.str_to_decimal_scalar(
@@ -1957,7 +1957,7 @@ def string_to_decimal_overload(expr, precision, scale, null_on_error):
             )
 
         return impl
-    elif expr == bodo.string_array_type:
+    elif expr == bodo.types.string_array_type:
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.str_to_decimal_array(

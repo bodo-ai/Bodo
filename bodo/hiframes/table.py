@@ -1859,13 +1859,13 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     # can lead to very difficult to debug errors.
 
     assert (
-        bodo.string_array_type in in_table_type.type_to_blk
-        and bodo.string_array_type in in_table_type.type_to_blk
+        bodo.types.string_array_type in in_table_type.type_to_blk
+        and bodo.types.string_array_type in in_table_type.type_to_blk
     ), (
         f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: Table type {in_table_type} does not contain both a string, and encoded string column"
     )
 
-    input_string_ary_blk = in_table_type.type_to_blk[bodo.string_array_type]
+    input_string_ary_blk = in_table_type.type_to_blk[bodo.types.string_array_type]
     input_dict_encoded_string_ary_blk = in_table_type.type_to_blk[
         bodo.dict_str_arr_type
     ]
@@ -1948,7 +1948,7 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
 
     glbls["decode_if_dict_array"] = decode_if_dict_array
 
-    out_table_block = out_table_type.type_to_blk[bodo.string_array_type]
+    out_table_block = out_table_type.type_to_blk[bodo.types.string_array_type]
 
     assert f"arr_inds_{input_string_ary_blk}" not in glbls, (
         f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: arr_inds_{input_string_ary_blk} already present in global variables"
@@ -2026,7 +2026,7 @@ def decode_if_dict_table(T):
 
     out_table_type = bodo.hiframes.table.get_init_table_output_type(T, True)
     input_table_has_str_and_dict_encoded_str = (
-        bodo.string_array_type in T.type_to_blk
+        bodo.types.string_array_type in T.type_to_blk
         and bodo.dict_str_arr_type in T.type_to_blk
     )
 
@@ -2042,7 +2042,7 @@ def decode_if_dict_table(T):
     for typ, input_blk in T.type_to_blk.items():
         # Skip these blocks if we handle them above
         if input_table_has_str_and_dict_encoded_str and typ in (
-            bodo.string_array_type,
+            bodo.types.string_array_type,
             bodo.dict_str_arr_type,
         ):
             continue
@@ -2051,10 +2051,10 @@ def decode_if_dict_table(T):
         # Specifically, if the input table has a string and dict encoded string block,
         # which will be fused into one block in the output table.
         if typ == bodo.dict_str_arr_type:
-            assert bodo.string_array_type in out_table_type.type_to_blk, (
+            assert bodo.types.string_array_type in out_table_type.type_to_blk, (
                 "Error in decode_if_dict_table: If encoded string type is present in the input, then non-encoded string type should be present in the output"
             )
-            output_blk = out_table_type.type_to_blk[bodo.string_array_type]
+            output_blk = out_table_type.type_to_blk[bodo.types.string_array_type]
         else:
             assert typ in out_table_type.type_to_blk, (
                 "Error in decode_if_dict_table: All non-encoded string types present in the input should be present in the output"

@@ -17,8 +17,8 @@ Python types and Bodo data types.
 | `BIGINT`              | `np.int64`             | `bodo.types.int64`                         |
 | `FLOAT`               | `np.float32`           | `bodo.types.float32`                       |
 | `DOUBLE`              | `np.float64`           | `bodo.types.float64`                       |
-| `VARCHAR`, `CHAR`     | `str`                  | `bodo.string_type`                   |
-| `VARBINARY`, `BINARY` | `bytes`                | `bodo.bytes_type`                    |
+| `VARCHAR`, `CHAR`     | `str`                  | `bodo.types.string_type`                   |
+| `VARBINARY`, `BINARY` | `bytes`                | `bodo.types.bytes_type`                    |
 | `DATE`                | `datetime.date`        | `bodo.datetime_date_type`            |
 | `TIME`                | `bodo.Time`            | `bodo.TimeType`                      |
 | `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(None)`     |

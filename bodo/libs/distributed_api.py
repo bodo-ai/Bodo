@@ -1199,7 +1199,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
             get_value_for_type(dtype.key_type): get_value_for_type(dtype.value_type)
         }
 
-    if dtype == bodo.string_type:
+    if dtype == bodo.types.string_type:
         # make names unique with next_label to avoid MultiIndex unboxing issue #811
         return "_" + str(ir_utils.next_label())
 
@@ -1405,7 +1405,7 @@ class BcastScalarInfer(AbstractTemplate):
             in [
                 bodo.types.datetime64ns,
                 bodo.types.timedelta64ns,
-                bodo.string_type,
+                bodo.types.string_type,
                 types.none,
                 types.bool_,
                 bodo.datetime_date_type,
@@ -1464,7 +1464,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
         return impl
 
-    if val == bodo.string_type:
+    if val == bodo.types.string_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def impl_str(val, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
@@ -1649,7 +1649,7 @@ def transform_str_getitem_output(data, length):
 
 @overload(transform_str_getitem_output)
 def overload_transform_str_getitem_output(data, length):
-    if data == bodo.string_type:
+    if data == bodo.types.string_type:
         return lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
             data._data, length
         )  # pragma: no cover
@@ -1665,7 +1665,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
     dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
 
-    if is_str_arr_type(arr) or arr == bodo.binary_array_type:
+    if is_str_arr_type(arr) or arr == bodo.types.binary_array_type:
         # TODO: other kinds, unicode
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))

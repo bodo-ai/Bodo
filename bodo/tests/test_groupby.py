@@ -3622,7 +3622,7 @@ def test_groupby_apply_objmode():
     """
 
     bodo.numba.types.test_df_type = bodo.DataFrameType(
-        (bodo.string_array_type, bodo.types.float64[::1]),
+        (bodo.types.string_array_type, bodo.types.float64[::1]),
         bodo.NumericIndexType(bodo.types.int64, bodo.types.none),
         ("B", "C"),
     )

@@ -294,7 +294,10 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
     """
     if isinstance(arr_type, types.Array):
         return CArrayTypeEnum.NUMPY.value
-    elif arr_type == bodo.string_array_type or arr_type == bodo.binary_array_type:
+    elif (
+        arr_type == bodo.types.string_array_type
+        or arr_type == bodo.types.binary_array_type
+    ):
         return CArrayTypeEnum.STRING.value
     elif arr_type in (
         bodo.null_array_type,
@@ -913,7 +916,9 @@ def create_categorical_type(categories, data, is_ordered):
     # following two types:
     # Int
     # Float
-    if data == bodo.string_array_type or bodo.utils.typing.is_dtype_nullable(data):
+    if data == bodo.types.string_array_type or bodo.utils.typing.is_dtype_nullable(
+        data
+    ):
         new_cats_arr = pd.CategoricalDtype(
             pd.array(categories), is_ordered
         ).categories.array
@@ -980,7 +985,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             dict_ref_arr=None: bodo.libs.null_arr_ext.init_null_array(n)
         )  # pragma: no cover
 
-    if typ == bodo.binary_array_type:
+    if typ == bodo.types.binary_array_type:
         return (
             lambda n,
             t,
@@ -1234,7 +1239,10 @@ def overload_astype(A, t):
     # Convert dictionary array to regular string array. This path is used
     # by join when 1 key is a regular string array and the other is a
     # dictionary array.
-    if A == bodo.libs.dict_arr_ext.dict_str_arr_type and typ == bodo.string_array_type:
+    if (
+        A == bodo.libs.dict_arr_ext.dict_str_arr_type
+        and typ == bodo.types.string_array_type
+    ):
         return lambda A, t: bodo.utils.typing.decode_if_dict_array(
             A
         )  # pragma: no cover

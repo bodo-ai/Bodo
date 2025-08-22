@@ -597,7 +597,7 @@ def overload_pd_timestamp(
         return impl_float
 
     # parse string input
-    if ts_input == bodo.string_type or is_overload_constant_str(ts_input):
+    if ts_input == bodo.types.string_type or is_overload_constant_str(ts_input):
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
         types.pd_timestamp_tz_naive_type = pd_timestamp_tz_naive_type
@@ -1846,7 +1846,7 @@ def overload_to_datetime(
     # This covers string as a literal or not
     # and integer as a literal or not
     if (
-        arg_a == bodo.string_type
+        arg_a == bodo.types.string_type
         or is_overload_constant_str(arg_a)
         or is_overload_constant_int(arg_a)
         or isinstance(arg_a, types.Integer)
@@ -2036,7 +2036,7 @@ def overload_to_datetime(
     # Categorical array with string values
     if (
         isinstance(arg_a, CategoricalArrayType)
-        and arg_a.dtype.elem_type == bodo.string_type
+        and arg_a.dtype.elem_type == bodo.types.string_type
     ):
         dt64_dtype = np.dtype("datetime64[ns]")
 
@@ -2228,7 +2228,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
     if is_overload_constant_str(arg_a) or arg_a in (
         pd_timedelta_type,
         datetime_timedelta_type,
-        bodo.string_type,
+        bodo.types.string_type,
     ):
 
         def impl_string(arg_a, unit="ns", errors="raise"):  # pragma: no cover
@@ -2298,7 +2298,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
             return impl_td64
 
         # Either a string array or numpy unichr array
-        if arg_a.dtype == bodo.string_type or isinstance(
+        if arg_a.dtype == bodo.types.string_type or isinstance(
             arg_a.dtype, types.UnicodeCharSeq
         ):
             # Call a kernel that enters objmode once for all conversion to avoid overhead

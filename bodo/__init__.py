@@ -260,10 +260,8 @@ from bodo.libs.distributed_api import (
     scatterv,
 )
 
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
+
 from bodo.libs.null_arr_ext import null_array_type, null_dtype
-from bodo.libs.str_ext import string_type
 from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
 from bodo.hiframes.time_ext import (
     TimeType,

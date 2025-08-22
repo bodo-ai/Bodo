@@ -181,7 +181,7 @@ def pd_timedelta(
         return impl_timedelta_kw
 
     # parse string input
-    if value == bodo.string_type or is_overload_constant_str(value):
+    if value == bodo.types.string_type or is_overload_constant_str(value):
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
         def impl_str(

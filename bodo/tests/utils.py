@@ -644,11 +644,11 @@ def _type_has_str_array(t):
         bool: True if input type 't' has a string array component
     """
     return (
-        (t == bodo.string_array_type)
-        or (isinstance(t, bodo.SeriesType) and t.data == bodo.string_array_type)
+        (t == bodo.types.string_array_type)
+        or (isinstance(t, bodo.SeriesType) and t.data == bodo.types.string_array_type)
         or (
             isinstance(t, bodo.DataFrameType)
-            and any(a == bodo.string_array_type for a in t.data)
+            and any(a == bodo.types.string_array_type for a in t.data)
         )
     )
 

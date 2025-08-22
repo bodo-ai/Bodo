@@ -94,8 +94,8 @@ _numba_to_sql_column_type_map = {
     types.NPDatetime("ns"): SqlTypeEnum.Timestamp_Ntz.value,
     types.NPTimedelta("ns"): SqlTypeEnum.Timedelta.value,
     types.bool_: SqlTypeEnum.Bool.value,
-    bodo.string_type: SqlTypeEnum.String.value,
-    bodo.bytes_type: SqlTypeEnum.Binary.value,
+    bodo.types.string_type: SqlTypeEnum.String.value,
+    bodo.types.bytes_type: SqlTypeEnum.Binary.value,
     # Note date doesn't have native support yet, but the code to
     # cast to datetime64 is handled in the Java code.
     bodo.datetime_date_type: SqlTypeEnum.Date.value,
@@ -116,7 +116,7 @@ _numba_to_sql_param_type_map = {
     types.float32: SqlTypeEnum.Float32.value,
     types.float64: SqlTypeEnum.Float64.value,
     types.bool_: SqlTypeEnum.Bool.value,
-    bodo.string_type: SqlTypeEnum.String.value,
+    bodo.types.string_type: SqlTypeEnum.String.value,
     # Scalar datetime and timedelta are assumed
     # to be scalar Pandas Timestamp/Timedelta
     bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Timestamp_Ntz.value,

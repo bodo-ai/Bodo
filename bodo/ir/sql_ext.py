@@ -1302,7 +1302,7 @@ def _get_snowflake_sql_literal(filter_value):
         )
         or filter_type
         in (
-            bodo.string_array_type,
+            bodo.types.string_array_type,
             bodo.dict_str_arr_type,
             bodo.boolean_array_type,
             bodo.datetime_date_array_type,

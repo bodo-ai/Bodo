@@ -1044,7 +1044,7 @@ def str_list_to_array(str_list):
 @overload(str_list_to_array, no_unliteral=True, jit_options={"cache": True})
 def str_list_to_array_overload(str_list):
     """same as cp_str_list_to_array, except this call allocates output"""
-    if isinstance(str_list, types.List) and str_list.dtype == bodo.string_type:
+    if isinstance(str_list, types.List) and str_list.dtype == bodo.types.string_type:
 
         def str_list_impl(str_list):  # pragma: no cover
             n = len(str_list)
@@ -1212,7 +1212,7 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
     Converts sequence (e.g. list, tuple, etc.) into a string array
     """
     in_seq = types.unliteral(in_seq)
-    if in_seq.dtype == bodo.bytes_type:
+    if in_seq.dtype == bodo.types.bytes_type:
         alloc_fn = "pre_alloc_binary_array"
     else:
         alloc_fn = "pre_alloc_string_array"
@@ -2405,11 +2405,11 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
 
         return dict_arr
 
-    assert str_arr_t == bodo.string_array_type, (
+    assert str_arr_t == bodo.types.string_array_type, (
         "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
     )
 
-    sig = bodo.dict_str_arr_type(bodo.string_array_type)
+    sig = bodo.dict_str_arr_type(bodo.types.string_array_type)
     return sig, codegen
 
 

@@ -231,7 +231,7 @@ def listagg_seq_cpp(
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
         # decode_utf8 version
-        decode_sig = bodo.string_type(types.voidptr, types.int64)
+        decode_sig = bodo.types.string_type(types.voidptr, types.int64)
         ret = context.compile_internal(
             builder,
             lambda data, length: bodo.libs.str_arr_ext.decode_utf8(data, length),

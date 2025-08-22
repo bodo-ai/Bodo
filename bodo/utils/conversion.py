@@ -1014,8 +1014,8 @@ def overload_coerce_to_array(
 
     # string/binary list
     if isinstance(data, types.List) and data.dtype in (
-        bodo.string_type,
-        bodo.bytes_type,
+        bodo.types.string_type,
+        bodo.types.bytes_type,
     ):
         return (
             lambda data,
@@ -1176,7 +1176,7 @@ def overload_coerce_to_array(
 
         return impl_str
 
-    if not is_overload_none(scalar_to_arr_len) and data == bodo.bytes_type:
+    if not is_overload_none(scalar_to_arr_len) and data == bodo.types.bytes_type:
 
         def impl_bytes(
             data,
@@ -2022,7 +2022,7 @@ def overload_fix_arr_dtype(
 
     # Datetime64 case
     if nb_dtype == bodo.types.datetime64ns:
-        if data.dtype == bodo.string_type:
+        if data.dtype == bodo.types.string_type:
             # Support String Arrays using objmode
             def impl_str(
                 data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -2078,7 +2078,7 @@ def overload_fix_arr_dtype(
 
     # Timedelta64 case
     if nb_dtype == bodo.types.timedelta64ns:
-        if data.dtype == bodo.string_type:
+        if data.dtype == bodo.types.string_type:
             # Support String Arrays using objmode
             def impl_str(
                 data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -2334,7 +2334,11 @@ def overload_index_from_array(data, name=None):
     """
     convert data array to Index object.
     """
-    if data in [bodo.string_array_type, bodo.binary_array_type, bodo.dict_str_arr_type]:
+    if data in [
+        bodo.types.string_array_type,
+        bodo.types.binary_array_type,
+        bodo.dict_str_arr_type,
+    ]:
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_binary_str_index(
             data, name
         )  # pragma: no cover
@@ -2772,7 +2776,7 @@ def overload_list_to_array(lst, arr_type, parallel=False):
 
     if arr_type == bodo.dict_str_arr_type:
         # For dictionary encoded arrays create a naive array containing duplicates.
-        glbls["data_arr_type"] = bodo.string_array_type
+        glbls["data_arr_type"] = bodo.types.string_array_type
         glbls["indices_arr_type"] = bodo.libs.dict_arr_ext.dict_indices_arr_type
         func_text += "  data_arr = bodo.utils.conversion.list_to_dict_array(lst, data_arr_type)\n"
         func_text += "  indices_arr = bodo.utils.utils.alloc_type(copy_len, indices_arr_type, (-1,))\n"

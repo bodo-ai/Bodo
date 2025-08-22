@@ -2877,10 +2877,10 @@ def test_json_non_constant_filepath_error(datapath):
         locals={
             "df": {
                 "one": bodo.types.float64[:],
-                "two": bodo.string_array_type,
+                "two": bodo.types.string_array_type,
                 "three": bodo.boolean_array_type,
                 "four": bodo.types.float64[:],
-                "five": bodo.string_array_type,
+                "five": bodo.types.string_array_type,
             }
         }
     )

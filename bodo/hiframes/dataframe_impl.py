@@ -3091,7 +3091,7 @@ def overload_isna_scalar(obj):
     # using unliteral_val() to avoid literal type in output type since we may replace
     # this call in Series pass with array_kernels.isna()
     obj = types.unliteral(obj)
-    if obj == bodo.string_type:
+    if obj == bodo.types.string_type:
         return lambda obj: unliteral_val(False)  # pragma: no cover
     if isinstance(obj, types.Integer):
         return lambda obj: unliteral_val(False)  # pragma: no cover
@@ -4368,7 +4368,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
                     bodo.TupleArrayType,
                 ),
             )
-            or values_column == bodo.binary_array_type
+            or values_column == bodo.types.binary_array_type
         ):
             raise BodoError(
                 f"{func_name}(): 'values' DataFrame column must have scalar rows"

@@ -1555,7 +1555,7 @@ def is_str_binary_array(arr):  # pragma: no cover
 @overload(is_str_binary_array)
 def overload_is_str_binary_array(arr):
     """return True if 'arr' is a string or binary array"""
-    if arr in [bodo.string_array_type, bodo.binary_array_type]:
+    if arr in [bodo.types.string_array_type, bodo.types.binary_array_type]:
         return lambda arr: True  # pragma: no cover
 
     return lambda arr: False  # pragma: no cover
@@ -1585,8 +1585,8 @@ def is_supported_shift_array_type(arr_type):
         in (
             bodo.boolean_array_type,
             bodo.datetime_date_array_type,
-            bodo.string_array_type,
-            bodo.binary_array_type,
+            bodo.types.string_array_type,
+            bodo.types.binary_array_type,
             bodo.dict_str_arr_type,
         )
     )
@@ -1937,7 +1937,7 @@ def bcast_n_chars_if_str_binary_arr(arr):
 @overload(bcast_n_chars_if_str_binary_arr)
 def overload_bcast_n_chars_if_str_binary_arr(arr):
     """broadcast number of characters if 'arr' is a string or binary array"""
-    if arr in [bodo.binary_array_type, bodo.string_array_type]:
+    if arr in [bodo.types.binary_array_type, bodo.types.string_array_type]:
 
         def impl(arr):  # pragma: no cover
             return bodo.libs.distributed_api.bcast_scalar(

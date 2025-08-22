@@ -227,7 +227,7 @@ def merge_sorted_dataframes(target_df: DataFrameType, delta_df: DataFrameType):
                 if delta_df.data[i] == bodo.dict_str_arr_type:
                     out_arr_types.append(bodo.dict_str_arr_type)
                 else:
-                    out_arr_types.append(bodo.string_array_type)
+                    out_arr_types.append(bodo.types.string_array_type)
             else:
                 out_arr_types.append(target_df.data[i])
 

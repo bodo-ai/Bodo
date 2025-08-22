@@ -54,9 +54,9 @@ def overload_array_op_any(A, skipna=True):
         isinstance(A, types.Array) and A.dtype == types.bool_
     ):
         zero_value = False
-    elif A == bodo.string_array_type:
+    elif A == bodo.types.string_array_type:
         zero_value = ""
-    elif A == bodo.binary_array_type:
+    elif A == bodo.types.binary_array_type:
         zero_value = b""
     else:
         raise bodo.utils.typing.BodoError(
@@ -104,9 +104,9 @@ def overload_array_op_all(A, skipna=True):
         isinstance(A, types.Array) and A.dtype == types.bool_
     ):
         zero_value = False
-    elif A == bodo.string_array_type:
+    elif A == bodo.types.string_array_type:
         zero_value = ""
-    elif A == bodo.binary_array_type:
+    elif A == bodo.types.binary_array_type:
         zero_value = b""
     else:
         raise bodo.utils.typing.BodoError(

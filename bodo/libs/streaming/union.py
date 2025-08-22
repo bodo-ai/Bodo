@@ -155,7 +155,7 @@ class UnionStateType(StreamingStateType):
                 for col_type in in_col_types:
                     if col_type not in (
                         bodo.dict_str_arr_type,
-                        bodo.string_array_type,
+                        bodo.types.string_array_type,
                         bodo.null_array_type,
                     ):
                         raise BodoError(

@@ -95,12 +95,12 @@ def is_str_arr_type(t):
     """check if 't' is a regular or dictionary-encoded string array type
     TODO(ehsan): add other string types like np str array when properly supported
     """
-    return t == bodo.string_array_type or t == bodo.dict_str_arr_type
+    return t == bodo.types.string_array_type or t == bodo.dict_str_arr_type
 
 
 def is_bin_arr_type(t):
     """check if 't' is a binary array type"""
-    return t == bodo.binary_array_type
+    return t == bodo.types.binary_array_type
 
 
 def type_has_unknown_cats(typ):
@@ -202,7 +202,7 @@ def decode_if_dict_array_overload(A):
 def to_str_arr_if_dict_array(t):
     """convert type 't' to a regular string array if it is a dictionary-encoded array"""
     if t == bodo.dict_str_arr_type:
-        return bodo.string_array_type
+        return bodo.types.string_array_type
 
     if isinstance(t, types.BaseTuple):
         return types.BaseTuple.from_types(
@@ -724,8 +724,8 @@ def element_type(val):
         if isinstance(val.dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
             return val.dtype.elem_type
         # Bytes type is array compatible, but should be treated as scalar
-        if val == bodo.bytes_type:
-            return bodo.bytes_type
+        if val == bodo.types.bytes_type:
+            return bodo.types.bytes_type
         return val.dtype
     return types.unliteral(val)
 
@@ -1132,7 +1132,7 @@ def parse_dtype(dtype, func_name=None):
         elif dtype.key[0] is bool:
             dtype = types.StringLiteral("bool")
         elif dtype.key[0] is str:
-            dtype = bodo.string_type
+            dtype = bodo.types.string_type
 
     # Handle Pandas Int type directly. This can occur when
     # we have a LiteralStrKeyDict so the type is the actual
@@ -1158,8 +1158,8 @@ def parse_dtype(dtype, func_name=None):
             bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
         ),
     ) or dtype in (
-        bodo.string_type,
-        bodo.bytes_type,
+        bodo.types.string_type,
+        bodo.types.bytes_type,
         bodo.datetime_date_type,
         bodo.datetime_timedelta_type,
         bodo.null_dtype,
@@ -1181,7 +1181,7 @@ def parse_dtype(dtype, func_name=None):
         if d_str == "boolean":
             return bodo.libs.bool_arr_ext.boolean_dtype
         if d_str == "str":
-            return bodo.string_type
+            return bodo.types.string_type
 
         # Handle separately since Numpy < 2 on Windows returns int32 in np.dtype
         if d_str == "int":
@@ -1345,10 +1345,10 @@ def get_index_type_from_dtype(t):
     ]:
         return TimedeltaIndexType(types.none)
 
-    if t == bodo.string_type:
+    if t == bodo.types.string_type:
         return StringIndexType(types.none)
 
-    if t == bodo.bytes_type:
+    if t == bodo.types.bytes_type:
         return BinaryIndexType(types.none)
 
     if (
@@ -1694,7 +1694,7 @@ def get_literal_value(t):
 def can_literalize_type(t, pyobject_to_literal=False):
     """return True if type 't' can have literal values"""
     return (
-        t in (bodo.string_type, types.bool_)
+        t in (bodo.types.string_type, types.bool_)
         or isinstance(t, (types.Integer, types.List, types.SliceType, types.DictType))
         or (pyobject_to_literal and t == types.pyobject)
     )
@@ -1723,12 +1723,12 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         return bodo.null_array_type
 
     # string array
-    if dtype == bodo.string_type:
-        return bodo.string_array_type
+    if dtype == bodo.types.string_type:
+        return bodo.types.string_array_type
 
     # binary array
-    if dtype == bodo.bytes_type:
-        return bodo.binary_array_type
+    if dtype == bodo.types.bytes_type:
+        return bodo.types.binary_array_type
 
     if bodo.utils.utils.is_array_typ(dtype, False):
         return bodo.ArrayItemArrayType(dtype)
@@ -2004,8 +2004,8 @@ def is_scalar_type(t: types.Type) -> bool:
     ) or t in (
         bodo.types.datetime64ns,
         bodo.types.timedelta64ns,
-        bodo.string_type,
-        bodo.bytes_type,
+        bodo.types.string_type,
+        bodo.types.bytes_type,
         bodo.datetime_date_type,
         bodo.datetime_datetime_type,
         bodo.datetime_timedelta_type,
@@ -2850,7 +2850,7 @@ def _is_equiv_array_type(A, B):
         isinstance(A, StructArrayType)
         and isinstance(B, MapArrayType)
         and set(A.data) == {B.value_arr_type}
-        and B.key_arr_type.dtype == bodo.string_type
+        and B.key_arr_type.dtype == bodo.types.string_type
     ) or (
         # Numpy array types that can be converted safely
         # see https://github.com/numba/numba/blob/306060a2e1eec194fa46b13c99a01651d944d657/numba/core/types/npytypes.py#L483

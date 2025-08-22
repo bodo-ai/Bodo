@@ -1048,7 +1048,7 @@ def pd_series_overload(
 
         # If a dtype is provided we need to convert the passed dtype into an array_type
         if bodo.utils.conversion._is_str_dtype(dtype):
-            _arr_dtype = bodo.string_array_type
+            _arr_dtype = bodo.types.string_array_type
         else:
             nb_dtype = bodo.utils.typing.parse_dtype(dtype, "pandas.Series")
             if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):

@@ -166,7 +166,7 @@ class WindowStateType(StreamingStateType):
                 )
             return bodo.StructArrayType(tuple(common_field_types))
 
-        valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+        valid_str_types = (bodo.types.string_array_type, bodo.dict_str_arr_type)
         if common_arr_type in valid_str_types:
             # if the input column is a dictionary keep it as a dict, and if it is a string keep it as string
             assert arr_type2 in valid_str_types

@@ -311,7 +311,7 @@ def gen_snowflake_schema(
                 sf_schema[col_name] = "TEXT"
             else:
                 sf_schema[col_name] = f"VARCHAR({column_precisions[col_idx]})"
-        elif col_type == bodo.binary_array_type:
+        elif col_type == bodo.types.binary_array_type:
             sf_schema[col_name] = "BINARY"
         elif col_type == bodo.boolean_array_type:
             sf_schema[col_name] = "BOOLEAN"
@@ -342,7 +342,7 @@ def gen_snowflake_schema(
 
         elif isinstance(col_type, bodo.MapArrayType):
             if (
-                not col_type.key_arr_type == bodo.string_array_type
+                not col_type.key_arr_type == bodo.types.string_array_type
                 and bodo.get_rank() == 0
             ):
                 warning = BodoWarning(
@@ -2447,7 +2447,7 @@ def gen_flatten_sql(
     def map_needs_flattened(column_datatype):
         return (
             isinstance(column_datatype, bodo.MapArrayType)
-            and column_datatype.key_arr_type == bodo.string_array_type
+            and column_datatype.key_arr_type == bodo.types.string_array_type
         )
 
     # Group columns on whether they need flattened so we know if we

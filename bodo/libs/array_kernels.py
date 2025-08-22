@@ -212,7 +212,7 @@ def overload_isna(arr, i):
         return lambda arr, i: arr.codes[i] == -1
 
     # Binary Array
-    if arr == bodo.binary_array_type:
+    if arr == bodo.types.binary_array_type:
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), i
         )  # pragma: no cover
@@ -331,7 +331,7 @@ def setna_overload(arr, ind, int_nan_const=0):
         )  # pragma: no cover
 
     # Binary Array
-    if arr == bodo.binary_array_type:
+    if arr == bodo.types.binary_array_type:
 
         def impl_binary_arr(arr, ind, int_nan_const=0):  # pragma: no cover
             # set offset
@@ -462,7 +462,7 @@ def overload_copy_array_element(out_arr, out_ind, in_arr, in_ind):
     """
 
     # string array case (input can be dict-encoded too in get_str_arr_item_copy)
-    if out_arr == bodo.string_array_type and is_str_arr_type(in_arr):
+    if out_arr == bodo.types.string_array_type and is_str_arr_type(in_arr):
 
         def impl_str(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
             if bodo.libs.array_kernels.isna(in_arr, in_ind):
@@ -1923,7 +1923,8 @@ def concat_overload(arr_list):
     if (
         isinstance(arr_list, (types.UniTuple, types.List))
         and (
-            is_str_arr_type(arr_list.dtype) or arr_list.dtype == bodo.binary_array_type
+            is_str_arr_type(arr_list.dtype)
+            or arr_list.dtype == bodo.types.binary_array_type
         )
     ) or (
         isinstance(arr_list, types.BaseTuple)
