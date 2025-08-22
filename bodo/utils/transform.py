@@ -35,7 +35,6 @@ from numba.core.typing.templates import fold_arguments
 import bodo
 import bodo.ir.object_mode
 import bodo.libs.distributed_api
-from bodo.decorators import WrapPythonDispatcher, WrapPythonDispatcherType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -1258,6 +1257,7 @@ def get_const_func_output_type(
     'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
     'is_udf' prepares the output for UDF cases like Series.apply()
     """
+    from bodo.decorators import WrapPythonDispatcher, WrapPythonDispatcherType
     from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 
     # wrap_python functions have output type available already

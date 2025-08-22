@@ -34,7 +34,6 @@ from numba.parfors.parfor import (
 import bodo
 import bodo.io
 import bodo.io.np_io
-from bodo.decorators import WrapPythonDispatcherType
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -915,6 +914,7 @@ class DistributedAnalysis:
         self, inst, lhs, rhs: ir.Expr, func_var, args, kws, equiv_set, array_dists
     ):
         """analyze array distributions in function calls"""
+        from bodo.decorators import WrapPythonDispatcherType
         from bodo.transforms.distributed_analysis_call_registry import (
             DistributedAnalysisContext,
             call_registry,

@@ -42,16 +42,34 @@ from numba.core.untyped_passes import (
 
 import bodo
 import bodo.decorators
+import bodo.ext
+import bodo.hiframes.boxing
 import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
+import bodo.hiframes.pd_timestamp_ext
 import bodo.io
+import bodo.io.csv_iterator_ext
+import bodo.io.np_io
+import bodo.io.stream_parquet_write
 import bodo.ir.object_mode  # noqa
 import bodo.libs
 import bodo.libs.array_kernels  # noqa # side effect: install Numba functions
+import bodo.libs.csr_matrix_ext
+import bodo.libs.distributed_api
 import bodo.libs.int_arr_ext  # noqa # side effect
+import bodo.libs.matrix_ext
+import bodo.libs.memory_budget
+import bodo.libs.query_profile_collector
 import bodo.libs.re_ext  # noqa # side effect: initialize Numba extensions
 import bodo.libs.spark_extra
+import bodo.libs.streaming.dict_encoding
+import bodo.libs.streaming.groupby
+import bodo.libs.streaming.join
+import bodo.libs.streaming.sort
+import bodo.libs.streaming.union
+import bodo.libs.streaming.window
+import bodo.libs.table_builder
 import bodo.transforms
 import bodo.transforms.series_pass
 import bodo.transforms.type_inference

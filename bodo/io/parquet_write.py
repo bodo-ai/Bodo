@@ -11,7 +11,6 @@ from numba.core import cgutils, types
 from numba.extending import intrinsic, overload
 
 import bodo
-from bodo.decorators import wrap_python
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_index_ext import SingleIndexType, array_type_to_index
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -484,7 +483,7 @@ def overload_gen_pandas_parquet_metadata(
             is_runtime_columns=False,
         )
 
-    @wrap_python(types.Tuple((types.unicode_type, bodo.string_array_type)))
+    @bodo.wrap_python(types.Tuple((types.unicode_type, bodo.string_array_type)))
     def _gen_pandas_parquet_metadata_helper(
         range_info, index_names, col_names_arr, write_non_range_index_to_metadata
     ):
