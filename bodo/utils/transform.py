@@ -1202,7 +1202,7 @@ def _func_is_pure(py_func, arg_types, kw_types):
                         if isinstance(typ, types.Array) and func_name == "tofile":
                             return False
                         # logging calls have side effects
-                        if isinstance(typ, bodo.LoggingLoggerType):
+                        if isinstance(typ, bodo.types.LoggingLoggerType):
                             return False
                         # matplotlib types
                         if str(typ).startswith("Mpl"):

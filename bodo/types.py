@@ -71,3 +71,4 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
 )
 from bodo.hiframes.table import TableType
+from bodo.libs.logging_ext import LoggingLoggerType

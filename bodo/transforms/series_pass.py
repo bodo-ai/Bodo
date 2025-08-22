@@ -3001,7 +3001,7 @@ class SeriesPass:
             )
 
         if isinstance(func_mod, ir.Var) and isinstance(
-            self.typemap[func_mod.name], bodo.LoggingLoggerType
+            self.typemap[func_mod.name], bodo.types.LoggingLoggerType
         ):
             return self._run_call_logger(
                 assign, assign.target, rhs, func_mod, func_name

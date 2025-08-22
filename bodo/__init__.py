@@ -261,7 +261,6 @@ from bodo.libs.distributed_api import (
 )
 
 from bodo.utils.typing import register_type
-from bodo.libs.logging_ext import LoggingLoggerType
 from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 
 
