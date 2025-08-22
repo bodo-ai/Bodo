@@ -271,7 +271,6 @@ from bodo.libs.null_arr_ext import null_array_type, null_dtype
 from bodo.libs.str_ext import string_type
 import bodo.libs.binops_ext
 import bodo.libs.array_ops
-from bodo.utils.utils import cprint
 from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
 from bodo.hiframes.time_ext import (
     TimeType,
