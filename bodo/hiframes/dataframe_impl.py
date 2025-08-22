@@ -6017,7 +6017,7 @@ def _install_typer_for_type(type_name, typ):
 
         return typer
 
-    no_side_effect_call_tuples.add((type_name, bodo))
+    no_side_effect_call_tuples.add((type_name, "types", bodo))
     no_side_effect_call_tuples.add((typ,))
     # TODO(ehsan): make lower_builtin work in case the type calls is not removed by
     # dead code elimination for some reason
@@ -6029,7 +6029,7 @@ def _install_type_call_typers():
     e.g. bodo.types.DataFrameType()
     """
     for type_name in bodo_types_with_params:
-        typ = getattr(bodo, type_name)
+        typ = getattr(bodo.types, type_name)
         _install_typer_for_type(type_name, typ)
 
 
