@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include "../_bodo_common.h"
 #include "../_dict_builder.h"
 #include "_groupby.h"

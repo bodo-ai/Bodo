@@ -491,7 +491,7 @@ def tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd=pd):
         numerator = df["VOLUME"].sum()
         return numerator / demonimator
 
-    total = total.groupby("O_YEAR", as_index=False).apply(udf)
+    total = total.groupby("O_YEAR", as_index=False).apply(udf, include_groups=False)
     total.columns = ["O_YEAR", "MKT_SHARE"]
     total = total.sort_values(by=["O_YEAR"], ascending=[True])
     return total

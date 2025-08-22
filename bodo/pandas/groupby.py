@@ -469,10 +469,14 @@ def _groupby_apply_plan(
     """Implementation of SeriesGroupby/DataFrameGroupby.apply."""
     from bodo.pandas.base import _empty_like
 
-    # TODO: support passing kwargs and args
     if include_groups:
         raise BodoLibNotImplementedException(
             "Groupby.apply(): include_groups=True not supported yet."
+        )
+
+    if not callable(func):
+        raise BodoLibNotImplementedException(
+            "Groupby.apply() only supports callable values for func."
         )
 
     # TODO: support passing kwargs and args

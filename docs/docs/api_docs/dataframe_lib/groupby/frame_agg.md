@@ -15,7 +15,8 @@ Apply one or more aggregate functions to groups of data in a BodoDataFrame. This
     * A dictionary mapping column name to aggregate function e.g. `{"col_1": "sum", "col_2": "mean"}`
     * None along with key word arguments specifying Named Aggregates.
 
-    [Refer to our documentation][df-lib-groupby] for aggregate functions that are currently supported in addition to most user defined functions. Any other combination of arguments will either fallback to Pandas [`DataFrameGroupBy.agg`](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.agg.html#pandas.core.groupby.DataFrameGroupBy.agg) or raise a descriptive error.
+    [Refer to our documentation][df-lib-groupby] for aggregate functions that are currently supported in addition to most user defined functions.
+    Any other combination of arguments will either fallback to Pandas [`DataFrameGroupBy.agg`](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.agg.html#pandas.core.groupby.DataFrameGroupBy.agg) or raise a descriptive error.
 
 : __\*\*kwargs__ Key word arguments are used to create Named Aggregations and should be in the form `new_name=pd.NamedAgg(column_name, function)` or simply `new_name=(column_name, function)`.
 
