@@ -508,13 +508,13 @@ def dist_reduce_impl(value, reduce_op, comm):
         ]
 
         if target_typ not in supported_typs and not isinstance(
-            target_typ, (bodo.Decimal128Type, bodo.types.PandasTimestampType)
+            target_typ, (bodo.types.Decimal128Type, bodo.types.PandasTimestampType)
         ):  # pragma: no cover
             raise BodoError(f"argmin/argmax not supported for type {target_typ}")
 
     typ_enum = np.int32(numba_to_c_type(target_typ))
 
-    if isinstance(target_typ, bodo.Decimal128Type):
+    if isinstance(target_typ, bodo.types.Decimal128Type):
         # For index-value types, the data pointed to has different amounts of padding depending on machine type.
         # as a workaround, we can pass the index separately.
 
@@ -1017,7 +1017,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     if dtype == string_array_type:
         return pd.array(["A"], "string")
 
-    if dtype == bodo.dict_str_arr_type:
+    if dtype == bodo.types.dict_str_arr_type:
         return pd.array(["a"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())))
 
     if dtype == binary_array_type:

@@ -221,9 +221,9 @@ def test_stream_union_decimal_promotion(memory_leak_check):
         in_table_types=(
             TableType(
                 (
-                    bodo.DecimalArrayType(12, 5),
-                    bodo.DecimalArrayType(15, 6),
-                    bodo.DecimalArrayType(16, 0),
+                    bodo.types.DecimalArrayType(12, 5),
+                    bodo.types.DecimalArrayType(15, 6),
+                    bodo.types.DecimalArrayType(16, 0),
                     bodo.IntegerArrayType(types.int32),
                     types.Array(types.float32, 1, "C"),
                     bodo.FloatingArrayType(types.float64),
@@ -231,22 +231,22 @@ def test_stream_union_decimal_promotion(memory_leak_check):
             ),
             TableType(
                 (
-                    bodo.DecimalArrayType(15, 6),
-                    bodo.DecimalArrayType(12, 5),
+                    bodo.types.DecimalArrayType(15, 6),
+                    bodo.types.DecimalArrayType(12, 5),
                     bodo.IntegerArrayType(types.int64),
-                    bodo.DecimalArrayType(26, 0),
-                    bodo.DecimalArrayType(15, 6),
-                    bodo.DecimalArrayType(38, 18),
+                    bodo.types.DecimalArrayType(26, 0),
+                    bodo.types.DecimalArrayType(15, 6),
+                    bodo.types.DecimalArrayType(38, 18),
                 )
             ),
             TableType(
                 (
-                    bodo.DecimalArrayType(25, 0),
-                    bodo.DecimalArrayType(15, 14),
+                    bodo.types.DecimalArrayType(25, 0),
+                    bodo.types.DecimalArrayType(15, 14),
                     types.Array(types.int32, 1, "C"),
                     types.Array(types.int8, 1, "C"),
                     bodo.IntegerArrayType(types.int32),
-                    bodo.DecimalArrayType(38, 4),
+                    bodo.types.DecimalArrayType(38, 4),
                 )
             ),
         )
@@ -256,16 +256,16 @@ def test_stream_union_decimal_promotion(memory_leak_check):
         (
             # All sources are decimal, so continue as decimal
             # Max Scale=6, Max Non-Scale=25
-            bodo.DecimalArrayType(31, 6),
+            bodo.types.DecimalArrayType(31, 6),
             # All sources are decimal, so continue as decimal
             # This is not converted to float64 for Numeric safety
-            bodo.DecimalArrayType(23, 14),
+            bodo.types.DecimalArrayType(23, 14),
             # All are decimal with 0 scale or integer
             # Scale=0, Max Non-Scale=16 => int64
             bodo.IntegerArrayType(types.int64),
             # All are decimal with 0 scale or integer
             # Scale=0, Max Non-Scale=26 which is above max int size
-            bodo.DecimalArrayType(26, 0),
+            bodo.types.DecimalArrayType(26, 0),
             # Merging a float, so must cast to float at end
             # Max Precision=15 => float64
             bodo.FloatingArrayType(types.float64),
@@ -290,15 +290,15 @@ def test_stream_union_dict_encoding_combo(memory_leak_check):
             TableType(
                 (
                     bodo.types.string_array_type,
-                    bodo.dict_str_arr_type,
+                    bodo.types.dict_str_arr_type,
                     bodo.types.string_array_type,
                 )
             ),
             TableType(
                 (
-                    bodo.dict_str_arr_type,
+                    bodo.types.dict_str_arr_type,
                     bodo.types.null_array_type,
-                    bodo.dict_str_arr_type,
+                    bodo.types.dict_str_arr_type,
                 )
             ),
             TableType(
@@ -313,9 +313,9 @@ def test_stream_union_dict_encoding_combo(memory_leak_check):
 
     assert state.out_table_type == TableType(
         (
-            bodo.dict_str_arr_type,
-            bodo.dict_str_arr_type,
-            bodo.dict_str_arr_type,
+            bodo.types.dict_str_arr_type,
+            bodo.types.dict_str_arr_type,
+            bodo.types.dict_str_arr_type,
         )
     )
 
@@ -338,7 +338,7 @@ def test_stream_union_null(memory_leak_check):
                 (
                     non_null_bool_arr,
                     bodo.types.string_array_type,
-                    bodo.boolean_array_type,
+                    bodo.types.boolean_array_type,
                     bodo.types.null_array_type,
                 )
             ),
@@ -355,9 +355,9 @@ def test_stream_union_null(memory_leak_check):
 
     assert state.out_table_type == TableType(
         (
-            bodo.boolean_array_type,
+            bodo.types.boolean_array_type,
             bodo.types.string_array_type,
-            bodo.boolean_array_type,
+            bodo.types.boolean_array_type,
             bodo.types.null_array_type,
         )
     )

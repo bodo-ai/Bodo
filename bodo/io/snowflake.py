@@ -313,20 +313,20 @@ def gen_snowflake_schema(
                 sf_schema[col_name] = f"VARCHAR({column_precisions[col_idx]})"
         elif col_type == bodo.types.binary_array_type:
             sf_schema[col_name] = "BINARY"
-        elif col_type == bodo.boolean_array_type:
+        elif col_type == bodo.types.boolean_array_type:
             sf_schema[col_name] = "BOOLEAN"
         # TODO: differentiate between unsigned vs. signed, 8, 16, 32, 64
         elif isinstance(col_type, bodo.IntegerArrayType):
             sf_schema[col_name] = "NUMBER(38, 0)"
         elif isinstance(col_type, bodo.FloatingArrayType):
             sf_schema[col_name] = "REAL"
-        elif isinstance(col_type, bodo.DecimalArrayType):
+        elif isinstance(col_type, bodo.types.DecimalArrayType):
             # TODO(njriasan): Integrate column_precisions when we have accurate
             # information from BodoSQL.
             sf_schema[col_name] = f"NUMBER({col_type.precision}, {col_type.scale})"
         elif isinstance(
             col_type,
-            (bodo.ArrayItemArrayType,),
+            (bodo.types.ArrayItemArrayType,),
         ):
             if contains_map_array(col_type):
                 raise_bodo_error("Nested MapArrayType is not supported.")

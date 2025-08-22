@@ -230,7 +230,7 @@ def test_nullable_decimal_cast(memory_leak_check):
     """
     Tests casting a nullable array to a decimal array.
     """
-    dtype = bodo.Decimal128Type(30, 10)
+    dtype = bodo.types.Decimal128Type(30, 10)
 
     def impl(n):
         null_arr = bodo.libs.null_arr_ext.init_null_array(n)

@@ -2125,7 +2125,7 @@ class UntypedPass:
                         raise BodoError(
                             f"pandas.read_csv(): column name '{c}' in _bodo_read_as_dict is not a string column"
                         )
-                    dtype_map[c] = bodo.dict_str_arr_type
+                    dtype_map[c] = bodo.types.dict_str_arr_type
 
         columns, _, out_types = _get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs

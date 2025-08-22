@@ -48,14 +48,14 @@ def is_valid_SQL_object_arg(arg):
             isinstance(arg, bodo.libs.map_arr_ext.MapArrayType)
             and (
                 arg.key_arr_type == bodo.types.string_array_type
-                or arg.key_arr_type == bodo.dict_str_arr_type
+                or arg.key_arr_type == bodo.types.dict_str_arr_type
             )
         )
         or (
             isinstance(arg, bodo.libs.map_arr_ext.MapScalarType)
             and (
                 arg.key_arr_type == bodo.types.string_array_type
-                or arg.key_arr_type == bodo.dict_str_arr_type
+                or arg.key_arr_type == bodo.types.dict_str_arr_type
             )
         )
     )
@@ -273,11 +273,11 @@ def gen_vectorized(
     for i in range(len(arg_types)):
         if bodo.utils.utils.is_array_typ(arg_types[i], False):
             vector_args += 1
-            if arg_types[i] == bodo.dict_str_arr_type:
+            if arg_types[i] == bodo.types.dict_str_arr_type:
                 dict_encoded_arg = i
         elif bodo.utils.utils.is_array_typ(arg_types[i], True):
             vector_args += 1
-            if arg_types[i].data == bodo.dict_str_arr_type:
+            if arg_types[i].data == bodo.types.dict_str_arr_type:
                 dict_encoded_arg = i
     use_dict_encoding = (
         support_dict_encoding and vector_args == 1 and dict_encoded_arg >= 0
@@ -913,10 +913,10 @@ def verify_numeric_arg(arg, f_name, a_name):  # pragma: no cover
     """
     if not (
         is_numeric_without_decimal(arg)
-        or isinstance(arg, bodo.Decimal128Type)
+        or isinstance(arg, bodo.types.Decimal128Type)
         or (
             bodo.utils.utils.is_array_typ(arg, True)
-            and isinstance(arg.dtype, bodo.Decimal128Type)
+            and isinstance(arg.dtype, bodo.types.Decimal128Type)
         )
     ):
         raise_bodo_error(
@@ -1022,7 +1022,7 @@ def is_valid_decimal_arg(arg):  # pragma: no cover
         arg (dtype): the dtype of the argument being checked
     returns: False if the argument is not a decimal or decimal column
     """
-    return isinstance(arg, (bodo.Decimal128Type, bodo.DecimalArrayType))
+    return isinstance(arg, (bodo.types.Decimal128Type, bodo.types.DecimalArrayType))
 
 
 def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
@@ -1045,10 +1045,10 @@ def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
             )
     else:
         if not (
-            isinstance(arg, bodo.ArrayItemArrayType)
+            isinstance(arg, bodo.types.ArrayItemArrayType)
             or (
                 bodo.hiframes.pd_series_ext.is_series_type(arg)
-                and isinstance(arg.data, bodo.ArrayItemArrayType)
+                and isinstance(arg.data, bodo.types.ArrayItemArrayType)
             )
         ):
             raise_bodo_error(
@@ -2060,14 +2060,14 @@ def get_combined_type(in_types, calling_func):
     # If the first type is is an array item array, verify that all of
     # the other types are also array item arrays and then recursively
     # repeat the procedure on all of the inner types.
-    if isinstance(seed_type, bodo.ArrayItemArrayType):
+    if isinstance(seed_type, bodo.types.ArrayItemArrayType):
         if not all(
-            isinstance(typ, bodo.ArrayItemArrayType) for typ in in_types
+            isinstance(typ, bodo.types.ArrayItemArrayType) for typ in in_types
         ):  # pragma: no cover
             raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
         inner_dtypes = [typ.dtype for typ in in_types]
         combined_inner_dtype = get_combined_type(inner_dtypes, calling_func)
-        return bodo.ArrayItemArrayType(combined_inner_dtype)
+        return bodo.types.ArrayItemArrayType(combined_inner_dtype)
 
     # For map arrays, recursively ensure the two child arrays match
     if isinstance(seed_type, (bodo.MapArrayType, types.DictType)):

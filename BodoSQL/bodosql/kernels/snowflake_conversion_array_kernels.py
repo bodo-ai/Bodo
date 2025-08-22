@@ -974,7 +974,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
     out_dtype = bodo.types.string_array_type
     convert_func_str = "bodosql.kernels.snowflake_conversion_array_kernels.convert_snowflake_date_format_str_to_py_format"
     # Check if we can use one of our array kernels to handle the conversion.
-    if is_array_typ(arr) and isinstance(arr, bodo.DecimalArrayType):
+    if is_array_typ(arr) and isinstance(arr, bodo.types.DecimalArrayType):
 
         def impl(arr, format_str, is_scalar):  # pragma: no cover
             return bodosql.kernels.numeric_array_kernels.decimal_array_to_str_array(arr)
@@ -1967,7 +1967,7 @@ def string_to_decimal_overload(expr, precision, scale, null_on_error):
         return impl
 
     else:
-        assert expr == bodo.dict_str_arr_type, (
+        assert expr == bodo.types.dict_str_arr_type, (
             "string_to_decimal_overload: dictionary-encoded string array type expected"
         )
 
@@ -2044,7 +2044,7 @@ def numeric_to_decimal_overload(expr, precision, scale, null_on_error):
             return None
 
         return impl
-    elif isinstance(expr, bodo.DecimalArrayType):
+    elif isinstance(expr, bodo.types.DecimalArrayType):
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.cast_decimal_to_decimal_array(
@@ -2052,7 +2052,7 @@ def numeric_to_decimal_overload(expr, precision, scale, null_on_error):
             )
 
         return impl
-    elif isinstance(expr, bodo.Decimal128Type):
+    elif isinstance(expr, bodo.types.Decimal128Type):
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.cast_decimal_to_decimal_scalar(

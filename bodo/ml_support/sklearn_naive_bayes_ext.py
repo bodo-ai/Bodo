@@ -98,13 +98,13 @@ def overload_multinomial_nb_model_fit(
         func_text += "    m, X, y, sample_weight=None, _is_data_distributed=False\n"
         func_text += "):  # pragma: no cover\n"
         # Attempt to change data to numpy array. Any data that fails means, we don't support
-        if y == bodo.boolean_array_type:
+        if y == bodo.types.boolean_array_type:
             # Explicitly call to_numpy() for boolean arrays because
             # coerce_to_ndarray() doesn't work for boolean array.
             func_text += "    y = y.to_numpy()\n"
         else:
             func_text += "    y = bodo.utils.conversion.coerce_to_ndarray(y)\n"
-        if isinstance(X, DataFrameType) or X == bodo.boolean_array_type:
+        if isinstance(X, DataFrameType) or X == bodo.types.boolean_array_type:
             # Explicitly call to_numpy() for boolean arrays because
             # coerce_to_ndarray() doesn't work for boolean array.
             func_text += "    X = X.to_numpy()\n"

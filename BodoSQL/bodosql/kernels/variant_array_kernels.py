@@ -21,7 +21,7 @@ def overload_is_array(V):
     # TODO(aneesh) this wouldn't actually work for true variant types that have
     # mixed data types internally - this eventually needs to compute whether or
     # not each row is an array when we have a runtime notion of VARIANT.
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     in_dtype = V
     is_series = isinstance(V, bodo.hiframes.pd_series_ext.SeriesType)
     if is_series:
@@ -49,7 +49,7 @@ def overload_is_object(V):
     # not each row is an object when we have a runtime notion of VARIANT.
     # TODO(aneesh) most IS_* functions will look very similar, so a future
     # refactor should create a common template method or something.
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     in_dtype = V
     is_series = isinstance(V, bodo.hiframes.pd_series_ext.SeriesType)
     if is_series:

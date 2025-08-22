@@ -1624,7 +1624,7 @@ def create_pyspark_schema_from_dataframe(df):
             isinstance(
                 arr_type, (types.Array, bodo.IntegerArrayType, bodo.FloatingArrayType)
             )
-            or arr_type == bodo.boolean_array_type
+            or arr_type == bodo.types.boolean_array_type
         ):
             pyspark_type = bodo_to_pyspark_dtype_map[arr_type.dtype]
         elif arr_type == bodo.types.string_array_type:

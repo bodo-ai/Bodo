@@ -198,7 +198,7 @@ def typeof_pd_index(val, c):
     arr_typ = bodo.hiframes.boxing._infer_series_arr_type(val)
     if arr_typ == bodo.types.datetime_date_array_type or isinstance(
         arr_typ,
-        (bodo.DecimalArrayType, bodo.DatetimeArrayType, bodo.types.TimeArrayType),
+        (bodo.types.DecimalArrayType, bodo.DatetimeArrayType, bodo.types.TimeArrayType),
     ):
         return NumericIndexType(
             arr_typ.dtype,
@@ -876,7 +876,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                     types.Float,
                     types.Boolean,
                     bodo.types.TimeType,
-                    bodo.Decimal128Type,
+                    bodo.types.Decimal128Type,
                 ),
             )
             or elem_type == bodo.types.datetime_date_type
@@ -3230,13 +3230,13 @@ def array_type_to_index(arr_typ, name_typ=None):
             IntegerArrayType,
             FloatingArrayType,
             bodo.CategoricalArrayType,
-            bodo.DecimalArrayType,
+            bodo.types.DecimalArrayType,
             bodo.types.TimeArrayType,
             bodo.DatetimeArrayType,
         ),
     ) or arr_typ in (
         bodo.types.datetime_date_array_type,
-        bodo.boolean_array_type,
+        bodo.types.boolean_array_type,
     ), f"Converting array type {arr_typ} to index not supported"
 
     # TODO: Pandas keeps datetime_date Index as a generic Index(, dtype=object)

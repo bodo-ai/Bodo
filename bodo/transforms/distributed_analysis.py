@@ -423,8 +423,10 @@ class DistributedAnalysis:
             or (
                 is_expr(rhs, "binop")
                 and (
-                    isinstance(self.typemap[rhs.lhs.name], bodo.DecimalArrayType)
-                    or isinstance(self.typemap[rhs.rhs.name], bodo.DecimalArrayType)
+                    isinstance(self.typemap[rhs.lhs.name], bodo.types.DecimalArrayType)
+                    or isinstance(
+                        self.typemap[rhs.rhs.name], bodo.types.DecimalArrayType
+                    )
                 )
             )
         ):

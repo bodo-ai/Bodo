@@ -42,12 +42,12 @@ desired Python, Numpy, or Pandas type.
 | `bodo.types.bool_[:]`, `bodo.types.int8[:]`, ..., `bodo.types.int64[:]`, `bodo.types.uint8[:]`, ..., `bodo.types.uint64[:]`, `bodo.types.float32[:]`, `bodo.types.float64[:]` | One-dimensional Numpy array of the given type. A full list of supported Numpy types can be found [here](https://numba.readthedocs.io/en/stable/reference/types.html#numbers){target="blank"}. A multidimensional can be specified by adding additional colons (*e.g.*, `bodo.types.int32[:, :, :]` for a three-dimensional array).|
 | `bodo.types.string_array_type`| Array of nullable strings|
 | `bodo.IntegerArrayType(integer_type)`|  Array of Pandas nullable integers of the given integer type. <br> *e.g.*, `bodo.IntegerArrayType(bodo.types.int64)`|
-| `bodo.boolean_array_type`| Array of Pandas nullable booleans|
+| `bodo.types.boolean_array_type`| Array of Pandas nullable booleans|
 | `bodo.types.datetime64ns[:]`| Array of Numpy datetime64 values|
 | `bodo.types.timedelta64ns[:]`|Array of Numpy timedelta64 values|
 | `bodo.types.datetime_date_array_type`|Array of datetime.date types|
 | `bodo.types.timedelta_array_type`|Array of datetime.timedelta types|
-| `bodo.DecimalArrayType(precision, scale)`| Array of Apache Arrow Decimal128 values with the given precision and scale. <br> *e.g.*, `bodo.DecimalArrayType(38, 18)`|
+| `bodo.types.DecimalArrayType(precision, scale)`| Array of Apache Arrow Decimal128 values with the given precision and scale. <br> *e.g.*, `bodo.types.DecimalArrayType(38, 18)`|
 | `bodo.types.binary_array_type`|Array of nullable bytes values|
 | `bodo.StructArrayType(data_types, field_names)`| Array of a user defined struct with the given tuple of data types and field names. <br> *e.g.*, `bodo.StructArrayType((bodo.types.int32[:], bodo.types.datetime64ns[:]), ("a", "b"))`|
 | `bodo.TupleArrayType(data_types)`| Array of a user defined tuple with the given tuple of data types. <br> *e.g.*, `bodo.TupleArrayType((bodo.types.int32[:], bodo.types.datetime64ns[:]))`|

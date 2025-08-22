@@ -112,7 +112,7 @@ def typeof_pyarrow_string_array(val, c):
     # use dict-encoded type if input is dict-encoded (boxed from Bodo dict-encoded
     # array since pandas doesn't use dict-encoded yet)
     if pa.types.is_dictionary(val._pa_array.combine_chunks().type):
-        return bodo.dict_str_arr_type
+        return bodo.types.dict_str_arr_type
     return string_array_type
 
 
@@ -790,7 +790,7 @@ def get_str_arr_item_length(A, i):  # pragma: no cover
     """return the number of bytes in the string at index i.
     Note: may not be the same as the length of the string for non-ascii unicode.
     """
-    if A == bodo.dict_str_arr_type:
+    if A == bodo.types.dict_str_arr_type:
         # For dictionary encoded arrays we recurse on the dictionary.
         def impl(A, i):  # pragma: no cover
             idx = A._indices[i]
@@ -845,7 +845,7 @@ def get_str_arr_item_copy(B, j, A, i):  # pragma: no cover
 
     # Update the location of the string array + index for dict encoded
     # array input vs string array input
-    if A == bodo.dict_str_arr_type:
+    if A == bodo.types.dict_str_arr_type:
         load_input_array = "in_str_arr = A._data"
         input_index = "input_index = A._indices[i]"
     else:
@@ -2290,7 +2290,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
     if not isinstance(nb_dtype, (types.Float, types.Integer)) and nb_dtype not in (
         types.bool_,
         bodo.libs.bool_arr_ext.boolean_dtype,
-        bodo.dict_str_arr_type,
+        bodo.types.dict_str_arr_type,
     ):  # pragma: no cover
         raise BodoError("invalid dtype in StringArray.astype()")
 
@@ -2339,7 +2339,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
 
         return impl_bool
 
-    elif nb_dtype == bodo.dict_str_arr_type:
+    elif nb_dtype == bodo.types.dict_str_arr_type:
 
         def impl_dict_str(A, dtype, copy=True):  # pragma: no cover
             return str_arr_to_dict_str_arr(A)
@@ -2409,7 +2409,7 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
         "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
     )
 
-    sig = bodo.dict_str_arr_type(bodo.types.string_array_type)
+    sig = bodo.types.dict_str_arr_type(bodo.types.string_array_type)
     return sig, codegen
 
 

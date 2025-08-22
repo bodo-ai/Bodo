@@ -269,10 +269,10 @@ def numba_to_c_types(
             c_types.extend(
                 numba_to_c_types((arr_type.key_arr_type, arr_type.value_arr_type))
             )
-        elif isinstance(arr_type, bodo.ArrayItemArrayType):
+        elif isinstance(arr_type, bodo.types.ArrayItemArrayType):
             c_types.append(CTypeEnum.LIST.value)
             c_types.extend(numba_to_c_types((arr_type.dtype,)))
-        elif isinstance(arr_type, bodo.DecimalArrayType):
+        elif isinstance(arr_type, bodo.types.DecimalArrayType):
             c_types.append(numba_to_c_type(arr_type.dtype))
             c_types.append(arr_type.dtype.precision)
             c_types.append(arr_type.dtype.scale)
@@ -302,14 +302,14 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
     elif arr_type in (
         bodo.types.null_array_type,
         bodo.types.datetime_date_array_type,
-        bodo.boolean_array_type,
+        bodo.types.boolean_array_type,
     ) or isinstance(
         arr_type,
         (
             bodo.IntegerArrayType,
             bodo.FloatingArrayType,
             bodo.types.TimeArrayType,
-            bodo.DecimalArrayType,
+            bodo.types.DecimalArrayType,
             bodo.DatetimeArrayType,
         ),
     ):
@@ -320,7 +320,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         return CArrayTypeEnum.INTERVAL.value
     elif arr_type == timestamptz_array_type:
         return CArrayTypeEnum.TIMESTAMPTZ.value
-    elif arr_type == bodo.dict_str_arr_type:
+    elif arr_type == bodo.types.dict_str_arr_type:
         return CArrayTypeEnum.DICT.value
     else:
         raise BodoError(f"Unsupported Array Type '{arr_type}' in numba_to_c_array_type")
@@ -349,10 +349,10 @@ def numba_to_c_array_types(
             c_arr_types.extend(
                 numba_to_c_array_types((arr_type.key_arr_type, arr_type.value_arr_type))
             )
-        elif isinstance(arr_type, bodo.ArrayItemArrayType):
+        elif isinstance(arr_type, bodo.types.ArrayItemArrayType):
             c_arr_types.append(CArrayTypeEnum.ARRAY_ITEM.value)
             c_arr_types.extend(numba_to_c_array_types((arr_type.dtype,)))
-        elif isinstance(arr_type, bodo.DecimalArrayType):
+        elif isinstance(arr_type, bodo.types.DecimalArrayType):
             c_arr_types.append(numba_to_c_array_type(arr_type))
             c_arr_types.append(arr_type.dtype.precision)
             c_arr_types.append(arr_type.dtype.scale)
@@ -953,7 +953,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
 
     # Dictionary-encoded arrays can be allocated if a reference array is provided to
     # reuse its dictionary
-    if typ == bodo.dict_str_arr_type and not is_overload_none(dict_ref_arr):
+    if typ == bodo.types.dict_str_arr_type and not is_overload_none(dict_ref_arr):
         return (
             lambda n,
             t,

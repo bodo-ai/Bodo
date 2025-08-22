@@ -18,7 +18,7 @@ across all arrays.
         ([1, 2, 3, 5] * 3, bodo.IntegerArrayType(bodo.types.int32)),
         ([1.1, 1.2, 3.1, 4.5] * 3, bodo.FloatingArrayType(bodo.types.float64)),
         (["a", "b", "a", "b", "c"] * 3, bodo.types.string_array_type),
-        (["a", "b", "a", "b", "c"] * 3, bodo.dict_str_arr_type),
+        (["a", "b", "a", "b", "c"] * 3, bodo.types.dict_str_arr_type),
     ],
 )
 def test_list_to_array(lst, arr_type, memory_leak_check):
@@ -47,7 +47,7 @@ def test_int_list_with_null_to_array(memory_leak_check):
     "arr_type",
     [
         bodo.types.string_array_type,
-        bodo.dict_str_arr_type,
+        bodo.types.dict_str_arr_type,
     ],
 )
 def test_str_list_with_null_to_array(arr_type, memory_leak_check):

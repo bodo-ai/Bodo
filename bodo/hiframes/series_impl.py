@@ -549,7 +549,7 @@ def overload_series_equals(S, other):
     # Bodo Limitation. Compilation fails with ArrayItemArrayType because A1[i] != A2[i]
     # doesn't work properly
     # TODO: [BE-109] Support ArrayItemArrayType
-    if isinstance(S.data, bodo.ArrayItemArrayType):
+    if isinstance(S.data, bodo.types.ArrayItemArrayType):
         raise BodoError(
             "Series.equals() not supported for Series where each element is an array or list"
         )
@@ -1417,7 +1417,8 @@ def overload_series_idxmin(S, axis=0, skipna=True):
                 bodo.DatetimeArrayType,
             ),
         )
-        or S.data in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
+        or S.data
+        in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmin() only supported for numeric array types. Array type: {S.data} not supported."
@@ -1477,7 +1478,8 @@ def overload_series_idxmax(S, axis=0, skipna=True):
                 bodo.DatetimeArrayType,
             ),
         )
-        or S.data in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
+        or S.data
+        in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmax() only supported for numeric array types. Array type: {S.data} not supported."
@@ -1527,11 +1529,12 @@ def check_argmax_min_args(func_name, S):
                 bodo.IntegerArrayType,
                 bodo.FloatingArrayType,
                 bodo.CategoricalArrayType,
-                bodo.DecimalArrayType,
+                bodo.types.DecimalArrayType,
                 bodo.DatetimeArrayType,
             ),
         )
-        or S.data in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
+        or S.data
+        in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.{func_name}() only supported for numeric array types. Array type: {S.data} not supported."
@@ -1743,7 +1746,7 @@ def overload_series_clip(
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
-        or S.data == bodo.dict_str_arr_type
+        or S.data == bodo.types.dict_str_arr_type
         or isinstance(
             S.data,
             (
@@ -3588,7 +3591,7 @@ def overload_series_fillna(
 
     if is_overload_true(inplace):
         if S.dtype == bodo.types.string_type:
-            if S.data == bodo.dict_str_arr_type:
+            if S.data == bodo.types.dict_str_arr_type:
                 raise_bodo_error(
                     "Series.fillna(): 'inplace' not supported for dictionary-encoded string arrays yet."
                 )
@@ -4604,7 +4607,7 @@ def _validate_self_other_mask_where(
                 # as str/bin_arr.data.dtype gives a pretty unintelligble error from the user perspective
                 not (
                     isinstance(other, (StringArrayType, BinaryArrayType))
-                    or other == bodo.dict_str_arr_type
+                    or other == bodo.types.dict_str_arr_type
                 )
                 and (
                     isinstance(arr.dtype, types.Integer)
@@ -5325,7 +5328,7 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
         raise BodoError(f"pd.to_numeric(): invalid argument type {arg_a}")
 
     # optimized path for dict-encoded string arrays
-    if arg_a == bodo.dict_str_arr_type:
+    if arg_a == bodo.types.dict_str_arr_type:
         return (
             lambda arg_a,
             errors="raise",

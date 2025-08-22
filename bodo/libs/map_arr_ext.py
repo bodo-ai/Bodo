@@ -376,7 +376,7 @@ def contains_map_array(arr):
     """Returns True if the array contains any maps or is a map"""
     if isinstance(arr, bodo.MapArrayType):
         return True
-    elif isinstance(arr, bodo.ArrayItemArrayType):
+    elif isinstance(arr, bodo.types.ArrayItemArrayType):
         return contains_map_array(arr.dtype)
     elif isinstance(arr, bodo.StructArrayType):
         return any(contains_map_array(t) for t in arr.data)

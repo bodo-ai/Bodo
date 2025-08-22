@@ -800,9 +800,9 @@ def test_snowflake_runtime_upcasting_int_to_int(
         (
             bodo.DataFrameType(
                 data=(
-                    bodo.DecimalArrayType(38, 0),
-                    bodo.DecimalArrayType(38, 0),
-                    bodo.DecimalArrayType(18, 0),
+                    bodo.types.DecimalArrayType(38, 0),
+                    bodo.types.DecimalArrayType(38, 0),
+                    bodo.types.DecimalArrayType(18, 0),
                 ),
                 columns=("l_orderkey", "l_partkey", "l_suppkey"),
             ),
@@ -818,7 +818,7 @@ def test_snowflake_runtime_upcasting_int_to_int(
         (
             bodo.DataFrameType(
                 data=(
-                    bodo.DecimalArrayType(38, 0),
+                    bodo.types.DecimalArrayType(38, 0),
                     types.Array(types.int32, 1, "C"),
                     types.Array(types.int32, 1, "C"),
                 ),

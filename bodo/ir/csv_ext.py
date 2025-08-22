@@ -653,7 +653,7 @@ def _get_pd_dtype_str(t):
         return "str"
 
     # NOTE: this is just a placeholder since strings are not handled with astype()
-    if t == string_array_type or t == bodo.dict_str_arr_type:
+    if t == string_array_type or t == bodo.types.dict_str_arr_type:
         return "str"
 
     # nullable int array

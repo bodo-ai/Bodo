@@ -531,7 +531,7 @@ def overload_arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):
     arg_names = ["array_0", "array_1", "is_scalar_0", "is_scalar_1"]
     arg_types = [array_0, array_1, is_scalar_0, is_scalar_1]
     propagate_null = [True, True, False, False]
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     scalar_text = "has_overlap = False\n"
     scalar_text += "for idx0 in range(len(arg0)):\n"
     scalar_text += "   null0 = bodo.libs.array_kernels.isna(arg0, idx0)\n"
@@ -710,7 +710,7 @@ def overload_array_contains_util(
     arg_names = ["elem", "container", "elem_is_scalar", "container_is_scalar"]
     arg_types = [elem, container, elem_is_scalar, container_is_scalar]
     propagate_null = [False, True, False, False]
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     are_arrays = [not elem_is_scalar_bool, not container_is_scalar_bool, False, False]
     scalar_text = "found_match = False\n"
     if elem == bodo.types.none:

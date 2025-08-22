@@ -147,12 +147,12 @@ class WindowStateType(StreamingStateType):
             )
             return bodo.MapArrayType(common_key_type, common_value_type)
 
-        if isinstance(common_arr_type, bodo.ArrayItemArrayType):
-            assert isinstance(arr_type2, bodo.ArrayItemArrayType)
+        if isinstance(common_arr_type, bodo.types.ArrayItemArrayType):
+            assert isinstance(arr_type2, bodo.types.ArrayItemArrayType)
             common_element_type = WindowStateType.derive_common_arr_types(
                 common_arr_type.dtype, arr_type2.dtype
             )
-            return bodo.ArrayItemArrayType(common_element_type)
+            return bodo.types.ArrayItemArrayType(common_element_type)
 
         if isinstance(common_arr_type, bodo.StructArrayType):
             assert isinstance(arr_type2, bodo.StructArrayType)
@@ -166,7 +166,7 @@ class WindowStateType(StreamingStateType):
                 )
             return bodo.StructArrayType(tuple(common_field_types))
 
-        valid_str_types = (bodo.types.string_array_type, bodo.dict_str_arr_type)
+        valid_str_types = (bodo.types.string_array_type, bodo.types.dict_str_arr_type)
         if common_arr_type in valid_str_types:
             # if the input column is a dictionary keep it as a dict, and if it is a string keep it as string
             assert arr_type2 in valid_str_types
@@ -491,12 +491,12 @@ class WindowStateType(StreamingStateType):
                     in_dtype = input_type.dtype
 
                     # Here we use the typing rules for sum + division to derive the type for mean. This differs from Snowflake behavior: Snowflake adds 3 to the scale by default. If the input scale is >34 it gives an error
-                    if isinstance(in_dtype, bodo.Decimal128Type):
+                    if isinstance(in_dtype, bodo.types.Decimal128Type):
                         out_p = bodo.libs.decimal_arr_ext.DECIMAL128_MAX_PRECISION
                         _, out_s = decimal_division_output_precision_scale(
                             out_p, in_dtype.scale, out_p, 0
                         )
-                        out_dtype = bodo.Decimal128Type(
+                        out_dtype = bodo.types.Decimal128Type(
                             out_p,
                             out_s,
                         )
@@ -524,8 +524,8 @@ class WindowStateType(StreamingStateType):
                         output_type = input_type
                     elif func_name == "sum":
                         in_dtype = input_type.dtype
-                        if isinstance(in_dtype, bodo.Decimal128Type):
-                            out_dtype = bodo.Decimal128Type(
+                        if isinstance(in_dtype, bodo.types.Decimal128Type):
+                            out_dtype = bodo.types.Decimal128Type(
                                 bodo.libs.decimal_arr_ext.DECIMAL128_MAX_PRECISION,
                                 in_dtype.scale,
                             )

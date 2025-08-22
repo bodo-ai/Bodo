@@ -105,14 +105,14 @@ public class BodoArrayHelpers {
       case ARRAY:
         typeName =
             String.format(
-                "bodo.ArrayItemArrayType(%s)",
+                "bodo.types.ArrayItemArrayType(%s)",
                 sqlTypeToBodoArrayType(
                         Objects.requireNonNull(type.getComponentType()), false, defaultTzExpr)
                     .emit());
         break;
       case BOOLEAN:
         // TODO: Add nullable support in the type
-        typeName = "bodo.boolean_array_type";
+        typeName = "bodo.types.boolean_array_type";
         break;
       case TINYINT:
         // TODO: Add signed vs unsigned support
@@ -184,7 +184,7 @@ public class BodoArrayHelpers {
       case CHAR:
         // TODO: Add nullable support
         if (strAsDict) {
-          typeName = "bodo.dict_str_arr_type";
+          typeName = "bodo.types.dict_str_arr_type";
         } else {
           typeName = "bodo.types.string_array_type";
         }

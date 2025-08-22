@@ -326,15 +326,17 @@ class JoinStateType(StreamingStateType):
             )
             return bodo.MapArrayType(common_key_arr_type, common_value_arr_types)
 
-        if isinstance(input_types[0], bodo.ArrayItemArrayType):
-            assert all(isinstance(t, bodo.ArrayItemArrayType) for t in input_types), (
+        if isinstance(input_types[0], bodo.types.ArrayItemArrayType):
+            assert all(
+                isinstance(t, bodo.types.ArrayItemArrayType) for t in input_types
+            ), (
                 f"StreamingHashJoin: Cannot unify List array with non-List arrays! {input_types=}"
             )
 
             common_element_type = JoinStateType._derive_common_key_type(
                 [t.dtype for t in input_types]
             )
-            return bodo.ArrayItemArrayType(common_element_type)
+            return bodo.types.ArrayItemArrayType(common_element_type)
 
         if isinstance(input_types[0], bodo.StructArrayType):
             assert all(isinstance(t, bodo.StructArrayType) for t in input_types), (
@@ -371,7 +373,10 @@ class JoinStateType(StreamingStateType):
             common_type = get_common_bodosql_integer_arr_type(input_types)
         else:
             # If the inputs are all string or dict, return string.
-            valid_str_types = (bodo.types.string_array_type, bodo.dict_str_arr_type)
+            valid_str_types = (
+                bodo.types.string_array_type,
+                bodo.types.dict_str_arr_type,
+            )
             if all(t in valid_str_types for t in input_types):
                 common_type = bodo.types.string_array_type
             else:
@@ -1459,7 +1464,10 @@ def _get_runtime_join_filter_info(
             cast_table_types.append(input_table_t)
         else:
             cast_arr_types = []
-            valid_str_types = (bodo.types.string_array_type, bodo.dict_str_arr_type)
+            valid_str_types = (
+                bodo.types.string_array_type,
+                bodo.types.dict_str_arr_type,
+            )
             for j in range(n_cols):
                 if j in input_idx_to_join_key_idxs[i]:
                     # If this is a key column, cast it to the join key type.
@@ -1485,8 +1493,8 @@ def _get_runtime_join_filter_info(
                     # At this point, this is the only case where a column level filter
                     # would be applied.
                     if (
-                        casted_type == bodo.dict_str_arr_type
-                        and join_key_t == bodo.dict_str_arr_type
+                        casted_type == bodo.types.dict_str_arr_type
+                        and join_key_t == bodo.types.dict_str_arr_type
                         and process_col_bitmask_lists[i][
                             input_idx_to_join_key_idxs[i][j]
                         ]
@@ -1613,7 +1621,7 @@ def overload_runtime_join_filter(
                 arr_type,
                 (
                     bodo.MapArrayType,
-                    bodo.ArrayItemArrayType,
+                    bodo.types.ArrayItemArrayType,
                 ),
             )
         ):

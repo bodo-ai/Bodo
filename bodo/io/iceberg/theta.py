@@ -124,7 +124,7 @@ def overload_get_supported_theta_sketch_columns(iceberg_pyarrow_schema):
     Returns a boolean array indicating which columns have types that can
     support theta sketches.
     """
-    arr_type = bodo.boolean_array_type
+    arr_type = bodo.types.boolean_array_type
 
     def impl(iceberg_pyarrow_schema):  # pragma: no cover
         res_info = _get_supported_theta_sketch_columns(iceberg_pyarrow_schema)
@@ -167,7 +167,7 @@ def overload_get_default_theta_sketch_columns(iceberg_pyarrow_schema):
     Returns a boolean array indicating which columns have types that output
     theta sketches by default.
     """
-    arr_type = bodo.boolean_array_type
+    arr_type = bodo.types.boolean_array_type
 
     def impl(iceberg_pyarrow_schema):  # pragma: no cover
         res_info = _get_default_theta_sketch_columns(iceberg_pyarrow_schema)

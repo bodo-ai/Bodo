@@ -298,7 +298,9 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
             # These functions support decimal types natively
             if func_name in {"ABS", "SIGN", "FACTORIAL"}:
                 verify_numeric_arg(arr, func_name, "arr")
-                if isinstance(arr, (bodo.Decimal128Type, bodo.DecimalArrayType)):
+                if isinstance(
+                    arr, (bodo.types.Decimal128Type, bodo.types.DecimalArrayType)
+                ):
                     # Return decimal version of implementations
 
                     if func_name == "ABS":
@@ -370,7 +372,9 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
 
             # Check upfront if first arg is a decimal, in which case
             # we redirect to the decimal implementation.
-            if isinstance(arr0, (bodo.Decimal128Type, bodo.DecimalArrayType)):
+            if isinstance(
+                arr0, (bodo.types.Decimal128Type, bodo.types.DecimalArrayType)
+            ):
                 if func_name == "ROUND":
 
                     def impl(arr0, arr1):  # pragma: no cover
@@ -450,7 +454,7 @@ _install_numeric_overload(funcs_utils_names)
 @numba.generated_jit(nopython=True)
 def abs_decimal(arr):
     # Array case
-    if isinstance(arr, bodo.DecimalArrayType):
+    if isinstance(arr, bodo.types.DecimalArrayType):
 
         def impl(arr):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.abs_decimal_array(arr)
@@ -467,7 +471,7 @@ def abs_decimal(arr):
 
 @numba.generated_jit(nopython=True)
 def factorial_decimal(arr):
-    if isinstance(arr, bodo.DecimalArrayType):
+    if isinstance(arr, bodo.types.DecimalArrayType):
         # Array case
 
         def impl(arr):  # pragma: no cover
@@ -492,11 +496,11 @@ def sign_decimal(arr):  # pragma: no cover
 def overload_sign_decimal(arr):
     if not (
         is_overload_none(arr)
-        or isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("sign_decimal: arr must be a decimal array or scalar")
 
-    if isinstance(arr, bodo.DecimalArrayType):
+    if isinstance(arr, bodo.types.DecimalArrayType):
         # Array case
         def impl(arr):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.decimal_array_sign(arr)
@@ -519,7 +523,7 @@ def round_decimal(arr, round_scale):  # pragma: no cover
 def overload_round_decimal(arr, round_scale):
     if not (
         is_overload_none(arr)
-        or isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("round_decimal: arr must be a decimal array or scalar")
     if not (
@@ -556,7 +560,7 @@ def overload_round_decimal(arr, round_scale):
 
     # Case on whether we are operating on an array or scalar.
 
-    if isinstance(arr, bodo.DecimalArrayType):
+    if isinstance(arr, bodo.types.DecimalArrayType):
         # Array case
         def impl(arr, round_scale):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.round_decimal_array(
@@ -568,7 +572,7 @@ def overload_round_decimal(arr, round_scale):
         # Scalar case
         # If just operating on scalars, use gen_vectorized.
 
-        out_dtype = bodo.DecimalArrayType(output_p, output_s)
+        out_dtype = bodo.types.DecimalArrayType(output_p, output_s)
 
         arg_names = ["arr", "round_scale"]
         arg_types = [arr, round_scale]
@@ -592,7 +596,7 @@ def trunc_decimal(arr, round_scale):  # pragma: no cover
 def overload_trunc_decimal(arr, round_scale):
     if not (
         is_overload_none(arr)
-        or isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("trunc_decimal: arr must be a decimal array or scalar")
     if not (
@@ -625,7 +629,7 @@ def overload_trunc_decimal(arr, round_scale):
         output_p = (input_p + 1) if input_p != 38 else 38  # To match Snowflake
 
     # Array case
-    if isinstance(arr, bodo.DecimalArrayType):
+    if isinstance(arr, bodo.types.DecimalArrayType):
 
         def impl(arr, round_scale):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.trunc_decimal_array(
@@ -635,7 +639,7 @@ def overload_trunc_decimal(arr, round_scale):
         return impl
 
     # Scalar case
-    out_dtype = bodo.DecimalArrayType(output_p, output_s)
+    out_dtype = bodo.types.DecimalArrayType(output_p, output_s)
 
     arg_names = ["arr", "round_scale"]
     arg_types = [arr, round_scale]
@@ -664,7 +668,7 @@ def floor(data, precision):  # pragma: no cover
                 i,
             )
 
-    if isinstance(data, (bodo.Decimal128Type, bodo.DecimalArrayType)):
+    if isinstance(data, (bodo.types.Decimal128Type, bodo.types.DecimalArrayType)):
 
         def impl(data, precision):  # pragma: no cover
             return floor_decimal_util(data, precision)
@@ -692,7 +696,7 @@ def ceil(data, precision):  # pragma: no cover
                 i,
             )
 
-    if isinstance(data, (bodo.Decimal128Type, bodo.DecimalArrayType)):
+    if isinstance(data, (bodo.types.Decimal128Type, bodo.types.DecimalArrayType)):
 
         def impl(data, precision):  # pragma: no cover
             return ceil_decimal_util(data, precision)
@@ -760,7 +764,7 @@ def floor_decimal_util(data, round_scale):
     """
     if not (
         is_overload_none(data)
-        or isinstance(data, (bodo.Decimal128Type, bodo.DecimalArrayType))
+        or isinstance(data, (bodo.types.Decimal128Type, bodo.types.DecimalArrayType))
     ):  # pragma: no cover
         raise_bodo_error("floor_decimal_util: data must be a decimal array or scalar")
     if not (
@@ -792,7 +796,7 @@ def floor_decimal_util(data, round_scale):
         output_p = input_p
 
     # Array case
-    if isinstance(data, bodo.DecimalArrayType):
+    if isinstance(data, bodo.types.DecimalArrayType):
 
         def impl(data, round_scale):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.ceil_floor_decimal_array(
@@ -802,7 +806,7 @@ def floor_decimal_util(data, round_scale):
         return impl
 
     # Scalar case
-    out_dtype = bodo.DecimalArrayType(output_p, output_s)
+    out_dtype = bodo.types.DecimalArrayType(output_p, output_s)
 
     arg_names = ["data", "round_scale"]
     arg_types = [data, round_scale]
@@ -862,7 +866,7 @@ def ceil_decimal_util(data, round_scale):
     """
     if not (
         is_overload_none(data)
-        or isinstance(data, (bodo.Decimal128Type, bodo.DecimalArrayType))
+        or isinstance(data, (bodo.types.Decimal128Type, bodo.types.DecimalArrayType))
     ):  # pragma: no cover
         raise_bodo_error("ceil_decimal_util: data must be a decimal array or scalar")
     if not (
@@ -894,7 +898,7 @@ def ceil_decimal_util(data, round_scale):
         output_p = input_p + 1 if input_p != 38 else 38  # For overflow
 
     # Array case
-    if isinstance(data, bodo.DecimalArrayType):
+    if isinstance(data, bodo.types.DecimalArrayType):
 
         def impl(data, round_scale):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.ceil_floor_decimal_array(
@@ -904,7 +908,7 @@ def ceil_decimal_util(data, round_scale):
         return impl
 
     # Scalar case
-    out_dtype = bodo.DecimalArrayType(output_p, output_s)
+    out_dtype = bodo.types.DecimalArrayType(output_p, output_s)
 
     arg_names = ["data", "round_scale"]
     arg_types = [data, round_scale]
@@ -1110,9 +1114,9 @@ def div0(arr, divisor):
     # Perform typechecking to determine the appropriate implementation.
 
     # Both are decimals -- use decimal implementation.
-    if isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type)) and isinstance(
-        divisor, (bodo.DecimalArrayType, bodo.Decimal128Type)
-    ):
+    if isinstance(
+        arr, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type)
+    ) and isinstance(divisor, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type)):
 
         def impl(arr, divisor):  # pragma: no cover
             return bodosql.kernels.numeric_array_kernels.div0_decimal_util(arr, divisor)
@@ -1122,8 +1126,10 @@ def div0(arr, divisor):
     # One is a decimal -- need to typecast appropriately with gen_coerced.
     elif (
         (
-            isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
-            or isinstance(divisor, (bodo.DecimalArrayType, bodo.Decimal128Type))
+            isinstance(arr, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
+            or isinstance(
+                divisor, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type)
+            )
         )
         and not is_overload_none(arr)
         and not is_overload_none(divisor)
@@ -1529,20 +1535,20 @@ def div0_decimal_util(arr, divisor):
     """
     if not (
         is_overload_none(arr)
-        or isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("div0_decimal_util: arr must be a decimal array or scalar")
     if not (
         is_overload_none(divisor)
-        or isinstance(divisor, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(divisor, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("div0_decimal_util: divisor must be a decimal array or scalar")
 
     # If either are decimal arrays, we can perform decimal division with do_div0=True.
     if (
-        isinstance(arr, bodo.DecimalArrayType)
+        isinstance(arr, bodo.types.DecimalArrayType)
         and (not is_overload_none(arr))
-        or isinstance(divisor, bodo.DecimalArrayType)
+        or isinstance(divisor, bodo.types.DecimalArrayType)
         and (not is_overload_none(divisor))
     ):
 
@@ -1559,7 +1565,7 @@ def div0_decimal_util(arr, divisor):
         p, s = bodo.libs.decimal_arr_ext.decimal_division_output_precision_scale(
             arr.precision, arr.scale, divisor.precision, divisor.scale
         )
-        out_dtype = bodo.DecimalArrayType(p, s)
+        out_dtype = bodo.types.DecimalArrayType(p, s)
         # Call divide_decimal_scalars with do_div0=True
         scalar_text = "res[i] = bodo.libs.decimal_arr_ext.divide_decimal_scalars(arg0, arg1, True)"
         return gen_vectorized(
@@ -1880,8 +1886,10 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
         verify_numeric_arg(arr1, func_name, "arr1")
 
         if isinstance(
-            arr0, (bodo.DecimalArrayType, bodo.Decimal128Type)
-        ) and isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type)):
+            arr0, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type)
+        ) and isinstance(
+            arr1, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type)
+        ):
             if func_name == "add_numeric":
 
                 def impl(arr0, arr1):  # pragma: no cover
@@ -1930,8 +1938,12 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
             raise_bodo_error(f"{func_name}: Decimal arithmetic is not yet supported")
         elif (
             (
-                isinstance(arr0, (bodo.DecimalArrayType, bodo.Decimal128Type))
-                or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+                isinstance(
+                    arr0, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type)
+                )
+                or isinstance(
+                    arr1, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type)
+                )
             )
             and not is_overload_none(arr0)
             and not is_overload_none(arr1)
@@ -2069,12 +2081,12 @@ def overload_add_decimals(arr1, arr2):
     """
     if not (
         is_overload_none(arr1)
-        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr1, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("add_decimals: arr1 must be a decimal array or scalar")
     if not (
         is_overload_none(arr2)
-        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr2, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("add_decimals: arr2 must be a decimal array or scalar")
 
@@ -2090,8 +2102,8 @@ def overload_add_decimals(arr1, arr2):
         p2, s2 = arr2.precision, arr2.scale
 
     if (
-        isinstance(arr1, bodo.DecimalArrayType)
-        or isinstance(arr2, bodo.DecimalArrayType)
+        isinstance(arr1, bodo.types.DecimalArrayType)
+        or isinstance(arr2, bodo.types.DecimalArrayType)
     ) and not (is_overload_none(arr1) or is_overload_none(arr2)):
         # If either argument is an array, call the specialized function to reduce function
         # call overhead on every element.
@@ -2111,7 +2123,7 @@ def overload_add_decimals(arr1, arr2):
         ) = bodo.libs.decimal_arr_ext.decimal_addition_subtraction_output_precision_scale(
             p1, s1, p2, s2
         )
-        out_dtype = bodo.DecimalArrayType(p, s)
+        out_dtype = bodo.types.DecimalArrayType(p, s)
         arg_names = ["arr1", "arr2"]
         arg_types = [arr1, arr2]
         propagate_null = [True, True]
@@ -2143,12 +2155,12 @@ def overload_subtract_decimals(arr1, arr2):
     """
     if not (
         is_overload_none(arr1)
-        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr1, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("subtract_decimals: arr1 must be a decimal array or scalar")
     if not (
         is_overload_none(arr2)
-        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr2, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("subtract_decimals: arr2 must be a decimal array or scalar")
 
@@ -2164,8 +2176,8 @@ def overload_subtract_decimals(arr1, arr2):
         p2, s2 = arr2.precision, arr2.scale
 
     if (
-        isinstance(arr1, bodo.DecimalArrayType)
-        or isinstance(arr2, bodo.DecimalArrayType)
+        isinstance(arr1, bodo.types.DecimalArrayType)
+        or isinstance(arr2, bodo.types.DecimalArrayType)
     ) and not (is_overload_none(arr1) or is_overload_none(arr2)):
         # If either argument is an array, call the specialized function to reduce function
         # call overhead on every element.
@@ -2185,7 +2197,7 @@ def overload_subtract_decimals(arr1, arr2):
         ) = bodo.libs.decimal_arr_ext.decimal_addition_subtraction_output_precision_scale(
             p1, s1, p2, s2
         )
-        out_dtype = bodo.DecimalArrayType(p, s)
+        out_dtype = bodo.types.DecimalArrayType(p, s)
 
         arg_names = ["arr1", "arr2"]
         arg_types = [arr1, arr2]
@@ -2215,12 +2227,12 @@ def overload_multiply_decimals(arr1, arr2):
     """
     if not (
         is_overload_none(arr1)
-        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr1, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):
         raise_bodo_error("multiply_decimals: arr1 must be a decimal array or scalar")
     if not (
         is_overload_none(arr2)
-        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr2, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):
         raise_bodo_error("multiply_decimals: arr2 must be a decimal array or scalar")
 
@@ -2237,8 +2249,10 @@ def overload_multiply_decimals(arr1, arr2):
 
     # If any argument is an array, call the specialized function to reduce function
     # call overhead on every element, else use gen_vectorized.
-    if (isinstance(arr1, bodo.DecimalArrayType) and (not is_overload_none(arr2))) or (
-        isinstance(arr2, bodo.DecimalArrayType) and (not is_overload_none(arr1))
+    if (
+        isinstance(arr1, bodo.types.DecimalArrayType) and (not is_overload_none(arr2))
+    ) or (
+        isinstance(arr2, bodo.types.DecimalArrayType) and (not is_overload_none(arr1))
     ):
 
         def impl(arr1, arr2):
@@ -2249,7 +2263,7 @@ def overload_multiply_decimals(arr1, arr2):
     p, s = bodo.libs.decimal_arr_ext.decimal_multiplication_output_precision_scale(
         p1, s1, p2, s2
     )
-    out_dtype = bodo.DecimalArrayType(p, s)
+    out_dtype = bodo.types.DecimalArrayType(p, s)
 
     arg_names = ["arr1", "arr2"]
     arg_types = [arr1, arr2]
@@ -2281,12 +2295,12 @@ def overload_divide_decimals(arr1, arr2):
     """
     if not (
         is_overload_none(arr1)
-        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr1, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):
         raise_bodo_error("divide_decimals: arr1 must be a decimal array or scalar")
     if not (
         is_overload_none(arr2)
-        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr2, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):
         raise_bodo_error("divide_decimals: arr2 must be a decimal array or scalar")
 
@@ -2307,8 +2321,10 @@ def overload_divide_decimals(arr1, arr2):
 
     # If any argument is an array, call the specialized function to reduce function
     # call overhead on every element, else use gen_vectorized.
-    if (isinstance(arr1, bodo.DecimalArrayType) and (not is_overload_none(arr2))) or (
-        isinstance(arr2, bodo.DecimalArrayType) and (not is_overload_none(arr1))
+    if (
+        isinstance(arr1, bodo.types.DecimalArrayType) and (not is_overload_none(arr2))
+    ) or (
+        isinstance(arr2, bodo.types.DecimalArrayType) and (not is_overload_none(arr1))
     ):
 
         def impl(arr1, arr2):
@@ -2319,7 +2335,7 @@ def overload_divide_decimals(arr1, arr2):
     p, s = bodo.libs.decimal_arr_ext.decimal_division_output_precision_scale(
         p1, s1, p2, s2
     )
-    out_dtype = bodo.DecimalArrayType(p, s)
+    out_dtype = bodo.types.DecimalArrayType(p, s)
 
     arg_names = ["arr1", "arr2"]
     arg_types = [arr1, arr2]
@@ -2351,12 +2367,12 @@ def overload_modulo_decimals(arr1, arr2):
     """
     if not (
         is_overload_none(arr1)
-        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr1, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("modulo_decimals: arr1 must be a decimal array or scalar")
     if not (
         is_overload_none(arr2)
-        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        or isinstance(arr2, (bodo.types.DecimalArrayType, bodo.types.Decimal128Type))
     ):  # pragma: no cover
         raise_bodo_error("modulo_decimals: arr2 must be a decimal array or scalar")
 
@@ -2372,8 +2388,8 @@ def overload_modulo_decimals(arr1, arr2):
         p2, s2 = arr2.precision, arr2.scale
 
     if (
-        isinstance(arr1, bodo.DecimalArrayType)
-        or isinstance(arr2, bodo.DecimalArrayType)
+        isinstance(arr1, bodo.types.DecimalArrayType)
+        or isinstance(arr2, bodo.types.DecimalArrayType)
     ) and not (is_overload_none(arr1) or is_overload_none(arr2)):
         # If either argument is an array, call the specialized function to reduce function
         # call overhead on every element.
@@ -2391,7 +2407,7 @@ def overload_modulo_decimals(arr1, arr2):
         ) = bodo.libs.decimal_arr_ext.decimal_misc_nary_output_precision_scale(
             [p1, p2], [s1, s2]
         )
-        out_dtype = bodo.DecimalArrayType(p, s)
+        out_dtype = bodo.types.DecimalArrayType(p, s)
         arg_names = ["arr1", "arr2"]
         arg_types = [arr1, arr2]
         propagate_null = [True, True]
@@ -2420,7 +2436,7 @@ def overload_decimal_scalar_to_str(arr):
     this converts into a Snowflake-style string,
     which maintains the trailing zeroes to fit to the scale.
     """
-    if not isinstance(arr, bodo.Decimal128Type):  # pragma: no cover
+    if not isinstance(arr, bodo.types.Decimal128Type):  # pragma: no cover
         raise_bodo_error("decimal_scalar_to_str: arr must be a decimal scalar")
 
     def impl(arr):  # pragma: no cover
@@ -2438,7 +2454,7 @@ def overload_decimal_array_to_str_array(arr):
     """
     Implementation to convert a decimal array to a string array.
     """
-    if not isinstance(arr, bodo.DecimalArrayType):  # pragma: no cover
+    if not isinstance(arr, bodo.types.DecimalArrayType):  # pragma: no cover
         raise_bodo_error("decimal_array_to_str_array: arr must be a decimal array")
 
     def impl(arr):  # pragma: no cover

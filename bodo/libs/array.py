@@ -403,7 +403,7 @@ def array_to_info_codegen(context, builder, sig, args):
         )
 
     # dictionary-encoded string array
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         # pass string array and indices array as array_info to C++
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         str_arr = arr.data
@@ -1032,7 +1032,7 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         )
 
     # dictionary-encoded string array
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         # extract nested array infos from input array info
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -2885,7 +2885,7 @@ def drop_duplicates_local_dictionary(dict_arr, sort_dictionary):  # pragma: no c
         dict_arr_info, sort_dictionary
     )
     check_and_propagate_cpp_exception()
-    out_arr = info_to_array(out_dict_arr_info, bodo.dict_str_arr_type)
+    out_arr = info_to_array(out_dict_arr_info, bodo.types.dict_str_arr_type)
     delete_info(out_dict_arr_info)
     return out_arr
 

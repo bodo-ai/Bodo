@@ -1280,7 +1280,7 @@ def _gen_iceberg_reader_chunked_py(
     str_as_dict_cols = [
         src_idx
         for src_idx, out_idx in zip(source_selected_cols, out_selected_cols)
-        if col_typs[out_idx] == bodo.dict_str_arr_type
+        if col_typs[out_idx] == bodo.types.dict_str_arr_type
     ]
     dict_str_cols_str = (
         f"dict_str_cols_arr_{call_id}.ctypes, np.int32({len(str_as_dict_cols)})"
@@ -1532,7 +1532,7 @@ def _gen_iceberg_reader_py(
     # pass indices to C++ of the selected string columns that are to be read
     # in dictionary-encoded format
     str_as_dict_cols = [
-        i for i in selected_cols if col_typs[i] == bodo.dict_str_arr_type
+        i for i in selected_cols if col_typs[i] == bodo.types.dict_str_arr_type
     ]
     dict_str_cols_str = (
         f"dict_str_cols_arr_{call_id}.ctypes, np.int32({len(str_as_dict_cols)})"

@@ -161,7 +161,7 @@ def drop_duplicates_local_dictionary_if_dict(arr):  # pragma: no cover
 
 @overload(drop_duplicates_local_dictionary_if_dict, jit_options={"cache": True})
 def overload_drop_duplicates_local_dictionary_if_dict(arr):
-    if arr == bodo.dict_str_arr_type:
+    if arr == bodo.types.dict_str_arr_type:
         return lambda arr: bodo.libs.array.drop_duplicates_local_dictionary(
             arr, False
         )  # lambda: no cover
@@ -674,7 +674,7 @@ def array_op_sum(arr, skipna, min_count):  # pragma: no cover
 
 @overload(array_op_sum, no_unliteral=True, jit_options={"cache": True})
 def overload_array_op_sum(arr, skipna, min_count):
-    if isinstance(arr, bodo.DecimalArrayType):
+    if isinstance(arr, bodo.types.DecimalArrayType):
 
         def impl(arr, skipna, min_count):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.sum_decimal_array(arr)

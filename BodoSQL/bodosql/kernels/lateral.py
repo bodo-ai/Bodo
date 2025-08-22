@@ -182,7 +182,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
     output_key_bool = get_overload_const_bool(output_key)
     if output_key_bool:
         if struct_mode:
-            out_typs += (bodo.dict_str_arr_type,)
+            out_typs += (bodo.types.dict_str_arr_type,)
         elif map_mode:
             out_typs += (explode_col_arg.key_arr_type,)
         else:  # pragma: no cover

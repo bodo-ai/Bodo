@@ -1867,7 +1867,7 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
 
     input_string_ary_blk = in_table_type.type_to_blk[bodo.types.string_array_type]
     input_dict_encoded_string_ary_blk = in_table_type.type_to_blk[
-        bodo.dict_str_arr_type
+        bodo.types.dict_str_arr_type
     ]
 
     # NOTE: Care must be taken to ensure that arrays are placed into the output block
@@ -2027,7 +2027,7 @@ def decode_if_dict_table(T):
     out_table_type = bodo.hiframes.table.get_init_table_output_type(T, True)
     input_table_has_str_and_dict_encoded_str = (
         bodo.types.string_array_type in T.type_to_blk
-        and bodo.dict_str_arr_type in T.type_to_blk
+        and bodo.types.dict_str_arr_type in T.type_to_blk
     )
 
     # In the case that we have both normal and dict encoded string arrays, we need to do
@@ -2043,14 +2043,14 @@ def decode_if_dict_table(T):
         # Skip these blocks if we handle them above
         if input_table_has_str_and_dict_encoded_str and typ in (
             bodo.types.string_array_type,
-            bodo.dict_str_arr_type,
+            bodo.types.dict_str_arr_type,
         ):
             continue
 
         # Output block num may be different from input block num in certain cases.
         # Specifically, if the input table has a string and dict encoded string block,
         # which will be fused into one block in the output table.
-        if typ == bodo.dict_str_arr_type:
+        if typ == bodo.types.dict_str_arr_type:
             assert bodo.types.string_array_type in out_table_type.type_to_blk, (
                 "Error in decode_if_dict_table: If encoded string type is present in the input, then non-encoded string type should be present in the output"
             )

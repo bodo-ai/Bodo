@@ -2607,7 +2607,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 col_ind = lir.Constant(lir.IntType(64), c_ind)
                 col_ptr = builder.load(builder.gep(table, [col_ind]))
 
-                if col_array_typ == bodo.boolean_array_type:
+                if col_array_typ == bodo.types.boolean_array_type:
                     # Boolean arrays store 1 bit per value, so we need a custom path to load the bit.
                     col_ptr = builder.bitcast(
                         col_ptr, context.get_data_type(types.uint8).as_pointer()
@@ -3367,7 +3367,7 @@ def determine_table_cast_map(
             # (e.g. left=int64 and right=float64 casts the left to float64)
             # and we need the key back to the original type in the output.
             if matched_key_types[i] != key_types[i] and (
-                convert_dict_col or key_types[i] != bodo.dict_str_arr_type
+                convert_dict_col or key_types[i] != bodo.types.dict_str_arr_type
             ):
                 # This maps the key number to the actual column number
                 # TODO [BE-3552]: Ensure the cast are compatible.
@@ -3437,7 +3437,7 @@ def _get_interval_join_info(
                 types.Float,
                 PandasDatetimeTZDtype,
                 bodo.types.TimeType,
-                bodo.Decimal128Type,
+                bodo.types.Decimal128Type,
             ),
         )
         or dtype

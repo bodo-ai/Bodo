@@ -974,7 +974,7 @@ def str_series_contains_regex(arr, pat, case, flags, na, regex):  # pragma: no c
     # numpy object array.
     dict_arr_S = pd.Series(dict_arr)
     # Compute the operation on the dictionary and save the output
-    with numba.objmode(dict_arr_out=bodo.boolean_array_type):
+    with numba.objmode(dict_arr_out=bodo.types.boolean_array_type):
         dict_arr_out = pd.array(dict_arr_S.array, "string")._str_contains(
             pat, case, flags, na, regex
         )
@@ -1054,10 +1054,10 @@ def str_match(arr, pat, case, flags, na, do_full_match=False):  # pragma: no cov
     # Compute the operation on the dictionary and save the output
     dict_arr_out = None
     if do_full_match:
-        with numba.objmode(dict_arr_out=bodo.boolean_array_type):
+        with numba.objmode(dict_arr_out=bodo.types.boolean_array_type):
             dict_arr_out = dict_arr_S.array._str_fullmatch(pat, case, flags, na)
     else:
-        with numba.objmode(dict_arr_out=bodo.boolean_array_type):
+        with numba.objmode(dict_arr_out=bodo.types.boolean_array_type):
             dict_arr_out = dict_arr_S.array._str_match(pat, case, flags, na)
 
     for i in range(n_indices):
@@ -1632,7 +1632,7 @@ def is_dict_encoded(t):
     you should just check the type at compile time."""
     t = if_series_to_array_type(t)
 
-    if t == bodo.dict_str_arr_type:
+    if t == bodo.types.dict_str_arr_type:
 
         def impl(t):
             return True

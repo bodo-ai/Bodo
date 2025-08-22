@@ -634,7 +634,7 @@ def table_columns_have_theta_sketches_wrapper(txn):  # pragma: no cover
 def overload_table_columns_have_theta_sketches_wrapper(txn):
     """Check if the columns in the table have theta sketches enabled. This extra
     wrapper is added to avoid calling into objmode inside control flow."""
-    _output_type = bodo.boolean_array_type
+    _output_type = bodo.types.boolean_array_type
 
     def impl(txn):  # pragma: no cover
         with bodo.ir.object_mode.no_warning_objmode(existing_columns=_output_type):
@@ -652,7 +652,7 @@ def table_columns_enabled_theta_sketches_wrapper(txn):  # pragma: no cover
 def overload_table_columns_enabled_theta_sketches_wrapper(txn):
     """Check if the columns in the table have theta sketches enabled. This extra
     wrapper is added to avoid calling into objmode inside control flow."""
-    _output_type = bodo.boolean_array_type
+    _output_type = bodo.types.boolean_array_type
 
     def impl(txn):  # pragma: no cover
         with bodo.ir.object_mode.no_warning_objmode(enabled_columns=_output_type):

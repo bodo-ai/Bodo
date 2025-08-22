@@ -452,10 +452,10 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
             # all arrays must be dictionaries or a scalar
             dict_encode_data = dict_encode_data and (
                 typ == bodo.types.string_type
-                or typ == bodo.dict_str_arr_type
+                or typ == bodo.types.dict_str_arr_type
                 or (
                     isinstance(typ, bodo.SeriesType)
-                    and typ.data == bodo.dict_str_arr_type
+                    and typ.data == bodo.types.dict_str_arr_type
                 )
             )
 
@@ -1458,7 +1458,7 @@ def overload_array_construct(A, scalar_tup):
 
     # Currently not able to support writing a dictionary encoded inner array
     # [BSE-1831] TODO: see if we can optimize ARRAY_CONSTRUCT for dictionary encoding
-    if inner_arr_type == bodo.dict_str_arr_type:
+    if inner_arr_type == bodo.types.dict_str_arr_type:
         inner_arr_type = bodo.types.string_array_type
     if inner_arr_type == bodo.types.none:
         inner_arr_type = bodo.types.null_array_type

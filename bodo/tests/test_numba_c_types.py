@@ -14,11 +14,12 @@ def test_numba_to_cpp_types_decimal():
     precisions = [32, 31, 30, 29]
     scales = [12, 13, 14, 15]
     decimal_arr_types = [
-        bodo.DecimalArrayType(precisions[i], scales[i]) for i in range(len(scales))
+        bodo.types.DecimalArrayType(precisions[i], scales[i])
+        for i in range(len(scales))
     ]
 
-    array_type1 = bodo.ArrayItemArrayType(decimal_arr_types[0])
-    array_type2 = bodo.ArrayItemArrayType(decimal_arr_types[1])
+    array_type1 = bodo.types.ArrayItemArrayType(decimal_arr_types[0])
+    array_type2 = bodo.types.ArrayItemArrayType(decimal_arr_types[1])
 
     map_type = bodo.MapArrayType(array_type2, decimal_arr_types[2])
     struct_type = bodo.StructArrayType((array_type1, map_type, decimal_arr_types[3]))

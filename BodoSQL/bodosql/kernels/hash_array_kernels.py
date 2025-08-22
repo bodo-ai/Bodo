@@ -443,7 +443,7 @@ def overload_consistent_hash(val):  # pragma: no cover
         def impl(val):  # pragma: no cover
             return int_hash(val.value)
 
-    elif isinstance(val, bodo.Decimal128Type):
+    elif isinstance(val, bodo.types.Decimal128Type):
 
         def impl(val):  # pragma: no cover
             return consistent_hash(str(val))

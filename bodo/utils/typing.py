@@ -95,7 +95,7 @@ def is_str_arr_type(t):
     """check if 't' is a regular or dictionary-encoded string array type
     TODO(ehsan): add other string types like np str array when properly supported
     """
-    return t == bodo.types.string_array_type or t == bodo.dict_str_arr_type
+    return t == bodo.types.string_array_type or t == bodo.types.dict_str_arr_type
 
 
 def is_bin_arr_type(t):
@@ -164,7 +164,7 @@ def decode_if_dict_array_overload(A):
             return ans
 
         return bodo_decode_if_dict_array_list
-    if A == bodo.dict_str_arr_type:
+    if A == bodo.types.dict_str_arr_type:
         return lambda A: A._decode()  # pragma: no cover
 
     if isinstance(A, bodo.SeriesType):
@@ -201,7 +201,7 @@ def decode_if_dict_array_overload(A):
 
 def to_str_arr_if_dict_array(t):
     """convert type 't' to a regular string array if it is a dictionary-encoded array"""
-    if t == bodo.dict_str_arr_type:
+    if t == bodo.types.dict_str_arr_type:
         return bodo.types.string_array_type
 
     if isinstance(t, types.BaseTuple):
@@ -216,8 +216,8 @@ def to_str_arr_if_dict_array(t):
     if isinstance(t, bodo.DataFrameType):
         return t.copy(data=tuple(to_str_arr_if_dict_array(t) for t in t.data))
 
-    if isinstance(t, bodo.ArrayItemArrayType):
-        return bodo.ArrayItemArrayType(to_str_arr_if_dict_array(t.dtype))
+    if isinstance(t, bodo.types.ArrayItemArrayType):
+        return bodo.types.ArrayItemArrayType(to_str_arr_if_dict_array(t.dtype))
 
     if isinstance(t, bodo.StructArrayType):
         return bodo.StructArrayType(
@@ -1150,7 +1150,7 @@ def parse_dtype(dtype, func_name=None):
             types.Number,
             types.NPDatetime,
             bodo.types.TimestampTZType,
-            bodo.Decimal128Type,
+            bodo.types.Decimal128Type,
             bodo.StructType,
             bodo.MapScalarType,
             bodo.types.TimeType,
@@ -1731,7 +1731,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         return bodo.types.binary_array_type
 
     if bodo.utils.utils.is_array_typ(dtype, False):
-        return bodo.ArrayItemArrayType(dtype)
+        return bodo.types.ArrayItemArrayType(dtype)
 
     # categorical
     if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
@@ -1744,7 +1744,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         return bodo.FloatingArrayType(dtype.dtype)
 
     if dtype == types.boolean:
-        return bodo.boolean_array_type
+        return bodo.types.boolean_array_type
 
     if dtype == bodo.types.datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
@@ -1758,8 +1758,8 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     if dtype == bodo.types.timestamptz_type:
         return bodo.hiframes.timestamptz_ext.timestamptz_array_type
 
-    if isinstance(dtype, bodo.Decimal128Type):
-        return bodo.DecimalArrayType(dtype.precision, dtype.scale)
+    if isinstance(dtype, bodo.types.Decimal128Type):
+        return bodo.types.DecimalArrayType(dtype.precision, dtype.scale)
 
     # struct array
     if isinstance(dtype, bodo.libs.struct_arr_ext.StructType):
@@ -1944,8 +1944,8 @@ def to_nullable_type(t):
         if isinstance(t.dtype, types.Float):
             return bodo.libs.float_arr_ext.FloatingArrayType(t.dtype)
 
-    if isinstance(t, bodo.ArrayItemArrayType):
-        return bodo.ArrayItemArrayType(to_nullable_type(t.dtype))
+    if isinstance(t, bodo.types.ArrayItemArrayType):
+        return bodo.types.ArrayItemArrayType(to_nullable_type(t.dtype))
 
     if isinstance(t, bodo.StructArrayType):
         return bodo.StructArrayType(tuple(to_nullable_type(a) for a in t.data), t.names)
@@ -1999,7 +1999,7 @@ def is_scalar_type(t: types.Type) -> bool:
             types.StringLiteral,
             bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
             bodo.types.TimeType,
-            bodo.Decimal128Type,
+            bodo.types.Decimal128Type,
         ),
     ) or t in (
         bodo.types.datetime64ns,
@@ -2123,9 +2123,10 @@ def get_common_scalar_dtype(
     # If all are Numeric types and one is Decimal128Type, then:
     # - We attempt to combine lossless-ly and reduce to closest non-Decimal type
     # - If too large, we default to closes Decimal128 type expecting lossy conversion
-    if any(isinstance(t, bodo.Decimal128Type) for t in scalar_types):
+    if any(isinstance(t, bodo.types.Decimal128Type) for t in scalar_types):
         if any(
-            not isinstance(t, (types.Number, bodo.Decimal128Type)) for t in scalar_types
+            not isinstance(t, (types.Number, bodo.types.Decimal128Type))
+            for t in scalar_types
         ):
             return None, False
 
@@ -2142,7 +2143,7 @@ def get_common_scalar_dtype(
             elif isinstance(t, types.Integer):
                 num_before_digits = max(num_before_digits, SIGS_IN_INT[t])
             else:
-                assert isinstance(t, bodo.Decimal128Type)
+                assert isinstance(t, bodo.types.Decimal128Type)
                 num_before_digits = max(num_before_digits, t.precision - t.scale)
                 scale = max(scale, t.scale)
 
@@ -2153,7 +2154,7 @@ def get_common_scalar_dtype(
             out = (
                 types.float64
                 if max_float is not None
-                else bodo.Decimal128Type(38, scale)
+                else bodo.types.Decimal128Type(38, scale)
             )
             return (out, True) if allow_downcast else (None, False)
         elif precision <= 18 and scale == 0:
@@ -2172,12 +2173,12 @@ def get_common_scalar_dtype(
         elif precision <= 15:
             base_out = types.float64
         else:
-            base_out = bodo.Decimal128Type(precision, scale)
+            base_out = bodo.types.Decimal128Type(precision, scale)
 
         if max_float is None:
             return (base_out, False)
 
-        if allow_downcast and isinstance(base_out, bodo.Decimal128Type):
+        if allow_downcast and isinstance(base_out, bodo.types.Decimal128Type):
             return (types.float64, True)
 
         # Combine max_float (float) and base_out (float or int) types
@@ -2295,7 +2296,7 @@ def is_immutable_array(typ):
     return isinstance(
         typ,
         (
-            bodo.ArrayItemArrayType,
+            bodo.types.ArrayItemArrayType,
             bodo.MapArrayType,
         ),
     )
@@ -3156,14 +3157,15 @@ def get_castable_arr_dtype(arr_type: types.Type):
         Any: The value used to generate the cast value.
     """
     if isinstance(
-        arr_type, (bodo.ArrayItemArrayType, bodo.MapArrayType, bodo.StructArrayType)
+        arr_type,
+        (bodo.types.ArrayItemArrayType, bodo.MapArrayType, bodo.StructArrayType),
     ):
         cast_typ = arr_type
     elif isinstance(arr_type, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
         cast_typ = arr_type.get_pandas_scalar_type_instance.name
-    elif arr_type == bodo.boolean_array_type:
+    elif arr_type == bodo.types.boolean_array_type:
         cast_typ = bodo.libs.bool_arr_ext.boolean_dtype
-    elif arr_type == bodo.dict_str_arr_type or isinstance(
+    elif arr_type == bodo.types.dict_str_arr_type or isinstance(
         arr_type, bodo.DatetimeArrayType
     ):
         cast_typ = arr_type
@@ -3184,7 +3186,7 @@ def is_bodosql_integer_arr_type(arr_typ: types.ArrayCompatible) -> bool:
     Returns:
         bool: Is the array a decimal or integer array (nullable or non-nullable).
     """
-    return isinstance(arr_typ, bodo.DecimalArrayType) or isinstance(
+    return isinstance(arr_typ, bodo.types.DecimalArrayType) or isinstance(
         arr_typ.dtype, types.Integer
     )
 

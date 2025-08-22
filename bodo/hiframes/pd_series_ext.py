@@ -1056,7 +1056,7 @@ def pd_series_overload(
             elif isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype):
                 _arr_dtype = bodo.FloatingArrayType(nb_dtype.dtype)
             elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
-                _arr_dtype = bodo.boolean_array_type
+                _arr_dtype = bodo.types.boolean_array_type
             elif nb_dtype == bodo.types.datetime64ns:  # pragma: no cover
                 _arr_dtype = bodo.libs.pd_datetime_arr_ext.DatetimeArrayType(None)
             elif isinstance(nb_dtype, PandasDatetimeTZDtype):

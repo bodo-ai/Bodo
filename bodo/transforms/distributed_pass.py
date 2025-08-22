@@ -1595,7 +1595,7 @@ class DistributedPass:
         # BooleanArray.func calls
         if (
             isinstance(func_mod, ir.Var)
-            and self.typemap[func_mod.name] == bodo.boolean_array_type
+            and self.typemap[func_mod.name] == bodo.types.boolean_array_type
         ):
             return self._run_call_boolean_array(func_mod, func_name, assign)
 
@@ -4655,7 +4655,7 @@ class DistributedPass:
                 init_val = "True"
                 if user_init_val == True:
                     return []
-            elif isinstance(el_typ, bodo.Decimal128Type):
+            elif isinstance(el_typ, bodo.types.Decimal128Type):
                 extra_globals["_str_to_decimal_scalar"] = (
                     bodo.libs.decimal_arr_ext._str_to_decimal_scalar
                 )
@@ -4679,7 +4679,7 @@ class DistributedPass:
                 init_val = "False"
                 if user_init_val == False:
                     return []
-            elif isinstance(el_typ, bodo.Decimal128Type):
+            elif isinstance(el_typ, bodo.types.Decimal128Type):
                 extra_globals["_str_to_decimal_scalar"] = (
                     bodo.libs.decimal_arr_ext._str_to_decimal_scalar
                 )

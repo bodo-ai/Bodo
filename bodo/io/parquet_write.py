@@ -294,7 +294,7 @@ def gen_pandas_parquet_metadata_template(
         elif isinstance(
             col_type,
             (
-                bodo.ArrayItemArrayType,
+                bodo.types.ArrayItemArrayType,
                 bodo.StructArrayType,
                 bodo.MapArrayType,
             ),

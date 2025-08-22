@@ -82,7 +82,7 @@ def contains_util(arr, pattern, dict_encoding_state, func_id):
     verify_string_binary_arg(arr, "CONTAINS", "arr")
     verify_string_binary_arg(pattern, "CONTAINS", "pattern")
 
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     arg_names = ["arr", "pattern", "dict_encoding_state", "func_id"]
     arg_types = [arr, pattern, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 2
@@ -1138,7 +1138,7 @@ def endswith_util(source, suffix, dict_encoding_state, func_id):
     propagate_null = [True] * 2 + [False] * 2
     scalar_text = "res[i] = arg0.endswith(arg1)"
 
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1773,7 +1773,7 @@ def startswith_util(source, prefix, dict_encoding_state, func_id):
     propagate_null = [True] * 2 + [False] * 2
     scalar_text = "res[i] = arg0.startswith(arg1)"
 
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1937,7 +1937,7 @@ def strtok_to_array_util(
     arg_names = ["source", "delim", "dict_encoding_state", "func_id"]
     arg_types = [source, delim, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 2
-    out_dtype = bodo.ArrayItemArrayType(bodo.types.string_array_type)
+    out_dtype = bodo.types.ArrayItemArrayType(bodo.types.string_array_type)
 
     scalar_text = "tokens = []\n"
     scalar_text += "buffer = ''\n"
@@ -2420,7 +2420,7 @@ def split_util(string, separator, dict_encoding_state, func_id):  # pragma: no c
     arg_names = ["string", "separator", "dict_encoding_state", "func_id"]
     arg_types = [string, separator, dict_encoding_state, func_id]
     propagate_null = [True] * 2 + [False] * 2
-    out_dtype = bodo.ArrayItemArrayType(bodo.types.string_array_type)
+    out_dtype = bodo.types.ArrayItemArrayType(bodo.types.string_array_type)
     scalar_text = "if arg1 == '':\n"
     scalar_text += "    str_list = [arg0]\n"
     scalar_text += "else:\n"

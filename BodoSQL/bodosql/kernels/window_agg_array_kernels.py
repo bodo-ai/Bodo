@@ -262,10 +262,10 @@ def windowed_sum(S, lower_bound, upper_bound):
 
     calculate_block = "res[i] = total"
 
-    if isinstance(S.dtype, bodo.Decimal128Type):
+    if isinstance(S.dtype, bodo.types.Decimal128Type):
         prec = bodo.libs.decimal_arr_ext.DECIMAL128_MAX_PRECISION
         scale = S.dtype.scale
-        out_dtype = bodo.DecimalArrayType(prec, scale)
+        out_dtype = bodo.types.DecimalArrayType(prec, scale)
         propagate_nan = False
 
         constant_block = (
@@ -344,7 +344,7 @@ def make_windowed_bool_aggfunc(func, cond):
 
         exit_block = "true_count -= int(bool(elem0))"
 
-        out_dtype = bodo.boolean_array_type
+        out_dtype = bodo.types.boolean_array_type
 
         return gen_windowed(
             calculate_block,
@@ -1004,8 +1004,8 @@ def make_windowed_min_max_function(func, cmp):
 
         # Dictionary encoded arrays have a special procedure to find the
         # min/max string within each slice
-        if S == bodo.dict_str_arr_type or (
-            isinstance(S, bodo.SeriesType) and S.data == bodo.dict_str_arr_type
+        if S == bodo.types.dict_str_arr_type or (
+            isinstance(S, bodo.SeriesType) and S.data == bodo.types.dict_str_arr_type
         ):
             setup_block += "dictionary = arr0._data\n"
             setup_block += "indices = arr0._indices\n"

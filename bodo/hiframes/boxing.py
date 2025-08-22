@@ -176,7 +176,7 @@ def typeof_pd_series(val: pd.Series, c):
     arr_typ = _infer_series_arr_type(val)
     # use dictionary-encoded array if necessary for testing (_use_dict_str_type set)
     if _use_dict_str_type and arr_typ == string_array_type:
-        arr_typ = bodo.dict_str_arr_type
+        arr_typ = bodo.types.dict_str_arr_type
 
     return SeriesType(
         arr_typ.dtype,
@@ -302,7 +302,9 @@ def get_hiframes_dtypes(df):
     ]
     # use dictionary-encoded array if necessary for testing (_use_dict_str_type set)
     hi_typs = [
-        bodo.dict_str_arr_type if _use_dict_str_type and t == string_array_type else t
+        bodo.types.dict_str_arr_type
+        if _use_dict_str_type and t == string_array_type
+        else t
         for t in hi_typs
     ]
     return tuple(hi_typs)
@@ -961,7 +963,7 @@ def _infer_series_arr_type(S: pd.Series, array_metadata=None):
         # always unbox boolean Series using nullable boolean array instead of Numpy
         # because some processes may have nulls, leading to inconsistent data types
         if arr_type == types.Array(types.bool_, 1, "C"):
-            arr_type = bodo.boolean_array_type
+            arr_type = bodo.types.boolean_array_type
 
         # We make all Series data arrays contiguous during unboxing to avoid type errors
         # see test_df_query_stringliteral_expr
@@ -1666,15 +1668,15 @@ def _infer_ndarray_obj_dtype(val):
                 "This can cause errors in parallel execution."
             )
         )
-        return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
+        return bodo.types.dict_str_arr_type if _use_dict_str_type else string_array_type
 
     first_val = val[i]
     # For compilation purposes we also impose a limit to the size
     # of the struct as very large structs cannot be efficiently compiled.
     if isinstance(first_val, DictStringSentinel):
-        return bodo.dict_str_arr_type
+        return bodo.types.dict_str_arr_type
     elif isinstance(first_val, str):
-        return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
+        return bodo.types.dict_str_arr_type if _use_dict_str_type else string_array_type
     elif isinstance(first_val, (bytes, bytearray)):
         return binary_array_type
     elif isinstance(first_val, (bool, np.bool_)):
@@ -1744,7 +1746,7 @@ def _infer_ndarray_obj_dtype(val):
         dtype = numba.typeof(first_val)
         dtype = to_nullable_type(dtype)
         if _use_dict_str_type and dtype == string_array_type:
-            dtype = bodo.dict_str_arr_type
+            dtype = bodo.types.dict_str_arr_type
         return ArrayItemArrayType(dtype)
     if isinstance(first_val, pd.Timestamp):
         return bodo.DatetimeArrayType(first_val.tz)
@@ -1800,7 +1802,7 @@ def _get_struct_value_arr_type(v):
         return dtype_to_array_type(numba.typeof(_value_to_array(v)))
 
     if isinstance(v, DictStringSentinel):
-        return bodo.dict_str_arr_type
+        return bodo.types.dict_str_arr_type
 
     if _is_scalar_value(v) and pd.isna(v):
         # assume string array if first field value is NA
@@ -1818,7 +1820,7 @@ def _get_struct_value_arr_type(v):
     arr_typ = to_nullable_type(arr_typ)
 
     if _use_dict_str_type and arr_typ == string_array_type:
-        arr_typ = bodo.dict_str_arr_type
+        arr_typ = bodo.types.dict_str_arr_type
 
     return arr_typ
 

@@ -132,7 +132,7 @@ def _get_type_max_value_overload(dtype):
     if dtype.dtype == types.bool_:
         return lambda dtype: True  # pragma: no cover
 
-    if isinstance(dtype, bodo.DecimalArrayType):
+    if isinstance(dtype, bodo.types.DecimalArrayType):
         scale = dtype.dtype.scale
         precision = dtype.dtype.precision
 
@@ -227,7 +227,7 @@ def _get_type_min_value_overload(dtype):
     if dtype.dtype == types.bool_:
         return lambda dtype: False  # pragma: no cover
 
-    if isinstance(dtype, bodo.DecimalArrayType):
+    if isinstance(dtype, bodo.types.DecimalArrayType):
         scale = dtype.dtype.scale
         precision = dtype.dtype.precision
 

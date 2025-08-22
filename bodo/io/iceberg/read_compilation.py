@@ -325,7 +325,7 @@ def get_orig_and_runtime_schema(
     # Change string array types to dict-encoded
     col_name_to_idx = {c: i for i, c in enumerate(col_names)}
     for c in all_dict_str_cols:
-        col_types[col_name_to_idx[c]] = bodo.dict_str_arr_type
+        col_types[col_name_to_idx[c]] = bodo.types.dict_str_arr_type
 
     return orig_col_names, orig_col_types, pa_schema, col_names, col_types
 

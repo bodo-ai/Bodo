@@ -114,7 +114,7 @@ def delta_table_setitem_common_code(
     for out_col_idx in range(n_out_cols):
         colname = f"{prefix}_col_{out_col_idx}"
 
-        if out_arr_types[out_col_idx] != bodo.dict_str_arr_type:
+        if out_arr_types[out_col_idx] != bodo.types.dict_str_arr_type:
             # Avoid intermediate allocations for arrays. Note that copy_array_element handles
             # null checking for us
             func_text += f"{indent}bodo.libs.array_kernels.copy_array_element(arr{out_col_idx}, output_tbl_idx, {colname}, {idx_var})\n"
@@ -223,9 +223,9 @@ def merge_sorted_dataframes(target_df: DataFrameType, delta_df: DataFrameType):
         # We drop the ID column so skip it
         if i != target_row_id_col_index:
             # Only dictionary encode data if both input and output are dictionary encoded.
-            if target_df.data[i] == bodo.dict_str_arr_type:
-                if delta_df.data[i] == bodo.dict_str_arr_type:
-                    out_arr_types.append(bodo.dict_str_arr_type)
+            if target_df.data[i] == bodo.types.dict_str_arr_type:
+                if delta_df.data[i] == bodo.types.dict_str_arr_type:
+                    out_arr_types.append(bodo.types.dict_str_arr_type)
                 else:
                     out_arr_types.append(bodo.types.string_array_type)
             else:
@@ -266,7 +266,7 @@ def merge_sorted_dataframes(target_df: DataFrameType, delta_df: DataFrameType):
     # TODO: Support table format: https://bodo.atlassian.net/jira/software/projects/BE/boards/4/backlog?selectedIssue=BE-3792
     for i in range(n_out_cols):
         func_text += f"  arr{i} = bodo.utils.utils.alloc_type(target_df_len - num_deletes, _arr_typ{i}, (-1,))\n"
-        if out_arr_types[i] == bodo.dict_str_arr_type:
+        if out_arr_types[i] == bodo.types.dict_str_arr_type:
             # If we have a dictionary array we allocate for the indices instead.
             alloc_arr_type = bodo.libs.dict_arr_ext.dict_indices_arr_type
         else:
@@ -289,7 +289,7 @@ def merge_sorted_dataframes(target_df: DataFrameType, delta_df: DataFrameType):
 
     # Allocate any output dictionaries for dictionary encoded columns.
     for i in range(n_out_cols):
-        if out_arr_types[i] == bodo.dict_str_arr_type:
+        if out_arr_types[i] == bodo.types.dict_str_arr_type:
             func_text += f"  target_table_col_data_{i} = target_table_col_{i}._data\n"
             func_text += (
                 f"  target_table_col_indices_{i} = target_table_col_{i}._indices\n"
@@ -350,7 +350,7 @@ def merge_sorted_dataframes(target_df: DataFrameType, delta_df: DataFrameType):
 
     # Create the dictionaries and drop duplicates
     for i in range(n_out_cols):
-        if out_arr_types[i] == bodo.dict_str_arr_type:
+        if out_arr_types[i] == bodo.types.dict_str_arr_type:
             # Note: We cannot assume it is unique even if each component were unique.
             func_text += f"  out_dict_arr_{i} = bodo.libs.dict_arr_ext.init_dict_arr(out_dict_data_{i}, arr{i}, dict_is_global_{i}, False, None)\n"
             # Drop any duplicates and update the dictionary

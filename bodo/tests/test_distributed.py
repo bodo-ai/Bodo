@@ -3235,11 +3235,11 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     "dtype",
     [
         bodo.MapArrayType(
-            bodo.dict_str_arr_type, bodo.FloatingArrayType(bodo.types.float32)
+            bodo.types.dict_str_arr_type, bodo.FloatingArrayType(bodo.types.float32)
         ),
         bodo.StructArrayType(
             (
-                bodo.ArrayItemArrayType(bodo.dict_str_arr_type),
+                bodo.types.ArrayItemArrayType(bodo.types.dict_str_arr_type),
                 bodo.MapArrayType(
                     bodo.IntegerArrayType(bodo.types.int32),
                     bodo.DatetimeArrayType(None),

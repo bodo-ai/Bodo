@@ -2718,7 +2718,7 @@ class JoinTyper(AbstractTemplate):
             if right_key in left_df.column_index:
                 columns.append(right_key)
                 if (
-                    right_key_type == bodo.dict_str_arr_type
+                    right_key_type == bodo.types.dict_str_arr_type
                     and left_key_type == bodo.types.string_array_type
                 ):
                     # If we have a merge between a dict_array and a regular string
@@ -2736,7 +2736,7 @@ class JoinTyper(AbstractTemplate):
             if left_key in right_df.column_index:
                 columns.append(left_key)
                 if (
-                    left_key_type == bodo.dict_str_arr_type
+                    left_key_type == bodo.types.dict_str_arr_type
                     and right_key_type == bodo.types.string_array_type
                 ):
                     # If we have a merge between a dict_array and a regular string
@@ -2754,13 +2754,13 @@ class JoinTyper(AbstractTemplate):
             )
             if col in comm_keys:
                 # For a common key we take either from left or right, so no additional NaN occurs.
-                if in_type == bodo.dict_str_arr_type:
+                if in_type == bodo.types.dict_str_arr_type:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
                     in_type = right_df.data[right_df.column_index[col]]
                 data.append(in_type)
             else:
-                if in_type == bodo.dict_str_arr_type and col in left_on_map:
+                if in_type == bodo.types.dict_str_arr_type and col in left_on_map:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
                     if right_index:
@@ -2780,7 +2780,7 @@ class JoinTyper(AbstractTemplate):
                 columns.append(
                     str(col) + suffix_y.literal_value if col in add_suffix else col
                 )
-                if in_type == bodo.dict_str_arr_type and col in right_on_map:
+                if in_type == bodo.types.dict_str_arr_type and col in right_on_map:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
                     if left_index:
@@ -3793,7 +3793,7 @@ def to_parquet_overload(
     else:
         for i in range(len(df.data)):
             func_text += f"    arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
-            if df.data[i] == bodo.dict_str_arr_type:
+            if df.data[i] == bodo.types.dict_str_arr_type:
                 func_text += f"    arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"    info_list = [{data_args}]\n"
@@ -4000,7 +4000,7 @@ def to_sql_exception_guard(
                         dtyp[c] = sa.types.Date
                     elif col_dtype in (
                         bodo.types.string_array_type,
-                        bodo.dict_str_arr_type,
+                        bodo.types.dict_str_arr_type,
                     ) and (not disable_varchar2 or disable_varchar2 == "0"):
                         dtyp[c] = VARCHAR2(4000)
                 # workaround to avoid issue with Oracle and Float values
@@ -4184,7 +4184,7 @@ def to_sql_overload(
             # Call drop_duplicates_local_dictionary on all dict-encoded arrays.
             # See note in `to_parquet_overload` (Why we are calling drop_duplicates_local_dictionary
             # on all dict encoded arrays?) for why this is important.
-            if df.data[i] == bodo.dict_str_arr_type:
+            if df.data[i] == bodo.types.dict_str_arr_type:
                 func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"        info_list = [{data_args}]\n"
@@ -4292,7 +4292,7 @@ def to_sql_overload(
     else:
         for i in range(len(df.data)):
             func_text += f"        arr{i} = get_dataframe_data(df, {i})\n"
-            if df.data[i] == bodo.dict_str_arr_type:
+            if df.data[i] == bodo.types.dict_str_arr_type:
                 func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join([f"arr{i}" for i in range(len(df.data))])
         func_text += f"        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), df.index, __col_name_meta_value_df_to_sql)\n"
@@ -5050,8 +5050,8 @@ def overload_union_dataframes(
                 if col_typ == other_col_typ:
                     new_col_types.append(col_typ)
                 elif (
-                    col_typ == bodo.dict_str_arr_type
-                    or other_col_typ == bodo.dict_str_arr_type
+                    col_typ == bodo.types.dict_str_arr_type
+                    or other_col_typ == bodo.types.dict_str_arr_type
                 ):
                     if col_typ not in (
                         bodo.types.string_array_type,
@@ -5066,7 +5066,7 @@ def overload_union_dataframes(
                             f"Unable to union table with columns of incompatible types. Found types {col_typ} and {other_col_typ} in column {i}."
                         )
                     # If either array is dict encoded we want the output to be dict encoded.
-                    new_col_types.append(bodo.dict_str_arr_type)
+                    new_col_types.append(bodo.types.dict_str_arr_type)
                 else:
                     col_dtype = col_typ.dtype
                     other_col_dtype = other_col_typ.dtype

@@ -1931,13 +1931,13 @@ def concat_overload(arr_list):
         if isinstance(arr_list, types.BaseTuple):
             _arr_type = arr_list.types[0]
             for i in range(len(arr_list)):
-                if arr_list.types[i] != bodo.dict_str_arr_type:
+                if arr_list.types[i] != bodo.types.dict_str_arr_type:
                     _arr_type = arr_list.types[i]
                     break
         else:
             _arr_type = arr_list.dtype
 
-        if _arr_type == bodo.dict_str_arr_type:
+        if _arr_type == bodo.types.dict_str_arr_type:
 
             def impl_dict_arr(arr_list):  # pragma: no cover
                 """
@@ -2787,7 +2787,7 @@ def overload_gen_na_array(n, arr, use_dict_arr=False):
 
         return impl_float
 
-    if arr == bodo.dict_str_arr_type and is_overload_true(use_dict_arr):
+    if arr == bodo.types.dict_str_arr_type and is_overload_true(use_dict_arr):
 
         def impl_dict(n, arr, use_dict_arr=False):  # pragma: no cover
             dict_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0)
@@ -3308,7 +3308,7 @@ def repeat_kernel_overload(A, repeats):
 
     # int case
     if isinstance(repeats, types.Integer):
-        if A == bodo.dict_str_arr_type:
+        if A == bodo.types.dict_str_arr_type:
 
             def impl_dict_int(A, repeats):  # pragma: no cover
                 data_arr = A._data.copy()
@@ -3347,7 +3347,7 @@ def repeat_kernel_overload(A, repeats):
         return impl_int
 
     # array case
-    if A == bodo.dict_str_arr_type:
+    if A == bodo.types.dict_str_arr_type:
 
         def impl_dict_arr(A, repeats):  # pragma: no cover
             data_arr = A._data.copy()
@@ -4406,7 +4406,7 @@ def np_interp(x, xp, fp, left=None, right=None, period=None):
 
 def is_index_decimal_value(indval):
     return isinstance(indval, typing.builtins.IndexValueType) and isinstance(
-        indval.val_typ, bodo.Decimal128Type
+        indval.val_typ, bodo.types.Decimal128Type
     )
 
 

@@ -2079,7 +2079,7 @@ def overload_to_datetime(
         return impl_cat_arr
 
     # Dictionary-encoded string array
-    if arg_a == bodo.dict_str_arr_type:
+    if arg_a == bodo.types.dict_str_arr_type:
 
         def impl_dict_str_arr(
             arg_a,

@@ -1264,7 +1264,7 @@ def scatterv_impl_jit(
         exec(func_text, glbls, loc_vars)
         return loc_vars["impl_table"]
 
-    if data == bodo.dict_str_arr_type:
+    if data == bodo.types.dict_str_arr_type:
         empty_int32_arr = np.array([], np.int32)
 
         def impl_dict_arr(

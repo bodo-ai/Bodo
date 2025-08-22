@@ -931,7 +931,7 @@ def create_is_func_util_overload(fn_name):  # pragma: no cover
 
         # These functions can't output null so we switch to a non-nullable
         # array.
-        out_dtype = bodo.boolean_array_type
+        out_dtype = bodo.types.boolean_array_type
         return gen_vectorized(
             arg_names, arg_types, propagate_null, scalar_text, out_dtype
         )

@@ -812,8 +812,9 @@ def regexp_replace_util(
             and flag_bit_vector == 0
         ):
             # Optimized implementation just calls into C++ and has it handle the entire array.
-            use_dict_caching = arr == bodo.dict_str_arr_type and not is_overload_none(
-                dict_encoding_state
+            use_dict_caching = (
+                arr == bodo.types.dict_str_arr_type
+                and not is_overload_none(dict_encoding_state)
             )
             if use_dict_caching:
 

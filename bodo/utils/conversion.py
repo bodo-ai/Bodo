@@ -111,7 +111,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
                 or data.dtype == bodo.types.datetime64ns
             ):
                 if data.dtype == types.bool_:
-                    output = bodo.boolean_array_type
+                    output = bodo.types.boolean_array_type
                 elif data.dtype == bodo.types.timedelta64ns:
                     output = bodo.types.timedelta_array_type
                 elif data.dtype == bodo.types.datetime64ns:
@@ -160,7 +160,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
             return signature(data.data, *folded_args).replace(pysig=pysig)
 
         if not is_overload_none(scalar_to_arr_len):
-            if isinstance(data, bodo.Decimal128Type):
+            if isinstance(data, bodo.types.Decimal128Type):
                 output = bodo.libs.decimal_arr_ext.DecimalArrayType(
                     data.precision, data.scale
                 )
@@ -184,7 +184,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
                 elif isinstance(dtype, types.Float):
                     output = bodo.FloatingArrayType(dtype)
                 elif dtype == types.bool_:
-                    output = bodo.boolean_array_type
+                    output = bodo.types.boolean_array_type
             else:
                 output = types.Array(data, 1, "C")
             return signature(output, *folded_args).replace(pysig=pysig)
@@ -449,7 +449,7 @@ def overload_coerce_to_ndarray(
     # TODO: make sure scalar is a Numpy dtype
 
     if not is_overload_none(scalar_to_arr_len):
-        if isinstance(data, bodo.Decimal128Type):
+        if isinstance(data, bodo.types.Decimal128Type):
             precision = data.precision
             scale = data.scale
 
@@ -1380,9 +1380,9 @@ def overload_fix_arr_dtype(
         )  # pragma: no cover
 
     # Handle nested types recursively:
-    if isinstance(data, bodo.ArrayItemArrayType):
+    if isinstance(data, bodo.types.ArrayItemArrayType):
         nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
-        if not isinstance(nb_dtype, bodo.ArrayItemArrayType):
+        if not isinstance(nb_dtype, bodo.types.ArrayItemArrayType):
             raise BodoError(
                 f"Both source and target types must be ArrayTimeArrayType! Got {data} and {nb_dtype} instead."
             )
@@ -1819,7 +1819,7 @@ def overload_fix_arr_dtype(
     nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
 
     if isinstance(data.dtype, types.Integer) and isinstance(
-        nb_dtype, bodo.Decimal128Type
+        nb_dtype, bodo.types.Decimal128Type
     ):
         new_prec = nb_dtype.precision
         new_scale = nb_dtype.scale
@@ -1845,7 +1845,7 @@ def overload_fix_arr_dtype(
             isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype)
             and data.dtype == nb_dtype.dtype
         )
-    elif data == bodo.boolean_array_type:
+    elif data == bodo.types.boolean_array_type:
         same_typ = nb_dtype == boolean_dtype
     elif bodo.utils.utils.is_array_typ(nb_dtype, False):
         same_typ = data == nb_dtype
@@ -1889,7 +1889,7 @@ def overload_fix_arr_dtype(
             return impl_float
         else:
             # optimized implementation for dictionary arrays
-            if data == bodo.dict_str_arr_type:
+            if data == bodo.types.dict_str_arr_type:
 
                 def impl_dict(
                     data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -2337,7 +2337,7 @@ def overload_index_from_array(data, name=None):
     if data in [
         bodo.types.string_array_type,
         bodo.types.binary_array_type,
-        bodo.dict_str_arr_type,
+        bodo.types.dict_str_arr_type,
     ]:
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_binary_str_index(
             data, name
@@ -2361,7 +2361,7 @@ def overload_index_from_array(data, name=None):
                 types.Float,
                 types.Boolean,
                 bodo.types.TimeType,
-                bodo.Decimal128Type,
+                bodo.types.Decimal128Type,
             ),
         )
         or data.dtype == bodo.types.datetime_date_type
@@ -2774,7 +2774,7 @@ def overload_list_to_array(lst, arr_type, parallel=False):
         real_arr_type = dtype_to_array_type(to_nullable_type(lst.dtype))
     glbls = {"bodo": bodo, "real_arr_type": real_arr_type}
 
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         # For dictionary encoded arrays create a naive array containing duplicates.
         glbls["data_arr_type"] = bodo.types.string_array_type
         glbls["indices_arr_type"] = bodo.libs.dict_arr_ext.dict_indices_arr_type
@@ -2785,7 +2785,7 @@ def overload_list_to_array(lst, arr_type, parallel=False):
             "  out_arr = bodo.utils.utils.alloc_type(copy_len, real_arr_type, (-1,))\n"
         )
     func_text += "  for i in range(start, start + copy_len):\n"
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         func_text += "    indices_arr[i - start] = i\n"
         # Ensure nulls are consistent. This extra pass is fine because we assume lists are small (e.g.
         # used by VALUES in SQL).

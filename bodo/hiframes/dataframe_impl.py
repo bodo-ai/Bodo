@@ -844,7 +844,7 @@ def overload_dataframe_isna(df):
 
     if df.is_table_format:
         # isna generates a boolean array for every column
-        output_arr_typ = bodo.boolean_array_type
+        output_arr_typ = bodo.types.boolean_array_type
         extra_globals = {"output_arr_typ": output_arr_typ}
         data_args = (
             "bodo.utils.table_utils.generate_mappable_table_func("
@@ -979,7 +979,7 @@ def overload_dataframe_notna(df):
     extra_globals = None
     if df.is_table_format:
         # notna generates a boolean array for every column
-        output_arr_typ = bodo.boolean_array_type
+        output_arr_typ = bodo.types.boolean_array_type
         extra_globals = {"output_arr_typ": output_arr_typ}
         data_args = (
             "bodo.utils.table_utils.generate_mappable_table_func("
@@ -1678,7 +1678,8 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                     bodo.CategoricalArrayType,
                 ),
             )
-            or coltype in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
+            or coltype
+            in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmax() only supported for numeric column types. Column type: {coltype} not supported."
@@ -1722,7 +1723,8 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                     bodo.CategoricalArrayType,
                 ),
             )
-            or coltype in [bodo.boolean_array_type, bodo.types.datetime_date_array_type]
+            or coltype
+            in [bodo.types.boolean_array_type, bodo.types.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmin() only supported for numeric column types. Column type: {coltype} not supported."
@@ -4296,7 +4298,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
         if isinstance(
             index_column,
             (
-                bodo.ArrayItemArrayType,
+                bodo.types.ArrayItemArrayType,
                 bodo.MapArrayType,
                 bodo.StructArrayType,
                 bodo.TupleArrayType,
@@ -4336,7 +4338,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
     if isinstance(
         columns_column,
         (
-            bodo.ArrayItemArrayType,
+            bodo.types.ArrayItemArrayType,
             bodo.MapArrayType,
             bodo.StructArrayType,
             bodo.TupleArrayType,
@@ -4362,7 +4364,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
             isinstance(
                 values_column,
                 (
-                    bodo.ArrayItemArrayType,
+                    bodo.types.ArrayItemArrayType,
                     bodo.MapArrayType,
                     bodo.StructArrayType,
                     bodo.TupleArrayType,
@@ -6063,7 +6065,7 @@ class SetDfColInfer(AbstractTemplate):
                 val = dtype_to_array_type(val.dtype)
             if is_overload_constant_str(val) or val == types.unicode_type:
                 # String scalars are coerced to dictionary encoded arrays.
-                val = bodo.dict_str_arr_type
+                val = bodo.types.dict_str_arr_type
             elif not is_array_typ(val):
                 val = dtype_to_array_type(val)
             if ind in target.columns:

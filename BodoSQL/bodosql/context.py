@@ -173,7 +173,7 @@ def construct_array_item_array_type(arr_type):
     value.
 
     Args:
-        typ (bodo.ArrayItemArrayType): A ArrayItemArray type
+        typ (bodo.types.ArrayItemArrayType): A ArrayItemArray type
         col_name (str): Column name
 
     Returns:
@@ -248,14 +248,14 @@ def get_sql_data_type(arr_type):
     elif isinstance(arr_type, bodo.types.TimeArrayType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(arr_type, nullable)
-    elif isinstance(arr_type, bodo.DecimalArrayType):
+    elif isinstance(arr_type, bodo.types.DecimalArrayType):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Decimal.value
         )
         return JavaEntryPoint.buildColumnDataTypeInfo(
             type_enum, nullable, arr_type.precision, arr_type.scale
         )
-    elif isinstance(arr_type, bodo.ArrayItemArrayType):
+    elif isinstance(arr_type, bodo.types.ArrayItemArrayType):
         return construct_array_item_array_type(arr_type)
     elif isinstance(arr_type, (bodo.StructArrayType, bodo.MapArrayType)):
         return construct_json_array_type(arr_type)
@@ -341,7 +341,7 @@ def get_sql_param_column_type_info(param_type: types.Type):
     elif isinstance(unliteral_type, bodo.types.TimeType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(param_type, nullable)
-    elif isinstance(unliteral_type, bodo.Decimal128Type):
+    elif isinstance(unliteral_type, bodo.types.Decimal128Type):
         # Decimal types need handling for precision and scale.
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Decimal.value

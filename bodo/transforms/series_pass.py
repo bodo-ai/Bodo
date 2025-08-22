@@ -1197,7 +1197,7 @@ class SeriesPass:
             and (is_str_arr_type(typ1) or is_str_arr_type(typ2))
             and all(
                 types.unliteral(t)
-                in (string_array_type, bodo.dict_str_arr_type, string_type)
+                in (string_array_type, bodo.types.dict_str_arr_type, string_type)
                 for t in (typ1, typ2)
             )
         ):
@@ -4322,7 +4322,7 @@ def _fix_typ_undefs(new_typ, old_typ):
                     StringArraySplitViewType,
                 ),
             )
-            or new_typ == bodo.dict_str_arr_type
+            or new_typ == bodo.types.dict_str_arr_type
         )
         if new_typ.dtype == types.undefined:
             return new_typ.copy(old_typ.dtype)

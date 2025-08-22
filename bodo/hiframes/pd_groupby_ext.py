@@ -406,11 +406,11 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
             raise BodoError(
                 f"Input scale of {in_dtype.precision} too large for MEDIAN operation"
             )
-        return bodo.DecimalArrayType(new_precision, new_scale), "ok"
+        return bodo.types.DecimalArrayType(new_precision, new_scale), "ok"
     elif func_name == "percentile_disc" and isinstance(in_dtype, Decimal128Type):
         # PERCENTILE_DISC
         # Maintain the same precision and scale as the input.
-        return bodo.DecimalArrayType(in_dtype.precision, in_dtype.scale), "ok"
+        return bodo.types.DecimalArrayType(in_dtype.precision, in_dtype.scale), "ok"
 
     elif (
         func_name
@@ -433,7 +433,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         if isinstance(
             in_dtype, (Decimal128Type, types.Integer, types.Float, types.Boolean)
         ):
-            return bodo.boolean_array_type, "ok"
+            return bodo.types.boolean_array_type, "ok"
         return (
             None,
             f"For {func_name}, only columns of type integer, float, Decimal, or boolean type are allowed",
@@ -1600,9 +1600,9 @@ def get_window_func_types():
         "std": to_nullable_type(dtype_to_array_type(types.float64)),
         "std_pop": to_nullable_type(dtype_to_array_type(types.float64)),
         "mean": to_nullable_type(dtype_to_array_type(types.float64)),
-        "min_row_number_filter": bodo.boolean_array_type,
-        "booland_agg": bodo.boolean_array_type,
-        "boolor_agg": bodo.boolean_array_type,
+        "min_row_number_filter": bodo.types.boolean_array_type,
+        "booland_agg": bodo.types.boolean_array_type,
+        "boolor_agg": bodo.types.boolean_array_type,
         # None = output dtype matches input dtype
         "any_value": None,
         "first": None,

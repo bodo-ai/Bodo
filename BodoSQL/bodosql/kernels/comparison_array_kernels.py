@@ -118,7 +118,7 @@ def create_comparison_operators_util_func_overload(func_name):  # pragma: no cov
         arg_names = ["arr0", "arr1", "dict_encoding_state", "func_id"]
         arg_types = [arr0, arr1, dict_encoding_state, func_id]
         propagate_null = [True, True, False, False]
-        out_dtype = bodo.boolean_array_type
+        out_dtype = bodo.types.boolean_array_type
         if func_name == "equal":
             operator_str = "=="
         elif func_name == "not_equal":
@@ -134,8 +134,8 @@ def create_comparison_operators_util_func_overload(func_name):  # pragma: no cov
 
         # decimal array comparison is done in Arrow to avoid function call overhead for
         # each row
-        if isinstance(arr0, bodo.DecimalArrayType) or isinstance(
-            arr1, bodo.DecimalArrayType
+        if isinstance(arr0, bodo.types.DecimalArrayType) or isinstance(
+            arr1, bodo.types.DecimalArrayType
         ):
             return eval(
                 f"lambda arr0, arr1, dict_encoding_state, func_id: arr0 {operator_str} arr1"

@@ -556,7 +556,7 @@ def _get_cfunc_wrapper(
         out_col_dtype = _get_agg_udf_output_type(func, in_col.dtype.pyarrow_dtype)
         out_col_type = bodo.typeof(_empty_pd_array(out_col_dtype))
 
-        if isinstance(out_col_type, bodo.ArrayItemArrayType):
+        if isinstance(out_col_type, bodo.types.ArrayItemArrayType):
 
             @numba.njit
             def coerce_to_array_impl(scalar):

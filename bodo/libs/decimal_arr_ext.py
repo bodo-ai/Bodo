@@ -3580,7 +3580,7 @@ def decimal_arr_setitem(A, idx, val):
             )  # pragma: no cover
 
     if not (
-        (is_iterable_type(val) and isinstance(val.dtype, bodo.Decimal128Type))
+        (is_iterable_type(val) and isinstance(val.dtype, bodo.types.Decimal128Type))
         or isinstance(val, Decimal128Type)
     ):
         raise BodoError(typ_err_msg)
@@ -3790,7 +3790,7 @@ def call_arrow_compute_cmp(op, lhs, rhs):
     )
 
     op_enum = cmp_op_to_enum[op].value
-    out_array_type = bodo.boolean_array_type
+    out_array_type = bodo.types.boolean_array_type
 
     def impl_pc_binop(lhs, rhs):  # pragma: no cover
         # For simplicity, convert scalar inputs to arrays and pass a flag to C++ to
