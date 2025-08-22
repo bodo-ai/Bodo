@@ -21,6 +21,7 @@ from pandas._typing import (
 )
 
 import bodo
+import bodo.ai
 from bodo.ai.backend import Backend
 from bodo.ai.utils import (
     get_default_bedrock_request_formatter,

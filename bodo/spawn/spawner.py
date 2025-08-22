@@ -26,16 +26,6 @@ from pandas.core.arrays.arrow.array import ArrowExtensionArray
 import bodo
 import bodo.user_logging
 from bodo.mpi4py import MPI
-from bodo.pandas import (
-    BodoDataFrame,
-    BodoSeries,
-    LazyArrowExtensionArray,
-    LazyMetadata,
-)
-from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
-from bodo.pandas.lazy_wrapper import BodoLazyWrapper
-from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
-from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
@@ -44,6 +34,16 @@ from bodo.spawn.utils import (
     poll_for_barrier,
 )
 from bodo.utils.utils import is_distributable_typ
+
+if pt.TYPE_CHECKING:
+    from bodo.pandas import (
+        BodoDataFrame,
+        BodoSeries,
+        LazyArrowExtensionArray,
+        LazyMetadata,
+    )
+    from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
+    from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 
 # Reference to BodoSQLContext class to be lazily initialized if BodoSQLContext
 # is detected
@@ -282,6 +282,8 @@ class Spawner:
         **kwargs,
     ):
         """Send func to be compiled and executed on spawned process"""
+        from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+
         # If we get a df/series with a plan we need to execute it and get the result id
         # so we can build the arg metadata.
         # We do this first so nothing is already running when we execute the plan.
@@ -418,6 +420,12 @@ class Spawner:
         lazy_metadata: LazyMetadata | list | dict | tuple,
     ) -> BodoDataFrame | BodoSeries | LazyArrowExtensionArray | list | dict | tuple:
         """Wrap the distributed return of a function into a BodoDataFrame, BodoSeries, or LazyArrowExtensionArray."""
+        from bodo.pandas import (
+            BodoDataFrame,
+            BodoSeries,
+            LazyArrowExtensionArray,
+            LazyMetadata,
+        )
 
         if isinstance(lazy_metadata, list):
             return [self.wrap_distributed_result(d) for d in lazy_metadata]
@@ -472,6 +480,8 @@ class Spawner:
         Returns:
             ArgMetadata or None: ArgMetadata if argument is distributable, None otherwise
         """
+        from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+
         dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
             if arg._lazy:
@@ -782,6 +792,11 @@ class Spawner:
         | LazySingleArrayManager
     ):
         """Scatter data to all workers and return the manager for the data."""
+        from bodo.pandas.utils import (
+            get_lazy_manager_class,
+            get_lazy_single_manager_class,
+        )
+
         self._is_running = True
         self.worker_intercomm.bcast(CommandType.SCATTER.value, self.bcast_root)
         bodo.libs.distributed_api.scatterv(
