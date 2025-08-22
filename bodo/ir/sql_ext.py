@@ -616,7 +616,7 @@ def convert_pyobj_to_snowflake_str(pyobj, time_zone):
     42 -> '42'
     "foo bar" -> "'foo bar'"
     datetime.date(2024, 3, 14) -> "DATE '2024-03-14'"
-    bodo.Time(12, 30, 59, 0, 0, 99) -> "TIME_FROM_PARTS(0, 0, 0, 45059000000091)"
+    bodo.types.Time(12, 30, 59, 0, 0, 99) -> "TIME_FROM_PARTS(0, 0, 0, 45059000000091)"
     pd.Timestamp("2024-07-04 12:30:01.025601") -> "TIMESTAMP_FROM_PARTS(2024, 7, 4, 12, 30, 1, 25601000)"
     """
     if isinstance(pyobj, str):
@@ -632,7 +632,7 @@ def convert_pyobj_to_snowflake_str(pyobj, time_zone):
         return f"TIMESTAMP{suffix}_FROM_PARTS({pyobj.year}, {pyobj.month}, {pyobj.day}, {pyobj.hour}, {pyobj.minute}, {pyobj.second}, {pyobj.value % 1_000_000_000})"
     elif isinstance(pyobj, datetime.date):
         return f"DATE '{pyobj.year:04}-{pyobj.month:02}-{pyobj.day:02}'"
-    elif isinstance(pyobj, bodo.Time):
+    elif isinstance(pyobj, bodo.types.Time):
         return f"TIME_FROM_PARTS(0, 0, 0, {pyobj.value})"
     else:
         return str(pyobj)
@@ -816,7 +816,7 @@ def get_rtjf_cols_extra_info(column_types, desired_indices):
     precisions = []
     time_zones = []
     for col_idx in desired_indices:
-        if isinstance(column_types[col_idx], bodo.TimeArrayType):
+        if isinstance(column_types[col_idx], bodo.types.TimeArrayType):
             precisions.append(column_types[col_idx].precision)
             time_zones.append(None)
         elif isinstance(column_types[col_idx], bodo.DatetimeArrayType):

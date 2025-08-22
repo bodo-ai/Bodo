@@ -150,11 +150,13 @@ def construct_tz_aware_array_type(typ, nullable):
         return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, precision)
 
 
-def construct_time_array_type(typ: bodo.TimeArrayType | bodo.TimeType, nullable: bool):
+def construct_time_array_type(
+    typ: bodo.types.TimeArrayType | bodo.types.TimeType, nullable: bool
+):
     """Construct a BodoSQL data type for a time array.
 
     Args:
-        typ (Union[bodo.TimeArrayType, bodo.TimeType]): A time Bodo type
+        typ (Union[bodo.types.TimeArrayType, bodo.types.TimeType]): A time Bodo type
         nullable (bool): Is the column Nullable
 
     Returns:
@@ -243,7 +245,7 @@ def get_sql_data_type(arr_type):
             SqlTypeEnum.Timestamp_Tz.value
         )
         return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
-    elif isinstance(arr_type, bodo.TimeArrayType):
+    elif isinstance(arr_type, bodo.types.TimeArrayType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(arr_type, nullable)
     elif isinstance(arr_type, bodo.DecimalArrayType):
@@ -336,7 +338,7 @@ def get_sql_param_column_type_info(param_type: types.Type):
         and unliteral_type.tz != None
     ):
         return construct_tz_aware_array_type(param_type, nullable)
-    elif isinstance(unliteral_type, bodo.TimeType):
+    elif isinstance(unliteral_type, bodo.types.TimeType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(param_type, nullable)
     elif isinstance(unliteral_type, bodo.Decimal128Type):

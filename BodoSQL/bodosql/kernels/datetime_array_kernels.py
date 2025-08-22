@@ -734,8 +734,8 @@ def add_interval_util(start_dt, interval):
     if is_valid_time_arg(start_dt):
         scalar_text += "td_val = bodo.utils.conversion.box_if_dt64(arg1).value\n"
         scalar_text += "value = (arg0.value + td_val) % 86400000000000\n"
-        scalar_text += "res[i] = bodo.Time(nanosecond=value)"
-        out_dtype = bodo.TimeArrayType(9)
+        scalar_text += "res[i] = bodo.types.Time(nanosecond=value)"
+        out_dtype = bodo.types.TimeArrayType(9)
     elif is_valid_date_arg(start_dt):
         # If the time unit is smaller than or equal to hour, returns timestamp objects
         scalar_text += f"res[i] = {unbox_str}(pd.Timestamp(arg0) + {box_str1}(arg1))\n"
@@ -1789,11 +1789,11 @@ def overload_date_trunc(
     Args:
         date_or_time_part (types.Type): A string scalar or array stating how to truncate
             the timestamp
-        date_or_time_expr (types.Type): A bodo.Time object or bodo.Time array or tz-aware or tz-naive Timestamp or
+        date_or_time_expr (types.Type): A bodo.types.Time object or bodo.types.Time array or tz-aware or tz-naive Timestamp or
             Timestamp array to be truncated.
 
     Returns:
-        types.Type: The bodo.Time/timestamp after being truncated, which has same type as date_or_time_expr
+        types.Type: The bodo.types.Time/timestamp after being truncated, which has same type as date_or_time_expr
     """
     args = [date_or_time_part, date_or_time_expr]
     for i, arg in enumerate(args):
@@ -1831,16 +1831,16 @@ def overload_date_trunc_util(
     date_or_time_part, date_or_time_expr, dict_encoding_state, func_id
 ):
     """
-    Truncates a given bodo.Time/datetime.date/Timestamp argument to the provided
+    Truncates a given bodo.types.Time/datetime.date/Timestamp argument to the provided
     date_or_time_part. This corresponds to DATE_TRUNC inside snowflake
 
     Args:
         date_or_time_part (types.Type): A string scalar or array stating how to truncate
-            the bodo.Time/datetime.date/Timestamp.
-        date_or_time_expr (types.Type): bodo.Time/datetime.date/Timestamp object or array to be truncated.
+            the bodo.types.Time/datetime.date/Timestamp.
+        date_or_time_expr (types.Type): bodo.types.Time/datetime.date/Timestamp object or array to be truncated.
 
     Returns:
-        types.Type: The bodo.Time/datetime.date/Timestamp after being truncated,
+        types.Type: The bodo.types.Time/datetime.date/Timestamp after being truncated,
                     which has same type as date_or_time_expr.
     """
     verify_string_arg(date_or_time_part, "DATE_TRUNC", "date_or_time_part")
@@ -1857,37 +1857,37 @@ def overload_date_trunc_util(
     func_id_name = "func_id" if use_dict_caching else None
     # Standardize the input to limit the condition in the loop
     scalar_text = "part_str = bodosql.kernels.datetime_array_kernels.standardize_snowflake_date_time_part(arg0)\n"
-    if is_valid_time_arg(date_or_time_expr):  # truncate a bodo.Time object/array
+    if is_valid_time_arg(date_or_time_expr):  # truncate a bodo.types.Time object/array
         scalar_text += "if part_str in ('quarter', 'year', 'month', 'week', 'day'):\n"
         # date_or_time_part is too large, set everything to 0
-        scalar_text += "    res[i] = bodo.Time()\n"
+        scalar_text += "    res[i] = bodo.types.Time()\n"
         scalar_text += "else:\n"
         scalar_text += "    if part_str == 'hour':\n"
-        scalar_text += "        res[i] = bodo.Time(arg1.hour)\n"
+        scalar_text += "        res[i] = bodo.types.Time(arg1.hour)\n"
         scalar_text += "    elif part_str == 'minute':\n"
-        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute)\n"
+        scalar_text += "        res[i] = bodo.types.Time(arg1.hour, arg1.minute)\n"
         scalar_text += "    elif part_str == 'second':\n"
         scalar_text += (
-            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second)\n"
+            "        res[i] = bodo.types.Time(arg1.hour, arg1.minute, arg1.second)\n"
         )
         scalar_text += "    elif part_str == 'millisecond':\n"
         scalar_text += (
-            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, "
+            "        res[i] = bodo.types.Time(arg1.hour, arg1.minute, arg1.second, "
             "arg1.millisecond)\n"
         )
         scalar_text += "    elif part_str == 'microsecond':\n"
         scalar_text += (
-            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, "
+            "        res[i] = bodo.types.Time(arg1.hour, arg1.minute, arg1.second, "
             "arg1.millisecond, arg1.microsecond)\n"
         )
         scalar_text += "    elif part_str == 'nanosecond':\n"
         scalar_text += (
-            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, "
+            "        res[i] = bodo.types.Time(arg1.hour, arg1.minute, arg1.second, "
             "arg1.millisecond, arg1.microsecond, arg1.nanosecond)\n"
         )
         scalar_text += "    else:\n"
         scalar_text += "        raise ValueError('Invalid time part for DATE_TRUNC')\n"
-        out_dtype = bodo.TimeArrayType(9)
+        out_dtype = bodo.types.TimeArrayType(9)
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -2256,7 +2256,7 @@ def timestamp_from_date_and_time_util(date_expr, time_expr):
 
     Args:
         date_expr (types.Type): tz-naive Timestamp or Timestamp array
-        time_expr (types.Type): bodo.Time or bodo.Time array
+        time_expr (types.Type): bodo.types.Time or bodo.types.Time array
 
     Returns:
         timestamp array/scalar: a tz-naive timestamp with the date and time as

@@ -178,7 +178,7 @@ public class BodoArrayHelpers {
       case TIME:
         // TODO: Add nullable support
         // TODO: Add precision support once Bodo stores value differently based on precision
-        typeName = "bodo.TimeArrayType(9)";
+        typeName = "bodo.types.TimeArrayType(9)";
         break;
       case VARCHAR:
       case CHAR:

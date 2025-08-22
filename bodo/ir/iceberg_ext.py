@@ -1102,7 +1102,7 @@ def convert_pyobj_to_arrow_filter_str(pyobj, tz):
     "foo bar" -> "'foo bar'"
     datetime.date(2024, 1, 1) -> "pa.scalar(19723, pa.date32())"
         (since 2024-01-01 = 19723 days since 1970-01-01)
-    bodo.Time(12, 30, 59, 0, 12, precision=6) -> "pa.scalar(45059000012, pa.time64('us'))"
+    bodo.types.Time(12, 30, 59, 0, 12, precision=6) -> "pa.scalar(45059000012, pa.time64('us'))"
     pd.Timestamp("2024-07-04 12:30:01.025601") -> "pa.scalar(1720096201025601000, pa.timestamp('ns'))"
     """
     if isinstance(pyobj, str):
@@ -1119,7 +1119,7 @@ def convert_pyobj_to_arrow_filter_str(pyobj, tz):
     elif isinstance(pyobj, datetime.date):
         since_1970 = pyobj.toordinal() - 719163
         return f"pa.scalar({since_1970}, pa.date32())"
-    elif isinstance(pyobj, bodo.Time):
+    elif isinstance(pyobj, bodo.types.Time):
         if pyobj.precision == 0:
             return f"pa.scalar({pyobj.value}, pa.time64('s'))"
         elif pyobj.precision == 3:

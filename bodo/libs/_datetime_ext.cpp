@@ -378,8 +378,8 @@ const static int64_t _NANOS_PER_HOUR = 60 * _NANOS_PER_MINUTE;
 
 /**
  * @brief Box native time_array data to Numpy object array of
- * bodo.Time items
- * @return Numpy object array of bodo.Time
+ * bodo.types.Time items
+ * @return Numpy object array of bodo.types.Time
  * @param[in] n number of values
  * @param[in] data pointer to 64-bit values
  * @param[in] null_bitmap bit vector representing nulls (Arrow format)
@@ -402,11 +402,11 @@ void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
     CHECK(ret, "allocating numpy array failed");
     int err;
 
-    // get bodo.Time constructor
+    // get bodo.types.Time constructor
     PyObject* bodo = PyImport_ImportModule("bodo");
     CHECK(bodo, "importing bodo module failed");
     PyObject* bodo_time_constructor = PyObject_GetAttrString(bodo, "Time");
-    CHECK(bodo_time_constructor, "getting bodo.Time failed");
+    CHECK(bodo_time_constructor, "getting bodo.types.Time failed");
 
     for (int64_t i = 0; i < n; ++i) {
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);

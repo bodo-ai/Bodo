@@ -485,32 +485,32 @@ def test_interval_add_interval_to_time(interval_input, memory_leak_check):
 
     time_input = pd.Series(
         [
-            bodo.Time(12, 30, 0, nanosecond=1),
-            bodo.Time(0, 0, 1),
-            bodo.Time(0, 0, 0),
-            bodo.Time(12, 0, 0),
-            bodo.Time(10, 50, 45, microsecond=500),
+            bodo.types.Time(12, 30, 0, nanosecond=1),
+            bodo.types.Time(0, 0, 1),
+            bodo.types.Time(0, 0, 0),
+            bodo.types.Time(12, 0, 0),
+            bodo.types.Time(10, 50, 45, microsecond=500),
         ]
     )
 
     if isinstance(interval_input, (pd.Timedelta)):
         answer = pd.Series(
             [
-                bodo.Time(12, 31, 30, nanosecond=1),
-                bodo.Time(0, 1, 31),
-                bodo.Time(0, 1, 30),
-                bodo.Time(12, 1, 30),
-                bodo.Time(10, 52, 15, microsecond=500),
+                bodo.types.Time(12, 31, 30, nanosecond=1),
+                bodo.types.Time(0, 1, 31),
+                bodo.types.Time(0, 1, 30),
+                bodo.types.Time(12, 1, 30),
+                bodo.types.Time(10, 52, 15, microsecond=500),
             ]
         )
     else:
         answer = pd.Series(
             [
-                bodo.Time(12, 30, 0, nanosecond=1),
+                bodo.types.Time(12, 30, 0, nanosecond=1),
                 None,
-                bodo.Time(23, 59, 18),
-                bodo.Time(12, 0, 0, microsecond=15),
-                bodo.Time(11, 5, 45, microsecond=500),
+                bodo.types.Time(23, 59, 18),
+                bodo.types.Time(12, 0, 0, microsecond=15),
+                bodo.types.Time(11, 5, 45, microsecond=500),
             ]
         )
 
@@ -2461,15 +2461,15 @@ def test_date_trunc(datetime_part_strings, ts_input, memory_leak_check):
     "time_input",
     [
         pytest.param(
-            bodo.Time(14, 24, 35, 523, 98, 13),
+            bodo.types.Time(14, 24, 35, 523, 98, 13),
             id="scalar-time",
         ),
         pytest.param(
             pd.Series(
                 [
-                    bodo.Time(19, 53, 26, 901, 8, 79),
-                    bodo.Time(0, 20, 43, 365, 128, 74),
-                    bodo.Time(23, 16, 6, 25, 77, 32),
+                    bodo.types.Time(19, 53, 26, 901, 8, 79),
+                    bodo.types.Time(0, 20, 43, 365, 128, 74),
+                    bodo.types.Time(23, 16, 6, 25, 77, 32),
                     None,
                 ]
             ).values,
@@ -2479,7 +2479,7 @@ def test_date_trunc(datetime_part_strings, ts_input, memory_leak_check):
 )
 def test_date_trunc_time(datetime_part_strings, time_input, memory_leak_check):
     """
-    Tests date_trunc array kernel on various bodo.Time inputs, testing all the different code paths
+    Tests date_trunc array kernel on various bodo.types.Time inputs, testing all the different code paths
     in the generated kernel.
     """
 
@@ -2487,7 +2487,7 @@ def test_date_trunc_time(datetime_part_strings, time_input, memory_leak_check):
         return pd.Series(bodosql.kernels.date_trunc(datetime_part_strings, arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(time_input, bodo.Time):
+    if isinstance(time_input, bodo.types.Time):
         impl = lambda datetime_part_strings, arr: bodosql.kernels.date_trunc(
             datetime_part_strings, arr
         )
@@ -2530,7 +2530,7 @@ def test_date_trunc_time(datetime_part_strings, time_input, memory_leak_check):
 )
 def test_date_trunc_date(day_part_strings, date_input, memory_leak_check):
     """
-    Tests date_trunc array kernel on various bodo.Time inputs, testing all the different code paths
+    Tests date_trunc array kernel on various bodo.types.Time inputs, testing all the different code paths
     in the generated kernel.
     """
 
@@ -2983,7 +2983,7 @@ def diff_fn(unit, arg0, arg1):
         return None
     else:
         datetime_part = standardize_snowflake_date_time_part_compile_time(unit)(unit)
-        if isinstance(arg0, bodo.Time):
+        if isinstance(arg0, bodo.types.Time):
             return nanoseconds_to_other_time_units(
                 arg1.value, datetime_part
             ) - nanoseconds_to_other_time_units(arg0.value, datetime_part)
@@ -3145,7 +3145,7 @@ def test_timestamp_from_date_and_time(timetype, memory_leak_check):
     Tests timestamp_from_date_and_time
     """
 
-    time_constructor = bodo.Time
+    time_constructor = bodo.types.Time
 
     def timestamp_constructor(h, m, s, ms, us, ns):
         return pd.Timestamp(2023, 1, 1, h, m, s, ms * 1000 + us, nanosecond=ns)

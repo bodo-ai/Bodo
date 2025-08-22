@@ -504,7 +504,7 @@ def dist_reduce_impl(value, reduce_op, comm):
             bodo.types.datetime64ns,
             bodo.types.timedelta64ns,
             bodo.types.datetime_date_type,
-            bodo.TimeType,
+            bodo.types.TimeType,
         ]
 
         if target_typ not in supported_typs and not isinstance(
@@ -1144,9 +1144,10 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
                 "get_value_for_type: only nanosecond precision is supported for nested data"
             )
             return pd.array(
-                [bodo.Time(3, precision=precision)], pd.ArrowDtype(pa.time64("ns"))
+                [bodo.types.Time(3, precision=precision)],
+                pd.ArrowDtype(pa.time64("ns")),
             )
-        return np.array([bodo.Time(3, precision=precision)], object)
+        return np.array([bodo.types.Time(3, precision=precision)], object)
 
     # NullArray
     if dtype == bodo.types.null_array_type:

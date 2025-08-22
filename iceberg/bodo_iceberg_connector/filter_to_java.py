@@ -127,7 +127,7 @@ def convert_scalar(val):
     representation.
     """
 
-    # Need to import Bodo here in order to check for bodo.Time
+    # Need to import Bodo here in order to check for bodo.types.Time
     import bodo
 
     if isinstance(val, pd.Timestamp):
@@ -174,7 +174,7 @@ def convert_scalar(val):
         return array_const_class(convert_list_to_java(converted_val))
     elif isinstance(val, bytes):
         return convert_bytes(val)
-    elif isinstance(val, bodo.Time):
+    elif isinstance(val, bodo.types.Time):
         return convert_time(val)
     else:
         raise NotImplementedError(
@@ -189,7 +189,7 @@ def convert_time(val):
     """
     import bodo
 
-    assert isinstance(val, bodo.Time)
+    assert isinstance(val, bodo.types.Time)
     converter = get_literal_converter_class()
     # All Iceberg times are in microseconds according to
     # https://iceberg.apache.org/spec/#primitive-types.

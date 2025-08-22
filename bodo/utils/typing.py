@@ -1153,7 +1153,7 @@ def parse_dtype(dtype, func_name=None):
             bodo.Decimal128Type,
             bodo.StructType,
             bodo.MapScalarType,
-            bodo.TimeType,
+            bodo.types.TimeType,
             bodo.hiframes.pd_categorical_ext.PDCategoricalDtype,
             bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
         ),
@@ -1752,7 +1752,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     if isinstance(dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
         return bodo.libs.pd_datetime_arr_ext.DatetimeArrayType(dtype.tz)
 
-    if isinstance(dtype, bodo.TimeType):
+    if isinstance(dtype, bodo.types.TimeType):
         return bodo.hiframes.time_ext.TimeArrayType(dtype.precision)
 
     if dtype == bodo.timestamptz_type:
@@ -1998,7 +1998,7 @@ def is_scalar_type(t: types.Type) -> bool:
             types.BooleanLiteral,
             types.StringLiteral,
             bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
-            bodo.TimeType,
+            bodo.types.TimeType,
             bodo.Decimal128Type,
         ),
     ) or t in (

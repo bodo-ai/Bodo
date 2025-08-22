@@ -1422,9 +1422,9 @@ def is_valid_time_arg(arg):
     Returns:
         bool: Is this type a time type
     """
-    return isinstance(arg, bodo.TimeType) or (
+    return isinstance(arg, bodo.types.TimeType) or (
         bodo.utils.utils.is_array_typ(arg, True)
-        and isinstance(arg.dtype, bodo.bodo.TimeType)
+        and isinstance(arg.dtype, bodo.bodo.types.TimeType)
     )
 
 

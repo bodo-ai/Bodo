@@ -73,7 +73,9 @@ def to_time_util(
                 "hr, mi, sc, ns = val.hour, val.minute, val.second, val.nanosecond\n"
             )
         scalar_text += "if succeeded:\n"
-        scalar_text += "   res[i] = bodo.Time(hr, mi, sc, nanosecond=ns, precision=9)\n"
+        scalar_text += (
+            "   res[i] = bodo.types.Time(hr, mi, sc, nanosecond=ns, precision=9)\n"
+        )
         scalar_text += "else:\n"
         if _try:
             scalar_text += "  bodo.libs.array_kernels.setna(res, i)"
@@ -81,15 +83,15 @@ def to_time_util(
             scalar_text += "  raise ValueError('Invalid time string')"
     elif is_valid_tz_naive_datetime_arg(arr) or is_valid_tz_aware_datetime_arg(arr):
         scalar_text = "ts = bodo.utils.conversion.box_if_dt64(arg0)\n"
-        scalar_text += "res[i] = bodo.Time(ts.hour, ts.minute, ts.second, microsecond=ts.microsecond, nanosecond=ts.nanosecond, precision=9)\n"
+        scalar_text += "res[i] = bodo.types.Time(ts.hour, ts.minute, ts.second, microsecond=ts.microsecond, nanosecond=ts.nanosecond, precision=9)\n"
     elif is_valid_timestamptz_arg(arr):
         scalar_text = "ts = arg0.local_timestamp()\n"
-        scalar_text += "res[i] = bodo.Time(ts.hour, ts.minute, ts.second, microsecond=ts.microsecond, nanosecond=ts.nanosecond, precision=9)\n"
+        scalar_text += "res[i] = bodo.types.Time(ts.hour, ts.minute, ts.second, microsecond=ts.microsecond, nanosecond=ts.nanosecond, precision=9)\n"
     else:
         raise_bodo_error(
             "TIME/TO_TIME/TRY_TO_TIME argument must be a string, timestamp, or null"
         )
-    out_dtype = bodo.TimeArrayType(9)
+    out_dtype = bodo.types.TimeArrayType(9)
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
@@ -147,8 +149,10 @@ def time_from_parts_util(hour, minute, second, nanosecond):  # pragma: no cover
     arg_names = ["hour", "minute", "second", "nanosecond"]
     arg_types = [hour, minute, second, nanosecond]
     propagate_null = [True] * 4
-    scalar_text = "res[i] = bodo.Time(arg0, arg1, arg2, nanosecond=arg3, precision=9)"
+    scalar_text = (
+        "res[i] = bodo.types.Time(arg0, arg1, arg2, nanosecond=arg3, precision=9)"
+    )
 
-    out_dtype = bodo.TimeArrayType(9)
+    out_dtype = bodo.types.TimeArrayType(9)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)

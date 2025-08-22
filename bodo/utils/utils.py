@@ -308,7 +308,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         (
             bodo.IntegerArrayType,
             bodo.FloatingArrayType,
-            bodo.TimeArrayType,
+            bodo.types.TimeArrayType,
             bodo.DecimalArrayType,
             bodo.DatetimeArrayType,
         ),

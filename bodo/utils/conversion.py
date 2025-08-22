@@ -171,7 +171,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
             elif data == bodo.hiframes.datetime_date_ext.datetime_date_type:
                 output = bodo.types.datetime_date_array_type
             elif isinstance(data, bodo.hiframes.time_ext.TimeType):
-                output = bodo.TimeArrayType(data.precision)
+                output = bodo.types.TimeArrayType(data.precision)
             elif data == bodo.timestamptz_type:
                 output = bodo.timestamptz_array_type
             # Timestamp values are stored as dt64 arrays
@@ -2360,7 +2360,7 @@ def overload_index_from_array(data, name=None):
                 types.Integer,
                 types.Float,
                 types.Boolean,
-                bodo.TimeType,
+                bodo.types.TimeType,
                 bodo.Decimal128Type,
             ),
         )

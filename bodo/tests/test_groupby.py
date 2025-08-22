@@ -7711,7 +7711,11 @@ def test_bit_agg(data, dtype, memory_leak_check):
         pd.Series([datetime.date(2022, 10, 10), datetime.date(2022, 11, 10)] * 6),
         # time (try in snowflake: select time_from_parts(12, 55, 55)::boolean)
         pd.Series(
-            [bodo.Time(12, 34, 56, precision=0), bodo.Time(12, 46, 56, precision=0)] * 6
+            [
+                bodo.types.Time(12, 34, 56, precision=0),
+                bodo.types.Time(12, 46, 56, precision=0),
+            ]
+            * 6
         ),
         # timestamp (try in snowflake: select timestamp_from_parts(2000, 1, 1, 1, 1, 1)::boolean)
         pd.Series([pd.Timestamp(2022, 10, 10), pd.Timestamp(2022, 11, 10)] * 6),

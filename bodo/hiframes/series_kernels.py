@@ -94,7 +94,7 @@ def _get_type_max_value_overload(dtype):
     if dtype == bodo.types.datetime_date_array_type:
         return lambda dtype: _get_date_max_value()  # pragma: no cover
 
-    # bodo.Time array
+    # bodo.types.Time array
     if dtype == TimeArrayType:
         return lambda dtype: _get_time_max_value()  # pragma: no cover
 
@@ -156,7 +156,7 @@ def _get_date_max_value():  # pragma: no cover
 
 @register_jitable
 def _get_time_max_value():  # pragma: no cover
-    return bodo.Time(23, 59, 59, 999, 999, 999)
+    return bodo.types.Time(23, 59, 59, 999, 999, 999)
 
 
 @register_jitable
@@ -186,7 +186,7 @@ def _get_type_min_value_overload(dtype):
     if dtype == bodo.types.datetime_date_array_type:
         return lambda dtype: _get_date_min_value()  # pragma: no cover
 
-    # bodo.Time array
+    # bodo.types.Time array
     if dtype == TimeArrayType:
         return lambda dtype: _get_time_min_value()  # pragma: no cover
 
@@ -251,7 +251,7 @@ def _get_date_min_value():  # pragma: no cover
 
 @register_jitable
 def _get_time_min_value():  # pragma: no cover
-    return bodo.Time()
+    return bodo.types.Time()
 
 
 @register_jitable

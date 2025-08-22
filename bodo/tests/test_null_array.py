@@ -171,8 +171,8 @@ def test_nullarray_cast():
         elif t == bodo.DatetimeArrayType:
             A = pd.array([pd.Timestamp("2000-01-01", tz="UTC")] * 5)
             py_output = pd.array([pd.NaT] * n, pd.DatetimeTZDtype(tz="UTC"))
-        elif t == bodo.TimeArrayType:
-            A = np.array([bodo.Time(12, 0, precision=6)] * n, object)
+        elif t == bodo.types.TimeArrayType:
+            A = np.array([bodo.types.Time(12, 0, precision=6)] * n, object)
         elif t == bodo.hiframes.timestamptz_ext.TimestampTZArrayType:
             A = np.array(
                 [bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100)] * n, object

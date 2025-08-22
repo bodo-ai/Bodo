@@ -2521,7 +2521,7 @@ class SeriesPass:
                     self,
                     extra_globals={"_tz": tz},
                 )
-            elif isinstance(typ, bodo.TimeArrayType):
+            elif isinstance(typ, bodo.types.TimeArrayType):
                 precision = typ.precision
                 return nodes + compile_func_single_block(
                     eval(

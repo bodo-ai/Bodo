@@ -738,14 +738,14 @@ def test_timestamp_tz_groupby(expanded_timestamp_tz_data, memory_leak_check):
             "TO_TIME(T)",
             pd.array(
                 [
-                    bodo.Time(12, 0, 0, 0, 0, 0),
+                    bodo.types.Time(12, 0, 0, 0, 0, 0),
                     None,
-                    bodo.Time(20, 30, 14, 250, 0, 0),
-                    bodo.Time(23, 59, 59, 999, 526, 500),
-                    bodo.Time(0, 0, 0, 0, 0, 0),
-                    bodo.Time(6, 45, 0, 0, 0, 0),
+                    bodo.types.Time(20, 30, 14, 250, 0, 0),
+                    bodo.types.Time(23, 59, 59, 999, 526, 500),
+                    bodo.types.Time(0, 0, 0, 0, 0, 0),
+                    bodo.types.Time(6, 45, 0, 0, 0, 0),
                     None,
-                    bodo.Time(12, 0, 0, 0, 0, 0),
+                    bodo.types.Time(12, 0, 0, 0, 0, 0),
                 ]
             ),
             id="tz_to_time",

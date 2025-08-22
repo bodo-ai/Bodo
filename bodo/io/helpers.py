@@ -481,7 +481,7 @@ def _numba_to_pyarrow_type(
         and numba_type.dtype in _numba_pyarrow_type_map
     ):
         dtype = _numba_pyarrow_type_map[numba_type.dtype]  # type: ignore
-    elif isinstance(numba_type, bodo.TimeArrayType):
+    elif isinstance(numba_type, bodo.types.TimeArrayType):
         if numba_type.precision == 0:
             dtype = pa.time32("s")
         elif numba_type.precision == 3:
@@ -598,11 +598,11 @@ def pyarrow_type_to_numba(arrow_type):
 
     if pa.types.is_time64(arrow_type):
         precision = 9 if arrow_type.unit == "ns" else 6
-        return bodo.TimeArrayType(precision)
+        return bodo.types.TimeArrayType(precision)
 
     if pa.types.is_time32(arrow_type):
         precision = 3 if arrow_type.unit == "ms" else 0
-        return bodo.TimeArrayType(precision)
+        return bodo.types.TimeArrayType(precision)
 
     if pa.types.is_duration(arrow_type):
         if arrow_type.unit == "ns":

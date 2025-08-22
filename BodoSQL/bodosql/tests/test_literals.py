@@ -193,7 +193,7 @@ def test_time_literal(basic_df, memory_leak_check):
         table1
     """
     py_output = pd.DataFrame(
-        {"A": basic_df["TABLE1"]["A"], "LIT": bodo.Time(10, 3, 56)}
+        {"A": basic_df["TABLE1"]["A"], "LIT": bodo.types.Time(10, 3, 56)}
     )
 
     check_query(

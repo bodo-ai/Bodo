@@ -260,11 +260,7 @@ from bodo.libs.distributed_api import (
     scatterv,
 )
 
-from bodo.hiframes.time_ext import (
-    TimeType,
-    TimeArrayType,
-    Time,
-)
+
 from bodo.hiframes.timestamptz_ext import (
     TimestampTZ,
     TimestampTZType,

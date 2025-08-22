@@ -20,7 +20,7 @@ Python types and Bodo data types.
 | `VARCHAR`, `CHAR`     | `str`                  | `bodo.types.string_type`                   |
 | `VARBINARY`, `BINARY` | `bytes`                | `bodo.types.bytes_type`                    |
 | `DATE`                | `datetime.date`        | `bodo.types.datetime_date_type`            |
-| `TIME`                | `bodo.Time`            | `bodo.TimeType`                      |
+| `TIME`                | `bodo.types.Time`            | `bodo.types.TimeType`                      |
 | `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(None)`     |
 | `TIMESTAMP_LTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(local_tz)` |
 | `TIMESTAMP_TZ`        | `bodo.TimestampTZ`     | `bodo.timestamptz_type`              |

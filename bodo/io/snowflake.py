@@ -263,7 +263,7 @@ def gen_snowflake_schema(
             sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
         elif col_type == bodo.types.datetime_date_array_type:
             sf_schema[col_name] = "DATE"
-        elif isinstance(col_type, bodo.TimeArrayType):
+        elif isinstance(col_type, bodo.types.TimeArrayType):
             # Note: The actual result may not match the precision
             # https://community.snowflake.com/s/article/Nano-second-precision-lost-after-Parquet-file-Unload
             if column_precisions is None:

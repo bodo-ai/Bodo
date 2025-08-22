@@ -2433,7 +2433,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     if (
         isinstance(
             col_array_dtype,
-            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.TimeArrayType),
+            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.types.TimeArrayType),
         )
         or col_array_dtype
         in (
@@ -2582,7 +2582,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
         col_dtype,
         (
             types.Number,
-            bodo.TimeType,
+            bodo.types.TimeType,
             bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
         ),
     ) or col_dtype in [
@@ -2833,7 +2833,7 @@ def _replace_column_accesses(
                     (
                         bodo.libs.int_arr_ext.IntegerArrayType,
                         bodo.FloatingArrayType,
-                        bodo.TimeArrayType,
+                        bodo.types.TimeArrayType,
                     ),
                 )
                 or array_typ
@@ -3436,7 +3436,7 @@ def _get_interval_join_info(
                 types.Integer,
                 types.Float,
                 PandasDatetimeTZDtype,
-                bodo.TimeType,
+                bodo.types.TimeType,
                 bodo.Decimal128Type,
             ),
         )
