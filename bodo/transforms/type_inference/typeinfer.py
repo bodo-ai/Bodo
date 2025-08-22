@@ -1,4 +1,3 @@
-import numba
 from numba.core.typing.templates import (
     AbstractTemplate,
     Registry,
@@ -51,5 +50,6 @@ class BodoRegistry(Registry):
         self.function_map["bodo.get_rank"] = func_type
 
 
-bodo_registry = BodoRegistry()
-numba.core.registry.cpu_target.typing_context.install_registry(bodo_registry)
+# TODO[BSE-5071]: Re-enable native typer when its coverage improved
+# bodo_registry = BodoRegistry()
+# numba.core.registry.cpu_target.typing_context.install_registry(bodo_registry)
