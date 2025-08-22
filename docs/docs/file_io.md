@@ -1276,10 +1276,10 @@ similar to [Numba's typing syntax](http://numba.pydata.org/numba-doc/latest/refe
 For example:
 
 ```py
-@bodo.jit(locals={"df":{"one": bodo.float64[:],
+@bodo.jit(locals={"df":{"one": bodo.types.float64[:],
                   "two": bodo.string_array_type,
-                  "three": bodo.bool_[:],
-                  "four": bodo.float64[:],
+                  "three": bodo.types.bool_[:],
+                  "four": bodo.types.float64[:],
                   "five": bodo.string_array_type,
                   }})
 def example_df_schema(fname1, fname2, flag):
@@ -1291,7 +1291,7 @@ def example_df_schema(fname1, fname2, flag):
     return df
 
 
- @bodo.jit(locals={"X": bodo.float64[:,:], "Y": bodo.float64[:]})
+ @bodo.jit(locals={"X": bodo.types.float64[:,:], "Y": bodo.types.float64[:]})
  def example_h5(fname1, fname2, flag):
     if flag:
         file_name = fname1

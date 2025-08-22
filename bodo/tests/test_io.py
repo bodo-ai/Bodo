@@ -2876,10 +2876,10 @@ def test_json_non_constant_filepath_error(datapath):
     @bodo.jit(
         locals={
             "df": {
-                "one": bodo.float64[:],
+                "one": bodo.types.float64[:],
                 "two": bodo.string_array_type,
                 "three": bodo.boolean_array_type,
-                "four": bodo.float64[:],
+                "four": bodo.types.float64[:],
                 "five": bodo.string_array_type,
             }
         }

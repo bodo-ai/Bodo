@@ -3815,7 +3815,7 @@ def months_between_util(dt0, dt1):
     scalar_text += "  months_frac_count = round((arg0.day - arg1.day)/31.0, 6)\n"
     scalar_text += "res[i] = months_int_count + months_frac_count\n"
 
-    out_dtype = bodo.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.FloatingArrayType(bodo.types.float64)
 
     return gen_vectorized(
         arg_names,

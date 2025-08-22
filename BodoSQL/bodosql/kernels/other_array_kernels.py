@@ -830,7 +830,7 @@ def regr_valx_util(y, x):
     propagate_null = [True] * 2
     scalar_text = "res[i] = arg1"
 
-    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -1115,7 +1115,7 @@ def uniform_util(lo, hi, gen):
         out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
     else:
         scalar_text += "res[i] = np.random.uniform(arg0, arg1)"
-        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
     return gen_vectorized(
         arg_names,

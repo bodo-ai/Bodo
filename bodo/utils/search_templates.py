@@ -38,7 +38,7 @@ from bodo.utils.typing import BodoError
 unsupported_overload_exception_msg = "not supported yet"
 
 # Define list of bodo types and how they relate to pandas
-int_arr_typ = bodo.IntegerArrayType(bodo.int64)
+int_arr_typ = bodo.IntegerArrayType(bodo.types.int64)
 
 series_types = [
     bodo.SeriesType(int_arr_typ),
@@ -52,7 +52,7 @@ series_types = [
 dataframe_types = [bodo.DataFrameType(data=(int_arr_typ,), columns=("A",))]
 
 index_types = [
-    bodo.NumericIndexType(bodo.int64),
+    bodo.NumericIndexType(bodo.types.int64),
     bodo.StringIndexType(),
     bodo.BinaryIndexType(),
 ]
@@ -68,7 +68,7 @@ bodo_pd_types_dict = {
         bodo.IntervalIndexType(bodo.IntervalArrayType(int_arr_typ)),
     ],
     "CategoricalIndex": [
-        bodo.CategoricalIndexType(bodo.CategoricalArrayType(bodo.int64)),
+        bodo.CategoricalIndexType(bodo.CategoricalArrayType(bodo.types.int64)),
     ],
     "MultiIndex": [MultiIndexType([int_arr_typ])],
     "DatetimeIndex": [

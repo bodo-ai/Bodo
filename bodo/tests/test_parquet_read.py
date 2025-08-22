@@ -1826,12 +1826,12 @@ def test_pq_non_constant_filepath_error(datapath):
     @bodo.jit(
         locals={
             "df": {
-                "one": bodo.float64[:],
+                "one": bodo.types.float64[:],
                 "two": bodo.string_array_type,
                 "three": bodo.boolean_array_type,
-                "four": bodo.float64[:],
+                "four": bodo.types.float64[:],
                 "five": bodo.string_array_type,
-                "__index_level_0__": bodo.int64[:],
+                "__index_level_0__": bodo.types.int64[:],
             }
         }
     )
@@ -1863,7 +1863,7 @@ def test_read_parquet_invalid_path():
         return df
 
     with pytest.raises(BodoError, match="error from pyarrow: FileNotFoundError"):
-        bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
+        bodo.jit(locals={"df": {"A": bodo.types.int64[:]}})(test_impl)()
 
 
 @pytest_mark_not_df_lib
@@ -1873,7 +1873,7 @@ def test_read_parquet_invalid_path_glob():
         return df
 
     with pytest.raises(BodoError, match="No files found matching glob pattern"):
-        bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
+        bodo.jit(locals={"df": {"A": bodo.types.int64[:]}})(test_impl)()
 
 
 @pytest_mark_not_df_lib
@@ -2674,12 +2674,12 @@ def test_pq_schema(datapath, memory_leak_check):
         distributed=False,
         locals={
             "df": {
-                "one": bodo.float64[:],
+                "one": bodo.types.float64[:],
                 "two": bodo.string_array_type,
-                "three": bodo.bool_[:],
-                "four": bodo.float64[:],
+                "three": bodo.types.bool_[:],
+                "four": bodo.types.float64[:],
                 "five": bodo.string_array_type,
-                "__index_level_0__": bodo.int64[:],
+                "__index_level_0__": bodo.types.int64[:],
             }
         },
     )(impl)

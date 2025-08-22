@@ -1455,7 +1455,7 @@ def test_dist_dict_getitem1(memory_leak_check):
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n)})
-    v = bodo.typed.Dict.empty(bodo.int64, bodo.typeof(df))
+    v = bodo.typed.Dict.empty(bodo.types.int64, bodo.typeof(df))
     v[0] = df
     v[1] = df
     bodo.jit(distributed_block={"v", "df"})(impl1)(v)
@@ -1470,7 +1470,7 @@ def test_dist_dict_setitem1(memory_leak_check):
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n)})
-    v = bodo.typed.Dict.empty(bodo.int64, bodo.typeof(df))
+    v = bodo.typed.Dict.empty(bodo.types.int64, bodo.typeof(df))
     v[0] = df
     v[1] = df
     bodo.jit(distributed_block={"v", "df"})(impl1)(v, df)
@@ -3105,7 +3105,7 @@ def test_dist_scalar_struct_to_arr(memory_leak_check):
 
     global_1 = bodo.StructArrayType(
         (
-            bodo.IntegerArrayType(bodo.int64),
+            bodo.IntegerArrayType(bodo.types.int64),
             bodo.bodo.IntegerArrayType(bodo.types.int32),
         ),
         ("A", "B"),
@@ -3129,7 +3129,8 @@ def test_dist_scalar_map_to_arr(memory_leak_check):
     """Make sure coerce_scalar_to_array for map array works for distributed output"""
 
     global_1 = bodo.MapArrayType(
-        bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.types.int32)
+        bodo.IntegerArrayType(bodo.types.int64),
+        bodo.bodo.IntegerArrayType(bodo.types.int32),
     )
 
     def impl(a, n):
@@ -3233,7 +3234,9 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
 @pytest.mark.parametrize(
     "dtype",
     [
-        bodo.MapArrayType(bodo.dict_str_arr_type, bodo.FloatingArrayType(bodo.float32)),
+        bodo.MapArrayType(
+            bodo.dict_str_arr_type, bodo.FloatingArrayType(bodo.types.float32)
+        ),
         bodo.StructArrayType(
             (
                 bodo.ArrayItemArrayType(bodo.dict_str_arr_type),

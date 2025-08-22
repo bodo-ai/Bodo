@@ -266,7 +266,7 @@ def test_array_sum_axis(memory_leak_check):
 @pytest.mark.skip(reason="TODO: replace since to_numeric() doesn't need locals anymore")
 def test_inline_locals(memory_leak_check):
     # make sure locals in inlined function works
-    @bodo.jit(locals={"B": bodo.float64[:]})
+    @bodo.jit(locals={"B": bodo.types.float64[:]})
     def g(S):
         B = pd.to_numeric(S, errors="coerce")
         return B
@@ -1018,7 +1018,7 @@ def test_objmode_types():
     """
 
     def impl(A):
-        with numba.objmode(B=bodo.int64[::1]):
+        with numba.objmode(B=bodo.types.int64[::1]):
             B = 2 * A
         return B
 
@@ -1026,7 +1026,7 @@ def test_objmode_types():
     def impl2():
         with numba.objmode(
             df=bodo.DataFrameType(
-                (bodo.float64[::1], bodo.string_array_type),
+                (bodo.types.float64[::1], bodo.string_array_type),
                 bodo.RangeIndexType(bodo.none),
                 ("A", "B"),
             )
@@ -1125,7 +1125,7 @@ def test_jitclass(memory_leak_check):
     @bodo.jitclass(
         {
             "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
-                (bodo.int64[::1], bodo.float64[::1]),
+                (bodo.types.int64[::1], bodo.types.float64[::1]),
                 bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
                 ("A", "B"),
             )
@@ -1169,7 +1169,7 @@ def test_jitclass(memory_leak_check):
     @bodo.jitclass(
         {
             "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
-                (bodo.float64[::1],),
+                (bodo.types.float64[::1],),
                 bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
                 ("A",),
             )
@@ -1186,7 +1186,7 @@ def test_jitclass(memory_leak_check):
     @bodo.jitclass(
         {
             "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
-                (bodo.float64[::1],),
+                (bodo.types.float64[::1],),
                 bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
                 ("A",),
             )

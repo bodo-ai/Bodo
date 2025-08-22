@@ -719,26 +719,26 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
     [
         pytest.param(
             "return 255",
-            IntegerArrayType(bodo.uint8),
+            IntegerArrayType(bodo.types.uint8),
             255,
             id="uint8",
         ),
         pytest.param(
             "return 2 ** 16 - 1",
-            IntegerArrayType(bodo.uint16),
+            IntegerArrayType(bodo.types.uint16),
             2**16 - 1,
             id="uint16",
         ),
         pytest.param(
             "return 2 ** 32 -1",
-            IntegerArrayType(bodo.uint32),
+            IntegerArrayType(bodo.types.uint32),
             2**32 - 1,
             id="uint32",
         ),
         # This is bigint syntax in javascript, all numerics are double by default which can't represent this value
         pytest.param(
             "return 2n ** 64n - 1n",
-            IntegerArrayType(bodo.uint64),
+            IntegerArrayType(bodo.types.uint64),
             2**64 - 1,
             id="uint64",
         ),
@@ -763,20 +763,20 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
         # This is bigint syntax in javascript, all numerics are double by default which can't represent this value
         pytest.param(
             "return 2n ** 64n  / 2n - 1n",
-            IntegerArrayType(bodo.int64),
+            IntegerArrayType(bodo.types.int64),
             2**64 / 2 - 1,
             id="int64",
         ),
         pytest.param(
             "return 2 + 1.1",
-            IntegerArrayType(bodo.float32),
+            IntegerArrayType(bodo.types.float32),
             3.1,
             id="float32",
         ),
         pytest.param(
             # Bigger than a float32 can represent
             "return 4 * 10**40",
-            IntegerArrayType(bodo.float64),
+            IntegerArrayType(bodo.types.float64),
             float(4 * 10**40),
             id="float64",
         ),

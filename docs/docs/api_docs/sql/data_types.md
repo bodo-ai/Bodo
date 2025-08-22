@@ -10,13 +10,13 @@ Python types and Bodo data types.
 
 | SQL Type(s)           | Equivalent Python Type | Bodo Data Type                       |
 |-----------------------|------------------------|--------------------------------------|
-| `BOOLEAN`             | `np.bool_`             | `bodo.bool_`                         |
+| `BOOLEAN`             | `np.bool_`             | `bodo.types.bool_`                         |
 | `TINYINT`             | `np.int8`              | `bodo.types.int8`                          |
 | `SMALLINT`            | `np.int16`             | `bodo.types.int16`                         |
 | `INT`                 | `np.int32`             | `bodo.types.int32`                         |
-| `BIGINT`              | `np.int64`             | `bodo.int64`                         |
-| `FLOAT`               | `np.float32`           | `bodo.float32`                       |
-| `DOUBLE`              | `np.float64`           | `bodo.float64`                       |
+| `BIGINT`              | `np.int64`             | `bodo.types.int64`                         |
+| `FLOAT`               | `np.float32`           | `bodo.types.float32`                       |
+| `DOUBLE`              | `np.float64`           | `bodo.types.float64`                       |
 | `VARCHAR`, `CHAR`     | `str`                  | `bodo.string_type`                   |
 | `VARBINARY`, `BINARY` | `bytes`                | `bodo.bytes_type`                    |
 | `DATE`                | `datetime.date`        | `bodo.datetime_date_type`            |

@@ -16,7 +16,7 @@ across all arrays.
     "lst, arr_type",
     [
         ([1, 2, 3, 5] * 3, bodo.IntegerArrayType(bodo.types.int32)),
-        ([1.1, 1.2, 3.1, 4.5] * 3, bodo.FloatingArrayType(bodo.float64)),
+        ([1.1, 1.2, 3.1, 4.5] * 3, bodo.FloatingArrayType(bodo.types.float64)),
         (["a", "b", "a", "b", "c"] * 3, bodo.string_array_type),
         (["a", "b", "a", "b", "c"] * 3, bodo.dict_str_arr_type),
     ],

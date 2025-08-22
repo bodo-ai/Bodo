@@ -3214,7 +3214,7 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
 
     for k, v in kwargs.items():
         # Bodo change: use get_const_value_inner to find constant type value to support
-        # more complex cases like bodo.int64[::1]
+        # more complex cases like bodo.types.int64[::1]
         v_const = None
         try:
             # create a dummy var to pass to get_const_value_inner since v is an IR node
@@ -3229,7 +3229,7 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
                 raise BodoError(
                     (
                         f"objmode type annotations require full data types, not just data type "
-                        f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
+                        f"classes. For example, 'bodo.DataFrameType((bodo.types.float64[::1],), "
                         f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
                         f"Variable {k} is annotated as type class {v_const}."
                     )

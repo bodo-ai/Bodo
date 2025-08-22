@@ -285,7 +285,7 @@ def windowed_sum(S, lower_bound, upper_bound):
             out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
             propagate_nan = False
         else:
-            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
             propagate_nan = True
 
         constant_block = "constant_value = S.sum()"
@@ -409,7 +409,7 @@ def overload_windowed_count_star(n, lower_bound, upper_bound):
     # look at a specific column. In contrast to most of the window
     # functions, this one just takes the length of the input.
     def impl(n, lower_bound, upper_bound):  # pragma: no cover
-        result = bodo.libs.int_arr_ext.alloc_int_array(n, bodo.uint32)
+        result = bodo.libs.int_arr_ext.alloc_int_array(n, bodo.types.uint32)
         if upper_bound < lower_bound:
             result[:] = np.uint32(0)
             return result
@@ -488,7 +488,7 @@ def windowed_avg(S, lower_bound, upper_bound):
 
     exit_block = "total -= elem0"
 
-    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
     return gen_windowed(
         calculate_block,
@@ -555,7 +555,7 @@ def make_windowed_variance_stddev_function(name, method, ddof):
         calculate_block += "else:\n"
         calculate_block += f"   res[i] = {calculation}"
 
-        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
         return gen_windowed(
             calculate_block,
@@ -853,7 +853,7 @@ def windowed_corr(Y, X, lower_bound, upper_bound):
     exit_block += "e1_x -= elem1 - k_x\n"
     exit_block += "e2_x -= (elem1 - k_x) ** 2\n"
 
-    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
     return gen_windowed(
         calculate_block,
@@ -1095,7 +1095,7 @@ def windowed_skew(S, lower_bound, upper_bound):  # pragma: no cover
 
 overload(windowed_skew)(
     make_slice_window_agg(
-        out_dtype_fn=lambda _: bodo.float64,
+        out_dtype_fn=lambda _: bodo.types.float64,
         agg_func=lambda S: f"{S}.skew()",
         min_elements=3,
     )
@@ -1108,7 +1108,7 @@ def windowed_kurtosis(S, lower_bound, upper_bound):  # pragma: no cover
 
 overload(windowed_kurtosis)(
     make_slice_window_agg(
-        out_dtype_fn=lambda _: bodo.float64,
+        out_dtype_fn=lambda _: bodo.types.float64,
         agg_func=lambda S: f"{S}.kurtosis()",
         min_elements=4,
     )

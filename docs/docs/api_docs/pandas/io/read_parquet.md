@@ -16,7 +16,7 @@
     
     For example:
     ```py
-    @bodo.jit(locals={'df':{'A': bodo.float64[:],
+    @bodo.jit(locals={'df':{'A': bodo.types.float64[:],
                             'B': bodo.string_array_type}})
     def impl(f):
       df = pd.read_parquet(f)

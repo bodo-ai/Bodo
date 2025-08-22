@@ -1036,8 +1036,8 @@ def test_snowflake_runtime_downcasting_decimal(mocker: "MockerFixture"):
         return_value=(
             bodo.DataFrameType(
                 data=(
-                    types.Array(bodo.float64, 1, "C"),
-                    types.Array(bodo.float64, 1, "C"),
+                    types.Array(bodo.types.float64, 1, "C"),
+                    types.Array(bodo.types.float64, 1, "C"),
                 ),
                 columns=("h", "i"),
             ),

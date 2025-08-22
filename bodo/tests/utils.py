@@ -1624,9 +1624,9 @@ def _typeof(val):
             (isinstance(a, float) and np.isnan(a)) or isinstance(a, int) for a in val
         )
     ):
-        return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
+        return bodo.libs.int_arr_ext.IntegerArrayType(bodo.types.int64)
     elif isinstance(val, pd.arrays.FloatingArray):
-        return bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+        return bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
     # TODO: add handling of Series with Float64 values here
     elif isinstance(val, pd.DataFrame) and any(
         isinstance(val.iloc[:, i].dtype, pd.core.arrays.floating.FloatingDtype)

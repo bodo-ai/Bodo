@@ -558,7 +558,7 @@ def _check_return_type(return_type):
     if isinstance(return_type, types.abstract._TypeMetaclass):
         raise BodoError(
             f"wrap_python requires full data types, not just data type "
-            f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
+            f"classes. For example, 'bodo.DataFrameType((bodo.types.float64[::1],), "
             f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
             f"Return type is type class {return_type}."
         )

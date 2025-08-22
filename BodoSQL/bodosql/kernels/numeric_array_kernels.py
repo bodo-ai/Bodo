@@ -184,7 +184,7 @@ def _get_numeric_output_dtype(func_name, arr0, arr1=None):
     arr0_dtype = arr0.dtype if is_array_typ(arr0) else arr0
     arr1_dtype = arr1.dtype if is_array_typ(arr1) else arr1
     # default to float64 without further information
-    out_dtype = bodo.float64
+    out_dtype = bodo.types.float64
     if (arr0 is None or arr0_dtype == bodo.none) or (
         func_name in double_arg_funcs and (arr1 is None or arr1_dtype == bodo.none)
     ):
@@ -220,7 +220,7 @@ def _get_numeric_output_dtype(func_name, arr0, arr1=None):
     elif func_name == "FACTORIAL":
         # the output of factorial is always a 64-bit integer
         # TODO: support 128-bit to match Snowflake
-        out_dtype = bodo.int64
+        out_dtype = bodo.types.int64
 
     if isinstance(out_dtype, types.Integer):
         return bodo.libs.int_arr_ext.IntegerArrayType(out_dtype)
@@ -1498,7 +1498,7 @@ def haversine_util(lat1, lon1, lat2, lon2):
     # r = 6731 is used for the radius of Earth (2r below)
     scalar_text += f"res[i] = 12742.0 * np.arcsin(np.sqrt({h}))\n"
 
-    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -1516,7 +1516,7 @@ def div0_util(arr, divisor):
     propagate_null = [True] * 2
     scalar_text = "res[i] = arg0 / arg1 if arg1 else 0\n"
 
-    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -1592,7 +1592,7 @@ def log_util(arr, base):
     propagate_null = [True] * 2
     scalar_text = "res[i] = np.log(arg0) / np.log(arg1)"
 
-    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -1829,7 +1829,7 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
                         else:
                             # If arr0 is signed and arr1 is unsigned, our output may be signed
                             # and may must support a bitwidth of double arr1.
-                            # e.g. say dtype1 = bodo.int64, dtype2 = bodo.uint16,
+                            # e.g. say dtype1 = bodo.types.int64, dtype2 = bodo.types.uint16,
                             # we know 0 <= arr1 <= 2^(15) - 1, however the output is based off
                             # the  sign of arr0 and thus we need to support signed ints
                             # of _double_ the bitwidth, -2^(15) <= arr <= 2^(15) - 1, so

@@ -28,11 +28,12 @@ public class BodoArrayHelpers {
       case SMALLINT:
       case INTEGER:
       case BIGINT:
-        return String.format("bodo.libs.int_arr_ext.alloc_int_array(%s, bodo.int64)", len);
+        return String.format("bodo.libs.int_arr_ext.alloc_int_array(%s, bodo.types.int64)", len);
       case FLOAT:
       case DOUBLE:
       case DECIMAL:
-        return String.format("bodo.libs.float_arr_ext.alloc_float_array(%s, bodo.float64)", len);
+        return String.format(
+            "bodo.libs.float_arr_ext.alloc_float_array(%s, bodo.types.float64)", len);
       case DATE:
         return String.format("bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(%s)", len);
       case TIMESTAMP:
@@ -140,24 +141,24 @@ public class BodoArrayHelpers {
       case BIGINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.int64)";
+          typeName = "bodo.IntegerArrayType(bodo.types.int64)";
         } else {
-          typeName = "numba.core.types.Array(bodo.int64, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.int64, 1, 'C')";
         }
         break;
       case FLOAT:
         if (nullable) {
-          typeName = "bodo.FloatingArrayType(bodo.float32)";
+          typeName = "bodo.FloatingArrayType(bodo.types.float32)";
         } else {
-          typeName = "numba.core.types.Array(bodo.float32, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.float32, 1, 'C')";
         }
         break;
       case DOUBLE:
       case DECIMAL:
         if (nullable) {
-          typeName = "bodo.FloatingArrayType(bodo.float64)";
+          typeName = "bodo.FloatingArrayType(bodo.types.float64)";
         } else {
-          typeName = "numba.core.types.Array(bodo.float64, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.float64, 1, 'C')";
         }
         break;
       case DATE:

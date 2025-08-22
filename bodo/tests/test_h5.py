@@ -139,10 +139,10 @@ def test_h5_file_keys(datapath, memory_leak_check):
         f.close()
         return s
 
-    bodo_func = bodo.jit(test_impl, h5_types={"X": bodo.int64[:]})
+    bodo_func = bodo.jit(test_impl, h5_types={"X": bodo.types.int64[:]})
     assert bodo_func() == test_impl()
     # test using locals for typing
-    bodo_func = bodo.jit(test_impl, locals={"X": bodo.int64[:]})
+    bodo_func = bodo.jit(test_impl, locals={"X": bodo.types.int64[:]})
     assert bodo_func() == test_impl()
 
 
@@ -159,7 +159,7 @@ def test_h5_group_keys(datapath, memory_leak_check):
         f.close()
         return s
 
-    bodo_func = bodo.jit(test_impl, h5_types={"X": bodo.int64[:]})
+    bodo_func = bodo.jit(test_impl, h5_types={"X": bodo.types.int64[:]})
     assert bodo_func() == test_impl()
 
 

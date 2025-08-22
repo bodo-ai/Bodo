@@ -2475,7 +2475,7 @@ def gen_objmode_attr_overload(
 @infer
 class NumTypeStaticGetItem(AbstractTemplate):
     """typer for getitem on number types in JIT code
-    e.g. bodo.int64[::1] -> array(int64, 1, "C")
+    e.g. bodo.types.int64[::1] -> array(int64, 1, "C")
     """
 
     key = "static_getitem"
