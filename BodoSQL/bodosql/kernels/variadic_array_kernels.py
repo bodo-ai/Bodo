@@ -79,7 +79,7 @@ def overload_object_construct_keep_null(values, names, scalars):
         is_optional = False
         if scalars[i]:
             # Represent null as a dummy type in the struct
-            if arr_typ == bodo.none:
+            if arr_typ == bodo.types.none:
                 arr_typ = bodo.null_array_type
             if isinstance(arr_typ, types.optional):
                 arr_typ = arr_typ.type
@@ -109,7 +109,7 @@ def overload_object_construct_keep_null(values, names, scalars):
     )
     nulls = []
     for i in range(len(values)):
-        if values[i] == bodo.none:
+        if values[i] == bodo.types.none:
             nulls.append("True")
         elif are_arrays[i]:
             nulls.append(f"bodo.libs.array_kernels.isna(v{i}, i)")
@@ -169,7 +169,7 @@ def overload_object_construct(values, names, scalars):
         is_optional = False
         if scalars[i]:
             # Represent null as a dummy type in the struct
-            if arr_typ == bodo.none:
+            if arr_typ == bodo.types.none:
                 arr_typ = bodo.null_array_type
             if isinstance(arr_typ, types.optional):
                 arr_typ = arr_typ.type
@@ -201,7 +201,7 @@ def overload_object_construct(values, names, scalars):
     # if that particular key-value pair should be kept or dropped.
     nulls = []
     for i in range(len(values)):
-        if values[i] == bodo.none:
+        if values[i] == bodo.types.none:
             nulls.append("True")
         elif are_arrays[i]:
             nulls.append(f"bodo.libs.array_kernels.isna(v{i}, i)")
@@ -411,7 +411,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
     dead_cols = []
     has_array_output = False
     for i in range(len(A)):
-        if A[i] == bodo.none:
+        if A[i] == bodo.types.none:
             dead_cols.append(i)
         elif not bodo.utils.utils.is_array_typ(A[i]):
             for j in range(i + 1, len(A)):
@@ -697,7 +697,7 @@ def decode_util(A, dict_encoding_state, func_id):
         cond = "if" if len(scalar_text) == 0 else "elif"
 
         # The code that is outputted inside of a conditional once a match is found:
-        if A[i + 1] == bodo.none:
+        if A[i + 1] == bodo.types.none:
             match_code = "   bodo.libs.array_kernels.setna(res, i)\n"
         elif bodo.utils.utils.is_array_typ(A[i + 1]):
             match_code = f"   if bodo.libs.array_kernels.isna({arg_names[i + 1]}, i):\n"
@@ -709,10 +709,10 @@ def decode_util(A, dict_encoding_state, func_id):
 
         # Match if the first column is a SCALAR null and this column is a scalar null or
         # a column with a null in it
-        if A[0] == bodo.none and (
-            bodo.utils.utils.is_array_typ(A[i]) or A[i] == bodo.none
+        if A[0] == bodo.types.none and (
+            bodo.utils.utils.is_array_typ(A[i]) or A[i] == bodo.types.none
         ):
-            if A[i] == bodo.none:
+            if A[i] == bodo.types.none:
                 scalar_text += f"{cond} True:\n"
                 scalar_text += match_code
                 break
@@ -723,7 +723,7 @@ def decode_util(A, dict_encoding_state, func_id):
                 scalar_text += match_code
 
         # Otherwise, if the first column is a NULL, skip this column
-        elif A[0] == bodo.none:
+        elif A[0] == bodo.types.none:
             pass
 
         elif bodo.utils.utils.is_array_typ(A[0]):
@@ -735,7 +735,7 @@ def decode_util(A, dict_encoding_state, func_id):
 
             # If A[0] is an array, A[i] is null, and A[0] is null in the
             # current row, then A[i+1] is the answer
-            elif A[i] == bodo.none:
+            elif A[i] == bodo.types.none:
                 scalar_text += (
                     f"{cond} bodo.libs.array_kernels.isna({arg_names[0]}, i):\n"
                 )
@@ -748,7 +748,7 @@ def decode_util(A, dict_encoding_state, func_id):
                 scalar_text += match_code
 
         # If A[0] is a scalar and A[i] is NULL, skip this pair
-        elif A[i] == bodo.none:
+        elif A[i] == bodo.types.none:
             pass
 
         # If A[0] is a scalar and A[i] is an array, and the current row of
@@ -766,7 +766,7 @@ def decode_util(A, dict_encoding_state, func_id):
     # else matched, otherwise set to null
     if len(scalar_text) > 0:
         scalar_text += "else:\n"
-    if len(A) % 2 == 0 and A[-1] != bodo.none:
+    if len(A) % 2 == 0 and A[-1] != bodo.types.none:
         if bodo.utils.utils.is_array_typ(A[-1]):
             scalar_text += f"   if bodo.libs.array_kernels.isna({arg_names[-1]}, i):\n"
             scalar_text += "      bodo.libs.array_kernels.setna(res, i)\n"
@@ -794,7 +794,7 @@ def decode_util(A, dict_encoding_state, func_id):
     out_dtype = get_common_broadcasted_type(output_types, "DECODE")
 
     # If all of the outputs are NULLs, just use the same array type as the input
-    if out_dtype == bodo.none:
+    if out_dtype == bodo.types.none:
         out_dtype = in_dtype
 
     # Only allow the output to be dictionary encoded if the first argument is
@@ -885,7 +885,7 @@ def overload_object_filter_keys_util(A, keep_keys, scalars):
     json_data = A[0]
 
     # If the input is null, just return it.
-    if json_data == bodo.none or json_data == bodo.null_array_type:
+    if json_data == bodo.types.none or json_data == bodo.null_array_type:
         return lambda A, keep_keys, scalars: A[0]  # pragma: no cover
 
     json_type = json_data
@@ -1460,7 +1460,7 @@ def overload_array_construct(A, scalar_tup):
     # [BSE-1831] TODO: see if we can optimize ARRAY_CONSTRUCT for dictionary encoding
     if inner_arr_type == bodo.dict_str_arr_type:
         inner_arr_type = bodo.string_array_type
-    if inner_arr_type == bodo.none:
+    if inner_arr_type == bodo.types.none:
         inner_arr_type = bodo.null_array_type
     out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
 
@@ -1487,7 +1487,7 @@ def overload_array_construct(A, scalar_tup):
             scalar_text += f"   bodo.libs.array_kernels.setna(inner_arr, {i})\n"
             scalar_text += "else:\n"
             scalar_text += f"   inner_arr[{i}] = arg{i}\n"
-        elif typ == bodo.none:
+        elif typ == bodo.types.none:
             scalar_text += f"bodo.libs.array_kernels.setna(inner_arr, {i})\n"
         elif optionals[i]:
             scalar_text += f"if arg{i} is None:\n"

@@ -30,9 +30,9 @@ def overload_sql_null_equal_column(arg0, arg1):
         )
     # 1 column and 1 scalar
     elif isinstance(arg0, bodo.SeriesType):
-        if arg1 == bodo.none:
+        if arg1 == bodo.types.none:
             return lambda arg0, arg1: arg0.isna()
-        elif isinstance(arg1, bodo.optional):
+        elif isinstance(arg1, bodo.types.optional):
 
             def impl(arg0, arg1):
                 # Note: This is check is separate to avoid optional type issues
@@ -67,9 +67,9 @@ def sql_null_equal_scalar_impl(arg0, arg1):
     check NA at runtime.
     """
 
-    if arg0 == bodo.none and arg1 == bodo.none:
+    if arg0 == bodo.types.none and arg1 == bodo.types.none:
         return lambda arg0, arg1: True
-    elif isinstance(arg0, bodo.optional) or isinstance(arg1, bodo.optional):
+    elif isinstance(arg0, bodo.types.optional) or isinstance(arg1, bodo.types.optional):
 
         def impl(arg0, arg1):
             if arg0 is not None:

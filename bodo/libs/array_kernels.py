@@ -4688,8 +4688,10 @@ def np_nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
     finfo = np.core.getlimits.finfo(dtype)
     largest_float = finfo.max
     smallest_float = finfo.min
-    pos_val = largest_float if posinf == bodo.none or posinf is None else "posinf"
-    neg_val = smallest_float if neginf == bodo.none or neginf is None else "neginf"
+    pos_val = largest_float if posinf == bodo.types.none or posinf is None else "posinf"
+    neg_val = (
+        smallest_float if neginf == bodo.types.none or neginf is None else "neginf"
+    )
     calculation_text = f"scalar_nan_to_num({{}}, nan, {pos_val}, {neg_val})"
 
     func_text = "def impl(x, copy=True, nan=0.0, posinf=None, neginf=None):\n"

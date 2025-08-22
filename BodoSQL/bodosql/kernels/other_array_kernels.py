@@ -238,7 +238,7 @@ def booland_util(A, B):
     propagate_null = [False] * 2
 
     # A = scalar null, B = anything
-    if A == bodo.none:
+    if A == bodo.types.none:
         propagate_null = [False, True]
         scalar_text = "if arg1 != 0:\n"
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
@@ -246,7 +246,7 @@ def booland_util(A, B):
         scalar_text += "   res[i] = False\n"
 
     # B = scalar null, A = anything
-    elif B == bodo.none:
+    elif B == bodo.types.none:
         propagate_null = [True, False]
         scalar_text = "if arg0 != 0:\n"
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
@@ -313,7 +313,7 @@ def boolor_util(A, B):
     propagate_null = [False] * 2
 
     # A = scalar null, B = anything
-    if A == bodo.none:
+    if A == bodo.types.none:
         propagate_null = [False, True]
         scalar_text = "if arg1 == 0:\n"
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
@@ -321,7 +321,7 @@ def boolor_util(A, B):
         scalar_text += "   res[i] = True\n"
 
     # B = scalar null, A = anything
-    elif B == bodo.none:
+    elif B == bodo.types.none:
         propagate_null = [True, False]
         scalar_text = "if arg0 == 0:\n"
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
@@ -517,8 +517,8 @@ def overload_cond_util(arr, ifbranch, elsebranch):
     # TODO: Replace with null array for robustness.
     if (
         bodo.utils.utils.is_array_typ(arr, True)
-        and ifbranch == bodo.none
-        and elsebranch == bodo.none
+        and ifbranch == bodo.types.none
+        and elsebranch == bodo.types.none
     ):
         raise_bodo_error("Both branches of IF() cannot be scalar NULL")
 
@@ -529,13 +529,13 @@ def overload_cond_util(arr, ifbranch, elsebranch):
     if bodo.utils.utils.is_array_typ(arr, True):
         scalar_text = "if (not bodo.libs.array_kernels.isna(arr, i)) and arg0:\n"
     # If the conditional is a non-null scalar, case on its truthiness
-    elif arr != bodo.none:
+    elif arr != bodo.types.none:
         scalar_text = "if arg0:\n"
     # Skip the ifbranch if the conditional is a scalar None (since we know that
     # the condition is always false)
     else:
         scalar_text = ""
-    if arr != bodo.none:
+    if arr != bodo.types.none:
         # If the ifbranch is an array, add a null check
         if bodo.utils.utils.is_array_typ(ifbranch, True):
             scalar_text += "   if bodo.libs.array_kernels.isna(ifbranch, i):\n"
@@ -543,7 +543,7 @@ def overload_cond_util(arr, ifbranch, elsebranch):
             scalar_text += "   else:\n"
             scalar_text += "      res[i] = arg1\n"
         # If the ifbranch is a scalar null, just set to null
-        elif ifbranch == bodo.none:
+        elif ifbranch == bodo.types.none:
             scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
         # If the ifbranch is a non-null scalar, then no null check is required
         else:
@@ -556,7 +556,7 @@ def overload_cond_util(arr, ifbranch, elsebranch):
         scalar_text += "   else:\n"
         scalar_text += "      res[i] = arg2\n"
     # If the elsebranch is a scalar null, just set to null
-    elif elsebranch == bodo.none:
+    elif elsebranch == bodo.types.none:
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
     # If the elsebranch is a non-null scalar, then no null check is required
     else:
@@ -599,8 +599,8 @@ def nvl2_util(arr, not_null_branch, null_branch):
         # (causes a typing ambiguity)
         if (
             bodo.utils.utils.is_array_typ(arr, True)
-            and not_null_branch == bodo.none
-            and null_branch == bodo.none
+            and not_null_branch == bodo.types.none
+            and null_branch == bodo.types.none
         ):  # pragma: no cover
             raise_bodo_error("Both branches of NVL2() cannot be scalar NULL")
 
@@ -610,7 +610,7 @@ def nvl2_util(arr, not_null_branch, null_branch):
             scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
             scalar_text += "  else:\n"
             scalar_text += "    res[i] = arg1\n"
-        elif not_null_branch == bodo.none:
+        elif not_null_branch == bodo.types.none:
             scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
         else:
             scalar_text += "    res[i] = arg1\n"
@@ -620,14 +620,14 @@ def nvl2_util(arr, not_null_branch, null_branch):
             scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
             scalar_text += "  else:\n"
             scalar_text += "    res[i] = arg2\n"
-        elif null_branch == bodo.none:
+        elif null_branch == bodo.types.none:
             scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
         else:
             scalar_text += "    res[i] = arg2\n"
     else:
         # If the first argument is a scalar, either always return
         # the second argument or always return the third argument.
-        if arr == bodo.none:
+        if arr == bodo.types.none:
             scalar_text = "res[i] = arg2"
         else:
             scalar_text = "res[i] = arg1"
@@ -685,9 +685,9 @@ def equal_null_util(A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id
         [dtype_a, dtype_b], allow_downcast=True
     )
 
-    if A == bodo.none:
+    if A == bodo.types.none:
         # A = scalar null, B = scalar null
-        if B == bodo.none:
+        if B == bodo.types.none:
             scalar_text = "res[i] = True"
 
         # A = scalar null, B is a vector
@@ -698,7 +698,7 @@ def equal_null_util(A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id
         else:
             scalar_text = "res[i] = False"
 
-    elif B == bodo.none:
+    elif B == bodo.types.none:
         # A is a vector, B = null
         if are_arrays[0]:
             scalar_text = "res[i] = bodo.libs.array_kernels.isna(A, i)"
@@ -769,7 +769,7 @@ def nullif_util(arr0, arr1, dict_encoding_state, func_id):
     propagate_null = [True, False, False, False]
     # NA check needs to come first here, otherwise the equality check misbehaves
 
-    if arr1 == bodo.none:
+    if arr1 == bodo.types.none:
         scalar_text = "res[i] = arg0\n"
     elif bodo.utils.utils.is_array_typ(arr1, True):
         scalar_text = "if bodo.libs.array_kernels.isna(arr1, i) or arg0 != arg1:\n"
@@ -1038,7 +1038,7 @@ def random_seedless(A):
         length matches the input. The values are random 64 bit integers.
 
     """
-    if A == bodo.none:
+    if A == bodo.types.none:
 
         def impl(A):  # pragma: no cover
             return np.int64(gen_random_int64())

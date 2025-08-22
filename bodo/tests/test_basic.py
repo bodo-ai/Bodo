@@ -1027,7 +1027,7 @@ def test_objmode_types():
         with numba.objmode(
             df=bodo.DataFrameType(
                 (bodo.types.float64[::1], bodo.string_array_type),
-                bodo.RangeIndexType(bodo.none),
+                bodo.RangeIndexType(bodo.types.none),
                 ("A", "B"),
             )
         ):

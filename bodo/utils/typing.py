@@ -1719,7 +1719,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         dtype = dtype_to_array_type(dtype.dtype, convert_nullable)
 
     # null array
-    if dtype == bodo.null_dtype or dtype == bodo.none:
+    if dtype == bodo.null_dtype or dtype == bodo.types.none:
         return bodo.null_array_type
 
     # string array

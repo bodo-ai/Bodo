@@ -62,7 +62,7 @@ desired Python, Numpy, or Pandas type.
 | `bodo.BinaryIndexType(name_type)`| Index of binary values with a given name type. <br> *e.g.*, `bodo.BinaryIndexType(bodo.string_type)`|
 | `bodo.TimedeltaIndexType(name_type)`| Index of timedelta64 values with a given name type.<br> *e.g.*, `bodo.TimedeltaIndexType(bodo.string_type)`|
 | `bodo.SeriesType(dtype=data_type, index=index_type, name_typ=name_type)`| Series with a given data type, index type, and name type. <br> *e.g.*, `bodo.SeriesType(bodo.types.float32, bodo.DatetimeIndexType(bodo.string_type), bodo.string_type)`|
-| `bodo.DataFrameType(data_types_tuple, index_type, column_names)`| DataFrame with a tuple of data types, an index type, and the names of the columns. <br> *e.g.*, `bodo.DataFrameType((bodo.types.int64[::1], bodo.types.float64[::1]), bodo.RangeIndexType(bodo.none), ("A", "B"))`|
+| `bodo.DataFrameType(data_types_tuple, index_type, column_names)`| DataFrame with a tuple of data types, an index type, and the names of the columns. <br> *e.g.*, `bodo.DataFrameType((bodo.types.int64[::1], bodo.types.float64[::1]), bodo.RangeIndexType(bodo.types.none), ("A", "B"))`|
 
 
 

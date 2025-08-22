@@ -518,7 +518,7 @@ def gen_snowflake_writer_append_table_impl_inner(
     n_cols = len(col_names_meta)
     py_table_typ = table
 
-    if col_precisions_meta == bodo.none:
+    if col_precisions_meta == bodo.types.none:
         col_precisions_tup = None
     else:
         col_precisions_tup = unwrap_typeref(col_precisions_meta).meta

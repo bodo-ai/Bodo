@@ -86,7 +86,7 @@ def object_keys_util(arr):
         )
     ):
         scalar_text = "res[i] = bodo.libs.str_arr_ext.str_list_to_array(list(arg0))\n"
-    elif typ == bodo.none:
+    elif typ == bodo.types.none:
         scalar_text = "res[i] = None"
     else:
         raise_bodo_error(f"object_keys: unsupported type {arr}")
@@ -617,7 +617,7 @@ def overload_array_position_util(elem, container, elem_is_scalar, container_is_s
     out_dtype = bodo.IntegerArrayType(types.int32)
     are_arrays = [not elem_is_scalar_bool, not container_is_scalar_bool, False, False]
     scalar_text = "match = -1\n"
-    if elem == bodo.none:
+    if elem == bodo.types.none:
         scalar_text += "null0 = True\n"
     elif are_arrays[0]:
         scalar_text += "null0 = bodo.libs.array_kernels.isna(elem, i)\n"
@@ -711,7 +711,7 @@ def overload_array_contains_util(
     out_dtype = bodo.boolean_array_type
     are_arrays = [not elem_is_scalar_bool, not container_is_scalar_bool, False, False]
     scalar_text = "found_match = False\n"
-    if elem == bodo.none:
+    if elem == bodo.types.none:
         scalar_text += "null0 = True\n"
     elif are_arrays[0]:
         scalar_text += "null0 = bodo.libs.array_kernels.isna(elem, i)\n"
@@ -1189,7 +1189,7 @@ def overload_to_object(data):  # pragma: no cover
                 types.DictType,
             ),
         )
-        or (data in (bodo.none, bodo.null_array_type))
+        or (data in (bodo.types.none, bodo.null_array_type))
         or (
             isinstance(data, types.optional)
             and isinstance(

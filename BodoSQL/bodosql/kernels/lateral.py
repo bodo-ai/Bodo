@@ -226,7 +226,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
 
     # Create the table type returned by the lateral operation
     out_types_0 = TableType(out_typs)
-    out_types_1 = bodo.none
+    out_types_1 = bodo.types.none
     n_out_table_cols = len(out_col_inds)
 
     json_mode = struct_mode or map_mode

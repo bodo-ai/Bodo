@@ -2989,7 +2989,7 @@ def base64_decode_util(msg, alphabet, _try, _is_str, dict_encoding_state, func_i
 
 @numba.generated_jit(nopython=True)
 def uuid4(A):
-    if A == bodo.none:
+    if A == bodo.types.none:
 
         def impl(A):  # pragma: no cover
             return bodo.libs.uuid.uuidV4()

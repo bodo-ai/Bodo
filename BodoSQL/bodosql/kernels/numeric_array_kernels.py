@@ -185,8 +185,9 @@ def _get_numeric_output_dtype(func_name, arr0, arr1=None):
     arr1_dtype = arr1.dtype if is_array_typ(arr1) else arr1
     # default to float64 without further information
     out_dtype = bodo.types.float64
-    if (arr0 is None or arr0_dtype == bodo.none) or (
-        func_name in double_arg_funcs and (arr1 is None or arr1_dtype == bodo.none)
+    if (arr0 is None or arr0_dtype == bodo.types.none) or (
+        func_name in double_arg_funcs
+        and (arr1 is None or arr1_dtype == bodo.types.none)
     ):
         if isinstance(out_dtype, types.Float):
             return bodo.libs.float_arr_ext.FloatingArrayType(out_dtype)
@@ -723,7 +724,7 @@ def floor_util(data, precision):  # pragma: no cover
     arg_names = ["data", "precision"]
     arg_types = [data, precision]
     propagate_null = [True] * 2
-    if data == bodo.none or data == bodo.null_array_type:
+    if data == bodo.types.none or data == bodo.null_array_type:
         scalar_text = "res[i] = 0"
     elif is_valid_int_arg(data):
         data_dtype = data.dtype if is_array_typ(data) else data
@@ -1299,8 +1300,8 @@ def bitnot_util(A):
     propagate_null = [True]
     scalar_text = "res[i] = ~arg0"
 
-    if A == bodo.none:
-        out_dtype = bodo.none
+    if A == bodo.types.none:
+        out_dtype = bodo.types.none
     else:
         if is_array_typ(A, True):
             scalar_type = A.dtype
@@ -1359,8 +1360,8 @@ def bitshiftright_util(A, B):
     arg_types = [A, B]
     propagate_null = [True] * 2
 
-    if A == bodo.none:
-        scalar_type = out_dtype = bodo.none
+    if A == bodo.types.none:
+        scalar_type = out_dtype = bodo.types.none
     else:
         if is_array_typ(A, True):
             scalar_type = A.dtype

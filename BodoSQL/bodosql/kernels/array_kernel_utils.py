@@ -243,7 +243,9 @@ def gen_vectorized(
         are_arrays = [bodo.utils.utils.is_array_typ(typ) for typ in arg_types]
     all_scalar = not any(are_arrays)
     out_null = any(
-        propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none
+        propagate_null[i]
+        for i in range(len(arg_types))
+        if arg_types[i] == bodo.types.none
     )
     # Construct a dictionary encoded output from a non-dictionary encoded input
     # if the 'V'/'?' arguments in synthesize_dict_if_vector are arrays and the
@@ -288,7 +290,7 @@ def gen_vectorized(
         and out_dtype == bodo.string_array_type
         and (
             any(
-                arg_types[i] == bodo.none and propagate_null[i]
+                arg_types[i] == bodo.types.none and propagate_null[i]
                 for i in range(len(arg_types))
             )
             or "bodo.libs.array_kernels.setna" in scalar_text
@@ -1033,7 +1035,7 @@ def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
         a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not a array scalar, array column, or null
     """
-    if arg == bodo.none or arg == bodo.null_array_type:
+    if arg == bodo.types.none or arg == bodo.null_array_type:
         return
     if is_scalar:
         if not bodo.utils.utils.is_array_typ(arg, False):
@@ -1076,7 +1078,7 @@ def verify_scalar_string_arg(arg, f_name, a_name):  # pragma: no cover
         a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not a scalar string
     """
-    if arg not in (types.unicode_type, bodo.none) and not isinstance(
+    if arg not in (types.unicode_type, bodo.types.none) and not isinstance(
         arg, types.StringLiteral
     ):
         raise_bodo_error(
@@ -1523,12 +1525,12 @@ def get_common_broadcasted_type(arg_types, func_name, suppress_error=False):
         else:
             elem_types.append(arg_types[i])
     if len(elem_types) == 0:
-        return bodo.none
+        return bodo.types.none
     elif len(elem_types) == 1:
         if bodo.utils.utils.is_array_typ(elem_types[0]):
             return bodo.utils.typing.to_nullable_type(elem_types[0])
-        elif elem_types[0] == bodo.none:
-            return bodo.none
+        elif elem_types[0] == bodo.types.none:
+            return bodo.types.none
         else:
             return bodo.utils.typing.to_nullable_type(
                 bodo.utils.typing.dtype_to_array_type(elem_types[0])
@@ -1542,14 +1544,14 @@ def get_common_broadcasted_type(arg_types, func_name, suppress_error=False):
                 scalar_dtypes.append(elem_types[i].dtype)
             # Avoid appending nonetypes to elem_types,
             # as scalar NULL coerces to any type.
-            elif elem_types[i] == bodo.none:
+            elif elem_types[i] == bodo.types.none:
                 pass
             else:
                 scalar_dtypes.append(elem_types[i])
 
         # All arguments were None scalars, return none
         if len(scalar_dtypes) == 0:
-            return bodo.none
+            return bodo.types.none
 
         common_dtype, _ = bodo.utils.typing.get_common_scalar_dtype(
             scalar_dtypes, allow_downcast=True

@@ -68,7 +68,7 @@ def null_ignoring_shift(input_arr, shift_amount, default_value):
     if not isinstance(shift_amount, types.Integer):  # pragma: no cover
         raise_bodo_error("Shift amount must be an integer type")
 
-    no_default = default_value == bodo.none
+    no_default = default_value == bodo.types.none
 
     func_text = "def impl(input_arr, shift_amount, default_value):\n"
     if isinstance(input_arr, bodo.SeriesType):

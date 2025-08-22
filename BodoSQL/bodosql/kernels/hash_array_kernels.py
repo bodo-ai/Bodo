@@ -523,7 +523,7 @@ def overload_sql_hash_util(A, scalars):
     scalar_text = ""
     hash_vals = []
     for i, typ in enumerate(arg_types):
-        if typ == bodo.none:
+        if typ == bodo.types.none:
             val = "-1"
         else:
             val = f"h{i}"

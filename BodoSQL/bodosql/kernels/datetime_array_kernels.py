@@ -2077,7 +2077,7 @@ def construct_timestamp_util(
     propagate_null = [True] * 7 + [False]
 
     args = [year, month, day, hour, minute, second, nanosecond, time_zone]
-    if any(arg == bodo.none for arg in args):
+    if any(arg == bodo.types.none for arg in args):
         tz = None
         localize_str = ""
     elif is_overload_constant_str(time_zone):

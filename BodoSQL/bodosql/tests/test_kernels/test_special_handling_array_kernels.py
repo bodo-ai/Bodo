@@ -37,7 +37,7 @@ def verify_dict_encoded_in_impl(impl, args):
     # Note: infrastructure doesn't handle defaults, so we need to manually add this to
     # the signature
     used_sig = used_sig + (
-        bodo.none,
+        bodo.types.none,
         bodo.types.bool_,
     )
     # Find the is_in_util dispatcher in the IR

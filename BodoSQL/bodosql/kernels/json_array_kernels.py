@@ -915,7 +915,7 @@ def overload_object_insert_util(
         json_type = json_type.data
 
     # If the input is null, just return it.
-    if json_type == bodo.none or json_type == bodo.null_array_type:
+    if json_type == bodo.types.none or json_type == bodo.null_array_type:
         return (
             lambda data, new_field_name, new_field_value, update, is_scalar: data
         )  # pragma: no cover
@@ -950,7 +950,7 @@ def overload_object_insert_util(
         # Codepath for calling OBJECT_INSERT on a STRUCT.
         if bodo.hiframes.pd_series_ext.is_series_type(new_field_value):
             new_field_value = new_field_value.data
-        if new_field_name == bodo.none:  # pragma: no cover
+        if new_field_name == bodo.types.none:  # pragma: no cover
             new_field_name_str = ""
         else:
             if not is_overload_constant_str(new_field_name):  # pragma: no cover
@@ -965,7 +965,8 @@ def overload_object_insert_util(
 
         # Determine whether the newly injected field is null.
         inserting_null = (
-            new_field_value == bodo.none or new_field_value == bodo.null_array_type
+            new_field_value == bodo.types.none
+            or new_field_value == bodo.null_array_type
         )
         if inserting_null:
             new_null_check = "True"
@@ -1013,7 +1014,7 @@ def overload_object_insert_util(
                     names.append(new_field_name_str)
                     nulls.append(new_null_check)
                     if (
-                        new_field_value == bodo.none
+                        new_field_value == bodo.types.none
                         or new_field_value == bodo.null_array_type
                     ):
                         # If replacing with null, keep the same dtype as before.
@@ -1064,7 +1065,7 @@ def overload_object_insert_util(
             and not bodo.hiframes.pd_series_ext.is_series_type(new_field_value)
             else new_field_value.dtype
         )
-        if new_field_dtype == bodo.none:  # pragma: no cover
+        if new_field_dtype == bodo.types.none:  # pragma: no cover
             new_field_dtype = val_dtype
 
         types_to_unify = [val_dtype, new_field_dtype]
