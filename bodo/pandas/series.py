@@ -1528,7 +1528,6 @@ class BodoSeriesAiMethods:
             )
 
         # OpenAI backend
-        api_key = api_key or ""
         if request_formatter is not None or response_formatter is not None:
             raise ValueError(
                 "Series.ai.llm_generate() does not support request_formatter or response_formatter with the OpenAI backend."
@@ -1681,7 +1680,6 @@ class BodoSeriesAiMethods:
             )
 
         # OpenAI backend
-        api_key = api_key or ""
         if request_formatter is not None or response_formatter is not None:
             raise ValueError(
                 "Series.ai.embed() does not support request_formatter or response_formatter with the OpenAI backend."
