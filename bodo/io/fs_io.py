@@ -826,7 +826,7 @@ def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
 @overload(get_s3_bucket_region_wrapper, jit_options={"cache": True})
 def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
     def impl(s3_filepath, parallel):
-        with bodo.no_warning_objmode(bucket_loc="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(bucket_loc="unicode_type"):
             bucket_loc = get_s3_bucket_region_wrapper(s3_filepath, parallel)
         return bucket_loc
 
@@ -891,7 +891,7 @@ def overload_get_storage_options_pyobject(storage_options):
     """generate a pyobject for the storage_options to pass to C++"""
     storage_options_val = get_overload_constant_dict(storage_options)
     func_text = "def impl(storage_options):\n"
-    func_text += "  with bodo.no_warning_objmode(storage_options_py='storage_options_dict_type'):\n"
+    func_text += "  with bodo.ir.object_mode.no_warning_objmode(storage_options_py='storage_options_dict_type'):\n"
     func_text += f"    storage_options_py = {str(storage_options_val)}\n"
     func_text += "  return storage_options_py\n"
     loc_vars = {}

@@ -2557,7 +2557,7 @@ def pd_arr_encode(arr, encoding, errors):
 @numba.njit(no_cpython_wrapper=True)
 def str_arr_encode(arr, encoding, errors):  # pragma: no cover
     """Encode string array using Pandas Series.str.encode in object mode"""
-    with bodo.no_warning_objmode(out_arr=binary_array_type):
+    with bodo.ir.object_mode.no_warning_objmode(out_arr=binary_array_type):
         out_arr = pd_arr_encode(arr, encoding, errors)
     return out_arr
 

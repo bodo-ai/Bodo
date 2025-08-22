@@ -904,7 +904,7 @@ def overload_get_filters_pyobject(filters_str, var_tup):
     if len(var_tup):
         func_text += f"  {var_unpack}, = var_tup\n"
     func_text += (
-        "  with bodo.no_warning_objmode(filters_py='parquet_predicate_type'):\n"
+        "  with bodo.ir.object_mode.no_warning_objmode(filters_py='parquet_predicate_type'):\n"
         f"    filters_py = {filter_str_val}\n"
         "  return filters_py\n"
     )
@@ -1057,7 +1057,9 @@ def add_rtjf_iceberg_filter(
     import pyiceberg.expressions as pie
 
     is_empty = bodo.ir.sql_ext.is_empty_build_table(state_var)
-    with bodo.no_warning_objmode(combined_filters="parquet_predicate_type"):
+    with bodo.ir.object_mode.no_warning_objmode(
+        combined_filters="parquet_predicate_type"
+    ):
         if is_empty:
             combined_filters = pie.AlwaysFalse()
         else:
@@ -1147,7 +1149,7 @@ def gen_runtime_join_filter_expr(
     """
     rtjf_expr = ""
 
-    with bodo.no_warning_objmode(rtjf_expr="unicode_type"):
+    with bodo.ir.object_mode.no_warning_objmode(rtjf_expr="unicode_type"):
         exprs = []
         for col, (min, max, unique_vals), op, tz in zip(
             filtered_cols, bounds, filter_ops, time_zones
@@ -1365,7 +1367,7 @@ def _gen_iceberg_reader_chunked_py(
     glbls = globals().copy()  # TODO: fix globals after Numba's #3355 is resolved
     glbls.update(
         {
-            "objmode": bodo.no_warning_objmode,
+            "objmode": bodo.ir.object_mode.no_warning_objmode,
             "unicode_to_utf8": unicode_to_utf8,
             "iceberg_pq_reader_init_py_entry": iceberg_pq_reader_init_py_entry,
             "get_filters_pyobject": get_filters_pyobject,
@@ -1635,7 +1637,7 @@ def _gen_iceberg_reader_py(
     glbls.update(
         {
             "bodo": bodo,
-            "objmode": bodo.no_warning_objmode,
+            "objmode": bodo.ir.object_mode.no_warning_objmode,
             f"py_table_type_{call_id}": py_table_type,
             "index_col_typ": index_column_type,
             f"table_idx_{call_id}": table_idx,

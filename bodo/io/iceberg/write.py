@@ -498,7 +498,7 @@ def iceberg_pq_write(
         4) *partition-values
     """
     rg_size = -1
-    with bodo.no_warning_objmode(compression="unicode_type"):
+    with bodo.ir.object_mode.no_warning_objmode(compression="unicode_type"):
         compression = properties.get("write.parquet.compression-codec", "snappy")
 
     # Call the C++ function to write the parquet files.
@@ -906,7 +906,7 @@ def iceberg_write(
     # Supporting REPL requires some refactor in the parquet write infrastructure,
     # so we're not implementing it for now. It will be added in a following PR.
     assert is_parallel, "Iceberg Write only supported for distributed DataFrames"
-    with bodo.no_warning_objmode(
+    with bodo.ir.object_mode.no_warning_objmode(
         txn="transaction_type",
         fs="pyarrow_fs_type",
         data_loc="unicode_type",
@@ -958,7 +958,7 @@ def iceberg_write(
         properties,
     )
 
-    with bodo.no_warning_objmode(success="bool_"):
+    with bodo.ir.object_mode.no_warning_objmode(success="bool_"):
         fnames, file_records, partition_infos = generate_data_file_info(
             iceberg_files_info
         )

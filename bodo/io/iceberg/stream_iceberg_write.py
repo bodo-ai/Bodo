@@ -103,7 +103,7 @@ def overload_get_enable_theta():
     """
 
     def impl():  # pragma: no cover
-        with bodo.no_warning_objmode(ret_var="bool_"):
+        with bodo.ir.object_mode.no_warning_objmode(ret_var="bool_"):
             ret_var = bodo.enable_theta_sketches
         return ret_var
 
@@ -387,7 +387,7 @@ def overload_start_write_wrapper(
         df_schema,
         create_table_info,
     ):  # pragma: no cover
-        with bodo.no_warning_objmode(
+        with bodo.ir.object_mode.no_warning_objmode(
             txn=transaction_type,
             fs="pyarrow_fs_type",
             data_loc="unicode_type",
@@ -443,7 +443,9 @@ def overload_get_empty_pylist():
     """Return an empty Python list object"""
 
     def impl():  # pragma: no cover
-        with bodo.no_warning_objmode(a="python_list_of_heterogeneous_tuples_type"):
+        with bodo.ir.object_mode.no_warning_objmode(
+            a="python_list_of_heterogeneous_tuples_type"
+        ):
             a = []
         return a
 
@@ -460,7 +462,7 @@ def get_table_target_file_size_bytes(properties):
     Returns:
         int: The value of 'write.target_file_size_bytes'
     """
-    with bodo.no_warning_objmode(output="i8"):
+    with bodo.ir.object_mode.no_warning_objmode(output="i8"):
         output = properties.get(
             "write.target-file-size-bytes", ICEBERG_WRITE_PARQUET_CHUNK_SIZE
         )
@@ -635,7 +637,7 @@ def overload_table_columns_have_theta_sketches_wrapper(txn):
     _output_type = bodo.boolean_array_type
 
     def impl(txn):  # pragma: no cover
-        with bodo.no_warning_objmode(existing_columns=_output_type):
+        with bodo.ir.object_mode.no_warning_objmode(existing_columns=_output_type):
             existing_columns = table_columns_have_theta_sketches(txn.table_metadata)
         return existing_columns
 
@@ -653,7 +655,7 @@ def overload_table_columns_enabled_theta_sketches_wrapper(txn):
     _output_type = bodo.boolean_array_type
 
     def impl(txn):  # pragma: no cover
-        with bodo.no_warning_objmode(enabled_columns=_output_type):
+        with bodo.ir.object_mode.no_warning_objmode(enabled_columns=_output_type):
             enabled_columns = table_columns_enabled_theta_sketches(txn)
         return enabled_columns
 
@@ -690,7 +692,7 @@ def overload_append_py_list(pylist, to_append):
     """Append a Python list object to existing Python list object"""
 
     def impl(pylist, to_append):  # pragma: no cover
-        with bodo.no_warning_objmode:
+        with bodo.ir.object_mode.no_warning_objmode:
             pylist.extend(to_append)
 
     return impl
@@ -814,13 +816,15 @@ def gen_iceberg_writer_append_table_impl_inner(
 
             # Fetch any existing puffin files:
             use_theta_sketches = writer["use_theta_sketches"]
-            with bodo.no_warning_objmode(old_puffin_file_path="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(
+                old_puffin_file_path="unicode_type"
+            ):
                 if use_theta_sketches and if_exists == "append":
                     old_puffin_file_path = get_old_statistics_file_path(txn)
                 else:
                     old_puffin_file_path = ""
 
-            with bodo.no_warning_objmode(success="bool_"):
+            with bodo.ir.object_mode.no_warning_objmode(success="bool_"):
                 (
                     fnames,
                     file_records,
@@ -838,7 +842,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                 )
 
             if use_theta_sketches:
-                with bodo.no_warning_objmode(
+                with bodo.ir.object_mode.no_warning_objmode(
                     snapshot_id="int64",
                     sequence_number="int64",
                     puffin_loc="unicode_type",
@@ -859,7 +863,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                 )
                 conn_str = writer["conn"]
                 table_id = writer["table_id"]
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     commit_statistics_file(conn_str, table_id, statistic_file_info)
 
             # Delete the theta sketches. An object exists even if there are no sketches.
@@ -1020,7 +1024,7 @@ def overload_convert_to_snowflake_iceberg_table(
     def impl(
         snowflake_conn, iceberg_conn, iceberg_base, iceberg_volume, table_name, replace
     ):  # pragma: no cover
-        with bodo.no_warning_objmode:
+        with bodo.ir.object_mode.no_warning_objmode:
             convert_to_snowflake_iceberg_table_py(
                 snowflake_conn,
                 iceberg_conn,

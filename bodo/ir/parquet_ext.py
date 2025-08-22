@@ -1125,7 +1125,7 @@ def _gen_pq_reader_chunked_py(
 def get_fname_pyobject(fname):
     """Convert fname native object (which can be a string or a list of strings)
     to its corresponding PyObject by going through unboxing and boxing"""
-    with bodo.no_warning_objmode(fname_py="read_parquet_fpath_type"):
+    with bodo.ir.object_mode.no_warning_objmode(fname_py="read_parquet_fpath_type"):
         fname_py = fname
     return fname_py
 

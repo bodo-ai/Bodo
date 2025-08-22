@@ -746,7 +746,7 @@ def uuid4_helper():  # pragma: no cover
     Returns
         out (str): String output of `uuid4()`
     """
-    with bodo.no_warning_objmode(out="unicode_type"):
+    with bodo.ir.object_mode.no_warning_objmode(out="unicode_type"):
         out = str(uuid.uuid4())
     return out
 
@@ -763,7 +763,7 @@ def makedirs_helper(path, exist_ok=False):  # pragma: no cover
             exists. If False, raise an exception if the directory exists.
 
     """
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         os.makedirs(path, exist_ok=exist_ok)
 
 

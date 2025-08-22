@@ -79,7 +79,7 @@ def test_import_module(capfd):
     import bodo.tests.test_spawn.mymodule as mymod
 
     def impl():
-        with bodo.no_warning_objmode:
+        with bodo.ir.object_mode.no_warning_objmode:
             mymod.f()
 
     fn = bodo.jit(spawn=True, cache=True)(impl)
@@ -181,7 +181,7 @@ def test_compute_return_scalar(datapath):
 def test_environment():
     @bodo.jit(spawn=True)
     def get_from_env(env_var):
-        with bodo.no_warning_objmode(ret_val="int64"):
+        with bodo.ir.object_mode.no_warning_objmode(ret_val="int64"):
             ret_val = int(os.environ[env_var])
         return ret_val
 
@@ -202,7 +202,7 @@ def test_environment():
         propagate_env=["EXTRA_ENV"],
     )
     def get_from_env_decorator(env_var):
-        with bodo.no_warning_objmode(ret_val="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(ret_val="unicode_type"):
             ret_val = os.environ.get(env_var, "DOES_NOT_EXIST")
         return ret_val
 
@@ -419,7 +419,7 @@ def test_spawn_globals_objmode():
 
     @bodo.jit(spawn=True)
     def f():
-        with bodo.no_warning_objmode(val="int64"):
+        with bodo.ir.object_mode.no_warning_objmode(val="int64"):
             val = VALUE
         return val
 

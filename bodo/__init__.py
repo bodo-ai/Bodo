@@ -248,11 +248,6 @@ from numba import (  # re-export from Numba
 )
 from numba.core.types import *
 
-from bodo.ir.object_mode import (
-    warning_objmode as objmode,
-    no_warning_objmode,
-)
-
 
 def set_numba_environ_vars():
     """

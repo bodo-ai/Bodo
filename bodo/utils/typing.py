@@ -3096,7 +3096,7 @@ if PYVERSION >= (3, 12):
             message, category=None, stacklevel=1, source=None, skip_file_prefixes=None
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
-                with bodo.no_warning_objmode:
+                with bodo.ir.object_mode.no_warning_objmode:
                     if skip_file_prefixes is None:
                         skip_file_prefixes = ()
                     warnings.warn(

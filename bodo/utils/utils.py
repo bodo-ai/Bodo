@@ -1584,7 +1584,7 @@ def inlined_check_and_propagate_cpp_exception(context, builder):
 
 @numba.njit(cache=True)
 def check_java_installation(fname):
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         check_java_installation_(fname)
 
 
@@ -1806,7 +1806,7 @@ def synchronize_error_njit(exception_str, error_message):
         exception_str (string): string representation of exception, e.x. 'RuntimeError', 'ValueError'
         error_message (string): error message, empty string means no error
     """
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         synchronize_error(exception_str, error_message)
 
 

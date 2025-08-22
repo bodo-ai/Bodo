@@ -674,7 +674,9 @@ def overload_gen_runtime_join_filter_cond(
                         state_var, np.int64(i)
                     )
                     # Use object mode to convert to a string representation of the containment check
-                    with bodo.no_warning_objmode(unique_as_strings="list_str_type"):
+                    with bodo.ir.object_mode.no_warning_objmode(
+                        unique_as_strings="list_str_type"
+                    ):
                         unique_as_strings = []
                         for elem in unique_values:
                             unique_as_strings.append(
@@ -697,7 +699,7 @@ def overload_gen_runtime_join_filter_cond(
                         state_var, np.int64(i), False, precisions[i]
                     )
                     # Use object mode to convert to a string representation of the bounds check
-                    with bodo.no_warning_objmode(
+                    with bodo.ir.object_mode.no_warning_objmode(
                         min_result="unicode_type", max_result="unicode_type"
                     ):
                         min_result = max_result = ""
@@ -745,7 +747,7 @@ def overload_gen_runtime_join_filter_interval_cond(
             max_val = get_runtime_join_filter_min_max(
                 state_var, build_col, False, precisions[i]
             )
-            with bodo.no_warning_objmode(result="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(result="unicode_type"):
                 result = ""
                 if op in (">", ">=") and min_val is not None:
                     result = f"(${probe_col + 1} {op} {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
@@ -1382,7 +1384,7 @@ compiled_funcs = []
 
 @numba.njit
 def sqlalchemy_check():  # pragma: no cover
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         sqlalchemy_check_()
 
 
@@ -1401,7 +1403,7 @@ def sqlalchemy_check_():  # pragma: no cover
 @numba.njit
 def pymysql_check():
     """MySQL Check that user has pymysql installed."""
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         pymysql_check_()
 
 
@@ -1421,7 +1423,7 @@ def pymysql_check_():  # pragma: no cover
 @numba.njit
 def cx_oracle_check():
     """Oracle Check that user has cx_oracle installed."""
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         cx_oracle_check_()
 
 
@@ -1441,7 +1443,7 @@ def cx_oracle_check_():  # pragma: no cover
 @numba.njit
 def psycopg2_check():  # pragma: no cover
     """PostgreSQL Check that user has psycopg2 installed."""
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         psycopg2_check_()
 
 
@@ -1817,7 +1819,9 @@ def _gen_sql_reader_py(
             if limit is not None:
                 func_text += f"  nb_row = {limit}\n"
             else:
-                func_text += '  with bodo.no_warning_objmode(nb_row="int64"):\n'
+                func_text += (
+                    '  with bodo.ir.object_mode.no_warning_objmode(nb_row="int64"):\n'
+                )
                 func_text += f"     if rank == {DEFAULT_ROOT}:\n"
                 func_text += "         sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
                 func_text += "         frame = pd.read_sql(sql_cons, conn)\n"
@@ -1825,7 +1829,7 @@ def _gen_sql_reader_py(
                 func_text += "     else:\n"
                 func_text += "         nb_row = 0\n"
                 func_text += "  nb_row = bcast_scalar(nb_row)\n"
-            func_text += f"  with bodo.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
+            func_text += f"  with bodo.ir.object_mode.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
             func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
             # https://docs.oracle.com/javadb/10.8.3.0/ref/rrefsqljoffsetfetch.html
             if db_type == "oracle":
@@ -1838,7 +1842,7 @@ def _gen_sql_reader_py(
                 "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"
             )
         else:
-            func_text += f"  with bodo.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
+            func_text += f"  with bodo.ir.object_mode.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
             func_text += "    df_ret = pd.read_sql(sql_request, conn)\n"
             func_text += (
                 "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"

@@ -4054,7 +4054,7 @@ def to_sql_exception_guard_encaps(
     _is_parallel=False,
 ):  # pragma: no cover
     ev = tracing.Event("to_sql_exception_guard_encaps", is_parallel=_is_parallel)
-    with bodo.no_warning_objmode(out="unicode_type"):
+    with bodo.ir.object_mode.no_warning_objmode(out="unicode_type"):
         ev_objmode = tracing.Event(
             "to_sql_exception_guard_encaps:objmode", is_parallel=_is_parallel
         )
@@ -4223,7 +4223,7 @@ def to_sql_overload(
     # In object mode: Connect to snowflake, create internal stage, and
     # get internal stage credentials on each rank
     func_text += (
-        "        with bodo.no_warning_objmode(\n"
+        "        with bodo.ir.object_mode.no_warning_objmode(\n"
         "            cursor='snowflake_connector_cursor_type',\n"
         "            tmp_folder='temporary_directory_type',\n"
         "            stage_name='unicode_type',\n"
@@ -4384,7 +4384,7 @@ def to_sql_overload(
         "            ev_pq_write_cpp.finalize()\n"
         # If needed, upload local parquet to internal stage using objmode PUT
         "            if upload_using_snowflake_put:\n"
-        "                with bodo.no_warning_objmode():\n"
+        "                with bodo.ir.object_mode.no_warning_objmode():\n"
         "                    bodo.io.snowflake.do_upload_and_cleanup(\n"
         "                        cursor, chunk_idx, chunk_path, stage_name,\n"
         "                    )\n"
@@ -4407,7 +4407,7 @@ def to_sql_overload(
     func_text += (
         # This is because it seems like globals aren't passed into objmode
         "        df_data_ = df_data\n"
-        "        with bodo.no_warning_objmode():\n"
+        "        with bodo.ir.object_mode.no_warning_objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
         # Creating the dict here instead of passing it in as a globall is necessary because when boxing
         # dicts we check if they contain type references in the value and throw an error, we need typerefs here
@@ -4618,7 +4618,7 @@ def to_csv_overload(
                 if bodo.get_rank() != 0:
                     return ""
 
-                with bodo.no_warning_objmode(D="unicode_type"):
+                with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
                     D = df.to_csv(
                         path_or_buf,
                         sep=sep,
@@ -4672,7 +4672,7 @@ def to_csv_overload(
             _bodo_file_prefix="part-",
             _bodo_concat_str_output=False,
         ):  # pragma: no cover
-            with bodo.no_warning_objmode(D="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
                 D = df.to_csv(
                     path_or_buf,
                     sep=sep,
@@ -4728,7 +4728,7 @@ def to_csv_overload(
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to csv
-        with bodo.no_warning_objmode(D="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
             D = df.to_csv(
                 None,
                 sep=sep,
@@ -4823,7 +4823,7 @@ def to_json_overload(
                 df = bodo.gatherv(df)
                 if bodo.get_rank() != 0:
                     return ""
-            with bodo.no_warning_objmode(D="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
                 D = df.to_json(
                     path_or_buf,
                     orient=orient,
@@ -4863,7 +4863,7 @@ def to_json_overload(
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to json
-        with bodo.no_warning_objmode(D="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
             D = df.to_json(
                 None,
                 orient=orient,

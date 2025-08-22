@@ -1369,7 +1369,7 @@ def test_df_set_col_rename_bug(memory_leak_check):
 
 def test_objmode_warning(memory_leak_check):
     """Test that bodo.objmode raises a warning when used
-    and that bodo.no_warning_objmode does not."""
+    and that bodo.ir.object_mode.no_warning_objmode does not."""
 
     def g():
         return 1
@@ -1382,7 +1382,7 @@ def test_objmode_warning(memory_leak_check):
 
     @bodo.jit
     def impl2():
-        with bodo.no_warning_objmode(a="int64"):
+        with bodo.ir.object_mode.no_warning_objmode(a="int64"):
             a = g()
         return a
 
@@ -1397,7 +1397,9 @@ def test_objmode_warning(memory_leak_check):
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", BodoWarning)
-            assert impl2() == 1, "Incorrect output with bodo.no_warning_objmode"
+            assert impl2() == 1, (
+                "Incorrect output with bodo.ir.object_mode.no_warning_objmode"
+            )
     finally:
         numba.core.config.DEVELOPER_MODE = old_developer_mode
 

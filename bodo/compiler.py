@@ -46,6 +46,7 @@ import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba 
 import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
 import bodo.io
+import bodo.ir.object_mode  # noqa
 import bodo.libs
 import bodo.libs.array_kernels  # noqa # side effect: install Numba functions
 import bodo.libs.int_arr_ext  # noqa # side effect

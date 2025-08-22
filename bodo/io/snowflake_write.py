@@ -341,7 +341,7 @@ def overload_connect_and_get_upload_info_jit(conn):
     """JIT version of connect_and_get_upload_info which wraps objmode (isolated to avoid Numba objmode bugs)"""
 
     def impl(conn):
-        with bodo.no_warning_objmode(
+        with bodo.ir.object_mode.no_warning_objmode(
             cursor="snowflake_connector_cursor_type",
             tmp_folder="temporary_directory_type",
             stage_name="unicode_type",
@@ -643,7 +643,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                     file_count_local = writer["file_count_local"]
                     stage_name = writer["stage_name"]
                     copy_into_dir = writer["copy_into_dir"]
-                    with bodo.no_warning_objmode():
+                    with bodo.ir.object_mode.no_warning_objmode():
                         bodo.io.snowflake.do_upload_and_cleanup(
                             cursor,
                             file_count_local,
@@ -678,7 +678,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                 location = writer["location"]
                 if_exists = writer["if_exists"]
                 table_type = writer["table_type"]
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     begin_write_transaction(
                         cursor,
                         location,
@@ -697,13 +697,13 @@ def gen_snowflake_writer_append_table_impl_inner(
                 cursor = writer["cursor"]
                 copy_into_prev_sfqid = writer["copy_into_prev_sfqid"]
                 file_count_global_prev = writer["file_count_global_prev"]
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     err = bodo.io.snowflake.retrieve_async_copy_into(
                         cursor, copy_into_prev_sfqid, file_count_global_prev
                     )
                     bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
             else:
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
             # Execute async COPY INTO form rank 0
             if bodo.get_rank() == 0:
@@ -712,7 +712,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                 location = writer["location"]
                 copy_into_dir = writer["copy_into_dir"]
                 flatten_table = writer["flatten_table"]
-                with bodo.no_warning_objmode(
+                with bodo.ir.object_mode.no_warning_objmode(
                     copy_into_new_sfqid="unicode_type",
                     flatten_sql="unicode_type",
                     flatten_table="unicode_type",
@@ -760,7 +760,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                 cursor = writer["cursor"]
                 copy_into_prev_sfqid = writer["copy_into_prev_sfqid"]
                 file_count_global_prev = writer["file_count_global_prev"]
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     err = bodo.io.snowflake.retrieve_async_copy_into(
                         cursor, copy_into_prev_sfqid, file_count_global_prev
                     )
@@ -770,12 +770,14 @@ def gen_snowflake_writer_append_table_impl_inner(
                             "COMMIT /* io.snowflake_write.snowflake_writer_append_table() */"
                         )
             else:
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
             if (not parallel or bodo.get_rank() == 0) and writer["flatten_sql"] != "":
                 cursor = writer["cursor"]
                 flatten_sql = writer["flatten_sql"]
-                with bodo.no_warning_objmode(flatten_sfqid="unicode_type"):
+                with bodo.ir.object_mode.no_warning_objmode(
+                    flatten_sfqid="unicode_type"
+                ):
                     err = None
                     try:
                         # TODO: BSE-1929 call flatten_sql once for each copy into
@@ -798,7 +800,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                         writer["copy_into_sfqids_exists"] = True
                         writer["copy_into_sfqids"] = flatten_sfqid
             else:
-                with bodo.no_warning_objmode():
+                with bodo.ir.object_mode.no_warning_objmode():
                     bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
             if bodo.get_rank() == 0:
                 writer["copy_into_prev_sfqid"] = ""
@@ -811,7 +813,7 @@ def gen_snowflake_writer_append_table_impl_inner(
             stage_name = writer["stage_name"]
             old_creds = writer["old_creds"]
             tmp_folder = writer["tmp_folder"]
-            with bodo.no_warning_objmode():
+            with bodo.ir.object_mode.no_warning_objmode():
                 if cursor is not None:
                     bodo.io.snowflake.drop_internal_stage(cursor, stage_name)
                     cursor.close()

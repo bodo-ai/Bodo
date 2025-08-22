@@ -3289,7 +3289,9 @@ class SeriesPass:
             setattr(types, type_name, output_type)
 
         func_text = f"def helper_{func_name}({full_header}):\n"
-        func_text += f"    with bodo.no_warning_objmode(res='{type_name}'):\n"
+        func_text += (
+            f"    with bodo.ir.object_mode.no_warning_objmode(res='{type_name}'):\n"
+        )
         if method_var:
             func_text += f"        res = {method_var}.{func_name}({arg_names})\n"
         else:
@@ -3327,7 +3329,7 @@ class SeriesPass:
 
             format_func_text = f"def format_func(string, {header_args}):\n"
             format_func_text += (
-                "    with bodo.no_warning_objmode(res='unicode_type'):\n"
+                "    with bodo.ir.object_mode.no_warning_objmode(res='unicode_type'):\n"
             )
             format_func_text += f"        res = string.format({arg_names})\n"
             format_func_text += "    return res\n"
@@ -3383,7 +3385,7 @@ class SeriesPass:
             func_text += f"    return format_func(logger, {header_args})\n"
 
             format_func_text = f"def format_func(logger, {header_args}):\n"
-            format_func_text += "    with bodo.no_warning_objmode():\n"
+            format_func_text += "    with bodo.ir.object_mode.no_warning_objmode():\n"
             format_func_text += f"        logger.{func_name}({arg_names})\n"
 
             loc_vars = {}
