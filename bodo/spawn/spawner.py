@@ -62,6 +62,7 @@ env_var_prefix = (
     "MKL",
     "OPENBLAS",
     "NUMBA",
+    "OPENAI",
 )
 
 

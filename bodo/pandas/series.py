@@ -1528,7 +1528,6 @@ class BodoSeriesAiMethods:
             )
 
         # OpenAI backend
-        api_key = api_key or ""
         if request_formatter is not None or response_formatter is not None:
             raise ValueError(
                 "Series.ai.llm_generate() does not support request_formatter or response_formatter with the OpenAI backend."
@@ -1562,10 +1561,12 @@ class BodoSeriesAiMethods:
             )
 
             async def per_row(row, client, generation_kwargs):
+                print("Generating for row:", row)
                 response = await client.chat.completions.create(
                     messages=[{"role": "user", "content": row}],
                     **generation_kwargs,
                 )
+                print("Response:", response)
                 return response.choices[0].message.content
 
             async def all_tasks(series, client, generation_kwargs):
@@ -1681,7 +1682,6 @@ class BodoSeriesAiMethods:
             )
 
         # OpenAI backend
-        api_key = api_key or ""
         if request_formatter is not None or response_formatter is not None:
             raise ValueError(
                 "Series.ai.embed() does not support request_formatter or response_formatter with the OpenAI backend."
