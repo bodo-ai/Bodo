@@ -24,6 +24,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo.libs.pd_datetime_arr_ext
+import bodo.types
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
     pd_timestamp_tz_naive_type,

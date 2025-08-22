@@ -40,6 +40,7 @@ from numba.extending import (
 import bodo
 import bodo.libs.str_ext
 import bodo.pandas_compat
+import bodo.types
 from bodo.hiframes.datetime_date_ext import (
     DatetimeDateType,
     _ord2ymd,
