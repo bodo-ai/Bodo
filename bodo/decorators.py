@@ -18,7 +18,7 @@ from numba.core.typing.templates import signature
 from numba.extending import lower_builtin, models, register_model
 
 import bodo
-import bodo.compiler
+import bodo.compiler  # noqa # side effect: initialize JIT compiler
 from bodo.pandas_compat import bodo_pandas_udf_execution_engine
 
 # Add Bodo's options to Numba's allowed options/flags
