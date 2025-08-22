@@ -1170,8 +1170,9 @@ def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
 
 
 def is_valid_timestamptz_arg(arg):
-    return arg == bodo.timestamptz_type or (
-        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.timestamptz_type
+    return arg == bodo.types.timestamptz_type or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and arg.dtype == bodo.types.timestamptz_type
     )
 
 
@@ -1233,8 +1234,9 @@ def is_valid_tz_aware_datetime_arg(arg):
 
 
 def is_valid_timestamptz_arg(arg):
-    return arg == bodo.timestamptz_type or (
-        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.timestamptz_type
+    return arg == bodo.types.timestamptz_type or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and arg.dtype == bodo.types.timestamptz_type
     )
 
 

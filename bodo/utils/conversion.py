@@ -172,8 +172,8 @@ class CoerceToNdarrayInfer(AbstractTemplate):
                 output = bodo.types.datetime_date_array_type
             elif isinstance(data, bodo.hiframes.time_ext.TimeType):
                 output = bodo.types.TimeArrayType(data.precision)
-            elif data == bodo.timestamptz_type:
-                output = bodo.timestamptz_array_type
+            elif data == bodo.types.timestamptz_type:
+                output = bodo.types.timestamptz_array_type
             # Timestamp values are stored as dt64 arrays
             elif data == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
                 output = types.Array(np.dtype("datetime64[ns]"), 1, "C")
@@ -539,7 +539,7 @@ def overload_coerce_to_ndarray(
 
             return impl_ts
 
-        if data == bodo.timestamptz_type:
+        if data == bodo.types.timestamptz_type:
 
             def impl_timestamptz(
                 data,

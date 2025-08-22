@@ -8017,11 +8017,11 @@ def test_reverse_shuffle_timestamp_tz(memory_leak_check):
 
     tz_arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-            bodo.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 300),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 300),
             None,
-            bodo.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
+            bodo.types.TimestampTZ.fromUTC("2022-12-31 12:59:59", 200),
         ]
     )
     df = pd.DataFrame({"A": [1, 3, 1, 4, 0], "B": tz_arr})
@@ -8039,9 +8039,9 @@ def test_timestamptz_gb_key(memory_leak_check):
 
     tz_arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 300),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 300),
             None,
         ]
         * 5
@@ -8075,9 +8075,9 @@ def test_timestamptz_gb_key(memory_leak_check):
                 {
                     "A": ["A", "B", "C", "D"],
                     "B": [
-                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
                         None,
                     ],
                 }
@@ -8090,9 +8090,9 @@ def test_timestamptz_gb_key(memory_leak_check):
                 {
                     "A": ["A", "B", "C", "D"],
                     "B": [
-                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
-                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
                         None,
                     ],
                 }
@@ -8105,9 +8105,9 @@ def test_timestamptz_gb_key(memory_leak_check):
                 {
                     "A": ["A", "B", "C", "D"],
                     "B": [
-                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
                         None,
                     ],
                 }
@@ -8120,9 +8120,9 @@ def test_timestamptz_gb_key(memory_leak_check):
                 {
                     "A": ["A", "B", "C", "D"],
                     "B": [
-                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
                         None,
                     ],
                 }
@@ -8140,13 +8140,13 @@ def test_timestamptz_gb_agg(fstr, expected, memory_leak_check):
     # groups A and C always have values, B has some nulls, D has all nulls
     tz_arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
             None,
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
             None,
         ]
         * 3
@@ -8175,34 +8175,34 @@ def test_timestamptz_gb_mode(memory_leak_check):
     tz_arr = np.array(
         [
             # A - all the same UTC time, but different offsets
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 0),
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 125),
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 333),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 0),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 125),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 333),
             # B - all the same local time, but different UTC times
-            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 60),
-            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 125),
-            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 333),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 125),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 333),
             # C - value is the mode
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 120),
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 240),
-            bodo.TimestampTZ.fromUTC("2024-01-01 01:01:01", 0),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 120),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 240),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 01:01:01", 0),
             # D - all null
             None,
             None,
             None,
             None,
             # E - some nulls
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
             None,
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
             # F - majority null
             None,
             None,
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
             None,
         ]
     )
@@ -8213,12 +8213,12 @@ def test_timestamptz_gb_mode(memory_leak_check):
             "A": ["A", "B", "C", "D", "E", "F"],
             "B": np.array(
                 [
-                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 0),
-                    bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
-                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                    bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 0),
+                    bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
+                    bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
                     None,
-                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
-                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                    bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                    bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
                 ]
             ),
         }

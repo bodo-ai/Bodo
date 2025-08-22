@@ -175,7 +175,7 @@ def test_nullarray_cast():
             A = np.array([bodo.types.Time(12, 0, precision=6)] * n, object)
         elif t == bodo.hiframes.timestamptz_ext.TimestampTZArrayType:
             A = np.array(
-                [bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100)] * n, object
+                [bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100)] * n, object
             )
         else:
             # Ignore array types that are not used in BodoSQL

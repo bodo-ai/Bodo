@@ -775,8 +775,8 @@ void unbox_timestamptz_array(PyObject* obj, int64_t n, int64_t* data_ts,
 
 /**
  * @brief Box native timestamptz_array data to Numpy object array of
- * bodo.TimestampTZ items
- * @return Numpy object array of bodo.TimestampTZ
+ * bodo.types.TimestampTZ items
+ * @return Numpy object array of bodo.types.TimestampTZ
  * @param[in] n number of values
  * @param[in] data timestamp pointer to 64-bit values
  * @param[in] data offset pointer to 64-bit values
@@ -807,12 +807,13 @@ void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
         PyObject_GetAttrString(pandas, "Timestamp");
     CHECK(timestamp_constructor, "getting pandas.Timestamp failed");
 
-    // get bodo.TimestampTZ constructor
+    // get bodo.types.TimestampTZ constructor
     PyObject* bodo = PyImport_ImportModule("bodo");
     CHECK(bodo, "importing bodo module failed");
     PyObject* bodo_timestamptz_constructor =
         PyObject_GetAttrString(bodo, "TimestampTZ");
-    CHECK(bodo_timestamptz_constructor, "getting bodo.TimestampTZ failed");
+    CHECK(bodo_timestamptz_constructor,
+          "getting bodo.types.TimestampTZ failed");
 
     for (int64_t i = 0; i < n; ++i) {
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);

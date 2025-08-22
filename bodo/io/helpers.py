@@ -289,7 +289,7 @@ def _get_numba_typ_from_pa_typ(
     if isinstance(pa_typ.type, pa.lib.TimestampType):
         return get_arrow_timestamp_type(pa_typ.type)
     elif isinstance(pa_typ.type, ArrowTimestampTZType):
-        return bodo.timestamptz_array_type, True
+        return bodo.types.timestamptz_array_type, True
     elif pa_typ.type in _pyarrow_numba_type_map:
         dtype = _pyarrow_numba_type_map[pa_typ.type]
         supported = True

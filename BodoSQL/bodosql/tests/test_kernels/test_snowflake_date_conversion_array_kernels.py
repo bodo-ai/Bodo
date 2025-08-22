@@ -800,14 +800,14 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
     """
     input_ = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 60),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", -60),
-            bodo.TimestampTZ.fromUTC("2024-03-10 18:00:01", 0),
-            bodo.TimestampTZ.fromUTC("2024-03-10 19:00:01", 0),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:30:00", -60),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 60),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", -60),
+            bodo.types.TimestampTZ.fromUTC("2024-03-10 18:00:01", 0),
+            bodo.types.TimestampTZ.fromUTC("2024-03-10 19:00:01", 0),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:30:00", -60),
         ]
     )
 
@@ -1227,12 +1227,12 @@ def test_to_time_timestamptz(_try, memory_leak_check):
     """
     input_ = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05.123456789", 0),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06.000123000", 60),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07.000000123", -60),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05.123456789", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06.000123000", 60),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07.000000123", -60),
             None,
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
         ]
     )
     answer = np.array(
@@ -1283,14 +1283,14 @@ def test_to_date_timestamptz(_try, memory_leak_check):
     """
     input_ = pd.Series(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
-            bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 60),
-            bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", -60),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 60),
+            bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", -60),
             None,
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
-            bodo.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
-            bodo.TimestampTZ.fromUTC("2024-01-01 23:00:00", 60),
-            bodo.TimestampTZ.fromUTC("2024-01-01 23:00:00", -60),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", 90),
+            bodo.types.TimestampTZ.fromUTC("2024-04-05 00:00:00", -90),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 23:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 23:00:00", -60),
         ]
     )
     answer = pd.Series(
@@ -1468,12 +1468,12 @@ def test_convert_timezone_ntz_vector(source_tz, target_tz, answer, memory_leak_c
 def test_convert_timezone_tz(target_tz, raw_answer, memory_leak_check):
     data = pd.Series(
         [
-            bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
-            bodo.TimestampTZ.fromLocal("2024-02-06 13:15:10", 60),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-02-06 13:15:10", 60),
             None,
-            bodo.TimestampTZ.fromLocal("2024-02-07 14:30:00", -240),
-            bodo.TimestampTZ.fromLocal("2024-07-04 15:45:30", 120),
-            bodo.TimestampTZ.fromLocal("2024-08-01 17:00:00", -300),
+            bodo.types.TimestampTZ.fromLocal("2024-02-07 14:30:00", -240),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 15:45:30", 120),
+            bodo.types.TimestampTZ.fromLocal("2024-08-01 17:00:00", -300),
         ]
     )
 

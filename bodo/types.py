@@ -16,3 +16,9 @@ from bodo.hiframes.time_ext import (
     TimeArrayType,
     Time,
 )
+from bodo.hiframes.timestamptz_ext import (
+    TimestampTZ,
+    TimestampTZType,
+    timestamptz_type,
+    timestamptz_array_type,
+)

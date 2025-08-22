@@ -1693,26 +1693,34 @@ def test_int_to_days(days, memory_leak_check):
         pytest.param(
             pd.Series(
                 [
-                    bodo.TimestampTZ.fromLocal("2015-01-31", 0),
-                    bodo.TimestampTZ.fromLocal("2016-02-29 01:36:01.737418240", 800),
-                    bodo.TimestampTZ.fromLocal("2017-03-27 08:43:00", -800),
+                    bodo.types.TimestampTZ.fromLocal("2015-01-31", 0),
+                    bodo.types.TimestampTZ.fromLocal(
+                        "2016-02-29 01:36:01.737418240", 800
+                    ),
+                    bodo.types.TimestampTZ.fromLocal("2017-03-27 08:43:00", -800),
                     None,
-                    bodo.TimestampTZ.fromLocal("2018-04-25 00:00:21", -600),
-                    bodo.TimestampTZ.fromLocal("2019-05-23 16:00:00", 600),
-                    bodo.TimestampTZ.fromLocal("2020-06-21 05:40:01", 1200),
+                    bodo.types.TimestampTZ.fromLocal("2018-04-25 00:00:21", -600),
+                    bodo.types.TimestampTZ.fromLocal("2019-05-23 16:00:00", 600),
+                    bodo.types.TimestampTZ.fromLocal("2020-06-21 05:40:01", 1200),
                     None,
-                    bodo.TimestampTZ.fromLocal("2021-07-19", 60),
+                    bodo.types.TimestampTZ.fromLocal("2021-07-19", 60),
                     None,
-                    bodo.TimestampTZ.fromLocal("2022-08-17 07:48:01.254654976", 480),
-                    bodo.TimestampTZ.fromLocal("2023-09-15 08:00:00", -480),
+                    bodo.types.TimestampTZ.fromLocal(
+                        "2022-08-17 07:48:01.254654976", 480
+                    ),
+                    bodo.types.TimestampTZ.fromLocal("2023-09-15 08:00:00", -480),
                     None,
-                    bodo.TimestampTZ.fromLocal("2024-10-13 00:00:45.511627776", 420),
-                    bodo.TimestampTZ.fromLocal("2025-11-11 16:15:00", -420),
-                    bodo.TimestampTZ.fromLocal("2026-12-09 11:16:01.467226624", 5),
+                    bodo.types.TimestampTZ.fromLocal(
+                        "2024-10-13 00:00:45.511627776", 420
+                    ),
+                    bodo.types.TimestampTZ.fromLocal("2025-11-11 16:15:00", -420),
+                    bodo.types.TimestampTZ.fromLocal(
+                        "2026-12-09 11:16:01.467226624", 5
+                    ),
                     None,
-                    bodo.TimestampTZ.fromLocal("2017-02-1", 1),
-                    bodo.TimestampTZ.fromLocal("2020-03-1", 2),
-                    bodo.TimestampTZ.fromLocal("2024-11-1", 3),
+                    bodo.types.TimestampTZ.fromLocal("2017-02-1", 1),
+                    bodo.types.TimestampTZ.fromLocal("2020-03-1", 2),
+                    bodo.types.TimestampTZ.fromLocal("2024-11-1", 3),
                 ]
             ),
             "year",
@@ -1748,7 +1756,7 @@ def last_day_scalar_fn(elem, unit):
     """
     Simulates LAST_DAY on a single row
     """
-    if isinstance(elem, bodo.TimestampTZ):
+    if isinstance(elem, bodo.types.TimestampTZ):
         # Convert TimestampTZ to local Timestamp
         elem = elem.local_timestamp()
     if pd.isna(elem) or pd.isna(unit):
@@ -2118,17 +2126,17 @@ def test_next_previous_day_timestamptz(memory_leak_check):
     dt = np.array(
         [
             None,
-            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
             None,
-            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 100),
-            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", -100),
+            bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", -100),
             None,
-            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
-            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 100),
-            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", -100),
+            bodo.types.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", -100),
             None,
-            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", -100),
-            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", 100),
+            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", -100),
+            bodo.types.TimestampTZ.fromLocal("2024-01-02 00:00:00", 100),
         ]
     )
 
@@ -2730,11 +2738,11 @@ def test_timestamp_tz_extract(fname, extra_args, answer, memory_leak_check):
     """
     ts_arr = np.array(
         [
-            bodo.TimestampTZ.fromLocal("1999-12-13 23:59:59.999874250", 0),
-            bodo.TimestampTZ.fromLocal("2023-03-14", 30),
-            bodo.TimestampTZ.fromLocal("2023-04-01 04:30:01.500", -135),
+            bodo.types.TimestampTZ.fromLocal("1999-12-13 23:59:59.999874250", 0),
+            bodo.types.TimestampTZ.fromLocal("2023-03-14", 30),
+            bodo.types.TimestampTZ.fromLocal("2023-04-01 04:30:01.500", -135),
             None,
-            bodo.TimestampTZ.fromLocal("2024-07-04 18:45:00", 480),
+            bodo.types.TimestampTZ.fromLocal("2024-07-04 18:45:00", 480),
         ]
     )
 
@@ -3506,32 +3514,32 @@ def test_date_diff_adjustment_boundary(arg0, arg1, answer, memory_leak_check):
     "arg0, arg1, answer",
     [
         pytest.param(
-            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
             datetime.date(2024, 1, 2),
             1,
             id="ttz-date",
         ),
         pytest.param(
             datetime.date(2024, 1, 2),
-            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
             -1,
             id="date-ttz",
         ),
         pytest.param(
-            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", 420),
-            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
+            bodo.types.TimestampTZ.fromLocal("2024-01-02 00:00:00", 420),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
             -1,
             id="ttz-ttz",
         ),
         pytest.param(
-            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", -420),
-            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
+            bodo.types.TimestampTZ.fromLocal("2024-01-02 00:00:00", -420),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
             -1,
             id="ttz-ttz-different_tz_1",
         ),
         pytest.param(
-            bodo.TimestampTZ.fromLocal("2024-01-02 00:01:00", -1380),
-            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
+            bodo.types.TimestampTZ.fromLocal("2024-01-02 00:01:00", -1380),
+            bodo.types.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
             -1,
             id="ttz-ttz-different_tz_1",
         ),

@@ -99,7 +99,7 @@ _numba_to_sql_column_type_map = {
     # Note date doesn't have native support yet, but the code to
     # cast to datetime64 is handled in the Java code.
     bodo.types.datetime_date_type: SqlTypeEnum.Date.value,
-    bodo.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
+    bodo.types.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
 }
 
 # Scalar dtypes for supported parameters
@@ -120,7 +120,7 @@ _numba_to_sql_param_type_map = {
     # Scalar datetime and timedelta are assumed
     # to be scalar Pandas Timestamp/Timedelta
     bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Timestamp_Ntz.value,
-    bodo.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
+    bodo.types.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
 
@@ -240,7 +240,7 @@ def get_sql_data_type(arr_type):
     if isinstance(arr_type, bodo.DatetimeArrayType):
         # Timezone-aware Timestamp columns have their own special handling.
         return construct_tz_aware_array_type(arr_type, nullable)
-    elif arr_type == bodo.timestamptz_array_type:
+    elif arr_type == bodo.types.timestamptz_array_type:
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Timestamp_Tz.value
         )

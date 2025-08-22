@@ -173,7 +173,7 @@ public class BodoArrayHelpers {
         typeName = String.format("bodo.DatetimeArrayType(%s)", defaultTzExpr.emit());
         break;
       case TIMESTAMP_TZ:
-        typeName = "bodo.timestamptz_array_type";
+        typeName = "bodo.types.timestamptz_array_type";
         break;
       case TIME:
         // TODO: Add nullable support

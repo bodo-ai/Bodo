@@ -255,7 +255,7 @@ def gen_snowflake_schema(
                 sf_schema[col_name] = f"TIMESTAMP_LTZ({precision})"
             else:
                 sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
-        elif col_type == bodo.timestamptz_array_type:
+        elif col_type == bodo.types.timestamptz_array_type:
             precision = get_precision(col_idx)
             sf_schema[col_name] = f"TIMESTAMP_TZ({precision})"
         elif col_type == bodo.datetime_datetime_type:

@@ -901,7 +901,7 @@ def test_multi_function_repartition(capfd):
                     "IDX": range(1000),
                     "O": pd.array(
                         [
-                            bodo.TimestampTZ(
+                            bodo.types.TimestampTZ(
                                 pd.Timestamp("2018-10-1")
                                 + pd.DateOffset(months=5 * (i // 10)),
                                 i,

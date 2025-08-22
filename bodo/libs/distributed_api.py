@@ -557,7 +557,7 @@ def dist_reduce_impl(value, reduce_op, comm):
 
         return impl
 
-    if isinstance(value, bodo.TimestampTZType):
+    if isinstance(value, bodo.types.TimestampTZType):
         # This requires special handling because TimestampTZ's scalar
         # representation isn't the same as it's array representation - as such,
         # we need to extract the timestamp and offset separately, otherwise the
@@ -599,7 +599,7 @@ def dist_reduce_impl(value, reduce_op, comm):
             )
             out_ts = load_val_ptr(out_ts_ptr, value_ts)
             out_offset = load_val_ptr(out_offset_ptr, value_ts)
-            return bodo.TimestampTZ(pd.Timestamp(out_ts), out_offset)
+            return bodo.types.TimestampTZ(pd.Timestamp(out_ts), out_offset)
 
         return impl
 
@@ -1133,8 +1133,8 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         )
 
     # TimestampTZ array
-    if dtype == bodo.timestamptz_array_type:
-        return np.array([bodo.TimestampTZ(pd.Timestamp(0), 0)])
+    if dtype == bodo.types.timestamptz_array_type:
+        return np.array([bodo.types.TimestampTZ(pd.Timestamp(0), 0)])
 
     # TimeArray
     if isinstance(dtype, TimeArrayType):
@@ -1410,7 +1410,7 @@ class BcastScalarInfer(AbstractTemplate):
                 types.none,
                 types.bool_,
                 bodo.types.datetime_date_type,
-                bodo.timestamptz_type,
+                bodo.types.timestamptz_type,
             ]
         ):
             raise BodoError(
@@ -1424,7 +1424,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
     if val == types.none:
         return lambda val, root=DEFAULT_ROOT, comm=0: None
 
-    if val == bodo.timestamptz_type:
+    if val == bodo.types.timestamptz_type:
 
         def impl(val, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
             updated_timestamp = bodo.libs.distributed_api.bcast_scalar(
@@ -1433,7 +1433,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
             updated_offset = bodo.libs.distributed_api.bcast_scalar(
                 val.offset_minutes, root, comm
             )
-            return bodo.TimestampTZ(updated_timestamp, updated_offset)
+            return bodo.types.TimestampTZ(updated_timestamp, updated_offset)
 
         return impl
 
@@ -1862,7 +1862,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return date_getitem_impl
 
-    if arr == bodo.timestamptz_array_type:
+    if arr == bodo.types.timestamptz_array_type:
 
         def timestamp_tz_getitem_impl(
             arr, ind, arr_start, total_len, is_1D

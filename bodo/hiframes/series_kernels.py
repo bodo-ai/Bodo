@@ -126,7 +126,7 @@ def _get_type_max_value_overload(dtype):
         return impl
 
     # timestamptz array
-    if dtype == bodo.timestamptz_array_type:
+    if dtype == bodo.types.timestamptz_array_type:
         return lambda dtype: _get_timestamptz_max_value()
 
     if dtype.dtype == types.bool_:
@@ -161,7 +161,7 @@ def _get_time_max_value():  # pragma: no cover
 
 @register_jitable
 def _get_timestamptz_max_value():  # pragma: no cover
-    return bodo.TimestampTZ(
+    return bodo.types.TimestampTZ(
         pd.Timestamp(numba.cpython.builtins.get_type_max_value(numba.core.types.int64)),
         0,
     )
@@ -221,7 +221,7 @@ def _get_type_min_value_overload(dtype):
         )  # pragma: no cover
 
     # timestamptz array
-    if dtype == bodo.timestamptz_array_type:
+    if dtype == bodo.types.timestamptz_array_type:
         return lambda dtype: _get_timestamptz_min_value()
 
     if dtype.dtype == types.bool_:
@@ -256,7 +256,7 @@ def _get_time_min_value():  # pragma: no cover
 
 @register_jitable
 def _get_timestamptz_min_value():  # pragma: no cover
-    return bodo.TimestampTZ(
+    return bodo.types.TimestampTZ(
         pd.Timestamp(numba.cpython.builtins.get_type_min_value(numba.core.types.int64)),
         0,
     )

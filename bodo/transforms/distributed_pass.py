@@ -4670,7 +4670,7 @@ class DistributedPass:
                 init_val = "bodo.hiframes.series_kernels._get_date_max_value()"
             elif isinstance(el_typ, TimeType):
                 init_val = "bodo.hiframes.series_kernels._get_time_max_value()"
-            elif isinstance(el_typ, bodo.TimestampTZType):
+            elif isinstance(el_typ, bodo.types.TimestampTZType):
                 init_val = "bodo.hiframes.series_kernels._get_timestamptz_max_value()"
             else:
                 init_val = f"numba.cpython.builtins.get_type_max_value(np.ones(1,dtype=np.{el_typ}).dtype)"
@@ -4694,7 +4694,7 @@ class DistributedPass:
                 init_val = "bodo.hiframes.series_kernels._get_date_min_value()"
             elif isinstance(el_typ, TimeType):
                 init_val = "bodo.hiframes.series_kernels._get_time_min_value()"
-            elif isinstance(el_typ, bodo.TimestampTZType):
+            elif isinstance(el_typ, bodo.types.TimestampTZType):
                 init_val = "bodo.hiframes.series_kernels._get_timestamptz_min_value()"
             else:
                 init_val = f"numba.cpython.builtins.get_type_min_value(np.ones(1,dtype=np.{el_typ}).dtype)"

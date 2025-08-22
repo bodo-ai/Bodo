@@ -307,7 +307,7 @@ def constant_timestamptz(context, builder, ty, pyval):
 
 
 def init_timestamptz_from_local(local_timestamp, offset_minutes):  # pragma: no cover
-    return bodo.TimestampTZ.fromLocal(local_timestamp, offset_minutes)
+    return bodo.types.TimestampTZ.fromLocal(local_timestamp, offset_minutes)
 
 
 @overload(init_timestamptz_from_local)

@@ -135,15 +135,21 @@ def test_timestamptz_literal(basic_df, spark_info, memory_leak_check):
         expected_output = pd.DataFrame(
             {
                 "TZ1": [
-                    bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05.123456789", -480)
+                    bodo.types.TimestampTZ.fromLocal(
+                        "2020-01-02 03:04:05.123456789", -480
+                    )
                 ]
                 * length,
                 # The session tz is +545
                 "TZ2": [
-                    bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05.123456789", 345)
+                    bodo.types.TimestampTZ.fromLocal(
+                        "2020-01-02 03:04:05.123456789", 345
+                    )
                 ]
                 * length,
-                "TZ3": [bodo.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456789", 0)]
+                "TZ3": [
+                    bodo.types.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456789", 0)
+                ]
                 * length,
             }
         )

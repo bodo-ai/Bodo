@@ -780,7 +780,7 @@ def add_interval_util(start_dt, interval):
         )
         scalar_text += "new_local_ts = local_ts + arg1\n"
         scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(new_local_ts, arg0.offset_minutes)\n"
-        out_dtype = bodo.timestamptz_array_type
+        out_dtype = bodo.types.timestamptz_array_type
     else:
         # For regular timestamps, perform the standard arithmetic on the datetime and
         # interval after unwrapping them, then re-wrap the result
@@ -1130,7 +1130,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                 scalar_text = f"res[i] = {wrap_str}({unwrap_str}(arg1) + pd.Timedelta({unit}=arg0){wrap_suffix})\n"
 
             out_dtype = (
-                bodo.timestamptz_array_type
+                bodo.types.timestamptz_array_type
                 if is_timestamp_tz
                 else types.Array(bodo.types.datetime64ns, 1, "C")
             )
@@ -1951,7 +1951,7 @@ def overload_date_trunc_util(
             scalar_text += (
                 "in_val = bodo.hiframes.timestamptz_ext.get_local_timestamp(arg1)\n"
             )
-            out_dtype = bodo.timestamptz_array_type
+            out_dtype = bodo.types.timestamptz_array_type
         elif tz_literal is None:
             scalar_text += f"in_val = {box_str}(arg1)\n"
             out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
@@ -2183,7 +2183,7 @@ def overload_timestamp_tz_from_parts_util(
         "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(ts, offset)"
     )
 
-    out_dtype = bodo.timestamptz_array_type
+    out_dtype = bodo.types.timestamptz_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 

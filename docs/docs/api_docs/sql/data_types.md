@@ -23,7 +23,7 @@ Python types and Bodo data types.
 | `TIME`                | `bodo.types.Time`            | `bodo.types.TimeType`                      |
 | `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(None)`     |
 | `TIMESTAMP_LTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(local_tz)` |
-| `TIMESTAMP_TZ`        | `bodo.TimestampTZ`     | `bodo.timestamptz_type`              |
+| `TIMESTAMP_TZ`        | `bodo.types.TimestampTZ`     | `bodo.types.timestamptz_type`              |
 | `INTERVAL(day-time)`  | `np.timedelta64[ns]`   | `bodo.types.timedelta64ns`                 |
 | `ARRAY`               | `pyarrow.large_list`   | `bodo.ArrayItemArray`                |
 | `MAP`                 | `pyarrow.map`          | `bodo.MapScalarType`                 |
@@ -45,7 +45,7 @@ to avoid any potential issues.
 
 ### TIMESTAMP\_TZ
 
-Note that `bodo.TimestampTZ` in python is a custom type provided by the Bodo
+Note that `bodo.types.TimestampTZ` in python is a custom type provided by the Bodo
 library. In `sql` this datatype is compatible with [Snowflake's
 TIMESTAMP\_TZ](https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp-ltz-timestamp-ntz-timestamp-tz).
 

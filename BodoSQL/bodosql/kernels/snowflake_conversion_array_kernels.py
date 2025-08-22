@@ -860,7 +860,7 @@ def overload_to_timestamptz_util(
         [conversion_val, time_zone, dict_encoding_state, func_id],
         [True, False, False, False],
         scalar_text,
-        bodo.timestamptz_array_type,
+        bodo.types.timestamptz_array_type,
         prefix_code=prefix_code,
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
@@ -2429,7 +2429,7 @@ def overload_convert_timezone_tz_util(target_tz, data):
     arg_names = ["target_tz", "data"]
     arg_types = [target_tz, data]
     propagate_null = [True, True]
-    out_dtype = bodo.timestamptz_array_type
+    out_dtype = bodo.types.timestamptz_array_type
     scalar_text = "current_target_offset = arg1.utc_timestamp.tz_localize(arg0).utcoffset().value // 60_000_000_000\n"
     scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(arg1.utc_timestamp, current_target_offset)\n"
 

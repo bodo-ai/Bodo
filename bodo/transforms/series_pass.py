@@ -2532,7 +2532,7 @@ class SeriesPass:
                     self,
                     extra_globals={"_precision": precision},
                 )
-            elif typ == bodo.timestamptz_array_type:
+            elif typ == bodo.types.timestamptz_array_type:
                 return nodes + compile_func_single_block(
                     eval(
                         "lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(n)"

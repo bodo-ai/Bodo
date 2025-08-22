@@ -1768,7 +1768,7 @@ def _infer_ndarray_obj_dtype(val):
             )
         arr = dtype_to_array_type(left_dtype, False)
         return bodo.libs.interval_arr_ext.IntervalArrayType(arr)
-    if isinstance(first_val, bodo.TimestampTZ):
+    if isinstance(first_val, bodo.types.TimestampTZ):
         return bodo.hiframes.timestamptz_ext.timestamptz_array_type
 
     raise BodoError(

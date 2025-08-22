@@ -1029,7 +1029,7 @@ def scatterv_impl_jit(
         return impl_null_arr
 
     # TimestampTZ array
-    if data == bodo.timestamptz_array_type:
+    if data == bodo.types.timestamptz_array_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def impl_timestamp_tz_arr(
