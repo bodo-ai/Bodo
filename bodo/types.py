@@ -1,6 +1,8 @@
 import numba
 from numba.core.types import *  # noqa
 
+from numba.core.types import List
+
 datetime64ns = numba.core.types.NPDatetime("ns")
 timedelta64ns = numba.core.types.NPTimedelta("ns")
 
