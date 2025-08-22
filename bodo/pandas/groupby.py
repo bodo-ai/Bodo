@@ -40,7 +40,7 @@ from bodo.pandas.utils import (
     wrap_plan,
 )
 from bodo.utils.conversion import coerce_scalar_to_array, coerce_to_array
-from bodo.utils.typing import BodoWarning
+from bodo.utils.typing import BodoWarning, get_array_getitem_scalar_type
 from bodo.utils.utils import is_array_typ
 
 if pt.TYPE_CHECKING:
@@ -616,7 +616,7 @@ def _make_logical_agg_plan(
     exprs: list[AggregateExpression],
     empty_out_data: pd.DataFrame | pd.Series,
 ) -> BodoDataFrame | BodoSeries:
-    """Wrap exprs in a LogicalAggregate lazy plan do additional column reshuffling
+    """Wrap exprs in a LogicalAggregate lazy plan and do additional column reshuffling
     if necessary.
     """
     key_indices = [grouped._obj.columns.get_loc(c) for c in grouped._keys]
@@ -647,8 +647,8 @@ def _make_logical_agg_plan(
 def _get_cfunc_wrapper(
     func: pt.Callable, empty_data: pd.DataFrame | pd.Series, out_type: pd.Series
 ) -> pt.Callable[[], int]:
-    """Create a wrapper around compiling a cfunc on individual workers which computes
-    UDF results on a single group.
+    """Create a wrapper around compiling a cfunc, which computes a UDF result for a
+    single group. Called once on each worker.
 
     Args:
         func (pt.Callable): The UDF
@@ -666,7 +666,7 @@ def _get_cfunc_wrapper(
 
     jitted_func = bodo.jit(cache=False, spawn=False, distributed=False)(func)
 
-    # ignore warning "Empty object array passed to Bodo"
+    # Ignore warning "Empty object array passed to Bodo"
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", BodoWarning)
         in_type = bodo.typeof(empty_data)
@@ -682,7 +682,7 @@ def _get_cfunc_wrapper(
         column_names = bodo.utils.typing.ColNamesMetaType(cols)
 
         @numba.njit
-        def cpp_table_to_py_impl(in_cpp_table):
+        def cpp_table_to_py_impl(in_cpp_table):  # pragma: no cover
             return cpp_table_to_df_jit(
                 in_cpp_table, out_cols_arr, column_names, py_table_type, index_type
             )
@@ -695,13 +695,13 @@ def _get_cfunc_wrapper(
         in_col_type = in_type.data
 
         @numba.njit
-        def cpp_table_to_py_impl(in_cpp_table):
+        def cpp_table_to_py_impl(in_cpp_table):  # pragma: no cover
             return cpp_table_to_series_jit(in_cpp_table, in_col_type)
 
     if isinstance(out_col_type, bodo.ArrayItemArrayType):
 
         @numba.njit
-        def coerce_to_array_impl(scalar):
+        def coerce_to_array_impl(scalar):  # pragma: no cover
             # ArrayItemArrayType expects an Array Dtype, so we first have to
             # coerce the type to Array before converting the Array to a nested array.
             out_arr = coerce_to_array(scalar, use_nullable_array=True)
@@ -712,7 +712,7 @@ def _get_cfunc_wrapper(
     else:
 
         @numba.njit
-        def coerce_to_array_impl(scalar):
+        def coerce_to_array_impl(scalar):  # pragma: no cover
             out_arr = coerce_scalar_to_array(scalar, 1, out_col_type, dict_encode=False)
             # coerce_scalar_to_array doesn't respect nullable types, so using coerce_to_array
             # to cast output to nullable if it isn't already.
@@ -720,7 +720,7 @@ def _get_cfunc_wrapper(
             return out_arr
 
     def wrapper():
-        def apply_func_impl(in_cpp_table):
+        def apply_func_impl(in_cpp_table):  # pragma: no cover
             py_in = cpp_table_to_py_impl(in_cpp_table)
             result = jitted_func(py_in)
             out_arr = coerce_to_array_impl(result)
@@ -734,11 +734,10 @@ def _get_cfunc_wrapper(
 
 
 def _numba_type_to_pyarrow_type(typ):
-    """Convert the numba type to corresponding Pyarrow type or
+    """Convert the given type to the corresponding Pyarrow type or
     return None.
 
-    Similar to io/helpers.py::_numba_type_to_pyarrow_type except
-    converts any scalar type and not just arrays.
+    Similar to io/helpers.py::_numba_type_to_pyarrow_type.
     """
     from numba import types
 
@@ -776,8 +775,12 @@ def _numba_type_to_pyarrow_type(typ):
     elif isinstance(typ, types.Optional):
         return _numba_type_to_pyarrow_type(typ.type)
 
-    elif isinstance(typ, types.List) or is_array_typ(typ, include_index_series=False):
+    elif isinstance(typ, types.List):
         inner_type = _numba_type_to_pyarrow_type(typ.dtype)
+        return pa.large_list(inner_type)
+
+    elif is_array_typ(typ, include_index_series=False):
+        inner_type = _numba_type_to_pyarrow_type(get_array_getitem_scalar_type(typ))
         return pa.large_list(inner_type)
 
     elif isinstance(typ, bodo.PandasTimestampType):
@@ -787,6 +790,8 @@ def _numba_type_to_pyarrow_type(typ):
         inner_types = [_numba_type_to_pyarrow_type(typ_) for typ_ in typ.data]
         fields = [pa.field(name, typ_) for name, typ_ in zip(typ.names, inner_types)]
         return pa.struct(fields)
+
+    # TODO: expand to more cases.
 
     return numba_to_arrow_map.get(typ, None)
 

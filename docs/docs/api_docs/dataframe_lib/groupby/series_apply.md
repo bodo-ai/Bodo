@@ -1,4 +1,4 @@
-# SeriesGroupBy.apply {#frame-apply}
+# SeriesGroupBy.apply {#series-apply}
 ```
 SeriesGroupBy.apply(self, func, *args, include_groups=True, **kwargs)
 ```
