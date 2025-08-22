@@ -29,6 +29,10 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 import bodo.pandas_compat
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.utils.indexing import (
     get_new_null_mask_bool_index,
     get_new_null_mask_int_index,
@@ -1656,10 +1660,10 @@ timedelta_unsupported_methods = [
 def _install_pd_timedelta_unsupported():
     for attr_name in timedelta_unsupported_attrs:
         full_name = "pandas.Timedelta." + attr_name
-        bodo.overload_unsupported_attribute(PDTimeDeltaType, attr_name, full_name)
+        overload_unsupported_attribute(PDTimeDeltaType, attr_name, full_name)
     for fname in timedelta_unsupported_methods:
         full_name = "pandas.Timedelta." + fname
-        bodo.overload_unsupported_method(PDTimeDeltaType, fname, full_name)
+        overload_unsupported_method(PDTimeDeltaType, fname, full_name)
 
 
 _install_pd_timedelta_unsupported()

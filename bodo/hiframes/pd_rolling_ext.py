@@ -34,6 +34,9 @@ from bodo.hiframes.rolling import (
     supported_rolling_funcs,
     unsupported_rolling_methods,
 )
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_method,
+)
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -496,7 +499,7 @@ def _install_rolling_unsupported_methods():
     """install unsupported overloads for rolling functions"""
     for fname in unsupported_rolling_methods:
         full_name = f"pandas.core.window.rolling.Rolling.{fname}"
-        bodo.overload_unsupported_method(RollingType, fname, full_name)
+        overload_unsupported_method(RollingType, fname, full_name)
 
 
 _install_rolling_methods()

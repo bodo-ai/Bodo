@@ -42,6 +42,10 @@ from bodo.ir.argument_checkers import (
     StringSeriesArgumentChecker,
 )
 from bodo.ir.declarative_templates import overload_method_declarative
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.array import (
     array_info_type,
     array_to_info,
@@ -1923,11 +1927,11 @@ def _install_catseries_unsupported():
 
     for attr_name in unsupported_cat_attrs:
         full_name = "Series.cat." + attr_name
-        bodo.overload_unsupported_attribute(SeriesCatMethodType, attr_name, full_name)
+        overload_unsupported_attribute(SeriesCatMethodType, attr_name, full_name)
 
     for fname in unsupported_cat_methods:
         full_name = "Series.cat." + fname
-        bodo.overload_unsupported_method(SeriesCatMethodType, fname, full_name)
+        overload_unsupported_method(SeriesCatMethodType, fname, full_name)
 
 
 _install_catseries_unsupported()
@@ -1950,7 +1954,7 @@ def _install_strseries_unsupported():
 
     for fname in unsupported_str_methods:
         full_name = "Series.str." + fname
-        bodo.overload_unsupported_method(SeriesStrMethodType, fname, full_name)
+        overload_unsupported_method(SeriesStrMethodType, fname, full_name)
 
 
 _install_strseries_unsupported()

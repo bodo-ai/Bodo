@@ -252,10 +252,6 @@ from bodo.ir.object_mode import (
     warning_objmode as objmode,
     no_warning_objmode,
 )
-from bodo.ir.unsupported_method_template import (
-    overload_unsupported_attribute,
-    overload_unsupported_method,
-)
 
 
 def set_numba_environ_vars():

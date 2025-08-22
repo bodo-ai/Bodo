@@ -58,6 +58,10 @@ from bodo.hiframes.table import (
     set_table_data_codegen,
 )
 from bodo.io import json_cpp
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.array import (
     append_arr_info_list_to_cpp_table,
     arr_info_list_to_table,
@@ -5332,10 +5336,10 @@ def _install_dataframe_unsupported():
 
     for attr_name in dataframe_unsupported_attrs:
         full_name = "DataFrame." + attr_name
-        bodo.overload_unsupported_attribute(DataFrameType, attr_name, full_name)
+        overload_unsupported_attribute(DataFrameType, attr_name, full_name)
     for fname in dataframe_unsupported:
         full_name = "DataFrame." + fname
-        bodo.overload_unsupported_method(DataFrameType, fname, full_name)
+        overload_unsupported_method(DataFrameType, fname, full_name)
 
 
 # Run install unsupported for each module to ensure a correct error message.

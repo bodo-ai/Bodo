@@ -27,6 +27,10 @@ from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.io import csv_cpp
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.float_arr_ext import FloatDtype
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
@@ -1430,11 +1434,11 @@ def _install_series_unsupported():
 
     for attr_name in series_unsupported_attrs:
         full_name = "Series." + attr_name
-        bodo.overload_unsupported_attribute(SeriesType, attr_name, full_name)
+        overload_unsupported_attribute(SeriesType, attr_name, full_name)
 
     for fname in series_unsupported_methods:
         full_name = "Series." + fname
-        bodo.overload_unsupported_method(SeriesType, fname, full_name)
+        overload_unsupported_method(SeriesType, fname, full_name)
 
 
 _install_series_unsupported()
@@ -1670,13 +1674,11 @@ def _install_heter_series_unsupported():
 
     for attr_name in heter_series_unsupported_attrs:
         full_name = "HeterogeneousSeries." + attr_name
-        bodo.overload_unsupported_attribute(
-            HeterogeneousSeriesType, attr_name, full_name
-        )
+        overload_unsupported_attribute(HeterogeneousSeriesType, attr_name, full_name)
 
     for fname in heter_series_unsupported_methods:
         full_name = "HeterogeneousSeries." + fname
-        bodo.overload_unsupported_method(HeterogeneousSeriesType, fname, full_name)
+        overload_unsupported_method(HeterogeneousSeriesType, fname, full_name)
 
 
 _install_heter_series_unsupported()

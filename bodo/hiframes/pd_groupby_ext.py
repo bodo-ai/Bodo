@@ -34,6 +34,10 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_from_cpp_table,
@@ -2748,29 +2752,29 @@ def _install_groupby_unsupported():
     """
 
     for attr_name in groupby_unsupported_attr:
-        bodo.overload_unsupported_attribute(
+        overload_unsupported_attribute(
             DataFrameGroupByType, attr_name, f"DataFrameGroupBy.{attr_name}"
         )
 
     for fname in groupby_unsupported:
-        bodo.overload_unsupported_method(
+        overload_unsupported_method(
             DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 
     # TODO: Replace DataFrameGroupByType with SeriesGroupByType once we
     # have separate types.
     for attr_name in series_only_unsupported_attrs:
-        bodo.overload_unsupported_attribute(
+        overload_unsupported_attribute(
             DataFrameGroupByType, attr_name, f"SeriesGroupBy.{attr_name}"
         )
 
     for fname in series_only_unsupported:
-        bodo.overload_unsupported_method(
+        overload_unsupported_method(
             DataFrameGroupByType, fname, f"SeriesGroupBy.{fname}"
         )
 
     for fname in dataframe_only_unsupported:
-        bodo.overload_unsupported_method(
+        overload_unsupported_method(
             DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 

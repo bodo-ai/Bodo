@@ -34,6 +34,10 @@ from bodo.ir.declarative_templates import (
     overload_attribute_declarative,
     overload_method_declarative,
 )
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.utils.typing import (
     BodoError,
@@ -1214,13 +1218,13 @@ def _install_series_dt_unsupported():
 
     for attr_name in series_dt_unsupported_attrs:
         full_name = "Series.dt." + attr_name
-        bodo.overload_unsupported_attribute(
+        overload_unsupported_attribute(
             SeriesDatetimePropertiesType, attr_name, full_name
         )
 
     for fname in series_dt_unsupported_methods:
         full_name = "Series.dt." + fname
-        bodo.overload_unsupported_method(SeriesDatetimePropertiesType, fname, full_name)
+        overload_unsupported_method(SeriesDatetimePropertiesType, fname, full_name)
 
 
 _install_series_dt_unsupported()

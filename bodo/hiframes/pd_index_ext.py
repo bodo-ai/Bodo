@@ -36,6 +36,10 @@ from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_multi_index_ext import IndexNameType, MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.float_arr_ext import FloatingArrayType
@@ -7582,7 +7586,7 @@ def _install_index_unsupported():
     for fname in index_unsupported_methods:
         for format_str, typ in index_types:
             format_str, extra_info = _split_idx_format_str(format_str)
-            bodo.overload_unsupported_method(
+            overload_unsupported_method(
                 typ, fname, format_str.format(fname), extra_info=extra_info
             )
 
@@ -7590,7 +7594,7 @@ def _install_index_unsupported():
     for attr_name in index_unsupported_atrs:
         for format_str, typ in index_types:
             format_str, extra_info = _split_idx_format_str(format_str)
-            bodo.overload_unsupported_attribute(
+            overload_unsupported_attribute(
                 typ, attr_name, format_str.format(attr_name), extra_info=extra_info
             )
 
@@ -7621,7 +7625,7 @@ def _install_index_unsupported():
         format_str = idx_typ_to_format_str_map[typ]
         for fname in cur_typ_unsupported_methods_list:
             format_str, extra_info = _split_idx_format_str(format_str)
-            bodo.overload_unsupported_method(
+            overload_unsupported_method(
                 typ, fname, format_str.format(fname), extra_info=extra_info
             )
 
@@ -7630,7 +7634,7 @@ def _install_index_unsupported():
         format_str = idx_typ_to_format_str_map[typ]
         for attr_name in cur_typ_unsupported_attrs_list:
             format_str, extra_info = _split_idx_format_str(format_str)
-            bodo.overload_unsupported_attribute(
+            overload_unsupported_attribute(
                 typ, attr_name, format_str.format(attr_name), extra_info=extra_info
             )
 

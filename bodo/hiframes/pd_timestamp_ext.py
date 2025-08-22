@@ -54,6 +54,10 @@ from bodo.hiframes.datetime_timedelta_ext import (
     pd_timedelta_type,
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs import hdatetime_ext
 from bodo.libs.pd_datetime_arr_ext import get_tz_type_info
 from bodo.libs.str_arr_ext import string_array_type
@@ -3057,10 +3061,10 @@ timestamp_unsupported_methods = [
 def _install_pd_timestamp_unsupported():
     for attr_name in timestamp_unsupported_attrs:
         full_name = "pandas.Timestamp." + attr_name
-        bodo.overload_unsupported_attribute(PandasTimestampType, attr_name, full_name)
+        overload_unsupported_attribute(PandasTimestampType, attr_name, full_name)
     for fname in timestamp_unsupported_methods:
         full_name = "pandas.Timestamp." + fname
-        bodo.overload_unsupported_method(PandasTimestampType, fname, full_name)
+        overload_unsupported_method(PandasTimestampType, fname, full_name)
 
 
 _install_pd_timestamp_unsupported()
