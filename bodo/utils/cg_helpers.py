@@ -6,9 +6,6 @@ from numba.core import cgutils, types
 from numba.extending import intrinsic
 
 import bodo
-from bodo.libs import array_ext
-
-ll.add_symbol("is_na_value", array_ext.is_na_value)
 
 
 def get_bitmap_bit(builder, null_bitmap_ptr, ind):

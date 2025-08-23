@@ -70,11 +70,6 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, hdist);
     SetAttrStringFromPyInit(m, hstr_ext);
     SetAttrStringFromPyInit(m, decimal_ext);
-    SetAttrStringFromPyInit(m, quantile_alg);
-    SetAttrStringFromPyInit(m, lateral_cpp);
-    SetAttrStringFromPyInit(m, theta_sketches);
-    SetAttrStringFromPyInit(m, puffin_file);
-    SetAttrStringFromPyInit(m, lead_lag);
     SetAttrStringFromPyInit(m, hdatetime_ext);
     SetAttrStringFromPyInit(m, hio);
     SetAttrStringFromPyInit(m, array_ext);
@@ -89,13 +84,10 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, memory_budget_cpp);
     SetAttrStringFromPyInit(m, stream_join_cpp);
     SetAttrStringFromPyInit(m, stream_groupby_cpp);
-    SetAttrStringFromPyInit(m, stream_window_cpp);
     SetAttrStringFromPyInit(m, stream_dict_encoding_cpp);
     SetAttrStringFromPyInit(m, stream_sort_cpp);
-    SetAttrStringFromPyInit(m, listagg);
     SetAttrStringFromPyInit(m, table_builder_cpp);
     SetAttrStringFromPyInit(m, query_profile_collector_cpp);
-    SetAttrStringFromPyInit(m, uuid_cpp);
 #ifdef BUILD_WITH_V8
     SetAttrStringFromPyInit(m, javascript_udf_cpp);
 #endif
