@@ -14,7 +14,7 @@ Currently, Bodo DataFrames will fallback to [pandas.core.groupby.SeriesGroupBy.a
 Currently only scalar return types are supported in Bodo DataFrames,
 if *func* returns a series or dataframe, a fallback to pandas.core.groupby.SeriesGroupBy.apply will be triggered.
 
-: __include_groups : *bool, default True*__ Whether to include grouping keys in the input to *func*.
+: __include_groups : *bool, default False*__ Whether to include grouping keys in the input to *func*.
 Bodo DataFrames only supports the value False, if *include_groups*, a fallback to pandas.core.groupby.SeriesGroupBy.apply will be triggered.
 
 : __args, kwargs__ Positional and keyword arguments to pass to *func*.

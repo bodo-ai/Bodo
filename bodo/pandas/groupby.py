@@ -160,9 +160,10 @@ class DataFrameGroupBy:
 
             raise AttributeError(e)
 
-    @check_args_fallback(supported=["func", "include_groups"])
-    def apply(self, func, *args, include_groups=True, **kwargs):
-        return _groupby_apply_plan(self, func, include_groups, *args, **kwargs)
+    @check_args_fallback(supported=["func"])
+    def apply(self, func, *args, include_groups=False, **kwargs):
+        """Apply a function group-wise and combine results together."""
+        return _groupby_apply_plan(self, func, *args, **kwargs)
 
     @check_args_fallback(supported="func")
     def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
@@ -343,9 +344,10 @@ class SeriesGroupBy:
             gb = pd.DataFrame(self._obj).groupby(self._keys)[self._selection[0]]
             return object.__getattribute__(gb, name)
 
-    @check_args_fallback(supported=["func", "include_groups"])
-    def apply(self, func, *args, include_groups=True, **kwargs):
-        return _groupby_apply_plan(self, func, include_groups, *args, **kwargs)
+    @check_args_fallback(supported=["func"])
+    def apply(self, func, *args, include_groups=False, **kwargs):
+        """Apply a function group-wise and combine results together."""
+        return _groupby_apply_plan(self, func, *args, **kwargs)
 
     @check_args_fallback(supported="func")
     def aggregate(self, func=None, *args, engine=None, engine_kwargs=None, **kwargs):
@@ -464,15 +466,10 @@ class SeriesGroupBy:
 
 
 def _groupby_apply_plan(
-    grouped: SeriesGroupBy | DataFrameGroupBy, func, include_groups, *args, **kwargs
+    grouped: SeriesGroupBy | DataFrameGroupBy, func, *args, **kwargs
 ) -> BodoSeries | BodoDataFrame:
     """Implementation of SeriesGroupby/DataFrameGroupby.apply."""
     from bodo.pandas.base import _empty_like
-
-    if include_groups:
-        raise BodoLibNotImplementedException(
-            "Groupby.apply(): include_groups=True not supported yet."
-        )
 
     if not callable(func):
         raise BodoLibNotImplementedException(

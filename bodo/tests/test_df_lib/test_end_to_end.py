@@ -2528,7 +2528,7 @@ def test_groupby_apply():
             num = df["C"].sum()
             return num / denom
 
-        ret = df.groupby("A", as_index=False).apply(udf, include_groups=False)
+        ret = df.groupby("A", as_index=False).apply(udf)
         ret.columns = ["A", "Q"]
         return ret
 
