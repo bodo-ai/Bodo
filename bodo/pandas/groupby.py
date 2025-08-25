@@ -16,12 +16,6 @@ from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
 import bodo
-from bodo.decorators import _cfunc
-from bodo.libs.array import (
-    array_info_type,
-    array_to_info,
-    table_type,
-)
 from bodo.pandas.plan import (
     AggregateExpression,
     LogicalAggregate,
@@ -35,13 +29,8 @@ from bodo.pandas.utils import (
     _empty_pd_array,
     check_args_fallback,
     convert_to_pandas_types,
-    cpp_table_to_df_jit,
-    cpp_table_to_series_jit,
     wrap_plan,
 )
-from bodo.utils.conversion import coerce_scalar_to_array, coerce_to_array
-from bodo.utils.typing import BodoWarning, get_array_getitem_scalar_type
-from bodo.utils.utils import is_array_typ
 
 if pt.TYPE_CHECKING:
     from bodo.pandas import BodoDataFrame, BodoSeries
@@ -659,7 +648,16 @@ def _get_cfunc_wrapper(
     """
     import numpy as np
 
+    from bodo.decorators import _cfunc
     from bodo.hiframes.table import TableType
+    from bodo.libs.array import (
+        array_info_type,
+        array_to_info,
+        table_type,
+    )
+    from bodo.pandas.utils_jit import cpp_table_to_df_jit, cpp_table_to_series_jit
+    from bodo.utils.conversion import coerce_scalar_to_array, coerce_to_array
+    from bodo.utils.typing import BodoWarning
 
     jitted_func = bodo.jit(cache=False, spawn=False, distributed=False)(func)
 
@@ -740,6 +738,7 @@ def _numba_type_to_pyarrow_type(typ):
 
     from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
     from bodo.libs.binary_arr_ext import bytes_type
+    from bodo.utils.typing import get_array_getitem_scalar_type
     from bodo.utils.utils import is_array_typ
 
     numba_to_arrow_map = {
@@ -909,6 +908,8 @@ def _get_agg_output_type(
             # TODO: bool/decimal median
             fallback = True
     elif callable(func.func):
+        from bodo.utils.utils import is_array_typ
+
         # UDF case
         empty_in_col = pd.Series(_empty_pd_array(pa_type))
         out_numba_type = _get_scalar_udf_out_type(func.func, empty_in_col)
