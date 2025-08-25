@@ -359,6 +359,18 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         super()._set_axis(1, value)
 
     @property
+    def columns(self):
+        return super().columns
+
+    @columns.setter
+    def columns(self, value):
+        if self.is_lazy_plan():
+            empty_data = self._mgr._plan.empty_data
+            empty_data.columns = value
+            self._mgr._plan.pa_schema = pa.Schema.from_pandas(empty_data)
+        super()._set_axis(0, value)
+
+    @property
     def shape(self):
         from bodo.pandas.plan import count_plan
 
