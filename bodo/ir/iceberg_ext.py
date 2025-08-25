@@ -11,13 +11,20 @@ import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
-from numba.core.extending import overload
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     next_label,
     replace_arg_nodes,
 )
-from numba.extending import intrinsic
+from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    models,
+    overload,
+    register_model,
+    unbox,
+)
 
 import bodo
 import bodo.ir.connector
@@ -27,7 +34,6 @@ from bodo.hiframes.table import TableType
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import pyarrow_schema_type, pyiceberg_catalog_type
-from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
 from bodo.ir.connector import Connector, log_limit_pushdown
 from bodo.ir.filter import Filter, FilterVisitor
 from bodo.ir.sql_ext import (
@@ -74,6 +80,67 @@ ll.add_symbol("iceberg_pq_read_py_entry", arrow_cpp.iceberg_pq_read_py_entry)
 ll.add_symbol(
     "iceberg_pq_reader_init_py_entry", arrow_cpp.iceberg_pq_reader_init_py_entry
 )
+
+
+class ParquetPredicateType(types.Type):
+    """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
+    It is just a Python object passed as pointer to C++
+    """
+
+    def __init__(self):
+        super().__init__(name="ParquetPredicateType()")
+
+
+parquet_predicate_type = ParquetPredicateType()
+types.parquet_predicate_type = parquet_predicate_type  # type: ignore
+register_model(ParquetPredicateType)(models.OpaqueModel)
+
+
+@unbox(ParquetPredicateType)
+def unbox_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(ParquetPredicateType)
+def box_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
+
+
+class ParquetFilterScalarsListType(types.Type):
+    """
+    Type for filter scalars for Parquet filtering
+    (e.g. [("f0", 2), ("f1", [1, 2, 3]), ("f2", "BODO")]).
+    It is a list of tuples. Each tuple has
+    a string for the variable name and the second element
+    can be any Python type (e.g. string, int, list, date, etc.)
+    It is just a Python object passed as pointer to C++
+    """
+
+    def __init__(self):
+        super().__init__(name="ParquetFilterScalarsListType()")
+
+
+parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
+types.parquet_filter_scalars_list_type = parquet_filter_scalars_list_type  # type: ignore
+register_model(ParquetFilterScalarsListType)(models.OpaqueModel)
+
+
+@unbox(ParquetFilterScalarsListType)
+def unbox_parquet_filter_scalars_list_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(ParquetFilterScalarsListType)
+def box_parquet_filter_scalars_list_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
 
 
 parquet_predicate_type = ParquetPredicateType()

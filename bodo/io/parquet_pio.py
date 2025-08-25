@@ -16,12 +16,7 @@ import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 from numba.core import types
 from numba.extending import (
-    NativeValue,
-    box,
-    models,
     overload,
-    register_model,
-    unbox,
 )
 
 import bodo
@@ -57,67 +52,6 @@ REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 READ_STR_AS_DICT_THRESHOLD = 1.0
 
 LIST_OF_FILES_ERROR_MSG = ". Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
-
-
-class ParquetPredicateType(types.Type):
-    """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
-    It is just a Python object passed as pointer to C++
-    """
-
-    def __init__(self):
-        super().__init__(name="ParquetPredicateType()")
-
-
-parquet_predicate_type = ParquetPredicateType()
-types.parquet_predicate_type = parquet_predicate_type  # type: ignore
-register_model(ParquetPredicateType)(models.OpaqueModel)
-
-
-@unbox(ParquetPredicateType)
-def unbox_parquet_predicate_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return NativeValue(val)
-
-
-@box(ParquetPredicateType)
-def box_parquet_predicate_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return val
-
-
-class ParquetFilterScalarsListType(types.Type):
-    """
-    Type for filter scalars for Parquet filtering
-    (e.g. [("f0", 2), ("f1", [1, 2, 3]), ("f2", "BODO")]).
-    It is a list of tuples. Each tuple has
-    a string for the variable name and the second element
-    can be any Python type (e.g. string, int, list, date, etc.)
-    It is just a Python object passed as pointer to C++
-    """
-
-    def __init__(self):
-        super().__init__(name="ParquetFilterScalarsListType()")
-
-
-parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
-types.parquet_filter_scalars_list_type = parquet_filter_scalars_list_type  # type: ignore
-register_model(ParquetFilterScalarsListType)(models.OpaqueModel)
-
-
-@unbox(ParquetFilterScalarsListType)
-def unbox_parquet_filter_scalars_list_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return NativeValue(val)
-
-
-@box(ParquetFilterScalarsListType)
-def box_parquet_filter_scalars_list_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return val
 
 
 class ParquetFileInfo(FileInfo):
