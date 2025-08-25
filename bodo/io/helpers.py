@@ -10,6 +10,7 @@ import threading
 import uuid
 from typing import TYPE_CHECKING
 
+import llvmlite.binding as ll
 import numba
 import numpy as np
 import pyarrow as pa
@@ -20,6 +21,7 @@ from numba.extending import (
     NativeValue,
     box,
     models,
+    overload,
     register_model,
     typeof_impl,
     unbox,
@@ -37,16 +39,19 @@ from bodo.hiframes.pd_categorical_ext import (
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.time_ext import TimeArrayType, TimeType
 from bodo.hiframes.timestamptz_ext import ArrowTimestampTZType
+from bodo.io import csv_cpp
+from bodo.io.fs_io import get_s3_bucket_region_wrapper
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
+from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_opaque_class
@@ -1019,3 +1024,60 @@ def is_pyarrow_list_type(arrow_type):
         or pa.types.is_large_list(arrow_type)
         or pa.types.is_fixed_size_list(arrow_type)
     )
+
+
+_csv_write = types.ExternalFunction(
+    "csv_write",
+    types.void(
+        types.voidptr,  # char *_path_name
+        types.voidptr,  # char *buff
+        types.int64,  # int64_t start
+        types.int64,  # int64_t count
+        types.bool_,  # bool is_parallel
+        types.voidptr,  # char *bucket_region
+        types.voidptr,  # char *prefix
+    ),
+)
+ll.add_symbol("csv_write", csv_cpp.csv_write)
+
+
+def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
+    # This is a dummy function used to allow overload.
+    return None
+
+
+@overload(csv_write, no_unliteral=True, jit_options={"cache": True})
+def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
+    def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
+        # Assuming that path_or_buf is a string
+        bucket_region = get_s3_bucket_region_wrapper(path_or_buf, parallel=is_parallel)
+        # TODO: support non-ASCII file names?
+        utf8_str, utf8_len = unicode_to_utf8_and_len(D)
+        offset = 0
+        if is_parallel:
+            offset = bodo.libs.distributed_api.dist_exscan(
+                utf8_len, np.int32(Reduce_Type.Sum.value)
+            )
+        _csv_write(
+            unicode_to_utf8(path_or_buf),
+            utf8_str,
+            offset,
+            utf8_len,
+            is_parallel,
+            unicode_to_utf8(bucket_region),
+            unicode_to_utf8(filename_prefix),
+        )
+        # Check if there was an error in the C++ code. If so, raise it.
+        bodo.utils.utils.check_and_propagate_cpp_exception()
+
+    return impl
+
+
+@overload(get_s3_bucket_region_wrapper, jit_options={"cache": True})
+def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
+    def impl(s3_filepath, parallel):
+        with bodo.ir.object_mode.no_warning_objmode(bucket_loc="unicode_type"):
+            bucket_loc = get_s3_bucket_region_wrapper(s3_filepath, parallel)
+        return bucket_loc
+
+    return impl

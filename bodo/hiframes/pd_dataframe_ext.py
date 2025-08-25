@@ -4755,7 +4755,7 @@ def to_csv_overload(
                 storage_options=storage_options,
             )
 
-        bodo.io.fs_io.csv_write(path_or_buf, D, _bodo_file_prefix)
+        bodo.io.herlpers.csv_write(path_or_buf, D, _bodo_file_prefix)
 
     return _impl
 

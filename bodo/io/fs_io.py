@@ -11,8 +11,6 @@ import warnings
 from glob import has_magic
 from urllib.parse import ParseResult, urlparse
 
-import llvmlite.binding as ll
-import numpy as np
 import pyarrow as pa
 from fsspec.implementations.arrow import (
     ArrowFile,
@@ -30,9 +28,6 @@ from numba.extending import (
 from pyarrow.fs import FileSystem, FSSpecHandler, PyFileSystem
 
 import bodo
-from bodo.io import csv_cpp
-from bodo.libs.distributed_api import Reduce_Type
-from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.py_objs import install_opaque_class
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
 from bodo.utils.utils import AWSCredentials
@@ -60,20 +55,6 @@ def fsspec_arrowfswrapper__open(self, path, mode="rb", block_size=None, **kwargs
 ArrowFSWrapper._open = wrap_exceptions(fsspec_arrowfswrapper__open)
 # -----------------------------------------------------------------------------
 
-
-_csv_write = types.ExternalFunction(
-    "csv_write",
-    types.void(
-        types.voidptr,  # char *_path_name
-        types.voidptr,  # char *buff
-        types.int64,  # int64_t start
-        types.int64,  # int64_t count
-        types.bool_,  # bool is_parallel
-        types.voidptr,  # char *bucket_region
-        types.voidptr,  # char *prefix
-    ),
-)
-ll.add_symbol("csv_write", csv_cpp.csv_write)
 
 bodo_error_msg = """
     Some possible causes:
@@ -821,48 +802,6 @@ def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     if s3_filepath.startswith("s3://") or s3_filepath.startswith("s3a://"):
         bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
     return bucket_loc
-
-
-@overload(get_s3_bucket_region_wrapper, jit_options={"cache": True})
-def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
-    def impl(s3_filepath, parallel):
-        with bodo.ir.object_mode.no_warning_objmode(bucket_loc="unicode_type"):
-            bucket_loc = get_s3_bucket_region_wrapper(s3_filepath, parallel)
-        return bucket_loc
-
-    return impl
-
-
-def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
-    # This is a dummy function used to allow overload.
-    return None
-
-
-@overload(csv_write, no_unliteral=True, jit_options={"cache": True})
-def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
-    def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
-        # Assuming that path_or_buf is a string
-        bucket_region = get_s3_bucket_region_wrapper(path_or_buf, parallel=is_parallel)
-        # TODO: support non-ASCII file names?
-        utf8_str, utf8_len = unicode_to_utf8_and_len(D)
-        offset = 0
-        if is_parallel:
-            offset = bodo.libs.distributed_api.dist_exscan(
-                utf8_len, np.int32(Reduce_Type.Sum.value)
-            )
-        _csv_write(
-            unicode_to_utf8(path_or_buf),
-            utf8_str,
-            offset,
-            utf8_len,
-            is_parallel,
-            unicode_to_utf8(bucket_region),
-            unicode_to_utf8(filename_prefix),
-        )
-        # Check if there was an error in the C++ code. If so, raise it.
-        bodo.utils.utils.check_and_propagate_cpp_exception()
-
-    return impl
 
 
 class StorageOptionsDictType(types.Opaque):
