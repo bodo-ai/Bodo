@@ -1021,4 +1021,4 @@ if (
     "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
     and "JPY_SESSION_NAME" not in os.environ
 ):
-    raise bodo.utils.typing.BodoError(vs_code_nb_msg)
+    raise ImportError(vs_code_nb_msg)
