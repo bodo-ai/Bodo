@@ -2508,6 +2508,10 @@ disconnect_hdfs_py_wrapper = hdfs_reader.disconnect_hdfs_py_wrapper
 
 
 def call_finalize():  # pragma: no cover
+    from bodo.spawn.spawner import destroy_spawner
+
+    # Destroy the spawner before finalize since it uses MPI
+    destroy_spawner()
     # Cleanup default buffer pool before finalize since it uses MPI inside
     bodo.memory_cpp.default_buffer_pool_cleanup()
     finalize()

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 """Spawner-worker compilation implementation"""
 
-import atexit
 import contextlib
 import inspect
 import itertools
@@ -892,9 +891,6 @@ def destroy_spawner():
     if spawner is not None:
         spawner.reset()
         spawner = None
-
-
-atexit.register(destroy_spawner)
 
 
 def submit_func_to_workers(
