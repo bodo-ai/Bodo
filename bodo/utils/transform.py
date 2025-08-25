@@ -33,7 +33,6 @@ from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import fold_arguments
 
 import bodo
-import bodo.libs.distributed_api
 from bodo.decorators import WrapPythonDispatcher, WrapPythonDispatcherType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.map_arr_ext import MapArrayType

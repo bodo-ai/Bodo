@@ -26,6 +26,7 @@ from bodo.ai.utils import (
     get_default_bedrock_request_formatter,
     get_default_bedrock_response_formatter,
 )
+from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
@@ -464,7 +465,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
-        from bodo.ext import plan_optimizer
+
         from bodo.pandas.base import _empty_like
 
         # Only selecting columns or filtering with BodoSeries is supported
@@ -1109,7 +1110,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Return a boolean Series showing whether each element in the Series
         matches an element in the passed sequence of `values` exactly.
         """
-        from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
         new_metadata = pd.Series(

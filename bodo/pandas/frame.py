@@ -30,12 +30,12 @@ if pt.TYPE_CHECKING:
     from pyiceberg.partitioning import PartitionSpec
     from pyiceberg.table.sorting import SortOrder
 
-    from bodo.ext import plan_optimizer
-
 import numpy as np
 from pandas.core.indexing import _LocIndexer
 
 import bodo
+from bodo.ext import plan_optimizer
+from bodo.hiframes.table import TableType
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.groupby import DataFrameGroupBy
 from bodo.pandas.lazy_metadata import LazyMetadata
@@ -1244,7 +1244,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 If errors occured during compilation, first value will be None
                 followed by the errors.
         """
-        from bodo.hiframes.table import TableType
         from bodo.pandas_compat import _prepare_function_arguments
 
         zero_sized_self = self.head(0)
@@ -1681,8 +1680,6 @@ def get_isin_filter_plan(source_plan: LazyPlan, key_plan: LazyPlan) -> LazyPlan 
     Pattern match df1[df1.A.isin(df2.B)] case and return a semi-join plan to implement
     it. Returns None if the plan pattern does not match.
     """
-    from bodo.ext import plan_optimizer
-
     # Match df1.A.isin(df2.B) case which is a mark join generated in our Series.isin()
     if not (
         is_single_colref_projection(key_plan)
@@ -1796,7 +1793,6 @@ def validate_merge_spec(left, right, on, left_on, right_on, is_cross):
 
 def _get_join_type_from_how(how: str) -> plan_optimizer.CJoinType:
     """Convert how string to DuckDB JoinType enum."""
-    from bodo.ext import plan_optimizer
 
     if how == "inner":
         return plan_optimizer.CJoinType.INNER

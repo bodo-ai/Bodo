@@ -20,10 +20,8 @@ from pandas.core.internals.managers import (
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.plan_optimizer import LogicalOperator
 from bodo.spawn.utils import debug_msg
-
-if pt.TYPE_CHECKING:
-    from bodo.ext.plan_optimizer import LogicalOperator
 
 
 class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):

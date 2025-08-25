@@ -11,6 +11,7 @@ from pandas.core.arrays import ExtensionArray
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+from bodo.pandas.plan_optimizer import LogicalOperator
 
 try:
     from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
@@ -26,9 +27,6 @@ except ModuleNotFoundError:
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
 from bodo.spawn.utils import debug_msg
-
-if pt.TYPE_CHECKING:
-    from bodo.ext.plan_optimizer import LogicalOperator
 
 
 class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
