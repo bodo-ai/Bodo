@@ -5,20 +5,21 @@ SeriesGroupBy.apply(self, func, *args, include_groups=True, **kwargs)
 
 Apply a function group-wise and combine results together.
 
-The function must take a series as the first argument and return a scalar, dataframe or series.
-Currently, Bodo DataFrames will fallback to [pandas.core.groupby.SeriesGroupBy.apply](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.apply.html) if the function returns a dataFrame or series.
+The function must take a Series as the first argument and return a scalar, DataFrame or Series.
+Bodo DataFrames will fallback to [pandas.core.groupby.SeriesGroupBy.apply](https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.apply.html) if the function returns a dataFrame or Series.
 
 <p class="api-header">Parameters</p>
 
-: __func : *callable*__: A callable that takes a series as its first argument.
-Currently only scalar return types are supported in Bodo DataFrames,
-if *func* returns a series or dataframe, a fallback to pandas.core.groupby.SeriesGroupBy.apply will be triggered.
+: __func : *callable*__: A callable that takes a Series as its first argument.
+Bodo DataFrames supports scalar return types.
+If *func* returns a Series or DataFrame, a fallback to pandas.core.groupby.SeriesGroupBy.apply will be triggered.
 
 : __include_groups : *bool, default False*__ Whether to include grouping keys in the input to *func*.
+Note that the default value differs from Pandas.
 Bodo DataFrames only supports the value False, if *include_groups*, a fallback to pandas.core.groupby.SeriesGroupBy.apply will be triggered.
 
 : __args, kwargs__ Positional and keyword arguments to pass to *func*.
-Currently, passing arguments to *func* is not supported and will trigger a fallback to pandas.core.groupby.SeriesGroupBy.apply.
+Passing arguments to *func* is not supported and will trigger a fallback to pandas.core.groupby.SeriesGroupBy.apply.
 
 <p class="api-header">Returns</p>
 

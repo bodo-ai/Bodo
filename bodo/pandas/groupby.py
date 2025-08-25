@@ -804,6 +804,7 @@ def _get_scalar_udf_out_type(func: pt.Callable, empty_input: pd.DataFrame | pd.S
 
     disp = dispatcher_registry[numba.core.target_extension.CPU]
     typing_ctx = disp.targetdescr.typing_context
+    # Refresh typing_ctx in case any new declarations were added.
     typing_ctx.refresh()
 
     target_ctx = (numba.core.registry.cpu_target.target_context,)

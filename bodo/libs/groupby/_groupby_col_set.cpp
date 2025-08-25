@@ -1627,6 +1627,7 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
         bodo::vector<int64_t> row_idxs = group_rows[i];
         std::shared_ptr<table_info> in_group_table =
             RetrieveTable(in_table, row_idxs);
+        // func is responsible for deleting in_table_arg
         table_info* in_table_arg = new table_info(*in_group_table);
         array_info* out_arr_result = func(in_table_arg);
 
