@@ -488,7 +488,7 @@ def _groupby_apply_plan(
 
     out_type = _get_scalar_udf_out_type(func, selected_self)
 
-    if isinstance(out_type, (bodo.DataFrameType, bodo.SeriesType)):
+    if isinstance(out_type, (bodo.types.DataFrameType, bodo.types.SeriesType)):
         raise BodoLibNotImplementedException(
             "DataFrameGroupby.apply(): functions returning Series or DataFrame not implemented yet."
         )
@@ -667,7 +667,7 @@ def _get_cfunc_wrapper(
         in_type = bodo.typeof(empty_data)
         out_col_type = bodo.typeof(out_type).data
 
-    if isinstance(in_type, bodo.DataFrameType):
+    if isinstance(in_type, bodo.types.DataFrameType):
         # Input table does not have an index
         index_type = bodo.typeof(pd.RangeIndex(0))
         py_table_type = TableType(in_type.data)
@@ -683,7 +683,7 @@ def _get_cfunc_wrapper(
             )
 
     else:
-        assert isinstance(in_type, bodo.SeriesType), (
+        assert isinstance(in_type, bodo.types.SeriesType), (
             "Expected in_type to be either SeriesType or DataFrameType."
         )
 
@@ -693,7 +693,7 @@ def _get_cfunc_wrapper(
         def cpp_table_to_py_impl(in_cpp_table):  # pragma: no cover
             return cpp_table_to_series_jit(in_cpp_table, in_col_type)
 
-    if isinstance(out_col_type, bodo.ArrayItemArrayType):
+    if isinstance(out_col_type, bodo.types.ArrayItemArrayType):
 
         @numba.njit
         def coerce_to_array_impl(scalar):  # pragma: no cover
@@ -779,10 +779,10 @@ def _numba_type_to_pyarrow_type(typ):
         inner_type = _numba_type_to_pyarrow_type(get_array_getitem_scalar_type(typ))
         return pa.large_list(inner_type)
 
-    elif isinstance(typ, bodo.PandasTimestampType):
+    elif isinstance(typ, bodo.types.PandasTimestampType):
         return pa.timestamp("ns", tz=typ.tz)
 
-    elif isinstance(typ, bodo.StructType):
+    elif isinstance(typ, bodo.types.StructType):
         inner_types = [_numba_type_to_pyarrow_type(typ_) for typ_ in typ.data]
         fields = [pa.field(name, typ_) for name, typ_ in zip(typ.names, inner_types)]
         return pa.struct(fields)
@@ -916,7 +916,9 @@ def _get_agg_output_type(
 
         # Matches Pandas error without the need to fall back.
         if (
-            isinstance(out_numba_type, (bodo.SeriesType, bodo.DataFrameType))
+            isinstance(
+                out_numba_type, (bodo.types.SeriesType, bodo.types.DataFrameType)
+            )
             or is_array_typ(out_numba_type)
         ) and not pa.types.is_list(pa_type):
             raise ValueError(
