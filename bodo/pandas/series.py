@@ -74,12 +74,10 @@ from bodo.pandas.utils import (
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
-    cpp_table_to_series_jit,
     fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
-    series_to_cpp_table_jit,
     wrap_plan,
 )
 
@@ -660,7 +658,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if engine == "bodo":
-            from bodo.pandas.utils_jit import get_udf_cfunc_decorator
+            from bodo.pandas.utils_jit import (
+                cpp_table_to_series_jit,
+                get_udf_cfunc_decorator,
+                series_to_cpp_table_jit,
+            )
             from bodo.utils.typing import BodoError
 
             empty_series = self.head(0)
