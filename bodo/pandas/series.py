@@ -82,7 +82,6 @@ from bodo.pandas.utils import (
     series_to_cpp_table_jit,
     wrap_plan,
 )
-from bodo.utils.typing import BodoError
 
 
 class BodoSeries(pd.Series, BodoLazyWrapper):
@@ -662,6 +661,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         if engine == "bodo":
             from bodo.pandas.utils_jit import get_udf_cfunc_decorator
+            from bodo.utils.typing import BodoError
 
             empty_series = self.head(0)
 
@@ -866,16 +866,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Validate ascending argument.
         if not isinstance(ascending, bool):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame.sort_values(): argument ascending iterable does not contain only boolean"
             )
 
         # Validate na_position argument.
         if not isinstance(na_position, str):
-            raise BodoError("Series.sort_values(): argument na_position not a string")
+            raise ValueError("Series.sort_values(): argument na_position not a string")
 
         if na_position not in ["first", "last"]:
-            raise BodoError(
+            raise ValueError(
                 "Series.sort_values(): argument na_position does not contain only 'first' or 'last'"
             )
 

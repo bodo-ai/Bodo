@@ -81,10 +81,6 @@ from bodo.pandas.utils import (
     series_to_cpp_table_jit,
     wrap_plan,
 )
-from bodo.utils.typing import (
-    BodoError,
-    check_unsupported_args,
-)
 
 
 class BodoDataFrameLocIndexer(_LocIndexer):
@@ -430,7 +426,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             compression = "none"
 
         if not isinstance(row_group_size, int):
-            raise BodoError("DataFrame.to_parquet(): row_group_size must be an integer")
+            raise ValueError(
+                "DataFrame.to_parquet(): row_group_size must be an integer"
+            )
 
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, False)
 
@@ -501,7 +499,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             properties = ()
         else:
             if not isinstance(properties, dict):
-                raise BodoError(
+                raise ValueError(
                     "Iceberg write properties must be a dictionary, got: "
                     f"{type(properties)}"
                 )
@@ -584,7 +582,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             snapshot_properties,
         )
         if not success:
-            raise BodoError("Iceberg write failed.")
+            raise ValueError("Iceberg write failed.")
 
     @check_args_fallback(unsupported="none")
     def to_s3_vectors(
@@ -606,11 +604,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         schema = self._plan.pa_schema
         required_fields = {"key", "data", "metadata"}
         if not required_fields.issubset(schema.names):
-            raise BodoError(
+            raise ValueError(
                 f"DataFrame must have columns {required_fields} to write to S3 Vectors."
             )
         if schema.field("key").type not in (pa.string(), pa.large_string()):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame 'key' column must be strings to write to S3 Vectors."
             )
         if schema.field("data").type not in (
@@ -619,11 +617,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             pa.list_(pa.float64()),
             pa.large_list(pa.float64()),
         ):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame 'data' column must be a list of floats to write to S3 Vectors."
             )
         if not isinstance(schema.field("metadata").type, pa.StructType):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame 'metadata' column must be a struct type to write to S3 Vectors."
             )
 
@@ -716,6 +714,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         errors="strict",
         storage_options=None,
     ):
+        from bodo.utils.typing import check_unsupported_args
         # argument defaults should match that of to_csv_overload in pd_dataframe_ext.py
 
         @bodo.jit(spawn=True)
@@ -1041,7 +1040,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if isinstance(columns, str):
             columns = [columns]
         if not isinstance(columns, list):
-            raise BodoError("drop columns must be string or list of string")
+            raise ValueError("drop columns must be string or list of string")
         cur_col_names = self.columns.tolist()
         columns_to_use = [x for x in cur_col_names if x not in columns]
         if len(columns_to_use) != len(cur_col_names) - len(columns):
@@ -1246,6 +1245,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         from bodo.hiframes.table import TableType
         from bodo.pandas.utils_jit import get_udf_cfunc_decorator
         from bodo.pandas_compat import _prepare_function_arguments
+        from bodo.utils.typing import BodoError
 
         zero_sized_self = self.head(0)
 
@@ -1384,12 +1384,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if isinstance(by, str):
             by = [by]
         elif not isinstance(by, (list, tuple)):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame.sort_values(): argument by not a string, list or tuple"
             )
 
         if not all(isinstance(item, str) for item in by):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame.sort_values(): argument by iterable does not contain only strings"
             )
 
@@ -1397,12 +1397,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if isinstance(ascending, bool):
             ascending = [ascending]
         elif not isinstance(ascending, (list, tuple)):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame.sort_values(): argument ascending not a bool, list or tuple"
             )
 
         if not all(isinstance(item, bool) for item in ascending):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame.sort_values(): argument ascending iterable does not contain only boolean"
             )
 
@@ -1410,12 +1410,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if isinstance(na_position, str):
             na_position = [na_position]
         elif not isinstance(na_position, (list, tuple)):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame.sort_values(): argument na_position not a string, list or tuple"
             )
 
         if not all(item in ["first", "last"] for item in na_position):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame.sort_values(): argument na_position iterable does not contain only 'first' or 'last'"
             )
 
@@ -1427,7 +1427,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             if len(ascending) == 1:
                 ascending = ascending * len(by)
             else:
-                raise BodoError(
+                raise ValueError(
                     f"DataFrame.sort_values(): lengths of by {len(by)} and ascending {len(ascending)}"
                 )
 
@@ -1436,7 +1436,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             if len(na_position) == 1:
                 na_position = na_position * len(by)
             else:
-                raise BodoError(
+                raise ValueError(
                     f"DataFrame.sort_values(): lengths of by {len(by)} and na_position {len(na_position)}"
                 )
         # Convert to True/False list instead of str.
