@@ -32,9 +32,9 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import TableType
-from bodo.io.fs_io import pyarrow_fs_type
 from bodo.io.helpers import (
     _get_stream_writer_payload,
+    pyarrow_fs_type,
     pyarrow_schema_type,
     stream_writer_alloc_codegen,
 )

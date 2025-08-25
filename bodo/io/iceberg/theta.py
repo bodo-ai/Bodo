@@ -20,8 +20,7 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.io.fs_io import pyarrow_fs_type
-from bodo.io.helpers import pyarrow_schema_type
+from bodo.io.helpers import pyarrow_fs_type, pyarrow_schema_type
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.libs import puffin_file, theta_sketches

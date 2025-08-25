@@ -22,8 +22,7 @@ from numba.extending import intrinsic
 import bodo
 import bodo.utils.tracing as tracing
 from bodo.io import arrow_cpp
-from bodo.io.fs_io import pyarrow_fs_type
-from bodo.io.helpers import pyarrow_schema_type
+from bodo.io.helpers import pyarrow_fs_type, pyarrow_schema_type
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.io.iceberg.theta import theta_sketch_collection_type
