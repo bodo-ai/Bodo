@@ -12,7 +12,7 @@ Bodo DataFrames will fallback to [pandas.core.groupby.DataFrameGroupBy.apply](ht
 
 : __func : *callable*__: A callable that takes a DataFrame as its first argument.
 Bodo DataFrames supports scalar return types.
-if *func* returns a Series or DataFrame, a fallback to pandas.core.groupby.DataFrameGroupBy.apply will be triggered.
+If *func* returns a Series or DataFrame, a fallback to pandas.core.groupby.DataFrameGroupBy.apply will be triggered.
 
 : __include_groups : *bool, default False*__ Whether to include grouping keys in the input to *func*.
 Note that the default value differs from Pandas.
