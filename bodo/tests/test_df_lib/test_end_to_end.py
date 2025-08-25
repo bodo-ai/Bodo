@@ -3381,10 +3381,10 @@ def test_set_column_names():
 
     df = pd.DataFrame(
         {
-            "A": [1, 2, 3, 4, 5],
-            "B": ["A", "B", "C", "D", "E"],
+            "A": [1, 2, 3, 4, 5] * 2,
+            "B": ["A", "B", "C", "D", "E"] * 2,
         },
-        index=["aa", "bb", "cc", "dd", "ee"],
+        index=["aa", "bb", "cc", "dd", "ee"] * 2,
     )
 
     # Set columns before executing plan

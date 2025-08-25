@@ -366,6 +366,16 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def columns(self, value):
         if self.is_lazy_plan():
             self._mgr._plan._update_column_names(value)
+        elif self._exec_state == ExecState.DISTRIBUTED:
+            empty_data = self.head(0)
+            empty_data.columns = value
+            # create projection with new column names
+            col_indices = list(
+                range(len(empty_data.columns) + get_n_index_arrays(empty_data.index))
+            )
+            self._mgr._plan = LogicalProjection(
+                empty_data, self._plan, make_col_ref_exprs(col_indices, self._plan)
+            )
         super()._set_axis(0, value)
 
     @property
