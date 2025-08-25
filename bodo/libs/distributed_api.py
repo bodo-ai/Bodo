@@ -2909,3 +2909,16 @@ init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
 )
+
+
+# Replace top export wrappers to help function matching inside JIT compilation
+bodo.allgatherv = allgatherv
+bodo.barrier = barrier
+bodo.gatherv = gatherv
+bodo.get_rank = get_rank
+bodo.get_size = get_size
+bodo.get_nodes_first_ranks = get_nodes_first_ranks
+bodo.parallel_print = parallel_print
+bodo.rebalance = rebalance
+bodo.random_shuffle = random_shuffle
+bodo.scatterv = scatterv

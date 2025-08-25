@@ -277,18 +277,75 @@ def jitclass(*args, **kwargs):
     return _jitclass(*args, **kwargs)
 
 
-from bodo.libs.distributed_api import (
-    allgatherv,
-    barrier,
-    gatherv,
-    get_rank,
-    get_size,
-    get_nodes_first_ranks,
-    parallel_print,
-    rebalance,
-    random_shuffle,
-    scatterv,
-)
+def get_rank():
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import get_rank
+    return get_rank()
+
+
+def get_size():
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import get_size
+    return get_size()
+
+
+def barrier():
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import barrier
+    barrier()
+
+
+def parallel_print(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import parallel_print
+    parallel_print(*args, **kwargs)
+
+
+def allgatherv(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import allgatherv
+    return allgatherv(*args, **kwargs)
+
+
+def gatherv(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import gatherv
+    return gatherv(*args, **kwargs)
+
+
+def scatterv(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import scatterv
+    return scatterv(*args, **kwargs)
+
+
+def get_nodes_first_ranks(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import get_nodes_first_ranks
+    return get_nodes_first_ranks(*args, **kwargs)
+
+
+def rebalance(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import rebalance
+    return rebalance(*args, **kwargs)
+
+
+def random_shuffle(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import random_shuffle
+    return random_shuffle(*args, **kwargs)
+
 
 from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 

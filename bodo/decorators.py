@@ -332,6 +332,7 @@ def is_jit_execution_overload():
 
 
 bodo.is_jit_execution = is_jit_execution
+bodo.jitclass = bodo.numba_compat.jitclass
 
 
 def jit(signature_or_function=None, pipeline_class=None, **options):
