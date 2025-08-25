@@ -364,6 +364,8 @@ def read_csv(
     storage_options: StorageOptions | None = None,
     dtype_backend: DtypeBackend | lib.NoDefault = lib.no_default,
 ) -> BodoDataFrame:
+    # Import compiler
+    import bodo.decorators  # isort:skip
     from bodo.utils.utils import bodo_spawn_exec
 
     func = "def bodo_read_csv(filepath"
