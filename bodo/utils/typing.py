@@ -47,6 +47,9 @@ from numba.extending import (
 )
 
 import bodo
+
+# Import compiler
+import bodo.decorators  # isort:skip
 from bodo import BodoWarning
 
 # sentinel string used in typing pass that specifies a const tuple as a const dict.

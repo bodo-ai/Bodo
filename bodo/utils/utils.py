@@ -38,6 +38,10 @@ from numba.np.arrayobj import get_itemsize, make_array, populate_array
 from numba.np.numpy_support import as_dtype
 
 import bodo
+
+# Import compiler
+import bodo.decorators  # isort:skip
+
 import bodo.hiframes
 import bodo.hiframes.datetime_timedelta_ext
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType

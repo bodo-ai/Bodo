@@ -27,6 +27,10 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+
+# Import compiler
+import bodo.decorators  # isort:skip
+
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
