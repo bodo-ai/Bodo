@@ -14,7 +14,6 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
-from numba.core import types
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -26,7 +25,6 @@ from bodo.io.fs_io import (
 from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
-    BodoWarning,
     FileInfo,
     FileSchema,
 )
@@ -720,7 +718,7 @@ def populate_row_counts_in_pq_dataset_pieces(
             fpath_tidbit = fpath
 
         warnings.warn(
-            BodoWarning(
+            bodo.BodoWarning(
                 f"Total number of row groups in parquet dataset {fpath_tidbit} ({total_num_row_groups}) is too small for effective IO parallelization."
                 f"For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()}). For more details, refer to https://docs.bodo.ai/latest/file_io/#parquet-section."
             )
@@ -738,7 +736,7 @@ def populate_row_counts_in_pq_dataset_pieces(
         and protocol in REMOTE_FILESYSTEMS
     ):
         warnings.warn(
-            BodoWarning(
+            bodo.BodoWarning(
                 f"Parquet average row group size is small ({avg_row_group_size_bytes} bytes) and can have negative impact on performance when reading from remote sources"
             )
         )
@@ -1324,7 +1322,7 @@ def parquet_file_schema(
         if bodo.get_rank() == 0:
             warnings.warn(
                 f"The following columns are not of datatype string and hence cannot be read with dictionary encoding: {non_str_columns_in_read_as_dict_cols}",
-                bodo.utils.typing.BodoWarning,
+                bodo.BodoWarning,
             )
     # Remove non-string columns from read_as_dict_cols
     read_as_dict_cols.intersection_update(str_columns_set)
@@ -1435,6 +1433,8 @@ def parquet_file_schema(
 
 def _get_partition_cat_dtype(dictionary):
     """get categorical dtype for Parquet partition set"""
+    from numba.core import types
+
     from bodo.hiframes.pd_categorical_ext import (
         CategoricalArrayType,
         PDCategoricalDtype,

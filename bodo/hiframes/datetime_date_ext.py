@@ -1077,7 +1077,7 @@ def create_datetime_date_cmp_op_overload(op):
         # equality between datetime and date doesn't look at the values.
         # We raise a warning because this may be a bug.
         datetime_warning = f"{lhs} {numba.core.utils.OPERATORS_TO_BUILTINS[op]} {rhs} is always {op == operator.ne} in Python. If this is unexpected there may be a bug in your code."
-        warnings.warn(datetime_warning, bodo.utils.typing.BodoWarning)
+        warnings.warn(datetime_warning, bodo.BodoWarning)
         if op == operator.eq:
             return lambda lhs, rhs: False  # pragma: no cover
         elif op == operator.ne:
