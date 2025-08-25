@@ -104,7 +104,9 @@ jobs:
       - name: Build BodoSQL Wheels
         run: |
           set -exo pipefail
-          pip install bodo --find-links "$(find . -name "cibw-wheels-*" -print)" --no-index --no-deps
+          pwd
+          ls
+          pip install bodo --find-links "cibw-wheels-linux-x86-3.13" --no-index --no-deps
           cd BodoSQL
           pip wheel --no-deps --no-build-isolation -v .
       - uses: actions/upload-artifact@v4
