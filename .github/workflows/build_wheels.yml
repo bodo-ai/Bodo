@@ -99,14 +99,12 @@ jobs:
         id: download-artifact
         with:
           pattern: cibw-wheels-linux-x86-3.13
-          path: .
+          path: ./cibw-wheels-linux-x86-3.13
 
       - name: Build BodoSQL Wheels
         run: |
           set -exo pipefail
-          pwd
-          ls
-          pip install bodo --find-links "cibw-wheels-linux-x86-3.13" --no-index --no-deps
+          pip install bodo --find-links "$(find . -name "cibw-wheels-*" -print)" --no-index --no-deps
           cd BodoSQL
           pip wheel --no-deps --no-build-isolation -v .
       - uses: actions/upload-artifact@v4
