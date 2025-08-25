@@ -75,8 +75,9 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                                 in_table_schema_reordered, cols_to_keep_vec);
 
         std::vector<int32_t> ftypes;
-        // Create input data column indices (only single data column for now)
+        // Create input data column indices
         std::vector<int32_t> f_in_cols;
+        std::vector<int32_t> f_in_offsets = {0};
         std::optional<bool> dropna = std::nullopt;
 
         std::vector<stream_udf_t*> udf_cfuncs;
@@ -91,39 +92,51 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                     expr->ToString());
             }
             auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
-            if (agg_expr.children.size() != 1 ||
-                agg_expr.children[0]->type !=
-                    duckdb::ExpressionType::BOUND_COLUMN_REF) {
-                throw std::runtime_error(
-                    "Aggregate expression does not have a single column "
-                    "reference child: " +
-                    expr->ToString());
-            }
-            auto& colref =
-                agg_expr.children[0]->Cast<duckdb::BoundColumnRefExpression>();
-            size_t col_idx = col_ref_map.at(
-                {colref.binding.table_index, colref.binding.column_index});
-
-            size_t reorder_col_idx =
-                std::find(this->input_col_inds.begin(),
-                          this->input_col_inds.end(), col_idx) -
-                this->input_col_inds.begin();
-            f_in_cols.push_back(reorder_col_idx);
 
             // Check if the aggregate function is supported
+            bool is_udf = agg_expr.function.name.starts_with("udf");
             if (function_to_ftype.find(agg_expr.function.name) ==
                     function_to_ftype.end() &&
-                !agg_expr.function.name.starts_with("udf")) {
+                !is_udf) {
                 throw std::runtime_error("Unsupported aggregate function: " +
                                          agg_expr.function.name);
             }
+
+            if (!is_udf && agg_expr.children.size() != 1) {
+                throw std::runtime_error(
+                    "Aggregate expression for builtin funcs must have exactly "
+                    "one child expression" +
+                    expr->ToString());
+            }
+
+            size_t col_idx = 0;
+            for (auto& child_expr : agg_expr.children) {
+                if (child_expr->type !=
+                    duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                    throw std::runtime_error(
+                        "Aggregate expression must have only col ref "
+                        "expression children" +
+                        expr->ToString());
+                }
+                auto& colref =
+                    child_expr->Cast<duckdb::BoundColumnRefExpression>();
+                col_idx = col_ref_map.at(
+                    {colref.binding.table_index, colref.binding.column_index});
+
+                size_t reorder_col_idx =
+                    std::find(this->input_col_inds.begin(),
+                              this->input_col_inds.end(), col_idx) -
+                    this->input_col_inds.begin();
+                f_in_cols.push_back(reorder_col_idx);
+            }
+            f_in_offsets.push_back(f_in_cols.size());
 
             // Extract bind_info
             BodoAggFunctionData& bind_info =
                 agg_expr.bind_info->Cast<BodoAggFunctionData>();
 
             std::unique_ptr<bodo::DataType> out_arr_type;
-            if (agg_expr.function.name.starts_with("udf")) {
+            if (is_udf) {
                 ftypes.push_back(Bodo_FTypes::stream_udf);
                 out_arr_type = arrow_type_to_bodo_data_type(
                     bind_info.out_schema->field(0)->type());
@@ -158,11 +171,6 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                     "value for the dropna parameter.");
             }
         }
-
-        // Offsets for the input data columns, which are trivial since we have a
-        // single data column
-        std::vector<int32_t> f_in_offsets(f_in_cols.size() + 1);
-        std::iota(f_in_offsets.begin(), f_in_offsets.end(), 0);
 
         auto udf_table = alloc_table(this->output_schema->Project(udf_idxs));
 
