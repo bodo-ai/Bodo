@@ -106,27 +106,6 @@ def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
     return loc_vars["impl"]
 
 
-def get_filter_scalars_pyobject(vars):  # pragma: no cover
-    pass
-
-
-@overload(get_filter_scalars_pyobject, no_unliteral=True)
-def overload_get_filter_scalars_pyobject(var_tup):
-    """
-    Generate a PyObject for a list of the scalars in
-    a filter to pass to C++.
-    """
-    func_text = "def impl(var_tup):\n"
-    func_text += "  with bodo.ir.object_mode.no_warning_objmode(filter_scalars_py='parquet_filter_scalars_list_type'):\n"
-    func_text += f"    filter_scalars_py = [(f'f{{i}}', var_tup[i]) for i in range({len(var_tup)})]\n"
-    func_text += "  return filter_scalars_py\n"
-    loc_vars = {}
-    glbs = globals()
-    glbs["bodo"] = bodo
-    exec(func_text, glbs, loc_vars)
-    return loc_vars["impl"]
-
-
 def unify_schemas(
     schemas: pt.Iterable[pa.Schema],
     promote_options: pt.Literal["default", "permissive"] = "default",

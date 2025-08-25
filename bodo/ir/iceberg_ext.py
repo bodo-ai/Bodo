@@ -1246,6 +1246,27 @@ def gen_runtime_join_filter_expr(
     return rtjf_expr
 
 
+def get_filter_scalars_pyobject(vars):  # pragma: no cover
+    pass
+
+
+@overload(get_filter_scalars_pyobject, no_unliteral=True)
+def overload_get_filter_scalars_pyobject(var_tup):
+    """
+    Generate a PyObject for a list of the scalars in
+    a filter to pass to C++.
+    """
+    func_text = "def impl(var_tup):\n"
+    func_text += "  with bodo.ir.object_mode.no_warning_objmode(filter_scalars_py='parquet_filter_scalars_list_type'):\n"
+    func_text += f"    filter_scalars_py = [(f'f{{i}}', var_tup[i]) for i in range({len(var_tup)})]\n"
+    func_text += "  return filter_scalars_py\n"
+    loc_vars = {}
+    glbs = globals()
+    glbs["bodo"] = bodo
+    exec(func_text, glbs, loc_vars)
+    return loc_vars["impl"]
+
+
 def _gen_iceberg_reader_chunked_py(
     col_names: list[str],
     col_typs: list[pt.Any],
@@ -1438,7 +1459,7 @@ def _gen_iceberg_reader_chunked_py(
             "unicode_to_utf8": unicode_to_utf8,
             "iceberg_pq_reader_init_py_entry": iceberg_pq_reader_init_py_entry,
             "get_filters_pyobject": get_filters_pyobject,
-            "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
+            "get_filter_scalars_pyobject": get_filter_scalars_pyobject,
             f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
             "out_type": ArrowReaderType(col_names, col_typs),
             f"selected_cols_arr_{call_id}": np.array(source_selected_cols, np.int32),
