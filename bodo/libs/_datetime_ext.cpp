@@ -810,8 +810,10 @@ void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
     // get bodo.types.TimestampTZ constructor
     PyObject* bodo = PyImport_ImportModule("bodo");
     CHECK(bodo, "importing bodo module failed");
+    PyObject* bodo_types = PyObject_GetAttrString(bodo, "types");
+    CHECK(bodo_types, "getting bodo.types module failed");
     PyObject* bodo_timestamptz_constructor =
-        PyObject_GetAttrString(bodo, "TimestampTZ");
+        PyObject_GetAttrString(bodo_types, "TimestampTZ");
     CHECK(bodo_timestamptz_constructor,
           "getting bodo.types.TimestampTZ failed");
 
@@ -840,6 +842,7 @@ void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
     }
 
     Py_DECREF(bodo_timestamptz_constructor);
+    Py_DECREF(bodo_types);
     Py_DECREF(bodo);
     Py_DECREF(timestamp_constructor);
     Py_DECREF(pandas);
