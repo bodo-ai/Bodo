@@ -89,9 +89,12 @@ void str_from_float64(char* s, double in);
 void inplace_int64_to_str(char* str, int64_t l, int64_t value);
 
 void del_str(std::string* in_str);
+int is_np_array(PyObject* obj);
+npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s);
 void bool_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* bool_arr, int64_t n);
+void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n);
 void print_str_arr(uint64_t n, uint64_t n_chars, offset_t* offsets,
                    uint8_t* data);
 void print_list_str_arr(uint64_t n, const char* data,
@@ -160,11 +163,14 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     SetAttrStringFromVoidPtr(m, inplace_int64_to_str);
     SetAttrStringFromVoidPtr(m, is_na);
     SetAttrStringFromVoidPtr(m, del_str);
+    SetAttrStringFromVoidPtr(m, array_size);
+    SetAttrStringFromVoidPtr(m, is_np_array);
     SetAttrStringFromVoidPtr(m, unicode_to_utf8);
     SetAttrStringFromVoidPtr(m, array_getptr1);
     SetAttrStringFromVoidPtr(m, array_setitem);
     SetAttrStringFromVoidPtr(m, get_utf8_size);
     SetAttrStringFromVoidPtr(m, bool_arr_to_bitmap);
+    SetAttrStringFromVoidPtr(m, mask_arr_to_bitmap);
     SetAttrStringFromVoidPtr(m, memcmp);
     SetAttrStringFromVoidPtr(m, bytes_to_hex);
     SetAttrStringFromVoidPtr(m, bytes_fromhex);
@@ -570,6 +576,9 @@ void* pd_pyarrow_array_from_string_array(array_info* str_arr,
 }
 
 // helper functions for call Numpy APIs
+int is_np_array(PyObject* obj) { return PyArray_CheckExact(obj); }
+
+npy_intp array_size(PyArrayObject* arr) { return PyArray_SIZE(arr); }
 
 void* array_getptr1(PyArrayObject* arr, npy_intp ind) {
     return PyArray_GETPTR1(arr, ind);
@@ -592,6 +601,15 @@ void bool_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* bool_arr, int64_t n) {
     for (int i = 0; i < n; i++) {
         bitmap_arr[i / 8] ^=
             static_cast<uint8_t>(-static_cast<uint8_t>(bool_arr[i] != 0) ^
+                                 bitmap_arr[i / 8]) &
+            kBitmask[i % 8];
+    }
+}
+
+void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n) {
+    for (int i = 0; i < n; i++) {
+        bitmap_arr[i / 8] ^=
+            static_cast<uint8_t>(-static_cast<uint8_t>(mask_arr[i] == 0) ^
                                  bitmap_arr[i / 8]) &
             kBitmask[i % 8];
     }

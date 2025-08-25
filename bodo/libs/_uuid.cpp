@@ -55,7 +55,7 @@ PyMODINIT_FUNC PyInit_uuid_cpp(void) {
         return nullptr;
     }
 
-    // No need for bodo_common_init() since only using header macros
+    bodo_common_init();
 
     SetAttrStringFromVoidPtr(m, uuidV4);
     SetAttrStringFromVoidPtr(m, uuidV5);

@@ -85,30 +85,6 @@ void bodo_common_init() {
     bodo::init_buffer_pool_ptr(memory_pool_ptr);
 
     Py_DECREF(pool_ptr_obj);
-
-    // Get the default memsys pointer from Python and set the global
-    // pointer
-    PyObject* memsys_ptr_obj =
-        PyObject_CallMethod(memory_module, "default_memsys_ptr", nullptr);
-    if (memsys_ptr_obj == nullptr) {
-        Py_DECREF(memory_module);
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "Failed to call default_memsys_ptr()!");
-        return;
-    }
-
-    int64_t memory_memsys_ptr = PyLong_AsLongLong(memsys_ptr_obj);
-    if (memory_memsys_ptr == -1 && PyErr_Occurred()) {
-        Py_DECREF(pool_ptr_obj);
-        Py_DECREF(memory_module);
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "Failed to convert memsys pointer to integer!");
-        return;
-    }
-
-    global_memsys = reinterpret_cast<MemSys*>(memory_memsys_ptr);
-
-    Py_DECREF(memsys_ptr_obj);
     Py_DECREF(memory_module);
 
     if (numpy_item_size.size() != Bodo_CTypes::_numtypes) {

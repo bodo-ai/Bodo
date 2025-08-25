@@ -34,27 +34,34 @@ struct MemSys {
     size_t stats_alloc, stats_free, stats_mi_alloc, stats_mi_free;
     /* MemInfo allocation functions */
     MemInfoAllocator mi_allocator;
+
+    /// @brief Get pointer to singleton MemSys object.
+    /// Used for finding memory leaks in unit tests.
+    /// All the C extensions will use the same object.
+    /// Ref:
+    /// https://betterprogramming.pub/3-tips-for-using-singletons-in-c-c6822dc42649
+    static MemSys *instance() {
+        static MemSys base(malloc, realloc, free);
+        return &base;
+    }
 };
 
 typedef struct MemSys NRT_MemSys;
 
-// Pointer to singleton MemSys object, set in bodo_common_init().
-// Used for finding memory leaks in unit tests.
-// All the C extensions will use the same object.
-inline MemSys *global_memsys = nullptr;
-
 inline size_t NRT_MemSys_get_stats_alloc() {
-    return global_memsys->stats_alloc;
+    return NRT_MemSys::instance()->stats_alloc;
 }
 
-inline size_t NRT_MemSys_get_stats_free() { return global_memsys->stats_free; }
+inline size_t NRT_MemSys_get_stats_free() {
+    return NRT_MemSys::instance()->stats_free;
+}
 
 inline size_t NRT_MemSys_get_stats_mi_alloc() {
-    return global_memsys->stats_mi_alloc;
+    return NRT_MemSys::instance()->stats_mi_alloc;
 }
 
 inline size_t NRT_MemSys_get_stats_mi_free() {
-    return global_memsys->stats_mi_free;
+    return NRT_MemSys::instance()->stats_mi_free;
 }
 
 /**
@@ -102,13 +109,15 @@ typedef struct MemInfo NRT_MemInfo;
  *
  */
 inline NRT_MemInfo *NRT_MemInfo_allocate() {
-    void *ptr = global_memsys->mi_allocator.malloc(sizeof(NRT_MemInfo));
+    void *ptr =
+        NRT_MemSys::instance()->mi_allocator.malloc(sizeof(NRT_MemInfo));
     if (!ptr) {
         throw std::runtime_error("bad mi alloc: possible Out of Memory error");
     }
 
     // Custom to Bodo: Allocate the DtorInfo struct
-    void *dtor_info_ptr = global_memsys->mi_allocator.malloc(sizeof(DtorInfo));
+    void *dtor_info_ptr =
+        NRT_MemSys::instance()->mi_allocator.malloc(sizeof(DtorInfo));
     if (!dtor_info_ptr) {
         throw std::runtime_error("bad mi alloc: possible Out of Memory error");
     }
@@ -117,8 +126,8 @@ inline NRT_MemInfo *NRT_MemInfo_allocate() {
     mi->dtor_info = dtor_info_ptr;
 
     /* Update stats */
-    global_memsys->stats_alloc++;
-    global_memsys->stats_mi_alloc++;
+    NRT_MemSys::instance()->stats_alloc++;
+    NRT_MemSys::instance()->stats_mi_alloc++;
     return mi;
 }
 
@@ -134,10 +143,10 @@ inline NRT_MemInfo *NRT_MemInfo_allocate() {
  * @param mi MemInfo struct to free.
  */
 inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
-    global_memsys->mi_allocator.free(static_cast<void *>(mi));
+    NRT_MemSys::instance()->mi_allocator.free(static_cast<void *>(mi));
     /* Update stats */
-    global_memsys->stats_free++;
-    global_memsys->stats_mi_free++;
+    NRT_MemSys::instance()->stats_free++;
+    NRT_MemSys::instance()->stats_mi_free++;
 }
 
 /* ------------------------------------------------------------- */
@@ -224,7 +233,7 @@ inline void buffer_pool_aligned_data_alloc(size_t size, unsigned align,
 
     CHECK_ARROW_MEM(status, "Allocation failed!");
     // Update stats for memory_leak_check.
-    global_memsys->stats_alloc++;
+    NRT_MemSys::instance()->stats_alloc++;
 }
 
 /**
@@ -243,7 +252,7 @@ inline void buffer_pool_aligned_data_free(void *ptr, size_t size,
         return;
     }
     pool->Free(static_cast<uint8_t *>(ptr), size);
-    global_memsys->stats_free++;
+    NRT_MemSys::instance()->stats_free++;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -258,7 +267,7 @@ inline void nrt_internal_custom_dtor(void *ptr, size_t size,
     buffer_pool_aligned_data_free(ptr, size, dtor_info->pool);
 
     // Free the DtorInfo struct
-    global_memsys->mi_allocator.free(dtor_info_raw);
+    NRT_MemSys::instance()->mi_allocator.free(dtor_info_raw);
 }
 
 /**

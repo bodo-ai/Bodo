@@ -29,6 +29,11 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+
+# NOTE: importing hdist is necessary for MPI initialization before array_ext
+from bodo.libs import array_ext, hstr_ext  # noqa: F401  # isort:skip
+
+
 from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
