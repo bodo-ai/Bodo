@@ -29,8 +29,9 @@ from numba.extending import (
 from pyarrow.fs import FileSystem, FSSpecHandler, PyFileSystem
 
 import bodo
+from bodo import BodoWarning
 from bodo.utils.py_objs import install_opaque_class
-from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
+from bodo.utils.typing import get_overload_constant_dict
 
 # Same as _fs_io.cpp
 GCS_RETRY_LIMIT_SECONDS = 2
@@ -102,7 +103,7 @@ def validate_s3fs_installed():
     try:
         import s3fs  # noqa
     except ImportError:
-        raise BodoError(
+        raise ValueError(
             "Couldn't import s3fs, which is required for certain types of S3 access."
             " s3fs can be installed by calling"
             " 'conda install -c conda-forge s3fs'.\n"
@@ -116,7 +117,7 @@ def validate_huggingface_hub_installed():
     try:
         import huggingface_hub  # noqa
     except ImportError:
-        raise BodoError(
+        raise ValueError(
             "Cannot import huggingface_hub, which is required for reading from Hugging Face."
             " Please make sure the huggingface_hub package is installed."
         )
@@ -275,7 +276,7 @@ def get_hdfs_fs(path):  # pragma: no cover
     try:
         fs = HdFS(host=host, port=port, user=user)
     except Exception as e:
-        raise BodoError(f"Hadoop file system cannot be created: {e}")
+        raise ValueError(f"Hadoop file system cannot be created: {e}")
 
     return fs
 
@@ -295,13 +296,13 @@ def pa_fs_is_directory(fs, path):
         return False
     except (FileNotFoundError, OSError):
         raise
-    except BodoError:  # pragma: no cover
+    except ValueError:  # pragma: no cover
         raise
     except Exception as e:  # pragma: no cover
         # There doesn't seem to be a way to get special errors for
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
-        raise BodoError(
+        raise ValueError(
             f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
@@ -331,13 +332,13 @@ def pa_fs_list_dir_fnames(fs, path):
                 ]
             else:
                 file_names.append(p)
-        except BodoError:  # pragma: no cover
+        except ValueError:  # pragma: no cover
             raise
         except Exception as e:  # pragma: no cover
             # There doesn't seem to be a way to get special errors for
             # credential issues, region issues, etc. in pyarrow (unlike s3fs).
             # So we include a blanket message to verify these details.
-            raise BodoError(
+            raise ValueError(
                 f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
             )
 
@@ -373,7 +374,7 @@ def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
     account_key = get_attr("account_key", "AZURE_STORAGE_ACCOUNT_KEY")
 
     if account_name is None:
-        raise BodoError(
+        raise ValueError(
             "abfs_get_fs: Azure storage account name is not provided. Please set either the account_name in the storage_options or the AZURE_STORAGE_ACCOUNT_NAME environment variable."
         )
 
@@ -437,7 +438,7 @@ def expand_glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[s
         # Arrow's FileSystem.glob() doesn't support Windows backslashes
         files = fs.glob(path.replace("\\", "/"))
     except Exception:  # pragma: no cover
-        raise BodoError(f"glob pattern expansion not supported for {protocol}")
+        raise ValueError(f"glob pattern expansion not supported for {protocol}")
 
     return files
 
@@ -451,7 +452,7 @@ def expand_path_globs(fpath: str | list[str], protocol: str, fs) -> list[str]:
         fs (pa.fs.FileSystem): filesystem object
 
     Raises:
-        BodoError: error if no files found matching glob pattern
+        ValueError: error if no files found matching glob pattern
 
     Returns:
         list[str]: expanded list of paths
@@ -471,12 +472,12 @@ def expand_path_globs(fpath: str | list[str], protocol: str, fs) -> list[str]:
             else:
                 new_fpath.append(p)
         if len(new_fpath) == 0:
-            raise BodoError("No files found matching glob pattern")
+            raise ValueError("No files found matching glob pattern")
 
     elif has_magic(fpath):
         new_fpath = expand_glob(protocol, fs, fpath)
         if len(new_fpath) == 0:
-            raise BodoError("No files found matching glob pattern")
+            raise ValueError("No files found matching glob pattern")
 
     return new_fpath
 
@@ -537,7 +538,7 @@ def getfs(
             )
         )
     if storage_options is not None and len(storage_options) > 0:
-        raise BodoError(
+        raise ValueError(
             f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
         )
 
@@ -616,11 +617,11 @@ def parse_fpath(fpath: str | list[str]) -> tuple[str | list[str], ParseResult, s
             u_p = urlparse(f)
             # make sure protocol and bucket name of every file matches
             if u_p.scheme != protocol:
-                raise BodoError(
+                raise ValueError(
                     "All parquet files must use the same filesystem protocol"
                 )
             if u_p.netloc != bucket_name:
-                raise BodoError("All parquet files must be in the same S3 bucket")
+                raise ValueError("All parquet files must be in the same S3 bucket")
             fpath[i] = f.rstrip("/")
     else:
         parsed_url: ParseResult = urlparse(fpath)
@@ -686,7 +687,7 @@ def get_all_csv_json_data_files(
         err_msg (str): error message to raise if no data files are found
 
     Raises:
-        BodoError: error when there are no data files found
+        ValueError: error when there are no data files found
 
     Returns:
         list[str]: list of files to read
@@ -706,7 +707,7 @@ def get_all_csv_json_data_files(
 
     if len(all_data_files) == 0:  # pragma: no cover
         # TODO: test
-        raise BodoError(err_msg)
+        raise ValueError(err_msg)
 
     return all_data_files
 
