@@ -10,8 +10,8 @@ import pyarrow as pa
 import pytest
 
 import bodosql
-from bodo import Time
 from bodo.tests.utils import pytest_slow_unless_groupby
+from bodo.types import Time
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 # Skip unless any groupby-related files were changed
