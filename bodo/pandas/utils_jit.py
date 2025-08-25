@@ -3,6 +3,7 @@ import typing as pt
 # Import JIT compiler lazily
 import bodo.decorators  # isort:skip
 import numba
+from numba.core.ccallback import CFunc
 
 from bodo.hiframes.pd_dataframe_ext import init_dataframe
 from bodo.hiframes.pd_index_ext import init_range_index
@@ -18,9 +19,6 @@ from bodo.libs.array import (
 )
 from bodo.utils.conversion import coerce_to_array, index_from_array
 from bodo.utils.typing import unwrap_typeref
-
-if pt.TYPE_CHECKING:
-    from numba.core.ccallback import CFunc
 
 
 @numba.njit
