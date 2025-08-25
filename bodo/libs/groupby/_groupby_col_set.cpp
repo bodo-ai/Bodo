@@ -1611,12 +1611,12 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
     std::shared_ptr<array_info> in_col = this->in_col;
     bodo::vector<bodo::vector<int64_t>> group_rows(grp_info.num_groups, pool);
 
-    if (!in_col->length) {
+    if (!in_table->nrows()) {
         return;
     }
 
     // get the rows in each group
-    for (size_t i = 0; i < in_col->length; i++) {
+    for (size_t i = 0; i < in_table->nrows(); i++) {
         int64_t i_grp = grp_info.row_to_group[i];
         group_rows[i_grp].push_back(i);
     }
@@ -1625,13 +1625,16 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
     std::vector<std::shared_ptr<array_info>> out_arrs(grp_info.num_groups);
     for (size_t i = 0; i < grp_info.num_groups; i++) {
         bodo::vector<int64_t> row_idxs = group_rows[i];
-        std::shared_ptr<array_info> in_group_arr =
-            RetrieveArray_SingleColumn(in_col, row_idxs);
-        array_info* out_arr_result = func(in_group_arr.get());
+        std::shared_ptr<table_info> in_group_table =
+            RetrieveTable(in_table, row_idxs);
+        // func is responsible for deleting in_table_arg
+        table_info* in_table_arg = new table_info(*in_group_table);
+        array_info* out_arr_result = func(in_table_arg);
 
         if (!out_arr_result) {
             throw std::runtime_error(
-                "Groupby.agg(): An error occured while executing user defined "
+                "Groupby.agg() | Groupby.apply(): An error occured while "
+                "executing user defined "
                 "function.");
         }
         std::shared_ptr<array_info> out_arr(out_arr_result);
@@ -1644,6 +1647,16 @@ void StreamingUDFColSet::update(const std::vector<grouping_info>& grp_infos,
     // Replace the dummy update column.
     std::shared_ptr<array_info> out_col = this->update_cols[0];
     *out_col = std::move(*real_out_col);
+}
+
+void StreamingUDFColSet::setInCol(
+    std::vector<std::shared_ptr<array_info>> in_cols) {
+    this->in_table = std::make_shared<table_info>(in_cols);
+}
+
+void StreamingUDFColSet::clear() {
+    BasicColSet::clear();
+    this->in_table.reset();
 }
 
 // ############################## Percentile ##############################
@@ -2196,11 +2209,13 @@ std::unique_ptr<BasicColSet> makeColSet(
          ftype != Bodo_FTypes::array_agg_distinct &&
          ftype != Bodo_FTypes::percentile_cont &&
          ftype != Bodo_FTypes::percentile_disc &&
-         ftype != Bodo_FTypes::object_agg) &&
+         ftype != Bodo_FTypes::object_agg &&
+         ftype != Bodo_FTypes::stream_udf) &&
         in_cols.size() > 1) {
         throw std::runtime_error(
             "Only listagg, array_agg, percentile_cont, percentile_disc, "
-            "object_agg, window functions and min_row_number_filter can have "
+            "object_agg, stream_udfs, window functions and "
+            "min_row_number_filter can have "
             "multiple input columns.");
     }
     switch (ftype) {

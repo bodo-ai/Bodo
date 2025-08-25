@@ -80,4 +80,4 @@ struct udfinfo_t {
  * groupby.
  *
  */
-using stream_udf_t = array_info*(array_info*);
+using stream_udf_t = array_info*(table_info*);

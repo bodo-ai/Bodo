@@ -19,6 +19,28 @@ def groupby_df():
     )
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(True, id="dropna-True"),
+        pytest.param(False, id="dropna-False"),
+    ],
+    scope="module",
+)
+def dropna(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(True, id="as_index-True"),
+        pytest.param(False, id="as_index-False"),
+    ],
+    scope="module",
+)
+def as_index(request):
+    return request.param
+
+
 def test_basic_agg_udf(groupby_df):
     df = groupby_df
     bdf = bd.from_pandas(df)
@@ -104,7 +126,11 @@ def test_agg_mix_udf_builtin(groupby_df):
             lambda x: pd.Timedelta(3), id="timedelta_ret", marks=pytest.mark.slow
         ),
         pytest.param(lambda x: "A", id="string_ret"),
-        pytest.param(lambda x: {"id": 1, "text": "hello"}, id="struct_ret"),
+        pytest.param(
+            lambda x: {"id": 1, "text": "hello"},
+            id="struct_ret",
+            marks=pytest.mark.slow,
+        ),
         pytest.param(lambda x: [1, 2], id="list_ret"),
     ],
 )
@@ -152,19 +178,30 @@ def test_agg_mix_udf_builtin(groupby_df):
                 ),
             ),
             id="struct_col",
+            marks=pytest.mark.slow,
         ),
     ],
 )
-def test_agg_udf_types(val_col, func):
-    """Test agg with custom funcs of different types."""
+@pytest.mark.parametrize(
+    "impl",
+    [
+        pytest.param(lambda df, func: df.groupby(by=["A"]).agg({"B": func}), id="agg"),
+        pytest.param(
+            lambda df, func: df.groupby(by=["A"]).apply(func, include_groups=False),
+            id="apply",
+        ),
+    ],
+)
+def test_groupby_udf_types(impl, val_col, func):
+    """Test agg and apply with custom funcs of different types."""
 
     df = pd.DataFrame({"A": ["A", "B", "C"] * 4, "B": val_col})
     bdf = bd.from_pandas(df)
     pdf = convert_to_pandas_types(df)
 
-    df2 = pdf.groupby(by=["A"]).agg({"B": func})
+    df2 = impl(pdf, func)
     with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby(by=["A"]).agg({"B": func})
+        bdf2 = impl(bdf, func)
 
     _test_equal(bdf2, df2, check_pandas_types=False)
 
@@ -191,32 +228,148 @@ def test_agg_udf_errorchecking(groupby_df):
             return 0
 
     # Series output not supported raises ValueError to match Pandas
-    with pytest.raises(ValueError, match="Must produce aggregated value"):
+    with pytest.raises(
+        ValueError, match="User defined function must produce aggregated value"
+    ):
         bdf.groupby("A").agg(udf1).execute_plan()
 
     with pytest.raises(
         Exception,
-        match=r"Groupby.agg\(\): An error occured while executing user defined function.",
+        match=r"Groupby.agg\(\) \| Groupby.apply\(\): An error occured while executing user defined function.",
     ):
         bdf.groupby("A").agg(udf2).execute_plan()
 
     # UDF cannot be compiled, fallback to Pandas
     df2 = groupby_df.groupby("A").agg(udf3)
     with pytest.warns(
-        BodoLibFallbackWarning, match=r"Groupby.agg\(\): unable to compile udf3"
+        BodoLibFallbackWarning,
+        match="An error occured while compiling user defined function",
     ):
         bdf2 = bdf.groupby("A").agg(udf3)
 
     _test_equal(bdf2, df2)
 
 
-def test_agg_null_keys():
+def test_agg_null_keys(dropna, as_index):
     df = pd.DataFrame({"A": [None, None, None, 1, 2, 3], "B": [1, 2, 3, 4, 5, 6]})
 
     bdf = bd.from_pandas(df)
 
-    df2 = df.groupby("A", dropna=False).agg(lambda x: x.sum())
+    df2 = df.groupby("A", dropna=dropna, as_index=as_index).agg(lambda x: x.sum())
     with assert_executed_plan_count(0):
-        bdf2 = bdf.groupby("A", dropna=False).agg(lambda x: x.sum())
+        bdf2 = bdf.groupby("A", dropna=dropna, as_index=as_index).agg(lambda x: x.sum())
 
     _test_equal(bdf2, df2, sort_output=True)
+
+
+def test_apply_basic(dropna, as_index):
+    """Test basic groupby apply example"""
+    df = pd.DataFrame(
+        {
+            "B": ["a", "c", "b", "c"] * 3,
+            "A": ["A", "B", None] * 4,
+            "C": [1, 2, 3, 4, 5, 6] * 2,
+            "BB": ["a", "b"] * 6,
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+
+    def udf(df):
+        denom = df["C"].sum()
+        df = df[df["B"] == "c"]
+        numer = df["C"].sum()
+        return numer / denom
+
+    df2 = df.groupby(["A", "BB"], dropna=dropna, as_index=as_index).apply(
+        udf, include_groups=False
+    )
+    with assert_executed_plan_count(0):
+        bdf2 = bdf.groupby(["A", "BB"], dropna=dropna, as_index=as_index).apply(
+            udf, include_groups=False
+        )
+
+    # Pandas/BD returns None column when as_index=False
+    # Bodo DataFrames just returns "None" for now,
+    if not as_index:
+        df2 = df2.rename(columns={None: "None"})
+
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "impl",
+    [
+        pytest.param(
+            lambda df, func: df.groupby("A", dropna=dropna, as_index=as_index)["C"].agg(
+                func
+            ),
+            id="agg",
+        ),
+        pytest.param(
+            lambda df, func: df.groupby("A", dropna=dropna, as_index=as_index)[
+                "C"
+            ].apply(func, include_groups=False),
+            id="apply",
+        ),
+    ],
+)
+def test_series_udf(dropna, as_index, impl):
+    df = pd.DataFrame(
+        {
+            "B": ["a", "c", "b", "c"] * 3,
+            "A": ["A", "B", None] * 4,
+            "C": [1, 2, 3, 4, 5, 6] * 2,
+        }
+    )
+
+    bdf = bd.from_pandas(df)
+
+    def udf(x):
+        return x.max() - x.min()
+
+    df2 = impl(df, udf)
+    with assert_executed_plan_count(0):
+        bdf2 = impl(bdf, udf)
+
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+
+
+def test_apply_fallback(groupby_df: pd.DataFrame, as_index):
+    # DataFrame return value
+    def udf1(x):
+        return x
+
+    # Unsupported operation in JIT (string Series sum)
+    def udf2(x):
+        return x.A.sum()
+
+    bdf = bd.from_pandas(groupby_df)
+
+    df2 = groupby_df.groupby("C", as_index=as_index).apply(udf1, include_groups=False)
+    with pytest.warns(
+        BodoLibFallbackWarning,
+        match="functions returning Series or DataFrame not implemented yet",
+    ):
+        bdf2 = bdf.groupby("C", as_index=as_index).apply(udf1, include_groups=False)
+
+    if not as_index:
+        df2 = df2.rename(columns={None: "None"})
+        bdf2 = df2.rename(columns={None: "None"})
+
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+
+    bdf = bd.from_pandas(groupby_df)
+
+    df2 = groupby_df.groupby("C", as_index=as_index).apply(udf2, include_groups=False)
+    with pytest.warns(
+        BodoLibFallbackWarning,
+        match="An error occured while compiling user defined function 'udf2'",
+    ):
+        bdf2 = bdf.groupby("C", as_index=as_index).apply(udf2, include_groups=False)
+
+    if not as_index:
+        df2 = df2.rename(columns={None: "None"})
+        bdf2 = df2.rename(columns={None: "None"})
+
+    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
