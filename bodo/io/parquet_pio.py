@@ -23,14 +23,11 @@ from bodo.io.fs_io import (
     parse_fpath,
 )
 from bodo.mpi4py import MPI
-from bodo.utils.typing import (
-    BodoError,
-    FileInfo,
-    FileSchema,
-)
 
 if pt.TYPE_CHECKING:
     import pyarrow.compute as pc
+
+    from bodo.utils.typing import FileSchema
 
 
 REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
@@ -39,41 +36,6 @@ REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 READ_STR_AS_DICT_THRESHOLD = 1.0
 
 LIST_OF_FILES_ERROR_MSG = ". Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
-
-
-class ParquetFileInfo(FileInfo):
-    """FileInfo object passed to ForceLiteralArg for
-    file name arguments that refer to a parquet dataset"""
-
-    def __init__(
-        self,
-        columns,
-        storage_options=None,
-        input_file_name_col=None,
-        read_as_dict_cols=None,
-        use_hive=True,
-    ):
-        self.columns = columns  # columns to select from parquet dataset
-        self.storage_options = storage_options
-        self.input_file_name_col = input_file_name_col
-        self.read_as_dict_cols = read_as_dict_cols
-        self.use_hive = use_hive
-        super().__init__()
-
-    def _get_schema(self, fname) -> FileSchema:
-        try:
-            return parquet_file_schema(
-                fname,
-                selected_columns=self.columns,
-                storage_options=self.storage_options,
-                input_file_name_col=self.input_file_name_col,
-                read_as_dict_cols=self.read_as_dict_cols,
-                use_hive=self.use_hive,
-            )
-        except OSError as e:
-            if "non-file path" in str(e):
-                raise FileNotFoundError(str(e))
-            raise
 
 
 def unify_schemas(
@@ -487,15 +449,17 @@ def get_bodo_pq_dataset_from_fpath(
         # back to numba and come back as an InternalError.
         # where numba errors are hidden from the user.
         # See [BE-1188] for an example
-        # Raising a BodoError lets messages come back and be seen by the user.
+        # Raising a bodo.utils.typing.BodoError lets messages come back and be seen by the user.
         if isinstance(e, IsADirectoryError):
             # We suppress Arrow's error message since it doesn't apply to Bodo
             # (the bit about doing a union of datasets)
-            e = BodoError(LIST_OF_FILES_ERROR_MSG)
+            e = bodo.utils.typing.BodoError(LIST_OF_FILES_ERROR_MSG)
         elif isinstance(fpath, list) and isinstance(e, (OSError, FileNotFoundError)):
-            e = BodoError(str(e) + LIST_OF_FILES_ERROR_MSG)
+            e = bodo.utils.typing.BodoError(str(e) + LIST_OF_FILES_ERROR_MSG)
         else:
-            e = BodoError(f"error from pyarrow: {type(e).__name__}: {str(e)}\n")
+            e = bodo.utils.typing.BodoError(
+                f"error from pyarrow: {type(e).__name__}: {str(e)}\n"
+            )
         return e
     finally:
         # Restore pyarrow default IO thread count
@@ -514,7 +478,7 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
             that the files allocated to this rank will read.
 
     Raises:
-        BodoError: If schemas couldn't be unified.
+        bodo.utils.typing.BodoError: If schemas couldn't be unified.
     """
     ev = tracing.Event("unify_schemas_across_ranks")
     error = None
@@ -533,7 +497,7 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
         for error in comm.allgather(error):
             if error:
                 msg = f"Schema in some files were different.\n{str(error)}"
-                raise BodoError(msg)
+                raise bodo.utils.typing.BodoError(msg)
     ev.finalize()
 
 
@@ -547,7 +511,7 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
         frag (pa.Dataset.Fragment): Fragment of the dataset to unify.
 
     Raises:
-        BodoError: If the schemas cannot be unified
+        bodo.utils.typing.BodoError: If the schemas cannot be unified
     """
     # Two files are compatible if arrow can unify their schemas.
     file_schema = frag.metadata.schema.to_arrow_schema()
@@ -563,12 +527,12 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
     added_columns = fileset_schema_names - dataset_schema_names
     if added_columns:
         msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
-        raise BodoError(msg)
+        raise bodo.utils.typing.BodoError(msg)
     try:
         dataset.schema = unify_schemas([dataset.schema, file_schema], "permissive")
     except Exception as e:
         msg = f"Schema in {piece} was different.\n{str(e)}"
-        raise BodoError(msg)
+        raise bodo.utils.typing.BodoError(msg)
 
 
 def populate_row_counts_in_pq_dataset_pieces(
@@ -690,7 +654,9 @@ def populate_row_counts_in_pq_dataset_pieces(
                 if isinstance(fpath, list) and isinstance(
                     error, (OSError, FileNotFoundError)
                 ):
-                    raise BodoError(str(error) + LIST_OF_FILES_ERROR_MSG)
+                    raise bodo.utils.typing.BodoError(
+                        str(error) + LIST_OF_FILES_ERROR_MSG
+                    )
                 raise error
 
     # Now unify the schemas across all ranks.
@@ -1092,7 +1058,7 @@ def _add_categories_to_pq_dataset(pq_dataset):
 
     # NOTE: shouldn't be possible
     if len(pq_dataset.pieces) < 1:  # pragma: no cover
-        raise BodoError(
+        raise bodo.utils.typing.BodoError(
             "No pieces found in Parquet dataset. Cannot get read categorical values"
         )
 
@@ -1397,7 +1363,9 @@ def parquet_file_schema(
     # make sure selected columns are in the schema
     for c in selected_columns:
         if c not in col_names_map:
-            raise BodoError(f"Selected column {c} not in Parquet file schema")
+            raise bodo.utils.typing.BodoError(
+                f"Selected column {c} not in Parquet file schema"
+            )
     for index_col in index_cols:
         if not isinstance(index_col, dict) and index_col not in selected_columns:
             # if index_col is "__index__level_0__" or some other name, append it.

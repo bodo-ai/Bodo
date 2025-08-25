@@ -42,7 +42,6 @@ from bodo.io.fs_io import (
 )
 from bodo.io.helpers import numba_to_pyarrow_schema, pyarrow_schema_type
 from bodo.io.parquet_pio import (
-    ParquetFileInfo,
     parquet_file_schema,
 )
 from bodo.ir.connector import Connector
@@ -62,7 +61,9 @@ from bodo.transforms.table_column_del_pass import (
 from bodo.utils.transform import get_const_value
 from bodo.utils.typing import (
     BodoError,
+    FileInfo,
     FilenameType,
+    FileSchema,
     get_overload_const_str,
     is_nullable_ignore_sentinels,
 )
@@ -131,6 +132,41 @@ def unbox_read_parquet_fpath_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return NativeValue(val)
+
+
+class ParquetFileInfo(FileInfo):
+    """FileInfo object passed to ForceLiteralArg for
+    file name arguments that refer to a parquet dataset"""
+
+    def __init__(
+        self,
+        columns,
+        storage_options=None,
+        input_file_name_col=None,
+        read_as_dict_cols=None,
+        use_hive=True,
+    ):
+        self.columns = columns  # columns to select from parquet dataset
+        self.storage_options = storage_options
+        self.input_file_name_col = input_file_name_col
+        self.read_as_dict_cols = read_as_dict_cols
+        self.use_hive = use_hive
+        super().__init__()
+
+    def _get_schema(self, fname) -> FileSchema:
+        try:
+            return parquet_file_schema(
+                fname,
+                selected_columns=self.columns,
+                storage_options=self.storage_options,
+                input_file_name_col=self.input_file_name_col,
+                read_as_dict_cols=self.read_as_dict_cols,
+                use_hive=self.use_hive,
+            )
+        except OSError as e:
+            if "non-file path" in str(e):
+                raise FileNotFoundError(str(e))
+            raise
 
 
 class ParquetHandler:
