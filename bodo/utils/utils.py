@@ -539,6 +539,9 @@ def is_np_array_typ(var_typ):
 
 
 def is_distributable_typ(var_typ):
+    # Import compiler lazily
+    import bodo.decorators  # isort:skip
+
     return (
         is_array_typ(var_typ)
         or isinstance(var_typ, bodo.hiframes.table.TableType)

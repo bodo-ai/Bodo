@@ -393,6 +393,9 @@ class Spawner:
         return res
 
     def lazy_manager_collect_func(self, res_id: str):
+        # Import compiler lazily
+        import bodo.decorators  # isort:skip
+
         root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
         # collect is sometimes triggered during receive (e.g. for unsupported types
         # like IntervalIndex) so we may be in the middle of function execution
@@ -481,6 +484,10 @@ class Spawner:
         """
         from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 
+        # Avoid importing compiler for plans unnecessarily
+        if isinstance(arg, bodo.pandas.plan.LazyPlan):
+            return None
+
         dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
             if arg._lazy:
@@ -545,10 +552,16 @@ class Spawner:
         """
         if isinstance(arg_meta, ArgMetadata):
             if arg_meta == ArgMetadata.BROADCAST:
+                # Import compiler lazily
+                import bodo.decorators  # isort:skip
+
                 bodo.libs.distributed_api.bcast(
                     arg, root=self.bcast_root, comm=spawner.worker_intercomm
                 )
             elif arg_meta == ArgMetadata.SCATTER:
+                # Import compiler lazily
+                import bodo.decorators  # isort:skip
+
                 bodo.libs.distributed_api.scatterv(
                     arg, root=self.bcast_root, comm=spawner.worker_intercomm
                 )
@@ -561,12 +574,18 @@ class Spawner:
         if isinstance(arg_meta, BodoSQLContextMetadata):
             for tname, tmeta in arg_meta.tables.items():
                 if tmeta is ArgMetadata.BROADCAST:
+                    # Import compiler lazily
+                    import bodo.decorators  # isort:skip
+
                     bodo.libs.distributed_api.bcast(
                         arg.tables[tname],
                         root=self.bcast_root,
                         comm=spawner.worker_intercomm,
                     )
                 elif tmeta is ArgMetadata.SCATTER:
+                    # Import compiler lazily
+                    import bodo.decorators  # isort:skip
+
                     bodo.libs.distributed_api.scatterv(
                         arg.tables[tname],
                         root=self.bcast_root,
@@ -793,6 +812,8 @@ class Spawner:
         | LazySingleArrayManager
     ):
         """Scatter data to all workers and return the manager for the data."""
+        # Import compiler lazily
+        import bodo.decorators  # isort:skip
         from bodo.pandas.utils import (
             get_lazy_manager_class,
             get_lazy_single_manager_class,
