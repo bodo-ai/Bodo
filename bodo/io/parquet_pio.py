@@ -21,10 +21,6 @@ from numba.extending import (
 
 import bodo
 import bodo.utils.tracing as tracing
-from bodo.hiframes.pd_categorical_ext import (
-    CategoricalArrayType,
-    PDCategoricalDtype,
-)
 from bodo.io.fs_io import (
     expand_path_globs,
     getfs,
@@ -1486,6 +1482,11 @@ def parquet_file_schema(
 
 def _get_partition_cat_dtype(dictionary):
     """get categorical dtype for Parquet partition set"""
+    from bodo.hiframes.pd_categorical_ext import (
+        CategoricalArrayType,
+        PDCategoricalDtype,
+    )
+
     # using 'dictionary' instead of 'keys' attribute since 'keys' may not have the
     # right data type (e.g. string instead of int64)
     assert dictionary is not None
