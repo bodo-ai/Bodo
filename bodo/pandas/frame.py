@@ -359,6 +359,27 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         super()._set_axis(1, value)
 
     @property
+    def columns(self):
+        return super().columns
+
+    @columns.setter
+    def columns(self, value):
+        if self.is_lazy_plan():
+            self._mgr._plan._update_column_names(value)
+        elif self._exec_state == ExecState.DISTRIBUTED:
+            # Since we can't edit the plan directly,
+            # create a new projection with new column names.
+            empty_data = self.head(0)
+            empty_data.columns = value
+            col_indices = list(
+                range(len(empty_data.columns) + get_n_index_arrays(empty_data.index))
+            )
+            self._mgr._plan = LogicalProjection(
+                empty_data, self._plan, make_col_ref_exprs(col_indices, self._plan)
+            )
+        super()._set_axis(0, value)
+
+    @property
     def shape(self):
         from bodo.pandas.plan import count_plan
 

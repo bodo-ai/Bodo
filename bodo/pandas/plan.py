@@ -43,6 +43,11 @@ class LazyPlan:
 
         self.pa_schema = pa.Schema.from_pandas(self.empty_data)
 
+    def _update_column_names(self, new_cols):
+        """Update the column names by modifying empty_data and pa_schema"""
+        self.empty_data.columns = new_cols
+        self.pa_schema = pa.Schema.from_pandas(self.empty_data)
+
     def __str__(self):
         args = self.args
 
@@ -281,6 +286,12 @@ class LogicalGetIcebergRead(LogicalOperator):
         # Iceberg needs schema metadata
         # TODO: avoid this to support operations like renaming columns
         self.pa_schema = arrow_schema
+
+    def _update_column_names(self, new_cols):
+        """Update the column names by modifying empty_data and pa_schema"""
+        raise NotImplementedError(
+            "_update_column_names is not implemented for LogicalGetIcebergRead."
+        )
 
 
 class LogicalParquetWrite(LogicalOperator):
