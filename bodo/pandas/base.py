@@ -54,7 +54,6 @@ from bodo.pandas.utils import (
     ensure_datetime64ns,
     wrap_plan,
 )
-from bodo.utils.utils import bodo_spawn_exec
 
 if pt.TYPE_CHECKING:
     from pyiceberg.table import Table as PyIcebergTable
@@ -365,6 +364,8 @@ def read_csv(
     storage_options: StorageOptions | None = None,
     dtype_backend: DtypeBackend | lib.NoDefault = lib.no_default,
 ) -> BodoDataFrame:
+    from bodo.utils.utils import bodo_spawn_exec
+
     func = "def bodo_read_csv(filepath"
     if names != lib.no_default:
         func += ", names"
