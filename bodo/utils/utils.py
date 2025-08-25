@@ -16,7 +16,6 @@ import traceback
 import typing as pt
 import warnings
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
 from enum import Enum
 
 import numba
@@ -1932,14 +1931,6 @@ def is_jupyter_on_bodo_platform() -> bool:
         "JPY_SESSION_NAME" in os.environ
         or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
     )
-
-
-@dataclass
-class AWSCredentials:
-    access_key: str
-    secret_key: str
-    session_token: str | None = None
-    region: str | None = None
 
 
 def create_arg_hash(*args, **kwargs):

@@ -8,6 +8,7 @@ import os
 import sys
 import typing as pt
 import warnings
+from dataclasses import dataclass
 from glob import has_magic
 from urllib.parse import ParseResult, urlparse
 
@@ -30,10 +31,17 @@ from pyarrow.fs import FileSystem, FSSpecHandler, PyFileSystem
 import bodo
 from bodo.utils.py_objs import install_opaque_class
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
-from bodo.utils.utils import AWSCredentials
 
 # Same as _fs_io.cpp
 GCS_RETRY_LIMIT_SECONDS = 2
+
+
+@dataclass
+class AWSCredentials:
+    access_key: str
+    secret_key: str
+    session_token: str | None = None
+    region: str | None = None
 
 
 # ----- monkey-patch fsspec.implementations.arrow.ArrowFSWrapper._open --------
