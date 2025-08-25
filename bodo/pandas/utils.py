@@ -976,6 +976,89 @@ def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
     return empty_series
 
 
+def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Series:
+    """Infer the output type of a scalar UDF by running it on a
+    sample of the data.
+
+    Args:
+        obj (BodoDataFrame | BodoSeries): The object the UDF is being applied over.
+        method_name ({"apply", "map", "map_parititons"}): The name of the method
+            applying the UDF.
+        func (Any): The UDF argument to pass to apply/map.
+        kwargs (dict): Optional keyword arguments to pass to apply/map.
+
+    Raises:
+        BodoLibNotImplementedException: If the dtype cannot be infered.
+
+    Returns:
+        Empty Series with the dtype matching the output of the UDF
+        (or equivalent pyarrow dtype)
+    """
+    assert method_name in {
+        "map",
+        "apply",
+        "map_partitions",
+        "map_with_state",
+        "map_partitions_with_state",
+    }, (
+        "expected method to be one of {'apply', 'map', 'map_partitions', 'map_with_state', 'map_partitions_with_state'}"
+    )
+
+    base_class = obj.__class__.__bases__[0]
+
+    # map_partitions is not a pandas.DataFrame method.
+    apply_method = None
+    if method_name in ("map", "apply"):
+        apply_method = getattr(base_class, method_name)
+
+    # TODO: Tune sample sizes
+    sample_sizes = (1, 4, 9, 25, 100)
+
+    except_msg = ""
+    for sample_size in sample_sizes:
+        pd_sample = base_class(obj.head(sample_size))
+
+        if method_name == "map_with_state":
+            out_sample = pd_sample.apply(lambda row: func[1](func[0], row))
+        elif method_name == "map_partitions_with_state":
+            out_sample = func[1](func[0], pd_sample, *args, **kwargs)
+        else:
+            out_sample = (
+                func(pd_sample, *args, **kwargs)
+                if apply_method is None
+                else apply_method(pd_sample, func, *args, **kwargs)
+            )
+
+        if not isinstance(out_sample, pd.Series):
+            raise BodoLibNotImplementedException(
+                f"expected output to be Series, got: {type(out_sample)}."
+            )
+
+        # For Series.map with na_action='ignore' and NA values in the first rows,
+        # the type infered will be the type of the NA, not necessarily the actual
+        # return type.
+        if not pd.isna(out_sample).all():
+            try:
+                empty_series = _get_empty_series_arrow(out_sample)
+            except (pa.lib.ArrowTypeError, pa.lib.ArrowInvalid) as e:
+                # Could not get a pyarrow type for the series, Fallback to pandas.
+                except_msg = f", got: {str(e)}."
+                break
+
+            return empty_series
+
+        # all the data was collected and couldn't infer types,
+        # fall back to pandas.
+        if len(out_sample) < sample_size:
+            break
+
+        # TODO: Warning that repeated sampling may hurt performance.
+
+    raise BodoLibNotImplementedException(
+        f"could not infer the output type of user defined function{except_msg}."
+    )
+
+
 def ensure_datetime64ns(df):
     """Convert datetime columns in a DataFrame to 'datetime64[ns]' dtype.
     Avoids datetime64[us] that is commonly used in Pandas but not supported in Bodo.
