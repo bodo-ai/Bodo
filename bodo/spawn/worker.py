@@ -596,8 +596,8 @@ def worker_loop(
     # don't inherit file descriptors from the parent process.
     out_socket = None
     if (
-        bodo.utils.utils.is_jupyter_on_windows()
-        or bodo.utils.utils.is_jupyter_on_bodo_platform()
+        bodo.spawn.utils.is_jupyter_on_windows()
+        or bodo.spawn.utils.is_jupyter_on_bodo_platform()
     ):
         import zmq
 

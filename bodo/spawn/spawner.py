@@ -675,8 +675,8 @@ class Spawner:
 
         # Skip if not in Jupyter on Windows and not Jupyter on Bodo platform
         if (
-            not bodo.utils.utils.is_jupyter_on_windows()
-            and not bodo.utils.utils.is_jupyter_on_bodo_platform()
+            not bodo.spawn.utils.is_jupyter_on_windows()
+            and not bodo.spawn.utils.is_jupyter_on_bodo_platform()
         ):
             self.worker_output_thread = None
             return

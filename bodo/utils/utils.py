@@ -9,7 +9,6 @@ import hashlib
 import importlib
 import inspect
 import keyword
-import os
 import re
 import sys
 import traceback
@@ -1908,29 +1907,6 @@ def is_ml_support_loaded():
         "bodo.ml_support.sklearn_utils_ext",
     )
     return any(module in sys.modules for module in ml_support_modules)
-
-
-def is_jupyter_on_windows() -> bool:
-    """Returns True if running in Jupyter on Windows"""
-
-    # Flag for testing purposes
-    if os.environ.get("BODO_OUTPUT_REDIRECT_TEST", "0") == "1":
-        return True
-
-    return sys.platform == "win32" and (
-        "JPY_SESSION_NAME" in os.environ
-        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
-    )
-
-
-def is_jupyter_on_bodo_platform() -> bool:
-    """Returns True if running in Jupyter on Bodo Platform"""
-
-    platform_cloud_provider = os.environ.get("BODO_PLATFORM_CLOUD_PROVIDER", None)
-    return (platform_cloud_provider is not None) and (
-        "JPY_SESSION_NAME" in os.environ
-        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
-    )
 
 
 def create_arg_hash(*args, **kwargs):
