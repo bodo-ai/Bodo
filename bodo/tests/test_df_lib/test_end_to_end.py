@@ -3419,7 +3419,8 @@ def test_set_column_names():
     bdf = get_bodo_df(df)
     pdf = df.copy()
 
-    bdf.columns = new_cols
+    with assert_executed_plan_count(0):
+        bdf.columns = new_cols
     pdf.columns = new_cols
 
     _test_equal(bdf, pdf, check_pandas_types=False)

@@ -367,9 +367,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if self.is_lazy_plan():
             self._mgr._plan._update_column_names(value)
         elif self._exec_state == ExecState.DISTRIBUTED:
+            # Since we can't edit the plan directly,
+            # create a new projection with new column names.
             empty_data = self.head(0)
             empty_data.columns = value
-            # create projection with new column names
             col_indices = list(
                 range(len(empty_data.columns) + get_n_index_arrays(empty_data.index))
             )
