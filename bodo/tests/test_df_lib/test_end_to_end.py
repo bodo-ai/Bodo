@@ -2535,8 +2535,6 @@ def test_groupby_apply():
     pd_out = impl(df)
     with assert_executed_plan_count(0):
         bodo_out = impl(bd.from_pandas(df))
-        # Setting columns is not supported yet in Bodo DataFrames
-        bodo_out = bodo_out.rename(columns={"None": "Q"})
 
     _test_equal(
         bodo_out,
@@ -3376,3 +3374,52 @@ def test_top_level_jit_fallback(datapath):
         check_names=False,
         sort_output=True,
     )
+
+
+def test_set_column_names():
+    """Check that setting columns attribute of a DataFrame works as expected."""
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5],
+            "B": ["A", "B", "C", "D", "E"],
+        },
+        index=["aa", "bb", "cc", "dd", "ee"],
+    )
+
+    # Set columns before executing plan
+    bdf = bd.from_pandas(df)
+    pdf = df.copy()
+    new_cols = ["C", "D"]
+
+    with assert_executed_plan_count(0):
+        bdf.columns = new_cols
+    pdf.columns = new_cols
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+    # Rename columns while building plan
+    bdf = bd.from_pandas(df)
+    pdf = df.copy()
+
+    def impl(df):
+        df.columns = new_cols
+        df2 = df[new_cols]
+        return df2
+
+    with assert_executed_plan_count(0):
+        bodo_result = impl(bdf)
+    pd_result = impl(pdf)
+    _test_equal(bodo_result, pd_result, check_pandas_types=False)
+
+    # Renaming the result of JIT
+    @bodo.jit(spawn=True)
+    def get_bodo_df(df):
+        return df
+
+    bdf = get_bodo_df(df)
+    pdf = df.copy()
+
+    bdf.columns = new_cols
+    pdf.columns = new_cols
+
+    _test_equal(bdf, pdf, check_pandas_types=False)
