@@ -11,9 +11,7 @@ from typing import Any
 from urllib.parse import ParseResult, urlparse
 
 import numpy as np
-import pyarrow  # noqa
 import pyarrow as pa
-import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 from numba.core import types
@@ -48,6 +46,10 @@ from bodo.utils.typing import (
     FileSchema,
     get_overload_const_str,
 )
+
+if pt.TYPE_CHECKING:
+    import pyarrow.compute as pc
+
 
 REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 # the ratio of total_uncompressed_size of a Parquet string column vs number of values,
