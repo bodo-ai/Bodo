@@ -16,18 +16,13 @@ import warnings
 from copy import deepcopy
 
 import cloudpickle
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-from numba import typed
-from numba.core import types
 from pandas.core.arrays.arrow import ArrowExtensionArray
 from pandas.core.base import ExtensionArray
 
 import bodo
-import bodo.hiframes
-import bodo.hiframes.table
 from bodo.mpi4py import MPI
 from bodo.pandas import LazyMetadata
 from bodo.spawn.spawner import BodoSQLContextMetadata, env_var_prefix
@@ -40,8 +35,6 @@ from bodo.spawn.utils import (
     set_global_config,
 )
 from bodo.spawn.worker_state import set_is_worker
-from bodo.utils.typing import BodoWarning
-from bodo.utils.utils import is_distributable_typ
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 
@@ -164,6 +157,8 @@ def _build_index_data(
 def _build_distributed_return_metadata(
     res: pt.Any, logger: logging.Logger
 ) -> distributed_return_metadata_t:
+    from numba import typed
+
     global RESULT_REGISTRY
 
     if isinstance(res, list):
@@ -235,6 +230,10 @@ def _gather_res(
     """
     If any output is marked as distributed and empty on rank 0, gather the results and return an updated is_distributed flag and result
     """
+    import bodo.hiframes
+    import bodo.hiframes.table
+    from bodo.utils.typing import BodoWarning
+
     if isinstance(res, tuple) and isinstance(is_distributed, (tuple, list)):
         all_updated_is_distributed = []
         all_updated_res = []
@@ -359,6 +358,10 @@ def exec_func_handler(
 ):
     """Callback to compile and execute the function being sent over
     driver_intercomm by the spawner"""
+    import numba
+
+    from bodo.utils.utils import is_distributable_typ
+
     global RESULT_REGISTRY
     debug_worker_msg(logger, "Begin listening for function.")
 
@@ -648,6 +651,8 @@ def worker_loop(
             del RESULT_REGISTRY[res_id]
             debug_worker_msg(logger, f"Deleted result {res_id}")
         elif command == CommandType.REGISTER_TYPE.value:
+            from numba.core import types
+
             (type_name, type_value) = spawner_intercomm.bcast(None, 0)
             setattr(types, type_name, type_value)
             debug_worker_msg(logger, f"Added type {type_name}")
