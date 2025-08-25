@@ -14,7 +14,6 @@ import pandas as pd
 import pyarrow as pa
 
 import bodo
-from bodo.decorators import _cfunc
 from bodo.hiframes.pd_dataframe_ext import init_dataframe
 from bodo.hiframes.pd_index_ext import init_range_index
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -1171,6 +1170,8 @@ def cpp_table_to_df_jit(
 def get_udf_cfunc_decorator() -> pt.Callable[[pt.Callable], CFunc]:
     """Decorator for creating C callbacks for map/apply that take in a table info and
     return a table info."""
+    from bodo.decorators import _cfunc
+
     return _cfunc(table_type(table_type), cache=True)
 
 
