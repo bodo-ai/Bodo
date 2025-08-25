@@ -259,6 +259,7 @@ def typeof(*args, **kwargs):
     return numba.typeof(*args, **kwargs)
 
 
+# The JIT version is replaced in decorators.py
 def is_jit_execution():  # pragma: no cover
     return False
 
@@ -269,7 +270,11 @@ def wrap_python(*args, **kwargs):
     return _wrap_python(*args, **kwargs)
 
 
-from bodo.numba_compat import jitclass
+def jitclass(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.numba_compat import jitclass as _jitclass
+    return _jitclass(*args, **kwargs)
 
 
 from bodo.libs.distributed_api import (
