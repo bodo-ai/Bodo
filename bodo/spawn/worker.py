@@ -24,7 +24,6 @@ from pandas.core.base import ExtensionArray
 
 import bodo
 from bodo.mpi4py import MPI
-from bodo.pandas import LazyMetadata
 from bodo.spawn.spawner import BodoSQLContextMetadata, env_var_prefix
 from bodo.spawn.utils import (
     ArgMetadata,
@@ -35,6 +34,17 @@ from bodo.spawn.utils import (
     set_global_config,
 )
 from bodo.spawn.worker_state import set_is_worker
+
+if pt.TYPE_CHECKING:
+    from bodo.pandas import LazyMetadata
+
+    distributed_return_metadata_t = pt.Union[
+        LazyMetadata,
+        list["distributed_return_metadata_t"],
+        dict[pt.Any, "distributed_return_metadata_t"],
+        ExtensionArray,
+    ]
+
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 
@@ -108,14 +118,6 @@ is_distributed_t = pt.Union[
 ]
 
 
-distributed_return_metadata_t = pt.Union[
-    LazyMetadata,
-    list["distributed_return_metadata_t"],
-    dict[pt.Any, "distributed_return_metadata_t"],
-    ExtensionArray,
-]
-
-
 def _build_index_data(
     res: pt.Any, logger: logging.Logger
 ) -> distributed_return_metadata_t | None:
@@ -158,6 +160,8 @@ def _build_distributed_return_metadata(
     res: pt.Any, logger: logging.Logger
 ) -> distributed_return_metadata_t:
     from numba import typed
+
+    from bodo.pandas import LazyMetadata
 
     global RESULT_REGISTRY
 
