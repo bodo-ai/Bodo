@@ -5,7 +5,6 @@ S3 & Hadoop file system supports, and file system dependent calls
 from __future__ import annotations
 
 import os
-import sys
 import typing as pt
 import warnings
 from dataclasses import dataclass
@@ -18,11 +17,10 @@ from fsspec.implementations.arrow import (
     ArrowFSWrapper,
     wrap_exceptions,
 )
-from pyarrow.fs import FileSystem, FSSpecHandler, PyFileSystem
+from pyarrow.fs import FSSpecHandler, PyFileSystem
 
 import bodo
 from bodo import BodoWarning
-from bodo.utils.py_objs import install_opaque_class
 
 # Same as _fs_io.cpp
 GCS_RETRY_LIMIT_SECONDS = 2
@@ -802,12 +800,3 @@ def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     if s3_filepath.startswith("s3://") or s3_filepath.startswith("s3a://"):
         bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
     return bucket_loc
-
-
-this_module = sys.modules[__name__]
-PyArrowFSType, pyarrow_fs_type = install_opaque_class(
-    types_name="pyarrow_fs_type",
-    python_type=FileSystem,
-    module=this_module,
-    class_name="PyArrowFSType",
-)

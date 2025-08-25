@@ -1116,3 +1116,12 @@ def overload_get_storage_options_pyobject(storage_options):
     loc_vars = {}
     exec(func_text, globals(), loc_vars)
     return loc_vars["impl"]
+
+
+this_module = sys.modules[__name__]
+PyArrowFSType, pyarrow_fs_type = install_opaque_class(
+    types_name="pyarrow_fs_type",
+    python_type=pa.fs.FileSystem,
+    module=this_module,
+    class_name="PyArrowFSType",
+)
