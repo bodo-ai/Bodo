@@ -15,9 +15,6 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 from numba.core import types
-from numba.extending import (
-    overload,
-)
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -32,7 +29,6 @@ from bodo.utils.typing import (
     BodoWarning,
     FileInfo,
     FileSchema,
-    get_overload_const_str,
 )
 
 if pt.TYPE_CHECKING:
@@ -80,30 +76,6 @@ class ParquetFileInfo(FileInfo):
             if "non-file path" in str(e):
                 raise FileNotFoundError(str(e))
             raise
-
-
-def get_filters_pyobject(dnf_filter_str, expr_filter_str, vars):  # pragma: no cover
-    pass
-
-
-@overload(get_filters_pyobject, no_unliteral=True)
-def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
-    """generate a pyobject for filter expression to pass to C++"""
-    dnf_filter_str_val = get_overload_const_str(dnf_filter_str)
-    expr_filter_str_val = get_overload_const_str(expr_filter_str)
-    var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
-    func_text = "def impl(dnf_filter_str, expr_filter_str, var_tup):\n"
-    if len(var_tup):
-        func_text += f"  {var_unpack}, = var_tup\n"
-    func_text += "  with bodo.ir.object_mode.no_warning_objmode(dnf_filters_py='parquet_predicate_type', expr_filters_py='parquet_predicate_type'):\n"
-    func_text += f"    dnf_filters_py = {dnf_filter_str_val}\n"
-    func_text += f"    expr_filters_py = {expr_filter_str_val}\n"
-    func_text += "  return (dnf_filters_py, expr_filters_py)\n"
-    loc_vars = {}
-    glbs = globals()
-    glbs["bodo"] = bodo
-    exec(func_text, glbs, loc_vars)
-    return loc_vars["impl"]
 
 
 def unify_schemas(

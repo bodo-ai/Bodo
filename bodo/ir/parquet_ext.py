@@ -21,8 +21,10 @@ from numba.core.ir_utils import (
 )
 from numba.extending import (
     NativeValue,
+    box,
     intrinsic,
     models,
+    overload,
     register_model,
     unbox,
 )
@@ -41,9 +43,7 @@ from bodo.io.fs_io import (
 from bodo.io.helpers import numba_to_pyarrow_schema, pyarrow_schema_type
 from bodo.io.parquet_pio import (
     ParquetFileInfo,
-    get_filters_pyobject,
     parquet_file_schema,
-    parquet_predicate_type,
 )
 from bodo.ir.connector import Connector
 from bodo.libs.array import (
@@ -63,6 +63,7 @@ from bodo.utils.transform import get_const_value
 from bodo.utils.typing import (
     BodoError,
     FilenameType,
+    get_overload_const_str,
     is_nullable_ignore_sentinels,
 )
 from bodo.utils.utils import (
@@ -81,6 +82,34 @@ if pt.TYPE_CHECKING:  # pragma: no cover
 
 ll.add_symbol("pq_read_py_entry", arrow_cpp.pq_read_py_entry)
 ll.add_symbol("pq_reader_init_py_entry", arrow_cpp.pq_reader_init_py_entry)
+
+
+class ParquetPredicateType(types.Type):
+    """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
+    It is just a Python object passed as pointer to C++
+    """
+
+    def __init__(self):
+        super().__init__(name="ParquetPredicateType()")
+
+
+parquet_predicate_type = ParquetPredicateType()
+types.parquet_predicate_type = parquet_predicate_type  # type: ignore
+register_model(ParquetPredicateType)(models.OpaqueModel)
+
+
+@unbox(ParquetPredicateType)
+def unbox_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(ParquetPredicateType)
+def box_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
 
 
 class ReadParquetFilepathType(types.Opaque):
@@ -756,6 +785,30 @@ def pq_reader_params(
         sanitized_col_names,
         sel_partition_names_map,
     )
+
+
+def get_filters_pyobject(dnf_filter_str, expr_filter_str, vars):  # pragma: no cover
+    pass
+
+
+@overload(get_filters_pyobject, no_unliteral=True)
+def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
+    """generate a pyobject for filter expression to pass to C++"""
+    dnf_filter_str_val = get_overload_const_str(dnf_filter_str)
+    expr_filter_str_val = get_overload_const_str(expr_filter_str)
+    var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
+    func_text = "def impl(dnf_filter_str, expr_filter_str, var_tup):\n"
+    if len(var_tup):
+        func_text += f"  {var_unpack}, = var_tup\n"
+    func_text += "  with bodo.ir.object_mode.no_warning_objmode(dnf_filters_py='parquet_predicate_type', expr_filters_py='parquet_predicate_type'):\n"
+    func_text += f"    dnf_filters_py = {dnf_filter_str_val}\n"
+    func_text += f"    expr_filters_py = {expr_filter_str_val}\n"
+    func_text += "  return (dnf_filters_py, expr_filters_py)\n"
+    loc_vars = {}
+    glbs = globals()
+    glbs["bodo"] = bodo
+    exec(func_text, glbs, loc_vars)
+    return loc_vars["impl"]
 
 
 def _gen_pq_reader_py(

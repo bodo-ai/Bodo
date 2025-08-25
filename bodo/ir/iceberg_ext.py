@@ -36,6 +36,7 @@ from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import pyarrow_schema_type, pyiceberg_catalog_type
 from bodo.ir.connector import Connector, log_limit_pushdown
 from bodo.ir.filter import Filter, FilterVisitor
+from bodo.ir.parquet_ext import ParquetPredicateType, parquet_predicate_type
 from bodo.ir.sql_ext import (
     RtjfValueType,
     extract_rtjf_terms,
@@ -82,34 +83,6 @@ ll.add_symbol(
 )
 
 
-class ParquetPredicateType(types.Type):
-    """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
-    It is just a Python object passed as pointer to C++
-    """
-
-    def __init__(self):
-        super().__init__(name="ParquetPredicateType()")
-
-
-parquet_predicate_type = ParquetPredicateType()
-types.parquet_predicate_type = parquet_predicate_type  # type: ignore
-register_model(ParquetPredicateType)(models.OpaqueModel)
-
-
-@unbox(ParquetPredicateType)
-def unbox_parquet_predicate_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return NativeValue(val)
-
-
-@box(ParquetPredicateType)
-def box_parquet_predicate_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return val
-
-
 class ParquetFilterScalarsListType(types.Type):
     """
     Type for filter scalars for Parquet filtering
@@ -143,7 +116,6 @@ def box_parquet_filter_scalars_list_type(typ, val, c):
     return val
 
 
-parquet_predicate_type = ParquetPredicateType()
 parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
 
 
