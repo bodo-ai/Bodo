@@ -15,8 +15,6 @@ from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
 import bodo
-from bodo.decorators import _cfunc
-from bodo.libs.array import array_info_type, array_to_info, info_to_array
 from bodo.pandas.plan import (
     AggregateExpression,
     LogicalAggregate,
@@ -543,6 +541,9 @@ def _get_cfunc_wrapper(
     aggregate UDFs.
     """
     import numba
+
+    from bodo.decorators import _cfunc
+    from bodo.libs.array import array_info_type, array_to_info, info_to_array
 
     if not func.is_custom_aggfunc:
         return None
