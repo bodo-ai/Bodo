@@ -84,6 +84,13 @@ _orig_except_hook = sys.excepthook
 sys.excepthook = _global_except_hook
 
 
+class BodoWarning(Warning):
+    """
+    Warning class for Bodo-related potential issues such as prevention of
+    parallelization by unsupported functions.
+    """
+
+
 # ------------------------------ Version Import ------------------------------
 from importlib.metadata import version, PackageNotFoundError
 

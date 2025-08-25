@@ -47,6 +47,7 @@ from numba.extending import (
 )
 
 import bodo
+from bodo import BodoWarning
 
 # sentinel string used in typing pass that specifies a const tuple as a const dict.
 # const tuple is used since there is no literal type for dict
@@ -271,13 +272,6 @@ def raise_bodo_error(msg, loc=None) -> typing.NoReturn:
     else:
         locs = [] if loc is None else [loc]
         raise BodoError(msg, locs_in_msg=locs)
-
-
-class BodoWarning(Warning):
-    """
-    Warning class for Bodo-related potential issues such as prevention of
-    parallelization by unsupported functions.
-    """
 
 
 def get_udf_error_msg(context_str, error):
