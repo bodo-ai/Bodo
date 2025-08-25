@@ -73,7 +73,6 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     _get_empty_series_arrow,
     check_args_fallback,
-    cpp_table_to_df_jit,
     fallback_wrapper,
     get_lazy_manager_class,
     get_n_index_arrays,
@@ -1243,7 +1242,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 followed by the errors.
         """
         from bodo.hiframes.table import TableType
-        from bodo.pandas.utils_jit import get_udf_cfunc_decorator
+        from bodo.pandas.utils_jit import cpp_table_to_df_jit, get_udf_cfunc_decorator
         from bodo.pandas_compat import _prepare_function_arguments
         from bodo.utils.typing import BodoError
 
