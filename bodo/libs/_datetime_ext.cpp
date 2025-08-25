@@ -405,7 +405,10 @@ void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
     // get bodo.types.Time constructor
     PyObject* bodo = PyImport_ImportModule("bodo");
     CHECK(bodo, "importing bodo module failed");
-    PyObject* bodo_time_constructor = PyObject_GetAttrString(bodo, "Time");
+    PyObject* bodo_types = PyObject_GetAttrString(bodo, "types");
+    CHECK(bodo_types, "getting bodo.types module failed");
+    PyObject* bodo_time_constructor =
+        PyObject_GetAttrString(bodo_types, "Time");
     CHECK(bodo_time_constructor, "getting bodo.types.Time failed");
 
     for (int64_t i = 0; i < n; ++i) {
@@ -432,6 +435,7 @@ void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
     }
 
     Py_DECREF(bodo_time_constructor);
+    Py_DECREF(bodo_types);
     Py_DECREF(bodo);
 
     PyGILState_Release(gilstate);
