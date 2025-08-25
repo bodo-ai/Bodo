@@ -36,11 +36,12 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
-from bodo.io.fs_io import (
+from bodo.io.helpers import (
     get_storage_options_pyobject,
+    numba_to_pyarrow_schema,
+    pyarrow_schema_type,
     storage_options_dict_type,
 )
-from bodo.io.helpers import numba_to_pyarrow_schema, pyarrow_schema_type
 from bodo.io.parquet_pio import (
     parquet_file_schema,
 )

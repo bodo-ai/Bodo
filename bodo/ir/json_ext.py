@@ -11,7 +11,7 @@ import bodo
 import bodo.ir.connector
 import bodo.user_logging
 from bodo.io import csv_json_reader
-from bodo.io.fs_io import (
+from bodo.io.helpers import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )

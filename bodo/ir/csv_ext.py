@@ -18,7 +18,7 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.hiframes.table import Table, TableType  # noqa
-from bodo.io.fs_io import (
+from bodo.io.helpers import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )

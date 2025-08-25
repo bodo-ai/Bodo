@@ -57,6 +57,7 @@ from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_opaque_class
 from bodo.utils.typing import (
     BodoError,
+    get_overload_constant_dict,
     is_nullable_ignore_sentinels,
     raise_bodo_error,
 )
@@ -1081,3 +1082,37 @@ def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
         return bucket_loc
 
     return impl
+
+
+class StorageOptionsDictType(types.Opaque):
+    def __init__(self):
+        super().__init__(name="StorageOptionsDictType")
+
+
+storage_options_dict_type = StorageOptionsDictType()
+types.storage_options_dict_type = storage_options_dict_type  # type: ignore
+register_model(StorageOptionsDictType)(models.OpaqueModel)
+
+
+@unbox(StorageOptionsDictType)
+def unbox_storage_options_dict_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+def get_storage_options_pyobject(storage_options):  # pragma: no cover
+    pass
+
+
+@overload(get_storage_options_pyobject, no_unliteral=True)
+def overload_get_storage_options_pyobject(storage_options):
+    """generate a pyobject for the storage_options to pass to C++"""
+    storage_options_val = get_overload_constant_dict(storage_options)
+    func_text = "def impl(storage_options):\n"
+    func_text += "  with bodo.ir.object_mode.no_warning_objmode(storage_options_py='storage_options_dict_type'):\n"
+    func_text += f"    storage_options_py = {str(storage_options_val)}\n"
+    func_text += "  return storage_options_py\n"
+    loc_vars = {}
+    exec(func_text, globals(), loc_vars)
+    return loc_vars["impl"]
