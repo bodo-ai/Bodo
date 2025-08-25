@@ -9,7 +9,6 @@ import typing as pt
 import warnings
 from typing import Any, Literal
 
-import numba
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
@@ -646,6 +645,7 @@ def _get_cfunc_wrapper(
         Callable: A function that takes no arguments and compiles the cfunc and returns
           the address.
     """
+    import numba
     import numpy as np
 
     from bodo.decorators import _cfunc
