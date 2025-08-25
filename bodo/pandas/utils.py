@@ -448,12 +448,13 @@ def check_args_fallback(
                     # Fallback to Python. Call the same method in the base class.
                     if self.__class__.__name__ in ("DataFrameGroupBy", "SeriesGroupBy"):
                         obj_base_class = self._obj.__class__.__bases__[0]
-                        self = getattr(obj_base_class, "groupby")(
+                        grouped = getattr(obj_base_class, "groupby")(
                             self._obj,
                             self._keys,
                             as_index=self._as_index,
                             dropna=self._dropna,
-                        )[self.selection_for_plan]
+                        )
+                        self = grouped[self._selection] if self._selection else grouped
                         base_class = self.__class__
                     elif self.__class__ == bodo.pandas.series.BodoStringMethods:
                         base_class = self._series.__class__.__bases__[0].str
