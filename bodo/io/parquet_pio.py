@@ -26,9 +26,6 @@ from bodo.io.fs_io import (
     getfs,
     parse_fpath,
 )
-from bodo.io.helpers import _get_numba_typ_from_pa_typ
-from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.libs.distributed_api import get_end, get_start
 from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
@@ -661,6 +658,8 @@ def populate_row_counts_in_pq_dataset_pieces(
         filters (pc.Expression, optional): Arrow expression filters
             to apply. Defaults to None.
     """
+    from bodo.libs.distributed_api import get_end, get_start
+
     ev_row_counts = tracing.Event("get_row_counts")
     # getting row counts and validating schema requires reading
     # the file metadata from the parquet files and is very expensive
@@ -1340,6 +1339,9 @@ def parquet_file_schema(
     use_hive: bool = True,
 ) -> FileSchema:
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
+    from bodo.io.helpers import _get_numba_typ_from_pa_typ
+    from bodo.libs.dict_arr_ext import dict_str_arr_type
+
     col_names = []
     col_types = []
 
