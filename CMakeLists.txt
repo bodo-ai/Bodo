@@ -555,7 +555,11 @@ python_add_library(crypto_funcs
 )
 target_include_directories(crypto_funcs PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(crypto_funcs PRIVATE ${CONDA_LIB_DIR})
-target_link_libraries(crypto_funcs PRIVATE ssl crypto)
+if (WIN32)
+  target_link_libraries(crypto_funcs PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+else()
+  target_link_libraries(crypto_funcs PRIVATE ssl crypto)
+endif()
 install(TARGETS crypto_funcs DESTINATION "bodo/libs/")
 
 
@@ -817,11 +821,6 @@ target_link_libraries(ext PRIVATE
 
 if (NOT WIN32)
   target_link_libraries(ext PRIVATE pthread)
-else()
-  target_link_libraries(crypto_funcs PRIVATE
-    OpenSSL::SSL
-    OpenSSL::Crypto
-  )
 endif()
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")
