@@ -480,7 +480,6 @@ class Spawner:
             ArgMetadata or None: ArgMetadata if argument is distributable, None otherwise
         """
         from bodo.pandas.lazy_wrapper import BodoLazyWrapper
-        from bodo.utils.utils import is_distributable_typ
 
         dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
@@ -510,7 +509,7 @@ class Spawner:
         if data_type is None:
             return None
 
-        if is_distributable_typ(data_type) and not is_replicated:
+        if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
             dist_flags["distributed_block"].add(arg_name)
             return dist_comm_meta
 
