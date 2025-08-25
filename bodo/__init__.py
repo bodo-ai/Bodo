@@ -285,10 +285,9 @@ def jitclass(*args, **kwargs):
 
 
 def get_rank():
-    # Import compiler lazily
-    import bodo.decorators
-    from bodo.libs.distributed_api import get_rank
-    return get_rank()
+    # Avoid compiler imports
+    from bodo.ext import hdist
+    return hdist.get_rank_py_wrapper()
 
 
 def get_size():
