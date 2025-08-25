@@ -17,10 +17,8 @@ import typing as pt
 from collections import deque
 
 import cloudpickle
-import numba
 import pandas as pd
 import psutil
-from numba.core import types
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo
@@ -33,9 +31,10 @@ from bodo.spawn.utils import (
     debug_msg,
     poll_for_barrier,
 )
-from bodo.utils.utils import is_distributable_typ
 
 if pt.TYPE_CHECKING:
+    from numba.core import types
+
     from bodo.pandas import (
         BodoDataFrame,
         BodoSeries,
@@ -481,6 +480,7 @@ class Spawner:
             ArgMetadata or None: ArgMetadata if argument is distributable, None otherwise
         """
         from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+        from bodo.utils.utils import is_distributable_typ
 
         dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
@@ -593,6 +593,8 @@ class Spawner:
             args (tuple[Any]): positional arguments
             kwargs (dict[str, Any]): keyword arguments
         """
+        import numba
+
         is_dispatcher = isinstance(func_to_execute, SpawnDispatcher)
         param_names = list(
             numba.core.utils.pysignature(
