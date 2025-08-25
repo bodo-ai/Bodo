@@ -79,7 +79,6 @@ from bodo.pandas.utils import (
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
-    get_udf_cfunc_decorator,
     series_to_cpp_table_jit,
     wrap_plan,
 )
@@ -662,6 +661,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             )
 
         if engine == "bodo":
+            from bodo.pandas.utils_jit import get_udf_cfunc_decorator
+
             empty_series = self.head(0)
 
             arr_type = bodo.typeof(empty_series).data

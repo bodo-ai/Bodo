@@ -78,7 +78,6 @@ from bodo.pandas.utils import (
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
-    get_udf_cfunc_decorator,
     series_to_cpp_table_jit,
     wrap_plan,
 )
@@ -1245,6 +1244,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 followed by the errors.
         """
         from bodo.hiframes.table import TableType
+        from bodo.pandas.utils_jit import get_udf_cfunc_decorator
         from bodo.pandas_compat import _prepare_function_arguments
 
         zero_sized_self = self.head(0)
