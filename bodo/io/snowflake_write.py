@@ -701,10 +701,10 @@ def gen_snowflake_writer_append_table_impl_inner(
                     err = bodo.io.snowflake.retrieve_async_copy_into(
                         cursor, copy_into_prev_sfqid, file_count_global_prev
                     )
-                    bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
+                    bodo.spawn.utils.sync_and_reraise_error(err, _is_parallel=parallel)
             else:
                 with bodo.ir.object_mode.no_warning_objmode():
-                    bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
+                    bodo.spawn.utils.sync_and_reraise_error(None, _is_parallel=parallel)
             # Execute async COPY INTO form rank 0
             if bodo.get_rank() == 0:
                 cursor = writer["cursor"]
@@ -764,14 +764,14 @@ def gen_snowflake_writer_append_table_impl_inner(
                     err = bodo.io.snowflake.retrieve_async_copy_into(
                         cursor, copy_into_prev_sfqid, file_count_global_prev
                     )
-                    bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
+                    bodo.spawn.utils.sync_and_reraise_error(err, _is_parallel=parallel)
                     if flatten_sql == "":
                         cursor.execute(
                             "COMMIT /* io.snowflake_write.snowflake_writer_append_table() */"
                         )
             else:
                 with bodo.ir.object_mode.no_warning_objmode():
-                    bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
+                    bodo.spawn.utils.sync_and_reraise_error(None, _is_parallel=parallel)
             if (not parallel or bodo.get_rank() == 0) and writer["flatten_sql"] != "":
                 cursor = writer["cursor"]
                 flatten_sql = writer["flatten_sql"]
@@ -787,7 +787,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                         flatten_sfqid = cursor.sfqid
                     except Exception as e:
                         err = e
-                    bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
+                    bodo.spawn.utils.sync_and_reraise_error(err, _is_parallel=parallel)
                     cursor.execute(
                         "COMMIT /* io.snowflake_write.snowflake_writer_append_table() */"
                     )
@@ -801,7 +801,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                         writer["copy_into_sfqids"] = flatten_sfqid
             else:
                 with bodo.ir.object_mode.no_warning_objmode():
-                    bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
+                    bodo.spawn.utils.sync_and_reraise_error(None, _is_parallel=parallel)
             if bodo.get_rank() == 0:
                 writer["copy_into_prev_sfqid"] = ""
                 writer["flatten_sql"] = ""
