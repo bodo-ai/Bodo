@@ -14,6 +14,7 @@ import uuid
 from decimal import Decimal
 from tempfile import TemporaryDirectory
 
+import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -70,7 +71,7 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_create_internal_stage(cursor):
-        with bodo.objmode(stage_name="unicode_type"):
+        with numba.objmode(stage_name="unicode_type"):
             stage_name = create_internal_stage(cursor, is_temporary=is_temporary)
         return stage_name
 
@@ -128,7 +129,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_drop_internal_stage(cursor, stage_name):
-        with bodo.objmode():
+        with numba.objmode():
             drop_internal_stage(cursor, stage_name)
 
     bodo_impl = bodo.jit(distributed=False)(test_impl_drop_internal_stage)
@@ -191,7 +192,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_do_upload_and_cleanup(cursor, chunk_path, stage_name):
-        with bodo.objmode():
+        with numba.objmode():
             do_upload_and_cleanup(cursor, 0, chunk_path, stage_name)
 
     bodo_impl = bodo.jit()(test_impl_do_upload_and_cleanup)
@@ -320,7 +321,7 @@ def test_snowflake_write_create_table_handle_exists():
     def test_impl_create_table_handle_exists(
         cursor, location, sf_schema, if_exists, table_type=""
     ):
-        with bodo.objmode():
+        with numba.objmode():
             create_table_handle_exists(
                 cursor, location, sf_schema, if_exists, table_type
             )
@@ -538,7 +539,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_execute_copy_into(cursor, stage_name, location, sf_schema, df_in):
-        with bodo.objmode(
+        with numba.objmode(
             nsuccess="int64",
             nchunks="int64",
             nrows="int64",
@@ -1038,43 +1039,43 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
             # with type Time: did not recognize Python value type when inferring an Arrow data type'
             # pa.time32("s")
             "time_col_p0": [
-                bodo.Time(12, 0, precision=0),
-                bodo.Time(1, 1, 3, precision=0),
-                bodo.Time(2, precision=0),
-                bodo.Time(12, 0, precision=0),
-                bodo.Time(5, 6, 3, precision=0),
-                bodo.Time(9, precision=0),
-                bodo.Time(11, 19, 34, precision=0),
+                bodo.types.Time(12, 0, precision=0),
+                bodo.types.Time(1, 1, 3, precision=0),
+                bodo.types.Time(2, precision=0),
+                bodo.types.Time(12, 0, precision=0),
+                bodo.types.Time(5, 6, 3, precision=0),
+                bodo.types.Time(9, precision=0),
+                bodo.types.Time(11, 19, 34, precision=0),
             ],
             # pa.time32("ms")
             "time_col_p3": [
-                bodo.Time(12, 0, precision=3),
-                bodo.Time(1, 1, 3, precision=3),
-                bodo.Time(2, precision=3),
-                bodo.Time(12, 0, precision=3),
-                bodo.Time(6, 7, 13, precision=3),
-                bodo.Time(2, precision=3),
-                bodo.Time(17, 1, 3, precision=3),
+                bodo.types.Time(12, 0, precision=3),
+                bodo.types.Time(1, 1, 3, precision=3),
+                bodo.types.Time(2, precision=3),
+                bodo.types.Time(12, 0, precision=3),
+                bodo.types.Time(6, 7, 13, precision=3),
+                bodo.types.Time(2, precision=3),
+                bodo.types.Time(17, 1, 3, precision=3),
             ],
             # # pa.time64("us")
             "time_col_p6": [
-                bodo.Time(12, 0, precision=6),
-                bodo.Time(1, 1, 3, precision=6),
-                bodo.Time(2, precision=6),
-                bodo.Time(12, 0, precision=6),
-                bodo.Time(5, 11, 53, precision=6),
-                bodo.Time(2, precision=6),
-                bodo.Time(1, 1, 3, precision=6),
+                bodo.types.Time(12, 0, precision=6),
+                bodo.types.Time(1, 1, 3, precision=6),
+                bodo.types.Time(2, precision=6),
+                bodo.types.Time(12, 0, precision=6),
+                bodo.types.Time(5, 11, 53, precision=6),
+                bodo.types.Time(2, precision=6),
+                bodo.types.Time(1, 1, 3, precision=6),
             ],
             # pa.time64("ns"). Default precision=9
             "time_col_p9": [
-                bodo.Time(12, 0),
-                bodo.Time(1, 1, 3),
-                bodo.Time(2),
-                bodo.Time(12, 1),
-                bodo.Time(5, 6, 3),
-                bodo.Time(9),
-                bodo.Time(11, 19, 34),
+                bodo.types.Time(12, 0),
+                bodo.types.Time(1, 1, 3),
+                bodo.types.Time(2),
+                bodo.types.Time(12, 1),
+                bodo.types.Time(5, 6, 3),
+                bodo.types.Time(9),
+                bodo.types.Time(11, 19, 34),
             ],
             "timestamp_ltz_col": [
                 pd.Timestamp("1999-12-15 11:03:40", tz="Asia/Dubai"),
@@ -1109,13 +1110,13 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
             # SF ignores nanoseconds precisions with COPY INTO FROM PARQUET-FILES
             # See for more information
             df["time_col_p9"] = [
-                bodo.Time(12, 0, precision=6),
-                bodo.Time(1, 1, 3, precision=6),
-                bodo.Time(2, precision=6),
-                bodo.Time(12, 1, precision=6),
-                bodo.Time(5, 6, 3, precision=6),
-                bodo.Time(9, precision=6),
-                bodo.Time(11, 19, 34, precision=6),
+                bodo.types.Time(12, 0, precision=6),
+                bodo.types.Time(1, 1, 3, precision=6),
+                bodo.types.Time(2, precision=6),
+                bodo.types.Time(12, 1, precision=6),
+                bodo.types.Time(5, 6, 3, precision=6),
+                bodo.types.Time(9, precision=6),
+                bodo.types.Time(11, 19, 34, precision=6),
             ]
             # Sort output as in some rare cases data read from SF
             # are in different order from written df.
@@ -2075,9 +2076,11 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
                 A4 = bodo.utils.conversion.make_replicated_array(
                     pd.Timestamp("01-11-2023", tz="US/Pacific"), 50
                 )
-                A5 = bodo.utils.conversion.make_replicated_array(bodo.Time(2, 3, 4), 50)
+                A5 = bodo.utils.conversion.make_replicated_array(
+                    bodo.types.Time(2, 3, 4), 50
+                )
                 A6 = bodo.utils.conversion.make_replicated_array(
-                    bodo.Time(2, 3, 4, 5, precision=6), 50
+                    bodo.types.Time(2, 3, 4, 5, precision=6), 50
                 )
                 df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
                     (A1, A2, A3, A4, A5, A6),

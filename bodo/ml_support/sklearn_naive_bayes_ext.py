@@ -2,6 +2,7 @@
 
 import sys
 
+import numba
 import numpy as np
 import sklearn.naive_bayes
 from numba.extending import (
@@ -55,7 +56,7 @@ def sklearn_naive_bayes_multinomialnb_overload(
         fit_prior=True,
         class_prior=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="multinomial_nb_type"):
+        with numba.objmode(m="multinomial_nb_type"):
             m = sklearn.naive_bayes.MultinomialNB(
                 alpha=alpha,
                 fit_prior=fit_prior,
@@ -82,7 +83,7 @@ def overload_multinomial_nb_model_fit(
         def _naive_bayes_multinomial_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode():
+            with numba.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -97,13 +98,13 @@ def overload_multinomial_nb_model_fit(
         func_text += "    m, X, y, sample_weight=None, _is_data_distributed=False\n"
         func_text += "):  # pragma: no cover\n"
         # Attempt to change data to numpy array. Any data that fails means, we don't support
-        if y == bodo.boolean_array_type:
+        if y == bodo.types.boolean_array_type:
             # Explicitly call to_numpy() for boolean arrays because
             # coerce_to_ndarray() doesn't work for boolean array.
             func_text += "    y = y.to_numpy()\n"
         else:
             func_text += "    y = bodo.utils.conversion.coerce_to_ndarray(y)\n"
-        if isinstance(X, DataFrameType) or X == bodo.boolean_array_type:
+        if isinstance(X, DataFrameType) or X == bodo.types.boolean_array_type:
             # Explicitly call to_numpy() for boolean arrays because
             # coerce_to_ndarray() doesn't work for boolean array.
             func_text += "    X = X.to_numpy()\n"
@@ -125,7 +126,7 @@ def overload_multinomial_nb_model_fit(
         func_text += "            bodo.gatherv(X[:, start:end:1], root=i)\n"
         # Replicate y in all ranks
         func_text += "    y_train = bodo.allgatherv(y, False)\n"
-        func_text += '    with bodo.objmode(m="multinomial_nb_type"):\n'
+        func_text += '    with numba.objmode(m="multinomial_nb_type"):\n'
         func_text += "        m = fit_multinomial_nb(\n"
         func_text += "            m, X_train, y_train, sample_weight, total_cols, _is_data_distributed\n"
         func_text += "        )\n"

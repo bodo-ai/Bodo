@@ -35,11 +35,11 @@ def sklearn_utils_shuffle_overload(
         #
         # Here, data is the underlying numba type of `data`. We need to set the
         # kwargs of objmode to be compile-time constants that represent the
-        # output type of each PyObject defined under the bodo.objmode context.
+        # output type of each PyObject defined under the numba.objmode context.
         #
         # Following https://github.com/numba/numba/blob/main/numba/core/withcontexts.py#L182
         # and https://github.com/numba/numba/blob/main/numba/core/sigutils.py#L12,
-        # bodo.objmode() will eval() the given type annotation string, with
+        # numba.objmode() will eval() the given type annotation string, with
         # the entries of numba.core.types as global variables, to determine the
         # type signature of each output.
 
@@ -58,7 +58,7 @@ def sklearn_utils_shuffle_overload(
             "    data, random_state=None, n_samples=None, _is_data_distributed=False\n"
         )
         func_text += "):\n"
-        func_text += f"    with bodo.objmode(out='{data_type_name}'):\n"
+        func_text += f"    with numba.objmode(out='{data_type_name}'):\n"
         func_text += "        out = sklearn.utils.shuffle(\n"
         func_text += (
             "            data, random_state=random_state, n_samples=n_samples\n"

@@ -293,17 +293,17 @@ def test_boolnot(boolean_numerical_scalar_vector, memory_leak_check):
                 ),
                 np.array(
                     [
-                        bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
+                        bodo.types.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-01-01", 60),
+                        bodo.types.TimestampTZ.fromLocal("2024-01-01", 60),
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", -150),
+                        bodo.types.TimestampTZ.fromLocal("2024-01-01 12:00:00", -150),
                         None,
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-01-01", 300),
+                        bodo.types.TimestampTZ.fromLocal("2024-01-01", 300),
                     ]
                 ),
-                bodo.TimestampTZ.fromLocal("2024-01-01 06:45:00", 0),
+                bodo.types.TimestampTZ.fromLocal("2024-01-01 06:45:00", 0),
             ),
             id="timestamp_tz",
         ),
@@ -428,17 +428,17 @@ def test_cond(args, memory_leak_check):
                 pd.Series([1, None, 3, None, 5, None, 7, None], dtype=pd.Int8Dtype()),
                 np.array(
                     [
-                        bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
-                        bodo.TimestampTZ.fromLocal("2024-01-01", 60),
+                        bodo.types.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
+                        bodo.types.TimestampTZ.fromLocal("2024-01-01", 60),
                         None,
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", -150),
-                        bodo.TimestampTZ.fromLocal("2024-01-01", 300),
+                        bodo.types.TimestampTZ.fromLocal("2024-01-01 12:00:00", -150),
+                        bodo.types.TimestampTZ.fromLocal("2024-01-01", 300),
                         None,
                         None,
                     ]
                 ),
-                bodo.TimestampTZ.fromLocal("2024-01-01 06:45:00", 0),
+                bodo.types.TimestampTZ.fromLocal("2024-01-01 06:45:00", 0),
             ),
             id="timestamp_tz",
         ),
@@ -584,18 +584,18 @@ def test_nvl2(args, memory_leak_check):
             (
                 pd.Series(
                     [
-                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 0),
-                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 60),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-02 03:04:05", 0),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-02 03:04:05", 60),
                         None,
-                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 0),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-02 03:04:05", 0),
                         None,
                     ]
                 ),
                 pd.Series(
                     [
-                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 10),
-                        bodo.TimestampTZ.fromUTC("2024-01-02 02:04:05", 0),
-                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 0),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-02 03:04:05", 10),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-02 02:04:05", 0),
+                        bodo.types.TimestampTZ.fromUTC("2024-01-02 03:04:05", 0),
                         None,
                         None,
                     ]

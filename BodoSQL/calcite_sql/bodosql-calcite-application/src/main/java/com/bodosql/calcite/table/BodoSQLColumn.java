@@ -61,7 +61,7 @@ public interface BodoSQLColumn {
     DECIMAL(11, "DECIMAL"), // Decimal Type
     BOOL8(12, "BOOL8"), // /< Boolean using one byte per value, 0 == false, else true
     DATE(13, "DATE"), // /< equivalent to datetime.date value
-    TIME(14, "TIME"), // /< equivalent to bodo.Time value
+    TIME(14, "TIME"), // /< equivalent to bodo.types.Time value
     TIMESTAMP_NTZ(15, "TIMESTAMP_NTZ"), // /< equivalent to datetime64[ns] value or pd.Timestamp
     TIMESTAMP_LTZ(16, "TIMESTAMP_LTZ"), // /< equivalent to a Timestamp with a timezone
     TIMESTAMP_TZ(17, "TIMESTAMP_TZ"), // /< equivalent to Timestamp with an offset

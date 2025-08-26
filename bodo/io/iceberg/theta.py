@@ -20,8 +20,7 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.io.fs_io import pyarrow_fs_type
-from bodo.io.helpers import pyarrow_schema_type
+from bodo.io.helpers import pyarrow_fs_type, pyarrow_schema_type
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.libs import puffin_file, theta_sketches
@@ -124,7 +123,7 @@ def overload_get_supported_theta_sketch_columns(iceberg_pyarrow_schema):
     Returns a boolean array indicating which columns have types that can
     support theta sketches.
     """
-    arr_type = bodo.boolean_array_type
+    arr_type = bodo.types.boolean_array_type
 
     def impl(iceberg_pyarrow_schema):  # pragma: no cover
         res_info = _get_supported_theta_sketch_columns(iceberg_pyarrow_schema)
@@ -167,7 +166,7 @@ def overload_get_default_theta_sketch_columns(iceberg_pyarrow_schema):
     Returns a boolean array indicating which columns have types that output
     theta sketches by default.
     """
-    arr_type = bodo.boolean_array_type
+    arr_type = bodo.types.boolean_array_type
 
     def impl(iceberg_pyarrow_schema):  # pragma: no cover
         res_info = _get_default_theta_sketch_columns(iceberg_pyarrow_schema)
@@ -258,7 +257,7 @@ def overload_iceberg_writer_fetch_theta(writer):
     that does not have a theta sketch, returns null instead. Largely
     used for testing purposes.
     """
-    arr_type = bodo.FloatingArrayType(types.float64)
+    arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(writer):  # pragma: no cover
         res_info = _iceberg_writer_fetch_theta(writer["theta_sketches"])
@@ -304,7 +303,7 @@ def overload_read_puffin_file_ndvs(puffin_file_loc, iceberg_schema):
     Reads the NDV values from a puffin file. This is used for testing purposes
     to verify that the theta sketches are being written correctly.
     """
-    arr_type = bodo.FloatingArrayType(types.float64)
+    arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(puffin_file_loc, iceberg_schema):  # pragma: no cover
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(

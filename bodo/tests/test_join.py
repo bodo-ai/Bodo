@@ -1188,10 +1188,15 @@ def test_interval_join_detection(memory_leak_check):
             (
                 pd.DataFrame(
                     {
-                        "P": [bodo.Time(x, 0, 0, x, precision=9) for x in range(8)]
+                        "P": [
+                            bodo.types.Time(x, 0, 0, x, precision=9) for x in range(8)
+                        ]
                         + [None, None],
                         "E": (
-                            [bodo.Time(4 * x, 0, 0, precision=9) for x in range(4)]
+                            [
+                                bodo.types.Time(4 * x, 0, 0, precision=9)
+                                for x in range(4)
+                            ]
                             + [None]
                         )
                         * 2,
@@ -1199,9 +1204,13 @@ def test_interval_join_detection(memory_leak_check):
                 ),
                 pd.DataFrame(
                     {
-                        "A": [bodo.Time(x, 0, 0, precision=9) for x in range(4)] * 5,
+                        "A": [bodo.types.Time(x, 0, 0, precision=9) for x in range(4)]
+                        * 5,
                         "B": [None, None]
-                        + [bodo.Time(x % 24, 0, 0, precision=9) for x in range(18)],
+                        + [
+                            bodo.types.Time(x % 24, 0, 0, precision=9)
+                            for x in range(18)
+                        ],
                         "D": [1.1, 2.2, 3.3, 4.4] * 5,
                     }
                 ),

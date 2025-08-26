@@ -85,7 +85,7 @@ def get_gateway():
 
             # Jupyter does not support writing to stderr
             # https://discourse.jupyter.org/t/how-to-know-from-python-script-if-we-are-in-jupyterlab/23993/4
-            if bodo.utils.utils.is_jupyter_on_windows():
+            if bodo.spawn.utils.is_jupyter_on_windows():
                 out_fd = None
                 err_fd = None
 

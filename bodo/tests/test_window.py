@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodo import Time
 from bodo.tests.utils import check_func, nullable_float_arr_maker
+from bodo.types import Time
 
 
 @pytest.fixture

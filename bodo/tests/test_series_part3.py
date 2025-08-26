@@ -1,6 +1,7 @@
 import re
 from string import ascii_lowercase
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
@@ -689,7 +690,7 @@ def test_heterogeneous_series_box(memory_leak_check):
 
     def impl(df):
         def f(row):
-            with bodo.objmode(res="int64"):
+            with numba.objmode(res="int64"):
                 res = g(row)
             return res
 

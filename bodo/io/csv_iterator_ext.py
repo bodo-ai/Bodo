@@ -9,6 +9,7 @@ import numba
 import numpy as np  # noqa
 import pandas as pd  # noqa
 from llvmlite import ir as lir
+from numba import objmode  # noqa
 from numba.core import cgutils, ir_utils, types
 from numba.core.imputils import RefType, impl_ret_borrowed, iternext_impl
 from numba.core.typing.templates import signature
@@ -17,7 +18,6 @@ from numba.extending import intrinsic, lower_builtin, models, register_model
 import bodo
 import bodo.ir.connector
 import bodo.ir.csv_ext
-from bodo import objmode  # noqa
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.io import csv_json_reader

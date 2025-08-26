@@ -182,7 +182,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
     output_key_bool = get_overload_const_bool(output_key)
     if output_key_bool:
         if struct_mode:
-            out_typs += (bodo.dict_str_arr_type,)
+            out_typs += (bodo.types.dict_str_arr_type,)
         elif map_mode:
             out_typs += (explode_col_arg.key_arr_type,)
         else:  # pragma: no cover
@@ -199,7 +199,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
     # If the index column is included in the output, add an extra column to store it
     output_index_bool = get_overload_const_bool(output_index)
     if output_index_bool:
-        out_typs += (bodo.IntegerArrayType(types.int64),)
+        out_typs += (bodo.types.IntegerArrayType(types.int64),)
 
     # If the value column is included in the output, add an extra column to store it
     output_val_bool = get_overload_const_bool(output_val)
@@ -226,7 +226,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
 
     # Create the table type returned by the lateral operation
     out_types_0 = TableType(out_typs)
-    out_types_1 = bodo.none
+    out_types_1 = bodo.types.none
     n_out_table_cols = len(out_col_inds)
 
     json_mode = struct_mode or map_mode

@@ -151,20 +151,20 @@ def test_coalesce_time(use_case, memory_leak_check):
             {
                 "A": pd.Series(
                     [
-                        bodo.Time(12, 0),
-                        bodo.Time(1, 1, 3),
+                        bodo.types.Time(12, 0),
+                        bodo.types.Time(1, 1, 3),
                         None,
                         None,
-                        bodo.Time(12, 0, 31, 5, 92),
+                        bodo.types.Time(12, 0, 31, 5, 92),
                     ]
                 ),
                 "B": pd.Series(
                     [
                         None,
-                        bodo.Time(17, 12, 13, 92, 234, 193),
-                        bodo.Time(2, 18, 37),
+                        bodo.types.Time(17, 12, 13, 92, 234, 193),
+                        bodo.types.Time(2, 18, 37),
                         None,
-                        bodo.Time(15, 26, 3, 44),
+                        bodo.types.Time(15, 26, 3, 44),
                     ]
                 ),
             }
@@ -174,11 +174,11 @@ def test_coalesce_time(use_case, memory_leak_check):
         {
             "A": pd.Series(
                 [
-                    bodo.Time(12, 0),
-                    bodo.Time(1, 1, 3),
-                    bodo.Time(2, 18, 37),
+                    bodo.types.Time(12, 0),
+                    bodo.types.Time(1, 1, 3),
+                    bodo.types.Time(2, 18, 37),
                     None,
-                    bodo.Time(12, 0, 31, 5, 92),
+                    bodo.types.Time(12, 0, 31, 5, 92),
                 ]
             )
         }
@@ -564,8 +564,8 @@ def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
             "OUTPUT": pd.Series(
                 [
                     None,
-                    bodo.Time(13, 37, 45),
-                    bodo.Time(1, 47, 59, 290, 574, 817),
+                    bodo.types.Time(13, 37, 45),
+                    bodo.types.Time(1, 47, 59, 290, 574, 817),
                 ]
                 * 4
             )
@@ -736,20 +736,20 @@ def test_nullif_time(memory_leak_check):
             {
                 "A": pd.Series(
                     [
-                        bodo.Time(12, 0),
-                        bodo.Time(8, 17, 43),
-                        bodo.Time(2, 18, 37),
+                        bodo.types.Time(12, 0),
+                        bodo.types.Time(8, 17, 43),
+                        bodo.types.Time(2, 18, 37),
                         None,
-                        bodo.Time(12, 0, 31, 5, 92),
+                        bodo.types.Time(12, 0, 31, 5, 92),
                     ]
                 ),
                 "B": pd.Series(
                     [
                         None,
-                        bodo.Time(17, 12, 13, 92, 234, 193),
-                        bodo.Time(2, 18, 37),
-                        bodo.Time(22, 56, 41),
-                        bodo.Time(15, 26, 3, 44),
+                        bodo.types.Time(17, 12, 13, 92, 234, 193),
+                        bodo.types.Time(2, 18, 37),
+                        bodo.types.Time(22, 56, 41),
+                        bodo.types.Time(15, 26, 3, 44),
                     ]
                 ),
             }
@@ -759,11 +759,11 @@ def test_nullif_time(memory_leak_check):
         {
             "A": pd.Series(
                 [
-                    bodo.Time(12, 0),
-                    bodo.Time(8, 17, 43),
+                    bodo.types.Time(12, 0),
+                    bodo.types.Time(8, 17, 43),
                     None,
                     None,
-                    bodo.Time(12, 0, 31, 5, 92),
+                    bodo.types.Time(12, 0, 31, 5, 92),
                 ]
             )
         }
@@ -1008,18 +1008,18 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
         {
             "OUTPUT": pd.Series(
                 [
-                    bodo.Time(5, 13, 29),
-                    bodo.Time(13, 37, 45),
-                    bodo.Time(8, 2, 5, 0, 1, 4),
-                    bodo.Time(5, 13, 29),
-                    bodo.Time(13, 37, 45),
-                    bodo.Time(22, 7, 16),
-                    bodo.Time(8, 2, 5, 0, 1, 4),
-                    bodo.Time(13, 37, 45),
-                    bodo.Time(22, 7, 16),
-                    bodo.Time(5, 13, 29),
-                    bodo.Time(8, 2, 5, 0, 1, 4),
-                    bodo.Time(22, 7, 16),
+                    bodo.types.Time(5, 13, 29),
+                    bodo.types.Time(13, 37, 45),
+                    bodo.types.Time(8, 2, 5, 0, 1, 4),
+                    bodo.types.Time(5, 13, 29),
+                    bodo.types.Time(13, 37, 45),
+                    bodo.types.Time(22, 7, 16),
+                    bodo.types.Time(8, 2, 5, 0, 1, 4),
+                    bodo.types.Time(13, 37, 45),
+                    bodo.types.Time(22, 7, 16),
+                    bodo.types.Time(5, 13, 29),
+                    bodo.types.Time(8, 2, 5, 0, 1, 4),
+                    bodo.types.Time(22, 7, 16),
                 ]
             )
         }

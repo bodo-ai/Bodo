@@ -201,7 +201,7 @@ public class LiteralCodeGen {
 
               return new Expr.Raw(
                   String.format(
-                      "bodo.Time(%d, %d, %d, %d, %d, %d, %d)",
+                      "bodo.types.Time(%d, %d, %d, %d, %d, %d, %d)",
                       hour,
                       minute,
                       second,

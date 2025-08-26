@@ -34,6 +34,10 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_from_cpp_table,
@@ -402,11 +406,11 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
             raise BodoError(
                 f"Input scale of {in_dtype.precision} too large for MEDIAN operation"
             )
-        return bodo.DecimalArrayType(new_precision, new_scale), "ok"
+        return bodo.types.DecimalArrayType(new_precision, new_scale), "ok"
     elif func_name == "percentile_disc" and isinstance(in_dtype, Decimal128Type):
         # PERCENTILE_DISC
         # Maintain the same precision and scale as the input.
-        return bodo.DecimalArrayType(in_dtype.precision, in_dtype.scale), "ok"
+        return bodo.types.DecimalArrayType(in_dtype.precision, in_dtype.scale), "ok"
 
     elif (
         func_name
@@ -429,7 +433,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         if isinstance(
             in_dtype, (Decimal128Type, types.Integer, types.Float, types.Boolean)
         ):
-            return bodo.boolean_array_type, "ok"
+            return bodo.types.boolean_array_type, "ok"
         return (
             None,
             f"For {func_name}, only columns of type integer, float, Decimal, or boolean type are allowed",
@@ -475,13 +479,13 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
                 None,
                 f"Unsupported array type for {func_name}: {arr_type}",
             )
-        return bodo.MapArrayType(key_arr_type, arr_type), "ok"
+        return bodo.types.MapArrayType(key_arr_type, arr_type), "ok"
 
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if (
             is_list_string
             or in_dtype == types.unicode_type
-            or arr_type == bodo.binary_array_type
+            or arr_type == bodo.types.binary_array_type
         ):
             if func_name not in {
                 "count",
@@ -498,7 +502,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
                     f"column type of strings or list of strings is not supported in groupby built-in function {func_name}",
                 )
         else:
-            if isinstance(in_dtype, bodo.PDCategoricalDtype):
+            if isinstance(in_dtype, bodo.types.PDCategoricalDtype):
                 if func_name in ("min", "max") and not in_dtype.ordered:
                     return (
                         None,
@@ -1596,9 +1600,9 @@ def get_window_func_types():
         "std": to_nullable_type(dtype_to_array_type(types.float64)),
         "std_pop": to_nullable_type(dtype_to_array_type(types.float64)),
         "mean": to_nullable_type(dtype_to_array_type(types.float64)),
-        "min_row_number_filter": bodo.boolean_array_type,
-        "booland_agg": bodo.boolean_array_type,
-        "boolor_agg": bodo.boolean_array_type,
+        "min_row_number_filter": bodo.types.boolean_array_type,
+        "booland_agg": bodo.types.boolean_array_type,
+        "boolor_agg": bodo.types.boolean_array_type,
         # None = output dtype matches input dtype
         "any_value": None,
         "first": None,
@@ -2748,29 +2752,29 @@ def _install_groupby_unsupported():
     """
 
     for attr_name in groupby_unsupported_attr:
-        bodo.overload_unsupported_attribute(
+        overload_unsupported_attribute(
             DataFrameGroupByType, attr_name, f"DataFrameGroupBy.{attr_name}"
         )
 
     for fname in groupby_unsupported:
-        bodo.overload_unsupported_method(
+        overload_unsupported_method(
             DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 
     # TODO: Replace DataFrameGroupByType with SeriesGroupByType once we
     # have separate types.
     for attr_name in series_only_unsupported_attrs:
-        bodo.overload_unsupported_attribute(
+        overload_unsupported_attribute(
             DataFrameGroupByType, attr_name, f"SeriesGroupBy.{attr_name}"
         )
 
     for fname in series_only_unsupported:
-        bodo.overload_unsupported_method(
+        overload_unsupported_method(
             DataFrameGroupByType, fname, f"SeriesGroupBy.{fname}"
         )
 
     for fname in dataframe_only_unsupported:
-        bodo.overload_unsupported_method(
+        overload_unsupported_method(
             DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 

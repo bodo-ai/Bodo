@@ -90,7 +90,7 @@ def _typeof_pd_cat_dtype(val, c):
 def _get_cat_index_type(elem_type):
     """return the Index type that holds "categories" values given the element type"""
     # NOTE assuming data type is string if unknown (TODO: test this possibility)
-    elem_type = bodo.string_type if elem_type is None else elem_type
+    elem_type = bodo.types.string_type if elem_type is None else elem_type
     return bodo.utils.typing.get_index_type_from_dtype(elem_type)
 
 
@@ -634,7 +634,7 @@ def build_replace_dicts(to_replace, value, categories):  # pragma: no cover
 def _build_replace_dicts(to_replace, value, categories):
     # Scalar case
     # TODO: replace with something that captures all scalars
-    if isinstance(to_replace, types.Number) or to_replace == bodo.string_type:
+    if isinstance(to_replace, types.Number) or to_replace == bodo.types.string_type:
 
         def impl(to_replace, value, categories):  # pragma: no cover
             return build_replace_dicts([to_replace], value, categories)

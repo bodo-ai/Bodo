@@ -112,7 +112,7 @@ def generate_date_trunc_time_func(part_str: str):
         else:
             if standardized_part in ("quarter", "year", "month", "week", "day"):
                 # date_or_time_part is too large, set everything to 0
-                return bodo.Time()
+                return bodo.types.Time()
             else:
                 return trunc_time(time_input, standardized_part)
 
@@ -169,7 +169,7 @@ def trunc_time(time, time_part):
         time_args.append(getattr(time, unit))
         if time_part == unit:
             break
-    return bodo.Time(*time_args)
+    return bodo.types.Time(*time_args)
 
 
 def trunc_date(date, date_part):

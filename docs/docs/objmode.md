@@ -63,9 +63,9 @@ def f():
 This is equivalent to creating the `DataFrameType` directly:
 
 ``` py
-df_type = bodo.DataFrameType(
-    (bodo.int64[::1], bodo.string_array_type),
-    bodo.NumericIndexType(bodo.int64),
+df_type = bodo.types.DataFrameType(
+    (bodo.types.int64[::1], bodo.types.string_array_type),
+    bodo.types.NumericIndexType(bodo.types.int64),
     ("A", "B"),
 )
 ```
@@ -75,7 +75,7 @@ string name later:
 
 ``` py
 df_sample = pd.DataFrame({"A": [0], "B": ["AB"]}, index=[0])
-bodo.register_type("my_df_type", bodo.typeof(df_sample))
+bodo.types.register_type("my_df_type", bodo.typeof(df_sample))
 
 
 @bodo.wrap_python("my_df_type")

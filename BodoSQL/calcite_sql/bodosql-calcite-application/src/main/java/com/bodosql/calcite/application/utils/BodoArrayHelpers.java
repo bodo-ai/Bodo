@@ -28,11 +28,12 @@ public class BodoArrayHelpers {
       case SMALLINT:
       case INTEGER:
       case BIGINT:
-        return String.format("bodo.libs.int_arr_ext.alloc_int_array(%s, bodo.int64)", len);
+        return String.format("bodo.libs.int_arr_ext.alloc_int_array(%s, bodo.types.int64)", len);
       case FLOAT:
       case DOUBLE:
       case DECIMAL:
-        return String.format("bodo.libs.float_arr_ext.alloc_float_array(%s, bodo.float64)", len);
+        return String.format(
+            "bodo.libs.float_arr_ext.alloc_float_array(%s, bodo.types.float64)", len);
       case DATE:
         return String.format("bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(%s)", len);
       case TIMESTAMP:
@@ -88,12 +89,12 @@ public class BodoArrayHelpers {
         typeName = "numba.types.unknown";
         break;
       case NULL:
-        typeName = "bodo.null_array_type";
+        typeName = "bodo.types.null_array_type";
         break;
       case MAP:
         typeName =
             String.format(
-                "bodo.MapArrayType(%s, %s)",
+                "bodo.types.MapArrayType(%s, %s)",
                 sqlTypeToBodoArrayType(
                         Objects.requireNonNull(type.getKeyType()), false, defaultTzExpr)
                     .emit(),
@@ -104,94 +105,94 @@ public class BodoArrayHelpers {
       case ARRAY:
         typeName =
             String.format(
-                "bodo.ArrayItemArrayType(%s)",
+                "bodo.types.ArrayItemArrayType(%s)",
                 sqlTypeToBodoArrayType(
                         Objects.requireNonNull(type.getComponentType()), false, defaultTzExpr)
                     .emit());
         break;
       case BOOLEAN:
         // TODO: Add nullable support in the type
-        typeName = "bodo.boolean_array_type";
+        typeName = "bodo.types.boolean_array_type";
         break;
       case TINYINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.int8)";
+          typeName = "bodo.types.IntegerArrayType(bodo.types.int8)";
         } else {
-          typeName = "numba.core.types.Array(bodo.int8, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.int8, 1, 'C')";
         }
         break;
       case SMALLINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.int16)";
+          typeName = "bodo.types.IntegerArrayType(bodo.types.int16)";
         } else {
-          typeName = "numba.core.types.Array(bodo.int16, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.int16, 1, 'C')";
         }
         break;
       case INTEGER:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.int32)";
+          typeName = "bodo.types.IntegerArrayType(bodo.types.int32)";
         } else {
-          typeName = "numba.core.types.Array(bodo.int32, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.int32, 1, 'C')";
         }
         break;
       case BIGINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          typeName = "bodo.IntegerArrayType(bodo.int64)";
+          typeName = "bodo.types.IntegerArrayType(bodo.types.int64)";
         } else {
-          typeName = "numba.core.types.Array(bodo.int64, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.int64, 1, 'C')";
         }
         break;
       case FLOAT:
         if (nullable) {
-          typeName = "bodo.FloatingArrayType(bodo.float32)";
+          typeName = "bodo.types.FloatingArrayType(bodo.types.float32)";
         } else {
-          typeName = "numba.core.types.Array(bodo.float32, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.float32, 1, 'C')";
         }
         break;
       case DOUBLE:
       case DECIMAL:
         if (nullable) {
-          typeName = "bodo.FloatingArrayType(bodo.float64)";
+          typeName = "bodo.types.FloatingArrayType(bodo.types.float64)";
         } else {
-          typeName = "numba.core.types.Array(bodo.float64, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.types.float64, 1, 'C')";
         }
         break;
       case DATE:
-        typeName = "bodo.datetime_date_array_type";
+        typeName = "bodo.types.datetime_date_array_type";
         break;
       case TIMESTAMP:
         // TODO: Add nullable support
-        typeName = "numba.core.types.Array(bodo.datetime64ns, 1, 'C')";
+        typeName = "numba.core.types.Array(bodo.types.datetime64ns, 1, 'C')";
         break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         // TODO: Add nullable support
-        typeName = String.format("bodo.DatetimeArrayType(%s)", defaultTzExpr.emit());
+        typeName = String.format("bodo.types.DatetimeArrayType(%s)", defaultTzExpr.emit());
         break;
       case TIMESTAMP_TZ:
-        typeName = "bodo.timestamptz_array_type";
+        typeName = "bodo.types.timestamptz_array_type";
         break;
       case TIME:
         // TODO: Add nullable support
         // TODO: Add precision support once Bodo stores value differently based on precision
-        typeName = "bodo.TimeArrayType(9)";
+        typeName = "bodo.types.TimeArrayType(9)";
         break;
       case VARCHAR:
       case CHAR:
         // TODO: Add nullable support
         if (strAsDict) {
-          typeName = "bodo.dict_str_arr_type";
+          typeName = "bodo.types.dict_str_arr_type";
         } else {
-          typeName = "bodo.string_array_type";
+          typeName = "bodo.types.string_array_type";
         }
         break;
       case VARBINARY:
       case BINARY:
         // TODO: Add nullable support
-        typeName = "bodo.binary_array_type";
+        typeName = "bodo.types.binary_array_type";
         break;
       case INTERVAL_DAY_HOUR:
       case INTERVAL_DAY_MINUTE:
@@ -204,7 +205,7 @@ public class BodoArrayHelpers {
       case INTERVAL_SECOND:
       case INTERVAL_DAY:
         // TODO: Add nullable support
-        typeName = "numba.core.types.Array(bodo.timedelta64ns, 1, 'C')";
+        typeName = "numba.core.types.Array(bodo.types.timedelta64ns, 1, 'C')";
         break;
       case INTERVAL_YEAR:
       case INTERVAL_MONTH:

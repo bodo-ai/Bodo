@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
 import typing as pt
 import uuid
 from enum import Enum
@@ -90,3 +92,26 @@ class WorkerProcess:
         """Initialize WorkerProcess with a mapping of ranks to PIDs."""
         self._uuid = uuid.uuid4()
         self._rank_to_pid = rank_to_pid
+
+
+def is_jupyter_on_windows() -> bool:
+    """Returns True if running in Jupyter on Windows"""
+
+    # Flag for testing purposes
+    if os.environ.get("BODO_OUTPUT_REDIRECT_TEST", "0") == "1":
+        return True
+
+    return sys.platform == "win32" and (
+        "JPY_SESSION_NAME" in os.environ
+        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
+    )
+
+
+def is_jupyter_on_bodo_platform() -> bool:
+    """Returns True if running in Jupyter on Bodo Platform"""
+
+    platform_cloud_provider = os.environ.get("BODO_PLATFORM_CLOUD_PROVIDER", None)
+    return (platform_cloud_provider is not None) and (
+        "JPY_SESSION_NAME" in os.environ
+        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
+    )

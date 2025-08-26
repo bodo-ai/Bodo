@@ -92,11 +92,11 @@ def overload_semi_safe_equals(arg0, arg1):
             )
 
     # If both inputs are null, they are equal.
-    if arg0 == bodo.none and arg1 == bodo.none:
+    if arg0 == bodo.types.none and arg1 == bodo.types.none:
         return lambda arg0, arg1: True  # pragma: no cover
 
     # If exactly one input is null, they are not equal.
-    if arg0 == bodo.none or arg1 == bodo.none:
+    if arg0 == bodo.types.none or arg1 == bodo.types.none:
         return lambda arg0, arg1: False  # pragma: no cover
 
     # Two entries from a MapArray are equal if they have the same key-value pairs.

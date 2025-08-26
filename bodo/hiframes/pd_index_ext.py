@@ -36,6 +36,10 @@ from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_multi_index_ext import IndexNameType, MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.float_arr_ext import FloatingArrayType
@@ -138,8 +142,8 @@ def typeof_pd_index(val, c):
             arr_type,
         )
     if val.inferred_type == "date" or pd._libs.lib.infer_dtype(val, True) == "date":
-        dtype = bodo.datetime_date_type
-        arr_type = bodo.datetime_date_array_type
+        dtype = bodo.types.datetime_date_type
+        arr_type = bodo.types.datetime_date_array_type
         return NumericIndexType(
             dtype,
             get_val_type_maybe_str_literal(val.name),
@@ -192,8 +196,13 @@ def typeof_pd_index(val, c):
 
     # catch-all for all remaining Index types
     arr_typ = bodo.hiframes.boxing._infer_series_arr_type(val)
-    if arr_typ == bodo.datetime_date_array_type or isinstance(
-        arr_typ, (bodo.DecimalArrayType, bodo.DatetimeArrayType, bodo.TimeArrayType)
+    if arr_typ == bodo.types.datetime_date_array_type or isinstance(
+        arr_typ,
+        (
+            bodo.types.DecimalArrayType,
+            bodo.types.DatetimeArrayType,
+            bodo.types.TimeArrayType,
+        ),
     ):
         return NumericIndexType(
             arr_typ.dtype,
@@ -236,7 +245,11 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible, SingleIndexTy
         # TODO: support other properties like freq/dtype/yearfirst?
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
-        self.data = types.Array(bodo.datetime64ns, 1, "C") if data is None else data
+        self.data = (
+            types.Array(numba.core.types.NPDatetime("ns"), 1, "C")
+            if data is None
+            else data
+        )
         super().__init__(name=f"DatetimeIndex({name_typ}, {self.data})")
 
     ndim = 1
@@ -252,7 +265,11 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible, SingleIndexTy
 
     @property
     def tzval(self):
-        return self.data.tz if isinstance(self.data, bodo.DatetimeArrayType) else None
+        return (
+            self.data.tz
+            if isinstance(self.data, bodo.types.DatetimeArrayType)
+            else None
+        )
 
     def copy(self):
         return DatetimeIndexType(self.name_typ, self.data)
@@ -868,11 +885,11 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                     types.Integer,
                     types.Float,
                     types.Boolean,
-                    bodo.TimeType,
-                    bodo.Decimal128Type,
+                    bodo.types.TimeType,
+                    bodo.types.Decimal128Type,
                 ),
             )
-            or elem_type == bodo.datetime_date_type
+            or elem_type == bodo.types.datetime_date_type
         ):
             if dtype_provided:
 
@@ -904,7 +921,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                 )
 
         # Categorical index:
-        elif isinstance(elem_type, bodo.PDCategoricalDtype):
+        elif isinstance(elem_type, bodo.types.PDCategoricalDtype):
             if dtype_provided:
 
                 def impl(
@@ -1060,7 +1077,7 @@ def to_offset_value(freq):  # pragma: no cover
     if freq is None:
         return None
 
-    with bodo.objmode(r="int64"):
+    with numba.objmode(r="int64"):
         r = pd.tseries.frequencies.to_offset(freq).nanos
     return r
 
@@ -1352,7 +1369,11 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible, SingleIndexT
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
         # NOTE: data array can have flags like readonly
-        self.data = types.Array(bodo.timedelta64ns, 1, "C") if data is None else data
+        self.data = (
+            types.Array(numba.core.types.NPTimedelta("ns"), 1, "C")
+            if data is None
+            else data
+        )
         super().__init__(name=f"TimedeltaIndexType({name_typ}, {self.data})")
 
     ndim = 1
@@ -1378,7 +1399,7 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible, SingleIndexT
     def iterator_type(self):
         # The underlying array is a timedelta64, but the data is
         # (and should be) boxed as a pd.Timedelta
-        return bodo.utils.typing.BodoArrayIterator(self, bodo.pd_timedelta_type)
+        return bodo.utils.typing.BodoArrayIterator(self, bodo.types.pd_timedelta_type)
 
     @property
     def pandas_type_name(self):
@@ -2139,7 +2160,7 @@ class PeriodIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         # TODO: nullable integer array?
         members = [
-            ("data", bodo.IntegerArrayType(types.int64)),
+            ("data", bodo.types.IntegerArrayType(types.int64)),
             ("name", fe_type.name_typ),
             ("dict", types.DictType(types.int64, types.int64)),
         ]
@@ -2223,9 +2244,11 @@ def box_period_index(typ, val, c):
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
-    c.context.nrt.incref(c.builder, bodo.IntegerArrayType(types.int64), index_val.data)
+    c.context.nrt.incref(
+        c.builder, bodo.types.IntegerArrayType(types.int64), index_val.data
+    )
     data_obj = c.pyapi.from_native_value(
-        bodo.IntegerArrayType(types.int64), index_val.data, c.env_manager
+        bodo.types.IntegerArrayType(types.int64), index_val.data, c.env_manager
     )
     c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
@@ -2253,7 +2276,7 @@ def box_period_index(typ, val, c):
 @unbox(PeriodIndexType)
 def unbox_period_index(typ, val, c):
     # get data and name attributes
-    arr_typ = bodo.IntegerArrayType(types.int64)
+    arr_typ = bodo.types.IntegerArrayType(types.int64)
     asi8_obj = c.pyapi.object_getattr_string(val, "asi8")
     isna_obj = c.pyapi.call_method(val, "isna", ())
     name_obj = c.pyapi.object_getattr_string(val, "name")
@@ -3211,7 +3234,7 @@ def array_type_to_index(arr_typ, name_typ=None):
     """convert array type to a corresponding Index type"""
     if is_str_arr_type(arr_typ):
         return StringIndexType(name_typ, arr_typ)
-    if arr_typ == bodo.binary_array_type:
+    if arr_typ == bodo.types.binary_array_type:
         return BinaryIndexType(name_typ)
 
     assert isinstance(
@@ -3220,14 +3243,14 @@ def array_type_to_index(arr_typ, name_typ=None):
             types.Array,
             IntegerArrayType,
             FloatingArrayType,
-            bodo.CategoricalArrayType,
-            bodo.DecimalArrayType,
-            bodo.TimeArrayType,
-            bodo.DatetimeArrayType,
+            bodo.types.CategoricalArrayType,
+            bodo.types.DecimalArrayType,
+            bodo.types.TimeArrayType,
+            bodo.types.DatetimeArrayType,
         ),
     ) or arr_typ in (
-        bodo.datetime_date_array_type,
-        bodo.boolean_array_type,
+        bodo.types.datetime_date_array_type,
+        bodo.types.boolean_array_type,
     ), f"Converting array type {arr_typ} to index not supported"
 
     # TODO: Pandas keeps datetime_date Index as a generic Index(, dtype=object)
@@ -3235,21 +3258,22 @@ def array_type_to_index(arr_typ, name_typ=None):
     if arr_typ.dtype == types.NPDatetime("ns"):
         return DatetimeIndexType(name_typ)
 
-    if isinstance(arr_typ, bodo.DatetimeArrayType):
+    if isinstance(arr_typ, bodo.types.DatetimeArrayType):
         return DatetimeIndexType(name_typ, arr_typ)
 
     # categorical array
-    if isinstance(arr_typ, bodo.CategoricalArrayType):
+    if isinstance(arr_typ, bodo.types.CategoricalArrayType):
         return CategoricalIndexType(arr_typ, name_typ)
 
-    if arr_typ.dtype in (types.NPTimedelta("ns"), bodo.pd_timedelta_type):
+    if arr_typ.dtype in (types.NPTimedelta("ns"), bodo.types.pd_timedelta_type):
         return TimedeltaIndexType(name_typ, arr_typ)
 
     if (
         isinstance(
-            arr_typ.dtype, (types.Integer, types.Float, types.Boolean, bodo.TimeType)
+            arr_typ.dtype,
+            (types.Integer, types.Float, types.Boolean, bodo.types.TimeType),
         )
-        or arr_typ == bodo.datetime_date_array_type
+        or arr_typ == bodo.types.datetime_date_array_type
     ):
         return NumericIndexType(arr_typ.dtype, name_typ, arr_typ)
 
@@ -3654,7 +3678,9 @@ def overload_init_engine(I, ban_unique=True):
                         I._dict[val] = i
 
         return impl
-    elif isinstance(I, TimedeltaIndexType) and I.data == bodo.timedelta_array_type:
+    elif (
+        isinstance(I, TimedeltaIndexType) and I.data == bodo.types.timedelta_array_type
+    ):
 
         def impl(I, ban_unique=True):  # pragma: no cover
             if len(I) > 0 and not I._dict:
@@ -3802,9 +3828,9 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
         I, "DatetimeIndex.get_loc"
     )
     if key == pd_timestamp_tz_naive_type:
-        key = bodo.datetime64ns
+        key = bodo.types.datetime64ns
     if key == pd_timedelta_type:
-        key = bodo.timedelta64ns
+        key = bodo.types.timedelta64ns
 
     if key != I.dtype:  # pragma: no cover
         raise_bodo_error("Index.get_loc(): invalid label type in Index.get_loc()")
@@ -7098,7 +7124,7 @@ def overload_heter_index_getitem(I, ind):  # pragma: no cover
 @lower_constant(TimedeltaIndexType)
 def lower_constant_time_index(context, builder, ty, pyval):
     """Constant lowering for DatetimeIndexType and TimedeltaIndexType."""
-    if isinstance(ty.data, bodo.DatetimeArrayType):
+    if isinstance(ty.data, bodo.types.DatetimeArrayType):
         # TODO [BE-2441]: Unify?
         data = context.get_constant_generic(builder, ty.data, pyval.array)
     else:
@@ -7118,7 +7144,7 @@ def lower_constant_period_index(context, builder, ty, pyval):
     """Constant lowering for PeriodIndexType."""
     data = context.get_constant_generic(
         builder,
-        bodo.IntegerArrayType(types.int64),
+        bodo.types.IntegerArrayType(types.int64),
         pd.arrays.IntegerArray(pyval.asi8, pyval.isna()),
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
@@ -7582,7 +7608,7 @@ def _install_index_unsupported():
     for fname in index_unsupported_methods:
         for format_str, typ in index_types:
             format_str, extra_info = _split_idx_format_str(format_str)
-            bodo.overload_unsupported_method(
+            overload_unsupported_method(
                 typ, fname, format_str.format(fname), extra_info=extra_info
             )
 
@@ -7590,7 +7616,7 @@ def _install_index_unsupported():
     for attr_name in index_unsupported_atrs:
         for format_str, typ in index_types:
             format_str, extra_info = _split_idx_format_str(format_str)
-            bodo.overload_unsupported_attribute(
+            overload_unsupported_attribute(
                 typ, attr_name, format_str.format(attr_name), extra_info=extra_info
             )
 
@@ -7621,7 +7647,7 @@ def _install_index_unsupported():
         format_str = idx_typ_to_format_str_map[typ]
         for fname in cur_typ_unsupported_methods_list:
             format_str, extra_info = _split_idx_format_str(format_str)
-            bodo.overload_unsupported_method(
+            overload_unsupported_method(
                 typ, fname, format_str.format(fname), extra_info=extra_info
             )
 
@@ -7630,7 +7656,7 @@ def _install_index_unsupported():
         format_str = idx_typ_to_format_str_map[typ]
         for attr_name in cur_typ_unsupported_attrs_list:
             format_str, extra_info = _split_idx_format_str(format_str)
-            bodo.overload_unsupported_attribute(
+            overload_unsupported_attribute(
                 typ, attr_name, format_str.format(attr_name), extra_info=extra_info
             )
 

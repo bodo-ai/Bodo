@@ -266,7 +266,9 @@ def make_string_mode_test_params(name, alphabet, is_dict, is_slow):
         make_date_time_mode_test_params(
             "date", "datetime.date.fromordinal(710000+{})", False
         ),
-        make_date_time_mode_test_params("time", "bodo.Time(nanosecond={}**2)", False),
+        make_date_time_mode_test_params(
+            "time", "bodo.types.Time(nanosecond={}**2)", False
+        ),
         make_bool_mode_test_params("bool_nullable", pd.BooleanDtype(), True, False),
         make_bool_mode_test_params("bool_numpy", None, False, False),
         make_string_mode_test_params(

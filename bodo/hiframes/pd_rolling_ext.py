@@ -34,6 +34,9 @@ from bodo.hiframes.rolling import (
     supported_rolling_funcs,
     unsupported_rolling_methods,
 )
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_method,
+)
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -496,7 +499,7 @@ def _install_rolling_unsupported_methods():
     """install unsupported overloads for rolling functions"""
     for fname in unsupported_rolling_methods:
         full_name = f"pandas.core.window.rolling.Rolling.{fname}"
-        bodo.overload_unsupported_method(RollingType, fname, full_name)
+        overload_unsupported_method(RollingType, fname, full_name)
 
 
 _install_rolling_methods()
@@ -683,7 +686,7 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
     if not (
         is_overload_int(window)
         or is_overload_constant_str(window)
-        or window == bodo.string_type
+        or window == bodo.types.string_type
         or window in (pd_timedelta_type, datetime_timedelta_type)
     ):
         raise BodoError(
@@ -736,7 +739,7 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
         on_data_type = data_types[col_names.index(get_literal_value(on))]
         if (
             not isinstance(on_data_type, types.Array)
-            or on_data_type.dtype != bodo.datetime64ns
+            or on_data_type.dtype != bodo.types.datetime64ns
         ):
             raise BodoError(
                 f"{func_name}.rolling(): 'on' column should have datetime64 data."

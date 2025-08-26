@@ -80,7 +80,7 @@ class SqlTypeEnum(Enum):
 
 # Scalar dtypes for supported Bodo Arrays
 _numba_to_sql_column_type_map = {
-    bodo.null_dtype: SqlTypeEnum.Null.value,
+    bodo.types.null_dtype: SqlTypeEnum.Null.value,
     types.int8: SqlTypeEnum.Int8.value,
     types.uint8: SqlTypeEnum.UInt8.value,
     types.int16: SqlTypeEnum.Int16.value,
@@ -94,12 +94,12 @@ _numba_to_sql_column_type_map = {
     types.NPDatetime("ns"): SqlTypeEnum.Timestamp_Ntz.value,
     types.NPTimedelta("ns"): SqlTypeEnum.Timedelta.value,
     types.bool_: SqlTypeEnum.Bool.value,
-    bodo.string_type: SqlTypeEnum.String.value,
-    bodo.bytes_type: SqlTypeEnum.Binary.value,
+    bodo.types.string_type: SqlTypeEnum.String.value,
+    bodo.types.bytes_type: SqlTypeEnum.Binary.value,
     # Note date doesn't have native support yet, but the code to
     # cast to datetime64 is handled in the Java code.
-    bodo.datetime_date_type: SqlTypeEnum.Date.value,
-    bodo.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
+    bodo.types.datetime_date_type: SqlTypeEnum.Date.value,
+    bodo.types.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
 }
 
 # Scalar dtypes for supported parameters
@@ -116,11 +116,11 @@ _numba_to_sql_param_type_map = {
     types.float32: SqlTypeEnum.Float32.value,
     types.float64: SqlTypeEnum.Float64.value,
     types.bool_: SqlTypeEnum.Bool.value,
-    bodo.string_type: SqlTypeEnum.String.value,
+    bodo.types.string_type: SqlTypeEnum.String.value,
     # Scalar datetime and timedelta are assumed
     # to be scalar Pandas Timestamp/Timedelta
-    bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Timestamp_Ntz.value,
-    bodo.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
+    bodo.types.pd_timestamp_tz_naive_type: SqlTypeEnum.Timestamp_Ntz.value,
+    bodo.types.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
 
@@ -150,11 +150,13 @@ def construct_tz_aware_array_type(typ, nullable):
         return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable, precision)
 
 
-def construct_time_array_type(typ: bodo.TimeArrayType | bodo.TimeType, nullable: bool):
+def construct_time_array_type(
+    typ: bodo.types.TimeArrayType | bodo.types.TimeType, nullable: bool
+):
     """Construct a BodoSQL data type for a time array.
 
     Args:
-        typ (Union[bodo.TimeArrayType, bodo.TimeType]): A time Bodo type
+        typ (Union[bodo.types.TimeArrayType, bodo.types.TimeType]): A time Bodo type
         nullable (bool): Is the column Nullable
 
     Returns:
@@ -171,7 +173,7 @@ def construct_array_item_array_type(arr_type):
     value.
 
     Args:
-        typ (bodo.ArrayItemArrayType): A ArrayItemArray type
+        typ (bodo.types.ArrayItemArrayType): A ArrayItemArray type
         col_name (str): Column name
 
     Returns:
@@ -189,13 +191,13 @@ def construct_json_array_type(arr_type):
     value.
 
     Args:
-        typ (bodo.StructArrayType or bodo.MapArrayType): A StructArray or MapArray type
+        typ (bodo.types.StructArrayType or bodo.types.MapArrayType): A StructArray or MapArray type
         col_name (str): Column name
 
     Returns:
         JavaObject: The Java Object for the BodoSQL column type data info.
     """
-    if isinstance(arr_type, bodo.StructArrayType):
+    if isinstance(arr_type, bodo.types.StructArrayType):
         # TODO: FIXME. We don't support full structs of types yet.
         # As a placeholder we will just match Snowflake.
         key_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
@@ -231,38 +233,38 @@ def get_sql_data_type(arr_type):
     # We currently treat NaT as nullable in BodoSQL, so for any array that has timestamp elements
     # type, we treat it as nullable.
     dtype_has_nullable = arr_type.dtype in (
-        bodo.datetime64ns,
-        bodo.timedelta64ns,
+        bodo.types.datetime64ns,
+        bodo.types.timedelta64ns,
     )
     nullable = dtype_has_nullable or bodo.utils.typing.is_nullable_type(arr_type)
-    if isinstance(arr_type, bodo.DatetimeArrayType):
+    if isinstance(arr_type, bodo.types.DatetimeArrayType):
         # Timezone-aware Timestamp columns have their own special handling.
         return construct_tz_aware_array_type(arr_type, nullable)
-    elif arr_type == bodo.timestamptz_array_type:
+    elif arr_type == bodo.types.timestamptz_array_type:
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Timestamp_Tz.value
         )
         return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
-    elif isinstance(arr_type, bodo.TimeArrayType):
+    elif isinstance(arr_type, bodo.types.TimeArrayType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(arr_type, nullable)
-    elif isinstance(arr_type, bodo.DecimalArrayType):
+    elif isinstance(arr_type, bodo.types.DecimalArrayType):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Decimal.value
         )
         return JavaEntryPoint.buildColumnDataTypeInfo(
             type_enum, nullable, arr_type.precision, arr_type.scale
         )
-    elif isinstance(arr_type, bodo.ArrayItemArrayType):
+    elif isinstance(arr_type, bodo.types.ArrayItemArrayType):
         return construct_array_item_array_type(arr_type)
-    elif isinstance(arr_type, (bodo.StructArrayType, bodo.MapArrayType)):
+    elif isinstance(arr_type, (bodo.types.StructArrayType, bodo.types.MapArrayType)):
         return construct_json_array_type(arr_type)
     elif arr_type.dtype in _numba_to_sql_column_type_map:
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
         )
         return JavaEntryPoint.buildColumnDataTypeInfo(type_enum, nullable)
-    elif isinstance(arr_type.dtype, bodo.PDCategoricalDtype):
+    elif isinstance(arr_type.dtype, bodo.types.PDCategoricalDtype):
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Categorical.value
         )
@@ -332,14 +334,14 @@ def get_sql_param_column_type_info(param_type: types.Type):
     # non-null.
     nullable = False
     if (
-        isinstance(unliteral_type, bodo.PandasTimestampType)
+        isinstance(unliteral_type, bodo.types.PandasTimestampType)
         and unliteral_type.tz != None
     ):
         return construct_tz_aware_array_type(param_type, nullable)
-    elif isinstance(unliteral_type, bodo.TimeType):
+    elif isinstance(unliteral_type, bodo.types.TimeType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(param_type, nullable)
-    elif isinstance(unliteral_type, bodo.Decimal128Type):
+    elif isinstance(unliteral_type, bodo.types.Decimal128Type):
         # Decimal types need handling for precision and scale.
         type_enum = JavaEntryPoint.buildBodoSQLColumnDataTypeFromTypeId(
             SqlTypeEnum.Decimal.value
@@ -377,7 +379,7 @@ def compute_df_types(df_list, is_bodo_type):
 
     Returns:
         Tuple(orig_bodo_types, df_types): Returns the Bodo types and
-            the bodo.DataFrameType for each table. The original bodo
+            the bodo.types.DataFrameType for each table. The original bodo
             types are kept to determine when code needs to be generated
             for TablePathType
     """
@@ -415,7 +417,7 @@ def compute_df_types(df_list, is_bodo_type):
                         index_col_name = types.StringLiteral(index_col["name"])
                     else:
                         index_col_name = None
-                    index_typ = bodo.RangeIndexType(index_col_name)
+                    index_typ = bodo.types.RangeIndexType(index_col_name)
 
                 # Otherwise the index is a specific set of columns
                 # Multiple for MultiIndex, single for single index
@@ -491,14 +493,14 @@ def compute_df_types(df_list, is_bodo_type):
 
                 # Generate the index type. We don't support an index column,
                 # so this is always a RangeIndex.
-                index_typ = bodo.RangeIndexType(None)
+                index_typ = bodo.types.RangeIndexType(None)
             else:
                 raise BodoError(
                     "Internal error, 'compute_df_types' found a TablePath with an invalid file type"
                 )
 
             # Generate the DataFrame type
-            df_type = bodo.DataFrameType(
+            df_type = bodo.types.DataFrameType(
                 tuple(col_types),
                 index_typ,
                 tuple(col_names),
@@ -512,7 +514,7 @@ def compute_df_types(df_list, is_bodo_type):
 def add_table_type(
     table_name: str,
     schema,
-    df_type: bodo.DataFrameType,
+    df_type: bodo.types.DataFrameType,
     estimated_row_count: int | None,
     estimated_ndvs: dict[str, int] | None,
     bodo_type: types.Type,
@@ -526,7 +528,7 @@ def add_table_type(
     Args:
         table_name (str): The name of the table.
         schema (Java LocalSchema): The schema to update.
-        df_type (bodo.DataFrameType): The Bodo DataFrame type.
+        df_type (bodo.types.DataFrameType): The Bodo DataFrame type.
         estimated_row_count (Optional[int]): The expected number of rows in the table for the
             Volcano Planner. None if no estimate is provided.
         estimated_ndvs (Optional[dict[str, int]]): Estimated NDV values for the columns. This
@@ -1491,7 +1493,7 @@ def initialize_schema():
 def update_schema(
     schema,
     table_names: list[str],
-    df_types: list[bodo.DataFrameType],
+    df_types: list[bodo.types.DataFrameType],
     estimated_row_counts: list[int | None],
     estimated_ndvs: list[dict[str, int] | None],
     bodo_types: list[types.Type],
@@ -1503,7 +1505,7 @@ def update_schema(
     Args:
         schema (Java LocalSchema): The schema to update.
         table_names (List[str]): List of tables to add to the schema.
-        df_types (List[bodo.DataFrameType]): List of Bodo DataFrame types for each table.
+        df_types (List[bodo.types.DataFrameType]): List of Bodo DataFrame types for each table.
         estimated_row_counts (List[Optional[int]]): The expected number of rows in each input
             table for the volcano planner. None if no estimate is provided.
         estimated_ndvs (List[Optional[dict[str, int]]]): The NDV estimates for each input table.

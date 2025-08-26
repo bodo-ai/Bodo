@@ -68,7 +68,7 @@ def sklearn_model_selection_leave_p_out_overload(
     def _sklearn_model_selection_leave_p_out_impl(
         p,
     ):  # pragma: no cover
-        with bodo.objmode(m="model_selection_leave_p_out_type"):
+        with numba.objmode(m="model_selection_leave_p_out_type"):
             m = sklearn.model_selection.LeavePOut(
                 p=p,
             )
@@ -140,7 +140,7 @@ def overload_model_selection_leave_p_out_generator(
         def _model_selection_leave_p_out_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(gen="model_selection_leave_p_out_generator_type"):
+            with numba.objmode(gen="model_selection_leave_p_out_generator_type"):
                 gen = sklearn_model_selection_leave_p_out_generator_dist_helper(m, X)
             return gen
 
@@ -149,7 +149,7 @@ def overload_model_selection_leave_p_out_generator(
         def _model_selection_leave_p_out_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(gen="model_selection_leave_p_out_generator_type"):
+            with numba.objmode(gen="model_selection_leave_p_out_generator_type"):
                 gen = m.split(X, y=y, groups=groups)
             return gen
 
@@ -173,7 +173,7 @@ def overload_model_selection_leave_p_out_get_n_splits(
         def _model_selection_leave_p_out_get_n_splits_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(out="int64"):
+            with numba.objmode(out="int64"):
                 global_data_size = bodo.libs.distributed_api.dist_reduce(
                     len(X), np.int32(Reduce_Type.Sum.value)
                 )
@@ -185,7 +185,7 @@ def overload_model_selection_leave_p_out_get_n_splits(
         def _model_selection_leave_p_out_get_n_splits_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with bodo.objmode(out="int64"):
+            with numba.objmode(out="int64"):
                 out = m.get_n_splits(X)
 
             return out
@@ -235,7 +235,7 @@ def sklearn_model_selection_kfold_overload(
         shuffle=False,
         random_state=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="model_selection_kfold_type"):
+        with numba.objmode(m="model_selection_kfold_type"):
             m = sklearn.model_selection.KFold(
                 n_splits=n_splits,
                 shuffle=shuffle,
@@ -365,7 +365,7 @@ def overload_model_selection_kfold_generator(
         ):  # pragma: no cover
             # Since we do not support iterating through generators directly,
             # as an unperformant hack, we convert the output to a list
-            with bodo.objmode(gen=out_type):
+            with numba.objmode(gen=out_type):
                 gen = list(
                     sklearn_model_selection_kfold_generator_dist_helper(
                         m, X, y=None, groups=None
@@ -382,7 +382,7 @@ def overload_model_selection_kfold_generator(
         ):  # pragma: no cover
             # Since we do not support iterating through generators directly,
             # as an unperformant hack, we convert the output to a list
-            with bodo.objmode(gen=out_type):
+            with numba.objmode(gen=out_type):
                 gen = list(m.split(X, y=y, groups=groups))
 
             return gen
@@ -406,7 +406,7 @@ def overload_model_selection_kfold_get_n_splits(
     def _model_selection_kfold_get_n_splits_impl(
         m, X=None, y=None, groups=None, _is_data_distributed=False
     ):  # pragma: no cover
-        with bodo.objmode(out="int64"):
+        with numba.objmode(out="int64"):
             out = m.n_splits
         return out
 
@@ -565,7 +565,7 @@ def overload_train_test_split(
         func_text += "    stratify=None,\n"
         func_text += "    _is_data_distributed=False,\n"
         func_text += "):  # pragma: no cover\n"
-        func_text += f"    with bodo.objmode(data_train='{data_type_name}', data_test='{data_type_name}', labels_train='{labels_type_name}', labels_test='{labels_type_name}'):\n"
+        func_text += f"    with numba.objmode(data_train='{data_type_name}', data_test='{data_type_name}', labels_train='{labels_type_name}', labels_test='{labels_type_name}'):\n"
         func_text += "        data_train, data_test, labels_train, labels_test = sklearn.model_selection.train_test_split(\n"
         func_text += "            data,\n"
         func_text += "            labels,\n"

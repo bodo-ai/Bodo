@@ -7,8 +7,8 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo import Time
 from bodo.tests.utils import check_func, nullable_float_arr_maker
+from bodo.types import Time
 
 
 @pytest.fixture(

@@ -298,11 +298,11 @@ def test_datetime_metrics(
             # Time
             "C": np.array(
                 [
-                    bodo.Time(2, 46, 40, precision=6),
-                    bodo.Time(0, 59, 59, microsecond=11, precision=6),
+                    bodo.types.Time(2, 46, 40, precision=6),
+                    bodo.types.Time(0, 59, 59, microsecond=11, precision=6),
                     None,
                     None,
-                    bodo.Time(23, 45, 45, millisecond=948, precision=6),
+                    bodo.types.Time(23, 45, 45, millisecond=948, precision=6),
                 ]
             ),
             # Date

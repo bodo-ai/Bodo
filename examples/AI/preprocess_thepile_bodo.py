@@ -28,13 +28,13 @@ class Config:
     max_seq_length: int = 512
 
 
-@bodo.wrap_python(bodo.string_type)
+@bodo.wrap_python(bodo.types.string_type)
 def hash_text(text):
     """Hash function for deduplication"""
     return hashlib.md5(text.encode('utf-8')).hexdigest()
 
 
-@bodo.wrap_python(bodo.string_type)
+@bodo.wrap_python(bodo.types.string_type)
 def clean_text(text):
     text = text.replace('\n', ' ').replace('\t', ' ')
     # Remove extra spaces

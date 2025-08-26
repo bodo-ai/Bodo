@@ -1128,17 +1128,20 @@ def test_df_dtypes(df_value):
     df_type = bodo.typeof(df_value)
     for i in range(len(df_value.columns)):
         if py_output.iloc[i] == np.object_:
-            if df_type.data[i] == bodo.boolean_array_type:
+            if df_type.data[i] == bodo.types.boolean_array_type:
                 py_output.iloc[i] = pd.BooleanDtype()
-            if df_type.data[i] in (bodo.string_array_type, bodo.dict_str_arr_type):
+            if df_type.data[i] in (
+                bodo.types.string_array_type,
+                bodo.types.dict_str_arr_type,
+            ):
                 py_output.iloc[i] = pd.StringDtype()
         # Bodo reads all bool arrays as nullable
         if py_output.iloc[i] == np.bool_:
             py_output.iloc[i] = pd.BooleanDtype()
         # Bodo boxes string arrays of categories as ArrowStringArray
         if (
-            isinstance(df_type.data[i], bodo.CategoricalArrayType)
-            and df_type.data[i].dtype.elem_type == bodo.string_type
+            isinstance(df_type.data[i], bodo.types.CategoricalArrayType)
+            and df_type.data[i].dtype.elem_type == bodo.types.string_type
         ):
             py_output.iloc[i] = pd.CategoricalDtype(
                 py_output.iloc[i].categories.astype("string[pyarrow]")

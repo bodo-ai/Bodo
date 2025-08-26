@@ -3,11 +3,11 @@
 
 import sys
 
+import numba
 import numpy as np
 import xgboost
 from numba.extending import overload, overload_attribute, overload_method
 
-import bodo
 from bodo.utils.py_objs import install_py_obj_class
 
 this_module = sys.modules[__name__]
@@ -88,7 +88,7 @@ def sklearn_xgbclassifier_overload(
         gpu_id=None,
         validate_parameters=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="xgbclassifier_type"):
+        with numba.objmode(m="xgbclassifier_type"):
             xgboost.rabit.init()
             m = xgboost.XGBClassifier(
                 objective=objective,
@@ -160,7 +160,7 @@ def overload_xgbclassifier_fit(
         callbacks=None,
         _is_data_distributed=False,
     ):  # pragma: no cover
-        with bodo.objmode():
+        with numba.objmode():
             m.n_jobs = 1
             m.fit(
                 X,
@@ -201,7 +201,7 @@ def overload_xgbclassifier_predict(
         base_margin=None,
     ):  # pragma: no cover
         # TODO: return data could be of different type or shape (2D)
-        with bodo.objmode(result="int64[:]"):
+        with numba.objmode(result="int64[:]"):
             m.n_jobs = 1
             result = (
                 m.predict(X, output_margin, ntree_limit, validate_features, base_margin)
@@ -230,7 +230,7 @@ def overload_xgbclassifier_predict_proba(
         validate_features=True,
         base_margin=None,
     ):  # pragma: no cover
-        with bodo.objmode(result="float64[:,:]"):
+        with numba.objmode(result="float64[:,:]"):
             m.n_jobs = 1
             result = m.predict_proba(
                 X, ntree_limit, validate_features, base_margin
@@ -317,7 +317,7 @@ def sklearn_xgbregressor_overload(
         gpu_id=None,
         validate_parameters=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="xgbregressor_type"):
+        with numba.objmode(m="xgbregressor_type"):
             xgboost.rabit.init()
             m = xgboost.XGBRegressor(
                 n_estimators=n_estimators,
@@ -388,7 +388,7 @@ def overload_xgbregressor_fit(
         callbacks=None,
         _is_data_distributed=False,
     ):  # pragma: no cover
-        with bodo.objmode():
+        with numba.objmode():
             m.n_jobs = 1
             m.fit(
                 X,
@@ -428,7 +428,7 @@ def overload_xgbregressor_predict(
         validate_features=True,
         base_margin=None,
     ):  # pragma: no cover
-        with bodo.objmode(result="float64[:]"):
+        with numba.objmode(result="float64[:]"):
             m.n_jobs = 1
             result = (
                 m.predict(X, output_margin, ntree_limit, validate_features, base_margin)
@@ -446,7 +446,7 @@ def get_xgb_feature_importances(m):
     """Overload feature_importances_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with bodo.objmode(result="float32[:]"):
+        with numba.objmode(result="float32[:]"):
             result = m.feature_importances_
         return result
 

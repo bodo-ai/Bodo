@@ -54,9 +54,9 @@ def overload_array_op_any(A, skipna=True):
         isinstance(A, types.Array) and A.dtype == types.bool_
     ):
         zero_value = False
-    elif A == bodo.string_array_type:
+    elif A == bodo.types.string_array_type:
         zero_value = ""
-    elif A == bodo.binary_array_type:
+    elif A == bodo.types.binary_array_type:
         zero_value = b""
     else:
         raise bodo.utils.typing.BodoError(
@@ -104,9 +104,9 @@ def overload_array_op_all(A, skipna=True):
         isinstance(A, types.Array) and A.dtype == types.bool_
     ):
         zero_value = False
-    elif A == bodo.string_array_type:
+    elif A == bodo.types.string_array_type:
         zero_value = ""
-    elif A == bodo.binary_array_type:
+    elif A == bodo.types.binary_array_type:
         zero_value = b""
     else:
         raise bodo.utils.typing.BodoError(
@@ -161,7 +161,7 @@ def drop_duplicates_local_dictionary_if_dict(arr):  # pragma: no cover
 
 @overload(drop_duplicates_local_dictionary_if_dict, jit_options={"cache": True})
 def overload_drop_duplicates_local_dictionary_if_dict(arr):
-    if arr == bodo.dict_str_arr_type:
+    if arr == bodo.types.dict_str_arr_type:
         return lambda arr: bodo.libs.array.drop_duplicates_local_dictionary(
             arr, False
         )  # lambda: no cover
@@ -224,7 +224,7 @@ def array_op_describe_dt_impl(arr):  # pragma: no cover
 def overload_array_op_describe(arr):
     # Pandas doesn't return std for describe of datetime64 data
     # https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L328
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
         return array_op_describe_dt_impl
 
     return array_op_describe_impl
@@ -246,7 +246,7 @@ def array_op_min(arr):  # pragma: no cover
 
 @overload(array_op_min)
 def overload_array_op_min(arr):
-    if arr.dtype == bodo.timedelta64ns:
+    if arr.dtype == bodo.types.timedelta64ns:
 
         def impl_td64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -264,7 +264,7 @@ def overload_array_op_min(arr):
 
         return impl_td64
 
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def impl_dt64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -374,7 +374,7 @@ def array_op_max(arr):  # pragma: no cover
 
 @overload(array_op_max, jit_options={"cache": True})
 def overload_array_op_max(arr):
-    if arr.dtype == bodo.timedelta64ns:
+    if arr.dtype == bodo.types.timedelta64ns:
 
         def impl_td64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -392,7 +392,7 @@ def overload_array_op_max(arr):
 
         return impl_td64
 
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def impl_dt64(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -500,7 +500,7 @@ def array_op_mean(arr):  # pragma: no cover
 @overload(array_op_mean, jit_options={"cache": True})
 def overload_array_op_mean(arr):
     # datetime
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def impl(arr):  # pragma: no cover
             return pd.Timestamp(
@@ -577,7 +577,7 @@ def array_op_std(arr, skipna=True, ddof=1):  # pragma: no cover
 @overload(array_op_std, jit_options={"cache": True})
 def overload_array_op_std(arr, skipna=True, ddof=1):
     # datetime
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def impl_dt64(arr, skipna=True, ddof=1):  # pragma: no cover
             return pd.Timedelta(
@@ -598,7 +598,7 @@ def array_op_quantile(arr, q):  # pragma: no cover
 @overload(array_op_quantile, jit_options={"cache": True})
 def overload_array_op_quantile(arr, q):
     if is_iterable_type(q):
-        if arr.dtype == bodo.datetime64ns:
+        if arr.dtype == bodo.types.datetime64ns:
 
             def _impl_list_dt(arr, q):  # pragma: no cover
                 out_arr = np.empty(len(q), np.int64)
@@ -611,7 +611,7 @@ def overload_array_op_quantile(arr, q):
 
             return _impl_list_dt
 
-        if isinstance(arr, bodo.DatetimeArrayType):
+        if isinstance(arr, bodo.types.DatetimeArrayType):
             tz = arr.tz
 
             def _impl_list_dt_tz(arr, q):  # pragma: no cover
@@ -639,7 +639,7 @@ def overload_array_op_quantile(arr, q):
 
         return impl_list
 
-    if arr.dtype == bodo.datetime64ns:
+    if arr.dtype == bodo.types.datetime64ns:
 
         def _impl_dt(arr, q):  # pragma: no cover
             return pd.Timestamp(
@@ -648,7 +648,7 @@ def overload_array_op_quantile(arr, q):
 
         return _impl_dt
 
-    if isinstance(arr, bodo.DatetimeArrayType):
+    if isinstance(arr, bodo.types.DatetimeArrayType):
         tz = arr.tz
 
         def _impl_dt_tz(arr, q):  # pragma: no cover
@@ -674,7 +674,7 @@ def array_op_sum(arr, skipna, min_count):  # pragma: no cover
 
 @overload(array_op_sum, no_unliteral=True, jit_options={"cache": True})
 def overload_array_op_sum(arr, skipna, min_count):
-    if isinstance(arr, bodo.DecimalArrayType):
+    if isinstance(arr, bodo.types.DecimalArrayType):
 
         def impl(arr, skipna, min_count):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.sum_decimal_array(arr)

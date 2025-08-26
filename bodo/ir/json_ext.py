@@ -11,7 +11,7 @@ import bodo
 import bodo.ir.connector
 import bodo.user_logging
 from bodo.io import csv_json_reader
-from bodo.io.fs_io import (
+from bodo.io.helpers import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
@@ -329,7 +329,7 @@ def _gen_json_reader_py(
     func_text += f"    {lines}, {parallel}, -1, bodo.libs.str_ext.unicode_to_utf8('{compression}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py )\n"
     func_text += "  if bodo.utils.utils.is_null_pointer(f_reader._pyobj):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
-    func_text += f"  with bodo.no_warning_objmode({typ_strs}):\n"
+    func_text += f"  with bodo.ir.object_mode.no_warning_objmode({typ_strs}):\n"
     func_text += f"    df = pd.read_json(f_reader, orient='{orient}',\n"
     func_text += f"       convert_dates = {convert_dates}, \n"
     func_text += f"       precise_float={precise_float}, \n"
@@ -350,8 +350,8 @@ def _gen_json_reader_py(
             "pd": pd,
             "np": np,
             "check_java_installation": check_java_installation,
-            "df_typeref": bodo.DataFrameType(
-                tuple(col_typs), bodo.RangeIndexType(None), tuple(col_names)
+            "df_typeref": bodo.types.DataFrameType(
+                tuple(col_typs), bodo.types.RangeIndexType(None), tuple(col_names)
             ),
             "get_storage_options_pyobject": get_storage_options_pyobject,
         }

@@ -29,6 +29,10 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 import bodo.pandas_compat
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.utils.indexing import (
     get_new_null_mask_bool_index,
     get_new_null_mask_int_index,
@@ -177,7 +181,7 @@ def pd_timedelta(
         return impl_timedelta_kw
 
     # parse string input
-    if value == bodo.string_type or is_overload_constant_str(value):
+    if value == bodo.types.string_type or is_overload_constant_str(value):
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
         def impl_str(
@@ -191,7 +195,7 @@ def pd_timedelta(
             hours=0,
             weeks=0,
         ):  # pragma: no cover
-            with bodo.objmode(res="pd_timedelta_type"):
+            with numba.objmode(res="pd_timedelta_type"):
                 res = pd.Timedelta(value)
             return res
 
@@ -726,13 +730,13 @@ def pd_create_cmp_op_overload(op):
             return impl
 
         # Timedelta/td64
-        if lhs == pd_timedelta_type and rhs == bodo.timedelta64ns:
+        if lhs == pd_timedelta_type and rhs == bodo.types.timedelta64ns:
             return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(lhs.value), rhs
             )  # pragma: no cover
 
         # td64/Timedelta
-        if lhs == bodo.timedelta64ns and rhs == pd_timedelta_type:
+        if lhs == bodo.types.timedelta64ns and rhs == pd_timedelta_type:
             return lambda lhs, rhs: op(
                 lhs, bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(rhs.value)
             )  # pragma: no cover
@@ -1259,7 +1263,7 @@ def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
 
 @numba.njit(no_cpython_wrapper=True)
 def alloc_timedelta_array(n):  # pragma: no cover
-    data_arr = np.empty(n, dtype=bodo.timedelta64ns)
+    data_arr = np.empty(n, dtype=bodo.types.timedelta64ns)
     # XXX: set all bits to not null since datetime.timedelta array operations do not support
     # NA yet. TODO: use 'empty' when all operations support NA
     # nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
@@ -1656,10 +1660,10 @@ timedelta_unsupported_methods = [
 def _install_pd_timedelta_unsupported():
     for attr_name in timedelta_unsupported_attrs:
         full_name = "pandas.Timedelta." + attr_name
-        bodo.overload_unsupported_attribute(PDTimeDeltaType, attr_name, full_name)
+        overload_unsupported_attribute(PDTimeDeltaType, attr_name, full_name)
     for fname in timedelta_unsupported_methods:
         full_name = "pandas.Timedelta." + fname
-        bodo.overload_unsupported_method(PDTimeDeltaType, fname, full_name)
+        overload_unsupported_method(PDTimeDeltaType, fname, full_name)
 
 
 _install_pd_timedelta_unsupported()

@@ -1162,7 +1162,7 @@ def test_invalid_replace_col_data(memory_leak_check):
         ValueError,
         match="DataFrameType.replace_col_type replaced column must be found in the DataFrameType",
     ):
-        infered_dtype.replace_col_type("C", bodo.string_array_type)
+        infered_dtype.replace_col_type("C", bodo.types.string_array_type)
 
 
 def test_dd_map_array_drop_subset(memory_leak_check):

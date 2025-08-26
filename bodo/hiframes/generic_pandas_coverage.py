@@ -93,14 +93,14 @@ def generate_simple_series_impl(
         )
 
     is_dict_input = (
-        series_arg == bodo.dict_str_arr_type
+        series_arg == bodo.types.dict_str_arr_type
         or (
             isinstance(series_arg, bodo.hiframes.pd_series_ext.SeriesType)
-            and series_arg.data == bodo.dict_str_arr_type
+            and series_arg.data == bodo.types.dict_str_arr_type
         )
         or (
             isinstance(series_arg, bodo.hiframes.series_str_impl.SeriesStrMethodType)
-            and series_arg.stype.data == bodo.dict_str_arr_type
+            and series_arg.stype.data == bodo.types.dict_str_arr_type
         )
     )
     out_arr_type = (
@@ -108,7 +108,7 @@ def generate_simple_series_impl(
         if isinstance(out_type, bodo.hiframes.pd_series_ext.SeriesType)
         else out_type
     )
-    out_dict = out_arr_type == bodo.dict_str_arr_type and maintain_dict
+    out_dict = out_arr_type == bodo.types.dict_str_arr_type and maintain_dict
     dict_loop = (
         is_dict_input and iterate_over_dict and not (out_dict and modifies_nulls)
     )
@@ -275,17 +275,17 @@ def generate_series_to_df_impl(
         )
 
     is_dict_input = (
-        series_arg == bodo.dict_str_arr_type
+        series_arg == bodo.types.dict_str_arr_type
         or (
             isinstance(series_arg, bodo.hiframes.pd_series_ext.SeriesType)
-            and series_arg.data == bodo.dict_str_arr_type
+            and series_arg.data == bodo.types.dict_str_arr_type
         )
         or (
             isinstance(series_arg, bodo.hiframes.series_str_impl.SeriesStrMethodType)
-            and series_arg.stype.data == bodo.dict_str_arr_type
+            and series_arg.stype.data == bodo.types.dict_str_arr_type
         )
     )
-    out_dicts = [typ == bodo.dict_str_arr_type for typ in out_types]
+    out_dicts = [typ == bodo.types.dict_str_arr_type for typ in out_types]
     out_any_dict = any(out_dicts) and maintain_dict
     dict_loop = (
         is_dict_input and iterate_over_dict and not (out_any_dict and modifies_nulls)

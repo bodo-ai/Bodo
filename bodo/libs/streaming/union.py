@@ -140,28 +140,30 @@ class UnionStateType(StreamingStateType):
                 in_table_type.arr_types[i] for in_table_type in self.in_table_types
             ]
             is_nullable_out_col = any(
-                col_type == bodo.null_array_type
+                col_type == bodo.types.null_array_type
                 or is_nullable_ignore_sentinels(col_type)
                 for col_type in in_col_types
             )
 
             if len(in_col_types) == 0:
-                out_arr_types.append(bodo.null_array_type)
+                out_arr_types.append(bodo.types.null_array_type)
 
             elif all(in_col_types[0] == col_typ for col_typ in in_col_types):
                 out_arr_types.append(in_col_types[0])
 
-            elif any(col_typ == bodo.dict_str_arr_type for col_typ in in_col_types):
+            elif any(
+                col_typ == bodo.types.dict_str_arr_type for col_typ in in_col_types
+            ):
                 for col_type in in_col_types:
                     if col_type not in (
-                        bodo.dict_str_arr_type,
-                        bodo.string_array_type,
-                        bodo.null_array_type,
+                        bodo.types.dict_str_arr_type,
+                        bodo.types.string_array_type,
+                        bodo.types.null_array_type,
                     ):
                         raise BodoError(
-                            f"Unable to union table with columns of incompatible types {col_type} and {bodo.dict_str_arr_type} in column {i}."
+                            f"Unable to union table with columns of incompatible types {col_type} and {bodo.types.dict_str_arr_type} in column {i}."
                         )
-                out_arr_types.append(bodo.dict_str_arr_type)
+                out_arr_types.append(bodo.types.dict_str_arr_type)
 
             else:
                 dtype, _ = get_common_scalar_dtype(

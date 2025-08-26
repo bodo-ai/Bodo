@@ -1,10 +1,9 @@
 import pandas as pd
 import pytest
 
-from bodo import Time
-
 # Skip unless any window-related files were changed
 from bodo.tests.utils import pytest_mark_multi_rank_nightly, pytest_slow_unless_window
+from bodo.types import Time
 from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 

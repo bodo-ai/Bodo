@@ -149,7 +149,7 @@ def run_clustering(training_df):
         n_init=5,  # Run 5 times and get the best model of those
     )
     model.fit(training_df)
-    with bodo.objmode(score="float64"):
+    with numba.objmode(score="float64"):
         score = model.inertia_
     t1 = time.time()
     print("run_clustering: Execution time: ", t1 - t0)

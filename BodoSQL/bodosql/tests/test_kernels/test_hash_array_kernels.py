@@ -74,7 +74,7 @@ pytestmark = pytest_slow_unless_codegen
             (
                 pd.Series(
                     [
-                        None if i % 10 == 0 else bodo.Time(minute=i**2)
+                        None if i % 10 == 0 else bodo.types.Time(minute=i**2)
                         for i in range(2**12)
                     ]
                 ),
@@ -263,7 +263,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
         pytest.param((np.uint8(100),), 2279747396317938166, id="uint8"),
         pytest.param((np.int32(100),), 2279747396317938166, id="int32"),
         pytest.param(
-            (datetime.date(1999, 12, 31), bodo.Time(12, 30, 0)),
+            (datetime.date(1999, 12, 31), bodo.types.Time(12, 30, 0)),
             5066071753504198015,
             id="date-time",
         ),

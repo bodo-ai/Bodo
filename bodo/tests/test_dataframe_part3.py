@@ -4,6 +4,7 @@ import os
 import re
 import time
 
+import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -532,11 +533,13 @@ def test_update_df_type(memory_leak_check):
     infered_dtype = bodo.typeof(dummy_df)
     new_dtype = infered_dtype.replace_col_type(
         "B",
-        bodo.MapArrayType(bodo.string_array_type, bodo.IntegerArrayType(types.int64)),
+        bodo.types.MapArrayType(
+            bodo.types.string_array_type, bodo.types.IntegerArrayType(types.int64)
+        ),
     )
 
     def bodo_func(n):
-        with bodo.objmode(df=new_dtype):
+        with numba.objmode(df=new_dtype):
             df = py_func(n)
         return df
 
@@ -625,7 +628,7 @@ def test_na_df_apply_homogeneous_no_inline(memory_leak_check):
     def impl(df):
         def f(row):
             # Add an objectmode call to prevent inlining
-            with bodo.objmode(ret_val="int64"):
+            with numba.objmode(ret_val="int64"):
                 ret_val = -1
             if pd.isna(row["A"]):
                 return ret_val

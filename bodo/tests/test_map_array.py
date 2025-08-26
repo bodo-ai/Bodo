@@ -173,33 +173,39 @@ def test_getitem_slice(map_arr_value):
     "arr,answer",
     [
         pytest.param(
-            bodo.MapArrayType(bodo.int64, bodo.float64), True, id="simple_map_array"
+            bodo.types.MapArrayType(bodo.types.int64, bodo.types.float64),
+            True,
+            id="simple_map_array",
         ),
-        pytest.param(bodo.IntegerArrayType(bodo.int64), False, id="simple_false"),
         pytest.param(
-            bodo.ArrayItemArrayType(
-                bodo.MapArrayType(
-                    bodo.IntegerArrayType(bodo.int64),
-                    bodo.FloatingArrayType(bodo.float64),
+            bodo.types.IntegerArrayType(bodo.types.int64), False, id="simple_false"
+        ),
+        pytest.param(
+            bodo.types.ArrayItemArrayType(
+                bodo.types.MapArrayType(
+                    bodo.types.IntegerArrayType(bodo.types.int64),
+                    bodo.types.FloatingArrayType(bodo.types.float64),
                 )
             ),
             True,
             id="map_inside_array",
         ),
         pytest.param(
-            bodo.ArrayItemArrayType(
-                bodo.ArrayItemArrayType(bodo.IntegerArrayType(bodo.int64))
+            bodo.types.ArrayItemArrayType(
+                bodo.types.ArrayItemArrayType(
+                    bodo.types.IntegerArrayType(bodo.types.int64)
+                )
             ),
             False,
             id="array_false",
         ),
         pytest.param(
-            bodo.StructArrayType(
+            bodo.types.StructArrayType(
                 (
-                    bodo.IntegerArrayType(bodo.int64),
-                    bodo.MapArrayType(
-                        bodo.IntegerArrayType(bodo.int64),
-                        bodo.FloatingArrayType(bodo.float64),
+                    bodo.types.IntegerArrayType(bodo.types.int64),
+                    bodo.types.MapArrayType(
+                        bodo.types.IntegerArrayType(bodo.types.int64),
+                        bodo.types.FloatingArrayType(bodo.types.float64),
                     ),
                 ),
                 ("ints", "map"),
@@ -208,10 +214,12 @@ def test_getitem_slice(map_arr_value):
             id="map_inside_struct",
         ),
         pytest.param(
-            bodo.StructArrayType(
+            bodo.types.StructArrayType(
                 (
-                    bodo.IntegerArrayType(bodo.int64),
-                    bodo.ArrayItemArrayType(bodo.IntegerArrayType(bodo.int64)),
+                    bodo.types.IntegerArrayType(bodo.types.int64),
+                    bodo.types.ArrayItemArrayType(
+                        bodo.types.IntegerArrayType(bodo.types.int64)
+                    ),
                 ),
                 ("ints", "array"),
             ),

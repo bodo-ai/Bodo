@@ -247,24 +247,24 @@ def test_timestamptz_comparison(
 
     input_a = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456", 100),
-            bodo.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456", 60),
+            bodo.types.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456", 100),
+            bodo.types.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456", 60),
             None,
-            bodo.TimestampTZ.fromUTC("2020-01-01 00:00:00", 0),
+            bodo.types.TimestampTZ.fromUTC("2020-01-01 00:00:00", 0),
             None,
-            bodo.TimestampTZ.fromUTC("2020-01-02 03:04:05.2", 100),
-            bodo.TimestampTZ.fromUTC("2020-01-02 03:04:05.2", 200),
+            bodo.types.TimestampTZ.fromUTC("2020-01-02 03:04:05.2", 100),
+            bodo.types.TimestampTZ.fromUTC("2020-01-02 03:04:05.2", 200),
         ]
     )
     input_b = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456", 200),
-            bodo.TimestampTZ.fromUTC("2020-01-02 02:04:05.123456", 0),
-            bodo.TimestampTZ.fromUTC("2020-01-01 00:00:00", 0),
+            bodo.types.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456", 200),
+            bodo.types.TimestampTZ.fromUTC("2020-01-02 02:04:05.123456", 0),
+            bodo.types.TimestampTZ.fromUTC("2020-01-01 00:00:00", 0),
             None,
             None,
-            bodo.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456", 200),
-            bodo.TimestampTZ.fromUTC("2020-01-02 11:00:00", -100),
+            bodo.types.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456", 200),
+            bodo.types.TimestampTZ.fromUTC("2020-01-02 11:00:00", -100),
         ]
     )
 

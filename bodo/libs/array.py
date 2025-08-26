@@ -403,7 +403,7 @@ def array_to_info_codegen(context, builder, sig, args):
         )
 
     # dictionary-encoded string array
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         # pass string array and indices array as array_info to C++
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         str_arr = arr.data
@@ -560,7 +560,7 @@ def array_to_info_codegen(context, builder, sig, args):
             )
 
     # null array
-    if arr_type == bodo.null_array_type:
+    if arr_type == bodo.types.null_array_type:
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         # TODO: Add a null dtype in C++. Since adding C++ support enables
         # passing the null array anywhere, including places where null arrays
@@ -596,7 +596,7 @@ def array_to_info_codegen(context, builder, sig, args):
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
-        bodo.timedelta_array_type,
+        bodo.types.timedelta_array_type,
     ):
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
         dtype = arr_type.dtype
@@ -604,13 +604,13 @@ def array_to_info_codegen(context, builder, sig, args):
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
         elif isinstance(arr_type, DatetimeArrayType):
-            np_dtype = bodo.datetime64ns
+            np_dtype = bodo.types.datetime64ns
         elif arr_type == datetime_date_array_type:
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             np_dtype = types.int8
-        elif arr_type == bodo.timedelta_array_type:
-            np_dtype = bodo.timedelta64ns
+        elif arr_type == bodo.types.timedelta_array_type:
+            np_dtype = bodo.types.timedelta64ns
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
             context, builder, arr.data
         )
@@ -756,7 +756,7 @@ def array_to_info_codegen(context, builder, sig, args):
     # calls itself on string array data which generates an unnecessary CPython wrapper
     # for a nested array. Boxing of nested array uses info_to_array().
     # See test_scatterv_gatherv_allgatherv_df_jit"[df_value2]"
-    if isinstance(arr_type, bodo.PrimitiveArrayType):
+    if isinstance(arr_type, bodo.types.PrimitiveArrayType):
         return context.get_constant_null(array_info_type)
 
     raise_bodo_error(f"array_to_info(): array type {arr_type} is not supported")
@@ -1032,7 +1032,7 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         )
 
     # dictionary-encoded string array
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         # extract nested array infos from input array info
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -1195,11 +1195,11 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
     # calls itself on string array data which generates an unnecessary CPython wrapper
     # for a nested array. Unboxing of nested array uses info_to_array().
     # See test_scatterv_gatherv_allgatherv_df_jit"[df_value2]"
-    if isinstance(arr_type, bodo.PrimitiveArrayType):
+    if isinstance(arr_type, bodo.types.PrimitiveArrayType):
         return context.get_constant_null(arr_type)
 
     # null array
-    if arr_type == bodo.null_array_type:
+    if arr_type == bodo.types.null_array_type:
         arr = cgutils.create_struct_proxy(arr_type)(context, builder)
         # Set the array as not empty
         arr.not_empty = lir.Constant(lir.IntType(1), 1)
@@ -1340,21 +1340,21 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
-        bodo.timedelta_array_type,
+        bodo.types.timedelta_array_type,
     ):
         arr = cgutils.create_struct_proxy(arr_type)(context, builder)
         np_dtype = arr_type.dtype
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
         elif isinstance(arr_type, DatetimeArrayType):
-            np_dtype = bodo.datetime64ns
+            np_dtype = bodo.types.datetime64ns
         elif arr_type == datetime_date_array_type:
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
             # Boolean array stores bits so we can't use boolean.
             np_dtype = types.uint8
-        elif arr_type == bodo.timedelta_array_type:
-            np_dtype = bodo.timedelta64ns
+        elif arr_type == bodo.types.timedelta_array_type:
+            np_dtype = bodo.types.timedelta64ns
         data_arr_type = types.Array(np_dtype, 1, "C")
         data_arr = context.make_array(data_arr_type)(context, builder)
         nulls_arr_type = types.Array(types.uint8, 1, "C")
@@ -2190,7 +2190,7 @@ def cpp_table_to_py_data(
 
     func_text = "def bodo_cpp_table_to_py_data(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
 
-    if isinstance(py_table_type, bodo.TableType):
+    if isinstance(py_table_type, bodo.types.TableType):
         func_text += "  py_table = init_table(py_table_type, False)\n"
         func_text += "  py_table = set_table_len(py_table, n_rows_t)\n"
 
@@ -2432,7 +2432,7 @@ class PyDataToCppTableInfer(AbstractTemplate):
         assert len(args) == 4
         py_table, extra_arrs_tup, _, n_table_cols_t = args
 
-        assert py_table == types.none or isinstance(py_table, bodo.TableType)
+        assert py_table == types.none or isinstance(py_table, bodo.types.TableType)
         assert isinstance(extra_arrs_tup, types.BaseTuple)
         assert all(
             isinstance(t, types.ArrayCompatible) or t == types.none
@@ -2649,7 +2649,7 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     table_typs = table_tup.types
     # All inputs have the same number of columns, so generate info from the first input.
     base_typ = table_typs[0]
-    if isinstance(base_typ, bodo.TableType):
+    if isinstance(base_typ, bodo.types.TableType):
         n_cols = len(base_typ.arr_types)
     else:
         # Input must be a tuple of arrays.
@@ -2666,7 +2666,7 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     )
     # Step 1: Convert each of the inputs to a C++ table.
     for i, table_typ in enumerate(table_typs):
-        if isinstance(table_typ, bodo.TableType):
+        if isinstance(table_typ, bodo.types.TableType):
             func_text += f"  table{i} = table_tup[{i}]\n"
             func_text += f"  arrs{i} = ()\n"
             table_cols = n_cols
@@ -2885,7 +2885,7 @@ def drop_duplicates_local_dictionary(dict_arr, sort_dictionary):  # pragma: no c
         dict_arr_info, sort_dictionary
     )
     check_and_propagate_cpp_exception()
-    out_arr = info_to_array(out_dict_arr_info, bodo.dict_str_arr_type)
+    out_arr = info_to_array(out_dict_arr_info, bodo.types.dict_str_arr_type)
     delete_info(out_dict_arr_info)
     return out_arr
 

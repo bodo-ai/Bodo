@@ -359,7 +359,7 @@ def overload_get_fname_prefix(base_prefix, iter):
     """
 
     def impl(base_prefix, iter):  # pragma: no cover
-        with bodo.no_warning_objmode(out="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(out="unicode_type"):
             MAX_ITER = 1000
             n_max_digits = math.ceil(math.log10(MAX_ITER))
 

@@ -141,7 +141,7 @@ def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
 @numba.njit
 def get_join_cond_addr(name):
     """Resolve address of cfunc given by its symbol name"""
-    with bodo.no_warning_objmode(addr="int64"):
+    with bodo.ir.object_mode.no_warning_objmode(addr="int64"):
         # This loads the function pointer at runtime, preventing
         # hardcoding the address into the IR.
         addr = bodo.ir.join.join_gen_cond_cfunc_addr[name]
@@ -740,8 +740,9 @@ def check_cross_join_coltypes(
     column is used in the condition.
     """
     for col_type in chain(left_col_types, right_col_types):
-        if col_type == bodo.timedelta_array_type or (
-            isinstance(col_type, types.Array) and col_type.dtype == bodo.timedelta64ns
+        if col_type == bodo.types.timedelta_array_type or (
+            isinstance(col_type, types.Array)
+            and col_type.dtype == bodo.types.timedelta64ns
         ):
             raise BodoError(
                 "The Timedelta column data type is not supported for Cross Joins or Joins with Inequality Conditions"
@@ -2432,13 +2433,17 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     if (
         isinstance(
             col_array_dtype,
-            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.TimeArrayType),
+            (
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
+                bodo.types.TimeArrayType,
+            ),
         )
         or col_array_dtype
         in (
             bodo.libs.bool_arr_ext.boolean_array_type,
-            bodo.binary_array_type,
-            bodo.datetime_date_array_type,
+            bodo.types.binary_array_type,
+            bodo.types.datetime_date_array_type,
         )
         or is_str_arr_type(col_array_dtype)
     ):
@@ -2473,18 +2478,18 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
 
         return checkna_func
 
-    elif isinstance(col_array_dtype, (types.Array, bodo.DatetimeArrayType)):
+    elif isinstance(col_array_dtype, (types.Array, bodo.types.DatetimeArrayType)):
         col_dtype = col_array_dtype.dtype
         if col_dtype in [
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
         ] or isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
             # Note: PandasDatetimeTZDtype is not the return type for scalar data.
             # In C++ the data is just a datetime64ns
             if isinstance(
                 col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
             ):
-                col_dtype = bodo.datetime64ns
+                col_dtype = bodo.types.datetime64ns
 
             # Datetime arrays represent NULL by using pd._libs.iNaT
             @intrinsic
@@ -2581,19 +2586,19 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
         col_dtype,
         (
             types.Number,
-            bodo.TimeType,
+            bodo.types.TimeType,
             bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
         ),
     ) or col_dtype in [
-        bodo.datetime_date_type,
-        bodo.datetime64ns,
-        bodo.timedelta64ns,
+        bodo.types.datetime_date_type,
+        bodo.types.datetime64ns,
+        bodo.types.timedelta64ns,
         types.bool_,
     ]:
         # Note: PandasDatetimeTZDtype is not the return type for scalar data.
         # In C++ the data is just a datetime64ns
         if isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
-            col_dtype = bodo.datetime64ns
+            col_dtype = bodo.types.datetime64ns
 
         # This code path just returns the data.
         @intrinsic
@@ -2606,7 +2611,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 col_ind = lir.Constant(lir.IntType(64), c_ind)
                 col_ptr = builder.load(builder.gep(table, [col_ind]))
 
-                if col_array_typ == bodo.boolean_array_type:
+                if col_array_typ == bodo.types.boolean_array_type:
                     # Boolean arrays store 1 bit per value, so we need a custom path to load the bit.
                     col_ptr = builder.bitcast(
                         col_ptr, context.get_data_type(types.uint8).as_pointer()
@@ -2635,7 +2640,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
 
         return getitem_func
 
-    if col_array_typ in (bodo.string_array_type, bodo.binary_array_type):
+    if col_array_typ in (bodo.types.string_array_type, bodo.types.binary_array_type):
         # If we have a unicode type we want to leave the raw
         # data pointer as a void* because we don't have a full
         # string yet.
@@ -2666,7 +2671,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 size = cgutils.alloca_once(builder, lir.IntType(64))
                 args = (col_ptr, row_ind, size)
                 data_ptr = builder.call(getitem_fn, args)
-                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                decode_sig = bodo.types.string_type(types.voidptr, types.int64)
                 return context.compile_internal(
                     builder,
                     lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
@@ -2677,7 +2682,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 )
 
             return (
-                bodo.string_type(types.voidptr, types.int64),
+                bodo.types.string_type(types.voidptr, types.int64),
                 codegen,
             )
 
@@ -2750,7 +2755,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 size = cgutils.alloca_once(builder, lir.IntType(64))
                 args = (dictionary_ptr, dict_loc, size)
                 data_ptr = builder.call(getitem_fn, args)
-                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                decode_sig = bodo.types.string_type(types.voidptr, types.int64)
                 return context.compile_internal(
                     builder,
                     lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
@@ -2761,7 +2766,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 )
 
             return (
-                bodo.string_type(types.voidptr, types.int64),
+                bodo.types.string_type(types.voidptr, types.int64),
                 codegen,
             )
 
@@ -2807,7 +2812,7 @@ def _replace_column_accesses(
         # Not creating intermediate variables for val_varname to avoid invalid access of
         # NA locations (null checks should run before getitems)
         # see https://bodo.atlassian.net/browse/BE-4146
-        if is_str_arr_type(array_typ) or array_typ == bodo.binary_array_type:
+        if is_str_arr_type(array_typ) or array_typ == bodo.types.binary_array_type:
             # If we have unicode we pass the table variable which is an array info
             val_varname = f"{getitem_fname}({table_name}_table, {table_name}_ind)\n"
         else:
@@ -2831,15 +2836,15 @@ def _replace_column_accesses(
                     array_typ,
                     (
                         bodo.libs.int_arr_ext.IntegerArrayType,
-                        bodo.FloatingArrayType,
-                        bodo.TimeArrayType,
+                        bodo.types.FloatingArrayType,
+                        bodo.types.TimeArrayType,
                     ),
                 )
                 or array_typ
                 in (
                     bodo.libs.bool_arr_ext.boolean_array_type,
-                    bodo.binary_array_type,
-                    bodo.datetime_date_array_type,
+                    bodo.types.binary_array_type,
+                    bodo.types.datetime_date_array_type,
                 )
                 or is_str_arr_type(array_typ)
             ):
@@ -2866,7 +2871,7 @@ def _match_join_key_types(t1, t2, loc):
     # Matching string + dictionary encoded arrays produces
     # a string key.
     if is_str_arr_type(t1) and is_str_arr_type(t2):
-        return bodo.string_array_type
+        return bodo.types.string_array_type
 
     try:
         arr = dtype_to_array_type(find_common_np_dtype([t1, t2]))
@@ -3305,7 +3310,7 @@ def _gen_join_cpp_call(
         if table_changed:
             func_text += "    T = bodo.utils.table_utils.table_astype(T, cast_table_type, False, _bodo_nan_to_str=False, used_cols=used_cols)\n"
             # Determine the types that must be loaded.
-            pre_cast_table_type = bodo.TableType(tuple(table_arrs))
+            pre_cast_table_type = bodo.types.TableType(tuple(table_arrs))
             # Update the table types
             glbs["py_table_type"] = pre_cast_table_type
             glbs["cast_table_type"] = out_table_type
@@ -3366,7 +3371,7 @@ def determine_table_cast_map(
             # (e.g. left=int64 and right=float64 casts the left to float64)
             # and we need the key back to the original type in the output.
             if matched_key_types[i] != key_types[i] and (
-                convert_dict_col or key_types[i] != bodo.dict_str_arr_type
+                convert_dict_col or key_types[i] != bodo.types.dict_str_arr_type
             ):
                 # This maps the key number to the actual column number
                 # TODO [BE-3552]: Ensure the cast are compatible.
@@ -3435,12 +3440,16 @@ def _get_interval_join_info(
                 types.Integer,
                 types.Float,
                 PandasDatetimeTZDtype,
-                bodo.TimeType,
-                bodo.Decimal128Type,
+                bodo.types.TimeType,
+                bodo.types.Decimal128Type,
             ),
         )
         or dtype
-        in (bodo.datetime64ns, bodo.datetime_date_type, bodo.datetime_timedelta_type)
+        in (
+            bodo.types.datetime64ns,
+            bodo.types.datetime_date_type,
+            bodo.types.datetime_timedelta_type,
+        )
     )
     # TODO: We should eventually handle joins between nullable and non-nullable arrays
     require(all(left_other_types[k] == key_type for k in left_col_nums))

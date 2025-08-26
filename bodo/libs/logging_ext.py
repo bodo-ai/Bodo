@@ -22,7 +22,10 @@ from numba.extending import (
     unbox,
 )
 
-import bodo
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.utils.typing import (
     gen_objmode_attr_overload,
 )
@@ -152,11 +155,11 @@ def _install_logging_logger_unsupported_objects():
     # Installs overload for logger.Logger
     for attr_name in logging_logger_unsupported_attrs:
         full_name = "logging.Logger." + attr_name
-        bodo.overload_unsupported_attribute(LoggingLoggerType, attr_name, full_name)
+        overload_unsupported_attribute(LoggingLoggerType, attr_name, full_name)
 
     for fname in logging_logger_unsupported_methods:
         full_name = "logging.Logger." + fname
-        bodo.overload_unsupported_method(LoggingLoggerType, fname, full_name)
+        overload_unsupported_method(LoggingLoggerType, fname, full_name)
 
 
 _install_logging_logger_unsupported_objects()

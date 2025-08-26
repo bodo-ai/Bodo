@@ -378,8 +378,8 @@ const static int64_t _NANOS_PER_HOUR = 60 * _NANOS_PER_MINUTE;
 
 /**
  * @brief Box native time_array data to Numpy object array of
- * bodo.Time items
- * @return Numpy object array of bodo.Time
+ * bodo.types.Time items
+ * @return Numpy object array of bodo.types.Time
  * @param[in] n number of values
  * @param[in] data pointer to 64-bit values
  * @param[in] null_bitmap bit vector representing nulls (Arrow format)
@@ -402,11 +402,14 @@ void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
     CHECK(ret, "allocating numpy array failed");
     int err;
 
-    // get bodo.Time constructor
+    // get bodo.types.Time constructor
     PyObject* bodo = PyImport_ImportModule("bodo");
     CHECK(bodo, "importing bodo module failed");
-    PyObject* bodo_time_constructor = PyObject_GetAttrString(bodo, "Time");
-    CHECK(bodo_time_constructor, "getting bodo.Time failed");
+    PyObject* bodo_types = PyObject_GetAttrString(bodo, "types");
+    CHECK(bodo_types, "getting bodo.types module failed");
+    PyObject* bodo_time_constructor =
+        PyObject_GetAttrString(bodo_types, "Time");
+    CHECK(bodo_time_constructor, "getting bodo.types.Time failed");
 
     for (int64_t i = 0; i < n; ++i) {
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
@@ -432,6 +435,7 @@ void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
     }
 
     Py_DECREF(bodo_time_constructor);
+    Py_DECREF(bodo_types);
     Py_DECREF(bodo);
 
     PyGILState_Release(gilstate);
@@ -775,8 +779,8 @@ void unbox_timestamptz_array(PyObject* obj, int64_t n, int64_t* data_ts,
 
 /**
  * @brief Box native timestamptz_array data to Numpy object array of
- * bodo.TimestampTZ items
- * @return Numpy object array of bodo.TimestampTZ
+ * bodo.types.TimestampTZ items
+ * @return Numpy object array of bodo.types.TimestampTZ
  * @param[in] n number of values
  * @param[in] data timestamp pointer to 64-bit values
  * @param[in] data offset pointer to 64-bit values
@@ -807,12 +811,15 @@ void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
         PyObject_GetAttrString(pandas, "Timestamp");
     CHECK(timestamp_constructor, "getting pandas.Timestamp failed");
 
-    // get bodo.TimestampTZ constructor
+    // get bodo.types.TimestampTZ constructor
     PyObject* bodo = PyImport_ImportModule("bodo");
     CHECK(bodo, "importing bodo module failed");
+    PyObject* bodo_types = PyObject_GetAttrString(bodo, "types");
+    CHECK(bodo_types, "getting bodo.types module failed");
     PyObject* bodo_timestamptz_constructor =
-        PyObject_GetAttrString(bodo, "TimestampTZ");
-    CHECK(bodo_timestamptz_constructor, "getting bodo.TimestampTZ failed");
+        PyObject_GetAttrString(bodo_types, "TimestampTZ");
+    CHECK(bodo_timestamptz_constructor,
+          "getting bodo.types.TimestampTZ failed");
 
     for (int64_t i = 0; i < n; ++i) {
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
@@ -839,6 +846,7 @@ void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
     }
 
     Py_DECREF(bodo_timestamptz_constructor);
+    Py_DECREF(bodo_types);
     Py_DECREF(bodo);
     Py_DECREF(timestamp_constructor);
     Py_DECREF(pandas);

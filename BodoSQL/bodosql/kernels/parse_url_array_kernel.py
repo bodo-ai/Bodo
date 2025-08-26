@@ -5,6 +5,7 @@ of helper functions needed.
 
 import re
 
+import numba
 import numpy as np
 from numba.core import types
 from numba.extending import overload
@@ -61,16 +62,18 @@ def overload_parse_url_util(data, permissive_flag):
 
     field_names = ("fragment", "host", "parameters", "path", "port", "query", "scheme")
     child_types = (
-        bodo.string_array_type,
-        bodo.string_array_type,
-        bodo.MapArrayType(bodo.string_array_type, bodo.string_array_type),
-        bodo.string_array_type,
-        bodo.string_array_type,
-        bodo.string_array_type,
-        bodo.string_array_type,
+        bodo.types.string_array_type,
+        bodo.types.string_array_type,
+        bodo.types.MapArrayType(
+            bodo.types.string_array_type, bodo.types.string_array_type
+        ),
+        bodo.types.string_array_type,
+        bodo.types.string_array_type,
+        bodo.types.string_array_type,
+        bodo.types.string_array_type,
     )
 
-    out_dtype = bodo.StructArrayType(tuple(child_types), field_names)
+    out_dtype = bodo.types.StructArrayType(tuple(child_types), field_names)
     arg_names = ["data", "permissive_flag"]
     arg_types = [data, permissive_flag]
     propagate_null = [True, False]
@@ -234,7 +237,7 @@ def parse_url_wrapper_overload(data):
     from urllib.parse import urlparse
 
     def impl(data):  # pragma: no cover
-        with bodo.objmode(
+        with numba.objmode(
             scheme="string",
             netloc="string",
             path="string",

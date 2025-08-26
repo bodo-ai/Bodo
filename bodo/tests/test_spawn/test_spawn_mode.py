@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 
+import numba
 import numpy as np
 import pandas as pd
 import psutil
@@ -79,7 +80,7 @@ def test_import_module(capfd):
     import bodo.tests.test_spawn.mymodule as mymod
 
     def impl():
-        with bodo.no_warning_objmode:
+        with bodo.ir.object_mode.no_warning_objmode:
             mymod.f()
 
     fn = bodo.jit(spawn=True, cache=True)(impl)
@@ -181,7 +182,7 @@ def test_compute_return_scalar(datapath):
 def test_environment():
     @bodo.jit(spawn=True)
     def get_from_env(env_var):
-        with bodo.no_warning_objmode(ret_val="int64"):
+        with bodo.ir.object_mode.no_warning_objmode(ret_val="int64"):
             ret_val = int(os.environ[env_var])
         return ret_val
 
@@ -202,7 +203,7 @@ def test_environment():
         propagate_env=["EXTRA_ENV"],
     )
     def get_from_env_decorator(env_var):
-        with bodo.no_warning_objmode(ret_val="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(ret_val="unicode_type"):
             ret_val = os.environ.get(env_var, "DOES_NOT_EXIST")
         return ret_val
 
@@ -343,13 +344,13 @@ def test_results_deleted_after_collection(datapath):
 
 
 def test_spawn_type_register():
-    """test bodo.register_type() support in spawn mode"""
+    """test bodo.types.register_type() support in spawn mode"""
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df_type1 = bodo.typeof(df1)
-    bodo.register_type("my_type1", df_type1)
+    bodo.types.register_type("my_type1", df_type1)
 
     def impl():
-        with bodo.objmode(df="my_type1"):
+        with numba.objmode(df="my_type1"):
             df = pd.DataFrame({"A": [1, 2, 5]})
         return df
 
@@ -419,7 +420,7 @@ def test_spawn_globals_objmode():
 
     @bodo.jit(spawn=True)
     def f():
-        with bodo.no_warning_objmode(val="int64"):
+        with bodo.ir.object_mode.no_warning_objmode(val="int64"):
             val = VALUE
         return val
 

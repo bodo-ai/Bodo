@@ -3,8 +3,6 @@
 # distutils: language = c++
 # cython: embedsignature = True
 
-import atexit
-
 from pyarrow.lib cimport CMemoryPool, MemoryPool
 import pyarrow as pa
 
@@ -39,4 +37,3 @@ default_buffer_pool_smallest_size_class = bodo.memory_cpp.default_buffer_pool_sm
 default_buffer_pool_bytes_allocated = bodo.memory_cpp.default_buffer_pool_bytes_allocated
 default_buffer_pool_bytes_pinned = bodo.memory_cpp.default_buffer_pool_bytes_pinned
 
-atexit.register(bodo.memory_cpp.default_buffer_pool_cleanup)

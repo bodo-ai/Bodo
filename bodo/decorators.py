@@ -10,6 +10,10 @@ import os
 import types as pytypes
 import warnings
 
+# NOTE: 'numba_compat' has to be imported first in bodo package to make sure all Numba
+# patches are applied before Bodo's Numba use (e.g. 'overload' is replaced properly)
+import bodo.numba_compat  # isort:skip
+
 import numba
 from numba.core import cgutils, cpu, serialize, types
 from numba.core.options import _mapping
@@ -18,6 +22,7 @@ from numba.core.typing.templates import signature
 from numba.extending import lower_builtin, models, register_model
 
 import bodo
+import bodo.compiler  # noqa # side effect: initialize JIT compiler
 from bodo.pandas_compat import bodo_pandas_udf_execution_engine
 
 # Add Bodo's options to Numba's allowed options/flags
@@ -326,6 +331,10 @@ def is_jit_execution_overload():
     return lambda: True  # pragma: no cover
 
 
+bodo.is_jit_execution = is_jit_execution
+bodo.jitclass = bodo.numba_compat.jitclass
+
+
 def jit(signature_or_function=None, pipeline_class=None, **options):
     # Use spawn mode if specified in decorator or enabled globally (decorator takes
     # precedence)
@@ -374,6 +383,7 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
 
 
 jit.__pandas_udf__ = bodo_pandas_udf_execution_engine
+bodo.jit = jit
 
 
 def _jit(signature_or_function=None, pipeline_class=None, **options):
@@ -553,8 +563,8 @@ def _check_return_type(return_type):
     if isinstance(return_type, types.abstract._TypeMetaclass):
         raise BodoError(
             f"wrap_python requires full data types, not just data type "
-            f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
-            f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
+            f"classes. For example, 'bodo.types.DataFrameType((bodo.types.float64[::1],), "
+            f"bodo.types.RangeIndexType(), ('A',))' is a valid data type but 'bodo.types.DataFrameType' is not.\n"
             f"Return type is type class {return_type}."
         )
     if not isinstance(return_type, types.Type):
@@ -583,6 +593,9 @@ def wrap_python(return_type: str | types.Type):
         return WrapPythonDispatcher(func, return_type)
 
     return wrapper
+
+
+bodo.wrap_python = wrap_python
 
 
 class WrapPythonDispatcherType(numba.types.Callable, numba.types.Opaque):

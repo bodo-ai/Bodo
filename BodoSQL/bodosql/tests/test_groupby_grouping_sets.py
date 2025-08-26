@@ -45,20 +45,20 @@ from bodosql.tests.utils import check_query
             (
                 np.array(
                     [
-                        bodo.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
-                        bodo.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
-                        bodo.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
-                        bodo.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
-                        bodo.TimestampTZ.fromLocal("2024-03-19 12:00:00", 120),
+                        bodo.types.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
+                        bodo.types.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
+                        bodo.types.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
+                        bodo.types.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-19 12:00:00", 120),
                     ]
                 ),
                 np.array(
                     [
-                        bodo.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
-                        bodo.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
-                        bodo.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
+                        bodo.types.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
+                        bodo.types.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
+                        bodo.types.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-03-18 12:00:00", 120),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-18 12:00:00", 120),
                     ]
                 ),
             ),

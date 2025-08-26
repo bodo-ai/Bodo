@@ -176,7 +176,7 @@ def typeof_pd_series(val: pd.Series, c):
     arr_typ = _infer_series_arr_type(val)
     # use dictionary-encoded array if necessary for testing (_use_dict_str_type set)
     if _use_dict_str_type and arr_typ == string_array_type:
-        arr_typ = bodo.dict_str_arr_type
+        arr_typ = bodo.types.dict_str_arr_type
 
     return SeriesType(
         arr_typ.dtype,
@@ -302,7 +302,9 @@ def get_hiframes_dtypes(df):
     ]
     # use dictionary-encoded array if necessary for testing (_use_dict_str_type set)
     hi_typs = [
-        bodo.dict_str_arr_type if _use_dict_str_type and t == string_array_type else t
+        bodo.types.dict_str_arr_type
+        if _use_dict_str_type and t == string_array_type
+        else t
         for t in hi_typs
     ]
     return tuple(hi_typs)
@@ -393,7 +395,7 @@ _one_to_one_type_to_enum_map: dict[types.Type, int] = {
     FloatDtype(types.float64): SeriesDtypeEnum.PD_nullable_Float64.value,
     bytes_type: SeriesDtypeEnum.BINARY.value,
     string_type: SeriesDtypeEnum.STRING.value,
-    bodo.bool_: SeriesDtypeEnum.Bool.value,
+    bodo.types.bool_: SeriesDtypeEnum.Bool.value,
     types.none: SeriesDtypeEnum.NoneType.value,
     null_array_type: SeriesDtypeEnum.NullArray.value,
     timestamptz_type: SeriesDtypeEnum.TimestampTZ.value,
@@ -427,7 +429,7 @@ _one_to_one_enum_to_type_map: dict[int, types.Type] = {
     SeriesDtypeEnum.PD_nullable_Float64.value: FloatDtype(types.float64),
     SeriesDtypeEnum.BINARY.value: bytes_type,
     SeriesDtypeEnum.STRING.value: string_type,
-    SeriesDtypeEnum.Bool.value: bodo.bool_,
+    SeriesDtypeEnum.Bool.value: bodo.types.bool_,
     SeriesDtypeEnum.NoneType.value: types.none,
     SeriesDtypeEnum.NullArray.value: null_array_type,
     SeriesDtypeEnum.TimestampTZ.value: timestamptz_type,
@@ -961,7 +963,7 @@ def _infer_series_arr_type(S: pd.Series, array_metadata=None):
         # always unbox boolean Series using nullable boolean array instead of Numpy
         # because some processes may have nulls, leading to inconsistent data types
         if arr_type == types.Array(types.bool_, 1, "C"):
-            arr_type = bodo.boolean_array_type
+            arr_type = bodo.types.boolean_array_type
 
         # We make all Series data arrays contiguous during unboxing to avoid type errors
         # see test_df_query_stringliteral_expr
@@ -1037,7 +1039,7 @@ def _get_df_columns_obj(c, builder, context, pyapi, df_typ, dataframe_payload):
 
     # avoid ArrowStringArray for column names due to Pandas bug for df column getattr
     # see test_jit_inside_prange
-    if columns_typ == bodo.string_array_type:
+    if columns_typ == bodo.types.string_array_type:
         prev_columns_obj = columns_obj
         columns_obj = pyapi.call_method(columns_obj, "to_numpy", ())
         pyapi.decref(prev_columns_obj)
@@ -1375,7 +1377,7 @@ def box_series(typ, val, c):
 
     # call pd.Series()
     if isinstance(typ, HeterogeneousSeriesType) and isinstance(
-        typ.data, bodo.NullableTupleType
+        typ.data, bodo.types.NullableTupleType
     ):
         # Use object value to preserve NA values (i.e None)
         dtype = c.pyapi.unserialize(c.pyapi.serialize_object(object))
@@ -1389,7 +1391,7 @@ def box_series(typ, val, c):
     c.pyapi.decref(name_obj)
     # Decref object if used.
     if isinstance(typ, HeterogeneousSeriesType) and isinstance(
-        typ.data, bodo.NullableTupleType
+        typ.data, bodo.types.NullableTupleType
     ):
         c.pyapi.decref(dtype)
 
@@ -1666,15 +1668,15 @@ def _infer_ndarray_obj_dtype(val):
                 "This can cause errors in parallel execution."
             )
         )
-        return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
+        return bodo.types.dict_str_arr_type if _use_dict_str_type else string_array_type
 
     first_val = val[i]
     # For compilation purposes we also impose a limit to the size
     # of the struct as very large structs cannot be efficiently compiled.
     if isinstance(first_val, DictStringSentinel):
-        return bodo.dict_str_arr_type
+        return bodo.types.dict_str_arr_type
     elif isinstance(first_val, str):
-        return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
+        return bodo.types.dict_str_arr_type if _use_dict_str_type else string_array_type
     elif isinstance(first_val, (bytes, bytearray)):
         return binary_array_type
     elif isinstance(first_val, (bool, np.bool_)):
@@ -1744,15 +1746,15 @@ def _infer_ndarray_obj_dtype(val):
         dtype = numba.typeof(first_val)
         dtype = to_nullable_type(dtype)
         if _use_dict_str_type and dtype == string_array_type:
-            dtype = bodo.dict_str_arr_type
+            dtype = bodo.types.dict_str_arr_type
         return ArrayItemArrayType(dtype)
     if isinstance(first_val, pd.Timestamp):
-        return bodo.DatetimeArrayType(first_val.tz)
+        return bodo.types.DatetimeArrayType(first_val.tz)
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
     if isinstance(first_val, datetime.timedelta):
-        return bodo.timedelta_array_type
-    if isinstance(first_val, bodo.Time):
+        return bodo.types.timedelta_array_type
+    if isinstance(first_val, bodo.types.Time):
         return TimeArrayType(first_val.precision)
     if isinstance(first_val, decimal.Decimal):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
@@ -1768,7 +1770,7 @@ def _infer_ndarray_obj_dtype(val):
             )
         arr = dtype_to_array_type(left_dtype, False)
         return bodo.libs.interval_arr_ext.IntervalArrayType(arr)
-    if isinstance(first_val, bodo.TimestampTZ):
+    if isinstance(first_val, bodo.types.TimestampTZ):
         return bodo.hiframes.timestamptz_ext.timestamptz_array_type
 
     raise BodoError(
@@ -1800,7 +1802,7 @@ def _get_struct_value_arr_type(v):
         return dtype_to_array_type(numba.typeof(_value_to_array(v)))
 
     if isinstance(v, DictStringSentinel):
-        return bodo.dict_str_arr_type
+        return bodo.types.dict_str_arr_type
 
     if _is_scalar_value(v) and pd.isna(v):
         # assume string array if first field value is NA
@@ -1818,7 +1820,7 @@ def _get_struct_value_arr_type(v):
     arr_typ = to_nullable_type(arr_typ)
 
     if _use_dict_str_type and arr_typ == string_array_type:
-        arr_typ = bodo.dict_str_arr_type
+        arr_typ = bodo.types.dict_str_arr_type
 
     return arr_typ
 

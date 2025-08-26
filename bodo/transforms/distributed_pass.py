@@ -36,7 +36,6 @@ from numba.core.ir_utils import (
 from numba.parfors.parfor import (
     Parfor,
     _lower_parfor_sequential_block,
-    get_parfor_params,
     unwrap_parfor_blocks,
     wrap_parfor_blocks,
 )
@@ -272,13 +271,6 @@ class DistributedPass:
         lower_parfor_sequential(
             self.typingctx, self.func_ir, self.typemap, self.calltypes, self.metadata
         )
-        if bodo.multithread_mode:
-            # parfor params need to be updated for multithread_mode since some
-            # new variables like alloc_start are introduced by distributed pass
-            # and are used in later parfors
-            _parfor_ids = get_parfor_params(
-                self.func_ir.blocks, True, defaultdict(list)
-            )
 
         # save data for debug and test
         global dist_analysis
@@ -1603,7 +1595,7 @@ class DistributedPass:
         # BooleanArray.func calls
         if (
             isinstance(func_mod, ir.Var)
-            and self.typemap[func_mod.name] == bodo.boolean_array_type
+            and self.typemap[func_mod.name] == bodo.types.boolean_array_type
         ):
             return self._run_call_boolean_array(func_mod, func_name, assign)
 
@@ -3920,13 +3912,6 @@ class DistributedPass:
         return out
 
     def _run_parfor(self, parfor, equiv_set, avail_vars):
-        # Thread and 1D parfors turn to gufunc in multithread mode
-        if (
-            bodo.multithread_mode
-            and self._dist_analysis.parfor_dists[parfor.id] != Distribution.REP
-        ):
-            parfor.no_sequential_lowering = True
-
         if self._dist_analysis.parfor_dists[parfor.id] == Distribution.OneD_Var:
             return self._run_parfor_1D_Var(parfor, equiv_set, avail_vars)
 
@@ -4670,7 +4655,7 @@ class DistributedPass:
                 init_val = "True"
                 if user_init_val == True:
                     return []
-            elif isinstance(el_typ, bodo.Decimal128Type):
+            elif isinstance(el_typ, bodo.types.Decimal128Type):
                 extra_globals["_str_to_decimal_scalar"] = (
                     bodo.libs.decimal_arr_ext._str_to_decimal_scalar
                 )
@@ -4681,11 +4666,11 @@ class DistributedPass:
                     f"val, _ = _str_to_decimal_scalar({dec_str_setup}, prec, scale)"
                 )
                 init_val = "val"
-            elif el_typ == bodo.datetime_date_type:
+            elif el_typ == bodo.types.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_max_value()"
             elif isinstance(el_typ, TimeType):
                 init_val = "bodo.hiframes.series_kernels._get_time_max_value()"
-            elif isinstance(el_typ, bodo.TimestampTZType):
+            elif isinstance(el_typ, bodo.types.TimestampTZType):
                 init_val = "bodo.hiframes.series_kernels._get_timestamptz_max_value()"
             else:
                 init_val = f"numba.cpython.builtins.get_type_max_value(np.ones(1,dtype=np.{el_typ}).dtype)"
@@ -4694,7 +4679,7 @@ class DistributedPass:
                 init_val = "False"
                 if user_init_val == False:
                     return []
-            elif isinstance(el_typ, bodo.Decimal128Type):
+            elif isinstance(el_typ, bodo.types.Decimal128Type):
                 extra_globals["_str_to_decimal_scalar"] = (
                     bodo.libs.decimal_arr_ext._str_to_decimal_scalar
                 )
@@ -4705,11 +4690,11 @@ class DistributedPass:
                     f"val, _ = _str_to_decimal_scalar({dec_str_setup}, prec, scale)"
                 )
                 init_val = "val"
-            elif el_typ == bodo.datetime_date_type:
+            elif el_typ == bodo.types.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_min_value()"
             elif isinstance(el_typ, TimeType):
                 init_val = "bodo.hiframes.series_kernels._get_time_min_value()"
-            elif isinstance(el_typ, bodo.TimestampTZType):
+            elif isinstance(el_typ, bodo.types.TimestampTZType):
                 init_val = "bodo.hiframes.series_kernels._get_timestamptz_min_value()"
             else:
                 init_val = f"numba.cpython.builtins.get_type_min_value(np.ones(1,dtype=np.{el_typ}).dtype)"

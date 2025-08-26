@@ -17,12 +17,12 @@ def scalar_nullable_logical_not(val):
 @generated_jit(nopython=True)
 def scalar_nullable_logical_not_impl(val):
     """Helper function that performs a logical not on a nullable boolean scalar value"""
-    if val == bodo.none:
+    if val == bodo.types.none:
         return lambda val: None
     # If the input is optional, the output is optional.
     # We could merge this code path with the default, but
     # if we can avoid optional types we should.
-    elif isinstance(val, bodo.optional):
+    elif isinstance(val, bodo.types.optional):
 
         def impl(val):
             if val is None:
@@ -52,12 +52,12 @@ def scalar_nullable_add_impl(a, b):
     neither value is none, or a + b.
     """
     # If either input is None, return None
-    if a == bodo.none or b == bodo.none:
+    if a == bodo.types.none or b == bodo.types.none:
         return lambda a, b: None
     # If either input is optional, the output is optional.
     # We could merge this code path with the default, but
     # if we can avoid optional types we should.
-    elif isinstance(a, bodo.optional) or isinstance(b, bodo.optional):
+    elif isinstance(a, bodo.types.optional) or isinstance(b, bodo.types.optional):
 
         def impl(a, b):
             if a is None or b is None:

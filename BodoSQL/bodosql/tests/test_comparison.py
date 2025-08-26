@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodo import Time
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodo.types import Time
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed

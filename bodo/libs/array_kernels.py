@@ -137,7 +137,7 @@ BODO_ARRAY_TYPE_CLASSES = (
     bodo.libs.map_arr_ext.MapArrayType,
     bodo.libs.matrix_ext.MatrixType,
     bodo.libs.csr_matrix_ext.CSRMatrixType,
-    bodo.DatetimeArrayType,
+    bodo.types.DatetimeArrayType,
     TimeArrayType,
     TimestampTZArrayType,
 )
@@ -212,7 +212,7 @@ def overload_isna(arr, i):
         return lambda arr, i: arr.codes[i] == -1
 
     # Binary Array
-    if arr == bodo.binary_array_type:
+    if arr == bodo.types.binary_array_type:
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), i
         )  # pragma: no cover
@@ -229,7 +229,7 @@ def overload_isna(arr, i):
             return lambda arr, i: False
 
     # Nullable tuple support
-    if isinstance(arr, bodo.NullableTupleType):
+    if isinstance(arr, bodo.types.NullableTupleType):
         return lambda arr, i: arr._null_values[i]  # pragma: no cover
 
     # dictionary encoded array
@@ -245,7 +245,7 @@ def overload_isna(arr, i):
         return lambda arr, i: np.isnat(arr._data[i])  # pragma: no cover
 
     # NullArrayType
-    if arr == bodo.null_array_type:
+    if arr == bodo.types.null_array_type:
         return lambda arr, i: True  # pragma: no cover
 
     # TODO: extend to other types (which ones are missing?)
@@ -281,7 +281,7 @@ def setna_overload(arr, ind, int_nan_const=0):
         return _setnan_impl
 
     if isinstance(arr, DatetimeArrayType):
-        nat = bodo.datetime64ns("NaT")
+        nat = bodo.types.datetime64ns("NaT")
 
         def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
             arr._data[ind] = nat
@@ -331,7 +331,7 @@ def setna_overload(arr, ind, int_nan_const=0):
         )  # pragma: no cover
 
     # Binary Array
-    if arr == bodo.binary_array_type:
+    if arr == bodo.types.binary_array_type:
 
         def impl_binary_arr(arr, ind, int_nan_const=0):  # pragma: no cover
             # set offset
@@ -462,7 +462,7 @@ def overload_copy_array_element(out_arr, out_ind, in_arr, in_ind):
     """
 
     # string array case (input can be dict-encoded too in get_str_arr_item_copy)
-    if out_arr == bodo.string_array_type and is_str_arr_type(in_arr):
+    if out_arr == bodo.types.string_array_type and is_str_arr_type(in_arr):
 
         def impl_str(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
             if bodo.libs.array_kernels.isna(in_arr, in_ind):
@@ -719,9 +719,7 @@ def get_valid_entries_from_date_offset(
         "def impl(index_arr, offset, initial_date, is_last, is_parallel=False):\n"
     )
     if types.unliteral(offset) == types.unicode_type:
-        func_text += (
-            "  with bodo.objmode(threshhold_date=bodo.pd_timestamp_tz_naive_type):\n"
-        )
+        func_text += "  with numba.objmode(threshhold_date=bodo.types.pd_timestamp_tz_naive_type):\n"
         func_text += "    date_offset = pd.tseries.frequencies.to_offset(offset)\n"
         if not get_overload_const_bool(is_last):
             func_text += "    if not isinstance(date_offset, pd._libs.tslibs.Tick) and date_offset.is_on_offset(index_arr[0]):\n"
@@ -1562,7 +1560,7 @@ def overload_dropna(data, how, thresh, subset):
     # allocate new arrays
     for i, out in enumerate(out_names):
         # Add a check for categorical, if so use data[{i}].dtype
-        if isinstance(data[i], bodo.CategoricalArrayType):
+        if isinstance(data[i], bodo.types.CategoricalArrayType):
             func_text += (
                 f"  {out} = bodo.utils.utils.alloc_type(new_len, data[{i}], (-1,))\n"
             )
@@ -1658,14 +1656,14 @@ def concat(arr_list):  # pragma: no cover
 @overload(concat, no_unliteral=True)
 def concat_overload(arr_list):
     # TODO: Support actually handling the possibles null values
-    if isinstance(arr_list, bodo.NullableTupleType):
+    if isinstance(arr_list, bodo.types.NullableTupleType):
         return lambda arr_list: bodo.libs.array_kernels.concat(
             arr_list._data
         )  # pragma: no cover
 
     if (
         isinstance(arr_list, (types.UniTuple, types.List))
-        and arr_list.dtype == bodo.null_array_type
+        and arr_list.dtype == bodo.types.null_array_type
     ):
 
         def null_array_concat_impl(arr_list):  # pragma: no cover
@@ -1723,7 +1721,7 @@ def concat_overload(arr_list):
 
     # Struct Array
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
-        arr_list.dtype, bodo.StructArrayType
+        arr_list.dtype, bodo.types.StructArrayType
     ):
         struct_keys = arr_list.dtype.names
         func_text = "def struct_array_concat_impl(arr_list):\n"
@@ -1770,7 +1768,7 @@ def concat_overload(arr_list):
 
     # TZ-Aware arrays
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
-        arr_list.dtype, bodo.DatetimeArrayType
+        arr_list.dtype, bodo.types.DatetimeArrayType
     ):
         tz_literal = arr_list.dtype.tz
 
@@ -1923,7 +1921,8 @@ def concat_overload(arr_list):
     if (
         isinstance(arr_list, (types.UniTuple, types.List))
         and (
-            is_str_arr_type(arr_list.dtype) or arr_list.dtype == bodo.binary_array_type
+            is_str_arr_type(arr_list.dtype)
+            or arr_list.dtype == bodo.types.binary_array_type
         )
     ) or (
         isinstance(arr_list, types.BaseTuple)
@@ -1932,13 +1931,13 @@ def concat_overload(arr_list):
         if isinstance(arr_list, types.BaseTuple):
             _arr_type = arr_list.types[0]
             for i in range(len(arr_list)):
-                if arr_list.types[i] != bodo.dict_str_arr_type:
+                if arr_list.types[i] != bodo.types.dict_str_arr_type:
                     _arr_type = arr_list.types[i]
                     break
         else:
             _arr_type = arr_list.dtype
 
-        if _arr_type == bodo.dict_str_arr_type:
+        if _arr_type == bodo.types.dict_str_arr_type:
 
             def impl_dict_arr(arr_list):  # pragma: no cover
                 """
@@ -2281,7 +2280,7 @@ def concat_overload(arr_list):
         )  # pragma: no cover
 
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
-        arr_list.dtype, bodo.MapArrayType
+        arr_list.dtype, bodo.types.MapArrayType
     ):
 
         def impl_map_arr_list(arr_list):  # pragma: no cover
@@ -2294,7 +2293,7 @@ def concat_overload(arr_list):
 
         return impl_map_arr_list
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
-        arr_list.dtype, bodo.TupleArrayType
+        arr_list.dtype, bodo.types.TupleArrayType
     ):
 
         def impl_tuple_arr_list(arr_list):  # pragma: no cover
@@ -2310,8 +2309,8 @@ def concat_overload(arr_list):
     if isinstance(arr_list, types.Tuple):
         # Generate a simpler error message for multiple timezones.
         all_timestamp_data = all(
-            isinstance(typ, bodo.DatetimeArrayType)
-            or (isinstance(typ, types.Array) and typ.dtype == bodo.datetime64ns)
+            isinstance(typ, bodo.types.DatetimeArrayType)
+            or (isinstance(typ, types.Array) and typ.dtype == bodo.types.datetime64ns)
             for typ in arr_list.types
         )
         if all_timestamp_data:
@@ -2788,7 +2787,7 @@ def overload_gen_na_array(n, arr, use_dict_arr=False):
 
         return impl_float
 
-    if arr == bodo.dict_str_arr_type and is_overload_true(use_dict_arr):
+    if arr == bodo.types.dict_str_arr_type and is_overload_true(use_dict_arr):
 
         def impl_dict(n, arr, use_dict_arr=False):  # pragma: no cover
             dict_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0)
@@ -2828,7 +2827,9 @@ ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_gen_na_array = gen_na_arr
 
 def cast_null_arr(context, builder, fromty, toty, val):
     """Cast null array to any other nullable array"""
-    assert fromty == bodo.null_array_type, "cast_null_arr: null_array_type expected"
+    assert fromty == bodo.types.null_array_type, (
+        "cast_null_arr: null_array_type expected"
+    )
 
     if toty != bodo.utils.typing.to_nullable_type(toty):  # pragma: no cover
         raise BodoError(
@@ -2847,7 +2848,7 @@ def cast_null_arr(context, builder, fromty, toty, val):
 def _install_null_array_casts():
     """Install casting all Bodo arrays to null array"""
     for t in BODO_ARRAY_TYPE_CLASSES:
-        lower_cast(bodo.null_array_type, t)(cast_null_arr)
+        lower_cast(bodo.types.null_array_type, t)(cast_null_arr)
 
 
 _install_null_array_casts()
@@ -3133,15 +3134,15 @@ def ffill_bfill_overload(A, method, parallel=False):
         null_value = "False"
     elif isinstance(_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
         null_value = f"pd.Timestamp(0, tz='{_dtype.tz}')"
-    elif _dtype == bodo.datetime64ns:
+    elif _dtype == bodo.types.datetime64ns:
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_datetime(0))"
         )
-    elif _dtype == bodo.timedelta64ns:
+    elif _dtype == bodo.types.timedelta64ns:
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_timedelta(0))"
         )
-    elif _dtype == bodo.pd_datetime_tz_naive_type:  # pragma: no cover
+    elif _dtype == bodo.types.pd_datetime_tz_naive_type:  # pragma: no cover
         null_value = "NOT_A_TIME"
         global_vars["NOT_A_TIME"] = pd.Timestamp("NaT")
     else:
@@ -3307,7 +3308,7 @@ def repeat_kernel_overload(A, repeats):
 
     # int case
     if isinstance(repeats, types.Integer):
-        if A == bodo.dict_str_arr_type:
+        if A == bodo.types.dict_str_arr_type:
 
             def impl_dict_int(A, repeats):  # pragma: no cover
                 data_arr = A._data.copy()
@@ -3346,7 +3347,7 @@ def repeat_kernel_overload(A, repeats):
         return impl_int
 
     # array case
-    if A == bodo.dict_str_arr_type:
+    if A == bodo.types.dict_str_arr_type:
 
         def impl_dict_arr(A, repeats):  # pragma: no cover
             data_arr = A._data.copy()
@@ -4165,8 +4166,11 @@ def np_hstack(tup):
     # Verify that arr_iter is a tuple, list of arrays, or Series of Arrays
     is_sequence = isinstance(tup, (types.BaseTuple, types.List))
     is_series = isinstance(
-        tup, (bodo.SeriesType, bodo.hiframes.pd_series_ext.HeterogeneousSeriesType)
-    ) and isinstance(tup.data, (types.BaseTuple, types.List, bodo.NullableTupleType))
+        tup,
+        (bodo.types.SeriesType, bodo.hiframes.pd_series_ext.HeterogeneousSeriesType),
+    ) and isinstance(
+        tup.data, (types.BaseTuple, types.List, bodo.types.NullableTupleType)
+    )
     if isinstance(tup, types.BaseTuple):
         # Determine that each type is an array type
         for typ in tup.types:
@@ -4185,7 +4189,7 @@ def np_hstack(tup):
         # Replace nullable tuples with the underlying type
         tup_data_val = (
             tup.data.tuple_typ
-            if isinstance(tup.data, bodo.NullableTupleType)
+            if isinstance(tup.data, bodo.types.NullableTupleType)
             else tup.data
         )
         for typ in tup_data_val.types:
@@ -4318,7 +4322,7 @@ def np_tile(A, reps):
     if not isinstance(reps, (types.Tuple, types.UniTuple)):  # pragma: no cover
         raise_bodo_error("np.tile: reps argument must be a tuple")
     if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
-        A, bodo.FloatingArrayType
+        A, bodo.types.FloatingArrayType
     ):  # pragma: no cover
         raise_bodo_error("np.tile: A argument must be a numpy array")
     ndims = A.ndim
@@ -4396,7 +4400,7 @@ def np_interp(x, xp, fp, left=None, right=None, period=None):
     # https://github.com/numpy/numpy/blob/1f82da745496092d85b402b1703877462a7c2de2/numpy/core/src/multiarray/compiled_base.c#L492
 
     def impl(x, xp, fp, left=None, right=None, period=None):  # pragma: no cover
-        with bodo.objmode(A=out_type):
+        with numba.objmode(A=out_type):
             A = np.interp(x, xp, fp, left, right, period)
         return A
 
@@ -4405,7 +4409,7 @@ def np_interp(x, xp, fp, left=None, right=None, period=None):
 
 def is_index_decimal_value(indval):
     return isinstance(indval, typing.builtins.IndexValueType) and isinstance(
-        indval.val_typ, bodo.Decimal128Type
+        indval.val_typ, bodo.types.Decimal128Type
     )
 
 
@@ -4448,7 +4452,7 @@ def _overload_nan_argmin(arr):
             (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
         )
         or arr in [boolean_array_type, datetime_date_array_type]
-        or arr.dtype in [bodo.timedelta64ns, bodo.datetime64ns]
+        or arr.dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]
         # Recent Numpy versions treat NA as min while pandas
         # skips NA values
         or isinstance(arr.dtype, types.Float)
@@ -4530,7 +4534,7 @@ def _overload_nan_argmax(arr):
             (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
         )
         or arr in [boolean_array_type, datetime_date_array_type]
-        or arr.dtype == bodo.timedelta64ns
+        or arr.dtype == bodo.types.timedelta64ns
         # Recent Numpy versions treat NA as max while pandas
         # skips NA values
         or isinstance(arr.dtype, types.Float)
@@ -4688,8 +4692,10 @@ def np_nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
     finfo = np.core.getlimits.finfo(dtype)
     largest_float = finfo.max
     smallest_float = finfo.min
-    pos_val = largest_float if posinf == bodo.none or posinf is None else "posinf"
-    neg_val = smallest_float if neginf == bodo.none or neginf is None else "neginf"
+    pos_val = largest_float if posinf == bodo.types.none or posinf is None else "posinf"
+    neg_val = (
+        smallest_float if neginf == bodo.types.none or neginf is None else "neginf"
+    )
     calculation_text = f"scalar_nan_to_num({{}}, nan, {pos_val}, {neg_val})"
 
     func_text = "def impl(x, copy=True, nan=0.0, posinf=None, neginf=None):\n"

@@ -34,7 +34,6 @@ from numba.parfors.parfor import (
 import bodo
 import bodo.io
 import bodo.io.np_io
-from bodo.decorators import WrapPythonDispatcherType
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -424,8 +423,10 @@ class DistributedAnalysis:
             or (
                 is_expr(rhs, "binop")
                 and (
-                    isinstance(self.typemap[rhs.lhs.name], bodo.DecimalArrayType)
-                    or isinstance(self.typemap[rhs.rhs.name], bodo.DecimalArrayType)
+                    isinstance(self.typemap[rhs.lhs.name], bodo.types.DecimalArrayType)
+                    or isinstance(
+                        self.typemap[rhs.rhs.name], bodo.types.DecimalArrayType
+                    )
                 )
             )
         ):
@@ -554,10 +555,12 @@ class DistributedAnalysis:
                     else:
                         code_expr = "is not None"
                         pandas_fn = "notna"
-                    if isinstance(arg1_typ, (bodo.DataFrameType, bodo.SeriesType)):
+                    if isinstance(
+                        arg1_typ, (bodo.types.DataFrameType, bodo.types.SeriesType)
+                    ):
                         obj_name = (
                             "DataFrame"
-                            if isinstance(arg1_typ, bodo.DataFrameType)
+                            if isinstance(arg1_typ, bodo.types.DataFrameType)
                             else "Series"
                         )
                         warning_msg = f"User code checks if a {obj_name} {code_expr} at {arg1.loc}. This checks that the {obj_name} object {code_expr}, not the contents, and is a common bug. To check the contents, please use '{obj_name}.{pandas_fn}()'."
@@ -915,6 +918,7 @@ class DistributedAnalysis:
         self, inst, lhs, rhs: ir.Expr, func_var, args, kws, equiv_set, array_dists
     ):
         """analyze array distributions in function calls"""
+        from bodo.decorators import WrapPythonDispatcherType
         from bodo.transforms.distributed_analysis_call_registry import (
             DistributedAnalysisContext,
             call_registry,
@@ -1603,7 +1607,7 @@ class DistributedAnalysis:
             return
 
         if fdef == ("random_seedless", "bodosql.kernels"):
-            if self.typemap[rhs.args[0].name] != bodo.none:
+            if self.typemap[rhs.args[0].name] != bodo.types.none:
                 _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
@@ -3501,7 +3505,7 @@ class DistributedAnalysis:
                 array_dists[in_list] = out_dist
             return
 
-        if isinstance(in_type, bodo.NullableTupleType):
+        if isinstance(in_type, bodo.types.NullableTupleType):
             nullable_tup_def = guard(get_definition, self.func_ir, args[0])
             assert (
                 isinstance(nullable_tup_def, ir.Expr) and nullable_tup_def.op == "call"

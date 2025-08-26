@@ -491,47 +491,47 @@ def test_mrnf_all_ties(memory_leak_check):
                 (
                     # Resolved by A
                     [
-                        bodo.Time(1, 1, 1, 1),
-                        bodo.Time(1, 1, 1, 1),
-                        bodo.Time(23),
-                        bodo.Time(1),
-                        bodo.Time(2),
-                        bodo.Time(2),
-                        bodo.Time(11, 10, 5),
-                        bodo.Time(11),
+                        bodo.types.Time(1, 1, 1, 1),
+                        bodo.types.Time(1, 1, 1, 1),
+                        bodo.types.Time(23),
+                        bodo.types.Time(1),
+                        bodo.types.Time(2),
+                        bodo.types.Time(2),
+                        bodo.types.Time(11, 10, 5),
+                        bodo.types.Time(11),
                     ]
                     # Resolved by B
                     + [
-                        bodo.Time(11),
-                        bodo.Time(11, 10, 5),
-                        bodo.Time(1, 1, 1, 1, 1, 1),
-                        bodo.Time(1, 1, 1, 1, 1),
-                        bodo.Time(11, 21),
+                        bodo.types.Time(11),
+                        bodo.types.Time(11, 10, 5),
+                        bodo.types.Time(1, 1, 1, 1, 1, 1),
+                        bodo.types.Time(1, 1, 1, 1, 1),
+                        bodo.types.Time(11, 21),
                         None,
                         None,
-                        bodo.Time(14),
+                        bodo.types.Time(14),
                     ]
                     # Resolved by C
                     + [
                         None,
                         None,
-                        bodo.Time(),
-                        bodo.Time(),
-                        bodo.Time(1),
-                        bodo.Time(1),
-                        bodo.Time(10, 5),
-                        bodo.Time(10, 5),
+                        bodo.types.Time(),
+                        bodo.types.Time(),
+                        bodo.types.Time(1),
+                        bodo.types.Time(1),
+                        bodo.types.Time(10, 5),
+                        bodo.types.Time(10, 5),
                     ]
                     # Resolved by D
                     + [
                         None,
                         None,
-                        bodo.Time(),
-                        bodo.Time(),
-                        bodo.Time(10, 5, 11),
-                        bodo.Time(10, 5, 11),
-                        bodo.Time(10, 5),
-                        bodo.Time(10, 5),
+                        bodo.types.Time(),
+                        bodo.types.Time(),
+                        bodo.types.Time(10, 5, 11),
+                        bodo.types.Time(10, 5, 11),
+                        bodo.types.Time(10, 5),
+                        bodo.types.Time(10, 5),
                     ]
                 ),
                 pd.Series(

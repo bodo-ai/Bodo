@@ -306,7 +306,7 @@ ll.add_symbol("box_time_array", hdatetime_ext.box_time_array)
 ll.add_symbol("unbox_time_array", hdatetime_ext.unbox_time_array)
 
 
-# bodo.Time implementation that uses a single int to store hour/minute/second/microsecond/nanosecond
+# bodo.types.Time implementation that uses a single int to store hour/minute/second/microsecond/nanosecond
 # The precision is saved in it's type
 # Does not need refcounted object wrapping since it is immutable
 class TimeType(types.Type):

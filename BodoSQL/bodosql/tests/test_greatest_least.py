@@ -377,9 +377,9 @@ def test_greatest_time_literals(greatest_or_least, memory_leak_check):
         {greatest_or_least}(TO_TIME('17:24:57'), TO_TIME('04:19:46'), TO_TIME('10:35:32'))
     """
     if greatest_or_least == "GREATEST":
-        answer = pd.DataFrame({"A": pd.Series([bodo.Time(17, 24, 57)])})
+        answer = pd.DataFrame({"A": pd.Series([bodo.types.Time(17, 24, 57)])})
     else:
-        answer = pd.DataFrame({"A": pd.Series([bodo.Time(4, 19, 46)])})
+        answer = pd.DataFrame({"A": pd.Series([bodo.types.Time(4, 19, 46)])})
     check_query(
         query,
         {},

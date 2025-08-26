@@ -31,7 +31,7 @@ def generate_objmode_warning(function_key: str):
     if function_key not in seen_functions:
         if numba.core.config.DEVELOPER_MODE:
             warning_msg = (
-                "Entered bodo.objmode. This will likely negatively impact performance."
+                "Entered numba.objmode. This will likely negatively impact performance."
             )
             warnings.warn(BodoWarning(warning_msg))
         seen_functions.add(function_key)

@@ -716,7 +716,7 @@ def test_nested_in_struct_metadata_handling(cursor):
     [
         # All larger int
         (
-            bodo.DataFrameType(
+            bodo.types.DataFrameType(
                 data=(
                     types.Array(types.int64, 1, "C"),
                     types.Array(types.int64, 1, "C"),
@@ -734,7 +734,7 @@ def test_nested_in_struct_metadata_handling(cursor):
         ),
         # Last column is larger int
         (
-            bodo.DataFrameType(
+            bodo.types.DataFrameType(
                 data=(
                     types.Array(types.int32, 1, "C"),
                     types.Array(types.int32, 1, "C"),
@@ -798,11 +798,11 @@ def test_snowflake_runtime_upcasting_int_to_int(
     [
         # All are larger decimal
         (
-            bodo.DataFrameType(
+            bodo.types.DataFrameType(
                 data=(
-                    bodo.DecimalArrayType(38, 0),
-                    bodo.DecimalArrayType(38, 0),
-                    bodo.DecimalArrayType(18, 0),
+                    bodo.types.DecimalArrayType(38, 0),
+                    bodo.types.DecimalArrayType(38, 0),
+                    bodo.types.DecimalArrayType(18, 0),
                 ),
                 columns=("l_orderkey", "l_partkey", "l_suppkey"),
             ),
@@ -816,9 +816,9 @@ def test_snowflake_runtime_upcasting_int_to_int(
         ),
         # First column is larger decimal
         (
-            bodo.DataFrameType(
+            bodo.types.DataFrameType(
                 data=(
-                    bodo.DecimalArrayType(38, 0),
+                    bodo.types.DecimalArrayType(38, 0),
                     types.Array(types.int32, 1, "C"),
                     types.Array(types.int32, 1, "C"),
                 ),
@@ -941,7 +941,7 @@ def test_snowflake_runtime_downcasting_ints_fail(mocker: "MockerFixture"):
     mocker.patch(
         "bodo.io.snowflake.get_schema",
         return_value=(
-            bodo.DataFrameType(
+            bodo.types.DataFrameType(
                 data=(
                     types.Array(types.int8, 1, "C"),
                     types.Array(types.int8, 1, "C"),
@@ -985,11 +985,11 @@ def test_snowflake_runtime_downcasting_timestamp_fail(mocker: "MockerFixture"):
     mocker.patch(
         "bodo.io.snowflake.get_schema",
         return_value=(
-            bodo.DataFrameType(
+            bodo.types.DataFrameType(
                 data=(
-                    bodo.datetime_date_array_type,
-                    types.Array(bodo.datetime64ns, 1, "C"),
-                    bodo.DatetimeArrayType("UTC"),
+                    bodo.types.datetime_date_array_type,
+                    types.Array(bodo.types.datetime64ns, 1, "C"),
+                    bodo.types.DatetimeArrayType("UTC"),
                 ),
                 columns=("date_col", "tz_naive_col", "tz_aware_col"),
             ),
@@ -1034,10 +1034,10 @@ def test_snowflake_runtime_downcasting_decimal(mocker: "MockerFixture"):
     mocker.patch(
         "bodo.io.snowflake.get_schema",
         return_value=(
-            bodo.DataFrameType(
+            bodo.types.DataFrameType(
                 data=(
-                    types.Array(bodo.float64, 1, "C"),
-                    types.Array(bodo.float64, 1, "C"),
+                    types.Array(bodo.types.float64, 1, "C"),
+                    types.Array(bodo.types.float64, 1, "C"),
                 ),
                 columns=("h", "i"),
             ),

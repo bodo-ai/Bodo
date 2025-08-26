@@ -348,7 +348,7 @@ def overload_get_REST_connection(rest_uri: str, warehouse: str, scope: str):
     """Overload for get_REST_connection that creates a RESTConnectionType."""
 
     def impl(rest_uri: str, warehouse: str, scope: str):  # pragma: no cover
-        with bodo.no_warning_objmode(token="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(token="unicode_type"):
             token = os.getenv("__BODOSQL_REST_TOKEN", "")
         assert token != "", (
             "get_REST_connection: Expected __BODOSQL_REST_TOKEN to be defined"

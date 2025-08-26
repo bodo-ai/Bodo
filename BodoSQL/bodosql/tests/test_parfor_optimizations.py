@@ -17,7 +17,7 @@ def test_parfor_fusion_scalar_optional_getitem(memory_leak_check):
     Tests that scalar_optional_getitem can be used to compute parfor
     fusion.
     """
-    out_arr_typ = bodo.IntegerArrayType(bodo.int64)
+    out_arr_typ = bodo.types.IntegerArrayType(bodo.types.int64)
 
     def impl(arr):
         n1 = len(arr)

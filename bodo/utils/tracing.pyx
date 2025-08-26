@@ -5,7 +5,7 @@ import warnings
 
 import numpy as np
 
-from bodo.utils.typing import BodoWarning
+from bodo import BodoWarning
 
 from mpi4py.libmpi cimport (
     MPI_COMM_WORLD,

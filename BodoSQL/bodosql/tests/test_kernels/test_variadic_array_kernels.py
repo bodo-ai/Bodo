@@ -149,13 +149,17 @@ def coalesce_expected_output(args):
                 pd.Series(
                     pd.array(
                         [
-                            bodo.TimestampTZ.fromLocal("2024-03-06 12:00:00", 0),
+                            bodo.types.TimestampTZ.fromLocal("2024-03-06 12:00:00", 0),
                             None,
-                            bodo.TimestampTZ.fromLocal("2024-03-06 13:00:00", 60),
+                            bodo.types.TimestampTZ.fromLocal("2024-03-06 13:00:00", 60),
                             None,
-                            bodo.TimestampTZ.fromLocal("2024-03-06 14:00:00", -300),
+                            bodo.types.TimestampTZ.fromLocal(
+                                "2024-03-06 14:00:00", -300
+                            ),
                             None,
-                            bodo.TimestampTZ.fromLocal("2024-03-06 15:00:00", -45),
+                            bodo.types.TimestampTZ.fromLocal(
+                                "2024-03-06 15:00:00", -45
+                            ),
                             None,
                         ]
                     )
@@ -163,12 +167,12 @@ def coalesce_expected_output(args):
                 pd.Series(
                     pd.array(
                         [
-                            bodo.TimestampTZ.fromLocal("2024-07-04", 30),
-                            bodo.TimestampTZ.fromLocal("2024-07-04", 0),
+                            bodo.types.TimestampTZ.fromLocal("2024-07-04", 30),
+                            bodo.types.TimestampTZ.fromLocal("2024-07-04", 0),
                             None,
                             None,
-                            bodo.TimestampTZ.fromLocal("2024-07-04", -30),
-                            bodo.TimestampTZ.fromLocal("2024-07-04", 90),
+                            bodo.types.TimestampTZ.fromLocal("2024-07-04", -30),
+                            bodo.types.TimestampTZ.fromLocal("2024-07-04", 90),
                             None,
                             None,
                         ]
@@ -598,14 +602,14 @@ def test_coalesce_str_array_optimized(memory_leak_check):
                 np.array(
                     [
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-03-07 10:13:42", -300),
-                        bodo.TimestampTZ.fromLocal("2024-03-07 10:14:00", -360),
-                        bodo.TimestampTZ.fromLocal("2024-03-07 10:15:00", -240),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-07 10:13:42", -300),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-07 10:14:00", -360),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-07 10:15:00", -240),
                         None,
                     ]
                 ),
                 "A",
-                bodo.TimestampTZ.fromLocal("2024-03-07 10:13:42", -300),
+                bodo.types.TimestampTZ.fromLocal("2024-03-07 10:13:42", -300),
             ),
             id="all_vector_timestamp_tz",
         ),
@@ -1211,40 +1215,40 @@ def test_coalesce_date_timestamp(args, answer, memory_leak_check):
             (
                 pd.Series(
                     [
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 0),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 0),
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-03-14", -60),
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 30),
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 60),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", -60),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 30),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 60),
                     ]
                 ),
                 pd.Series(
                     [
-                        bodo.TimestampTZ.fromLocal("2024-03-14", -60),
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 0),
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 300),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", -60),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 0),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 300),
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 480),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 480),
                     ]
                 ),
             ),
             (
                 pd.Series(
                     [
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 0),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 0),
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 300),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 300),
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 480),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 480),
                     ]
                 ),
                 pd.Series(
                     [
-                        bodo.TimestampTZ.fromLocal("2024-03-14", -60),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", -60),
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-03-14", -60),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", -60),
                         None,
-                        bodo.TimestampTZ.fromLocal("2024-03-14", 60),
+                        bodo.types.TimestampTZ.fromLocal("2024-03-14", 60),
                     ]
                 ),
             ),

@@ -172,7 +172,7 @@ def bodosql_listagg_seq(df, ascending, na_position, separator=""):
         "py_table_to_cpp_table": bodo.hiframes.pd_dataframe_ext.py_table_to_cpp_table,
         "py_table_typ": df.table_type
         if df.is_table_format
-        else bodo.TableType(df.data),
+        else bodo.types.TableType(df.data),
         "unicode_to_utf8": unicode_to_utf8,
         "np": np,
         "arr_info_list_to_table": arr_info_list_to_table,
@@ -231,7 +231,7 @@ def listagg_seq_cpp(
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
         # decode_utf8 version
-        decode_sig = bodo.string_type(types.voidptr, types.int64)
+        decode_sig = bodo.types.string_type(types.voidptr, types.int64)
         ret = context.compile_internal(
             builder,
             lambda data, length: bodo.libs.str_arr_ext.decode_utf8(data, length),

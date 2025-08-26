@@ -1292,7 +1292,7 @@ def test_index_argminmax(index, memory_leak_check):
             id="decimal",
         ),
         pytest.param(
-            pd.Index([bodo.Time(nanosecond=10**i) for i in range(12)]), id="time"
+            pd.Index([bodo.types.Time(nanosecond=10**i) for i in range(12)]), id="time"
         ),
         pytest.param(
             pd.Index([datetime.date.fromordinal(738886 + i**2) for i in range(12)]),
@@ -1344,7 +1344,7 @@ def test_index_argminmax(index, memory_leak_check):
         ),
         pytest.param(
             pd.CategoricalIndex(
-                [bodo.Time(nanosecond=10**i) for i in range(12)], ordered=True
+                [bodo.types.Time(nanosecond=10**i) for i in range(12)], ordered=True
             ),
             id="ord_cat_time",
         ),
@@ -3003,7 +3003,7 @@ def test_index_where_putmask(args):
     )
     check_func(impl1, (idx, con), dist_test=dist_test)
     if isinstance(idx, pd.RangeIndex) or isinstance(
-        bodo.typeof(idx), bodo.NumericIndexType
+        bodo.typeof(idx), bodo.types.NumericIndexType
     ):
         check_func(impl2, (idx, con, np.nan), dist_test=dist_test)
     check_func(impl2, (idx, con, oth), dist_test=dist_test)

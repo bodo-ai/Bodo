@@ -345,7 +345,7 @@ def test_nested_arr_pyarrow_typeof():
     typ = bodo.typeof(S)
 
     assert (
-        isinstance(typ.dtype, bodo.DecimalArrayType)
+        isinstance(typ.dtype, bodo.types.DecimalArrayType)
         and typ.dtype.precision == precision
         and typ.dtype.scale == scale
     )

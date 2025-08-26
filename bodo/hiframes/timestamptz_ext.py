@@ -24,6 +24,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo.libs.pd_datetime_arr_ext
+import bodo.types
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
     pd_timestamp_tz_naive_type,
@@ -307,7 +308,7 @@ def constant_timestamptz(context, builder, ty, pyval):
 
 
 def init_timestamptz_from_local(local_timestamp, offset_minutes):  # pragma: no cover
-    return bodo.TimestampTZ.fromLocal(local_timestamp, offset_minutes)
+    return bodo.types.TimestampTZ.fromLocal(local_timestamp, offset_minutes)
 
 
 @overload(init_timestamptz_from_local)

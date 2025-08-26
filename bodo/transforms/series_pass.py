@@ -399,7 +399,7 @@ class SeriesPass:
 
         # Start of Table Operations
 
-        if isinstance(target_typ, bodo.TableType):
+        if isinstance(target_typ, bodo.types.TableType):
             # Inline all table getitems
             impl = bodo.hiframes.table.overload_table_getitem(target_typ, idx_typ)
             return nodes + compile_func_single_block(
@@ -563,7 +563,7 @@ class SeriesPass:
         # optimize out getitem on build_nullable_tuple,
         # important for df.apply since the row is converted
         # to a nullable tuple.
-        if isinstance(target_typ, bodo.NullableTupleType) and isinstance(
+        if isinstance(target_typ, bodo.types.NullableTupleType) and isinstance(
             idx_typ, types.IntegerLiteral
         ):
             val_def = guard(get_definition, self.func_ir, rhs.value)
@@ -838,7 +838,7 @@ class SeriesPass:
 
         # Replace T.shape to optimize out T.shape[1] (can be generated in BodoSQL)
         if (
-            isinstance(rhs_type, bodo.TableType)
+            isinstance(rhs_type, bodo.types.TableType)
             and rhs.attr == "shape"
             and not rhs_type.has_runtime_cols
         ):
@@ -1160,8 +1160,8 @@ class SeriesPass:
 
         # Add for tz-aware
         if rhs.fn == operator.add and (
-            isinstance(typ1, bodo.DatetimeArrayType)
-            or isinstance(typ2, bodo.DatetimeArrayType)
+            isinstance(typ1, bodo.types.DatetimeArrayType)
+            or isinstance(typ2, bodo.types.DatetimeArrayType)
         ):
             impl = bodo.libs.pd_datetime_arr_ext.overload_add_operator_datetime_arr(
                 typ1, typ2
@@ -1197,7 +1197,7 @@ class SeriesPass:
             and (is_str_arr_type(typ1) or is_str_arr_type(typ2))
             and all(
                 types.unliteral(t)
-                in (string_array_type, bodo.dict_str_arr_type, string_type)
+                in (string_array_type, bodo.types.dict_str_arr_type, string_type)
                 for t in (typ1, typ2)
             )
         ):
@@ -1259,13 +1259,15 @@ class SeriesPass:
             rhs.fn in cmp_ops
             and (
                 isinstance(typ1, types.Array)
-                and typ1.dtype == bodo.datetime64ns
-                and typ2 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
+                and typ1.dtype == bodo.types.datetime64ns
+                and typ2
+                in (bodo.types.datetime_date_array_type, bodo.types.datetime_date_type)
             )
             or (
-                typ1 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
+                typ1
+                in (bodo.types.datetime_date_array_type, bodo.types.datetime_date_type)
                 and isinstance(typ2, types.Array)
-                and typ2.dtype == bodo.datetime64ns
+                and typ2.dtype == bodo.types.datetime64ns
             )
         ):
             impl = bodo.hiframes.datetime_date_ext.create_datetime_array_date_cmp_op_overload(
@@ -2110,7 +2112,9 @@ class SeriesPass:
             # TODO: Remove static_getitem from Numba
             if (is_expr(obj_def, "getitem") or is_expr(obj_def, "static_getitem")) and (
                 is_array_typ(self.typemap[obj_def.value.name], False)
-                or isinstance(self.typemap[obj_def.value.name], bodo.NullableTupleType)
+                or isinstance(
+                    self.typemap[obj_def.value.name], bodo.types.NullableTupleType
+                )
             ):
                 if is_expr(obj_def, "getitem"):
                     index_var = obj_def.index
@@ -2133,7 +2137,7 @@ class SeriesPass:
                 impl = bodo.libs.array_kernels.overload_isna(*arg_typs)
                 return replace_func(self, impl, rhs.args)
             # Optimize out the nullable tuple if using a static index
-            if isinstance(arr_typ, bodo.NullableTupleType) and isinstance(
+            if isinstance(arr_typ, bodo.types.NullableTupleType) and isinstance(
                 self.typemap[rhs.args[1].name], types.IntegerLiteral
             ):
                 val_def = guard(get_definition, self.func_ir, arr)
@@ -2508,7 +2512,7 @@ class SeriesPass:
                     self,
                     extra_globals={"_precision": precision, "_scale": scale},
                 )
-            elif isinstance(typ, bodo.DatetimeArrayType):
+            elif isinstance(typ, bodo.types.DatetimeArrayType):
                 tz = typ.tz
                 return nodes + compile_func_single_block(
                     eval(
@@ -2519,7 +2523,7 @@ class SeriesPass:
                     self,
                     extra_globals={"_tz": tz},
                 )
-            elif isinstance(typ, bodo.TimeArrayType):
+            elif isinstance(typ, bodo.types.TimeArrayType):
                 precision = typ.precision
                 return nodes + compile_func_single_block(
                     eval(
@@ -2530,7 +2534,7 @@ class SeriesPass:
                     self,
                     extra_globals={"_precision": precision},
                 )
-            elif typ == bodo.timestamptz_array_type:
+            elif typ == bodo.types.timestamptz_array_type:
                 return nodes + compile_func_single_block(
                     eval(
                         "lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(n)"
@@ -2989,7 +2993,7 @@ class SeriesPass:
 
         # Replace str.format because we need to expand kwargs
         if isinstance(func_mod, ir.Var) and (
-            self.typemap[func_mod.name] == bodo.string_type
+            self.typemap[func_mod.name] == bodo.types.string_type
             or is_overload_constant_str(self.typemap[func_mod.name])
         ):
             return self._run_call_string(
@@ -2997,7 +3001,7 @@ class SeriesPass:
             )
 
         if isinstance(func_mod, ir.Var) and isinstance(
-            self.typemap[func_mod.name], bodo.LoggingLoggerType
+            self.typemap[func_mod.name], bodo.types.LoggingLoggerType
         ):
             return self._run_call_logger(
                 assign, assign.target, rhs, func_mod, func_name
@@ -3289,7 +3293,9 @@ class SeriesPass:
             setattr(types, type_name, output_type)
 
         func_text = f"def helper_{func_name}({full_header}):\n"
-        func_text += f"    with bodo.no_warning_objmode(res='{type_name}'):\n"
+        func_text += (
+            f"    with bodo.ir.object_mode.no_warning_objmode(res='{type_name}'):\n"
+        )
         if method_var:
             func_text += f"        res = {method_var}.{func_name}({arg_names})\n"
         else:
@@ -3327,7 +3333,7 @@ class SeriesPass:
 
             format_func_text = f"def format_func(string, {header_args}):\n"
             format_func_text += (
-                "    with bodo.no_warning_objmode(res='unicode_type'):\n"
+                "    with bodo.ir.object_mode.no_warning_objmode(res='unicode_type'):\n"
             )
             format_func_text += f"        res = string.format({arg_names})\n"
             format_func_text += "    return res\n"
@@ -3383,7 +3389,7 @@ class SeriesPass:
             func_text += f"    return format_func(logger, {header_args})\n"
 
             format_func_text = f"def format_func(logger, {header_args}):\n"
-            format_func_text += "    with bodo.no_warning_objmode():\n"
+            format_func_text += "    with bodo.ir.object_mode.no_warning_objmode():\n"
             format_func_text += f"        logger.{func_name}({arg_names})\n"
 
             loc_vars = {}
@@ -4318,7 +4324,7 @@ def _fix_typ_undefs(new_typ, old_typ):
                     StringArraySplitViewType,
                 ),
             )
-            or new_typ == bodo.dict_str_arr_type
+            or new_typ == bodo.types.dict_str_arr_type
         )
         if new_typ.dtype == types.undefined:
             return new_typ.copy(old_typ.dtype)

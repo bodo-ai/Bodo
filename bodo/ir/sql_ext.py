@@ -616,7 +616,7 @@ def convert_pyobj_to_snowflake_str(pyobj, time_zone):
     42 -> '42'
     "foo bar" -> "'foo bar'"
     datetime.date(2024, 3, 14) -> "DATE '2024-03-14'"
-    bodo.Time(12, 30, 59, 0, 0, 99) -> "TIME_FROM_PARTS(0, 0, 0, 45059000000091)"
+    bodo.types.Time(12, 30, 59, 0, 0, 99) -> "TIME_FROM_PARTS(0, 0, 0, 45059000000091)"
     pd.Timestamp("2024-07-04 12:30:01.025601") -> "TIMESTAMP_FROM_PARTS(2024, 7, 4, 12, 30, 1, 25601000)"
     """
     if isinstance(pyobj, str):
@@ -632,7 +632,7 @@ def convert_pyobj_to_snowflake_str(pyobj, time_zone):
         return f"TIMESTAMP{suffix}_FROM_PARTS({pyobj.year}, {pyobj.month}, {pyobj.day}, {pyobj.hour}, {pyobj.minute}, {pyobj.second}, {pyobj.value % 1_000_000_000})"
     elif isinstance(pyobj, datetime.date):
         return f"DATE '{pyobj.year:04}-{pyobj.month:02}-{pyobj.day:02}'"
-    elif isinstance(pyobj, bodo.Time):
+    elif isinstance(pyobj, bodo.types.Time):
         return f"TIME_FROM_PARTS(0, 0, 0, {pyobj.value})"
     else:
         return str(pyobj)
@@ -674,7 +674,9 @@ def overload_gen_runtime_join_filter_cond(
                         state_var, np.int64(i)
                     )
                     # Use object mode to convert to a string representation of the containment check
-                    with bodo.no_warning_objmode(unique_as_strings="list_str_type"):
+                    with bodo.ir.object_mode.no_warning_objmode(
+                        unique_as_strings="list_str_type"
+                    ):
                         unique_as_strings = []
                         for elem in unique_values:
                             unique_as_strings.append(
@@ -697,7 +699,7 @@ def overload_gen_runtime_join_filter_cond(
                         state_var, np.int64(i), False, precisions[i]
                     )
                     # Use object mode to convert to a string representation of the bounds check
-                    with bodo.no_warning_objmode(
+                    with bodo.ir.object_mode.no_warning_objmode(
                         min_result="unicode_type", max_result="unicode_type"
                     ):
                         min_result = max_result = ""
@@ -745,7 +747,7 @@ def overload_gen_runtime_join_filter_interval_cond(
             max_val = get_runtime_join_filter_min_max(
                 state_var, build_col, False, precisions[i]
             )
-            with bodo.no_warning_objmode(result="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(result="unicode_type"):
                 result = ""
                 if op in (">", ">=") and min_val is not None:
                     result = f"(${probe_col + 1} {op} {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
@@ -814,10 +816,10 @@ def get_rtjf_cols_extra_info(column_types, desired_indices):
     precisions = []
     time_zones = []
     for col_idx in desired_indices:
-        if isinstance(column_types[col_idx], bodo.TimeArrayType):
+        if isinstance(column_types[col_idx], bodo.types.TimeArrayType):
             precisions.append(column_types[col_idx].precision)
             time_zones.append(None)
-        elif isinstance(column_types[col_idx], bodo.DatetimeArrayType):
+        elif isinstance(column_types[col_idx], bodo.types.DatetimeArrayType):
             precisions.append(-1)
             time_zones.append(column_types[col_idx].tz)
         else:
@@ -1229,7 +1231,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
     ):
         # Numeric and boolean values can just return the string representation
         return lambda filter_value: str(filter_value)  # pragma: no cover
-    elif isinstance(filter_type, bodo.PandasTimestampType):
+    elif isinstance(filter_type, bodo.types.PandasTimestampType):
         if filter_type.tz is None:
             tz_str = "TIMESTAMP_NTZ"
         else:
@@ -1251,14 +1253,14 @@ def _get_snowflake_sql_literal_scalar(filter_value):
             return f"timestamp '{filter_value.strftime('%Y-%m-%d %H:%M:%S.%f')}{nanosecond_prepend}{nanosecond}'::{tz_str}"  # pragma: no cover
 
         return impl
-    elif filter_type == bodo.datetime_date_type:
+    elif filter_type == bodo.types.datetime_date_type:
         # datetime.date needs to be converted to a date literal
         # Just return the string wrapped in quotes.
         # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#date
         return (
             lambda filter_value: f"date '{filter_value.strftime('%Y-%m-%d')}'"
         )  # pragma: no cover
-    elif filter_type == bodo.datetime64ns:
+    elif filter_type == bodo.types.datetime64ns:
         # datetime64 needs to be a Timestamp literal
         return lambda filter_value: bodo.ir.sql_ext._get_snowflake_sql_literal_scalar(
             pd.Timestamp(filter_value)
@@ -1278,12 +1280,12 @@ def _get_snowflake_sql_literal(filter_value):
     returns a string representation of the filter value
     that could be used in a Snowflake SQL query.
     """
-    scalar_isinstance = (types.Integer, types.Float, bodo.PandasTimestampType)
+    scalar_isinstance = (types.Integer, types.Float, bodo.types.PandasTimestampType)
     scalar_equals = (
-        bodo.datetime_date_type,
+        bodo.types.datetime_date_type,
         types.unicode_type,
         types.bool_,
-        bodo.datetime64ns,
+        bodo.types.datetime64ns,
         types.none,
     )
     filter_type = types.unliteral(filter_value)
@@ -1293,17 +1295,17 @@ def _get_snowflake_sql_literal(filter_value):
             (
                 types.List,
                 types.Array,
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
-                bodo.DatetimeArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
+                bodo.types.DatetimeArrayType,
             ),
         )
         or filter_type
         in (
-            bodo.string_array_type,
-            bodo.dict_str_arr_type,
-            bodo.boolean_array_type,
-            bodo.datetime_date_array_type,
+            bodo.types.string_array_type,
+            bodo.types.dict_str_arr_type,
+            bodo.types.boolean_array_type,
+            bodo.types.datetime_date_array_type,
         )
     ) and (
         isinstance(filter_type.dtype, scalar_isinstance)
@@ -1382,7 +1384,7 @@ compiled_funcs = []
 
 @numba.njit
 def sqlalchemy_check():  # pragma: no cover
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         sqlalchemy_check_()
 
 
@@ -1401,7 +1403,7 @@ def sqlalchemy_check_():  # pragma: no cover
 @numba.njit
 def pymysql_check():
     """MySQL Check that user has pymysql installed."""
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         pymysql_check_()
 
 
@@ -1421,7 +1423,7 @@ def pymysql_check_():  # pragma: no cover
 @numba.njit
 def cx_oracle_check():
     """Oracle Check that user has cx_oracle installed."""
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         cx_oracle_check_()
 
 
@@ -1441,7 +1443,7 @@ def cx_oracle_check_():  # pragma: no cover
 @numba.njit
 def psycopg2_check():  # pragma: no cover
     """PostgreSQL Check that user has psycopg2 installed."""
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         psycopg2_check_()
 
 
@@ -1817,7 +1819,9 @@ def _gen_sql_reader_py(
             if limit is not None:
                 func_text += f"  nb_row = {limit}\n"
             else:
-                func_text += '  with bodo.no_warning_objmode(nb_row="int64"):\n'
+                func_text += (
+                    '  with bodo.ir.object_mode.no_warning_objmode(nb_row="int64"):\n'
+                )
                 func_text += f"     if rank == {DEFAULT_ROOT}:\n"
                 func_text += "         sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
                 func_text += "         frame = pd.read_sql(sql_cons, conn)\n"
@@ -1825,7 +1829,7 @@ def _gen_sql_reader_py(
                 func_text += "     else:\n"
                 func_text += "         nb_row = 0\n"
                 func_text += "  nb_row = bcast_scalar(nb_row)\n"
-            func_text += f"  with bodo.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
+            func_text += f"  with bodo.ir.object_mode.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
             func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
             # https://docs.oracle.com/javadb/10.8.3.0/ref/rrefsqljoffsetfetch.html
             if db_type == "oracle":
@@ -1838,7 +1842,7 @@ def _gen_sql_reader_py(
                 "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"
             )
         else:
-            func_text += f"  with bodo.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
+            func_text += f"  with bodo.ir.object_mode.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
             func_text += "    df_ret = pd.read_sql(sql_request, conn)\n"
             func_text += (
                 "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"
@@ -1898,9 +1902,9 @@ def _gen_sql_reader_py(
                 "pymysql_check": pymysql_check,
                 "cx_oracle_check": cx_oracle_check,
                 "psycopg2_check": psycopg2_check,
-                "df_typeref": bodo.DataFrameType(
+                "df_typeref": bodo.types.DataFrameType(
                     tuple(used_col_types),
-                    bodo.RangeIndexType(None),
+                    bodo.types.RangeIndexType(None),
                     tuple(used_col_names),
                 ),
                 "Table": Table,

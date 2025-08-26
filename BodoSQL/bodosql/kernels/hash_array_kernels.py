@@ -443,7 +443,7 @@ def overload_consistent_hash(val):  # pragma: no cover
         def impl(val):  # pragma: no cover
             return int_hash(val.value)
 
-    elif isinstance(val, bodo.Decimal128Type):
+    elif isinstance(val, bodo.types.Decimal128Type):
 
         def impl(val):  # pragma: no cover
             return consistent_hash(str(val))
@@ -523,7 +523,7 @@ def overload_sql_hash_util(A, scalars):
     scalar_text = ""
     hash_vals = []
     for i, typ in enumerate(arg_types):
-        if typ == bodo.none:
+        if typ == bodo.types.none:
             val = "-1"
         else:
             val = f"h{i}"

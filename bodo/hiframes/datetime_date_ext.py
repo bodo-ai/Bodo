@@ -423,7 +423,7 @@ def today_impl():  # pragma: no cover
     Untyped pass replaces datetime.date.today() with this call since class methods are
     not supported in Numba's typing
     """
-    with bodo.objmode(d="datetime_date_type"):
+    with numba.objmode(d="datetime_date_type"):
         d = datetime.date.today()
     return d
 
@@ -968,7 +968,7 @@ def dt_date_arr_setitem(A, idx, val):
             raise BodoError(typ_err_msg)
 
     if not (
-        (is_iterable_type(val) and val.dtype == bodo.datetime_date_type)
+        (is_iterable_type(val) and val.dtype == bodo.types.datetime_date_type)
         or types.unliteral(val) == datetime_date_type
     ):
         raise BodoError(typ_err_msg)
@@ -1051,7 +1051,7 @@ def create_cmp_op_overload(op):
             return impl
 
         # datetime.date and datetime64
-        if lhs == datetime_date_type and rhs == bodo.datetime64ns:
+        if lhs == datetime_date_type and rhs == bodo.types.datetime64ns:
             # Convert both to integers (ns) for comparison.
             return lambda lhs, rhs: op(
                 cast_datetime_date_to_int_ns(lhs),
@@ -1059,7 +1059,7 @@ def create_cmp_op_overload(op):
             )  # pragma: no cover
 
         # datetime64 and datetime.date
-        if rhs == datetime_date_type and lhs == bodo.datetime64ns:
+        if rhs == datetime_date_type and lhs == bodo.types.datetime64ns:
             # Convert both to integers (ns) for comparison.
             return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.dt64_to_integer(lhs),
@@ -1077,7 +1077,7 @@ def create_datetime_date_cmp_op_overload(op):
         # equality between datetime and date doesn't look at the values.
         # We raise a warning because this may be a bug.
         datetime_warning = f"{lhs} {numba.core.utils.OPERATORS_TO_BUILTINS[op]} {rhs} is always {op == operator.ne} in Python. If this is unexpected there may be a bug in your code."
-        warnings.warn(datetime_warning, bodo.utils.typing.BodoWarning)
+        warnings.warn(datetime_warning, bodo.BodoWarning)
         if op == operator.eq:
             return lambda lhs, rhs: False  # pragma: no cover
         elif op == operator.ne:
@@ -1091,7 +1091,7 @@ def create_datetime_array_date_cmp_op_overload(op):
     and date types."""
 
     def overload_arr_cmp(lhs, rhs):
-        if isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns:
+        if isinstance(lhs, types.Array) and lhs.dtype == bodo.types.datetime64ns:
             # datetime64 + date scalar
             if rhs == datetime_date_type:
 
@@ -1136,7 +1136,7 @@ def create_datetime_array_date_cmp_op_overload(op):
 
                 return impl
 
-        elif isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns:
+        elif isinstance(rhs, types.Array) and rhs.dtype == bodo.types.datetime64ns:
             # date scalar + datetime64
             if lhs == datetime_date_type:
 
@@ -1295,7 +1295,7 @@ def now_date_wrapper(tz_value_or_none=None):
     """
 
     def impl(tz_value_or_none=None):  # pragma: no cover
-        with bodo.objmode(d="datetime_date_type"):
+        with numba.objmode(d="datetime_date_type"):
             d = now_date_python(tz_value_or_none)
         return d
 

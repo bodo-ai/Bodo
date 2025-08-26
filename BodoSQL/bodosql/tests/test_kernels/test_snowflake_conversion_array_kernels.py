@@ -495,11 +495,11 @@ _timestamps_nans[2] = _timestamps_nans[7] = np.nan
         pytest.param(
             np.array(
                 [
-                    bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
-                    bodo.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
-                    bodo.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
-                    bodo.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
-                    bodo.TimestampTZ.fromUTC("2025-05-06 07:08:09", 500),
+                    bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 100),
+                    bodo.types.TimestampTZ.fromUTC("2022-02-03 04:05:06", 200),
+                    bodo.types.TimestampTZ.fromUTC("2023-03-04 05:06:07", 300),
+                    bodo.types.TimestampTZ.fromUTC("2024-04-05 06:07:08", 400),
+                    bodo.types.TimestampTZ.fromUTC("2025-05-06 07:08:09", 500),
                 ]
             ),
             False,

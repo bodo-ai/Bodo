@@ -11,7 +11,6 @@ from numba.core import cgutils, types
 from numba.extending import intrinsic, overload
 
 import bodo
-from bodo.decorators import wrap_python
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_index_ext import SingleIndexType, array_type_to_index
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -243,7 +242,7 @@ def gen_pandas_parquet_metadata_template(
             continue
         # Currently only timezone types contain metadata
         metadata = None
-        if isinstance(col_type, bodo.DatetimeArrayType):
+        if isinstance(col_type, bodo.types.DatetimeArrayType):
             pandas_type = "datetimetz"
             numpy_type = "datetime64[ns]"
             # Reuse pyarrow to construct the metadata.
@@ -280,7 +279,7 @@ def gen_pandas_parquet_metadata_template(
                     f"to_parquet(): unknown dtype in nullable Integer column {col_name} {col_type}"
                 )
             pandas_type = col_type.dtype.name
-        elif isinstance(col_type, bodo.FloatingArrayType):
+        elif isinstance(col_type, bodo.types.FloatingArrayType):
             dtype_name = col_type.dtype.name
             # Pandas dtype is float32/float64
             # numpy dtype is Float32/Float64 (capitalize to specify nullable array)
@@ -295,9 +294,9 @@ def gen_pandas_parquet_metadata_template(
         elif isinstance(
             col_type,
             (
-                bodo.ArrayItemArrayType,
-                bodo.StructArrayType,
-                bodo.MapArrayType,
+                bodo.types.ArrayItemArrayType,
+                bodo.types.StructArrayType,
+                bodo.types.MapArrayType,
             ),
         ):
             # TODO: provide meaningful pandas_type when possible.
@@ -484,7 +483,7 @@ def overload_gen_pandas_parquet_metadata(
             is_runtime_columns=False,
         )
 
-    @wrap_python(types.Tuple((types.unicode_type, bodo.string_array_type)))
+    @bodo.wrap_python(types.Tuple((types.unicode_type, bodo.types.string_array_type)))
     def _gen_pandas_parquet_metadata_helper(
         range_info, index_names, col_names_arr, write_non_range_index_to_metadata
     ):

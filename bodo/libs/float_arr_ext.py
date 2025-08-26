@@ -359,7 +359,7 @@ def float_arr_setitem(A, idx, val):  # pragma: no cover
     typ_err_msg = f"setitem for FloatingArray with indexing type {idx} received an incorrect 'value' type {val}."
 
     is_scalar = isinstance(
-        val, (types.Integer, types.Boolean, types.Float, bodo.Decimal128Type)
+        val, (types.Integer, types.Boolean, types.Float, bodo.types.Decimal128Type)
     )
 
     # scalar case

@@ -914,7 +914,7 @@ def test_df_apply_func_case2(memory_leak_check):
 g_var = [3, 1, 5]
 
 
-@bodo.wrap_python(bodo.int64)
+@bodo.wrap_python(bodo.types.int64)
 def g3(r):
     return r.A + g_var[0]
 
@@ -1106,7 +1106,7 @@ def test_df_apply_udf_inline_objmode(memory_leak_check):
 
     @bodo.jit
     def g(a):
-        with bodo.objmode(out="int64"):
+        with numba.objmode(out="int64"):
             out = a + 1
         return out
 
