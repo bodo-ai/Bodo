@@ -1,6 +1,4 @@
-import atexit
 import datetime
-import sys
 import time
 import warnings
 from collections import defaultdict
@@ -2516,38 +2514,6 @@ def dist_permutation_array_index(
         n_samples,
     )
     check_and_propagate_cpp_exception()
-
-
-########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
-
-
-from bodo.io import hdfs_reader
-
-finalize = hdist.finalize_py_wrapper
-disconnect_hdfs_py_wrapper = hdfs_reader.disconnect_hdfs_py_wrapper
-
-
-def call_finalize():  # pragma: no cover
-    from bodo.spawn.spawner import destroy_spawner
-
-    # Destroy the spawner before finalize since it uses MPI
-    destroy_spawner()
-    # Cleanup default buffer pool before finalize since it uses MPI inside
-    bodo.memory_cpp.default_buffer_pool_cleanup()
-    finalize()
-    disconnect_hdfs_py_wrapper()
-
-
-def flush_stdout():
-    # using a function since pytest throws an error sometimes
-    # if flush function is passed directly to atexit
-    if not sys.stdout.closed:
-        sys.stdout.flush()
-
-
-atexit.register(call_finalize)
-# Flush output before finalize
-atexit.register(flush_stdout)
 
 
 def bcast(data, comm_ranks=None, root=DEFAULT_ROOT, comm=None):  # pragma: no cover

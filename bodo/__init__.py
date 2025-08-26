@@ -380,3 +380,34 @@ COMPLEX_CASE_THRESHOLD = 100
 # Set our Buffer Pool as the default memory pool for PyArrow.
 # Note that this will initialize the Buffer Pool.
 import bodo.memory
+
+
+
+########### finalize MPI, disconnect hdfs when exiting ############
+
+
+
+def call_finalize():  # pragma: no cover
+    from bodo.spawn.spawner import destroy_spawner
+    from bodo.io import hdfs_reader
+    from bodo.ext import hdist
+
+    # Destroy the spawner before finalize since it uses MPI
+    destroy_spawner()
+    # Cleanup default buffer pool before finalize since it uses MPI inside
+    bodo.memory_cpp.default_buffer_pool_cleanup()
+    hdist.finalize_py_wrapper()
+    hdfs_reader.disconnect_hdfs_py_wrapper()
+
+
+def flush_stdout():
+    # using a function since pytest throws an error sometimes
+    # if flush function is passed directly to atexit
+    if not sys.stdout.closed:
+        sys.stdout.flush()
+
+
+import atexit
+atexit.register(call_finalize)
+# Flush output before finalize
+atexit.register(flush_stdout)
