@@ -466,6 +466,19 @@ def get_bodo_pq_dataset_from_fpath(
         pa.set_io_thread_count(pa_default_io_thread_count)
 
 
+# Create an mpi4py reduction function.
+def pa_schema_unify_reduction(schema_a_and_row_count, schema_b_and_row_count, unused):
+    # Attempt to unify the schemas, but if any schema is associated with a row
+    # count of 0, disregard it.
+    schema_a, count_a = schema_a_and_row_count
+    schema_b, count_b = schema_b_and_row_count
+    if count_a == 0 and count_b > 0:
+        return (schema_b, count_b)
+    if count_a > 0 and count_b == 0:
+        return (schema_a, count_a)
+    return (pa.unify_schemas([schema_a, schema_b]), count_a + count_b)
+
+
 def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     """
     Unify the dataset schema across all ranks.
@@ -484,10 +497,11 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     error = None
 
     comm = MPI.COMM_WORLD
+    pa_schema_unify_mpi_op = MPI.Op.Create(pa_schema_unify_reduction, commute=True)
     try:
         dataset.schema, _ = comm.allreduce(
             (dataset.schema, total_rows_chunk),
-            bodo.io.helpers.pa_schema_unify_mpi_op,
+            pa_schema_unify_mpi_op,
         )
     except Exception as e:
         error = e
@@ -496,6 +510,8 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     if comm.allreduce(error is not None, op=MPI.LOR):
         for error in comm.allgather(error):
             if error:
+                import bodo.decorators
+
                 msg = f"Schema in some files were different.\n{str(error)}"
                 raise bodo.utils.typing.BodoError(msg)
     ev.finalize()

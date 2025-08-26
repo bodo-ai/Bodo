@@ -112,22 +112,6 @@ def lower_pyarrow_table_schema(context, builder, ty, pyval):
     return pyapi.unserialize(pyapi.serialize_object(pyval))
 
 
-# Create an mpi4py reduction function.
-def pa_schema_unify_reduction(schema_a_and_row_count, schema_b_and_row_count, unused):
-    # Attempt to unify the schemas, but if any schema is associated with a row
-    # count of 0, disregard it.
-    schema_a, count_a = schema_a_and_row_count
-    schema_b, count_b = schema_b_and_row_count
-    if count_a == 0 and count_b > 0:
-        return (schema_b, count_b)
-    if count_a > 0 and count_b == 0:
-        return (schema_a, count_a)
-    return (pa.unify_schemas([schema_a, schema_b]), count_a + count_b)
-
-
-pa_schema_unify_mpi_op = MPI.Op.Create(pa_schema_unify_reduction, commute=True)
-
-
 this_module = sys.modules[__name__]
 _, pyiceberg_catalog_type = install_opaque_class(
     types_name="pyiceberg_catalogType",
