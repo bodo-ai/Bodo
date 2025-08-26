@@ -152,6 +152,7 @@ def get_dataframe_overloads():
     to some degree by bodo.jit.
     """
     # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
     from bodo.numba_compat import get_method_overloads
 
@@ -164,6 +165,7 @@ def get_series_overloads():
     to some degree by bodo.jit.
     """
     # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.numba_compat import get_method_overloads
 
@@ -176,6 +178,7 @@ def get_series_string_overloads():
     to some degree by bodo.jit.
     """
     # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.series_str_impl import SeriesStrMethodType
     from bodo.numba_compat import get_method_overloads
 
@@ -188,6 +191,7 @@ def get_series_datetime_overloads():
     to some degree by bodo.jit.
     """
     # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
     from bodo.numba_compat import get_method_overloads
 
@@ -200,6 +204,7 @@ def get_groupby_overloads():
     to some degree by bodo.jit.
     """
     # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
     from bodo.numba_compat import get_method_overloads
 
