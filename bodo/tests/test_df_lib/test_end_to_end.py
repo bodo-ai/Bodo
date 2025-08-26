@@ -3395,6 +3395,7 @@ def test_set_column_names():
     with assert_executed_plan_count(0):
         bdf.columns = new_cols
     pdf.columns = new_cols
+    _test_equal(bdf.head(0), pdf.head(0), check_pandas_types=False)
     _test_equal(bdf, pdf, check_pandas_types=False)
 
     # Rename columns while building plan
@@ -3409,6 +3410,7 @@ def test_set_column_names():
     with assert_executed_plan_count(0):
         bodo_result = impl(bdf)
     pd_result = impl(pdf)
+    _test_equal(bodo_result.head(0), pd_result.head(0), check_pandas_types=False)
     _test_equal(bodo_result, pd_result, check_pandas_types=False)
 
     # Renaming the result of JIT
@@ -3423,4 +3425,5 @@ def test_set_column_names():
         bdf.columns = new_cols
     pdf.columns = new_cols
 
+    _test_equal(bdf.head(0), pdf.head(0), check_pandas_types=False)
     _test_equal(bdf, pdf, check_pandas_types=False)
