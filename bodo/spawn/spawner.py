@@ -1,6 +1,8 @@
-from __future__ import annotations
+"""Spawner for spawner-worker implementation. This file should import JIT lazily to
+avoid slowing down non-JIT code paths.
+"""
 
-"""Spawner-worker compilation implementation"""
+from __future__ import annotations
 
 import contextlib
 import inspect
@@ -393,9 +395,6 @@ class Spawner:
         return res
 
     def lazy_manager_collect_func(self, res_id: str):
-        # Import compiler lazily
-        import bodo.decorators  # isort:skip
-
         root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
         # collect is sometimes triggered during receive (e.g. for unsupported types
         # like IntervalIndex) so we may be in the middle of function execution
@@ -405,9 +404,7 @@ class Spawner:
             self._is_running = True
         self.worker_intercomm.bcast(CommandType.GATHER.value, root=root)
         self.worker_intercomm.bcast(res_id, root=root)
-        res = bodo.libs.distributed_api.gatherv(
-            None, root=root, comm=self.worker_intercomm
-        )
+        res = bodo.gatherv(None, root=root, comm=self.worker_intercomm)
         if not initial_running:
             self._is_running = False
             self._run_del_queue()
@@ -516,6 +513,10 @@ class Spawner:
         if data_type is None:
             return None
 
+        # Import compiler lazily
+        import bodo
+        import bodo.decorators  # isort:skip
+
         if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
             dist_flags["distributed_block"].add(arg_name)
             return dist_comm_meta
@@ -553,18 +554,14 @@ class Spawner:
         if isinstance(arg_meta, ArgMetadata):
             if arg_meta == ArgMetadata.BROADCAST:
                 # Import compiler lazily
+                import bodo
                 import bodo.decorators  # isort:skip
 
                 bodo.libs.distributed_api.bcast(
                     arg, root=self.bcast_root, comm=spawner.worker_intercomm
                 )
             elif arg_meta == ArgMetadata.SCATTER:
-                # Import compiler lazily
-                import bodo.decorators  # isort:skip
-
-                bodo.libs.distributed_api.scatterv(
-                    arg, root=self.bcast_root, comm=spawner.worker_intercomm
-                )
+                bodo.scatterv(arg, root=self.bcast_root, comm=spawner.worker_intercomm)
             elif arg_meta == ArgMetadata.LAZY:
                 spawner.worker_intercomm.bcast(
                     arg._get_result_id(), root=self.bcast_root
@@ -575,6 +572,7 @@ class Spawner:
             for tname, tmeta in arg_meta.tables.items():
                 if tmeta is ArgMetadata.BROADCAST:
                     # Import compiler lazily
+                    import bodo
                     import bodo.decorators  # isort:skip
 
                     bodo.libs.distributed_api.bcast(
@@ -583,10 +581,7 @@ class Spawner:
                         comm=spawner.worker_intercomm,
                     )
                 elif tmeta is ArgMetadata.SCATTER:
-                    # Import compiler lazily
-                    import bodo.decorators  # isort:skip
-
-                    bodo.libs.distributed_api.scatterv(
+                    bodo.scatterv(
                         arg.tables[tname],
                         root=self.bcast_root,
                         comm=spawner.worker_intercomm,
@@ -812,8 +807,6 @@ class Spawner:
         | LazySingleArrayManager
     ):
         """Scatter data to all workers and return the manager for the data."""
-        # Import compiler lazily
-        import bodo.decorators  # isort:skip
         from bodo.pandas.utils import (
             get_lazy_manager_class,
             get_lazy_single_manager_class,
@@ -821,9 +814,7 @@ class Spawner:
 
         self._is_running = True
         self.worker_intercomm.bcast(CommandType.SCATTER.value, self.bcast_root)
-        bodo.libs.distributed_api.scatterv(
-            data, root=self.bcast_root, comm=self.worker_intercomm
-        )
+        bodo.scatterv(data, root=self.bcast_root, comm=self.worker_intercomm)
         res_id = self.worker_intercomm.recv(None, source=0)
         self._is_running = False
         self._run_del_queue()

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 """Worker process to handle compiling and running python functions with
 Bodo - note that this module should only be run with MPI.Spawn and not invoked
-directly"""
+directly
+This file should import JIT lazily to
+avoid slowing down non-JIT code paths.
+"""
 
 import logging
 import os
