@@ -535,6 +535,24 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
         raise bodo.utils.typing.BodoError(msg)
 
 
+def get_start(total_size, pes, rank):  # pragma: no cover
+    """Same as bodo.libs.distributed_api.get_start() but avoiding JIT compiler import
+    here.
+    """
+    res = total_size % pes
+    blk_size = (total_size - res) // pes
+    return rank * blk_size + min(rank, res)
+
+
+def get_end(total_size, pes, rank):  # pragma: no cover
+    """Same as bodo.libs.distributed_api.get_end() but avoiding JIT compiler import
+    here.
+    """
+    res = total_size % pes
+    blk_size = (total_size - res) // pes
+    return (rank + 1) * blk_size + min(rank + 1, res)
+
+
 def populate_row_counts_in_pq_dataset_pieces(
     dataset: ParquetDataset,
     fpath: str | list[str],
@@ -571,7 +589,6 @@ def populate_row_counts_in_pq_dataset_pieces(
         filters (pc.Expression, optional): Arrow expression filters
             to apply. Defaults to None.
     """
-    from bodo.libs.distributed_api import get_end, get_start
 
     ev_row_counts = tracing.Event("get_row_counts")
     # getting row counts and validating schema requires reading
