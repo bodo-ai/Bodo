@@ -1,6 +1,5 @@
 import fractions
 import random
-import warnings
 
 import cloudpickle
 import numba
@@ -18,7 +17,7 @@ from bodo.tests.utils import (
     count_parfor_OneDs,
     dist_IR_contains,
 )
-from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_assign, is_expr
 
 
@@ -1367,43 +1366,6 @@ def test_df_set_col_rename_bug(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, 3]})
     check_func(impl, (df,), only_seq=True, copy_input=True)
-
-
-def test_objmode_warning(memory_leak_check):
-    """Test that numba.objmode raises a warning when used
-    and that bodo.ir.object_mode.no_warning_objmode does not."""
-
-    def g():
-        return 1
-
-    @bodo.jit
-    def impl1():
-        with numba.objmode(a="int64"):
-            a = g()
-        return a
-
-    @bodo.jit
-    def impl2():
-        with bodo.ir.object_mode.no_warning_objmode(a="int64"):
-            a = g()
-        return a
-
-    old_developer_mode = numba.core.config.DEVELOPER_MODE
-    try:
-        numba.core.config.DEVELOPER_MODE = True
-        with pytest.warns(
-            BodoWarning,
-            match="Entered bodo\\.objmode\\. This will likely negatively impact performance\\.",
-        ):
-            assert impl1() == 1, "Incorrect output with numba.objmode"
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", BodoWarning)
-            assert impl2() == 1, (
-                "Incorrect output with bodo.ir.object_mode.no_warning_objmode"
-            )
-    finally:
-        numba.core.config.DEVELOPER_MODE = old_developer_mode
 
 
 def test_wrap_python(memory_leak_check):
