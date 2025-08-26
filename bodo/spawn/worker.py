@@ -72,6 +72,7 @@ def _recv_arg(
     if isinstance(arg, ArgMetadata):
         if arg == ArgMetadata.BROADCAST:
             # Import compiler lazily
+            import bodo
             import bodo.decorators  # isort:skip
 
             return (
@@ -79,13 +80,8 @@ def _recv_arg(
                 arg,
             )
         elif arg == ArgMetadata.SCATTER:
-            # Import compiler lazily
-            import bodo.decorators  # isort:skip
-
             return (
-                bodo.libs.distributed_api.scatterv(
-                    None, root=0, comm=spawner_intercomm
-                ),
+                bodo.scatterv(None, root=0, comm=spawner_intercomm),
                 arg,
             )
         elif arg == ArgMetadata.LAZY:
@@ -241,6 +237,7 @@ def _gather_res(
     If any output is marked as distributed and empty on rank 0, gather the results and return an updated is_distributed flag and result
     """
     # Import compiler lazily
+    import bodo
     import bodo.decorators  # isort:skip
 
     import bodo.hiframes
@@ -641,17 +638,13 @@ def worker_loop(
             return
         elif command == CommandType.BROADCAST.value:
             # Import compiler lazily
+            import bodo
             import bodo.decorators  # isort:skip
 
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
             debug_worker_msg(logger, "Broadcast done")
         elif command == CommandType.SCATTER.value:
-            # Import compiler lazily
-            import bodo.decorators  # isort:skip
-
-            data = bodo.libs.distributed_api.scatterv(
-                None, root=0, comm=spawner_intercomm
-            )
+            data = bodo.scatterv(None, root=0, comm=spawner_intercomm)
             res_id = str(
                 comm_world.bcast(uuid.uuid4() if bodo.get_rank() == 0 else None, root=0)
             )
@@ -660,11 +653,8 @@ def worker_loop(
                 spawner_intercomm.send(res_id, dest=0)
             debug_worker_msg(logger, "Scatter done")
         elif command == CommandType.GATHER.value:
-            # Import compiler lazily
-            import bodo.decorators  # isort:skip
-
             res_id = spawner_intercomm.bcast(None, 0)
-            bodo.libs.distributed_api.gatherv(
+            bodo.gatherv(
                 RESULT_REGISTRY.pop(res_id, None), root=0, comm=spawner_intercomm
             )
             debug_worker_msg(logger, f"Gather done for result {res_id}")
