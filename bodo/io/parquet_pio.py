@@ -487,6 +487,10 @@ def pa_schema_unify_reduction(schema_a_and_row_count, schema_b_and_row_count, un
     return (pa.unify_schemas([schema_a, schema_b]), count_a + count_b)
 
 
+# Initialize local MPI operation for schema unification lazily
+pa_schema_unify_mpi_op = None
+
+
 def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     """
     Unify the dataset schema across all ranks.
@@ -503,11 +507,14 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     """
     import bodo
 
+    global pa_schema_unify_mpi_op
+
     ev = tracing.Event("unify_schemas_across_ranks")
     error = None
 
     comm = MPI.COMM_WORLD
-    pa_schema_unify_mpi_op = MPI.Op.Create(pa_schema_unify_reduction, commute=True)
+    if pa_schema_unify_mpi_op is None:
+        pa_schema_unify_mpi_op = MPI.Op.Create(pa_schema_unify_reduction, commute=True)
     try:
         dataset.schema, _ = comm.allreduce(
             (dataset.schema, total_rows_chunk),
