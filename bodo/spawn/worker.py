@@ -368,6 +368,29 @@ def _update_env_var(new_env_var, propagate_env):
                 del os.environ[env_var]
 
 
+def _is_distributable_result(res):
+    """
+    Check if the worker result is a distributable type which requires gather to spawner.
+    Avoids importing the compiler as much as possible to reduce overheads.
+    """
+    from pandas.core.arrays.arrow import ArrowExtensionArray
+
+    import bodo
+
+    if isinstance(
+        res, (pd.DataFrame, pd.Series, pd.Index, np.ndarray, ArrowExtensionArray)
+    ):
+        return True
+
+    if pd.api.types.is_scalar(res):
+        return False
+
+    # Import compiler lazily
+    import bodo.decorators  # isort:skip
+
+    return bodo.utils.utils.is_distributable_typ(bodo.typeof(res))
+
+
 def exec_func_handler(
     comm_world: MPI.Intracomm, spawner_intercomm: MPI.Intercomm, logger: logging.Logger
 ):
@@ -471,10 +494,7 @@ def exec_func_handler(
     # not be replicated in the non-JIT cases like map_partitions, so we have to define
     # the semantics (e.g. gather all values across ranks in a list?).
     if not is_dispatcher:
-        # Import compiler lazily
-        import bodo.decorators  # isort:skip
-
-        is_distributed = bodo.utils.utils.is_distributable_typ(bodo.typeof(res))
+        is_distributed = _is_distributable_result(res)
 
     debug_worker_msg(logger, f"Function result {is_distributed=}")
 
