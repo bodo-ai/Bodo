@@ -1086,7 +1086,7 @@ def get_const_value_inner(
     if (
         call_name is not None
         and len(call_name) == 2
-        and call_name[1] == "bodo"
+        and call_name[1] == "bodo.types"
         and call_name[0] in bodo_types_with_params
     ):
         args = tuple(
@@ -1099,7 +1099,7 @@ def get_const_value_inner(
             )
             for name, v in dict(var_def.kws).items()
         }
-        return getattr(bodo, call_name[0])(*args, **kwargs)
+        return getattr(bodo.types, call_name[0])(*args, **kwargs)
 
     # evaluate JIT function at compile time if arguments can be constant and it is a
     # "pure" function (has no side effects and only depends on input values for output)
