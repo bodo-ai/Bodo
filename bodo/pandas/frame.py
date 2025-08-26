@@ -466,6 +466,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         import bodo.io.iceberg
         import bodo.io.iceberg.stream_iceberg_write
         from bodo.pandas.base import _empty_like
+
+        # TODO
         from bodo.utils.typing import CreateTableMetaType
 
         # Support simple directory only calls like:
@@ -712,6 +714,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         errors="strict",
         storage_options=None,
     ):
+        # Import compiler lazily
+        import bodo.decorators  # isort:skip
         from bodo.utils.typing import check_unsupported_args
         # argument defaults should match that of to_csv_overload in pd_dataframe_ext.py
 
@@ -1240,6 +1244,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 If errors occured during compilation, first value will be None
                 followed by the errors.
         """
+        # Import compiler lazily
+        import bodo.decorators  # isort:skip
         from bodo.hiframes.table import TableType
         from bodo.pandas.utils_jit import (
             cpp_table_to_df_jit,

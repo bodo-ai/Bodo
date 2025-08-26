@@ -1,3 +1,7 @@
+"""Support for top level pandas functions.
+This file should import JIT lazily to avoid slowing down non-JIT code paths.
+"""
+
 from __future__ import annotations
 
 import csv
