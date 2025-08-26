@@ -327,6 +327,7 @@ no_side_effect_call_tuples = {
     ("prange", bodo),
     (numba.prange,),
     ("objmode", bodo),
+    ("objmode", numba),
     (numba.objmode,),
     ("no_warning_objmode", bodo),
     (bodo.ir.object_mode.no_warning_objmode,),
