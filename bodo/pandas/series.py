@@ -652,12 +652,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Map values of Series according to an input mapping or function.
         """
+        import bodo
+
         if engine not in ("bodo", "python"):
             raise TypeError(
                 f"Series.map() got unsupported engine: {engine}, expected one of ('bodo', 'python')."
             )
 
         if engine == "bodo":
+            # Import compiler
+            import bodo.decorators  # isort:skip # noqa
             from bodo.pandas.utils_jit import (
                 cpp_table_to_series_jit,
                 get_udf_cfunc_decorator,
