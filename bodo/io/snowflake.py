@@ -22,7 +22,6 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.timestamptz_ext import ArrowTimestampTZType
 from bodo.io.helpers import (
     _get_numba_typ_from_pa_typ,
-    sync_and_reraise_error,
     update_env_vars,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
@@ -2128,7 +2127,7 @@ def get_dataset(
         err_connecting = e
 
     # Check if this failed on any rank.
-    sync_and_reraise_error(
+    bodo.spawn.utils.sync_and_reraise_error(
         err_connecting,
         _is_parallel=(not is_independent),
         # We don't broadcast the errors in case they are not pickle-able.
@@ -2172,7 +2171,7 @@ def get_dataset(
             except Exception as e:
                 error = e
 
-    sync_and_reraise_error(
+    bodo.spawn.utils.sync_and_reraise_error(
         error,
         (not is_independent),
         # In case the error is not pickle-able, we only raise it on rank 0.

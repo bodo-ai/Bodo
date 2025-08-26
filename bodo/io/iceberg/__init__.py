@@ -18,7 +18,6 @@ import pyarrow.dataset as ds
 import bodo
 import bodo.utils.tracing as tracing
 from bodo.io import arrow_cpp
-from bodo.io.helpers import sync_and_reraise_error
 from bodo.mpi4py import MPI
 
 from . import merge_into
@@ -238,7 +237,7 @@ def get_iceberg_pq_dataset(
             local_pieces.extend(file_pieces)
     except Exception as e:
         err = e
-    sync_and_reraise_error(err, _is_parallel=True)
+    bodo.spawn.utils.sync_and_reraise_error(err, _is_parallel=True)
 
     # Analyze number of row groups, their sizes, etc. and print warnings
     # similar to what we do for Parquet.
