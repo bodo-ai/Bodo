@@ -1,3 +1,7 @@
+"""Parquet I/O utilities. This file should import JIT lazily to avoid slowing down
+non-JIT code paths.
+"""
+
 from __future__ import annotations
 
 import json
@@ -444,6 +448,10 @@ def get_bodo_pq_dataset_from_fpath(
 
         return dataset
     except Exception as e:
+        # Import compiler lazily to access BodoError
+        import bodo
+        import bodo.decorators  # isort:skip
+
         # See note in pa_fs_list_dir_fnames
         # In some cases, OSError/FileNotFoundError can propagate
         # back to numba and come back as an InternalError.
@@ -510,7 +518,9 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     if comm.allreduce(error is not None, op=MPI.LOR):
         for error in comm.allgather(error):
             if error:
-                import bodo.decorators
+                # Import compiler lazily to access BodoError
+                import bodo
+                import bodo.decorators  # isort:skip
 
                 msg = f"Schema in some files were different.\n{str(error)}"
                 raise bodo.utils.typing.BodoError(msg)
@@ -542,11 +552,19 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
     # missing from the file will be filled with nulls at read time.
     added_columns = fileset_schema_names - dataset_schema_names
     if added_columns:
+        # Import compiler lazily to access BodoError
+        import bodo
+        import bodo.decorators  # isort:skip
+
         msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
         raise bodo.utils.typing.BodoError(msg)
     try:
         dataset.schema = unify_schemas([dataset.schema, file_schema], "permissive")
     except Exception as e:
+        # Import compiler lazily to access BodoError
+        import bodo
+        import bodo.decorators  # isort:skip
+
         msg = f"Schema in {piece} was different.\n{str(e)}"
         raise bodo.utils.typing.BodoError(msg)
 
@@ -687,6 +705,10 @@ def populate_row_counts_in_pq_dataset_pieces(
                 if isinstance(fpath, list) and isinstance(
                     error, (OSError, FileNotFoundError)
                 ):
+                    # Import compiler lazily to access BodoError
+                    import bodo
+                    import bodo.decorators  # isort:skip
+
                     raise bodo.utils.typing.BodoError(
                         str(error) + LIST_OF_FILES_ERROR_MSG
                     )
@@ -1091,6 +1113,10 @@ def _add_categories_to_pq_dataset(pq_dataset):
 
     # NOTE: shouldn't be possible
     if len(pq_dataset.pieces) < 1:  # pragma: no cover
+        # Import compiler lazily to access BodoError
+        import bodo
+        import bodo.decorators  # isort:skip
+
         raise bodo.utils.typing.BodoError(
             "No pieces found in Parquet dataset. Cannot get read categorical values"
         )
@@ -1287,6 +1313,9 @@ def parquet_file_schema(
     use_hive: bool = True,
 ) -> FileSchema:
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
+    # Import compiler lazily to access BodoError
+    import bodo
+    import bodo.decorators  # isort:skip
     from bodo.io.helpers import _get_numba_typ_from_pa_typ
     from bodo.libs.dict_arr_ext import dict_str_arr_type
 
@@ -1396,6 +1425,10 @@ def parquet_file_schema(
     # make sure selected columns are in the schema
     for c in selected_columns:
         if c not in col_names_map:
+            # Import compiler lazily to access BodoError
+            import bodo
+            import bodo.decorators  # isort:skip
+
             raise bodo.utils.typing.BodoError(
                 f"Selected column {c} not in Parquet file schema"
             )
@@ -1436,6 +1469,9 @@ def _get_partition_cat_dtype(dictionary):
     """get categorical dtype for Parquet partition set"""
     from numba.core import types
 
+    # Import compiler lazily
+    import bodo
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.pd_categorical_ext import (
         CategoricalArrayType,
         PDCategoricalDtype,
