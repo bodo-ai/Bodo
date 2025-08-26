@@ -235,18 +235,25 @@ def _send_output(
             spawner_intercomm.send(res, dest=0)
 
 
-def _gather_res(
-    is_distributed: is_distributed_t, res: pt.Any
-) -> tuple[is_distributed_t, pt.Any]:
-    """
-    If any output is marked as distributed and empty on rank 0, gather the results and return an updated is_distributed flag and result
-    """
+def _is_table_type(t):
+    """Helper for checking Table type that imports the JIT compiler lazily."""
     # Import compiler lazily
     import bodo
     import bodo.decorators  # isort:skip
 
     import bodo.hiframes
     import bodo.hiframes.table
+
+    return isinstance(t, bodo.hiframes.table.Table)
+
+
+def _gather_res(
+    is_distributed: is_distributed_t, res: pt.Any
+) -> tuple[is_distributed_t, pt.Any]:
+    """
+    If any output is marked as distributed and empty on rank 0, gather the results and return an updated is_distributed flag and result
+    """
+
     from bodo import BodoWarning
 
     if isinstance(res, tuple) and isinstance(is_distributed, (tuple, list)):
@@ -285,12 +292,12 @@ def _gather_res(
         or isinstance(res, np.ndarray)
         # TODO[BSE-4198]: support lazy Index wrappers
         or isinstance(res, pd.Index)
-        or isinstance(res, bodo.hiframes.table.Table)
         or isinstance(res, pd.Categorical)
         or isinstance(res, pd.arrays.IntervalArray)
         # TODO[BSE-4205]: move DatetimeArray to use Arrow
         or isinstance(res, pd.arrays.DatetimeArray)
         or isinstance(res, pa.lib.NullArray)
+        or (type(res).__name__ == "Table" and _is_table_type(res))
     ):
         # If the result is empty on rank 0, we can't send a head to the spawner
         # so just gather the results and send it all to to the spawner
