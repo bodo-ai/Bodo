@@ -14,7 +14,6 @@ import pyarrow as pa
 from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
-import bodo
 from bodo.pandas.plan import (
     AggregateExpression,
     LogicalAggregate,
@@ -459,6 +458,9 @@ def _groupby_apply_plan(
     """Implementation of SeriesGroupby/DataFrameGroupby.apply."""
     from bodo.pandas.base import _empty_like
 
+    # Import compiler
+    import bodo.decorators  # isort:skip
+
     if not callable(func):
         raise BodoLibNotImplementedException(
             "Groupby.apply() only supports callable values for func."
@@ -648,6 +650,8 @@ def _get_cfunc_wrapper(
     import numba
     import numpy as np
 
+    # Import compiler
+    import bodo.decorators  # isort:skip
     from bodo.decorators import _cfunc
     from bodo.hiframes.table import TableType
     from bodo.libs.array import (
@@ -736,6 +740,8 @@ def _numba_type_to_pyarrow_type(typ):
     """
     from numba import types
 
+    # Import compiler
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
     from bodo.libs.binary_arr_ext import bytes_type
     from bodo.utils.typing import get_array_getitem_scalar_type
@@ -795,6 +801,9 @@ def _numba_type_to_pyarrow_type(typ):
 def _get_scalar_udf_out_type(func: pt.Callable, empty_input: pd.DataFrame | pd.Series):
     """Use compiler utilities to determine the output type of func given it's input types."""
     import numba
+
+    # Import compiler
+    import bodo.decorators  # isort:skip
     from numba.core.target_extension import dispatcher_registry
 
     from bodo.utils.transform import get_const_func_output_type
@@ -856,6 +865,8 @@ def _get_agg_output_type(
     Returns:
         pa.DataType: The output type from applying func to col_name.
     """
+    import bodo
+
     new_type = None
     fallback = False
     func_name = func.func_name
@@ -908,6 +919,8 @@ def _get_agg_output_type(
             # TODO: bool/decimal median
             fallback = True
     elif callable(func.func):
+        # Import compiler
+        import bodo.decorators  # isort:skip
         from bodo.utils.utils import is_array_typ
 
         # UDF case
