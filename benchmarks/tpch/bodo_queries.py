@@ -16,121 +16,125 @@ import bodo
 
 @bodo.jit(cache=True)
 def run_queries(data_folder):
-    # Load the data
     t1 = time.time()
-    lineitem = load_lineitem(data_folder)
-    orders = load_orders(data_folder)
-    customer = load_customer(data_folder)
-    nation = load_nation(data_folder)
-    region = load_region(data_folder)
-    supplier = load_supplier(data_folder)
-    part = load_part(data_folder)
-    partsupp = load_partsupp(data_folder)
-    print("Reading time (s): ", time.time() - t1)
-
-    # Run the Queries:
-    t1 = time.time()
-    q01(lineitem)
-    q02(part, partsupp, supplier, nation, region)
-    q03(lineitem, orders, customer)
-    q04(lineitem, orders)
-    q05(lineitem, orders, customer, nation, region, supplier)
-    q06(lineitem)
-    q07(lineitem, supplier, orders, customer, nation)
-    q08(part, lineitem, supplier, orders, customer, nation, region)
-    q09(lineitem, orders, part, nation, partsupp, supplier)
-    q10(lineitem, orders, customer, nation)
-    q11(partsupp, supplier, nation)
-    q12(lineitem, orders)
-    q13(customer, orders)
-    q14(lineitem, part)
-    q15(lineitem, supplier)
-    q16(part, partsupp, supplier)
-    q17(lineitem, part)
-    q18(lineitem, orders, customer)
-    q19(lineitem, part)
-    q20(lineitem, part, nation, partsupp, supplier)
-    q21(lineitem, orders, supplier, nation)
-    q22(customer, orders)
+    q01(data_folder)
+    q02(data_folder)
+    q03(data_folder)
+    q04(data_folder)
+    q05(data_folder)
+    q06(data_folder)
+    q07(data_folder)
+    q08(data_folder)
+    q09(data_folder)
+    q10(data_folder)
+    q11(data_folder)
+    q12(data_folder)
+    q13(data_folder)
+    q14(data_folder)
+    q15(data_folder)
+    q16(data_folder)
+    q17(data_folder)
+    q18(data_folder)
+    q19(data_folder)
+    q20(data_folder)
+    q21(data_folder)
+    q22(data_folder)
     print("Total Query time (s): ", time.time() - t1)
 
 
 @bodo.jit
 def load_lineitem(data_folder):
+    t0 = time.time()
     data_path = data_folder + "/lineitem.pq"
     df = pd.read_parquet(
         data_path,
     )
+    print("Time to load lineitem (s): ", time.time() - t0)
     return df
 
 
 @bodo.jit
 def load_part(data_folder):
+    t0 = time.time()
     data_path = data_folder + "/part.pq"
     df = pd.read_parquet(
         data_path,
     )
+    print("Time to load part (s): ", time.time() - t0)
     return df
 
 
 @bodo.jit
 def load_orders(data_folder):
+    t0 = time.time()
     data_path = data_folder + "/orders.pq"
     df = pd.read_parquet(
         data_path,
     )
+    print("Time to load orders (s): ", time.time() - t0)
     return df
 
 
 @bodo.jit
 def load_customer(data_folder):
+    t0 = time.time()
     data_path = data_folder + "/customer.pq"
     df = pd.read_parquet(
         data_path,
     )
+    print("Time to load customer (s): ", time.time() - t0)
     return df
 
 
 # Nation is a very small file so set it to replicated
 @bodo.jit(distributed=False)
 def load_nation(data_folder):
+    t0 = time.time()
     data_path = data_folder + "/nation.pq"
     df = pd.read_parquet(
         data_path,
     )
+    print("Time to load nation (s): ", time.time() - t0)
     return df
 
 
 # Region is a very small file so set it to replicated
 @bodo.jit(distributed=False)
 def load_region(data_folder):
+    t0 = time.time()
     data_path = data_folder + "/region.pq"
     df = pd.read_parquet(
         data_path,
     )
+    print("Time to load region (s): ", time.time() - t0)
     return df
 
 
 @bodo.jit
 def load_supplier(data_folder):
+    t0 = time.time()
     data_path = data_folder + "/supplier.pq"
     df = pd.read_parquet(
         data_path,
     )
+    print("Time to load supplier (s): ", time.time() - t0)
     return df
 
 
 @bodo.jit
 def load_partsupp(data_folder):
+    t0 = time.time()
     data_path = data_folder + "/partsupp.pq"
     df = pd.read_parquet(
         data_path,
     )
+    print("Time to load partsupp (s): ", time.time() - t0)
     return df
 
 
 @bodo.jit
-def q01(lineitem):
+def q01(data_folder):
+    lineitem = load_lineitem(data_folder)
     t1 = time.time()
     date = pd.Timestamp("1998-09-02")
     lineitem_filtered = lineitem.loc[
@@ -186,8 +190,13 @@ def q01(lineitem):
 
 
 @bodo.jit
-def q02(part, partsupp, supplier, nation, region):
+def q02(data_folder):
     t1 = time.time()
+    part = load_part(data_folder)
+    partsupp = load_partsupp(data_folder)
+    supplier = load_supplier(data_folder)
+    nation = load_nation(data_folder)
+    region = load_region(data_folder)
     nation_filtered = nation.loc[:, ["N_NATIONKEY", "N_NAME", "N_REGIONKEY"]]
     region_filtered = region[(region["R_NAME"] == "EUROPE")]
     region_filtered = region_filtered.loc[:, ["R_REGIONKEY"]]
@@ -292,8 +301,11 @@ def q02(part, partsupp, supplier, nation, region):
 
 
 @bodo.jit
-def q03(lineitem, orders, customer):
+def q03(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
+    customer = load_customer(data_folder)
     date = pd.Timestamp("1995-03-04")
     lineitem_filtered = lineitem.loc[
         :, ["L_ORDERKEY", "L_EXTENDEDPRICE", "L_DISCOUNT", "L_SHIPDATE"]
@@ -324,8 +336,10 @@ def q03(lineitem, orders, customer):
 
 
 @bodo.jit
-def q04(lineitem, orders):
+def q04(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
     date1 = pd.Timestamp("1993-11-01")
     date2 = pd.Timestamp("1993-08-01")
     lsel = lineitem.L_COMMITDATE < lineitem.L_RECEIPTDATE
@@ -343,8 +357,14 @@ def q04(lineitem, orders):
 
 
 @bodo.jit
-def q05(lineitem, orders, customer, nation, region, supplier):
+def q05(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
+    customer = load_customer(data_folder)
+    nation = load_nation(data_folder)
+    region = load_region(data_folder)
+    supplier = load_supplier(data_folder)
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     rsel = region.R_NAME == "ASIA"
@@ -366,7 +386,8 @@ def q05(lineitem, orders, customer, nation, region, supplier):
 
 
 @bodo.jit
-def q06(lineitem):
+def q06(data_folder):
+    lineitem = load_lineitem(data_folder)
     t1 = time.time()
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
@@ -387,65 +408,13 @@ def q06(lineitem):
 
 
 @bodo.jit
-def q07_old(lineitem, supplier, orders, customer, nation):
+def q07(data_folder):
     t1 = time.time()
-    supplier_filtered = supplier.loc[:, ["S_SUPPKEY", "S_NATIONKEY"]]
-    lineitem_filtered = lineitem[
-        (lineitem["L_SHIPDATE"] >= pd.Timestamp("1995-01-01"))
-        & (lineitem["L_SHIPDATE"] < pd.Timestamp("1997-01-01"))
-    ]
-    lineitem_filtered["L_YEAR"] = lineitem_filtered["L_SHIPDATE"].apply(
-        lambda x: x.year
-    )
-    lineitem_filtered["VOLUME"] = lineitem_filtered["L_EXTENDEDPRICE"] * (
-        1.0 - lineitem_filtered["L_DISCOUNT"]
-    )
-    lineitem_filtered = lineitem_filtered.loc[
-        :, ["L_ORDERKEY", "L_SUPPKEY", "L_YEAR", "VOLUME"]
-    ]
-    total = supplier_filtered.merge(
-        lineitem_filtered, left_on="S_SUPPKEY", right_on="L_SUPPKEY", how="inner"
-    )
-    total = total.loc[:, ["S_NATIONKEY", "L_ORDERKEY", "L_YEAR", "VOLUME"]]
-    orders_filtered = orders.loc[:, ["O_ORDERKEY", "O_CUSTKEY"]]
-    total = total.merge(
-        orders_filtered, left_on="L_ORDERKEY", right_on="O_ORDERKEY", how="inner"
-    )
-    total = total.loc[:, ["S_NATIONKEY", "L_YEAR", "VOLUME", "O_CUSTKEY"]]
-    customer_filtered = customer.loc[:, ["C_CUSTKEY", "C_NATIONKEY"]]
-    total = total.merge(
-        customer_filtered, left_on="O_CUSTKEY", right_on="C_CUSTKEY", how="inner"
-    )
-    total = total.loc[:, ["S_NATIONKEY", "L_YEAR", "VOLUME", "C_NATIONKEY"]]
-    nation_filtered = nation[
-        (nation["N_NAME"] == "FRANCE") | (nation["N_NAME"] == "GERMANY")
-    ]
-    n1 = nation_filtered.loc[:, ["N_NAME", "N_NATIONKEY"]].rename(
-        columns={"N_NAME": "SUPP_NATION"}
-    )
-    n2 = nation_filtered.loc[:, ["N_NAME", "N_NATIONKEY"]].rename(
-        columns={"N_NAME": "CUST_NATION"}
-    )
-    total = total.merge(n1, left_on="S_NATIONKEY", right_on="N_NATIONKEY", how="inner")
-    total = total.loc[:, ["L_YEAR", "VOLUME", "C_NATIONKEY", "SUPP_NATION"]]
-    total = total.merge(n2, left_on="C_NATIONKEY", right_on="N_NATIONKEY", how="inner")
-    total = total.loc[:, ["SUPP_NATION", "CUST_NATION", "L_YEAR", "VOLUME"]]
-    total = total[total["SUPP_NATION"] != total["CUST_NATION"]]
-    total = total.groupby(["SUPP_NATION", "CUST_NATION", "L_YEAR"], as_index=False).agg(
-        REVENUE=pd.NamedAgg(column="VOLUME", aggfunc="sum")
-    )
-    total = total.sort_values(
-        by=["SUPP_NATION", "CUST_NATION", "L_YEAR"], ascending=[True, True, True]
-    )
-    print(total)
-    print("Q07 Execution time (s): ", time.time() - t1)
-
-
-@bodo.jit
-def q07(lineitem, supplier, orders, customer, nation):
-    """This version is faster than q07_old. Keeping the old one for reference"""
-    t1 = time.time()
-
+    lineitem = load_lineitem(data_folder)
+    supplier = load_supplier(data_folder)
+    orders = load_orders(data_folder)
+    customer = load_customer(data_folder)
+    nation = load_nation(data_folder)
     lineitem_filtered = lineitem[
         (lineitem["L_SHIPDATE"] >= pd.Timestamp("1995-01-01"))
         & (lineitem["L_SHIPDATE"] < pd.Timestamp("1997-01-01"))
@@ -535,8 +504,15 @@ def q07(lineitem, supplier, orders, customer, nation):
 
 
 @bodo.jit
-def q08(part, lineitem, supplier, orders, customer, nation, region):
+def q08(data_folder):
     t1 = time.time()
+    part = load_part(data_folder)
+    lineitem = load_lineitem(data_folder)
+    supplier = load_supplier(data_folder)
+    orders = load_orders(data_folder)
+    customer = load_customer(data_folder)
+    nation = load_nation(data_folder)
+    region = load_region(data_folder)
     part_filtered = part[(part["P_TYPE"] == "ECONOMY ANODIZED STEEL")]
     part_filtered = part_filtered.loc[:, ["P_PARTKEY"]]
     lineitem_filtered = lineitem.loc[:, ["L_PARTKEY", "L_SUPPKEY", "L_ORDERKEY"]]
@@ -600,8 +576,14 @@ def q08(part, lineitem, supplier, orders, customer, nation, region):
 
 
 @bodo.jit
-def q09(lineitem, orders, part, nation, partsupp, supplier):
+def q09(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
+    part = load_part(data_folder)
+    nation = load_nation(data_folder)
+    partsupp = load_partsupp(data_folder)
+    supplier = load_supplier(data_folder)
     psel = part.P_NAME.str.contains("ghost")
     fpart = part[psel]
     jn1 = lineitem.merge(fpart, left_on="L_PARTKEY", right_on="P_PARTKEY")
@@ -622,8 +604,12 @@ def q09(lineitem, orders, part, nation, partsupp, supplier):
 
 
 @bodo.jit
-def q10(lineitem, orders, customer, nation):
+def q10(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
+    customer = load_customer(data_folder)
+    nation = load_nation(data_folder)
     date1 = pd.Timestamp("1994-11-01")
     date2 = pd.Timestamp("1995-02-01")
     osel = (orders.O_ORDERDATE >= date1) & (orders.O_ORDERDATE < date2)
@@ -652,8 +638,11 @@ def q10(lineitem, orders, customer, nation):
 
 
 @bodo.jit
-def q11(partsupp, supplier, nation):
+def q11(data_folder):
     t1 = time.time()
+    partsupp = load_partsupp(data_folder)
+    supplier = load_supplier(data_folder)
+    nation = load_nation(data_folder)
     partsupp_filtered = partsupp.loc[:, ["PS_PARTKEY", "PS_SUPPKEY"]]
     partsupp_filtered["TOTAL_COST"] = (
         partsupp["PS_SUPPLYCOST"] * partsupp["PS_AVAILQTY"]
@@ -680,8 +669,10 @@ def q11(partsupp, supplier, nation):
 
 
 @bodo.jit
-def q12(lineitem, orders):
+def q12(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
     date1 = pd.Timestamp("1994-01-01")
     date2 = pd.Timestamp("1995-01-01")
     sel = (
@@ -709,8 +700,10 @@ def q12(lineitem, orders):
 
 
 @bodo.jit
-def q13(customer, orders):
+def q13(data_folder):
     t1 = time.time()
+    customer = load_customer(data_folder)
+    orders = load_orders(data_folder)
     customer_filtered = customer.loc[:, ["C_CUSTKEY"]]
     orders_filtered = orders[
         ~orders["O_COMMENT"].str.contains("special(\S|\s)*requests")
@@ -731,8 +724,10 @@ def q13(customer, orders):
 
 
 @bodo.jit
-def q14(lineitem, part):
+def q14(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    part = load_part(data_folder)
     startDate = pd.Timestamp("1994-03-01")
     endDate = pd.Timestamp("1994-04-01")
     p_type_like = "PROMO"
@@ -752,8 +747,10 @@ def q14(lineitem, part):
 
 
 @bodo.jit
-def q15(lineitem, supplier):
+def q15(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    supplier = load_supplier(data_folder)
     lineitem_filtered = lineitem[
         (lineitem["L_SHIPDATE"] >= pd.Timestamp("1996-01-01"))
         & (
@@ -784,8 +781,11 @@ def q15(lineitem, supplier):
 
 
 @bodo.jit
-def q16(part, partsupp, supplier):
+def q16(data_folder):
     t1 = time.time()
+    part = load_part(data_folder)
+    partsupp = load_partsupp(data_folder)
+    supplier = load_supplier(data_folder)
     part_filtered = part[
         (part["P_BRAND"] != "Brand#45")
         & (~part["P_TYPE"].str.contains("^MEDIUM POLISHED"))
@@ -820,8 +820,10 @@ def q16(part, partsupp, supplier):
 
 
 @bodo.jit
-def q17(lineitem, part):
+def q17(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    part = load_part(data_folder)
     left = lineitem.loc[:, ["L_PARTKEY", "L_QUANTITY", "L_EXTENDEDPRICE"]]
     right = part[((part["P_BRAND"] == "Brand#23") & (part["P_CONTAINER"] == "MED BOX"))]
     right = right.loc[:, ["P_PARTKEY"]]
@@ -847,8 +849,11 @@ def q17(lineitem, part):
 
 
 @bodo.jit
-def q18(lineitem, orders, customer):
+def q18(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
+    customer = load_customer(data_folder)
     gb1 = lineitem.groupby("L_ORDERKEY", as_index=False)["L_QUANTITY"].sum()
     fgb1 = gb1[gb1.L_QUANTITY > 300]
     jn1 = fgb1.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
@@ -863,8 +868,10 @@ def q18(lineitem, orders, customer):
 
 
 @bodo.jit
-def q19(lineitem, part):
+def q19(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    part = load_part(data_folder)
     Brand31 = "Brand#31"
     Brand43 = "Brand#43"
     SMBOX = "SM BOX"
@@ -941,8 +948,13 @@ def q19(lineitem, part):
 
 
 @bodo.jit
-def q20(lineitem, part, nation, partsupp, supplier):
+def q20(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    part = load_part(data_folder)
+    nation = load_nation(data_folder)
+    partsupp = load_partsupp(data_folder)
+    supplier = load_supplier(data_folder)
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     psel = part.P_NAME.str.startswith("azure")
@@ -971,8 +983,12 @@ def q20(lineitem, part, nation, partsupp, supplier):
 
 
 @bodo.jit
-def q21(lineitem, orders, supplier, nation):
+def q21(data_folder):
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
+    orders = load_orders(data_folder)
+    supplier = load_supplier(data_folder)
+    nation = load_nation(data_folder)
     lineitem_filtered = lineitem.loc[
         :, ["L_ORDERKEY", "L_SUPPKEY", "L_RECEIPTDATE", "L_COMMITDATE"]
     ]
@@ -1038,8 +1054,10 @@ def q21(lineitem, orders, supplier, nation):
 
 
 @bodo.jit
-def q22(customer, orders):
+def q22(data_folder):
     t1 = time.time()
+    customer = load_customer(data_folder)
+    orders = load_orders(data_folder)
     customer_filtered = customer.loc[:, ["C_ACCTBAL", "C_CUSTKEY"]]
     customer_filtered["CNTRYCODE"] = customer["C_PHONE"].str.slice(0, 2)
     customer_filtered = customer_filtered[
