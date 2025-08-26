@@ -134,8 +134,8 @@ def load_partsupp(data_folder):
 
 @bodo.jit
 def q01(data_folder):
-    lineitem = load_lineitem(data_folder)
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
     date = pd.Timestamp("1998-09-02")
     lineitem_filtered = lineitem.loc[
         :,
@@ -387,8 +387,8 @@ def q05(data_folder):
 
 @bodo.jit
 def q06(data_folder):
-    lineitem = load_lineitem(data_folder)
     t1 = time.time()
+    lineitem = load_lineitem(data_folder)
     date1 = pd.Timestamp("1996-01-01")
     date2 = pd.Timestamp("1997-01-01")
     lineitem_filtered = lineitem.loc[
