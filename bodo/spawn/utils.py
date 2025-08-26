@@ -1,4 +1,6 @@
-"""Utilities for Spawn Mode"""
+"""Utilities for Spawn Mode.
+This file should import JIT lazily to avoid slowing down non-JIT code paths.
+"""
 
 from __future__ import annotations
 

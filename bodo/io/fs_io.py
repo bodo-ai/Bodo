@@ -1,5 +1,6 @@
 """
-S3 & Hadoop file system supports, and file system dependent calls
+S3 & Hadoop file system supports, and file system dependent calls.
+This file should import JIT lazily to avoid slowing down non-JIT code paths.
 """
 
 from __future__ import annotations
