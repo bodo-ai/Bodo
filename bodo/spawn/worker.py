@@ -72,10 +72,11 @@ def _recv_arg(
     Returns:
         Any: received function argument
     """
+    import bodo
+
     if isinstance(arg, ArgMetadata):
         if arg == ArgMetadata.BROADCAST:
             # Import compiler lazily
-            import bodo
             import bodo.decorators  # isort:skip
 
             return (
@@ -166,6 +167,7 @@ def _build_distributed_return_metadata(
 ) -> distributed_return_metadata_t:
     from numba import typed
 
+    import bodo
     from bodo.pandas import LazyMetadata
 
     global RESULT_REGISTRY
@@ -373,6 +375,8 @@ def exec_func_handler(
     driver_intercomm by the spawner"""
     import numba
 
+    import bodo
+
     global RESULT_REGISTRY
     debug_worker_msg(logger, "Begin listening for function.")
 
@@ -468,7 +472,6 @@ def exec_func_handler(
     # the semantics (e.g. gather all values across ranks in a list?).
     if not is_dispatcher:
         # Import compiler lazily
-        import bodo
         import bodo.decorators  # isort:skip
 
         is_distributed = bodo.utils.utils.is_distributable_typ(bodo.typeof(res))
@@ -592,6 +595,8 @@ def worker_loop(
     comm_world: MPI.Intracomm, spawner_intercomm: MPI.Intercomm, logger: logging.Logger
 ):
     """Main loop for the worker to listen and receive commands from driver_intercomm"""
+    import bodo
+
     global RESULT_REGISTRY
     global spawnerpid
 
@@ -641,7 +646,6 @@ def worker_loop(
             return
         elif command == CommandType.BROADCAST.value:
             # Import compiler lazily
-            import bodo
             import bodo.decorators  # isort:skip
 
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)

@@ -479,6 +479,7 @@ class Spawner:
         Returns:
             ArgMetadata or None: ArgMetadata if argument is distributable, None otherwise
         """
+        import bodo
         from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 
         # Avoid importing compiler for plans unnecessarily
@@ -514,7 +515,6 @@ class Spawner:
             return None
 
         # Import compiler lazily
-        import bodo
         import bodo.decorators  # isort:skip
 
         if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
@@ -551,10 +551,11 @@ class Spawner:
             arg: input argument
             out_arg: input argument metadata
         """
+        import bodo
+
         if isinstance(arg_meta, ArgMetadata):
             if arg_meta == ArgMetadata.BROADCAST:
                 # Import compiler lazily
-                import bodo
                 import bodo.decorators  # isort:skip
 
                 bodo.libs.distributed_api.bcast(
@@ -572,7 +573,6 @@ class Spawner:
             for tname, tmeta in arg_meta.tables.items():
                 if tmeta is ArgMetadata.BROADCAST:
                     # Import compiler lazily
-                    import bodo
                     import bodo.decorators  # isort:skip
 
                     bodo.libs.distributed_api.bcast(

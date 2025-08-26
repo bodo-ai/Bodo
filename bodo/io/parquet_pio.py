@@ -392,6 +392,7 @@ def get_bodo_pq_dataset_from_fpath(
             the caller can handle error synchronization (since this function
             should be called from a single rank).
     """
+    import bodo
 
     nthreads = 1  # Number of threads to use on this rank to collect metadata
     cpu_count = os.cpu_count()
@@ -449,7 +450,6 @@ def get_bodo_pq_dataset_from_fpath(
         return dataset
     except Exception as e:
         # Import compiler lazily to access BodoError
-        import bodo
         import bodo.decorators  # isort:skip
 
         # See note in pa_fs_list_dir_fnames
@@ -501,6 +501,8 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     Raises:
         bodo.utils.typing.BodoError: If schemas couldn't be unified.
     """
+    import bodo
+
     ev = tracing.Event("unify_schemas_across_ranks")
     error = None
 
@@ -519,7 +521,6 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
         for error in comm.allgather(error):
             if error:
                 # Import compiler lazily to access BodoError
-                import bodo
                 import bodo.decorators  # isort:skip
 
                 msg = f"Schema in some files were different.\n{str(error)}"
@@ -539,6 +540,8 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
     Raises:
         bodo.utils.typing.BodoError: If the schemas cannot be unified
     """
+    import bodo
+
     # Two files are compatible if arrow can unify their schemas.
     file_schema = frag.metadata.schema.to_arrow_schema()
     fileset_schema_names = set(file_schema.names)
@@ -553,7 +556,6 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
     added_columns = fileset_schema_names - dataset_schema_names
     if added_columns:
         # Import compiler lazily to access BodoError
-        import bodo
         import bodo.decorators  # isort:skip
 
         msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
@@ -562,7 +564,6 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
         dataset.schema = unify_schemas([dataset.schema, file_schema], "permissive")
     except Exception as e:
         # Import compiler lazily to access BodoError
-        import bodo
         import bodo.decorators  # isort:skip
 
         msg = f"Schema in {piece} was different.\n{str(e)}"
@@ -623,6 +624,7 @@ def populate_row_counts_in_pq_dataset_pieces(
         filters (pc.Expression, optional): Arrow expression filters
             to apply. Defaults to None.
     """
+    import bodo
 
     ev_row_counts = tracing.Event("get_row_counts")
     # getting row counts and validating schema requires reading
@@ -706,7 +708,6 @@ def populate_row_counts_in_pq_dataset_pieces(
                     error, (OSError, FileNotFoundError)
                 ):
                     # Import compiler lazily to access BodoError
-                    import bodo
                     import bodo.decorators  # isort:skip
 
                     raise bodo.utils.typing.BodoError(
@@ -1109,12 +1110,12 @@ def _add_categories_to_pq_dataset(pq_dataset):
     """
     import pyarrow as pa
 
+    import bodo
     from bodo.mpi4py import MPI
 
     # NOTE: shouldn't be possible
     if len(pq_dataset.pieces) < 1:  # pragma: no cover
         # Import compiler lazily to access BodoError
-        import bodo
         import bodo.decorators  # isort:skip
 
         raise bodo.utils.typing.BodoError(
@@ -1426,7 +1427,6 @@ def parquet_file_schema(
     for c in selected_columns:
         if c not in col_names_map:
             # Import compiler lazily to access BodoError
-            import bodo
             import bodo.decorators  # isort:skip
 
             raise bodo.utils.typing.BodoError(
