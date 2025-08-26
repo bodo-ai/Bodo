@@ -131,6 +131,10 @@ def get_rank():
     return hdist.get_rank_py_wrapper()
 
 
+def get_size():
+    return hdist.get_size_py_wrapper()
+
+
 # XXX same as _distributed.h::BODO_ReduceOps::ReduceOpsEnum
 class Reduce_Type(Enum):
     Sum = 0
@@ -149,7 +153,6 @@ class Reduce_Type(Enum):
     No_Op = 13
 
 
-_get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
 _get_cpu_id = types.ExternalFunction("get_cpu_id", types.int32())
 get_remote_size = types.ExternalFunction("c_get_remote_size", types.int32(types.int64))
@@ -174,10 +177,23 @@ def lower_get_rank(context, builder, sig, args):
     return out
 
 
-@numba.njit(cache=True)
-def get_size():  # pragma: no cover
-    """wrapper for getting number of processes (MPI COMM size currently)"""
-    return _get_size()
+@infer_global(get_size)
+class GetSizeInfer(ConcreteTemplate):
+    cases = [signature(types.int32)]
+
+
+@lower_builtin(
+    get_size,
+)
+def lower_get_size(context, builder, sig, args):
+    fnty = lir.FunctionType(
+        lir.IntType(32),
+        [],
+    )
+    fn_typ = cgutils.get_or_insert_function(builder.module, fnty, name="c_get_size")
+    out = builder.call(fn_typ, args)
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return out
 
 
 @numba.njit(cache=True)

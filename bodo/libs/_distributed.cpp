@@ -801,6 +801,20 @@ static PyObject *get_rank_py_wrapper(PyObject *self, PyObject *args) {
 }
 
 /**
+ * @brief Wrapper around get_size() to be called from Python (avoids Numba JIT
+ overhead and makes compiler debugging easier by eliminating extra compilation)
+ *
+ */
+static PyObject *get_size_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError, "get_size() does not take arguments");
+        return nullptr;
+    }
+    PyObject *size_obj = PyLong_FromLong(dist_get_size());
+    return size_obj;
+}
+
+/**
  * @brief Wrapper around finalize() to be called from Python (avoids Numba JIT
  overhead and makes compiler debugging easier by eliminating extra compilation)
  *
@@ -817,6 +831,7 @@ static PyObject *finalize_py_wrapper(PyObject *self, PyObject *args) {
 static PyMethodDef ext_methods[] = {
 #define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
     declmethod(get_rank_py_wrapper),
+    declmethod(get_size_py_wrapper),
     declmethod(finalize_py_wrapper),
     {nullptr},
 #undef declmethod

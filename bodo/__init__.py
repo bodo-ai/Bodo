@@ -291,10 +291,9 @@ def get_rank():
 
 
 def get_size():
-    # Import compiler lazily
-    import bodo.decorators
-    from bodo.libs.distributed_api import get_size
-    return get_size()
+    # Avoid compiler imports
+    from bodo.ext import hdist
+    return hdist.get_size_py_wrapper()
 
 
 def barrier():
