@@ -128,7 +128,7 @@ jobs:
         id: download-bodo-artifact
         with:
           pattern: cibw-wheels-linux-x86-${{ matrix.python_version }}
-          path: ./cibw-wheels-linux-x86
+          path: ./cibw-wheels-linux-x86-${{ matrix.python_version }}
       - uses: actions/download-artifact@v5
         id: download-bodosql-artifact
         with:
