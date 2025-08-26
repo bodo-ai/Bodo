@@ -44,7 +44,7 @@ class LazyPlan:
         self.pa_schema = pa.Schema.from_pandas(self.empty_data)
 
     def _update_column_names(self, new_cols):
-        """Update the column names by modifying empty_data and pa_schema"""
+        """Update column names in empty_data and pa_schema."""
         self.empty_data.columns = new_cols
         self.pa_schema = pa.Schema.from_pandas(self.empty_data)
 
@@ -288,7 +288,7 @@ class LogicalGetIcebergRead(LogicalOperator):
         self.pa_schema = arrow_schema
 
     def _update_column_names(self, new_cols):
-        """Update the column names by modifying empty_data and pa_schema"""
+        """Update column names in empty_data and pa_schema."""
         raise NotImplementedError(
             "_update_column_names is not implemented for LogicalGetIcebergRead."
         )
