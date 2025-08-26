@@ -468,6 +468,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         from bodo.pandas.base import _empty_like
 
         # TODO
+        import bodo.decorators  # isort:skip
         from bodo.utils.typing import CreateTableMetaType
 
         # Support simple directory only calls like:

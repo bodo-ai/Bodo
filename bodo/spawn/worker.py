@@ -247,7 +247,7 @@ def _gather_res(
 
     import bodo.hiframes
     import bodo.hiframes.table
-    from bodo.utils.typing import BodoWarning
+    from bodo import BodoWarning
 
     if isinstance(res, tuple) and isinstance(is_distributed, (tuple, list)):
         all_updated_is_distributed = []
