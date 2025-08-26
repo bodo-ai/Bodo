@@ -151,6 +151,7 @@ def get_dataframe_overloads():
     """Return a list of the functions supported on BodoDataFrame objects
     to some degree by bodo.jit.
     """
+    # Import compiler
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
     from bodo.numba_compat import get_method_overloads
 
@@ -162,6 +163,7 @@ def get_series_overloads():
     """Return a list of the functions supported on BodoSeries objects
     to some degree by bodo.jit.
     """
+    # Import compiler
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.numba_compat import get_method_overloads
 
@@ -173,6 +175,7 @@ def get_series_string_overloads():
     """Return a list of the functions supported on BodoStringMethods objects
     to some degree by bodo.jit.
     """
+    # Import compiler
     from bodo.hiframes.series_str_impl import SeriesStrMethodType
     from bodo.numba_compat import get_method_overloads
 
@@ -184,6 +187,7 @@ def get_series_datetime_overloads():
     """Return a list of the functions supported on SeriesDatetimePropertiesType objects
     to some degree by bodo.jit.
     """
+    # Import compiler
     from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
     from bodo.numba_compat import get_method_overloads
 
@@ -195,6 +199,7 @@ def get_groupby_overloads():
     """Return a list of the functions supported on DataFrameGroupby/DataFrameSeries objects
     to some degree by bodo.jit.
     """
+    # Import compiler
     from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
     from bodo.numba_compat import get_method_overloads
 
@@ -1241,6 +1246,8 @@ class JITFallback:
         self.name = name
 
     def __call__(self, *args, **kwargs):
+        import bodo
+
         key = (
             (
                 self.base_obj.__class__.__name__,
@@ -1260,6 +1267,9 @@ class JITFallback:
         # work for unknown reasons.  So, we will be on the safe side for now and
         # only JIT fallback for methods that we have tested.
         if self.name in ("duplicated", "pivot") and cache_entry != False:
+            # Import compiler
+            import bodo.decorators  # isort:skip
+
             # None means it wasn't in the cache either way so we can try to
             # JIT compile it.
             if cache_entry is None:
