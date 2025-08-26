@@ -876,6 +876,8 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     cdef readonly str table_identifier
 
     def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema, object snapshot_id, uint64_t table_len_estimate):
+        # TODO(ehsan): avoid compiler import in Iceberg read
+        import bodo.decorators  # isort:skip # noqa
         import pyiceberg.catalog
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
         self.out_schema = out_schema
