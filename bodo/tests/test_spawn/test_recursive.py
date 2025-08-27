@@ -8,7 +8,7 @@ from bodo.tests.utils import pytest_spawn_mode
 pytestmark = pytest_spawn_mode
 
 
-CUSTOMER_TABLE_PATH = datapath_util("tpch-test_data/parquet/customer.parquet")
+CUSTOMER_TABLE_PATH = datapath_util("tpch-test_data/parquet/customer.pq")
 
 
 @bodo.jit(spawn=True)
