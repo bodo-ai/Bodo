@@ -4,6 +4,7 @@ import sys
 import warnings
 
 import numpy as np
+import pandas as pd
 import sklearn.feature_extraction
 from numba.extending import (
     overload,
@@ -150,9 +151,13 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
     else:
         raise ValueError(f"loss {m.loss} not supported")
 
-    regC = False
-    if isinstance(m, sklearn.linear_model.SGDRegressor):
-        regC = True
+    if isinstance(y_classes, pd.arrays.ArrowExtensionArray):
+        y_classes = y_classes.to_numpy()
+
+    if not (regC := isinstance(m, sklearn.linear_model.SGDRegressor)):
+        # Function used to produce input for loss function
+        predict_func = m.predict_proba if m.loss == "log_loss" else m.decision_function
+
     for _ in range(m.max_iter):
         if regC:
             m.partial_fit(X, y)
@@ -167,7 +172,7 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
             y_pred = m.predict(X)
             cur_loss = loss_func(y, y_pred)
         else:
-            y_pred = m.decision_function(X)
+            y_pred = predict_func(X)
             cur_loss = loss_func(y, y_pred, labels=y_classes)
         cur_loss_sum = comm.allreduce(cur_loss, op=MPI.SUM)
         cur_loss = cur_loss_sum / nranks
