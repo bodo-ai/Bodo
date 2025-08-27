@@ -2356,13 +2356,13 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
         return df
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match="ParquetReader: `storage_options` is not supported for protocol",
     ):
         bodo.jit(distributed=["df"])(test_impl1)()
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match="ParquetReader: `storage_options` is not supported for protocol",
     ):
         bodo.jit(distributed=["df"])(test_impl2)()
@@ -2387,7 +2387,7 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
         return df
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=re.escape(
             "ParquetReader: `storage_options` is not supported for protocol"
         ),
