@@ -651,6 +651,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         dtype=None,
         method=None,
     ):
+        bodo.spawn.utils.import_compiler_on_workers()
+
         # argument defaults should match that of to_sql_overload in pd_dataframe_ext.py
         @bodo.jit(spawn=True)
         def to_sql_wrapper(
@@ -822,6 +824,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     ):
         # Argument defaults should match that of to_json_overload in pd_dataframe_ext.py
         # Passing orient and lines as free vars to become literals in the compiler
+
+        bodo.spawn.utils.import_compiler_on_workers()
 
         @bodo.jit(spawn=True)
         def to_json_wrapper(
