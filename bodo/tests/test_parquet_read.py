@@ -3033,7 +3033,7 @@ def test_batched_read_agg(datapath, memory_leak_check):
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
         check_func(
-            impl, (datapath("tpch-test_data/parquet/lineitem.parquet"),), py_output=4000
+            impl, (datapath("tpch-test_data/parquet/lineitem.pq"),), py_output=4000
         )
         check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(stream, "Columns loaded ['L_PARTKEY']")
@@ -3066,7 +3066,7 @@ def test_batched_read_only_len(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         check_func(
             impl,
-            (datapath("tpch-test_data/parquet/lineitem.parquet"),),
+            (datapath("tpch-test_data/parquet/lineitem.pq"),),
             py_output=120515,
         )
         check_logger_msg(stream, "Columns loaded []")

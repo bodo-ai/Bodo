@@ -357,8 +357,8 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
     Basic test for Streaming Union, especially for testing coverage
     The BodoSQL UNION tests cover edge cases
     """
-    customer_path: str = datapath("tpch-test_data/parquet/customer.parquet")
-    orders_path: str = datapath("tpch-test_data/parquet/orders.parquet")
+    customer_path: str = datapath("tpch-test_data/parquet/customer.pq")
+    orders_path: str = datapath("tpch-test_data/parquet/orders.pq")
     global_1 = ColNamesMetaType(("c_custkey",))
     global_2 = MetaType((0,))
     global_3 = MetaType((1,))
@@ -432,8 +432,8 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
     multiple pipelines where the number of input batches on different ranks
     might be different.
     """
-    customer_path: str = datapath("tpch-test_data/parquet/customer.parquet")
-    orders_path: str = datapath("tpch-test_data/parquet/orders.parquet")
+    customer_path: str = datapath("tpch-test_data/parquet/customer.pq")
+    orders_path: str = datapath("tpch-test_data/parquet/orders.pq")
     global_1 = ColNamesMetaType(("c_custkey",))
     global_2 = MetaType((0,))
     global_3 = MetaType((0,))

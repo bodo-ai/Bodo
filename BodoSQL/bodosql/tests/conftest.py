@@ -1216,14 +1216,14 @@ def load_tpch_data(dir_name):
     We use bodo.jit so we can read easily from a directory.
 
     If rows is not None, only fetches that many rows from each table"""
-    customer_df = pd.read_parquet(dir_name + "/customer.parquet/")
-    orders_df = pd.read_parquet(dir_name + "/orders.parquet/")
-    lineitem_df = pd.read_parquet(dir_name + "/lineitem.parquet/")
-    nation_df = pd.read_parquet(dir_name + "/nation.parquet/")
-    region_df = pd.read_parquet(dir_name + "/region.parquet/")
-    supplier_df = pd.read_parquet(dir_name + "/supplier.parquet/")
-    part_df = pd.read_parquet(dir_name + "/part.parquet/")
-    partsupp_df = pd.read_parquet(dir_name + "/partsupp.parquet/")
+    customer_df = pd.read_parquet(dir_name + "/customer.pq/")
+    orders_df = pd.read_parquet(dir_name + "/orders.pq/")
+    lineitem_df = pd.read_parquet(dir_name + "/lineitem.pq/")
+    nation_df = pd.read_parquet(dir_name + "/nation.pq/")
+    region_df = pd.read_parquet(dir_name + "/region.pq/")
+    supplier_df = pd.read_parquet(dir_name + "/supplier.pq/")
+    part_df = pd.read_parquet(dir_name + "/part.pq/")
+    partsupp_df = pd.read_parquet(dir_name + "/partsupp.pq/")
     return (
         customer_df,
         orders_df,
