@@ -1290,7 +1290,7 @@ def to_csv_overload(
                 storage_options=storage_options,
             )
 
-        bodo.io.herlpers.csv_write(path_or_buf, D, _bodo_file_prefix, _is_parallel)
+        bodo.io.helpers.csv_write(path_or_buf, D, _bodo_file_prefix, _is_parallel)
 
     return _impl
 
