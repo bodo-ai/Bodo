@@ -2827,6 +2827,66 @@ def test_bcast_df_dict(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    "val0, val1, val2, val3",
+    [
+        (0, 1, 2, 3),
+        (
+            np.datetime64("2015-05-12").astype("datetime64[ns]"),
+            np.datetime64("2011-10-11").astype("datetime64[ns]"),
+            np.datetime64("2005-01-02").astype("datetime64[ns]"),
+            np.datetime64("2001-03-11").astype("datetime64[ns]"),
+        ),
+        (
+            np.timedelta64(100).astype("timedelta64[ns]"),
+            np.timedelta64(-25).astype("timedelta64[ns]"),
+            np.timedelta64(10).astype("timedelta64[ns]"),
+            np.timedelta64(1000).astype("timedelta64[ns]"),
+        ),
+        (False, True, False, True),
+        (0.0091823, 12.14523, -1231.12398, 11.0),
+    ],
+)
+def test_all_to_all(val0, val1, val2, val3):
+    if bodo.get_size() > 4:
+        return
+
+    from bodo.libs.distributed_api import alltoall
+
+    def impl(n):
+        values_to_send_to_rank_0 = [val0] * n
+        values_to_send_to_rank_1 = [val1] * n
+        values_to_send_to_rank_2 = [val2] * n
+        values_to_send_to_rank_3 = [val3] * n
+        if bodo.get_size() == 1:
+            L = values_to_send_to_rank_0
+        if bodo.get_size() >= 2:
+            L = values_to_send_to_rank_0 + values_to_send_to_rank_1
+        if bodo.get_size() >= 3:
+            L = (
+                values_to_send_to_rank_0
+                + values_to_send_to_rank_1
+                + values_to_send_to_rank_2
+            )
+        if bodo.get_size() >= 4:
+            L = (
+                values_to_send_to_rank_0
+                + values_to_send_to_rank_1
+                + values_to_send_to_rank_2
+                + values_to_send_to_rank_3
+            )
+
+        A = np.array(L)
+        recv_buf = np.empty(len(A), A.dtype)
+        alltoall(A, recv_buf, n)
+
+        return recv_buf
+
+    check_func(impl, (1,), is_out_distributed=False)
+    check_func(impl, (10,), is_out_distributed=False)
+
+
+@pytest.mark.slow
 def test_barrier_error():
     def f():
         bodo.barrier("foo")

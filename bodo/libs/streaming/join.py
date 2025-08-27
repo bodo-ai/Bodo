@@ -1559,37 +1559,6 @@ def lower_runtime_join_filter(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic
-def _retrieve_table(typingctx, cpp_table, row_bitmask):
-    """This function takes in a cpp table and a bitmask over it's rows
-    and returns a new table after applying the bitmask. If the bitmask is
-    all True copying is skipped.
-    """
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),  # output is a table
-            [
-                lir.IntType(8).as_pointer(),  # in_table
-                lir.IntType(8).as_pointer(),  # row_bitmask
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="retrieve_table_py_entry"
-        )
-        func_args = [args[0], args[1]]
-        table_ret = builder.call(fn_tp, func_args)  # change this to bitmask
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return table_ret
-
-    sig = cpp_table(
-        cpp_table,
-        array_info_type,
-    )
-
-    return sig, codegen
-
-
 def overload_runtime_join_filter(
     join_states, table, join_keys_idxs, process_col_bitmasks
 ):
