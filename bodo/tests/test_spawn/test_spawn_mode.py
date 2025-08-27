@@ -141,7 +141,7 @@ def test_compute_return_df(datapath):
     """Simple test that reads data and computes in spawn mode, returning a
     dataframe"""
 
-    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.parquet")
+    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.pq")
 
     def impl():
         df = pd.read_parquet(CUSTOMER_TABLE_PATH)
@@ -165,7 +165,7 @@ def test_compute_return_df(datapath):
 def test_compute_return_scalar(datapath):
     """Simple test that reads data and computes in spawn mode, returning a
     scalar"""
-    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.parquet")
+    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.pq")
 
     def impl():
         df = pd.read_parquet(CUSTOMER_TABLE_PATH)
@@ -324,7 +324,7 @@ def test_dist_false():
 
 def test_results_deleted_after_collection(datapath):
     """Test that results are deleted from workers after collection"""
-    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.parquet")
+    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.pq")
 
     @bodo.jit(spawn=True)
     def impl():

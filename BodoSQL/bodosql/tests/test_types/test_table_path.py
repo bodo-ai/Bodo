@@ -411,7 +411,7 @@ def test_parquet_statistics_file(datapath, memory_leak_check):
     works as expected.
     """
 
-    f1 = datapath("tpch-test-data/parquet/orders.parquet")
+    f1 = datapath("tpch-test-data/parquet/orders.pq")
     stats_file = datapath("tpch-test-data/stats_orders.json")
     table = bodosql.TablePath(f1, "parquet", statistics_file=stats_file)
     bc = bodosql.BodoSQLContext({"ORDERS": table})
@@ -454,7 +454,7 @@ def test_parquet_statistics_file_jit(datapath, memory_leak_check, tmp_path):
     orig_sql_plan_cache_loc = bodo.sql_plan_cache_loc
     bodo.sql_plan_cache_loc = str(tmp_path_rank0)
 
-    f1 = datapath("tpch-test-data/parquet/orders.parquet")
+    f1 = datapath("tpch-test-data/parquet/orders.pq")
     stats_file = datapath("tpch-test-data/stats_orders.json")
     table = bodosql.TablePath(f1, "parquet", statistics_file=stats_file)
     bc = bodosql.BodoSQLContext({"ORDERS": table})

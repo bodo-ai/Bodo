@@ -91,9 +91,6 @@ def is_na_value(builder, context, val, C_NA):
     """check if Python object 'val' is an NA value (None, or np.nan or pd.NA).
     passing pd.NA in as C_NA to avoid getattr overheads inside loops.
     """
-    from bodo.libs import array_ext
-
-    ll.add_symbol("is_na_value", array_ext.is_na_value)
     pyobj = context.get_argument_type(types.pyobject)
     arr_isna_fnty = lir.FunctionType(lir.IntType(32), [pyobj, pyobj])
     arr_isna_fn = cgutils.get_or_insert_function(

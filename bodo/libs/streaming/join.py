@@ -20,6 +20,7 @@ from numba.extending import intrinsic, lower_builtin, models, register_model
 
 import bodo
 from bodo.ext import stream_join_cpp
+from bodo.libs import array_ext
 from bodo.libs.array import (
     array_info_type,
     cpp_table_to_py_table,
@@ -47,6 +48,7 @@ if TYPE_CHECKING:  # pragma: no cover
     pass
 
 
+ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
 ll.add_symbol("join_state_init_py_entry", stream_join_cpp.join_state_init_py_entry)
 ll.add_symbol(
     "join_build_consume_batch_py_entry",
@@ -1573,9 +1575,6 @@ def _retrieve_table(typingctx, cpp_table, row_bitmask):
     and returns a new table after applying the bitmask. If the bitmask is
     all True copying is skipped.
     """
-    from bodo.libs import array_ext
-
-    ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
