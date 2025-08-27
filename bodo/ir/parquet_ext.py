@@ -9,6 +9,7 @@ import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.dataset as ds
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
@@ -844,6 +845,7 @@ def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
     loc_vars = {}
     glbs = globals()
     glbs["bodo"] = bodo
+    glbs["ds"] = ds
     exec(func_text, glbs, loc_vars)
     return loc_vars["impl"]
 
@@ -1070,6 +1072,7 @@ def _gen_pq_reader_py(
         "np": np,
         "pd": pd,
         "bodo": bodo,
+        "ds": ds,
         "get_node_portion": bodo.libs.distributed_api.get_node_portion,
         "set_table_len": bodo.hiframes.table.set_table_len,
         "init_struct_arr": bodo.libs.struct_arr_ext.init_struct_arr,
@@ -1203,6 +1206,7 @@ def _gen_pq_reader_chunked_py(
         "arrow_reader_t": ArrowReaderType(col_names, out_table_col_types),
         "np": np,
         "bodo": bodo,
+        "ds": ds,
     }
 
     loc_vars = {}
