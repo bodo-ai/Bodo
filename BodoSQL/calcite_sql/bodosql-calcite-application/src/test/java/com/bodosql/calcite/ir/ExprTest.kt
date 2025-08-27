@@ -74,7 +74,7 @@ class ExprTest {
                 Variable("bodo"),
                 "boolean_array_type",
             )
-        assertEquals("bodo.types.boolean_array_type", attribute2.emit())
+        assertEquals("bodo.boolean_array_type", attribute2.emit())
     }
 
     @Test
