@@ -144,22 +144,20 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
     # TODO: Add other loss cases
     if m.loss == "hinge":
         loss_func = hinge_loss
-        predict_func = m.decision_function
     elif m.loss == "log_loss":
         loss_func = log_loss
-        predict_func = m.predict_proba
     elif m.loss == "squared_error":
         loss_func = mean_squared_error
-        predict_func = m.decision_function
     else:
         raise ValueError(f"loss {m.loss} not supported")
 
     if isinstance(y_classes, pd.arrays.ArrowExtensionArray):
         y_classes = y_classes.to_numpy()
 
-    regC = False
-    if isinstance(m, sklearn.linear_model.SGDRegressor):
-        regC = True
+    if not (regC := isinstance(m, sklearn.linear_model.SGDRegressor)):
+        # Function used to produce input for loss function
+        predict_func = m.predict_proba if m.loss == "log_loss" else m.decision_function
+
     for _ in range(m.max_iter):
         if regC:
             m.partial_fit(X, y)
