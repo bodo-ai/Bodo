@@ -463,7 +463,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         import pyiceberg.partitioning
         import pyiceberg.table.sorting
 
-        # TODO(ehsan): avoid compiler import in Iceberg read
+        # TODO(ehsan): avoid compiler import in Iceberg write
         import bodo.decorators  # isort:skip
         import bodo.io.iceberg
         import bodo.io.iceberg.stream_iceberg_write
