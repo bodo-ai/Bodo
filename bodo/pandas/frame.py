@@ -137,17 +137,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def loc(self):
         return BodoDataFrameLocIndexer("loc", self)
 
-    def __setattr__(self, name, value):
-        # Intercept direct setting of columns attribute
-        # and copy new column names to _head_df if it
-        # exists so that when column names are propagated
-        # from there they match the latest dataframe
-        # column names.
-        if name == "columns":
-            if self._head_df is not None:
-                self._head_df.columns = value
-        super().__setattr__(name, value)
-
     @property
     def _plan(self):
         if self.is_lazy_plan():
@@ -350,6 +339,36 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
     def index(self, value):
         self.execute_plan()
         super()._set_axis(1, value)
+
+    @property
+    def columns(self):
+        return super().columns
+
+    @columns.setter
+    def columns(self, value):
+        # Validate arguments/Update column names in managers.
+        super()._set_axis(0, value)
+
+        # Update column names in head/metadata.
+        if self._head_df is not None:
+            self._head_df.columns = value
+        if (md_head := getattr(self._mgr, "_md_head", None)) is not None:
+            md_head.columns = value
+
+        # Update column names in plan.
+        if self.is_lazy_plan():
+            self._mgr._plan._update_column_names(value)
+        elif self._exec_state == ExecState.DISTRIBUTED:
+            assert self._head_df is not None
+            # Since we can't edit the plan directly,
+            # create a new projection with new column names.
+            empty_data = self._head_df.head(0)
+            col_indices = list(
+                range(len(empty_data.columns) + get_n_index_arrays(empty_data.index))
+            )
+            self._mgr._plan = LogicalProjection(
+                empty_data, self._plan, make_col_ref_exprs(col_indices, self._plan)
+            )
 
     @property
     def shape(self):

@@ -24,7 +24,7 @@ class ZipFileWithPermissions(ZipFile):
         return targetpath
 
 
-def patch_lib(fpath):
+def patch_lib(fpath, prefix_path):
     # Update the LC_LOAD_DYLIB call for libmpi if it exists.
     # https://medium.com/@donblas/fun-with-rpath-otool-and-install-name-tool-e3e41ae86172
     load_libs = check_output(["otool", "-L", fpath]).decode("utf-8").split("\n")
@@ -38,8 +38,8 @@ def patch_lib(fpath):
 
     for lib in load_libs[1:]:
         print(lib)
-        if is_libmpi(lib):
-            print("Patching libmpi")
+        if is_libmpi(lib) or is_libpmpi(lib):
+            print(f"Patching {lib}")
             # Each line looks like
             #      path ...
             # So we strip whitespace and split on spaces,
@@ -53,7 +53,7 @@ def patch_lib(fpath):
                     "install_name_tool",
                     "-change",
                     lib_path,
-                    f"@loader_path/../../../{filename}",
+                    f"{prefix_path}/{filename}",
                     fpath,
                 ]
             )
@@ -64,14 +64,23 @@ def is_libmpi(fname):
     return "libmpi" in fname
 
 
+def is_libpmpi(fname):
+    return "libpmpi" in fname
+
+
 def patch_libs(path):
     """patch .so files found recursively in path"""
+    ext_prefix = "@loader_path/../../.."
+    # Assumes MPI.cpython.*.so is located in bodo/mpi4py/_vendored_mpi4py
+    mpi_prefix = ext_prefix + "/../.."
     for root, _, files in os.walk(path):
         for f in files:
-            # Only patch the main extension since other extensions might have different relative paths
+            # Only patch the main extension + MPI since other extensions might have different relative paths
             # other libraries will find the library in the cache
             if f.startswith("ext.cpython") and f.endswith(".so"):
-                patch_lib(os.path.join(root, f))
+                patch_lib(os.path.join(root, f), ext_prefix)
+            elif f.startswith("MPI.cpython") and f.endswith(".so"):
+                patch_lib(os.path.join(root, f), mpi_prefix)
 
 
 def patch_wheel(path):

@@ -494,13 +494,13 @@ def _groupby_apply_plan(
 
     if isinstance(out_type, (bodo.types.DataFrameType, bodo.types.SeriesType)):
         raise BodoLibNotImplementedException(
-            "DataFrameGroupby.apply(): functions returning Series or DataFrame not implemented yet."
+            "Groupby.apply(): functions returning Series or DataFrame not implemented yet."
         )
 
     out_arrow_type = _numba_type_to_pyarrow_type(out_type)
     if out_arrow_type is None:
         raise BodoLibNotImplementedException(
-            "DataFrameGroupby.apply(): Unsupported UDF output type:", out_type
+            "Groupby.apply(): Unsupported UDF output type:", out_type
         )
 
     selected_cols = [
