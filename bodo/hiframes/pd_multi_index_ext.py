@@ -251,7 +251,7 @@ def impl(iterables, sortorder=None, names=None):
     return mi
 """
     loc_vars = {}
-    exec(func_text, {"pd": pd, "bodo": bodo}, loc_vars)
+    exec(func_text, {"pd": pd, "bodo": bodo, "numba": numba}, loc_vars)
     impl = loc_vars["impl"]
     return impl
 
