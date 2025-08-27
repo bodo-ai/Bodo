@@ -39,8 +39,10 @@ from bodo.libs.array import (
     array_from_cpp_table,
     array_to_info,
     delete_table,
+    get_groupby_labels,
     get_null_shuffle_info,
     get_shuffle_info,
+    reverse_shuffle_table,
     shuffle_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
@@ -2384,15 +2386,6 @@ def get_group_indices(keys, dropna, _is_parallel):  # pragma: no cover
 @overload(get_group_indices)
 def get_group_indices_overload(keys, dropna, _is_parallel):
     """get group indices (labels) for a tuple of key arrays."""
-    from bodo.libs.array import table_type
-
-    get_groupby_labels = types.ExternalFunction(
-        "get_groupby_labels_py_entry",
-        types.int64(
-            table_type, types.voidptr, types.voidptr, types.boolean, types.bool_
-        ),
-    )
-
     func_text = "def impl(keys, dropna, _is_parallel):\n"
     # convert arrays to table
     func_text += (
@@ -2554,29 +2547,6 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
 
 def reverse_shuffle(data, shuffle_info):  # pragma: no cover
     return data
-
-
-@intrinsic
-def reverse_shuffle_table(typingctx, table_t, shuffle_info_t):
-    """call reverse shuffle if shuffle info not none"""
-    from llvmlite import ir as lir
-
-    from bodo.libs.array import table_type
-
-    def codegen(context, builder, sig, args):
-        if sig.args[-1] == types.none:
-            return context.get_constant_null(table_type)
-
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="reverse_shuffle_table"
-        )
-        return builder.call(fn_tp, args)
-
-    return table_type(table_type, shuffle_info_t), codegen
 
 
 @overload(reverse_shuffle)

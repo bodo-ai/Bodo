@@ -1685,7 +1685,7 @@ def impl_runtime_join_filter(
                 func_text += "    if applied_any_filter:\n"
                 func_text += "        row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)\n"
                 func_text += f"        cpp_table = bodo.libs.array.py_data_to_cpp_table(cast_table, (), col_inds_t, {n_cols})\n"
-                func_text += "        cpp_table = _retrieve_table(\n"
+                func_text += "        cpp_table = bodo.libs.array._retrieve_table(\n"
                 func_text += "            cpp_table, row_bitmask_arr\n"
                 func_text += "        )\n"
                 func_text += (
@@ -1712,7 +1712,7 @@ def impl_runtime_join_filter(
     row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)
 
     if applied_any_filter:
-        out_cpp_table = _retrieve_table(
+        out_cpp_table = bodo.libs.array._retrieve_table(
             cpp_table, row_bitmask_arr
         )
         out_table = bodo.libs.array.cpp_table_to_py_table(
@@ -1742,7 +1742,6 @@ def impl_runtime_join_filter(
         "can_apply_bloom_filters": can_apply_bloom_filters,
         "can_apply_column_filters": can_apply_col_filters,
         "_runtime_join_filter": _runtime_join_filter,
-        "_retrieve_table": _retrieve_table,
     }
     exec(func_text, global_vars, loc_vars)
 

@@ -42,11 +42,7 @@ from bodo.ir.argument_checkers import (
     StringSeriesArgumentChecker,
 )
 from bodo.ir.declarative_templates import overload_method_declarative
-from bodo.libs.array import (
-    array_info_type,
-    array_to_info,
-    check_and_propagate_cpp_exception,
-)
+from bodo.libs.array import get_search_regex
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.str_arr_ext import (
     get_utf8_size,
@@ -591,30 +587,6 @@ def is_regex_unsupported(pat):
         return any(x in pat for x in unsupported_regex)
     else:
         return True
-
-
-_get_search_regex = types.ExternalFunction(
-    "get_search_regex_py_entry",
-    # params: in array, case-sensitive flag, pattern, output boolean array
-    types.void(
-        array_info_type,
-        types.bool_,
-        types.bool_,
-        types.voidptr,
-        array_info_type,
-        types.bool_,
-    ),
-)
-
-
-@numba.njit(no_cpython_wrapper=True)
-def get_search_regex(
-    in_arr, case, match, pat, out_arr, do_full_match=False
-):  # pragma: no cover
-    in_arr_info = array_to_info(in_arr)
-    out_arr_info = array_to_info(out_arr)
-    _get_search_regex(in_arr_info, case, match, pat, out_arr_info, do_full_match)
-    check_and_propagate_cpp_exception()
 
 
 @overload_method_declarative(

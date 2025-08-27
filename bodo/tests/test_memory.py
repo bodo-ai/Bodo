@@ -5461,13 +5461,6 @@ def test_array_unpinned():
     Test that arrays can be unpinned and are indicated so in
     the BufferPool
     """
-    from numba.core import types
-
-    from bodo.libs.array import array_info_type
-
-    _array_info_unpin = types.ExternalFunction(
-        "array_info_unpin", types.void(array_info_type)
-    )
 
     @bodo.jit(returns_maybe_distributed=False)
     def impl():
@@ -5496,7 +5489,7 @@ def test_array_unpinned():
         arr_info = bodo.libs.array.array_to_info(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0)
         )
-        _array_info_unpin(arr_info)
+        bodo.libs.array._array_info_unpin(arr_info)
 
         # Check Metrics after Unpinning
         with bodo.objmode(passed_checks="boolean"):

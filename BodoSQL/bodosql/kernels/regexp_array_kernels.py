@@ -5,17 +5,11 @@ Implements regexp array kernels that are specific to BodoSQL
 import re
 
 import numba
-from numba.core import cgutils, types
-from numba.extending import intrinsic, register_jitable
+from numba.core import types
+from numba.extending import register_jitable
 
 import bodo
-from bodo.libs.array import (
-    array_info_type,
-    array_to_info,
-    check_and_propagate_cpp_exception,
-    delete_info,
-    info_to_array,
-)
+from bodo.libs.array import get_replace_regex, get_replace_regex_dict_state
 from bodo.libs.re_ext import init_const_pattern
 from bodo.utils.typing import (
     get_overload_const_int,
@@ -654,70 +648,6 @@ def _gen_regex_replace_body():
     scalar_text += "      result += r.sub(arg2, arg0, count=1)\n"
     scalar_text += "      res[i] = result"
     return scalar_text
-
-
-@intrinsic
-def _get_replace_regex_dict_state(
-    typingctx, arr_info_t, pattern_t, replace_t, dict_encoding_state_t, func_id_t
-):
-    assert arr_info_t == array_info_type
-    assert isinstance(func_id_t, types.Integer), "func_id must be an integer"
-
-    def codegen(context, builder, sig, args):
-        from llvmlite import ir as lir
-
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_replace_regex_dict_state_py_entry"
-        )
-        ret = builder.call(fn_tp, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    sig = array_info_type(
-        arr_info_t, types.voidptr, types.voidptr, dict_encoding_state_t, types.int64
-    )
-    return sig, codegen
-
-
-@numba.njit(no_cpython_wrapper=True)
-def get_replace_regex_dict_state(
-    in_arr, pattern_typ, replace_typ, dict_encoding_state, func_id
-):  # pragma: no cover
-    in_arr_info = array_to_info(in_arr)
-    out_arr_info = _get_replace_regex_dict_state(
-        in_arr_info, pattern_typ, replace_typ, dict_encoding_state, func_id
-    )
-    out = info_to_array(out_arr_info, in_arr)
-    delete_info(out_arr_info)
-    return out
-
-
-_get_replace_regex = types.ExternalFunction(
-    "get_replace_regex_py_entry",
-    # params: in array, pattern, replacement,
-    # Output: out array
-    array_info_type(array_info_type, types.voidptr, types.voidptr),
-)
-
-
-@numba.njit(no_cpython_wrapper=True)
-def get_replace_regex(in_arr, pattern_typ, replace_typ):  # pragma: no cover
-    in_arr_info = array_to_info(in_arr)
-    out_arr_info = _get_replace_regex(in_arr_info, pattern_typ, replace_typ)
-    check_and_propagate_cpp_exception()
-    out = info_to_array(out_arr_info, in_arr)
-    delete_info(out_arr_info)
-    return out
 
 
 @numba.generated_jit(nopython=True, no_unliteral=True)

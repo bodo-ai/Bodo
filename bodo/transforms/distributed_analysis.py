@@ -1760,14 +1760,17 @@ class DistributedAnalysis:
                 )
 
             return
-
-        if fdef == ("get_search_regex", "bodo.hiframes.series_str_impl"):
+        if fdef == ("get_search_regex", "bodo.libs.array"):
             # out_arr and in_arr should have the same distribution
             new_dist = _meet_array_dists(
                 self.typemap, rhs.args[0].name, rhs.args[3].name, array_dists
             )
             array_dists[rhs.args[0].name] = new_dist
             array_dists[rhs.args[3].name] = new_dist
+            return
+        if fdef == ("get_replace_regex", "bodo.libs.array"):
+            # out_arr and in_arr should have the same distribution
+            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("rolling_fixed", "bodo.hiframes.rolling"):
