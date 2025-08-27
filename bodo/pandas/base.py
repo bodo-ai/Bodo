@@ -194,6 +194,8 @@ def read_iceberg(
     from bodo.io.iceberg.read_metadata import get_table_length
     from bodo.pandas.utils import BodoLibNotImplementedException
 
+    bodo.spawn.utils.import_compiler_on_workers()
+
     # Support simple directory only calls like:
     # pd.read_iceberg("table", location="/path/to/table")
     if catalog_name is None and catalog_properties is None and location is not None:
@@ -373,6 +375,8 @@ def read_csv(
     # Import compiler
     import bodo.decorators  # isort:skip
     from bodo.utils.utils import bodo_spawn_exec
+
+    bodo.spawn.utils.import_compiler_on_workers()
 
     func = "def bodo_read_csv(filepath"
     if names != lib.no_default:

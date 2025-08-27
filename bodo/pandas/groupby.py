@@ -461,6 +461,8 @@ def _groupby_apply_plan(
     # Import compiler
     import bodo.decorators  # isort:skip
 
+    bodo.spawn.utils.import_compiler_on_workers()
+
     if not callable(func):
         raise BodoLibNotImplementedException(
             "Groupby.apply() only supports callable values for func."

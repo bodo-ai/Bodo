@@ -180,3 +180,14 @@ def sync_and_reraise_error(
     else:
         if err is not None:
             raise err
+
+
+def import_compiler_on_workers():
+    """Import the JIT compiler on all workers. Done as necessary since import time
+    can be significant.
+    """
+
+    def import_compiler():
+        pass
+
+    bodo.spawn.spawner.submit_func_to_workers(lambda: import_compiler(), [])

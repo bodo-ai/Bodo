@@ -719,6 +719,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         from bodo.utils.typing import check_unsupported_args
         # argument defaults should match that of to_csv_overload in pd_dataframe_ext.py
 
+        bodo.spawn.utils.import_compiler_on_workers()
+
         @bodo.jit(spawn=True)
         def to_csv_wrapper(
             df: pd.DataFrame,
@@ -1360,6 +1362,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 )
                 warnings.warn(BodoCompilationFailedWarning(msg))
             else:
+                bodo.spawn.utils.import_compiler_on_workers()
                 return apply_result
 
         # engine == "python" or jit fallthrough

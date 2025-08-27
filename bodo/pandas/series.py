@@ -700,6 +700,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 error_msg = "Jit could not determine pyarrow return type from UDF."
 
             if empty_series is not None:
+                bodo.spawn.utils.import_compiler_on_workers()
                 # Compile the cfunc and get pointer
                 return _get_series_func_plan(
                     self._plan,

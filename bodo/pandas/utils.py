@@ -1275,6 +1275,8 @@ class JITFallback:
             # Import compiler
             import bodo.decorators  # isort:skip
 
+            bodo.spawn.utils.import_compiler_on_workers()
+
             # None means it wasn't in the cache either way so we can try to
             # JIT compile it.
             if cache_entry is None:
