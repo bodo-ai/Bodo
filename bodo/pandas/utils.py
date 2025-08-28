@@ -1181,11 +1181,16 @@ def compile_cfunc(func, decorator):
     """
     import ctypes
 
-    try:
-        cfunc = decorator(func)
-    except OSError:
-        print("caught OSError")
-        raise Exception
+    num_retries = 10
+
+    for _ in range(num_retries):
+        try:
+            cfunc = decorator(func)
+            break
+        except OSError:
+            print("retrying...")
+            time.sleep(0.01)
+
     return ctypes.c_void_p(cfunc.address).value
 
 
