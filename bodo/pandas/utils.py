@@ -1187,7 +1187,8 @@ def compile_cfunc(func, decorator):
         try:
             cfunc = decorator(func)
             break
-        except OSError:
+        except OSError as e:
+            raise e
             print("retrying...")
             time.sleep(0.01)
 
