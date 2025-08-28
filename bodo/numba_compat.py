@@ -1948,17 +1948,29 @@ def Cache_guard_against_spurious_io_errors(self):
         except OSError as e:
             if e.errno != errno.EACCES:
                 raise
-    else:
-        # No such conditions under non-Windows OSes
+    elif os.environ.get("BODO_PLATFORM_CACHE_LOCATION", None) is not None:
+        # If on the platform (using NFS for cache), multiple files
+        # trying to write to the same location can cause Stale File Handle Error.
+        # Since we only at least need one rank to populate the cache, we can
+        # safely ignore.
         try:
             yield
         except OSError as e:
-            print("Got OSError", e.errno)
             if e.errno != errno.ESTALE:
                 raise
+    else:
+        yield
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.caching.Cache._guard_against_spurious_io_errors)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "85fcb4ee1a5705773f0d0cec78f45854ae7a6002d7521cd5a9a0deeefccca89a"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.caching._Cache._guard_against_spurious_io_errors has changed")
 
 numba.core.caching.Cache._guard_against_spurious_io_errors = Cache_guard_against_spurious_io_errors
-
 
 def slice_size(self, index, dsize, equiv_set, scope, stmts):
     return None, None

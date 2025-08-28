@@ -1181,17 +1181,7 @@ def compile_cfunc(func, decorator):
     """
     import ctypes
 
-    num_retries = 1
-
-    for _ in range(num_retries):
-        try:
-            cfunc = decorator(func)
-            break
-        except OSError:
-            # Retry on stale file handle errors
-            # from multiple workers accessing NFS.
-            time.sleep(0.01)
-
+    cfunc = decorator(func)
     return ctypes.c_void_p(cfunc.address).value
 
 
