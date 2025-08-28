@@ -1187,9 +1187,9 @@ def compile_cfunc(func, decorator):
         try:
             cfunc = decorator(func)
             break
-        except OSError as e:
-            raise e
-            print("retrying...")
+        except OSError:
+            # Retry on stale file handle errors
+            # from multiple workers accessing NFS.
             time.sleep(0.01)
 
     return ctypes.c_void_p(cfunc.address).value

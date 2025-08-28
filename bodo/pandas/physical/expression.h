@@ -3,7 +3,6 @@
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
 #include <arrow/type_traits.h>
-#include <iostream>
 #include <string>
 #include <type_traits>
 #include "../libs/_array_utils.h"
@@ -821,9 +820,6 @@ class PhysicalUDFExpression : public PhysicalExpression {
 
             PyObject *result = PyObject_CallMethod(bodo_module, "compile_cfunc",
                                                    "O", scalar_func_data.args);
-            int rank;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-            std::cout << "rank: " << rank << " got here.";
             if (!result) {
                 PyErr_Print();
                 Py_DECREF(bodo_module);
