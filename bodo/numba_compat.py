@@ -3,9 +3,7 @@ Numba monkey patches to fix issues related to Bodo. Should be imported before an
 other module in bodo package.
 """
 
-import contextlib
 import copy
-import errno
 import functools
 import hashlib
 import inspect
@@ -23,6 +21,8 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 
 import numba
+import numba.core.ccallback
+from numba.core.compiler_lock import global_compiler_lock
 import numba.core.boxing
 import numba.core.dispatcher
 import numba.core.funcdesc
@@ -1501,7 +1501,6 @@ if _check_numba_change:  # pragma: no cover
 
 numba.core.dispatcher.Dispatcher.compile = Dispatcher_compile
 
-from numba.core.compiler_lock import global_compiler_lock
 
 @global_compiler_lock
 def CFunc_compile(self):
@@ -1531,7 +1530,6 @@ def CFunc_compile(self):
     self._wrapper_address = self._library.get_pointer_to_function(
         self._wrapper_name)
 
-import numba.core.ccallback
 
 if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.ccallback.CFunc.compile)
