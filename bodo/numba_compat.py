@@ -1940,7 +1940,6 @@ numba.core.caching.CacheImpl.__init__ = CacheImpl__init__
 
 @contextlib.contextmanager
 def Cache_guard_against_spurious_io_errors(self):
-    print("monkey patching _guard_against_spurious_io_errors")
     if os.name == 'nt':
         # Guard against permission errors due to accessing the file
         # from several processes (see #2028)
@@ -1954,6 +1953,7 @@ def Cache_guard_against_spurious_io_errors(self):
         try:
             yield
         except OSError as e:
+            print("Got OSError", e.errno)
             if e.errno != errno.ESTALE:
                 raise
 
