@@ -22,7 +22,6 @@ from contextlib import ExitStack
 
 import numba
 import numba.core.ccallback
-from numba.core.compiler_lock import global_compiler_lock
 import numba.core.boxing
 import numba.core.dispatcher
 import numba.core.funcdesc
@@ -36,6 +35,7 @@ import numba.np.linalg
 import numba.np.ufunc.array_exprs as array_exprs
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.compiler import Compiler
+from numba.core.compiler_lock import global_compiler_lock
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
 from numba.core.ir_utils import (
     _create_function_from_code_obj,
