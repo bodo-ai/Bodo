@@ -1413,7 +1413,7 @@ def resolve_join_general_cond_funcs(cres):
             join_gen_cond_cfunc_addr[sym] = cres.library.get_pointer_to_function(sym)
 
 
-def compile(self, sig):
+def Dispatcher_compile(self, sig):
     import numba.core.event as ev
     from numba.core import sigutils
     from numba.core.compiler_lock import global_compiler_lock
@@ -1499,8 +1499,49 @@ if _check_numba_change:  # pragma: no cover
     ):  # pragma: no cover
         warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
 
-numba.core.dispatcher.Dispatcher.compile = compile
+numba.core.dispatcher.Dispatcher.compile = Dispatcher_compile
 
+from numba.core.compiler_lock import global_compiler_lock
+
+@global_compiler_lock
+def CFunc_compile(self):
+    import bodo
+    # Try to load from cache
+    cres = self._cache.load_overload(self._sig,
+                                        self._targetdescr.target_context)
+    if cres is None:
+        cres = self._compile_uncached()
+        # bodo change: only save to cache on at most one rank per node.
+        if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
+            # Since we used a shared file system on the platform, writing with just one rank is
+            # sufficient, and desirable (to avoid I/O contention due to filesystem limitations).
+            if bodo.get_rank() == 0:
+                self._cache.save_overload(self._sig, cres)
+        else:
+            # Even when not on platform, it's best to minimize I/O contention, so we
+            # write cache files from one rank on each node.
+            first_ranks = bodo.get_nodes_first_ranks()
+            if bodo.get_rank() in first_ranks:
+                self._cache.save_overload(self._sig, cres)
+    else:
+        self._cache_hits += 1
+
+    self._library = cres.library
+    self._wrapper_name = cres.fndesc.llvm_cfunc_wrapper_name
+    self._wrapper_address = self._library.get_pointer_to_function(
+        self._wrapper_name)
+
+import numba.core.ccallback
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.ccallback.CFunc.compile)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "08edc561907b33be181e3377776782b5d8c43f67df4dccfe2f567fdaf810cf53"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.ccallback.CFunc.compile has changed")
+
+numba.core.ccallback.CFunc.compile = CFunc_compile
 
 def _get_module_for_linking(self):
     """
@@ -1938,39 +1979,39 @@ if _check_numba_change:  # pragma: no cover
 
 numba.core.caching.CacheImpl.__init__ = CacheImpl__init__
 
-@contextlib.contextmanager
-def Cache_guard_against_spurious_io_errors(self):
-    if os.name == 'nt':
-        # Guard against permission errors due to accessing the file
-        # from several processes (see #2028)
-        try:
-            yield
-        except OSError as e:
-            if e.errno != errno.EACCES:
-                raise
-    elif os.environ.get("BODO_PLATFORM_CACHE_LOCATION", None) is not None:
-        # bodo change: If on the platform (using NFS for cache), multiple processes
-        # trying to write to the same location can cause a Stale File Handle Error.
-        # Since we only at least need one rank to populate the cache, we can
-        # safely ignore.
-        try:
-            yield
-        except OSError as e:
-            if e.errno not in (errno.ESTALE, errno.ETXTBSY) :
-                raise
-    else:
-        yield
+# @contextlib.contextmanager
+# def Cache_guard_against_spurious_io_errors(self):
+#     if os.name == 'nt':
+#         # Guard against permission errors due to accessing the file
+#         # from several processes (see #2028)
+#         try:
+#             yield
+#         except OSError as e:
+#             if e.errno != errno.EACCES:
+#                 raise
+#     elif os.environ.get("BODO_PLATFORM_CACHE_LOCATION", None) is not None:
+#         # bodo change: If on the platform (using NFS for cache), multiple processes
+#         # trying to write to the same location can cause a Stale File Handle Error.
+#         # Since we only at least need one rank to populate the cache, we can
+#         # safely ignore.
+#         try:
+#             yield
+#         except OSError as e:
+#             if e.errno not in (errno.ESTALE, errno.ETXTBSY) :
+#                 raise
+#     else:
+#         yield
 
 
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.caching.Cache._guard_against_spurious_io_errors)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "85fcb4ee1a5705773f0d0cec78f45854ae7a6002d7521cd5a9a0deeefccca89a"
-    ):  # pragma: no cover
-        warnings.warn("numba.core.caching._Cache._guard_against_spurious_io_errors has changed")
+# if _check_numba_change:  # pragma: no cover
+#     lines = inspect.getsource(numba.core.caching.Cache._guard_against_spurious_io_errors)
+#     if (
+#         hashlib.sha256(lines.encode()).hexdigest()
+#         != "85fcb4ee1a5705773f0d0cec78f45854ae7a6002d7521cd5a9a0deeefccca89a"
+#     ):  # pragma: no cover
+#         warnings.warn("numba.core.caching._Cache._guard_against_spurious_io_errors has changed")
 
-numba.core.caching.Cache._guard_against_spurious_io_errors = Cache_guard_against_spurious_io_errors
+# numba.core.caching.Cache._guard_against_spurious_io_errors = Cache_guard_against_spurious_io_errors
 
 def slice_size(self, index, dsize, equiv_set, scope, stmts):
     return None, None
