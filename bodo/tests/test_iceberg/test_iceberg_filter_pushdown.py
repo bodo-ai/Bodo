@@ -75,7 +75,7 @@ def test_filter_pushdown_time_direct(iceberg_database, iceberg_table_conn):
 def test_filter_pushdown_time(iceberg_database, iceberg_table_conn):
     table_name = "filter_pushdown_time_table_2"
     input_df = pd.DataFrame(
-        {"ID": np.arange(10), "time_col": [bodo.Time(10, 10, precision=9)] * 10}
+        {"ID": np.arange(10), "time_col": [bodo.types.Time(10, 10, precision=9)] * 10}
     )
 
     db_schema, warehouse_loc = iceberg_database()
@@ -87,7 +87,7 @@ def test_filter_pushdown_time(iceberg_database, iceberg_table_conn):
 
     def impl(table_name, conn, db_schema):
         df = pd.read_sql_table(table_name, conn, db_schema)
-        df = df[df.time_col == bodo.Time(10, 10, precision=6)]
+        df = df[df.time_col == bodo.types.Time(10, 10, precision=6)]
         return df
 
     check_func(

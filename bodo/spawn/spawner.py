@@ -1,8 +1,9 @@
+"""Spawner for spawner-worker implementation. This file should import JIT lazily to
+avoid slowing down non-JIT code paths.
+"""
+
 from __future__ import annotations
 
-"""Spawner-worker compilation implementation"""
-
-import atexit
 import contextlib
 import inspect
 import itertools
@@ -17,25 +18,13 @@ import typing as pt
 from collections import deque
 
 import cloudpickle
-import numba
 import pandas as pd
 import psutil
-from numba.core import types
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo
 import bodo.user_logging
 from bodo.mpi4py import MPI
-from bodo.pandas import (
-    BodoDataFrame,
-    BodoSeries,
-    LazyArrowExtensionArray,
-    LazyMetadata,
-)
-from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
-from bodo.pandas.lazy_wrapper import BodoLazyWrapper
-from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
-from bodo.pandas.utils import get_lazy_manager_class, get_lazy_single_manager_class
 from bodo.spawn.utils import (
     ArgMetadata,
     CommandType,
@@ -43,7 +32,18 @@ from bodo.spawn.utils import (
     debug_msg,
     poll_for_barrier,
 )
-from bodo.utils.utils import is_distributable_typ
+
+if pt.TYPE_CHECKING:
+    from numba.core import types
+
+    from bodo.pandas import (
+        BodoDataFrame,
+        BodoSeries,
+        LazyArrowExtensionArray,
+        LazyMetadata,
+    )
+    from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
+    from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
 
 # Reference to BodoSQLContext class to be lazily initialized if BodoSQLContext
 # is detected
@@ -283,6 +283,8 @@ class Spawner:
         **kwargs,
     ):
         """Send func to be compiled and executed on spawned process"""
+        from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+
         # If we get a df/series with a plan we need to execute it and get the result id
         # so we can build the arg metadata.
         # We do this first so nothing is already running when we execute the plan.
@@ -402,9 +404,7 @@ class Spawner:
             self._is_running = True
         self.worker_intercomm.bcast(CommandType.GATHER.value, root=root)
         self.worker_intercomm.bcast(res_id, root=root)
-        res = bodo.libs.distributed_api.gatherv(
-            None, root=root, comm=self.worker_intercomm
-        )
+        res = bodo.gatherv(None, root=root, comm=self.worker_intercomm)
         if not initial_running:
             self._is_running = False
             self._run_del_queue()
@@ -419,6 +419,12 @@ class Spawner:
         lazy_metadata: LazyMetadata | list | dict | tuple,
     ) -> BodoDataFrame | BodoSeries | LazyArrowExtensionArray | list | dict | tuple:
         """Wrap the distributed return of a function into a BodoDataFrame, BodoSeries, or LazyArrowExtensionArray."""
+        from bodo.pandas import (
+            BodoDataFrame,
+            BodoSeries,
+            LazyArrowExtensionArray,
+            LazyMetadata,
+        )
 
         if isinstance(lazy_metadata, list):
             return [self.wrap_distributed_result(d) for d in lazy_metadata]
@@ -473,6 +479,13 @@ class Spawner:
         Returns:
             ArgMetadata or None: ArgMetadata if argument is distributable, None otherwise
         """
+        import bodo
+        from bodo.pandas.lazy_wrapper import BodoLazyWrapper
+
+        # Avoid importing compiler for plans unnecessarily
+        if isinstance(arg, bodo.pandas.plan.LazyPlan):
+            return None
+
         dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
             if arg._lazy:
@@ -501,7 +514,10 @@ class Spawner:
         if data_type is None:
             return None
 
-        if is_distributable_typ(data_type) and not is_replicated:
+        # Import compiler lazily
+        import bodo.decorators  # isort:skip
+
+        if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
             dist_flags["distributed_block"].add(arg_name)
             return dist_comm_meta
 
@@ -535,15 +551,18 @@ class Spawner:
             arg: input argument
             out_arg: input argument metadata
         """
+        import bodo
+
         if isinstance(arg_meta, ArgMetadata):
             if arg_meta == ArgMetadata.BROADCAST:
+                # Import compiler lazily
+                import bodo.decorators  # isort:skip
+
                 bodo.libs.distributed_api.bcast(
                     arg, root=self.bcast_root, comm=spawner.worker_intercomm
                 )
             elif arg_meta == ArgMetadata.SCATTER:
-                bodo.libs.distributed_api.scatterv(
-                    arg, root=self.bcast_root, comm=spawner.worker_intercomm
-                )
+                bodo.scatterv(arg, root=self.bcast_root, comm=spawner.worker_intercomm)
             elif arg_meta == ArgMetadata.LAZY:
                 spawner.worker_intercomm.bcast(
                     arg._get_result_id(), root=self.bcast_root
@@ -553,13 +572,16 @@ class Spawner:
         if isinstance(arg_meta, BodoSQLContextMetadata):
             for tname, tmeta in arg_meta.tables.items():
                 if tmeta is ArgMetadata.BROADCAST:
+                    # Import compiler lazily
+                    import bodo.decorators  # isort:skip
+
                     bodo.libs.distributed_api.bcast(
                         arg.tables[tname],
                         root=self.bcast_root,
                         comm=spawner.worker_intercomm,
                     )
                 elif tmeta is ArgMetadata.SCATTER:
-                    bodo.libs.distributed_api.scatterv(
+                    bodo.scatterv(
                         arg.tables[tname],
                         root=self.bcast_root,
                         comm=spawner.worker_intercomm,
@@ -584,6 +606,8 @@ class Spawner:
             args (tuple[Any]): positional arguments
             kwargs (dict[str, Any]): keyword arguments
         """
+        import numba
+
         is_dispatcher = isinstance(func_to_execute, SpawnDispatcher)
         param_names = list(
             numba.core.utils.pysignature(
@@ -664,8 +688,8 @@ class Spawner:
 
         # Skip if not in Jupyter on Windows and not Jupyter on Bodo platform
         if (
-            not bodo.utils.utils.is_jupyter_on_windows()
-            and not bodo.utils.utils.is_jupyter_on_bodo_platform()
+            not bodo.spawn.utils.is_jupyter_on_windows()
+            and not bodo.spawn.utils.is_jupyter_on_bodo_platform()
         ):
             self.worker_output_thread = None
             return
@@ -783,11 +807,14 @@ class Spawner:
         | LazySingleArrayManager
     ):
         """Scatter data to all workers and return the manager for the data."""
+        from bodo.pandas.utils import (
+            get_lazy_manager_class,
+            get_lazy_single_manager_class,
+        )
+
         self._is_running = True
         self.worker_intercomm.bcast(CommandType.SCATTER.value, self.bcast_root)
-        bodo.libs.distributed_api.scatterv(
-            data, root=self.bcast_root, comm=self.worker_intercomm
-        )
+        bodo.scatterv(data, root=self.bcast_root, comm=self.worker_intercomm)
         res_id = self.worker_intercomm.recv(None, source=0)
         self._is_running = False
         self._run_del_queue()
@@ -876,9 +903,6 @@ def destroy_spawner():
     if spawner is not None:
         spawner.reset()
         spawner = None
-
-
-atexit.register(destroy_spawner)
 
 
 def submit_func_to_workers(
@@ -988,4 +1012,4 @@ if (
     "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
     and "JPY_SESSION_NAME" not in os.environ
 ):
-    raise bodo.utils.typing.BodoError(vs_code_nb_msg)
+    raise ImportError(vs_code_nb_msg)

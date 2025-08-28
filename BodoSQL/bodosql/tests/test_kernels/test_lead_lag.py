@@ -182,14 +182,14 @@ pytestmark = pytest_slow_unless_codegen
         pytest.param(
             pd.Series(
                 [
-                    bodo.Time(12, 30, 0),
-                    bodo.Time(10, 59, 59, millisecond=250),
+                    bodo.types.Time(12, 30, 0),
+                    bodo.types.Time(10, 59, 59, millisecond=250),
                     None,
-                    bodo.Time(nanosecond=1234567890),
-                    bodo.Time(23, 11),
+                    bodo.types.Time(nanosecond=1234567890),
+                    bodo.types.Time(23, 11),
                 ],
             ),
-            bodo.Time(16, 21),
+            bodo.types.Time(16, 21),
             False,
             id="time",
             marks=pytest.mark.slow,
@@ -354,9 +354,9 @@ def test_lead_lag_seq(
             id="date",
         ),
         pytest.param(
-            [bodo.Time(second=i) for i in [45000, 86399, 21600, 1, 1020]],
+            [bodo.types.Time(second=i) for i in [45000, 86399, 21600, 1, 1020]],
             None,
-            bodo.Time(0, 0, 0),
+            bodo.types.Time(0, 0, 0),
             id="time",
         ),
         pytest.param(

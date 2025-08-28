@@ -395,8 +395,8 @@ def test_groupby_cumsum_dist(memory_leak_check):
     """
     from bodo.utils.typing import ColNamesMetaType, MetaType
 
-    global_2 = bodo.int32[::1]
-    global_1 = bodo.int32[::1]
+    global_2 = bodo.types.int32[::1]
+    global_1 = bodo.types.int32[::1]
     global_6 = ColNamesMetaType(("EXPR$0", "EXPR$1", "__bodo_dummy__"))
     global_5 = MetaType((0, 1, 2))
 
@@ -1455,7 +1455,7 @@ def test_dist_dict_getitem1(memory_leak_check):
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n)})
-    v = bodo.typed.Dict.empty(bodo.int64, bodo.typeof(df))
+    v = numba.typed.Dict.empty(bodo.types.int64, bodo.typeof(df))
     v[0] = df
     v[1] = df
     bodo.jit(distributed_block={"v", "df"})(impl1)(v)
@@ -1470,7 +1470,7 @@ def test_dist_dict_setitem1(memory_leak_check):
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n)})
-    v = bodo.typed.Dict.empty(bodo.int64, bodo.typeof(df))
+    v = numba.typed.Dict.empty(bodo.types.int64, bodo.typeof(df))
     v[0] = df
     v[1] = df
     bodo.jit(distributed_block={"v", "df"})(impl1)(v, df)
@@ -1856,7 +1856,7 @@ def test_dist_objmode(memory_leak_check):
         s = 0
         for i in bodo.prange(len(A)):
             x = A[i]
-            with bodo.objmode(y="float64"):
+            with numba.objmode(y="float64"):
                 y = sc.entr(x)  # call entropy function on each data element
             s += y
         return s
@@ -1889,7 +1889,7 @@ def test_dist_objmode_dist(memory_leak_check):
 
     def impl(n):
         A = np.arange(n)
-        with bodo.objmode(B="int64[:]"):
+        with numba.objmode(B="int64[:]"):
             B = A[:3]
         return B
 
@@ -2477,15 +2477,15 @@ def get_random_int64index(n):
         pytest.param(
             pd.Series(
                 [
-                    bodo.Time(17, 33, 26, 91, 8, 79),
-                    bodo.Time(0, 24, 43, 365, 18, 74),
-                    bodo.Time(3, 59, 6, 25, 757, 3),
-                    bodo.Time(),
-                    bodo.Time(4),
-                    bodo.Time(6, 41),
-                    bodo.Time(22, 13, 57),
-                    bodo.Time(17, 34, 29, 90),
-                    bodo.Time(7, 3, 45, 876, 234),
+                    bodo.types.Time(17, 33, 26, 91, 8, 79),
+                    bodo.types.Time(0, 24, 43, 365, 18, 74),
+                    bodo.types.Time(3, 59, 6, 25, 757, 3),
+                    bodo.types.Time(),
+                    bodo.types.Time(4),
+                    bodo.types.Time(6, 41),
+                    bodo.types.Time(22, 13, 57),
+                    bodo.types.Time(17, 34, 29, 90),
+                    bodo.types.Time(7, 3, 45, 876, 234),
                     None,
                 ],
                 dtype=object,
@@ -3103,8 +3103,11 @@ def test_dist_flag_info_propagation(memory_leak_check):
 def test_dist_scalar_struct_to_arr(memory_leak_check):
     """Make sure coerce_scalar_to_array for struct array works for distributed output"""
 
-    global_1 = bodo.StructArrayType(
-        (bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.int32)),
+    global_1 = bodo.types.StructArrayType(
+        (
+            bodo.types.IntegerArrayType(bodo.types.int64),
+            bodo.bodo.types.IntegerArrayType(bodo.types.int32),
+        ),
         ("A", "B"),
     )
 
@@ -3125,8 +3128,9 @@ def test_dist_scalar_struct_to_arr(memory_leak_check):
 def test_dist_scalar_map_to_arr(memory_leak_check):
     """Make sure coerce_scalar_to_array for map array works for distributed output"""
 
-    global_1 = bodo.MapArrayType(
-        bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.int32)
+    global_1 = bodo.types.MapArrayType(
+        bodo.types.IntegerArrayType(bodo.types.int64),
+        bodo.bodo.types.IntegerArrayType(bodo.types.int32),
     )
 
     def impl(a, n):
@@ -3230,12 +3234,16 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
 @pytest.mark.parametrize(
     "dtype",
     [
-        bodo.MapArrayType(bodo.dict_str_arr_type, bodo.FloatingArrayType(bodo.float32)),
-        bodo.StructArrayType(
+        bodo.types.MapArrayType(
+            bodo.types.dict_str_arr_type,
+            bodo.types.FloatingArrayType(bodo.types.float32),
+        ),
+        bodo.types.StructArrayType(
             (
-                bodo.ArrayItemArrayType(bodo.dict_str_arr_type),
-                bodo.MapArrayType(
-                    bodo.IntegerArrayType(bodo.int32), bodo.DatetimeArrayType(None)
+                bodo.types.ArrayItemArrayType(bodo.types.dict_str_arr_type),
+                bodo.types.MapArrayType(
+                    bodo.types.IntegerArrayType(bodo.types.int32),
+                    bodo.types.DatetimeArrayType(None),
                 ),
             ),
             ("A", "B"),

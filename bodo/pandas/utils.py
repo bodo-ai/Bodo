@@ -5,35 +5,14 @@ import functools
 import importlib
 import inspect
 import time
-import typing as pt
 import warnings
 
-import numba
-import numba.extending
 import pandas as pd
 import pyarrow as pa
 
 import bodo
-from bodo.decorators import _cfunc
-from bodo.hiframes.pd_dataframe_ext import init_dataframe
-from bodo.hiframes.pd_index_ext import init_range_index
-from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.hiframes.pd_series_ext import init_series
-from bodo.libs.array import (
-    arr_info_list_to_table,
-    array_from_cpp_table,
-    array_to_info,
-    cpp_table_to_py_table,
-    delete_table,
-    table_type,
-)
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
-from bodo.utils.conversion import coerce_to_array, index_from_array
-from bodo.utils.typing import check_unsupported_args_fallback, unwrap_typeref
-
-if pt.TYPE_CHECKING:
-    from numba.core.ccallback import CFunc
 
 BODO_NONE_DUMMY = "_bodo_none_dummy_"
 
@@ -172,6 +151,8 @@ def get_dataframe_overloads():
     """Return a list of the functions supported on BodoDataFrame objects
     to some degree by bodo.jit.
     """
+    # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
     from bodo.numba_compat import get_method_overloads
 
@@ -183,6 +164,8 @@ def get_series_overloads():
     """Return a list of the functions supported on BodoSeries objects
     to some degree by bodo.jit.
     """
+    # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.numba_compat import get_method_overloads
 
@@ -194,6 +177,8 @@ def get_series_string_overloads():
     """Return a list of the functions supported on BodoStringMethods objects
     to some degree by bodo.jit.
     """
+    # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.series_str_impl import SeriesStrMethodType
     from bodo.numba_compat import get_method_overloads
 
@@ -205,6 +190,8 @@ def get_series_datetime_overloads():
     """Return a list of the functions supported on SeriesDatetimePropertiesType objects
     to some degree by bodo.jit.
     """
+    # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
     from bodo.numba_compat import get_method_overloads
 
@@ -216,6 +203,8 @@ def get_groupby_overloads():
     """Return a list of the functions supported on DataFrameGroupby/DataFrameSeries objects
     to some degree by bodo.jit.
     """
+    # Import compiler
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
     from bodo.numba_compat import get_method_overloads
 
@@ -264,7 +253,7 @@ method_time = 0
 
 
 def report_times():
-    if bodo.libs.distributed_api.get_rank() == 0:
+    if bodo.get_rank() == 0:
         print("profile_time atexit total_top_time", top_time)
         print("profile_time atexit total_method_time", method_time)
         print("profile_time atexit total_init_lazy", bodo.pandas.plan.total_init_lazy)
@@ -1081,110 +1070,6 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
     )
 
 
-@numba.njit
-def series_to_cpp_table_jit(series_type):  # pragma: no cover
-    """Convert a Series to a cpp table (table_info)"""
-    out_arr = coerce_to_array(series_type, use_nullable_array=True)
-    out_info = array_to_info(out_arr)
-    out_cpp_table = arr_info_list_to_table([out_info])
-    return out_cpp_table
-
-
-@numba.njit
-def cpp_table_to_series_jit(in_cpp_table, series_arr_type):  # pragma: no cover
-    """Convert a cpp table (table info) to a series using JIT"""
-    series_data = array_from_cpp_table(in_cpp_table, 0, series_arr_type)
-    # TODO: Add option to also convert index
-    index = init_range_index(0, len(series_data), 1, None)
-    out_series = init_series(series_data, index)
-    delete_table(in_cpp_table)
-    return out_series
-
-
-def extract_cpp_index(cpp_table, n_cols, index_type, length):
-    pass
-
-
-@numba.extending.overload(extract_cpp_index)
-def overload_extract_cpp_index(cpp_table, n_cols, index_type, length):
-    """Helper for cpp_table_to_df_jit to extract *index_type* index from cpp_table
-    (table info) assuming that the index arrays begin after n_cols in the cpp_table
-    """
-
-    index_type = unwrap_typeref(index_type)
-
-    if isinstance(index_type, bodo.RangeIndexType):
-
-        def impl(cpp_table, n_cols, index_type, length):  # pragma: no cover
-            return bodo.hiframes.pd_index_ext.init_range_index(0, length, 1, None)
-    elif isinstance(index_type, MultiIndexType):
-        n_levels = len(index_type.array_types)
-        index_arrays = ",".join(
-            f"array_from_cpp_table(cpp_table, n_cols + {i}, arr_types[{i}])"
-            for i in range(n_levels)
-        )
-        names = ",".join(f"names[{i}]" for i in range(n_levels))
-
-        func_text = "def impl(cpp_table, n_cols, index_type, length):\n"
-        func_text += f"  return init_multi_index(({index_arrays},), ({names},), None)"
-
-        locals = {}
-        globals = {
-            "arr_types": index_type.array_types,
-            "names": tuple(name.literal_value for name in index_type.names_typ),
-            "init_multi_index": bodo.hiframes.pd_multi_index_ext.init_multi_index,
-            "array_from_cpp_table": array_from_cpp_table,
-        }
-        exec(func_text, globals, locals)
-        return locals["impl"]
-    else:
-        arr_type = index_type.data
-
-        def impl(cpp_table, n_cols, index_type, length):  # pragma: no cover
-            index_arr = array_from_cpp_table(cpp_table, n_cols, arr_type)
-            return index_from_array(index_arr)
-
-    return impl
-
-
-@numba.njit
-def cpp_table_to_df_jit(
-    cpp_table, out_cols_arr, column_names, py_table_type, index_type
-):  # pragma: no cover
-    """Convert a cpp table to a DataFrame using JIT.
-
-    Args:
-        cpp_table (table_info): Input table to convert to a DataFrame
-        out_cols_arr (Array): Array of indices from cpp_table to select as columns.
-        column_names (ColNamesMetaType): The names of the columns.
-        py_table_type (TableType): Type of the columns of the dataframe.
-        index_type (IndexType): The type of the index.
-
-    Returns:
-        DataFrameType
-    """
-    py_table = cpp_table_to_py_table(cpp_table, out_cols_arr, py_table_type, 0)
-    index = extract_cpp_index(cpp_table, len(out_cols_arr), index_type, len(py_table))
-    delete_table(cpp_table)
-    return init_dataframe((py_table,), index, column_names)
-
-
-def get_udf_cfunc_decorator() -> pt.Callable[[pt.Callable], CFunc]:
-    """Decorator for creating C callbacks for map/apply that take in a table info and
-    return a table info."""
-    return _cfunc(table_type(table_type), cache=True)
-
-
-def compile_cfunc(func, decorator):
-    """Util for to compiling a cfunc and getting a pointer
-    to the C callback (called once on each worker per cfunc).
-    """
-    import ctypes
-
-    cfunc = decorator(func)
-    return ctypes.c_void_p(cfunc.address).value
-
-
 def ensure_datetime64ns(df):
     """Convert datetime columns in a DataFrame to 'datetime64[ns]' dtype.
     Avoids datetime64[us] that is commonly used in Pandas but not supported in Bodo.
@@ -1268,6 +1153,86 @@ def fallback_wrapper(self, attr, name, msg):
     return attr
 
 
+def single_arg_check_no_jit(v1, v2):
+    """Same as bodo.utils.typing.single_arg_check, but without JIT support to avoid
+    JIT import.
+    """
+    import numpy as np
+
+    return (
+        (v1 is not None and v2 is None)
+        or (v1 is None and v2 is not None)
+        or (v1 is not np.nan and v1 != v2)
+        or (v1 is np.nan and v2 is not np.nan)
+        or (v1 is not np.nan and v2 is np.nan)
+    )
+
+
+def check_unsupported_args_fallback(
+    fname,
+    must_be_default_args,
+    must_be_default_kwargs,
+    args,
+    kwargs,
+    package_name="pandas",
+    fn_str=None,
+    module_name="",
+    raise_on_error=False,
+):
+    """Check for unsupported arguments for function 'fname', and raise an error if any
+    value other than the default is provided.
+    'args_dict' is a dictionary of provided arguments in overload.
+    'arg_defaults_dict' is a dictionary of default values for unsupported arguments.
+
+    'package_name' is used to differentiate by various libraries in documentation links (i.e. numpy, pandas)
+
+    'module_name' is used for libraries that are split into multiple different files per module.
+
+    'raise_on_error' to generate exception on unsupported usage else return whether unsupported usage occurred.
+    """
+
+    if fn_str == None:
+        fn_str = f"{fname}()"
+    error_message = ""
+    unsupported = False
+
+    # Check all the arguments given positionally that have to have their default values.
+    for idx, param in must_be_default_args.items():
+        # If parameter index is greater than number of args then nothing left to check.
+        if idx >= len(args):
+            break
+        v1 = args[idx]  # Get the actual value.
+        v2 = param.default  # Get the default value.
+        # Flexible check for not matching.
+        if single_arg_check_no_jit(v1, v2):
+            error_message = (
+                f"{fn_str}: {param.name} parameter only supports default value {v2}"
+            )
+            unsupported = True
+            break
+
+    # Check all the keyword arguments that have to have their default values if we
+    # haven't already found an error.
+    if not unsupported:
+        for name, param in must_be_default_kwargs.items():
+            if name not in kwargs:
+                continue
+            v1 = kwargs[name]  # Get the actual value.
+            v2 = param.default  # Get the default value.
+            # Flexible check for not matching.
+            if single_arg_check_no_jit(v1, v2):
+                error_message = (
+                    f"{fn_str}: {name} parameter only supports default value {v2}"
+                )
+                unsupported = True
+                break
+
+    if not raise_on_error:
+        return unsupported
+
+    raise ValueError(error_message)
+
+
 class JITFallback:
     # Holds a mapping of a tuple of class name and function name to either
     # False to say that compilation previously failed for that function or
@@ -1286,6 +1251,8 @@ class JITFallback:
         self.name = name
 
     def __call__(self, *args, **kwargs):
+        import bodo
+
         key = (
             (
                 self.base_obj.__class__.__name__,
@@ -1305,6 +1272,11 @@ class JITFallback:
         # work for unknown reasons.  So, we will be on the safe side for now and
         # only JIT fallback for methods that we have tested.
         if self.name in ("duplicated", "pivot") and cache_entry != False:
+            # Import compiler
+            import bodo.decorators  # isort:skip
+
+            bodo.spawn.utils.import_compiler_on_workers()
+
             # None means it wasn't in the cache either way so we can try to
             # JIT compile it.
             if cache_entry is None:

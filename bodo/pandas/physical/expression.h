@@ -810,7 +810,8 @@ class PhysicalUDFExpression : public PhysicalExpression {
           cfunc_ptr(nullptr),
           init_state(nullptr) {
         if (scalar_func_data.is_cfunc) {
-            PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+            PyObject *bodo_module =
+                PyImport_ImportModule("bodo.pandas.utils_jit");
 
             if (!bodo_module) {
                 PyErr_Print();

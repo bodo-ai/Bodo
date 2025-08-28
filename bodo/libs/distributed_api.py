@@ -1,6 +1,4 @@
-import atexit
 import datetime
-import sys
 import time
 import warnings
 from collections import defaultdict
@@ -27,6 +25,10 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+
+# Import compiler
+import bodo.decorators  # isort:skip
+
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
@@ -127,6 +129,10 @@ def get_rank():
     return hdist.get_rank_py_wrapper()
 
 
+def get_size():
+    return hdist.get_size_py_wrapper()
+
+
 # XXX same as _distributed.h::BODO_ReduceOps::ReduceOpsEnum
 class Reduce_Type(Enum):
     Sum = 0
@@ -145,7 +151,6 @@ class Reduce_Type(Enum):
     No_Op = 13
 
 
-_get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
 _get_cpu_id = types.ExternalFunction("get_cpu_id", types.int32())
 get_remote_size = types.ExternalFunction("c_get_remote_size", types.int32(types.int64))
@@ -170,10 +175,23 @@ def lower_get_rank(context, builder, sig, args):
     return out
 
 
-@numba.njit(cache=True)
-def get_size():  # pragma: no cover
-    """wrapper for getting number of processes (MPI COMM size currently)"""
-    return _get_size()
+@infer_global(get_size)
+class GetSizeInfer(ConcreteTemplate):
+    cases = [signature(types.int32)]
+
+
+@lower_builtin(
+    get_size,
+)
+def lower_get_size(context, builder, sig, args):
+    fnty = lir.FunctionType(
+        lir.IntType(32),
+        [],
+    )
+    fn_typ = cgutils.get_or_insert_function(builder.module, fnty, name="c_get_size")
+    out = builder.call(fn_typ, args)
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return out
 
 
 @numba.njit(cache=True)
@@ -508,20 +526,20 @@ def dist_reduce_impl(value, reduce_op, comm):
             types.float32,
             types.float64,
             types.int64,
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
-            bodo.datetime_date_type,
-            bodo.TimeType,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
+            bodo.types.datetime_date_type,
+            bodo.types.TimeType,
         ]
 
         if target_typ not in supported_typs and not isinstance(
-            target_typ, (bodo.Decimal128Type, bodo.PandasTimestampType)
+            target_typ, (bodo.types.Decimal128Type, bodo.types.PandasTimestampType)
         ):  # pragma: no cover
             raise BodoError(f"argmin/argmax not supported for type {target_typ}")
 
     typ_enum = np.int32(numba_to_c_type(target_typ))
 
-    if isinstance(target_typ, bodo.Decimal128Type):
+    if isinstance(target_typ, bodo.types.Decimal128Type):
         # For index-value types, the data pointed to has different amounts of padding depending on machine type.
         # as a workaround, we can pass the index separately.
 
@@ -564,7 +582,7 @@ def dist_reduce_impl(value, reduce_op, comm):
 
         return impl
 
-    if isinstance(value, bodo.TimestampTZType):
+    if isinstance(value, bodo.types.TimestampTZType):
         # This requires special handling because TimestampTZ's scalar
         # representation isn't the same as it's array representation - as such,
         # we need to extract the timestamp and offset separately, otherwise the
@@ -606,7 +624,7 @@ def dist_reduce_impl(value, reduce_op, comm):
             )
             out_ts = load_val_ptr(out_ts_ptr, value_ts)
             out_offset = load_val_ptr(out_offset_ptr, value_ts)
-            return bodo.TimestampTZ(pd.Timestamp(out_ts), out_offset)
+            return bodo.types.TimestampTZ(pd.Timestamp(out_ts), out_offset)
 
         return impl
 
@@ -1024,7 +1042,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     if dtype == string_array_type:
         return pd.array(["A"], "string")
 
-    if dtype == bodo.dict_str_arr_type:
+    if dtype == bodo.types.dict_str_arr_type:
         return pd.array(["a"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())))
 
     if dtype == binary_array_type:
@@ -1071,7 +1089,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
             return pd.RangeIndex(1, name=name)
         arr_type = bodo.utils.typing.get_index_data_arr_types(dtype)[0]
         arr = get_value_for_type(arr_type)
-        if isinstance(dtype, bodo.PeriodIndexType):
+        if isinstance(dtype, bodo.types.PeriodIndexType):
             return pd.period_range(
                 start="2023-01-01", periods=1, freq=dtype.freq, name=name
             )
@@ -1105,7 +1123,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return df
 
     # Table
-    if isinstance(dtype, bodo.TableType):
+    if isinstance(dtype, bodo.types.TableType):
         arrs = tuple(get_value_for_type(t) for t in dtype.arr_types)
         return bodo.hiframes.table.Table(arrs)
 
@@ -1140,8 +1158,8 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         )
 
     # TimestampTZ array
-    if dtype == bodo.timestamptz_array_type:
-        return np.array([bodo.TimestampTZ(pd.Timestamp(0), 0)])
+    if dtype == bodo.types.timestamptz_array_type:
+        return np.array([bodo.types.TimestampTZ(pd.Timestamp(0), 0)])
 
     # TimeArray
     if isinstance(dtype, TimeArrayType):
@@ -1151,18 +1169,19 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
                 "get_value_for_type: only nanosecond precision is supported for nested data"
             )
             return pd.array(
-                [bodo.Time(3, precision=precision)], pd.ArrowDtype(pa.time64("ns"))
+                [bodo.types.Time(3, precision=precision)],
+                pd.ArrowDtype(pa.time64("ns")),
             )
-        return np.array([bodo.Time(3, precision=precision)], object)
+        return np.array([bodo.types.Time(3, precision=precision)], object)
 
     # NullArray
-    if dtype == bodo.null_array_type:
+    if dtype == bodo.types.null_array_type:
         return pd.arrays.ArrowExtensionArray(pa.nulls(1))
 
     # StructArray
-    if isinstance(dtype, bodo.StructArrayType):
+    if isinstance(dtype, bodo.types.StructArrayType):
         # Handle empty struct corner case which can have typing issues
-        if dtype == bodo.StructArrayType((), ()):
+        if dtype == bodo.types.StructArrayType((), ()):
             return pd.array([{}], pd.ArrowDtype(pa.struct([])))
 
         pa_arr = pa.StructArray.from_arrays(
@@ -1171,7 +1190,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # TupleArray
-    if isinstance(dtype, bodo.TupleArrayType):
+    if isinstance(dtype, bodo.types.TupleArrayType):
         # TODO[BSE-4213]: Use Arrow arrays
         return pd.array(
             [
@@ -1184,7 +1203,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         )._ndarray
 
     # MapArrayType
-    if isinstance(dtype, bodo.MapArrayType):
+    if isinstance(dtype, bodo.types.MapArrayType):
         pa_arr = pa.MapArray.from_arrays(
             [0, 1],
             get_value_for_type(dtype.key_arr_type, True),
@@ -1193,7 +1212,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # Numpy Matrix
-    if isinstance(dtype, bodo.MatrixType):
+    if isinstance(dtype, bodo.types.MatrixType):
         return np.asmatrix(
             get_value_for_type(types.Array(dtype.dtype, 2, dtype.layout))
         )
@@ -1206,7 +1225,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
             get_value_for_type(dtype.key_type): get_value_for_type(dtype.value_type)
         }
 
-    if dtype == bodo.string_type:
+    if dtype == bodo.types.string_type:
         # make names unique with next_label to avoid MultiIndex unboxing issue #811
         return "_" + str(ir_utils.next_label())
 
@@ -1405,18 +1424,18 @@ class BcastScalarInfer(AbstractTemplate):
                 (
                     types.Integer,
                     types.Float,
-                    bodo.PandasTimestampType,
+                    bodo.types.PandasTimestampType,
                 ),
             )
             or val
             in [
-                bodo.datetime64ns,
-                bodo.timedelta64ns,
-                bodo.string_type,
+                bodo.types.datetime64ns,
+                bodo.types.timedelta64ns,
+                bodo.types.string_type,
                 types.none,
                 types.bool_,
-                bodo.datetime_date_type,
-                bodo.timestamptz_type,
+                bodo.types.datetime_date_type,
+                bodo.types.timestamptz_type,
             ]
         ):
             raise BodoError(
@@ -1430,7 +1449,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
     if val == types.none:
         return lambda val, root=DEFAULT_ROOT, comm=0: None
 
-    if val == bodo.timestamptz_type:
+    if val == bodo.types.timestamptz_type:
 
         def impl(val, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
             updated_timestamp = bodo.libs.distributed_api.bcast_scalar(
@@ -1439,11 +1458,11 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
             updated_offset = bodo.libs.distributed_api.bcast_scalar(
                 val.offset_minutes, root, comm
             )
-            return bodo.TimestampTZ(updated_timestamp, updated_offset)
+            return bodo.types.TimestampTZ(updated_timestamp, updated_offset)
 
         return impl
 
-    if val == bodo.datetime_date_type:
+    if val == bodo.types.datetime_date_type:
         c_type = numba_to_c_type(types.int32)
 
         # Note: There are issues calling this function with recursion.
@@ -1456,7 +1475,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
         return impl
 
-    if isinstance(val, bodo.PandasTimestampType):
+    if isinstance(val, bodo.types.PandasTimestampType):
         c_type = numba_to_c_type(types.int64)
         tz = val.tz
 
@@ -1471,7 +1490,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
         return impl
 
-    if val == bodo.string_type:
+    if val == bodo.types.string_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def impl_str(val, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
@@ -1656,7 +1675,7 @@ def transform_str_getitem_output(data, length):
 
 @overload(transform_str_getitem_output)
 def overload_transform_str_getitem_output(data, length):
-    if data == bodo.string_type:
+    if data == bodo.types.string_type:
         return lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
             data._data, length
         )  # pragma: no cover
@@ -1672,7 +1691,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
     dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
 
-    if is_str_arr_type(arr) or arr == bodo.binary_array_type:
+    if is_str_arr_type(arr) or arr == bodo.types.binary_array_type:
         # TODO: other kinds, unicode
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
@@ -1746,7 +1765,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return str_getitem_impl
 
-    if isinstance(arr, bodo.CategoricalArrayType):
+    if isinstance(arr, bodo.types.CategoricalArrayType):
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def cat_getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
@@ -1822,7 +1841,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return tz_aware_getitem_impl
 
-    if arr == bodo.null_array_type:
+    if arr == bodo.types.null_array_type:
 
         def null_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -1833,7 +1852,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return null_getitem_impl
 
-    if arr == bodo.datetime_date_array_type:
+    if arr == bodo.types.datetime_date_array_type:
 
         def date_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -1868,7 +1887,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return date_getitem_impl
 
-    if arr == bodo.timestamptz_array_type:
+    if arr == bodo.types.timestamptz_array_type:
 
         def timestamp_tz_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -2497,32 +2516,6 @@ def dist_permutation_array_index(
     check_and_propagate_cpp_exception()
 
 
-########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
-
-
-from bodo.io import hdfs_reader
-
-finalize = hdist.finalize_py_wrapper
-disconnect_hdfs_py_wrapper = hdfs_reader.disconnect_hdfs_py_wrapper
-
-
-def call_finalize():  # pragma: no cover
-    finalize()
-    disconnect_hdfs_py_wrapper()
-
-
-def flush_stdout():
-    # using a function since pytest throws an error sometimes
-    # if flush function is passed directly to atexit
-    if not sys.stdout.closed:
-        sys.stdout.flush()
-
-
-atexit.register(call_finalize)
-# Flush output before finalize
-atexit.register(flush_stdout)
-
-
 def bcast(data, comm_ranks=None, root=DEFAULT_ROOT, comm=None):  # pragma: no cover
     """bcast() sends data from rank 0 to comm_ranks."""
     from bodo.mpi4py import MPI
@@ -2908,3 +2901,16 @@ init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
 )
+
+
+# Replace top export wrappers to help function matching inside JIT compilation
+bodo.allgatherv = allgatherv
+bodo.barrier = barrier
+bodo.gatherv = gatherv
+bodo.get_rank = get_rank
+bodo.get_size = get_size
+bodo.get_nodes_first_ranks = get_nodes_first_ranks
+bodo.parallel_print = parallel_print
+bodo.rebalance = rebalance
+bodo.random_shuffle = random_shuffle
+bodo.scatterv = scatterv

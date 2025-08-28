@@ -9,6 +9,7 @@ import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.dataset as ds
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
@@ -21,8 +22,10 @@ from numba.core.ir_utils import (
 )
 from numba.extending import (
     NativeValue,
+    box,
     intrinsic,
     models,
+    overload,
     register_model,
     unbox,
 )
@@ -34,16 +37,14 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
-from bodo.io.fs_io import (
+from bodo.io.helpers import (
     get_storage_options_pyobject,
+    numba_to_pyarrow_schema,
+    pyarrow_schema_type,
     storage_options_dict_type,
 )
-from bodo.io.helpers import numba_to_pyarrow_schema, pyarrow_schema_type
 from bodo.io.parquet_pio import (
-    ParquetFileInfo,
-    get_filters_pyobject,
     parquet_file_schema,
-    parquet_predicate_type,
 )
 from bodo.ir.connector import Connector
 from bodo.libs.array import (
@@ -62,7 +63,10 @@ from bodo.transforms.table_column_del_pass import (
 from bodo.utils.transform import get_const_value
 from bodo.utils.typing import (
     BodoError,
+    FileInfo,
     FilenameType,
+    FileSchema,
+    get_overload_const_str,
     is_nullable_ignore_sentinels,
 )
 from bodo.utils.utils import (
@@ -81,6 +85,34 @@ if pt.TYPE_CHECKING:  # pragma: no cover
 
 ll.add_symbol("pq_read_py_entry", arrow_cpp.pq_read_py_entry)
 ll.add_symbol("pq_reader_init_py_entry", arrow_cpp.pq_reader_init_py_entry)
+
+
+class ParquetPredicateType(types.Type):
+    """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
+    It is just a Python object passed as pointer to C++
+    """
+
+    def __init__(self):
+        super().__init__(name="ParquetPredicateType()")
+
+
+parquet_predicate_type = ParquetPredicateType()
+types.parquet_predicate_type = parquet_predicate_type  # type: ignore
+register_model(ParquetPredicateType)(models.OpaqueModel)
+
+
+@unbox(ParquetPredicateType)
+def unbox_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(ParquetPredicateType)
+def box_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
 
 
 class ReadParquetFilepathType(types.Opaque):
@@ -102,6 +134,41 @@ def unbox_read_parquet_fpath_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return NativeValue(val)
+
+
+class ParquetFileInfo(FileInfo):
+    """FileInfo object passed to ForceLiteralArg for
+    file name arguments that refer to a parquet dataset"""
+
+    def __init__(
+        self,
+        columns,
+        storage_options=None,
+        input_file_name_col=None,
+        read_as_dict_cols=None,
+        use_hive=True,
+    ):
+        self.columns = columns  # columns to select from parquet dataset
+        self.storage_options = storage_options
+        self.input_file_name_col = input_file_name_col
+        self.read_as_dict_cols = read_as_dict_cols
+        self.use_hive = use_hive
+        super().__init__()
+
+    def _get_schema(self, fname) -> FileSchema:
+        try:
+            return parquet_file_schema(
+                fname,
+                selected_columns=self.columns,
+                storage_options=self.storage_options,
+                input_file_name_col=self.input_file_name_col,
+                read_as_dict_cols=self.read_as_dict_cols,
+                use_hive=self.use_hive,
+            )
+        except OSError as e:
+            if "non-file path" in str(e):
+                raise FileNotFoundError(str(e))
+            raise
 
 
 class ParquetHandler:
@@ -758,6 +825,31 @@ def pq_reader_params(
     )
 
 
+def get_filters_pyobject(dnf_filter_str, expr_filter_str, vars):  # pragma: no cover
+    pass
+
+
+@overload(get_filters_pyobject, no_unliteral=True)
+def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
+    """generate a pyobject for filter expression to pass to C++"""
+    dnf_filter_str_val = get_overload_const_str(dnf_filter_str)
+    expr_filter_str_val = get_overload_const_str(expr_filter_str)
+    var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
+    func_text = "def impl(dnf_filter_str, expr_filter_str, var_tup):\n"
+    if len(var_tup):
+        func_text += f"  {var_unpack}, = var_tup\n"
+    func_text += "  with bodo.ir.object_mode.no_warning_objmode(dnf_filters_py='parquet_predicate_type', expr_filters_py='parquet_predicate_type'):\n"
+    func_text += f"    dnf_filters_py = {dnf_filter_str_val}\n"
+    func_text += f"    expr_filters_py = {expr_filter_str_val}\n"
+    func_text += "  return (dnf_filters_py, expr_filters_py)\n"
+    loc_vars = {}
+    glbs = globals()
+    glbs["bodo"] = bodo
+    glbs["ds"] = ds
+    exec(func_text, glbs, loc_vars)
+    return loc_vars["impl"]
+
+
 def _gen_pq_reader_py(
     col_names: list[str],
     col_indices,
@@ -808,7 +900,7 @@ def _gen_pq_reader_py(
     if is_dead_table:
         py_table_type = types.none
 
-    # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
+    # table_idx is a list of index values for each array in the bodo.types.TableType being loaded from C++.
     # For a list column, the value is an integer which is the location of the column in the C++ Table.
     # Dead columns have the value -1.
 
@@ -980,6 +1072,7 @@ def _gen_pq_reader_py(
         "np": np,
         "pd": pd,
         "bodo": bodo,
+        "ds": ds,
         "get_node_portion": bodo.libs.distributed_api.get_node_portion,
         "set_table_len": bodo.hiframes.table.set_table_len,
         "init_struct_arr": bodo.libs.struct_arr_ext.init_struct_arr,
@@ -1113,6 +1206,7 @@ def _gen_pq_reader_chunked_py(
         "arrow_reader_t": ArrowReaderType(col_names, out_table_col_types),
         "np": np,
         "bodo": bodo,
+        "ds": ds,
     }
 
     loc_vars = {}
@@ -1125,7 +1219,7 @@ def _gen_pq_reader_chunked_py(
 def get_fname_pyobject(fname):
     """Convert fname native object (which can be a string or a list of strings)
     to its corresponding PyObject by going through unboxing and boxing"""
-    with bodo.no_warning_objmode(fname_py="read_parquet_fpath_type"):
+    with bodo.ir.object_mode.no_warning_objmode(fname_py="read_parquet_fpath_type"):
         fname_py = fname
     return fname_py
 

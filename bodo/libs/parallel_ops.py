@@ -11,7 +11,7 @@ def get_array_op_describe_dispatcher(arr_typ):
     """
     Helper function to simplify the distributed pass code.
     """
-    if arr_typ.dtype == bodo.datetime64ns:
+    if arr_typ.dtype == bodo.types.datetime64ns:
         return array_op_describe_parallel_dt
     return array_op_describe_parallel
 

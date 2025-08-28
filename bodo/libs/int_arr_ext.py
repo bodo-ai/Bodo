@@ -420,7 +420,7 @@ def int_arr_setitem(A, idx, val):
     # See test_bitwise.py::test_bitshiftright[vector_scalar_uint64_case]
     # TODO(Nick): Verify inputs can be safely cast to an integer
     is_scalar = isinstance(
-        val, (types.Integer, types.Boolean, types.Float, bodo.Decimal128Type)
+        val, (types.Integer, types.Boolean, types.Float, bodo.types.Decimal128Type)
     )
 
     # scalar case
@@ -589,7 +589,7 @@ def overload_int_arr_astype(A, dtype, copy=True):
             bodo.libs.int_arr_ext.get_int_arr_bitmap(A).copy(),
         )
 
-    if isinstance(dtype, bodo.Decimal128Type):
+    if isinstance(dtype, bodo.types.Decimal128Type):
         precision = dtype.precision
         scale = dtype.scale
 

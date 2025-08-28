@@ -47,15 +47,15 @@ def is_valid_SQL_object_arg(arg):
         or (
             isinstance(arg, bodo.libs.map_arr_ext.MapArrayType)
             and (
-                arg.key_arr_type == bodo.string_array_type
-                or arg.key_arr_type == bodo.dict_str_arr_type
+                arg.key_arr_type == bodo.types.string_array_type
+                or arg.key_arr_type == bodo.types.dict_str_arr_type
             )
         )
         or (
             isinstance(arg, bodo.libs.map_arr_ext.MapScalarType)
             and (
-                arg.key_arr_type == bodo.string_array_type
-                or arg.key_arr_type == bodo.dict_str_arr_type
+                arg.key_arr_type == bodo.types.string_array_type
+                or arg.key_arr_type == bodo.types.dict_str_arr_type
             )
         )
     )
@@ -243,7 +243,9 @@ def gen_vectorized(
         are_arrays = [bodo.utils.utils.is_array_typ(typ) for typ in arg_types]
     all_scalar = not any(are_arrays)
     out_null = any(
-        propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none
+        propagate_null[i]
+        for i in range(len(arg_types))
+        if arg_types[i] == bodo.types.none
     )
     # Construct a dictionary encoded output from a non-dictionary encoded input
     # if the 'V'/'?' arguments in synthesize_dict_if_vector are arrays and the
@@ -271,11 +273,11 @@ def gen_vectorized(
     for i in range(len(arg_types)):
         if bodo.utils.utils.is_array_typ(arg_types[i], False):
             vector_args += 1
-            if arg_types[i] == bodo.dict_str_arr_type:
+            if arg_types[i] == bodo.types.dict_str_arr_type:
                 dict_encoded_arg = i
         elif bodo.utils.utils.is_array_typ(arg_types[i], True):
             vector_args += 1
-            if arg_types[i].data == bodo.dict_str_arr_type:
+            if arg_types[i].data == bodo.types.dict_str_arr_type:
                 dict_encoded_arg = i
     use_dict_encoding = (
         support_dict_encoding and vector_args == 1 and dict_encoded_arg >= 0
@@ -285,10 +287,10 @@ def gen_vectorized(
     # the arguments with null propagation is a scalar NULL
     use_null_flushing = (
         use_dict_encoding
-        and out_dtype == bodo.string_array_type
+        and out_dtype == bodo.types.string_array_type
         and (
             any(
-                arg_types[i] == bodo.none and propagate_null[i]
+                arg_types[i] == bodo.types.none and propagate_null[i]
                 for i in range(len(arg_types))
             )
             or "bodo.libs.array_kernels.setna" in scalar_text
@@ -358,7 +360,7 @@ def gen_vectorized(
             # array. Alternatively if we have not propagate_null[dict_encoded_arg] then we
             # will be modifying the indices in place so we must make a copy.
             if (
-                out_dtype == bodo.string_array_type
+                out_dtype == bodo.types.string_array_type
                 or not propagate_null[dict_encoded_arg]
             ):
                 func_text += (
@@ -366,7 +368,7 @@ def gen_vectorized(
                 )
             else:
                 func_text += f"   indices = {arg_names[dict_encoded_arg]}._indices\n"
-            if out_dtype == bodo.string_array_type:
+            if out_dtype == bodo.types.string_array_type:
                 # In Bodo, if has _has_unique_local_dictionary is True, there are no duplicate values in the
                 # dictionary. Therefore, if we're performing an operation that may create duplicate values,
                 # we need to set the values appropriately.
@@ -387,7 +389,7 @@ def gen_vectorized(
                 )
 
         # If dictionary encoded outputs are not being used, then the output is
-        # still bodo.string_array_type, the number of loop iterations is still the
+        # still bodo.types.string_array_type, the number of loop iterations is still the
         # length of the indices, and scalar_text/propagate_null should work the
         # same because isna checks the data & indices, and scalar_text uses the
         # arguments extracted by getitem.
@@ -427,7 +429,7 @@ def gen_vectorized(
             non_cached_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
 
         # If dictionary encoded outputs are not being used, then the output is
-        # still bodo.string_array_type, the number of loop iterations is still the
+        # still bodo.types.string_array_type, the number of loop iterations is still the
         # length of the indices, and scalar_text/propagate_null should work the
         # same because isna checks the data & indices, and scalar_text uses the
         # arguments extracted by getitem.
@@ -475,7 +477,7 @@ def gen_vectorized(
                 if not propagate_null[dict_encoded_arg]:
                     non_cached_text += f"   {arr_name} = bodo.libs.array_kernels.concat([bodo.libs.array_kernels.gen_na_array(1, {arr_name}), {arr_name}])\n"
             # adding one extra element in dictionary for null output if necessary
-            if out_dtype == bodo.string_array_type:
+            if out_dtype == bodo.types.string_array_type:
                 non_cached_text += "   res = bodo.libs.str_arr_ext.pre_alloc_string_array(vec_iter_end, -1)\n"
             else:
                 non_cached_text += "   res = bodo.utils.utils.alloc_type(vec_iter_end, out_dtype, (-1,))\n"
@@ -549,7 +551,7 @@ def gen_vectorized(
             # and insert the set_array call. This populates the cache with the
             # result for the next time this kernel is called.
             non_cached_text += "   else:\n"
-            if out_dtype == bodo.string_array_type:
+            if out_dtype == bodo.types.string_array_type:
                 non_cached_text += (
                     "      new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(n)\n"
                 )
@@ -573,7 +575,7 @@ def gen_vectorized(
         if use_dict_encoding:
             if not propagate_null[dict_encoded_arg]:
                 # If NULL was transformed to a non-NULL value, then we need to
-                # update `indices` (which is a copy for bodo.string_array_type
+                # update `indices` (which is a copy for bodo.types.string_array_type
                 # and therefore safe to modify) so that NULL entries map to the
                 # newly added transformed NULL value.
                 # TODO(aneesh) in the case where NULL was mapped to NULL, it
@@ -598,7 +600,7 @@ def gen_vectorized(
                 func_text += "         if bodo.libs.array_kernels.isna(res, loc):\n"
                 func_text += "            bodo.libs.array_kernels.setna(indices, i)\n"
             # If the output dtype is a string array, create the new dictionary encoded array
-            if out_dtype == bodo.string_array_type:
+            if out_dtype == bodo.types.string_array_type:
                 dict_id = "new_dict_id" if cache_dict_arrays else "None"
                 func_text += f"   res = bodo.libs.dict_arr_ext.init_dict_arr(res, indices, has_global, is_dict_unique, {dict_id})\n"
             # Otherwise, use the indices to copy the values from the smaller array
@@ -911,10 +913,10 @@ def verify_numeric_arg(arg, f_name, a_name):  # pragma: no cover
     """
     if not (
         is_numeric_without_decimal(arg)
-        or isinstance(arg, bodo.Decimal128Type)
+        or isinstance(arg, bodo.types.Decimal128Type)
         or (
             bodo.utils.utils.is_array_typ(arg, True)
-            and isinstance(arg.dtype, bodo.Decimal128Type)
+            and isinstance(arg.dtype, bodo.types.Decimal128Type)
         )
     ):
         raise_bodo_error(
@@ -946,9 +948,10 @@ def is_valid_binary_arg(arg):  # pragma: no cover
     returns: False if the argument is not binary data
     """
     return not (
-        arg not in (types.none, bodo.bytes_type)
+        arg not in (types.none, bodo.types.bytes_type)
         and not (
-            bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.bytes_type
+            bodo.utils.utils.is_array_typ(arg, True)
+            and arg.dtype == bodo.types.bytes_type
         )
         and not is_overload_constant_bytes(arg)
         and not isinstance(arg, types.Bytes)
@@ -992,7 +995,7 @@ def is_valid_timedelta_arg(arg):
             and (
                 is_timedelta64_series_typ(arg)
                 or isinstance(arg, PDTimeDeltaType)
-                or arg.dtype == bodo.timedelta64ns
+                or arg.dtype == bodo.types.timedelta64ns
             )
         )
     )
@@ -1019,7 +1022,7 @@ def is_valid_decimal_arg(arg):  # pragma: no cover
         arg (dtype): the dtype of the argument being checked
     returns: False if the argument is not a decimal or decimal column
     """
-    return isinstance(arg, (bodo.Decimal128Type, bodo.DecimalArrayType))
+    return isinstance(arg, (bodo.types.Decimal128Type, bodo.types.DecimalArrayType))
 
 
 def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
@@ -1033,7 +1036,7 @@ def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
         a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not a array scalar, array column, or null
     """
-    if arg == bodo.none or arg == bodo.null_array_type:
+    if arg == bodo.types.none or arg == bodo.types.null_array_type:
         return
     if is_scalar:
         if not bodo.utils.utils.is_array_typ(arg, False):
@@ -1042,10 +1045,10 @@ def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
             )
     else:
         if not (
-            isinstance(arg, bodo.ArrayItemArrayType)
+            isinstance(arg, bodo.types.ArrayItemArrayType)
             or (
                 bodo.hiframes.pd_series_ext.is_series_type(arg)
-                and isinstance(arg.data, bodo.ArrayItemArrayType)
+                and isinstance(arg.data, bodo.types.ArrayItemArrayType)
             )
         ):
             raise_bodo_error(
@@ -1076,7 +1079,7 @@ def verify_scalar_string_arg(arg, f_name, a_name):  # pragma: no cover
         a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not a scalar string
     """
-    if arg not in (types.unicode_type, bodo.none) and not isinstance(
+    if arg not in (types.unicode_type, bodo.types.none) and not isinstance(
         arg, types.StringLiteral
     ):
         raise_bodo_error(
@@ -1167,8 +1170,9 @@ def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
 
 
 def is_valid_timestamptz_arg(arg):
-    return arg == bodo.timestamptz_type or (
-        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.timestamptz_type
+    return arg == bodo.types.timestamptz_type or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and arg.dtype == bodo.types.timestamptz_type
     )
 
 
@@ -1183,9 +1187,9 @@ def is_valid_date_arg(arg):
     Returns:
         bool: Is this type one of the date types.
     """
-    return arg == bodo.datetime_date_type or (
+    return arg == bodo.types.datetime_date_type or (
         bodo.utils.utils.is_array_typ(arg, True)
-        and arg.dtype == bodo.datetime_date_type
+        and arg.dtype == bodo.types.datetime_date_type
     )
 
 
@@ -1202,10 +1206,13 @@ def is_valid_tz_naive_datetime_arg(arg):
         bool: Is this type one of the tz-naive datetime types.
     """
     return arg in (
-        bodo.datetime64ns,
-        bodo.pd_timestamp_tz_naive_type,
-        bodo.pd_datetime_tz_naive_type,
-    ) or (bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.datetime64ns)
+        bodo.types.datetime64ns,
+        bodo.types.pd_timestamp_tz_naive_type,
+        bodo.types.pd_datetime_tz_naive_type,
+    ) or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and arg.dtype == bodo.types.datetime64ns
+    )
 
 
 def is_valid_tz_aware_datetime_arg(arg):
@@ -1220,15 +1227,16 @@ def is_valid_tz_aware_datetime_arg(arg):
     Returns:
         bool: Is this type one of the tz-aware datetime types.
     """
-    return (isinstance(arg, bodo.PandasTimestampType) and arg.tz is not None) or (
+    return (isinstance(arg, bodo.types.PandasTimestampType) and arg.tz is not None) or (
         bodo.utils.utils.is_array_typ(arg, True)
         and isinstance(arg.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
     )
 
 
 def is_valid_timestamptz_arg(arg):
-    return arg == bodo.timestamptz_type or (
-        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.timestamptz_type
+    return arg == bodo.types.timestamptz_type or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and arg.dtype == bodo.types.timestamptz_type
     )
 
 
@@ -1366,7 +1374,7 @@ def verify_sql_interval(arg, f_name, a_name):  # pragma: no cover
     if not (
         is_overload_none(arg)
         or is_valid_timedelta_arg(arg)
-        or arg == bodo.date_offset_type
+        or arg == bodo.types.date_offset_type
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a Timedelta scalar/column, DateOffset, or null, but was {arg}"
@@ -1416,9 +1424,9 @@ def is_valid_time_arg(arg):
     Returns:
         bool: Is this type a time type
     """
-    return isinstance(arg, bodo.TimeType) or (
+    return isinstance(arg, bodo.types.TimeType) or (
         bodo.utils.utils.is_array_typ(arg, True)
-        and isinstance(arg.dtype, bodo.bodo.TimeType)
+        and isinstance(arg.dtype, bodo.bodo.types.TimeType)
     )
 
 
@@ -1523,12 +1531,12 @@ def get_common_broadcasted_type(arg_types, func_name, suppress_error=False):
         else:
             elem_types.append(arg_types[i])
     if len(elem_types) == 0:
-        return bodo.none
+        return bodo.types.none
     elif len(elem_types) == 1:
         if bodo.utils.utils.is_array_typ(elem_types[0]):
             return bodo.utils.typing.to_nullable_type(elem_types[0])
-        elif elem_types[0] == bodo.none:
-            return bodo.none
+        elif elem_types[0] == bodo.types.none:
+            return bodo.types.none
         else:
             return bodo.utils.typing.to_nullable_type(
                 bodo.utils.typing.dtype_to_array_type(elem_types[0])
@@ -1542,14 +1550,14 @@ def get_common_broadcasted_type(arg_types, func_name, suppress_error=False):
                 scalar_dtypes.append(elem_types[i].dtype)
             # Avoid appending nonetypes to elem_types,
             # as scalar NULL coerces to any type.
-            elif elem_types[i] == bodo.none:
+            elif elem_types[i] == bodo.types.none:
                 pass
             else:
                 scalar_dtypes.append(elem_types[i])
 
         # All arguments were None scalars, return none
         if len(scalar_dtypes) == 0:
-            return bodo.none
+            return bodo.types.none
 
         common_dtype, _ = bodo.utils.typing.get_common_scalar_dtype(
             scalar_dtypes, allow_downcast=True
@@ -2047,30 +2055,31 @@ def get_combined_type(in_types, calling_func):
             bodo.utils.typing.is_str_arr_type(typ) for typ in in_types
         ):  # pragma: no cover
             raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
-        return bodo.string_array_type
+        return bodo.types.string_array_type
 
     # If the first type is is an array item array, verify that all of
     # the other types are also array item arrays and then recursively
     # repeat the procedure on all of the inner types.
-    if isinstance(seed_type, bodo.ArrayItemArrayType):
+    if isinstance(seed_type, bodo.types.ArrayItemArrayType):
         if not all(
-            isinstance(typ, bodo.ArrayItemArrayType) for typ in in_types
+            isinstance(typ, bodo.types.ArrayItemArrayType) for typ in in_types
         ):  # pragma: no cover
             raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
         inner_dtypes = [typ.dtype for typ in in_types]
         combined_inner_dtype = get_combined_type(inner_dtypes, calling_func)
-        return bodo.ArrayItemArrayType(combined_inner_dtype)
+        return bodo.types.ArrayItemArrayType(combined_inner_dtype)
 
     # For map arrays, recursively ensure the two child arrays match
-    if isinstance(seed_type, (bodo.MapArrayType, types.DictType)):
+    if isinstance(seed_type, (bodo.types.MapArrayType, types.DictType)):
         if not all(
-            isinstance(typ, (bodo.MapArrayType, types.DictType)) for typ in in_types
+            isinstance(typ, (bodo.types.MapArrayType, types.DictType))
+            for typ in in_types
         ):  # pragma: no cover
             raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
         key_types = []
         val_types = []
         for typ in in_types:
-            if isinstance(typ, bodo.MapArrayType):
+            if isinstance(typ, bodo.types.MapArrayType):
                 key_types.append(typ.key_arr_type)
                 val_types.append(typ.value_arr_type)
             else:
@@ -2078,14 +2087,16 @@ def get_combined_type(in_types, calling_func):
                 val_types.append(bodo.utils.typing.dtype_to_array_type(typ.value_type))
         combined_key_type = get_combined_type(key_types, calling_func)
         combined_val_type = get_combined_type(val_types, calling_func)
-        return bodo.MapArrayType(combined_key_type, combined_val_type)
+        return bodo.types.MapArrayType(combined_key_type, combined_val_type)
 
     # For struct arrays, match the names recursively ensure the all child arrays match
     if isinstance(
-        seed_type, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+        seed_type, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
     ):
         if not all(
-            isinstance(typ, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType))
+            isinstance(
+                typ, (bodo.types.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+            )
             and typ.names == seed_type.names
             for typ in in_types
         ):  # pragma: no cover
@@ -2094,14 +2105,14 @@ def get_combined_type(in_types, calling_func):
         for i in range(len(seed_type.names)):
             field_types = []
             for typ in in_types:
-                if isinstance(typ, bodo.StructArrayType):
+                if isinstance(typ, bodo.types.StructArrayType):
                     field_types.append(typ.data[i])
                 else:
                     field_types.append(
                         bodo.utils.typing.dtype_to_array_type(typ.data[i])
                     )
             data_types.append(get_combined_type(field_types, calling_func))
-        return bodo.StructArrayType(tuple(data_types), seed_type.names)
+        return bodo.types.StructArrayType(tuple(data_types), seed_type.names)
 
     # For all other array types, get the common scalar type if possible
     dtypes = [typ.dtype for typ in in_types]

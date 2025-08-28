@@ -79,7 +79,7 @@ def test_javascript_udf_no_args_return_int(memory_leak_check):
     """
     body = MetaType("return 2 + 1")
     args = MetaType(())
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f():
         f = create_javascript_udf(body, args, ret_type)
@@ -98,7 +98,7 @@ def test_javascript_interleaved_execution(memory_leak_check):
     body_a = MetaType("return 2 + 1")
     body_b = MetaType("return 2 + 2")
     args = MetaType(())
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f():
         a = create_javascript_udf(body_a, args, ret_type)
@@ -121,7 +121,7 @@ def test_javascript_udf_single_arg_return_int(memory_leak_check):
     """
     body = MetaType("return A + 1")
     args = MetaType(("A",))
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f(arr):
         f = create_javascript_udf(body, args, ret_type)
@@ -180,7 +180,7 @@ def test_javascript_udf_multiple_args_return_int(inputs, answer, memory_leak_che
     """
     body = MetaType("return (A == null || B == null) ? null : Math.sqrt(A * A + B * B)")
     args = MetaType(("A", "B"))
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f(arr0, arr1):
         f = create_javascript_udf(body, args, ret_type)
@@ -206,7 +206,7 @@ def test_javascript_udf_optional_args_return_int(flags, answer, memory_leak_chec
     """
     body = MetaType("return (x == null || y == null) ? null : x * y")
     args = MetaType(("x", "y"))
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f(flag0, flag1):
         arg0 = 6 if flag0 else None
@@ -256,7 +256,7 @@ def test_javascript_udf_string_args_return_int(arr, answer, memory_leak_check):
     return longest;"""
     )
     args = MetaType(("sentence",))
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     def f(arr):
         f = create_javascript_udf(body, args, ret_type)
@@ -316,7 +316,7 @@ def test_javascript_udf_complex_function(arr, answer, memory_leak_check):
     return sequence[idx-1].toString()"""
     )
     args = MetaType(("x",))
-    ret_type = bodo.string_array_type
+    ret_type = bodo.types.string_array_type
 
     def f(arr):
         f = create_javascript_udf(body, args, ret_type)
@@ -374,7 +374,7 @@ def test_javascript_invalid_body(memory_leak_check):
     """
     body = MetaType("return 2 + '")
     args = MetaType(())
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     @bodo.jit
     def f():
@@ -393,7 +393,7 @@ def test_javascript_throws_exception(memory_leak_check):
     """
     body = MetaType("throw 'error_string'")
     args = MetaType(())
-    ret_type = IntegerArrayType(bodo.int32)
+    ret_type = IntegerArrayType(bodo.types.int32)
 
     @bodo.jit
     def f():
@@ -409,7 +409,7 @@ def test_javascript_throws_exception(memory_leak_check):
 def test_javascript_unicode_in_body(memory_leak_check):
     body = MetaType("return 'hëllo'")
     args = MetaType(())
-    ret_type = bodo.string_array_type
+    ret_type = bodo.types.string_array_type
 
     def f():
         f = create_javascript_udf(body, args, ret_type)
@@ -674,7 +674,7 @@ if ( P_MASK_TYPE2 == true )
 return upc;
 """
     args = ("P_BARCODE", "P_LENGTH", "P_HAS_CHECK", "P_MASK_TYPE2")
-    return body, args, bodo.string_array_type
+    return body, args, bodo.types.string_array_type
 
 
 def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
@@ -719,64 +719,64 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
     [
         pytest.param(
             "return 255",
-            IntegerArrayType(bodo.uint8),
+            IntegerArrayType(bodo.types.uint8),
             255,
             id="uint8",
         ),
         pytest.param(
             "return 2 ** 16 - 1",
-            IntegerArrayType(bodo.uint16),
+            IntegerArrayType(bodo.types.uint16),
             2**16 - 1,
             id="uint16",
         ),
         pytest.param(
             "return 2 ** 32 -1",
-            IntegerArrayType(bodo.uint32),
+            IntegerArrayType(bodo.types.uint32),
             2**32 - 1,
             id="uint32",
         ),
         # This is bigint syntax in javascript, all numerics are double by default which can't represent this value
         pytest.param(
             "return 2n ** 64n - 1n",
-            IntegerArrayType(bodo.uint64),
+            IntegerArrayType(bodo.types.uint64),
             2**64 - 1,
             id="uint64",
         ),
         pytest.param(
             "return 2 ** 8 / 2 - 1",
-            IntegerArrayType(bodo.int8),
+            IntegerArrayType(bodo.types.int8),
             127,
             id="int8",
         ),
         pytest.param(
             "return 2 ** 16 / 2 - 1",
-            IntegerArrayType(bodo.int16),
+            IntegerArrayType(bodo.types.int16),
             2**16 / 2 - 1,
             id="int16",
         ),
         pytest.param(
             "return 2 ** 32 / 2 - 1",
-            IntegerArrayType(bodo.int32),
+            IntegerArrayType(bodo.types.int32),
             2**32 / 2 - 1,
             id="int32",
         ),
         # This is bigint syntax in javascript, all numerics are double by default which can't represent this value
         pytest.param(
             "return 2n ** 64n  / 2n - 1n",
-            IntegerArrayType(bodo.int64),
+            IntegerArrayType(bodo.types.int64),
             2**64 / 2 - 1,
             id="int64",
         ),
         pytest.param(
             "return 2 + 1.1",
-            IntegerArrayType(bodo.float32),
+            IntegerArrayType(bodo.types.float32),
             3.1,
             id="float32",
         ),
         pytest.param(
             # Bigger than a float32 can represent
             "return 4 * 10**40",
-            IntegerArrayType(bodo.float64),
+            IntegerArrayType(bodo.types.float64),
             float(4 * 10**40),
             id="float64",
         ),
@@ -788,19 +788,19 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
         ),
         pytest.param(
             "return 'hello'",
-            bodo.string_array_type,
+            bodo.types.string_array_type,
             "hello",
             id="string",
         ),
         pytest.param(
             "return new Date('2021-01-01')",
-            bodo.datetime_date_array_type,
+            bodo.types.datetime_date_array_type,
             datetime.date(2021, 1, 1),
             id="date",
         ),
         pytest.param(
             "return new Uint8Array([1, 2, 3])",
-            bodo.binary_array_type,
+            bodo.types.binary_array_type,
             b"\x01\x02\x03",
             id="binary",
         ),

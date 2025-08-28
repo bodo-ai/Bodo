@@ -457,7 +457,7 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
         bodo.libs.query_profile_collector.finalize()
         return total_max
 
-    _ = impl(datapath("tpch-test_data/parquet/lineitem.parquet"))
+    _ = impl(datapath("tpch-test_data/parquet/lineitem.pq"))
     reader_output_row_count = (
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )

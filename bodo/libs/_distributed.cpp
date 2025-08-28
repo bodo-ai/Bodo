@@ -801,6 +801,45 @@ static PyObject *get_rank_py_wrapper(PyObject *self, PyObject *args) {
 }
 
 /**
+ * @brief Wrapper around get_size() to be called from Python (avoids Numba JIT
+ overhead and makes compiler debugging easier by eliminating extra compilation)
+ *
+ */
+static PyObject *get_size_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError, "get_size() does not take arguments");
+        return nullptr;
+    }
+    PyObject *size_obj = PyLong_FromLong(dist_get_size());
+    return size_obj;
+}
+
+/**
+ * @brief Wrapper for bcast of int64 to avoid JIT import in plan_optimizer
+ *
+ */
+static PyObject *bcast_int64_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 1) {
+        PyErr_SetString(PyExc_TypeError,
+                        "bcast_int64() takes exactly one argument");
+        return nullptr;
+    }
+    PyObject *input_obj = PyTuple_GetItem(args, 0);
+    if (!PyLong_Check(input_obj)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "bcast_int64() argument must be an integer");
+        return nullptr;
+    }
+    int64_t input_value = PyLong_AsLongLong(input_obj);
+
+    CHECK_MPI(MPI_Bcast(&input_value, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+              "_distributed.h::c_bcast: MPI error on MPI_Bcast:");
+
+    PyObject *output_obj = PyLong_FromLongLong(input_value);
+    return output_obj;
+}
+
+/**
  * @brief Wrapper around finalize() to be called from Python (avoids Numba JIT
  overhead and makes compiler debugging easier by eliminating extra compilation)
  *
@@ -817,6 +856,8 @@ static PyObject *finalize_py_wrapper(PyObject *self, PyObject *args) {
 static PyMethodDef ext_methods[] = {
 #define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
     declmethod(get_rank_py_wrapper),
+    declmethod(get_size_py_wrapper),
+    declmethod(bcast_int64_py_wrapper),
     declmethod(finalize_py_wrapper),
     {nullptr},
 #undef declmethod

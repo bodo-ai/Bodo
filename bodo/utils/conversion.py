@@ -107,19 +107,19 @@ class CoerceToNdarrayInfer(AbstractTemplate):
         if isinstance(data, types.Array):
             if not is_overload_none(use_nullable_array) and (
                 isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
-                or data.dtype == bodo.timedelta64ns
-                or data.dtype == bodo.datetime64ns
+                or data.dtype == bodo.types.timedelta64ns
+                or data.dtype == bodo.types.datetime64ns
             ):
                 if data.dtype == types.bool_:
-                    output = bodo.boolean_array_type
-                elif data.dtype == bodo.timedelta64ns:
-                    output = bodo.timedelta_array_type
-                elif data.dtype == bodo.datetime64ns:
-                    output = bodo.DatetimeArrayType(None)
+                    output = bodo.types.boolean_array_type
+                elif data.dtype == bodo.types.timedelta64ns:
+                    output = bodo.types.timedelta_array_type
+                elif data.dtype == bodo.types.datetime64ns:
+                    output = bodo.types.DatetimeArrayType(None)
                 elif isinstance(data.dtype, types.Float):
-                    output = bodo.FloatingArrayType(data.dtype)
+                    output = bodo.types.FloatingArrayType(data.dtype)
                 else:  # Integer case
-                    output = bodo.IntegerArrayType(data.dtype)
+                    output = bodo.types.IntegerArrayType(data.dtype)
                 return signature(output, *folded_args).replace(pysig=pysig)
             if data.layout != "C":
                 return signature(data.copy(layout="C"), *folded_args).replace(
@@ -130,7 +130,7 @@ class CoerceToNdarrayInfer(AbstractTemplate):
         if isinstance(data, RangeIndexType):
             if not is_overload_none(use_nullable_array):
                 return signature(
-                    bodo.IntegerArrayType(data.dtype), *folded_args
+                    bodo.types.IntegerArrayType(data.dtype), *folded_args
                 ).replace(pysig=pysig)
             return signature(types.Array(data.dtype, 1, "C"), *folded_args).replace(
                 pysig=pysig
@@ -151,40 +151,40 @@ class CoerceToNdarrayInfer(AbstractTemplate):
             ):
                 if isinstance(data.dtype, types.Integer):
                     return signature(
-                        bodo.IntegerArrayType(data.dtype), *folded_args
+                        bodo.types.IntegerArrayType(data.dtype), *folded_args
                     ).replace(pysig=pysig)
                 else:
                     return signature(
-                        bodo.FloatingArrayType(data.dtype), *folded_args
+                        bodo.types.FloatingArrayType(data.dtype), *folded_args
                     ).replace(pysig=pysig)
             return signature(data.data, *folded_args).replace(pysig=pysig)
 
         if not is_overload_none(scalar_to_arr_len):
-            if isinstance(data, bodo.Decimal128Type):
+            if isinstance(data, bodo.types.Decimal128Type):
                 output = bodo.libs.decimal_arr_ext.DecimalArrayType(
                     data.precision, data.scale
                 )
             elif data == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
-                output = types.Array(bodo.datetime64ns, 1, "C")
+                output = types.Array(bodo.types.datetime64ns, 1, "C")
             elif data == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
-                output = types.Array(bodo.timedelta64ns, 1, "C")
+                output = types.Array(bodo.types.timedelta64ns, 1, "C")
             elif data == bodo.hiframes.datetime_date_ext.datetime_date_type:
-                output = bodo.datetime_date_array_type
+                output = bodo.types.datetime_date_array_type
             elif isinstance(data, bodo.hiframes.time_ext.TimeType):
-                output = bodo.TimeArrayType(data.precision)
-            elif data == bodo.timestamptz_type:
-                output = bodo.timestamptz_array_type
+                output = bodo.types.TimeArrayType(data.precision)
+            elif data == bodo.types.timestamptz_type:
+                output = bodo.types.timestamptz_array_type
             # Timestamp values are stored as dt64 arrays
             elif data == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
                 output = types.Array(np.dtype("datetime64[ns]"), 1, "C")
             elif not is_overload_none(use_nullable_array):
                 dtype = types.unliteral(data)
                 if isinstance(dtype, types.Integer):
-                    output = bodo.IntegerArrayType(dtype)
+                    output = bodo.types.IntegerArrayType(dtype)
                 elif isinstance(dtype, types.Float):
-                    output = bodo.FloatingArrayType(dtype)
+                    output = bodo.types.FloatingArrayType(dtype)
                 elif dtype == types.bool_:
-                    output = bodo.boolean_array_type
+                    output = bodo.types.boolean_array_type
             else:
                 output = types.Array(data, 1, "C")
             return signature(output, *folded_args).replace(pysig=pysig)
@@ -243,7 +243,7 @@ def overload_np_to_nullable_array(data):
             return lambda data: bodo.libs.int_arr_ext.init_integer_array(
                 data, np.full((len(data) + 7) >> 3, 255, np.uint8)
             )  # pragma: no cover
-    elif data.dtype == bodo.timedelta64ns:
+    elif data.dtype == bodo.types.timedelta64ns:
         if data.layout != "C":
             return (
                 lambda data: bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
@@ -257,7 +257,7 @@ def overload_np_to_nullable_array(data):
                     data, np.full((len(data) + 7) >> 3, 255, np.uint8)
                 )
             )  # pragma: no cover
-    elif data.dtype == bodo.datetime64ns:
+    elif data.dtype == bodo.types.datetime64ns:
         if data.layout != "C":
             return lambda data: bodo.libs.pd_datetime_arr_ext.init_datetime_array(
                 np.ascontiguousarray(data),
@@ -334,8 +334,8 @@ def overload_coerce_to_ndarray(
     if isinstance(data, types.Array):
         if not is_overload_none(use_nullable_array) and (
             isinstance(data.dtype, (types.Boolean, types.Integer, types.Float))
-            or data.dtype == bodo.timedelta64ns
-            or data.dtype == bodo.datetime64ns
+            or data.dtype == bodo.types.timedelta64ns
+            or data.dtype == bodo.types.datetime64ns
         ):
             return (
                 lambda data,
@@ -449,7 +449,7 @@ def overload_coerce_to_ndarray(
     # TODO: make sure scalar is a Numpy dtype
 
     if not is_overload_none(scalar_to_arr_len):
-        if isinstance(data, bodo.Decimal128Type):
+        if isinstance(data, bodo.types.Decimal128Type):
             precision = data.precision
             scale = data.scale
 
@@ -539,7 +539,7 @@ def overload_coerce_to_ndarray(
 
             return impl_ts
 
-        if data == bodo.timestamptz_type:
+        if data == bodo.types.timestamptz_type:
 
             def impl_timestamptz(
                 data,
@@ -707,7 +707,7 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
     if _arr_typ == types.unknown:
         _arr_typ = to_nullable_type(dtype_to_array_type(scalar))
 
-    if _arr_typ == bodo.null_array_type:
+    if _arr_typ == bodo.types.null_array_type:
         return (
             lambda scalar,
             length,
@@ -738,14 +738,14 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
 
         return impl
 
-    if isinstance(_arr_typ, bodo.MapArrayType):
+    if isinstance(_arr_typ, bodo.types.MapArrayType):
 
         def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
             return bodo.libs.map_arr_ext.scalar_to_map_array(scalar, length, _arr_typ)
 
         return impl
 
-    if isinstance(_arr_typ, bodo.StructArrayType):
+    if isinstance(_arr_typ, bodo.types.StructArrayType):
 
         def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
             return bodo.libs.struct_arr_ext.scalar_to_struct_array(
@@ -857,9 +857,9 @@ def overload_coerce_to_array(
                 data.data,
                 (
                     ArrayItemArrayType,
-                    bodo.TupleArrayType,
-                    bodo.StructArrayType,
-                    bodo.MapArrayType,
+                    bodo.types.TupleArrayType,
+                    bodo.types.StructArrayType,
+                    bodo.types.MapArrayType,
                 ),
             )
             or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(data)
@@ -913,7 +913,7 @@ def overload_coerce_to_array(
 
         return impl_array_item_array_to_nullable
 
-    if isinstance(data, bodo.StructArrayType) and not is_overload_none(
+    if isinstance(data, bodo.types.StructArrayType) and not is_overload_none(
         use_nullable_array
     ):
         # Convert inner types to nullable
@@ -966,7 +966,7 @@ def overload_coerce_to_array(
 
         return bodo.utils.utils.bodo_exec(func_text, {"bodo": bodo}, {}, __name__)
 
-    if isinstance(data, bodo.TupleArrayType) and not is_overload_none(
+    if isinstance(data, bodo.types.TupleArrayType) and not is_overload_none(
         use_nullable_array
     ):
         # Convert inner types to nullable
@@ -985,7 +985,9 @@ def overload_coerce_to_array(
 
         return impl_tuple_array_to_nullable
 
-    if isinstance(data, bodo.MapArrayType) and not is_overload_none(use_nullable_array):
+    if isinstance(data, bodo.types.MapArrayType) and not is_overload_none(
+        use_nullable_array
+    ):
         # Convert inner types to nullable
 
         def impl_map_array_to_nullable(
@@ -1014,8 +1016,8 @@ def overload_coerce_to_array(
 
     # string/binary list
     if isinstance(data, types.List) and data.dtype in (
-        bodo.string_type,
-        bodo.bytes_type,
+        bodo.types.string_type,
+        bodo.types.bytes_type,
     ):
         return (
             lambda data,
@@ -1176,7 +1178,7 @@ def overload_coerce_to_array(
 
         return impl_str
 
-    if not is_overload_none(scalar_to_arr_len) and data == bodo.bytes_type:
+    if not is_overload_none(scalar_to_arr_len) and data == bodo.types.bytes_type:
 
         def impl_bytes(
             data,
@@ -1214,7 +1216,7 @@ def overload_coerce_to_array(
         return impl_list_timestamp
 
     # Convert list of Timedeltas to td64 array
-    if isinstance(data, types.List) and data.dtype == bodo.pd_timedelta_type:
+    if isinstance(data, types.List) and data.dtype == bodo.types.pd_timedelta_type:
 
         def impl_list_timedelta(
             data,
@@ -1264,12 +1266,12 @@ def overload_coerce_to_array(
 
     # Timestamp/Timedelta scalars to array
     if not is_overload_none(scalar_to_arr_len) and data in [
-        bodo.pd_timestamp_tz_naive_type,
-        bodo.pd_timedelta_type,
+        bodo.types.pd_timestamp_tz_naive_type,
+        bodo.types.pd_timedelta_type,
     ]:
         _dtype = (
             "datetime64[ns]"
-            if data == bodo.pd_timestamp_tz_naive_type
+            if data == bodo.types.pd_timestamp_tz_naive_type
             else "timedelta64[ns]"
         )
 
@@ -1380,9 +1382,9 @@ def overload_fix_arr_dtype(
         )  # pragma: no cover
 
     # Handle nested types recursively:
-    if isinstance(data, bodo.ArrayItemArrayType):
+    if isinstance(data, bodo.types.ArrayItemArrayType):
         nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
-        if not isinstance(nb_dtype, bodo.ArrayItemArrayType):
+        if not isinstance(nb_dtype, bodo.types.ArrayItemArrayType):
             raise BodoError(
                 f"Both source and target types must be ArrayTimeArrayType! Got {data} and {nb_dtype} instead."
             )
@@ -1433,9 +1435,9 @@ def overload_fix_arr_dtype(
                 return new_data
 
             return impl
-    elif isinstance(data, bodo.StructArrayType):
+    elif isinstance(data, bodo.types.StructArrayType):
         nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
-        if not isinstance(nb_dtype, bodo.StructArrayType):
+        if not isinstance(nb_dtype, bodo.types.StructArrayType):
             raise BodoError(
                 f"Both source and target types must be StructArrayType! Got {data} and {nb_dtype} instead."
             )
@@ -1504,10 +1506,10 @@ def overload_fix_arr_dtype(
         )
         return loc_vars["impl"]
 
-    elif isinstance(data, bodo.MapArrayType):
+    elif isinstance(data, bodo.types.MapArrayType):
         nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
 
-        if not isinstance(nb_dtype, bodo.MapArrayType):
+        if not isinstance(nb_dtype, bodo.types.MapArrayType):
             raise BodoError(
                 f"Both source and target types must be MapArrayType! Got {data} and {nb_dtype} instead."
             )
@@ -1551,8 +1553,8 @@ def overload_fix_arr_dtype(
             types.uint64: np.uint64(0),
             types.float32: np.float32(0),
             types.float64: np.float64(0),
-            bodo.datetime64ns: pd.Timestamp(0),
-            bodo.timedelta64ns: pd.Timedelta(0),
+            bodo.types.datetime64ns: pd.Timestamp(0),
+            bodo.types.timedelta64ns: pd.Timedelta(0),
         }
 
         convert_func_dict = {
@@ -1569,8 +1571,8 @@ def overload_fix_arr_dtype(
             types.uint64: np.uint64,
             types.float32: np.float32,
             types.float64: np.float64,
-            bodo.datetime64ns: pd.to_datetime,
-            bodo.timedelta64ns: pd.to_timedelta,
+            bodo.types.datetime64ns: pd.to_datetime,
+            bodo.types.timedelta64ns: pd.to_timedelta,
         }
 
         # If NA values properly done this should suffice for default_value_dict:
@@ -1582,22 +1584,22 @@ def overload_fix_arr_dtype(
         if nb_dtype not in valid_types:
             raise BodoError(f"type conversion to {nb_dtype} types unsupported.")
         for typ in scalar_types:
-            if typ == bodo.datetime64ns:
+            if typ == bodo.types.datetime64ns:
                 if nb_dtype not in (
                     types.unicode_type,
                     types.int64,
                     types.uint64,
-                    bodo.datetime64ns,
+                    bodo.types.datetime64ns,
                 ):
                     raise BodoError(
                         f"invalid type conversion from {typ} to {nb_dtype}."
                     )
-            elif typ == bodo.timedelta64ns:
+            elif typ == bodo.types.timedelta64ns:
                 if nb_dtype not in (
                     types.unicode_type,
                     types.int64,
                     types.uint64,
-                    bodo.timedelta64ns,
+                    bodo.types.timedelta64ns,
                 ):
                     raise BodoError(
                         f"invalid type conversion from {typ} to {nb_dtype}."
@@ -1635,7 +1637,7 @@ def overload_fix_arr_dtype(
         return impl
 
     # null array input case
-    if data == bodo.null_array_type:
+    if data == bodo.types.null_array_type:
 
         def impl_null_array(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -1696,8 +1698,8 @@ def overload_fix_arr_dtype(
             return impl_binary
 
         if is_overload_true(from_series) and data.dtype in (
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
         ):
 
             def impl_str_dt_series(
@@ -1819,7 +1821,7 @@ def overload_fix_arr_dtype(
     nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
 
     if isinstance(data.dtype, types.Integer) and isinstance(
-        nb_dtype, bodo.Decimal128Type
+        nb_dtype, bodo.types.Decimal128Type
     ):
         new_prec = nb_dtype.precision
         new_scale = nb_dtype.scale
@@ -1845,7 +1847,7 @@ def overload_fix_arr_dtype(
             isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype)
             and data.dtype == nb_dtype.dtype
         )
-    elif data == bodo.boolean_array_type:
+    elif data == bodo.types.boolean_array_type:
         same_typ = nb_dtype == boolean_dtype
     elif bodo.utils.utils.is_array_typ(nb_dtype, False):
         same_typ = data == nb_dtype
@@ -1889,7 +1891,7 @@ def overload_fix_arr_dtype(
             return impl_float
         else:
             # optimized implementation for dictionary arrays
-            if data == bodo.dict_str_arr_type:
+            if data == bodo.types.dict_str_arr_type:
 
                 def impl_dict(
                     data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -1995,8 +1997,8 @@ def overload_fix_arr_dtype(
 
     # Note astype(datetime.date) isn't possible in Pandas because its treated
     # as an object type. We support it to maintain parity with Spark's cast.
-    if nb_dtype == bodo.datetime_date_type and (
-        data.dtype == bodo.datetime64ns or data_is_tz_aware
+    if nb_dtype == bodo.types.datetime_date_type and (
+        data.dtype == bodo.types.datetime64ns or data_is_tz_aware
     ):
         # This operation isn't defined in Pandas, so we opt to implement it as
         # truncating to the date, which best resembles a cast.
@@ -2021,8 +2023,8 @@ def overload_fix_arr_dtype(
         return impl_date
 
     # Datetime64 case
-    if nb_dtype == bodo.datetime64ns:
-        if data.dtype == bodo.string_type:
+    if nb_dtype == bodo.types.datetime64ns:
+        if data.dtype == bodo.types.string_type:
             # Support String Arrays using objmode
             def impl_str(
                 data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -2033,7 +2035,7 @@ def overload_fix_arr_dtype(
 
             return impl_str
 
-        if data == bodo.datetime_date_array_type:
+        if data == bodo.types.datetime_date_array_type:
             # Support Date Arrays using objmode
             # TODO: Replace with a native impl
             def impl_date(
@@ -2055,7 +2057,7 @@ def overload_fix_arr_dtype(
             return impl_tz_ts
 
         if isinstance(data.dtype, types.Number) or data.dtype in [
-            bodo.timedelta64ns,
+            bodo.types.timedelta64ns,
             types.bool_,
         ]:
             # Nullable Integer/boolean/timedelta64 arrays
@@ -2077,8 +2079,8 @@ def overload_fix_arr_dtype(
             return impl_numeric
 
     # Timedelta64 case
-    if nb_dtype == bodo.timedelta64ns:
-        if data.dtype == bodo.string_type:
+    if nb_dtype == bodo.types.timedelta64ns:
+        if data.dtype == bodo.types.string_type:
             # Support String Arrays using objmode
             def impl_str(
                 data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -2090,7 +2092,7 @@ def overload_fix_arr_dtype(
             return impl_str
 
         if isinstance(data.dtype, types.Number) or data.dtype in [
-            bodo.datetime64ns,
+            bodo.types.datetime64ns,
             types.bool_,
         ]:
             if do_copy:
@@ -2125,7 +2127,8 @@ def overload_fix_arr_dtype(
 
     # Pandas currently only supports dt64/td64 -> int64
     if (nb_dtype == types.int64) and (
-        data.dtype in [bodo.datetime64ns, bodo.timedelta64ns] or data_is_tz_aware
+        data.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
+        or data_is_tz_aware
     ):
 
         def impl_datelike_to_integer(
@@ -2252,7 +2255,7 @@ def overload_convert_to_td64ns(data):
 
     if (
         is_np_arr_typ(data, types.NPTimedelta("ns"))
-        or data == bodo.timedelta_array_type
+        or data == bodo.types.timedelta_array_type
     ):
         return lambda data: data  # pragma: no cover
 
@@ -2333,7 +2336,11 @@ def overload_index_from_array(data, name=None):
     """
     convert data array to Index object.
     """
-    if data in [bodo.string_array_type, bodo.binary_array_type, bodo.dict_str_arr_type]:
+    if data in [
+        bodo.types.string_array_type,
+        bodo.types.binary_array_type,
+        bodo.types.dict_str_arr_type,
+    ]:
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_binary_str_index(
             data, name
         )  # pragma: no cover
@@ -2343,7 +2350,7 @@ def overload_index_from_array(data, name=None):
             data, name=name
         )  # pragma: no cover
 
-    if data.dtype in (types.NPTimedelta("ns"), bodo.pd_timedelta_type):
+    if data.dtype in (types.NPTimedelta("ns"), bodo.types.pd_timedelta_type):
         return lambda data, name=None: pd.TimedeltaIndex(
             data, name=name
         )  # pragma: no cover
@@ -2355,11 +2362,11 @@ def overload_index_from_array(data, name=None):
                 types.Integer,
                 types.Float,
                 types.Boolean,
-                bodo.TimeType,
-                bodo.Decimal128Type,
+                bodo.types.TimeType,
+                bodo.types.Decimal128Type,
             ),
         )
-        or data.dtype == bodo.datetime_date_type
+        or data.dtype == bodo.types.datetime_date_type
     ):
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_numeric_index(
             data, name
@@ -2769,9 +2776,9 @@ def overload_list_to_array(lst, arr_type, parallel=False):
         real_arr_type = dtype_to_array_type(to_nullable_type(lst.dtype))
     glbls = {"bodo": bodo, "real_arr_type": real_arr_type}
 
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         # For dictionary encoded arrays create a naive array containing duplicates.
-        glbls["data_arr_type"] = bodo.string_array_type
+        glbls["data_arr_type"] = bodo.types.string_array_type
         glbls["indices_arr_type"] = bodo.libs.dict_arr_ext.dict_indices_arr_type
         func_text += "  data_arr = bodo.utils.conversion.list_to_dict_array(lst, data_arr_type)\n"
         func_text += "  indices_arr = bodo.utils.utils.alloc_type(copy_len, indices_arr_type, (-1,))\n"
@@ -2780,7 +2787,7 @@ def overload_list_to_array(lst, arr_type, parallel=False):
             "  out_arr = bodo.utils.utils.alloc_type(copy_len, real_arr_type, (-1,))\n"
         )
     func_text += "  for i in range(start, start + copy_len):\n"
-    if arr_type == bodo.dict_str_arr_type:
+    if arr_type == bodo.types.dict_str_arr_type:
         func_text += "    indices_arr[i - start] = i\n"
         # Ensure nulls are consistent. This extra pass is fine because we assume lists are small (e.g.
         # used by VALUES in SQL).

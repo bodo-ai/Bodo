@@ -261,7 +261,7 @@ def map_arr_setitem(arr, ind, val):
     typ_tuple = (arr.key_arr_type, arr.value_arr_type)
 
     if isinstance(ind, types.Integer):
-        if isinstance(val, bodo.StructArrayType):
+        if isinstance(val, bodo.types.StructArrayType):
             if val.data != typ_tuple or val.names != (
                 "key",
                 "value",
@@ -374,11 +374,11 @@ def map_arr_getitem(arr, ind):
 
 def contains_map_array(arr):
     """Returns True if the array contains any maps or is a map"""
-    if isinstance(arr, bodo.MapArrayType):
+    if isinstance(arr, bodo.types.MapArrayType):
         return True
-    elif isinstance(arr, bodo.ArrayItemArrayType):
+    elif isinstance(arr, bodo.types.ArrayItemArrayType):
         return contains_map_array(arr.dtype)
-    elif isinstance(arr, bodo.StructArrayType):
+    elif isinstance(arr, bodo.types.StructArrayType):
         return any(contains_map_array(t) for t in arr.data)
     else:
         return False

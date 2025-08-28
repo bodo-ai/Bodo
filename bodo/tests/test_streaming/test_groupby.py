@@ -1145,9 +1145,9 @@ def test_groupby_timestamptz_key(memory_leak_check):
     """
     tz_arr = np.array(
         [
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
             None,
-            bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 300),
+            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 300),
             None,
         ]
         * 5
@@ -1160,7 +1160,9 @@ def test_groupby_timestamptz_key(memory_leak_check):
     )
     expected_df = pd.DataFrame(
         {
-            "B": np.array([bodo.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400), None]),
+            "B": np.array(
+                [bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400), None]
+            ),
             "A": ["ACACACACAC", "BDBDBDBDBD"],
         }
     )

@@ -360,7 +360,7 @@ def test_table_useall_later_block(file_type, datapath, memory_leak_check):
         else:
             w = 100
         # Use objmode to force useall
-        with bodo.objmode(n="int64"):
+        with numba.objmode(n="int64"):
             n = df.shape[1]
         return n + w"""
 
@@ -390,7 +390,7 @@ def test_table_useall_early_block(file_type, datapath, memory_leak_check):
     func_text = f"""def impl():
         df = pd.read_{file_type}({filename!r})
         # Use objmode to force useall
-        with bodo.objmode(n="int64"):
+        with numba.objmode(n="int64"):
             n = df.shape[1]
         size = df["Column0"].sum()
         if size < 1000:
@@ -995,7 +995,7 @@ def test_table_useall_later_block_alias(file_type, datapath, memory_leak_check):
         else:
             w = 100
         # Use objmode to force useall
-        with bodo.objmode(n="int64"):
+        with numba.objmode(n="int64"):
             n = df.shape[1]
         return n + w"""
 
@@ -1027,7 +1027,7 @@ def test_table_useall_early_block_alias(file_type, datapath, memory_leak_check):
         df = pd.read_{file_type}({filename!r})
         df["Column99"] = np.arange(1000)
         # Use objmode to force useall
-        with bodo.objmode(n="int64"):
+        with numba.objmode(n="int64"):
             n = df.shape[1]
         size = df["Column0"].sum()
         if size < 1000:
