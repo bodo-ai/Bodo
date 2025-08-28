@@ -1956,7 +1956,7 @@ def Cache_guard_against_spurious_io_errors(self):
         try:
             yield
         except OSError as e:
-            if e.errno != errno.ESTALE:
+            if e.errno not in (errno.ESTALE, errno.ETXTBSY) :
                 raise
     else:
         yield
