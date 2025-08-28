@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 
 import numba
+import numba.core.ccallback
 import numba.core.boxing
 import numba.core.dispatcher
 import numba.core.funcdesc
@@ -34,6 +35,7 @@ import numba.np.linalg
 import numba.np.ufunc.array_exprs as array_exprs
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.compiler import Compiler
+from numba.core.compiler_lock import global_compiler_lock
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
 from numba.core.ir_utils import (
     _create_function_from_code_obj,
@@ -1411,7 +1413,7 @@ def resolve_join_general_cond_funcs(cres):
             join_gen_cond_cfunc_addr[sym] = cres.library.get_pointer_to_function(sym)
 
 
-def compile(self, sig):
+def Dispatcher_compile(self, sig):
     import numba.core.event as ev
     from numba.core import sigutils
     from numba.core.compiler_lock import global_compiler_lock
@@ -1497,8 +1499,47 @@ if _check_numba_change:  # pragma: no cover
     ):  # pragma: no cover
         warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
 
-numba.core.dispatcher.Dispatcher.compile = compile
+numba.core.dispatcher.Dispatcher.compile = Dispatcher_compile
 
+
+@global_compiler_lock
+def CFunc_compile(self):
+    import bodo
+    # Try to load from cache
+    cres = self._cache.load_overload(self._sig,
+                                        self._targetdescr.target_context)
+    if cres is None:
+        cres = self._compile_uncached()
+        # bodo change: Only write to cache on at most one rank per node.
+        if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
+            # Since we used a shared file system on the platform, writing with just one rank is
+            # sufficient, and desirable (to avoid I/O contention due to filesystem limitations).
+            if bodo.get_rank() == 0:
+                self._cache.save_overload(self._sig, cres)
+        else:
+            # Even when not on platform, it's best to minimize I/O contention, so we
+            # write cache files from one rank on each node.
+            first_ranks = bodo.get_nodes_first_ranks()
+            if bodo.get_rank() in first_ranks:
+                self._cache.save_overload(self._sig, cres)
+    else:
+        self._cache_hits += 1
+
+    self._library = cres.library
+    self._wrapper_name = cres.fndesc.llvm_cfunc_wrapper_name
+    self._wrapper_address = self._library.get_pointer_to_function(
+        self._wrapper_name)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.ccallback.CFunc.compile)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "08edc561907b33be181e3377776782b5d8c43f67df4dccfe2f567fdaf810cf53"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.ccallback.CFunc.compile has changed")
+
+numba.core.ccallback.CFunc.compile = CFunc_compile
 
 def _get_module_for_linking(self):
     """
