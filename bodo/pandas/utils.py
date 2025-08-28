@@ -1181,7 +1181,11 @@ def compile_cfunc(func, decorator):
     """
     import ctypes
 
-    cfunc = decorator(func)
+    try:
+        cfunc = decorator(func)
+    except OSError:
+        print("caught OSError")
+        raise Exception
     return ctypes.c_void_p(cfunc.address).value
 
 
