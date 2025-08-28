@@ -3,6 +3,7 @@ Numba monkey patches to fix issues related to Bodo. Should be imported before an
 other module in bodo package.
 """
 
+import contextlib
 import copy
 import functools
 import hashlib
@@ -1935,6 +1936,23 @@ if _check_numba_change:  # pragma: no cover
         warnings.warn("numba.core.caching._CacheImpl.__init__ has changed")
 
 numba.core.caching.CacheImpl.__init__ = CacheImpl__init__
+
+@contextlib.contextmanager
+def Cache_guard_against_spurious_io_errors(self):
+    print("monkey patching _guard_against_spurious_io_errors")
+    if os.name == 'nt':
+        # Guard against permission errors due to accessing the file
+        # from several processes (see #2028)
+        try:
+            yield
+        except OSError as e:
+            if e.errno != errno.EACCES:
+                raise
+    else:
+        # No such conditions under non-Windows OSes
+        yield
+
+numba.core.caching.Cache._guard_against_spurious_io_errors = Cache_guard_against_spurious_io_errors
 
 
 def slice_size(self, index, dsize, equiv_set, scope, stmts):
