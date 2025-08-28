@@ -1949,8 +1949,8 @@ def Cache_guard_against_spurious_io_errors(self):
             if e.errno != errno.EACCES:
                 raise
     elif os.environ.get("BODO_PLATFORM_CACHE_LOCATION", None) is not None:
-        # If on the platform (using NFS for cache), multiple files
-        # trying to write to the same location can cause Stale File Handle Error.
+        # bodo change: If on the platform (using NFS for cache), multiple processes
+        # trying to write to the same location can cause a Stale File Handle Error.
         # Since we only at least need one rank to populate the cache, we can
         # safely ignore.
         try:
