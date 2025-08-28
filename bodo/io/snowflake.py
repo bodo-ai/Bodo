@@ -22,7 +22,6 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.timestamptz_ext import ArrowTimestampTZType
 from bodo.io.helpers import (
     _get_numba_typ_from_pa_typ,
-    sync_and_reraise_error,
     update_env_vars,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
@@ -249,21 +248,21 @@ def gen_snowflake_schema(
         if col_name == "":
             raise BodoError("Column name cannot be empty when writing to Snowflake.")
         # [BE-3587] need specific tz for each column type.
-        if isinstance(col_type, bodo.DatetimeArrayType):
+        if isinstance(col_type, bodo.types.DatetimeArrayType):
             precision = get_precision(col_idx)
             if col_type.tz is not None:
                 sf_schema[col_name] = f"TIMESTAMP_LTZ({precision})"
             else:
                 sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
-        elif col_type == bodo.timestamptz_array_type:
+        elif col_type == bodo.types.timestamptz_array_type:
             precision = get_precision(col_idx)
             sf_schema[col_name] = f"TIMESTAMP_TZ({precision})"
-        elif col_type == bodo.datetime_datetime_type:
+        elif col_type == bodo.types.datetime_datetime_type:
             precision = get_precision(col_idx)
             sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
-        elif col_type == bodo.datetime_date_array_type:
+        elif col_type == bodo.types.datetime_date_array_type:
             sf_schema[col_name] = "DATE"
-        elif isinstance(col_type, bodo.TimeArrayType):
+        elif isinstance(col_type, bodo.types.TimeArrayType):
             # Note: The actual result may not match the precision
             # https://community.snowflake.com/s/article/Nano-second-precision-lost-after-Parquet-file-Unload
             if column_precisions is None:
@@ -311,22 +310,22 @@ def gen_snowflake_schema(
                 sf_schema[col_name] = "TEXT"
             else:
                 sf_schema[col_name] = f"VARCHAR({column_precisions[col_idx]})"
-        elif col_type == bodo.binary_array_type:
+        elif col_type == bodo.types.binary_array_type:
             sf_schema[col_name] = "BINARY"
-        elif col_type == bodo.boolean_array_type:
+        elif col_type == bodo.types.boolean_array_type:
             sf_schema[col_name] = "BOOLEAN"
         # TODO: differentiate between unsigned vs. signed, 8, 16, 32, 64
-        elif isinstance(col_type, bodo.IntegerArrayType):
+        elif isinstance(col_type, bodo.types.IntegerArrayType):
             sf_schema[col_name] = "NUMBER(38, 0)"
-        elif isinstance(col_type, bodo.FloatingArrayType):
+        elif isinstance(col_type, bodo.types.FloatingArrayType):
             sf_schema[col_name] = "REAL"
-        elif isinstance(col_type, bodo.DecimalArrayType):
+        elif isinstance(col_type, bodo.types.DecimalArrayType):
             # TODO(njriasan): Integrate column_precisions when we have accurate
             # information from BodoSQL.
             sf_schema[col_name] = f"NUMBER({col_type.precision}, {col_type.scale})"
         elif isinstance(
             col_type,
-            (bodo.ArrayItemArrayType,),
+            (bodo.types.ArrayItemArrayType,),
         ):
             if contains_map_array(col_type):
                 raise_bodo_error("Nested MapArrayType is not supported.")
@@ -334,15 +333,15 @@ def gen_snowflake_schema(
 
         elif isinstance(
             col_type,
-            (bodo.StructArrayType,),
+            (bodo.types.StructArrayType,),
         ):
             if contains_map_array(col_type):
                 raise_bodo_error("Nested MapArrayType is not supported.")
             sf_schema[col_name] = "OBJECT"
 
-        elif isinstance(col_type, bodo.MapArrayType):
+        elif isinstance(col_type, bodo.types.MapArrayType):
             if (
-                not col_type.key_arr_type == bodo.string_array_type
+                not col_type.key_arr_type == bodo.types.string_array_type
                 and bodo.get_rank() == 0
             ):
                 warning = BodoWarning(
@@ -353,7 +352,7 @@ def gen_snowflake_schema(
                 raise_bodo_error("Nested MapArrayType is not supported.")
             sf_schema[col_name] = "OBJECT"
         # See https://bodo.atlassian.net/browse/BSE-1525
-        elif col_type == bodo.null_array_type:
+        elif col_type == bodo.types.null_array_type:
             sf_schema[col_name] = "VARCHAR"
         else:
             raise BodoError(
@@ -2128,7 +2127,7 @@ def get_dataset(
         err_connecting = e
 
     # Check if this failed on any rank.
-    sync_and_reraise_error(
+    bodo.spawn.utils.sync_and_reraise_error(
         err_connecting,
         _is_parallel=(not is_independent),
         # We don't broadcast the errors in case they are not pickle-able.
@@ -2172,7 +2171,7 @@ def get_dataset(
             except Exception as e:
                 error = e
 
-    sync_and_reraise_error(
+    bodo.spawn.utils.sync_and_reraise_error(
         error,
         (not is_independent),
         # In case the error is not pickle-able, we only raise it on rank 0.
@@ -2446,8 +2445,8 @@ def gen_flatten_sql(
     # If there are any map arrays they need flattened
     def map_needs_flattened(column_datatype):
         return (
-            isinstance(column_datatype, bodo.MapArrayType)
-            and column_datatype.key_arr_type == bodo.string_array_type
+            isinstance(column_datatype, bodo.types.MapArrayType)
+            and column_datatype.key_arr_type == bodo.types.string_array_type
         )
 
     # Group columns on whether they need flattened so we know if we
@@ -2467,7 +2466,7 @@ def gen_flatten_sql(
             # Map columns need a variant column in the temp table
             temp_schema[c] = (
                 typ
-                if not isinstance(column_datatypes[c], bodo.MapArrayType)
+                if not isinstance(column_datatypes[c], bodo.types.MapArrayType)
                 else "VARIANT"
             )
         flatten_table = f"bodo_temp_{str(uuid4()).replace('-', '_')}"

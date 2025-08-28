@@ -58,6 +58,10 @@ from bodo.hiframes.table import (
     set_table_data_codegen,
 )
 from bodo.io import json_cpp
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.array import (
     append_arr_info_list_to_cpp_table,
     arr_info_list_to_table,
@@ -622,12 +626,12 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         )
         data_type = types.BaseTuple.from_types(dtypes)
         null_tup_type = types.Tuple([types.bool_] * len(data_type))
-        nullable_dtype = bodo.NullableTupleType(data_type, null_tup_type)
+        nullable_dtype = bodo.types.NullableTupleType(data_type, null_tup_type)
         name_dtype = df.index.dtype
         if name_dtype == types.NPDatetime("ns"):
-            name_dtype = bodo.pd_timestamp_tz_naive_type
+            name_dtype = bodo.types.pd_timestamp_tz_naive_type
         if name_dtype == types.NPTimedelta("ns"):
-            name_dtype = bodo.pd_timedelta_type
+            name_dtype = bodo.types.pd_timedelta_type
         if is_heterogeneous_tuple_type(data_type):
             row_typ = HeterogeneousSeriesType(nullable_dtype, index_type, name_dtype)
         else:
@@ -1897,7 +1901,7 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
     data_arrs = []
     for i in range(n_cols):
         col = pyval.iloc[:, i]
-        if isinstance(df_type.data[i], bodo.DatetimeArrayType):
+        if isinstance(df_type.data[i], bodo.types.DatetimeArrayType):
             # TODO [BE-2441]: Unify?
             py_arr = col.array
         else:
@@ -2498,7 +2502,7 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
 
     # object array of NaNs if dtype not specified
     if is_overload_none(dtype):
-        dtype = "bodo.string_array_type"
+        dtype = "bodo.types.string_array_type"
     else:
         dtype = "bodo.utils.conversion.array_type_from_dtype(dtype)"
 
@@ -2520,7 +2524,7 @@ class LenTemplate(AbstractTemplate):
         assert not kws
         assert len(args) == 1
         # TODO: Fuse more templates
-        if isinstance(args[0], (DataFrameType, bodo.TableType)):
+        if isinstance(args[0], (DataFrameType, bodo.types.TableType)):
             return types.int64(*args)
 
 
@@ -2714,13 +2718,13 @@ class JoinTyper(AbstractTemplate):
             if right_key in left_df.column_index:
                 columns.append(right_key)
                 if (
-                    right_key_type == bodo.dict_str_arr_type
-                    and left_key_type == bodo.string_array_type
+                    right_key_type == bodo.types.dict_str_arr_type
+                    and left_key_type == bodo.types.string_array_type
                 ):
                     # If we have a merge between a dict_array and a regular string
                     # array, the output needs to be a string array. This is because
                     # we will fall back to a string array for the join.
-                    out_col = bodo.string_array_type
+                    out_col = bodo.types.string_array_type
                 else:
                     out_col = right_key_type
                 data.append(out_col)
@@ -2732,13 +2736,13 @@ class JoinTyper(AbstractTemplate):
             if left_key in right_df.column_index:
                 columns.append(left_key)
                 if (
-                    left_key_type == bodo.dict_str_arr_type
-                    and right_key_type == bodo.string_array_type
+                    left_key_type == bodo.types.dict_str_arr_type
+                    and right_key_type == bodo.types.string_array_type
                 ):
                     # If we have a merge between a dict_array and a regular string
                     # array, the output needs to be a string array. This is because
                     # we will fall back to a string array for the join.
-                    out_col = bodo.string_array_type
+                    out_col = bodo.types.string_array_type
                 else:
                     out_col = left_key_type
                 data.append(out_col)
@@ -2750,13 +2754,13 @@ class JoinTyper(AbstractTemplate):
             )
             if col in comm_keys:
                 # For a common key we take either from left or right, so no additional NaN occurs.
-                if in_type == bodo.dict_str_arr_type:
+                if in_type == bodo.types.dict_str_arr_type:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
                     in_type = right_df.data[right_df.column_index[col]]
                 data.append(in_type)
             else:
-                if in_type == bodo.dict_str_arr_type and col in left_on_map:
+                if in_type == bodo.types.dict_str_arr_type and col in left_on_map:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
                     if right_index:
@@ -2776,7 +2780,7 @@ class JoinTyper(AbstractTemplate):
                 columns.append(
                     str(col) + suffix_y.literal_value if col in add_suffix else col
                 )
-                if in_type == bodo.dict_str_arr_type and col in right_on_map:
+                if in_type == bodo.types.dict_str_arr_type and col in right_on_map:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
                     if left_index:
@@ -2797,9 +2801,11 @@ class JoinTyper(AbstractTemplate):
         if indicator_value:
             columns.append("_merge")
             data.append(
-                bodo.CategoricalArrayType(
-                    bodo.PDCategoricalDtype(
-                        ("left_only", "right_only", "both"), bodo.string_type, False
+                bodo.types.CategoricalArrayType(
+                    bodo.types.PDCategoricalDtype(
+                        ("left_only", "right_only", "both"),
+                        bodo.types.string_type,
+                        False,
                     )
                 )
             )
@@ -3787,7 +3793,7 @@ def to_parquet_overload(
     else:
         for i in range(len(df.data)):
             func_text += f"    arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
-            if df.data[i] == bodo.dict_str_arr_type:
+            if df.data[i] == bodo.types.dict_str_arr_type:
                 func_text += f"    arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"    info_list = [{data_args}]\n"
@@ -3993,8 +3999,8 @@ def to_sql_exception_guard(
                     if col_dtype == datetime_date_array_type:
                         dtyp[c] = sa.types.Date
                     elif col_dtype in (
-                        bodo.string_array_type,
-                        bodo.dict_str_arr_type,
+                        bodo.types.string_array_type,
+                        bodo.types.dict_str_arr_type,
                     ) and (not disable_varchar2 or disable_varchar2 == "0"):
                         dtyp[c] = VARCHAR2(4000)
                 # workaround to avoid issue with Oracle and Float values
@@ -4050,7 +4056,7 @@ def to_sql_exception_guard_encaps(
     _is_parallel=False,
 ):  # pragma: no cover
     ev = tracing.Event("to_sql_exception_guard_encaps", is_parallel=_is_parallel)
-    with bodo.no_warning_objmode(out="unicode_type"):
+    with bodo.ir.object_mode.no_warning_objmode(out="unicode_type"):
         ev_objmode = tracing.Event(
             "to_sql_exception_guard_encaps:objmode", is_parallel=_is_parallel
         )
@@ -4178,7 +4184,7 @@ def to_sql_overload(
             # Call drop_duplicates_local_dictionary on all dict-encoded arrays.
             # See note in `to_parquet_overload` (Why we are calling drop_duplicates_local_dictionary
             # on all dict encoded arrays?) for why this is important.
-            if df.data[i] == bodo.dict_str_arr_type:
+            if df.data[i] == bodo.types.dict_str_arr_type:
                 func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"        info_list = [{data_args}]\n"
@@ -4219,7 +4225,7 @@ def to_sql_overload(
     # In object mode: Connect to snowflake, create internal stage, and
     # get internal stage credentials on each rank
     func_text += (
-        "        with bodo.no_warning_objmode(\n"
+        "        with bodo.ir.object_mode.no_warning_objmode(\n"
         "            cursor='snowflake_connector_cursor_type',\n"
         "            tmp_folder='temporary_directory_type',\n"
         "            stage_name='unicode_type',\n"
@@ -4286,7 +4292,7 @@ def to_sql_overload(
     else:
         for i in range(len(df.data)):
             func_text += f"        arr{i} = get_dataframe_data(df, {i})\n"
-            if df.data[i] == bodo.dict_str_arr_type:
+            if df.data[i] == bodo.types.dict_str_arr_type:
                 func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join([f"arr{i}" for i in range(len(df.data))])
         func_text += f"        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), df.index, __col_name_meta_value_df_to_sql)\n"
@@ -4380,7 +4386,7 @@ def to_sql_overload(
         "            ev_pq_write_cpp.finalize()\n"
         # If needed, upload local parquet to internal stage using objmode PUT
         "            if upload_using_snowflake_put:\n"
-        "                with bodo.no_warning_objmode():\n"
+        "                with bodo.ir.object_mode.no_warning_objmode():\n"
         "                    bodo.io.snowflake.do_upload_and_cleanup(\n"
         "                        cursor, chunk_idx, chunk_path, stage_name,\n"
         "                    )\n"
@@ -4403,7 +4409,7 @@ def to_sql_overload(
     func_text += (
         # This is because it seems like globals aren't passed into objmode
         "        df_data_ = df_data\n"
-        "        with bodo.no_warning_objmode():\n"
+        "        with bodo.ir.object_mode.no_warning_objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
         # Creating the dict here instead of passing it in as a globall is necessary because when boxing
         # dicts we check if they contain type references in the value and throw an error, we need typerefs here
@@ -4614,7 +4620,7 @@ def to_csv_overload(
                 if bodo.get_rank() != 0:
                     return ""
 
-                with bodo.no_warning_objmode(D="unicode_type"):
+                with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
                     D = df.to_csv(
                         path_or_buf,
                         sep=sep,
@@ -4668,7 +4674,7 @@ def to_csv_overload(
             _bodo_file_prefix="part-",
             _bodo_concat_str_output=False,
         ):  # pragma: no cover
-            with bodo.no_warning_objmode(D="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
                 D = df.to_csv(
                     path_or_buf,
                     sep=sep,
@@ -4724,7 +4730,7 @@ def to_csv_overload(
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to csv
-        with bodo.no_warning_objmode(D="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
             D = df.to_csv(
                 None,
                 sep=sep,
@@ -4749,7 +4755,7 @@ def to_csv_overload(
                 storage_options=storage_options,
             )
 
-        bodo.io.fs_io.csv_write(path_or_buf, D, _bodo_file_prefix)
+        bodo.io.helpers.csv_write(path_or_buf, D, _bodo_file_prefix)
 
     return _impl
 
@@ -4819,7 +4825,7 @@ def to_json_overload(
                 df = bodo.gatherv(df)
                 if bodo.get_rank() != 0:
                     return ""
-            with bodo.no_warning_objmode(D="unicode_type"):
+            with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
                 D = df.to_json(
                     path_or_buf,
                     orient=orient,
@@ -4859,7 +4865,7 @@ def to_json_overload(
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to json
-        with bodo.no_warning_objmode(D="unicode_type"):
+        with bodo.ir.object_mode.no_warning_objmode(D="unicode_type"):
             D = df.to_json(
                 None,
                 orient=orient,
@@ -5044,15 +5050,15 @@ def overload_union_dataframes(
                 if col_typ == other_col_typ:
                     new_col_types.append(col_typ)
                 elif (
-                    col_typ == bodo.dict_str_arr_type
-                    or other_col_typ == bodo.dict_str_arr_type
+                    col_typ == bodo.types.dict_str_arr_type
+                    or other_col_typ == bodo.types.dict_str_arr_type
                 ):
                     if col_typ not in (
-                        bodo.string_array_type,
-                        bodo.null_array_type,
+                        bodo.types.string_array_type,
+                        bodo.types.null_array_type,
                     ) and other_col_typ not in (
-                        bodo.string_array_type,
-                        bodo.null_array_type,
+                        bodo.types.string_array_type,
+                        bodo.types.null_array_type,
                     ):
                         # If one column is dict encoded the other column must be a string
                         # or null array.
@@ -5060,7 +5066,7 @@ def overload_union_dataframes(
                             f"Unable to union table with columns of incompatible types. Found types {col_typ} and {other_col_typ} in column {i}."
                         )
                     # If either array is dict encoded we want the output to be dict encoded.
-                    new_col_types.append(bodo.dict_str_arr_type)
+                    new_col_types.append(bodo.types.dict_str_arr_type)
                 else:
                     col_dtype = col_typ.dtype
                     other_col_dtype = other_col_typ.dtype
@@ -5078,7 +5084,7 @@ def overload_union_dataframes(
     func_text = "def impl(df_tup, drop_duplicates, output_colnames):\n"
     glbls = {
         "bodo": bodo,
-        "py_table_typ": bodo.TableType(col_types),
+        "py_table_typ": bodo.types.TableType(col_types),
     }
     # Step 2 generate code to convert each DataFrame to C++.
     for i, df_type in enumerate(df_types):
@@ -5332,10 +5338,10 @@ def _install_dataframe_unsupported():
 
     for attr_name in dataframe_unsupported_attrs:
         full_name = "DataFrame." + attr_name
-        bodo.overload_unsupported_attribute(DataFrameType, attr_name, full_name)
+        overload_unsupported_attribute(DataFrameType, attr_name, full_name)
     for fname in dataframe_unsupported:
         full_name = "DataFrame." + fname
-        bodo.overload_unsupported_method(DataFrameType, fname, full_name)
+        overload_unsupported_method(DataFrameType, fname, full_name)
 
 
 # Run install unsupported for each module to ensure a correct error message.

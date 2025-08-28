@@ -396,7 +396,9 @@ def cast_float_to_nullable(df, df_type):
 
     col_map = defaultdict(list)
     for i, coltype in enumerate(df_type.data):
-        if isinstance(coltype, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
+        if isinstance(
+            coltype, (bodo.types.IntegerArrayType, bodo.types.FloatingArrayType)
+        ):
             dtype = coltype.get_pandas_scalar_type_instance
             col_map[dtype].append(df.columns[i])
     for typ, cols in col_map.items():
@@ -849,13 +851,13 @@ def determine_filter_cast(
         # We always cast string -> other types
         # Only supported types should be string and timestamp or timestamp + date
         if lhs_scalar_typ == types.unicode_type and rhs_scalar_typ in (
-            bodo.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.datetime64ns,
+            bodo.types.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
             return ".cast(pa.timestamp('ns'), safe=False)", ""
         elif rhs_scalar_typ == types.unicode_type and lhs_scalar_typ in (
-            bodo.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+            bodo.types.datetime64ns,
+            bodo.types.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
             if isinstance(rhs_typ, (types.List, types.Set)):  # pragma: no cover
                 # This path should never be reached because we checked that
@@ -865,14 +867,14 @@ def determine_filter_cast(
                     f"Cannot cast {type_name} values with isin filter pushdown."
                 )
             return col_cast, ".cast(pa.timestamp('ns'), safe=False)"
-        elif lhs_scalar_typ == bodo.datetime_date_type and rhs_scalar_typ in (
-            bodo.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+        elif lhs_scalar_typ == bodo.types.datetime_date_type and rhs_scalar_typ in (
+            bodo.types.datetime64ns,
+            bodo.types.pd_timestamp_tz_naive_type,
         ):
             return ".cast(pa.timestamp('ns'), safe=False)", ""
-        elif rhs_scalar_typ == bodo.datetime_date_type and lhs_scalar_typ in (
-            bodo.datetime64ns,
-            bodo.pd_timestamp_tz_naive_type,
+        elif rhs_scalar_typ == bodo.types.datetime_date_type and lhs_scalar_typ in (
+            bodo.types.datetime64ns,
+            bodo.types.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
             return col_cast, ".cast(pa.timestamp('ns'), safe=False)"
     return col_cast, ""

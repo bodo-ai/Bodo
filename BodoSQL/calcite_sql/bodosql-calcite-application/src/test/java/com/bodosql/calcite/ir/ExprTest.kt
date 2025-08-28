@@ -71,10 +71,10 @@ class ExprTest {
 
         val attribute2 =
             Expr.Attribute(
-                Variable("bodo"),
+                Variable("bodo.types"),
                 "boolean_array_type",
             )
-        assertEquals("bodo.boolean_array_type", attribute2.emit())
+        assertEquals("bodo.types.boolean_array_type", attribute2.emit())
     }
 
     @Test

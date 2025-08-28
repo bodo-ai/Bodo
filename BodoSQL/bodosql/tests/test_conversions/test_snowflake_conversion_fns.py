@@ -8,7 +8,7 @@ import pytest
 from pandas.api.types import is_bool_dtype, is_float_dtype
 
 import bodosql
-from bodo import Time
+from bodo.types import Time
 from bodosql.tests.test_kernels.test_snowflake_conversion_array_kernels import (
     _dates,
     _dates_nans,

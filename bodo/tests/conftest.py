@@ -650,7 +650,7 @@ def cmp_op(request):
 @pytest.fixture
 def time_df():
     """
-    Fixture containing a representative set of bodo.Time object
+    Fixture containing a representative set of bodo.types.Time object
     for use in testing, including None object.
     """
     return {
@@ -658,30 +658,30 @@ def time_df():
             {
                 "A": pd.Series(
                     [
-                        bodo.Time(17, 33, 26, 91, 8, 79),
-                        bodo.Time(0, 24, 43, 365, 18, 74),
-                        bodo.Time(3, 59, 6, 25, 757, 3),
-                        bodo.Time(),
-                        bodo.Time(4),
-                        bodo.Time(6, 41),
-                        bodo.Time(22, 13, 57),
-                        bodo.Time(17, 34, 29, 90),
-                        bodo.Time(7, 3, 45, 876, 234),
+                        bodo.types.Time(17, 33, 26, 91, 8, 79),
+                        bodo.types.Time(0, 24, 43, 365, 18, 74),
+                        bodo.types.Time(3, 59, 6, 25, 757, 3),
+                        bodo.types.Time(),
+                        bodo.types.Time(4),
+                        bodo.types.Time(6, 41),
+                        bodo.types.Time(22, 13, 57),
+                        bodo.types.Time(17, 34, 29, 90),
+                        bodo.types.Time(7, 3, 45, 876, 234),
                         None,
                     ]
                 ),
                 "B": pd.Series(
                     [
-                        bodo.Time(20, 6, 26, 324, 4, 79),
-                        bodo.Time(3, 59, 6, 25, 57, 3),
-                        bodo.Time(7, 3, 45, 876, 234),
-                        bodo.Time(17, 34, 29, 90),
-                        bodo.Time(22, 13, 57),
-                        bodo.Time(6, 41),
-                        bodo.Time(4),
-                        bodo.Time(),
+                        bodo.types.Time(20, 6, 26, 324, 4, 79),
+                        bodo.types.Time(3, 59, 6, 25, 57, 3),
+                        bodo.types.Time(7, 3, 45, 876, 234),
+                        bodo.types.Time(17, 34, 29, 90),
+                        bodo.types.Time(22, 13, 57),
+                        bodo.types.Time(6, 41),
+                        bodo.types.Time(4),
+                        bodo.types.Time(),
                         None,
-                        bodo.Time(0, 24, 4, 512, 18, 74),
+                        bodo.types.Time(0, 24, 4, 512, 18, 74),
                     ]
                 ),
             }

@@ -459,8 +459,8 @@ def test_cast_boolean(numeric_arrays, memory_leak_check):
             (
                 pd.Series(
                     [
-                        bodo.Time(1, 2, 3, 4, 5, 6),
-                        bodo.Time(1, 52, 33, 443, 534, 632),
+                        bodo.types.Time(1, 2, 3, 4, 5, 6),
+                        bodo.types.Time(1, 52, 33, 443, 534, 632),
                         None,
                     ]
                     * 4
@@ -491,7 +491,7 @@ def test_cast_char_other(args, memory_leak_check):
     def char_scalar_fn(elem):
         if pd.isna(elem):
             return None
-        elif isinstance(elem, (bodo.Time, bodo.TimeType)):
+        elif isinstance(elem, (bodo.types.Time, bodo.types.TimeType)):
             # Using Snowflake's default TIME format: HH:MM:SS
             return f"{elem.hour:02}:{elem.minute:02}:{elem.second:02}"
         elif isinstance(elem, bytes):

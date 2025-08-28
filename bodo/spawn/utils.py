@@ -1,8 +1,12 @@
-"""Utilities for Spawn Mode"""
+"""Utilities for Spawn Mode.
+This file should import JIT lazily to avoid slowing down non-JIT code paths.
+"""
 
 from __future__ import annotations
 
 import logging
+import os
+import sys
 import typing as pt
 import uuid
 from enum import Enum
@@ -90,3 +94,100 @@ class WorkerProcess:
         """Initialize WorkerProcess with a mapping of ranks to PIDs."""
         self._uuid = uuid.uuid4()
         self._rank_to_pid = rank_to_pid
+
+
+def is_jupyter_on_windows() -> bool:
+    """Returns True if running in Jupyter on Windows"""
+
+    # Flag for testing purposes
+    if os.environ.get("BODO_OUTPUT_REDIRECT_TEST", "0") == "1":
+        return True
+
+    return sys.platform == "win32" and (
+        "JPY_SESSION_NAME" in os.environ
+        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
+    )
+
+
+def is_jupyter_on_bodo_platform() -> bool:
+    """Returns True if running in Jupyter on Bodo Platform"""
+
+    platform_cloud_provider = os.environ.get("BODO_PLATFORM_CLOUD_PROVIDER", None)
+    return (platform_cloud_provider is not None) and (
+        "JPY_SESSION_NAME" in os.environ
+        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
+    )
+
+
+def sync_and_reraise_error(
+    err,
+    _is_parallel=False,
+    bcast_lowest_err: bool = True,
+    default_generic_err_msg: str | None = None,
+):  # pragma: no cover
+    """
+    If `err` is an Exception on any rank, raise an error on all ranks.
+    If 'bcast_lowest_err' is True, we will broadcast the error from the
+    "lowest" rank that has an error and raise it on all the ranks without
+    their own error. If 'bcast_lowest_err' is False, we will raise a
+    generic error on ranks without their own error. This is useful in
+    cases where the error could be something that's not safe to broadcast
+    (e.g. not pickle-able).
+    This is a no-op if all ranks are exception-free.
+
+    Args:
+        err (Exception or None): Could be None or an exception
+        _is_parallel (bool): Whether this is being called from many ranks
+        bcast_lowest_err (bool): Whether to broadcast the error from the
+            lowest rank. Only applicable in the _is_parallel case.
+        default_generic_err_msg (str, optional): If bcast_lowest_err = False,
+            this message will be used for the exception raised on
+            ranks without their own error. Only applicable in the
+            _is_parallel case.
+    """
+    comm = MPI.COMM_WORLD
+
+    if _is_parallel:
+        # If any rank raises an exception, re-raise that error on all non-failing
+        # ranks to prevent deadlock on future MPI collective ops.
+        # We use allreduce with MPI.MAXLOC to communicate the rank of the lowest
+        # failing process, then broadcast the error backtrace across all ranks.
+        err_on_this_rank = int(err is not None)
+        err_on_any_rank, failing_rank = comm.allreduce(
+            (err_on_this_rank, comm.Get_rank()), op=MPI.MAXLOC
+        )
+        if err_on_any_rank:
+            if comm.Get_rank() == failing_rank:
+                lowest_err = err
+            else:
+                lowest_err = None
+            if bcast_lowest_err:
+                lowest_err = comm.bcast(lowest_err, root=failing_rank)
+            else:
+                err_msg = (
+                    default_generic_err_msg
+                    if (default_generic_err_msg is not None)
+                    else "Exception on some ranks. See other ranks for error."
+                )
+                lowest_err = Exception(err_msg)
+
+            # Each rank that already has an error will re-raise their own error, and
+            # any rank that doesn't have an error will re-raise the lowest rank's error.
+            if err_on_this_rank:
+                raise err
+            else:
+                raise lowest_err
+    else:
+        if err is not None:
+            raise err
+
+
+def import_compiler_on_workers():
+    """Import the JIT compiler on all workers. Done as necessary since import time
+    can be significant.
+    """
+
+    def import_compiler():
+        pass
+
+    bodo.spawn.spawner.submit_func_to_workers(lambda: import_compiler(), [])

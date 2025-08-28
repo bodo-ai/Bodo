@@ -1,6 +1,5 @@
 import fractions
 import random
-import warnings
 
 import cloudpickle
 import numba
@@ -18,7 +17,7 @@ from bodo.tests.utils import (
     count_parfor_OneDs,
     dist_IR_contains,
 )
-from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_assign, is_expr
 
 
@@ -266,7 +265,7 @@ def test_array_sum_axis(memory_leak_check):
 @pytest.mark.skip(reason="TODO: replace since to_numeric() doesn't need locals anymore")
 def test_inline_locals(memory_leak_check):
     # make sure locals in inlined function works
-    @bodo.jit(locals={"B": bodo.float64[:]})
+    @bodo.jit(locals={"B": bodo.types.float64[:]})
     def g(S):
         B = pd.to_numeric(S, errors="coerce")
         return B
@@ -940,7 +939,7 @@ def test_pure_func(datapath):
 
     # objmode
     def impl3():
-        with bodo.objmode():
+        with numba.objmode():
             impl1()
 
     # pq read
@@ -1018,16 +1017,16 @@ def test_objmode_types():
     """
 
     def impl(A):
-        with bodo.objmode(B=bodo.int64[::1]):
+        with numba.objmode(B=bodo.types.int64[::1]):
             B = 2 * A
         return B
 
     # complex type
     def impl2():
-        with bodo.objmode(
-            df=bodo.DataFrameType(
-                (bodo.float64[::1], bodo.string_array_type),
-                bodo.RangeIndexType(bodo.none),
+        with numba.objmode(
+            df=bodo.types.DataFrameType(
+                (bodo.types.float64[::1], bodo.types.string_array_type),
+                bodo.types.RangeIndexType(bodo.types.none),
                 ("A", "B"),
             )
         ):
@@ -1037,7 +1036,9 @@ def test_objmode_types():
     f = lambda A: (A.view("datetime64[ns]"), A.view("timedelta64[ns]"))
 
     def impl3(A):
-        with bodo.objmode(B=bodo.datetime64ns[::1], C=bodo.timedelta64ns[::1]):
+        with numba.objmode(
+            B=bodo.types.datetime64ns[::1], C=bodo.types.timedelta64ns[::1]
+        ):
             B, C = f(A)
         return B, C
 
@@ -1125,7 +1126,7 @@ def test_jitclass(memory_leak_check):
     @bodo.jitclass(
         {
             "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
-                (bodo.int64[::1], bodo.float64[::1]),
+                (bodo.types.int64[::1], bodo.types.float64[::1]),
                 bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
                 ("A", "B"),
             )
@@ -1169,7 +1170,7 @@ def test_jitclass(memory_leak_check):
     @bodo.jitclass(
         {
             "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
-                (bodo.float64[::1],),
+                (bodo.types.float64[::1],),
                 bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
                 ("A",),
             )
@@ -1186,7 +1187,7 @@ def test_jitclass(memory_leak_check):
     @bodo.jitclass(
         {
             "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
-                (bodo.float64[::1],),
+                (bodo.types.float64[::1],),
                 bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
                 ("A",),
             )
@@ -1261,7 +1262,7 @@ def test_dict_scalar_to_array(memory_leak_check):
     Tests the BodoSQL kernel scalar to array works as expected
     with various inputs.
     """
-    arr_type = bodo.dict_str_arr_type
+    arr_type = bodo.types.dict_str_arr_type
 
     def impl1(arg, len):
         return bodo.utils.conversion.coerce_scalar_to_array(arg, len, arr_type)
@@ -1286,7 +1287,7 @@ def test_int_scalar_to_array(memory_leak_check):
     """
     Tests that coerce_scalar_to_array keeps integers as non-nullable.
     """
-    arr_type = bodo.IntegerArrayType(types.int64)
+    arr_type = bodo.types.IntegerArrayType(types.int64)
 
     def impl(arg, len):
         return bodo.utils.conversion.coerce_scalar_to_array(arg, len, arr_type)
@@ -1302,7 +1303,7 @@ def test_parfor_empty_entry_block(memory_leak_check):
     """make sure CFG simplification can handle empty entry block corner case properly.
     See BodoSQL/bodosql/tests/test_named_param_df_apply.py::test_case
     """
-    out_arr_type = bodo.boolean_array_type
+    out_arr_type = bodo.types.boolean_array_type
 
     @bodo.jit
     def impl(arrs, n, b, c, d, e, f, g):
@@ -1367,41 +1368,6 @@ def test_df_set_col_rename_bug(memory_leak_check):
     check_func(impl, (df,), only_seq=True, copy_input=True)
 
 
-def test_objmode_warning(memory_leak_check):
-    """Test that bodo.objmode raises a warning when used
-    and that bodo.no_warning_objmode does not."""
-
-    def g():
-        return 1
-
-    @bodo.jit
-    def impl1():
-        with bodo.objmode(a="int64"):
-            a = g()
-        return a
-
-    @bodo.jit
-    def impl2():
-        with bodo.no_warning_objmode(a="int64"):
-            a = g()
-        return a
-
-    old_developer_mode = numba.core.config.DEVELOPER_MODE
-    try:
-        numba.core.config.DEVELOPER_MODE = True
-        with pytest.warns(
-            BodoWarning,
-            match="Entered bodo\\.objmode\\. This will likely negatively impact performance\\.",
-        ):
-            assert impl1() == 1, "Incorrect output with numba.objmode"
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", BodoWarning)
-            assert impl2() == 1, "Incorrect output with bodo.no_warning_objmode"
-    finally:
-        numba.core.config.DEVELOPER_MODE = old_developer_mode
-
-
 def test_wrap_python(memory_leak_check):
     """Make sure basic usage of wrap_python works"""
 
@@ -1423,7 +1389,7 @@ def test_wrap_python_error_handling(memory_leak_check):
 
     with pytest.raises(BodoError, match="wrap_python requires full data types"):
 
-        @bodo.wrap_python(bodo.DataFrameType)
+        @bodo.wrap_python(bodo.types.DataFrameType)
         def g(df):
             return df
 

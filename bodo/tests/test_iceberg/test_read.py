@@ -1024,7 +1024,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
         df = df[df.B == 2]
         # Force use of df since we won't return it and still need
         # to load data.
-        with bodo.objmode(sort_list=file_list_type):
+        with numba.objmode(sort_list=file_list_type):
             sort_list = f(df, file_list)
         return (sort_list, snapshot_id)
 

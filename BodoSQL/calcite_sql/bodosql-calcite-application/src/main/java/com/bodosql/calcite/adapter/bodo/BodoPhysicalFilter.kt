@@ -155,7 +155,7 @@ class BodoPhysicalFilter(
             Expr.Len(input),
             bodoSQLKernel("is_true", listOf(filter)),
             Expr.Attribute(
-                Expr.Raw("bodo"),
+                Expr.Raw("bodo.types"),
                 "boolean_array_type",
             ),
         )

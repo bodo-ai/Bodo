@@ -945,11 +945,11 @@ def test_to_timestamp_format_str(
             "TO_CHAR(CONVERT_TIMEZONE('Europe/Berlin', T))",
             np.array(
                 [
-                    bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
-                    bodo.TimestampTZ.fromLocal("2024-02-04 11:15:10", 60),
+                    bodo.types.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
+                    bodo.types.TimestampTZ.fromLocal("2024-02-04 11:15:10", 60),
                     None,
-                    bodo.TimestampTZ.fromLocal("2024-07-09 14:30:00", 195),
-                    bodo.TimestampTZ.fromLocal("2024-08-16 13:45:20", -330),
+                    bodo.types.TimestampTZ.fromLocal("2024-07-09 14:30:00", 195),
+                    bodo.types.TimestampTZ.fromLocal("2024-08-16 13:45:20", -330),
                 ]
             ),
             None,

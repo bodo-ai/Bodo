@@ -11,13 +11,20 @@ import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
-from numba.core.extending import overload
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     next_label,
     replace_arg_nodes,
 )
-from numba.extending import intrinsic
+from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    models,
+    overload,
+    register_model,
+    unbox,
+)
 
 import bodo
 import bodo.ir.connector
@@ -27,9 +34,9 @@ from bodo.hiframes.table import TableType
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import pyarrow_schema_type, pyiceberg_catalog_type
-from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
 from bodo.ir.connector import Connector, log_limit_pushdown
 from bodo.ir.filter import Filter, FilterVisitor
+from bodo.ir.parquet_ext import ParquetPredicateType, parquet_predicate_type
 from bodo.ir.sql_ext import (
     RtjfValueType,
     extract_rtjf_terms,
@@ -76,7 +83,39 @@ ll.add_symbol(
 )
 
 
-parquet_predicate_type = ParquetPredicateType()
+class ParquetFilterScalarsListType(types.Type):
+    """
+    Type for filter scalars for Parquet filtering
+    (e.g. [("f0", 2), ("f1", [1, 2, 3]), ("f2", "BODO")]).
+    It is a list of tuples. Each tuple has
+    a string for the variable name and the second element
+    can be any Python type (e.g. string, int, list, date, etc.)
+    It is just a Python object passed as pointer to C++
+    """
+
+    def __init__(self):
+        super().__init__(name="ParquetFilterScalarsListType()")
+
+
+parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
+types.parquet_filter_scalars_list_type = parquet_filter_scalars_list_type  # type: ignore
+register_model(ParquetFilterScalarsListType)(models.OpaqueModel)
+
+
+@unbox(ParquetFilterScalarsListType)
+def unbox_parquet_filter_scalars_list_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(ParquetFilterScalarsListType)
+def box_parquet_filter_scalars_list_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
+
+
 parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
 
 
@@ -904,7 +943,7 @@ def overload_get_filters_pyobject(filters_str, var_tup):
     if len(var_tup):
         func_text += f"  {var_unpack}, = var_tup\n"
     func_text += (
-        "  with bodo.no_warning_objmode(filters_py='parquet_predicate_type'):\n"
+        "  with bodo.ir.object_mode.no_warning_objmode(filters_py='parquet_predicate_type'):\n"
         f"    filters_py = {filter_str_val}\n"
         "  return filters_py\n"
     )
@@ -1057,7 +1096,9 @@ def add_rtjf_iceberg_filter(
     import pyiceberg.expressions as pie
 
     is_empty = bodo.ir.sql_ext.is_empty_build_table(state_var)
-    with bodo.no_warning_objmode(combined_filters="parquet_predicate_type"):
+    with bodo.ir.object_mode.no_warning_objmode(
+        combined_filters="parquet_predicate_type"
+    ):
         if is_empty:
             combined_filters = pie.AlwaysFalse()
         else:
@@ -1100,7 +1141,7 @@ def convert_pyobj_to_arrow_filter_str(pyobj, tz):
     "foo bar" -> "'foo bar'"
     datetime.date(2024, 1, 1) -> "pa.scalar(19723, pa.date32())"
         (since 2024-01-01 = 19723 days since 1970-01-01)
-    bodo.Time(12, 30, 59, 0, 12, precision=6) -> "pa.scalar(45059000012, pa.time64('us'))"
+    bodo.types.Time(12, 30, 59, 0, 12, precision=6) -> "pa.scalar(45059000012, pa.time64('us'))"
     pd.Timestamp("2024-07-04 12:30:01.025601") -> "pa.scalar(1720096201025601000, pa.timestamp('ns'))"
     """
     if isinstance(pyobj, str):
@@ -1117,7 +1158,7 @@ def convert_pyobj_to_arrow_filter_str(pyobj, tz):
     elif isinstance(pyobj, datetime.date):
         since_1970 = pyobj.toordinal() - 719163
         return f"pa.scalar({since_1970}, pa.date32())"
-    elif isinstance(pyobj, bodo.Time):
+    elif isinstance(pyobj, bodo.types.Time):
         if pyobj.precision == 0:
             return f"pa.scalar({pyobj.value}, pa.time64('s'))"
         elif pyobj.precision == 3:
@@ -1147,7 +1188,7 @@ def gen_runtime_join_filter_expr(
     """
     rtjf_expr = ""
 
-    with bodo.no_warning_objmode(rtjf_expr="unicode_type"):
+    with bodo.ir.object_mode.no_warning_objmode(rtjf_expr="unicode_type"):
         exprs = []
         for col, (min, max, unique_vals), op, tz in zip(
             filtered_cols, bounds, filter_ops, time_zones
@@ -1175,6 +1216,27 @@ def gen_runtime_join_filter_expr(
                     )
         rtjf_expr += " & ".join(exprs)
     return rtjf_expr
+
+
+def get_filter_scalars_pyobject(vars):  # pragma: no cover
+    pass
+
+
+@overload(get_filter_scalars_pyobject, no_unliteral=True)
+def overload_get_filter_scalars_pyobject(var_tup):
+    """
+    Generate a PyObject for a list of the scalars in
+    a filter to pass to C++.
+    """
+    func_text = "def impl(var_tup):\n"
+    func_text += "  with bodo.ir.object_mode.no_warning_objmode(filter_scalars_py='parquet_filter_scalars_list_type'):\n"
+    func_text += f"    filter_scalars_py = [(f'f{{i}}', var_tup[i]) for i in range({len(var_tup)})]\n"
+    func_text += "  return filter_scalars_py\n"
+    loc_vars = {}
+    glbs = globals()
+    glbs["bodo"] = bodo
+    exec(func_text, glbs, loc_vars)
+    return loc_vars["impl"]
 
 
 def _gen_iceberg_reader_chunked_py(
@@ -1278,7 +1340,7 @@ def _gen_iceberg_reader_chunked_py(
     str_as_dict_cols = [
         src_idx
         for src_idx, out_idx in zip(source_selected_cols, out_selected_cols)
-        if col_typs[out_idx] == bodo.dict_str_arr_type
+        if col_typs[out_idx] == bodo.types.dict_str_arr_type
     ]
     dict_str_cols_str = (
         f"dict_str_cols_arr_{call_id}.ctypes, np.int32({len(str_as_dict_cols)})"
@@ -1365,11 +1427,11 @@ def _gen_iceberg_reader_chunked_py(
     glbls = globals().copy()  # TODO: fix globals after Numba's #3355 is resolved
     glbls.update(
         {
-            "objmode": bodo.no_warning_objmode,
+            "objmode": bodo.ir.object_mode.no_warning_objmode,
             "unicode_to_utf8": unicode_to_utf8,
             "iceberg_pq_reader_init_py_entry": iceberg_pq_reader_init_py_entry,
             "get_filters_pyobject": get_filters_pyobject,
-            "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
+            "get_filter_scalars_pyobject": get_filter_scalars_pyobject,
             f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
             "out_type": ArrowReaderType(col_names, col_typs),
             f"selected_cols_arr_{call_id}": np.array(source_selected_cols, np.int32),
@@ -1530,7 +1592,7 @@ def _gen_iceberg_reader_py(
     # pass indices to C++ of the selected string columns that are to be read
     # in dictionary-encoded format
     str_as_dict_cols = [
-        i for i in selected_cols if col_typs[i] == bodo.dict_str_arr_type
+        i for i in selected_cols if col_typs[i] == bodo.types.dict_str_arr_type
     ]
     dict_str_cols_str = (
         f"dict_str_cols_arr_{call_id}.ctypes, np.int32({len(str_as_dict_cols)})"
@@ -1578,7 +1640,7 @@ def _gen_iceberg_reader_py(
         func_text += "  local_rows = total_rows\n"
 
     # Copied from _gen_pq_reader_py and simplified (no partitions or input_file_name)
-    # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
+    # table_idx is a list of index values for each array in the bodo.types.TableType being loaded from C++.
     # For a list column, the value is an integer which is the location of the column in the C++ Table.
     # Dead columns have the value -1.
 
@@ -1635,7 +1697,7 @@ def _gen_iceberg_reader_py(
     glbls.update(
         {
             "bodo": bodo,
-            "objmode": bodo.no_warning_objmode,
+            "objmode": bodo.ir.object_mode.no_warning_objmode,
             f"py_table_type_{call_id}": py_table_type,
             "index_col_typ": index_column_type,
             f"table_idx_{call_id}": table_idx,

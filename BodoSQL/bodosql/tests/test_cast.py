@@ -841,11 +841,11 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
                 ),
                 pd.Series(
                     [
-                        bodo.Time(3, 24, 55),
+                        bodo.types.Time(3, 24, 55),
                         None,
                         None,
-                        bodo.Time(20, 39, 47, 876),
-                        bodo.Time(19, 57, 28, 82, 374, 912),
+                        bodo.types.Time(20, 39, 47, 876),
+                        bodo.types.Time(19, 57, 28, 82, 374, 912),
                     ]
                     * 4
                 ),

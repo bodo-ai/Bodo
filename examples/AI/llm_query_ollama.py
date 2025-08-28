@@ -8,7 +8,7 @@ import time
 MODEL = "llama3.2"
 
 
-@bodo.wrap_python(bodo.string_type)
+@bodo.wrap_python(bodo.types.string_type)
 def query_model(prompt):
     """
     Sends a prompt to the Ollama model and returns the response.

@@ -20,8 +20,6 @@ from numba.extending import (
     unbox,
 )
 
-import bodo
-
 """
 Implementation is based on
 https://github.com/python/cpython/blob/39a5c889d30d03a88102e56f03ee0c95db198fb3/Lib/datetime.py
@@ -257,7 +255,7 @@ def now_impl():  # pragma: no cover
     Untyped pass replaces datetime.date.now() with this call since class methods are
     not supported in Numba's typing
     """
-    with bodo.objmode(d="datetime_datetime_type"):
+    with numba.objmode(d="datetime_datetime_type"):
         d = datetime.datetime.now()
     return d
 
@@ -268,7 +266,7 @@ def today_impl():  # pragma: no cover
     Untyped pass replaces datetime.datetime.today() with this call since class methods are
     not supported in Numba's typing
     """
-    with bodo.objmode(d="datetime_datetime_type"):
+    with numba.objmode(d="datetime_datetime_type"):
         d = datetime.datetime.today()
     return d
 
@@ -279,7 +277,7 @@ def strptime_impl(date_string, dtformat):  # pragma: no cover
     Untyped pass replaces datetime.datetime.strptime() with this call since class methods are
     not supported in Numba's typing
     """
-    with bodo.objmode(d="datetime_datetime_type"):
+    with numba.objmode(d="datetime_datetime_type"):
         d = datetime.datetime.strptime(date_string, dtformat)
     return d
 

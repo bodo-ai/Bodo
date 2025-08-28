@@ -10,24 +10,24 @@ Python types and Bodo data types.
 
 | SQL Type(s)           | Equivalent Python Type | Bodo Data Type                       |
 |-----------------------|------------------------|--------------------------------------|
-| `BOOLEAN`             | `np.bool_`             | `bodo.bool_`                         |
-| `TINYINT`             | `np.int8`              | `bodo.int8`                          |
-| `SMALLINT`            | `np.int16`             | `bodo.int16`                         |
-| `INT`                 | `np.int32`             | `bodo.int32`                         |
-| `BIGINT`              | `np.int64`             | `bodo.int64`                         |
-| `FLOAT`               | `np.float32`           | `bodo.float32`                       |
-| `DOUBLE`              | `np.float64`           | `bodo.float64`                       |
-| `VARCHAR`, `CHAR`     | `str`                  | `bodo.string_type`                   |
-| `VARBINARY`, `BINARY` | `bytes`                | `bodo.bytes_type`                    |
-| `DATE`                | `datetime.date`        | `bodo.datetime_date_type`            |
-| `TIME`                | `bodo.Time`            | `bodo.TimeType`                      |
-| `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(None)`     |
-| `TIMESTAMP_LTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(local_tz)` |
-| `TIMESTAMP_TZ`        | `bodo.TimestampTZ`     | `bodo.timestamptz_type`              |
-| `INTERVAL(day-time)`  | `np.timedelta64[ns]`   | `bodo.timedelta64ns`                 |
+| `BOOLEAN`             | `np.bool_`             | `bodo.types.bool_`                         |
+| `TINYINT`             | `np.int8`              | `bodo.types.int8`                          |
+| `SMALLINT`            | `np.int16`             | `bodo.types.int16`                         |
+| `INT`                 | `np.int32`             | `bodo.types.int32`                         |
+| `BIGINT`              | `np.int64`             | `bodo.types.int64`                         |
+| `FLOAT`               | `np.float32`           | `bodo.types.float32`                       |
+| `DOUBLE`              | `np.float64`           | `bodo.types.float64`                       |
+| `VARCHAR`, `CHAR`     | `str`                  | `bodo.types.string_type`                   |
+| `VARBINARY`, `BINARY` | `bytes`                | `bodo.types.bytes_type`                    |
+| `DATE`                | `datetime.date`        | `bodo.types.datetime_date_type`            |
+| `TIME`                | `bodo.types.Time`            | `bodo.types.TimeType`                      |
+| `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.types.PandasTimestampType(None)`     |
+| `TIMESTAMP_LTZ`       | `pd.Timestamp`         | `bodo.types.PandasTimestampType(local_tz)` |
+| `TIMESTAMP_TZ`        | `bodo.types.TimestampTZ`     | `bodo.types.timestamptz_type`              |
+| `INTERVAL(day-time)`  | `np.timedelta64[ns]`   | `bodo.types.timedelta64ns`                 |
 | `ARRAY`               | `pyarrow.large_list`   | `bodo.ArrayItemArray`                |
-| `MAP`                 | `pyarrow.map`          | `bodo.MapScalarType`                 |
-| `NULL`                | `pyarrow.NA`           | `bodo.null_dtype`                    |
+| `MAP`                 | `pyarrow.map`          | `bodo.types.MapScalarType`                 |
+| `NULL`                | `pyarrow.NA`           | `bodo.types.null_dtype`                    |
 
 </center>
 
@@ -45,7 +45,7 @@ to avoid any potential issues.
 
 ### TIMESTAMP\_TZ
 
-Note that `bodo.TimestampTZ` in python is a custom type provided by the Bodo
+Note that `bodo.types.TimestampTZ` in python is a custom type provided by the Bodo
 library. In `sql` this datatype is compatible with [Snowflake's
 TIMESTAMP\_TZ](https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp-ltz-timestamp-ntz-timestamp-tz).
 

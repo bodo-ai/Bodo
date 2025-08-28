@@ -21,6 +21,7 @@ from pandas._typing import (
 )
 
 import bodo
+import bodo.ai
 from bodo.ai.backend import Backend
 from bodo.ai.utils import (
     get_default_bedrock_request_formatter,
@@ -73,16 +74,12 @@ from bodo.pandas.utils import (
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
-    cpp_table_to_series_jit,
     fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
-    get_udf_cfunc_decorator,
-    series_to_cpp_table_jit,
     wrap_plan,
 )
-from bodo.utils.typing import BodoError
 
 
 class BodoSeries(pd.Series, BodoLazyWrapper):
@@ -655,12 +652,23 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Map values of Series according to an input mapping or function.
         """
+        import bodo
+
         if engine not in ("bodo", "python"):
             raise TypeError(
                 f"Series.map() got unsupported engine: {engine}, expected one of ('bodo', 'python')."
             )
 
         if engine == "bodo":
+            # Import compiler
+            import bodo.decorators  # isort:skip # noqa
+            from bodo.pandas.utils_jit import (
+                cpp_table_to_series_jit,
+                get_udf_cfunc_decorator,
+                series_to_cpp_table_jit,
+            )
+            from bodo.utils.typing import BodoError
+
             empty_series = self.head(0)
 
             arr_type = bodo.typeof(empty_series).data
@@ -692,6 +700,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 error_msg = "Jit could not determine pyarrow return type from UDF."
 
             if empty_series is not None:
+                bodo.spawn.utils.import_compiler_on_workers()
                 # Compile the cfunc and get pointer
                 return _get_series_func_plan(
                     self._plan,
@@ -864,16 +873,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Validate ascending argument.
         if not isinstance(ascending, bool):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame.sort_values(): argument ascending iterable does not contain only boolean"
             )
 
         # Validate na_position argument.
         if not isinstance(na_position, str):
-            raise BodoError("Series.sort_values(): argument na_position not a string")
+            raise ValueError("Series.sort_values(): argument na_position not a string")
 
         if na_position not in ["first", "last"]:
-            raise BodoError(
+            raise ValueError(
                 "Series.sort_values(): argument na_position does not contain only 'first' or 'last'"
             )
 

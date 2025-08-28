@@ -271,7 +271,7 @@ def overload_bodosql_context_add_or_replace_view(bc, name, table):
             "BodoSQLContext.add_or_replace_view(): 'name' must be a constant string"
         )
     name = get_overload_const_str(name)
-    if not isinstance(table, (bodo.DataFrameType, TablePathType)):
+    if not isinstance(table, (bodo.types.DataFrameType, TablePathType)):
         raise BodoError(
             "BodoSQLContext.add_or_replace_view(): 'table' must be a DataFrameType or TablePathType"
         )

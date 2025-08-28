@@ -16,7 +16,6 @@ import bodo.ai.backend
 import bodo.pandas as bd
 from bodo.spawn.spawner import spawn_process_on_nodes
 from bodo.tests.utils import _test_equal
-from bodo.utils.typing import BodoError
 
 
 def test_write_s3_vectors(datapath):
@@ -74,25 +73,25 @@ def test_write_s3_vectors(datapath):
         s3vectors.delete_index(vectorBucketName=bucket_name, indexName=index_name)
 
     # Error checking
-    with pytest.raises(BodoError, match="DataFrame must have columns"):
+    with pytest.raises(ValueError, match="DataFrame must have columns"):
         bdf_invalid = bd.from_pandas(df.drop("key", axis=1))
         bdf_invalid.to_s3_vectors(
             vector_bucket_name=bucket_name, index_name=index_name, region=region
         )
 
-    with pytest.raises(BodoError, match="column must be strings to write"):
+    with pytest.raises(ValueError, match="column must be strings to write"):
         bdf_invalid = bd.from_pandas(df.assign(key=[1, 2, 3]))
         bdf_invalid.to_s3_vectors(
             vector_bucket_name=bucket_name, index_name=index_name, region=region
         )
 
-    with pytest.raises(BodoError, match="column must be a list of floats"):
+    with pytest.raises(ValueError, match="column must be a list of floats"):
         bdf_invalid = bd.from_pandas(df.assign(data=[1, 2, 3]))
         bdf_invalid.to_s3_vectors(
             vector_bucket_name=bucket_name, index_name=index_name, region=region
         )
 
-    with pytest.raises(BodoError, match="column must be a struct type"):
+    with pytest.raises(ValueError, match="column must be a struct type"):
         bdf_invalid = bd.from_pandas(df.assign(metadata=[1, 2, 3]))
         bdf_invalid.to_s3_vectors(
             vector_bucket_name=bucket_name, index_name=index_name, region=region

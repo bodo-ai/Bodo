@@ -7,10 +7,6 @@ targets with the verbose flag.
 import logging
 import sys
 
-from numba.extending import overload
-
-from bodo.ir.object_mode import no_warning_objmode
-
 # Create the default logger
 _default_logger = logging.getLogger("Bodo Default Logger")
 _default_logger.setLevel(logging.DEBUG)
@@ -47,20 +43,6 @@ def get_verbose_level():
     Returns the current verbose level in Bodo.
     """
     return _bodo_verbose_level
-
-
-@overload(get_verbose_level)
-def overload_get_verbose_level():
-    """
-    Implementation of get_verbose_level that can be called from JIT.
-    """
-
-    def impl():  # pragma: no cover
-        with no_warning_objmode(verbose_level="int64"):
-            verbose_level = get_verbose_level()
-        return verbose_level
-
-    return impl
 
 
 def set_verbose_level(level):
@@ -138,17 +120,3 @@ def log_message(header, msg, *args, **kws):
         equal_str = "\n" + ("=" * 80)
         final_msg = "\n".join([equal_str, header.center(80, "-"), msg, equal_str])
         logger.info(final_msg, *args, **kws)
-
-
-@overload(log_message)
-def overload_log_message(header, msg):
-    """
-    Implementation of log_message that can be called from JIT.
-    This implementation doesn't support additional arguments.
-    """
-
-    def impl(header, msg):  # pragma: no cover
-        with no_warning_objmode():
-            log_message(header, msg)
-
-    return impl

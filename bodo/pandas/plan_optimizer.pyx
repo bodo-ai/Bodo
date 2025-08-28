@@ -790,10 +790,12 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly int nrows
 
     def __cinit__(self, object out_schema, object parquet_path, object storage_options):
+        from bodo.ext import hdist
+
         self.out_schema = out_schema
         self.path = parquet_path
         self.storage_options = storage_options
-        self.nrows = bodo.libs.distributed_api.bcast_scalar(self._get_nrows() if bodo.get_rank() == 0 else 0)
+        self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows() if bodo.get_rank() == 0 else 0)
         cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, self.getCardinality())
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
@@ -874,6 +876,8 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     cdef readonly str table_identifier
 
     def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema, object snapshot_id, uint64_t table_len_estimate):
+        # TODO(ehsan): avoid compiler import in Iceberg read
+        import bodo.decorators  # isort:skip # noqa
         import pyiceberg.catalog
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
         self.out_schema = out_schema

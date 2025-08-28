@@ -1485,7 +1485,7 @@ def Dispatcher_compile(self, sig):
             else:
                 # Even when not on platform, it's best to minimize I/O contention, so we
                 # write cache files from one rank on each node.
-                first_ranks = bodo.get_nodes_first_ranks()
+                first_ranks = bodo.libs.distributed_api.get_nodes_first_ranks()
                 if bodo.get_rank() in first_ranks:
                     self._cache.save_overload(sig, cres)
             return cres.entry_point
@@ -3257,7 +3257,7 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
 
     for k, v in kwargs.items():
         # Bodo change: use get_const_value_inner to find constant type value to support
-        # more complex cases like bodo.int64[::1]
+        # more complex cases like bodo.types.int64[::1]
         v_const = None
         try:
             # create a dummy var to pass to get_const_value_inner since v is an IR node
@@ -3272,8 +3272,8 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
                 raise BodoError(
                     (
                         f"objmode type annotations require full data types, not just data type "
-                        f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
-                        f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
+                        f"classes. For example, 'bodo.types.DataFrameType((bodo.types.float64[::1],), "
+                        f"bodo.types.RangeIndexType(), ('A',))' is a valid data type but 'bodo.types.DataFrameType' is not.\n"
                         f"Variable {k} is annotated as type class {v_const}."
                     )
                 )
@@ -7081,3 +7081,37 @@ numba.core.inline_closurecall.find_callname = find_callname
 numba.parfors.array_analysis.find_callname = find_callname
 numba.parfors.parfor.find_callname = find_callname
 numba.stencils.stencilparfor.find_callname = find_callname
+
+
+def set_numba_environ_vars():
+    """
+    Set environment variables so that the Numba configuration can persist after reloading by re-setting config
+    variables directly from environment variables.
+    These should be tested in `test_numba_warn_config.py`.
+    """
+    # This env variable is set by the platform and points to the central cache directory
+    # on the shared filesystem.
+    if (cache_loc := os.environ.get("BODO_PLATFORM_CACHE_LOCATION")) is not None:
+        if ("NUMBA_CACHE_DIR" in os.environ) and (
+            os.environ["NUMBA_CACHE_DIR"] != cache_loc
+        ):
+            import warnings
+
+            warnings.warn(
+                "Since BODO_PLATFORM_CACHE_LOC is set, the value set for NUMBA_CACHE_DIR will be ignored"
+            )
+        numba.config.CACHE_DIR = cache_loc
+        # In certain cases, numba reloads its config variables from the
+        # environment. In those cases, the above line would be overridden.
+        # Therefore, we also set it to the env var that numba reloads from.
+        os.environ["NUMBA_CACHE_DIR"] = cache_loc
+
+    # avoid Numba parallel performance warning when there is no Parfor in the IR
+    numba.config.DISABLE_PERFORMANCE_WARNINGS = 1
+    bodo_env_vars = {
+        "NUMBA_DISABLE_PERFORMANCE_WARNINGS": "1",
+    }
+    os.environ.update(bodo_env_vars)
+
+
+set_numba_environ_vars()

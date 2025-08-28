@@ -159,6 +159,7 @@ exclude = [
 
     # TODO: Skip specific rules for these files
     "bodo/__init__.py",
+    "bodo/types.py",
     "BodoSQL/bodosql/__init__.py",
     "iceberg/bodo_iceberg_connector/__init__.py",
     "bodo/pandas/__init__.py",

@@ -9,19 +9,11 @@ import typing as pt
 import warnings
 from typing import Any, Literal
 
-import numba
 import pandas as pd
 import pyarrow as pa
 from pandas._libs import lib
 from pandas.core.dtypes.inference import is_dict_like, is_list_like
 
-import bodo
-from bodo.decorators import _cfunc
-from bodo.libs.array import (
-    array_info_type,
-    array_to_info,
-    table_type,
-)
 from bodo.pandas.plan import (
     AggregateExpression,
     LogicalAggregate,
@@ -35,13 +27,8 @@ from bodo.pandas.utils import (
     _empty_pd_array,
     check_args_fallback,
     convert_to_pandas_types,
-    cpp_table_to_df_jit,
-    cpp_table_to_series_jit,
     wrap_plan,
 )
-from bodo.utils.conversion import coerce_scalar_to_array, coerce_to_array
-from bodo.utils.typing import BodoWarning, get_array_getitem_scalar_type
-from bodo.utils.utils import is_array_typ
 
 if pt.TYPE_CHECKING:
     from bodo.pandas import BodoDataFrame, BodoSeries
@@ -471,6 +458,11 @@ def _groupby_apply_plan(
     """Implementation of SeriesGroupby/DataFrameGroupby.apply."""
     from bodo.pandas.base import _empty_like
 
+    # Import compiler
+    import bodo.decorators  # isort:skip
+
+    bodo.spawn.utils.import_compiler_on_workers()
+
     if not callable(func):
         raise BodoLibNotImplementedException(
             "Groupby.apply() only supports callable values for func."
@@ -500,7 +492,7 @@ def _groupby_apply_plan(
 
     out_type = _get_scalar_udf_out_type(func, selected_self)
 
-    if isinstance(out_type, (bodo.DataFrameType, bodo.SeriesType)):
+    if isinstance(out_type, (bodo.types.DataFrameType, bodo.types.SeriesType)):
         raise BodoLibNotImplementedException(
             "Groupby.apply(): functions returning Series or DataFrame not implemented yet."
         )
@@ -657,9 +649,21 @@ def _get_cfunc_wrapper(
         Callable: A function that takes no arguments and compiles the cfunc and returns
           the address.
     """
+    import numba
     import numpy as np
 
+    # Import compiler
+    import bodo.decorators  # isort:skip
+    from bodo.decorators import _cfunc
     from bodo.hiframes.table import TableType
+    from bodo.libs.array import (
+        array_info_type,
+        array_to_info,
+        table_type,
+    )
+    from bodo.pandas.utils_jit import cpp_table_to_df_jit, cpp_table_to_series_jit
+    from bodo.utils.conversion import coerce_scalar_to_array, coerce_to_array
+    from bodo.utils.typing import BodoWarning
 
     jitted_func = bodo.jit(cache=False, spawn=False, distributed=False)(func)
 
@@ -669,7 +673,7 @@ def _get_cfunc_wrapper(
         in_type = bodo.typeof(empty_data)
         out_col_type = bodo.typeof(out_type).data
 
-    if isinstance(in_type, bodo.DataFrameType):
+    if isinstance(in_type, bodo.types.DataFrameType):
         # Input table does not have an index
         index_type = bodo.typeof(pd.RangeIndex(0))
         py_table_type = TableType(in_type.data)
@@ -685,7 +689,7 @@ def _get_cfunc_wrapper(
             )
 
     else:
-        assert isinstance(in_type, bodo.SeriesType), (
+        assert isinstance(in_type, bodo.types.SeriesType), (
             "Expected in_type to be either SeriesType or DataFrameType."
         )
 
@@ -695,7 +699,7 @@ def _get_cfunc_wrapper(
         def cpp_table_to_py_impl(in_cpp_table):  # pragma: no cover
             return cpp_table_to_series_jit(in_cpp_table, in_col_type)
 
-    if isinstance(out_col_type, bodo.ArrayItemArrayType):
+    if isinstance(out_col_type, bodo.types.ArrayItemArrayType):
 
         @numba.njit
         def coerce_to_array_impl(scalar):  # pragma: no cover
@@ -738,8 +742,11 @@ def _numba_type_to_pyarrow_type(typ):
     """
     from numba import types
 
+    # Import compiler
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
     from bodo.libs.binary_arr_ext import bytes_type
+    from bodo.utils.typing import get_array_getitem_scalar_type
     from bodo.utils.utils import is_array_typ
 
     numba_to_arrow_map = {
@@ -780,10 +787,10 @@ def _numba_type_to_pyarrow_type(typ):
         inner_type = _numba_type_to_pyarrow_type(get_array_getitem_scalar_type(typ))
         return pa.large_list(inner_type)
 
-    elif isinstance(typ, bodo.PandasTimestampType):
+    elif isinstance(typ, bodo.types.PandasTimestampType):
         return pa.timestamp("ns", tz=typ.tz)
 
-    elif isinstance(typ, bodo.StructType):
+    elif isinstance(typ, bodo.types.StructType):
         inner_types = [_numba_type_to_pyarrow_type(typ_) for typ_ in typ.data]
         fields = [pa.field(name, typ_) for name, typ_ in zip(typ.names, inner_types)]
         return pa.struct(fields)
@@ -796,6 +803,9 @@ def _numba_type_to_pyarrow_type(typ):
 def _get_scalar_udf_out_type(func: pt.Callable, empty_input: pd.DataFrame | pd.Series):
     """Use compiler utilities to determine the output type of func given it's input types."""
     import numba
+
+    # Import compiler
+    import bodo.decorators  # isort:skip
     from numba.core.target_extension import dispatcher_registry
 
     from bodo.utils.transform import get_const_func_output_type
@@ -857,6 +867,8 @@ def _get_agg_output_type(
     Returns:
         pa.DataType: The output type from applying func to col_name.
     """
+    import bodo
+
     new_type = None
     fallback = False
     func_name = func.func_name
@@ -909,13 +921,19 @@ def _get_agg_output_type(
             # TODO: bool/decimal median
             fallback = True
     elif callable(func.func):
+        # Import compiler
+        import bodo.decorators  # isort:skip
+        from bodo.utils.utils import is_array_typ
+
         # UDF case
         empty_in_col = pd.Series(_empty_pd_array(pa_type))
         out_numba_type = _get_scalar_udf_out_type(func.func, empty_in_col)
 
         # Matches Pandas error without the need to fall back.
         if (
-            isinstance(out_numba_type, (bodo.SeriesType, bodo.DataFrameType))
+            isinstance(
+                out_numba_type, (bodo.types.SeriesType, bodo.types.DataFrameType)
+            )
             or is_array_typ(out_numba_type)
         ) and not pa.types.is_list(pa_type):
             raise ValueError(

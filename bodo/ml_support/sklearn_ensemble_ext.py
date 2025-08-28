@@ -5,6 +5,7 @@ classification, regression and anomaly detection.
 import itertools
 import sys
 
+import numba
 import numpy as np
 import sklearn.ensemble
 from numba.extending import (
@@ -94,7 +95,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
         max_samples=None,
         monotonic_cst=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="random_forest_classifier_type"):
+        with numba.objmode(m="random_forest_classifier_type"):
             if random_state is not None and get_num_nodes() > 1:
                 print("With multinode, fixed random_state seed values are ignored.\n")
                 random_state = None
@@ -218,7 +219,7 @@ def overload_sklearn_rf_regressor(
         max_samples=None,
         monotonic_cst=None,
     ):  # pragma: no cover
-        with bodo.objmode(m="random_forest_regressor_type"):
+        with numba.objmode(m="random_forest_regressor_type"):
             if random_state is not None and get_num_nodes() > 1:
                 print("With multinode, fixed random_state seed values are ignored.\n")
                 random_state = None
@@ -296,7 +297,7 @@ def random_forest_model_fit(m, X, y):
 
     # Gather all trees from each first rank/node to rank 0 within subcomm. Then broadcast to all
     # Get lowest rank in each node
-    with bodo.objmode(first_rank_node="int32[:]"):
+    with numba.objmode(first_rank_node="int32[:]"):
         first_rank_node = get_nodes_first_ranks()
     # Create subcommunicator with these ranks only
     subcomm = create_subcomm_mpi4py(first_rank_node)
@@ -378,7 +379,7 @@ def overload_rf_classifier_model_fit(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
         # Get lowest rank in each node
-        with bodo.objmode(first_rank_node="int32[:]"):
+        with numba.objmode(first_rank_node="int32[:]"):
             first_rank_node = get_nodes_first_ranks()
         if _is_data_distributed:
             nnodes = len(first_rank_node)
@@ -389,7 +390,7 @@ def overload_rf_classifier_model_fit(
                 X = bodo.libs.distributed_api.bcast(X, comm_ranks=first_rank_node)
                 y = bodo.libs.distributed_api.bcast(y, comm_ranks=first_rank_node)
 
-        with bodo.objmode:
+        with numba.objmode:
             random_forest_model_fit(m, X, y)  # return value is m
 
         bodo.barrier()

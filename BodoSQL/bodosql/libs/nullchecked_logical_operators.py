@@ -26,7 +26,7 @@ def mysql_nullchecking_scalar_or_impl(arg0, arg1):
     see https://spark.apache.org/docs/3.0.0-preview/sql-ref-null-semantics.html#logical-operators
     """
 
-    if isinstance(arg0, bodo.optional) or isinstance(arg1, bodo.optional):
+    if isinstance(arg0, bodo.types.optional) or isinstance(arg1, bodo.types.optional):
 
         def impl(arg0, arg1):
             if arg0 is None and arg1 is None:
@@ -47,11 +47,11 @@ def mysql_nullchecking_scalar_or_impl(arg0, arg1):
                 return arg0 or arg1
 
         return impl
-    elif arg0 == bodo.none and arg1 == bodo.none:
+    elif arg0 == bodo.types.none and arg1 == bodo.types.none:
         return lambda arg0, arg1: None
-    elif arg0 == bodo.none:
+    elif arg0 == bodo.types.none:
         return lambda arg0, arg1: True if arg1 else None
-    elif arg1 == bodo.none:
+    elif arg1 == bodo.types.none:
         return lambda arg0, arg1: True if arg0 else None
     else:
         return lambda arg0, arg1: arg0 or arg1
@@ -75,9 +75,9 @@ def mysql_nullchecking_scalar_and_impl(arg0, arg1):
     see https://spark.apache.org/docs/3.0.0-preview/sql-ref-null-semantics.html#logical-operators
     """
 
-    if arg0 == bodo.none:
+    if arg0 == bodo.types.none:
         return lambda arg0, arg1: None
-    elif isinstance(arg0, bodo.optional) or isinstance(arg1, bodo.optional):
+    elif isinstance(arg0, bodo.types.optional) or isinstance(arg1, bodo.types.optional):
 
         def impl(arg0, arg1):
             if arg0 is None:
@@ -95,7 +95,7 @@ def mysql_nullchecking_scalar_and_impl(arg0, arg1):
                 return arg0 and arg1
 
         return impl
-    elif arg1 == bodo.none:
+    elif arg1 == bodo.types.none:
         # arg0 != None
         return lambda arg0, arg1: False if arg0 is False else None
     else:

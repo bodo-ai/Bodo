@@ -2121,11 +2121,11 @@ class UntypedPass:
             dtype_map_cpy = dtype_map.copy()
             for c, t in dtype_map_cpy.items():
                 if c in _bodo_read_as_dict:
-                    if dtype_map[c] != bodo.string_array_type:
+                    if dtype_map[c] != bodo.types.string_array_type:
                         raise BodoError(
                             f"pandas.read_csv(): column name '{c}' in _bodo_read_as_dict is not a string column"
                         )
-                    dtype_map[c] = bodo.dict_str_arr_type
+                    dtype_map[c] = bodo.types.dict_str_arr_type
 
         columns, _, out_types = _get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
@@ -3251,7 +3251,7 @@ def _dtype_val_to_arr_type(t, func_name, loc):
     # categorical type
     if isinstance(t, pd.CategoricalDtype):
         cats = tuple(t.categories)
-        elem_typ = bodo.string_type if len(cats) == 0 else bodo.typeof(cats[0])
+        elem_typ = bodo.types.string_type if len(cats) == 0 else bodo.typeof(cats[0])
         typ = PDCategoricalDtype(cats, elem_typ, t.ordered)
         return CategoricalArrayType(typ)
 
@@ -3515,7 +3515,9 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
         # Column is alive if its in the dtype_map or date_cols
         if col_name in dtype_map or i in date_cols or col_name in date_cols:
             # Pandas prioritizes dtype_map over date_cols
-            col_type = dtype_map.get(col_name, types.Array(bodo.datetime64ns, 1, "C"))
+            col_type = dtype_map.get(
+                col_name, types.Array(bodo.types.datetime64ns, 1, "C")
+            )
             columns.append(col_name)
             out_types.append(col_type)
             data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))
@@ -3846,14 +3848,14 @@ def _get_sql_df_type_from_db(
                 # so it will fall in the else-stmt
                 if db_type == "mysql" and sql_word in ("DESCRIBE", "DESC"):
                     colnames = ("Field", "Type", "Null", "Key", "Default", "Extra")
-                    index_type = bodo.RangeIndexType(bodo.none)
+                    index_type = bodo.types.RangeIndexType(bodo.types.none)
                     data_type = (
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
-                        bodo.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
+                        bodo.types.string_type,
                     )
                     df_type = DataFrameType(data_type, index_type, colnames)
                 else:

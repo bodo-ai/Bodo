@@ -16,7 +16,7 @@ from bodosql.kernels import (
 def test_javascript_udf_error_if_not_in_build():
     body = MetaType("return 2 + 1")
     args = MetaType(())
-    ret_type = IntegerArrayType(bodo.int64)
+    ret_type = IntegerArrayType(bodo.types.int64)
 
     @bodo.jit
     def f():
