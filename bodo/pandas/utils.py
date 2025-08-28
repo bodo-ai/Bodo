@@ -1181,7 +1181,7 @@ def compile_cfunc(func, decorator):
     """
     import ctypes
 
-    num_retries = 10
+    num_retries = 1
 
     for _ in range(num_retries):
         try:

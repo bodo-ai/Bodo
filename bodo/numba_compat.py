@@ -5,6 +5,7 @@ other module in bodo package.
 
 import contextlib
 import copy
+import errno
 import functools
 import hashlib
 import inspect
@@ -1950,7 +1951,11 @@ def Cache_guard_against_spurious_io_errors(self):
                 raise
     else:
         # No such conditions under non-Windows OSes
-        yield
+        try:
+            yield
+        except OSError as e:
+            if e.errno != errno.ESTALE:
+                raise
 
 numba.core.caching.Cache._guard_against_spurious_io_errors = Cache_guard_against_spurious_io_errors
 
