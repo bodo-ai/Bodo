@@ -1511,7 +1511,7 @@ def CFunc_compile(self):
                                         self._targetdescr.target_context)
     if cres is None:
         cres = self._compile_uncached()
-        # bodo change: only save to cache on at most one rank per node.
+        # bodo change: Only write to cache on at most one rank per node.
         if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
             # Since we used a shared file system on the platform, writing with just one rank is
             # sufficient, and desirable (to avoid I/O contention due to filesystem limitations).
@@ -1979,39 +1979,6 @@ if _check_numba_change:  # pragma: no cover
 
 numba.core.caching.CacheImpl.__init__ = CacheImpl__init__
 
-# @contextlib.contextmanager
-# def Cache_guard_against_spurious_io_errors(self):
-#     if os.name == 'nt':
-#         # Guard against permission errors due to accessing the file
-#         # from several processes (see #2028)
-#         try:
-#             yield
-#         except OSError as e:
-#             if e.errno != errno.EACCES:
-#                 raise
-#     elif os.environ.get("BODO_PLATFORM_CACHE_LOCATION", None) is not None:
-#         # bodo change: If on the platform (using NFS for cache), multiple processes
-#         # trying to write to the same location can cause a Stale File Handle Error.
-#         # Since we only at least need one rank to populate the cache, we can
-#         # safely ignore.
-#         try:
-#             yield
-#         except OSError as e:
-#             if e.errno not in (errno.ESTALE, errno.ETXTBSY) :
-#                 raise
-#     else:
-#         yield
-
-
-# if _check_numba_change:  # pragma: no cover
-#     lines = inspect.getsource(numba.core.caching.Cache._guard_against_spurious_io_errors)
-#     if (
-#         hashlib.sha256(lines.encode()).hexdigest()
-#         != "85fcb4ee1a5705773f0d0cec78f45854ae7a6002d7521cd5a9a0deeefccca89a"
-#     ):  # pragma: no cover
-#         warnings.warn("numba.core.caching._Cache._guard_against_spurious_io_errors has changed")
-
-# numba.core.caching.Cache._guard_against_spurious_io_errors = Cache_guard_against_spurious_io_errors
 
 def slice_size(self, index, dsize, equiv_set, scope, stmts):
     return None, None
