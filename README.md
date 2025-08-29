@@ -27,14 +27,14 @@ All three modes offer enormous speedups thanks to an efficient, parallel backend
 
 ## Goals
 
-Bodo {DataFrames, JIT, SQL} makes Python run much (much!) faster than it normally does!
+Bodo makes Python run much (much!) faster than it normally does!
 
 1. **Exceptional Performance:**
 Deliver HPC-grade performance and scalability for Python data workloads as if the code was written in C++/MPI, whether running on a laptop or across large cloud clusters.
 
 2. **Easy to Use:**
-Easily integrate into Python workflows, whether it is changing a single import to unlock the power of Bodo DataFrames,
-or adding a simple decorator to a performance-critical functions with Bodo JIT.
+Easily integrate into Python workflows, whether it's changing a single import to unlock the power of Bodo DataFrames,
+or adding a simple Bodo JIT decorator to a performance-critical function.
 
 3. **Interoperable:**
 Compatible with regular Python ecosystem, and can selectively speed up only the sections of the workload that are Bodo supported.
@@ -51,8 +51,8 @@ We are currently focused on a targeted subset of Python used for data-intensive 
 2. *Non-Data Workloads:*
 Prioritize applications in data engineering, data science, and AI/ML. Bodo is not designed for general-purpose use cases that are non-data-centric.
 
-3. *Real-time Compilation:*
-Bodo is not yet optimized for small, fast workloads (e.g., workloads with execution times of only a few seconds).
+3. *Real-time:*
+Bodo DataFrames, JIT and BodoSQL are not yet optimized for small, fast workloads (e.g., workloads with execution times of only a few seconds).
 
 
 ## Key Features

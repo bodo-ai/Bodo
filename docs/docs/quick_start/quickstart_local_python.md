@@ -48,7 +48,7 @@ See the [Bodo DataFrames API reference][dataframe-lib] for supported Pandas APIs
 
 JIT compilation converts Python functions to optimized parallel binaries.
 Unlike Bodo DataFrames, JIT can optimize both Pandas and Numpy operations together and
-in some cases can provide better performance over Bodo DataFrames.
+in some cases provide better performance over Bodo DataFrames.
 For example:
 
 ```python
