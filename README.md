@@ -12,15 +12,16 @@ NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart
   <a href="https://www.bodo.ai/benchmarks/" target="_blank"><b>Benchmarks</b></a>
 </h3>
 
-# Bodo: High-Performance Python Compute Engine for Data and AI
+# Bodo {DataFrames, JIT, SQL}:
 
-Bodo is a cutting edge compute engine for large scale Python data processing. Powered by an innovative auto-parallelizing just-in-time compiler, Bodo transforms Python programs into highly optimized, parallel binaries without requiring code rewrites, which makes Bodo [20x to 240x faster](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi) compared to alternatives!
+Bodo is an essential tool-kit for large scale Python data processing, AI, and ML workloads. Whether you are using Pandas, Numpy or SQL, calling LLMs or working with vectors, Bodo automatically optimizes and parallelizes your code, scaling from laptop to large cloud clusters with minimal fiction.
 
-<img src="benchmarks/img/nyc-taxi-benchmark.png" alt="NYC Taxi Benchmark" width="500"/>
-
-Unlike traditional distributed computing frameworks, Bodo:
-- Seamlessly supports native Python APIs like Pandas and NumPy.
-- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) tech for true distributed execution.
+Bodo consists of three modes: DataFrames, JIT, and SQL with different strengths and use cases.
+All three modes offer enormous speedups thanks to an efficient, parallel backend:
+- Use Bodo DataFrames for scaling Pandas with the least amount of effort, just change the import to: `import bodo.pandas as pd`.
+- Use Bodo DataFrames AI APIs for simplifying and scaling AI workloads.
+- Use Bodo JIT for the best end-to-end native performance for workloads consisting of Pandas, Numpy and Sci-kit learn.
+- Use BodoSQL for an advanced vectorized query engine that integrates seemlessly with Python workflows.
 
 ## Goals
 
@@ -30,7 +31,8 @@ Bodo makes Python run much (much!) faster than it normally does!
 Deliver HPC-grade performance and scalability for Python data workloads as if the code was written in C++/MPI, whether running on a laptop or across large cloud clusters.
 
 2. **Easy to Use:**
-Easily integrate into Python workflows with a simple decorator, and support native Pandas and NumPy APIs.
+Easily integrate into Python workflows, whether it is changing a single import to unlock the power of Bodo DataFrames,
+or adding a simple decorator to a performance-critical function with Bodo JIT.
 
 3. **Interoperable:**
 Compatible with regular Python ecosystem, and can selectively speed up only the functions that are Bodo supported.
@@ -48,7 +50,7 @@ We are currently focused on a targeted subset of Python used for data-intensive 
 Prioritize applications in data engineering, data science, and AI/ML. Bodo is not designed for general-purpose use cases that are non-data-centric.
 
 3. *Real-time Compilation:*
-While compilation time is improving, Bodo is not yet optimized for scenarios requiring very short compilation times (e.g., workloads with execution times of only a few seconds).
+Bodo is not yet optimized for small, fast workloads (e.g., workloads with execution times of only a few seconds).
 
 
 ## Key Features
@@ -81,18 +83,23 @@ conda install bodo -c conda-forge
 
 Bodo works with Linux x86, both Mac x86 and Mac ARM, and Windows right now. We will have Linux ARM support (and more) coming soon!
 
-## Example Code
+## Bodo DataFrames Example
 
-Here is an example Pandas code that reads and processes a sample Parquet dataset with Bodo.
-
-
+Here is an example Pandas code that reads and processes a sample Parquet dataset.
+Note that we replaced the typical import:
 ```python
 import pandas as pd
+```
+with:
+```python
+import bodo.pandas as pd
+```
+
+```python
+import bodo.pandas as pd
 import numpy as np
-import bodo
 import time
 
-# Generate sample data
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
@@ -102,12 +109,11 @@ df = pd.DataFrame({
 })
 df.to_parquet("my_data.pq")
 
-@bodo.jit(cache=True)
 def computation():
     t1 = time.time()
     df = pd.read_parquet("my_data.pq")
-    df2 = pd.DataFrame({"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)})
-    df2.to_parquet("out.pq")
+    df["C"] = df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)
+    df.to_parquet("out.pq")
     print("Execution time:", time.time() - t1)
 
 computation()
