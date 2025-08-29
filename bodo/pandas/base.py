@@ -373,7 +373,7 @@ def read_csv(
     dtype_backend: DtypeBackend | lib.NoDefault = lib.no_default,
 ) -> BodoDataFrame:
     # Import compiler
-    import bodo.decorators  # isort:skip
+    import bodo.decorators  # isort:skip # noqa
     from bodo.utils.utils import bodo_spawn_exec
 
     bodo.spawn.utils.import_compiler_on_workers()

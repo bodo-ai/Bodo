@@ -450,7 +450,7 @@ def get_bodo_pq_dataset_from_fpath(
         return dataset
     except Exception as e:
         # Import compiler lazily to access BodoError
-        import bodo.decorators  # isort:skip
+        import bodo.decorators  # isort:skip # noqa
 
         # See note in pa_fs_list_dir_fnames
         # In some cases, OSError/FileNotFoundError can propagate
@@ -528,7 +528,7 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
         for error in comm.allgather(error):
             if error:
                 # Import compiler lazily to access BodoError
-                import bodo.decorators  # isort:skip
+                import bodo.decorators  # isort:skip # noqa
 
                 msg = f"Schema in some files were different.\n{str(error)}"
                 raise bodo.utils.typing.BodoError(msg)
@@ -563,7 +563,7 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
     added_columns = fileset_schema_names - dataset_schema_names
     if added_columns:
         # Import compiler lazily to access BodoError
-        import bodo.decorators  # isort:skip
+        import bodo.decorators  # isort:skip # noqa
 
         msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
         raise bodo.utils.typing.BodoError(msg)
@@ -571,7 +571,7 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
         dataset.schema = unify_schemas([dataset.schema, file_schema], "permissive")
     except Exception as e:
         # Import compiler lazily to access BodoError
-        import bodo.decorators  # isort:skip
+        import bodo.decorators  # isort:skip # noqa
 
         msg = f"Schema in {piece} was different.\n{str(e)}"
         raise bodo.utils.typing.BodoError(msg)
@@ -715,7 +715,7 @@ def populate_row_counts_in_pq_dataset_pieces(
                     error, (OSError, FileNotFoundError)
                 ):
                     # Import compiler lazily to access BodoError
-                    import bodo.decorators  # isort:skip
+                    import bodo.decorators  # isort:skip # noqa
 
                     raise bodo.utils.typing.BodoError(
                         str(error) + LIST_OF_FILES_ERROR_MSG
@@ -1123,7 +1123,7 @@ def _add_categories_to_pq_dataset(pq_dataset):
     # NOTE: shouldn't be possible
     if len(pq_dataset.pieces) < 1:  # pragma: no cover
         # Import compiler lazily to access BodoError
-        import bodo.decorators  # isort:skip
+        import bodo.decorators  # isort:skip # noqa
 
         raise bodo.utils.typing.BodoError(
             "No pieces found in Parquet dataset. Cannot get read categorical values"
@@ -1323,7 +1323,7 @@ def parquet_file_schema(
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
     # Import compiler lazily to access BodoError
     import bodo
-    import bodo.decorators  # isort:skip
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.helpers import _get_numba_typ_from_pa_typ
     from bodo.libs.dict_arr_ext import dict_str_arr_type
 
@@ -1434,7 +1434,7 @@ def parquet_file_schema(
     for c in selected_columns:
         if c not in col_names_map:
             # Import compiler lazily to access BodoError
-            import bodo.decorators  # isort:skip
+            import bodo.decorators  # isort:skip # noqa
 
             raise bodo.utils.typing.BodoError(
                 f"Selected column {c} not in Parquet file schema"
@@ -1478,7 +1478,7 @@ def _get_partition_cat_dtype(dictionary):
 
     # Import compiler lazily
     import bodo
-    import bodo.decorators  # isort:skip
+    import bodo.decorators  # isort:skip # noqa
     from bodo.hiframes.pd_categorical_ext import (
         CategoricalArrayType,
         PDCategoricalDtype,
