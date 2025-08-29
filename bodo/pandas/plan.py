@@ -765,7 +765,7 @@ def execute_plan(plan: LazyPlan):
         if top_most_subquery is not None:
             # If there is one then go back from the plan to the
             # dataframe or series object.
-            materialized_frame_or_series = top_most_subquery.back_ref
+            materialized_frame_or_series = wrap_plan(top_most_subquery)
             if (
                 bodo.dataframe_library_profile
                 and bodo.libs.distributed_api.get_rank() == 0
