@@ -18,11 +18,25 @@ Bodo DataFrames can be used as a drop-in replacement for Pandas by changing `imp
 ```python
 import bodo.pandas as pd
 import numpy as np
+import time
 
-n = 20_000_000
-df = pd.DataFrame({"A": np.arange(n) % 30, "B": np.arange(n)})
-df2 = df.groupby("A", as_index=False)["B"].max()
-df2.to_parquet("my_data.pq")
+NUM_GROUPS = 30
+NUM_ROWS = 20_000_000
+
+df = pd.DataFrame({
+    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
+    "B": np.arange(NUM_ROWS)
+})
+df.to_parquet("my_data.pq")
+
+def computation():
+    t1 = time.time()
+    df = pd.read_parquet("my_data.pq")
+    df["C"] = df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)
+    df.to_parquet("out.pq")
+    print("Execution time:", time.time() - t1)
+
+computation()
 ```
 
 Bodo DataFrames will optimize and parallelize the code automatically when possible.
@@ -30,25 +44,36 @@ It will fall back to Pandas seamlessly when some API isn't supported yet and thr
 See the [Bodo DataFrames API reference][dataframe-lib] for supported Pandas APIs.
 
 
-## Bodo JIT Compilation for Custom Code
+## Bodo JIT Compilation for Best Native End-to-end Performance
 
-JIT compilation converts Python functions to optimized parallel binaries,
-which can provide orders of magnitude performance boost for custom code
-like user defined functions (UDFs). For example:
+JIT compilation converts Python functions to optimized parallel binaries.
+Unlike Bodo DataFrames, JIT can optimize both Pandas and Numpy operations together and
+in some cases can provide better performance over Bodo DataFrames.
+For example:
 
 ```python
 import bodo
-import bodo.pandas as pd
+import pandas as pd
 import numpy as np
+import time
+
+NUM_GROUPS = 30
+NUM_ROWS = 20_000_000
+
+df = pd.DataFrame({
+    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
+    "B": np.arange(NUM_ROWS)
+})
 
 @bodo.jit
-def f(df):
-    return df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)
+def computation(df):
+    t1 = time.time()
+    df["C"] = df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)
+    df["D"] = np.sin(df.A)
+    df.to_parquet("out.pq")
+    print("Execution time:", time.time() - t1)
 
-n = 20_000_000
-df = pd.DataFrame({"A": np.arange(n) % 30, "B": np.arange(n)})
-S = f(df)
-pd.DataFrame({"C": S}).to_parquet("my_data.pq")
+computation(df)
 ```
 
 All the code in JIT functions has to be compilable by Bodo JIT (will throw appropriate errors otherwise).

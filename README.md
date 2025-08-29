@@ -14,28 +14,30 @@ NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart
 
 # Bodo {DataFrames, JIT, SQL}:
 
-Bodo is an essential tool-kit for large scale Python data processing, AI, and ML workloads. Whether you are using Pandas, Numpy or SQL, calling LLMs or working with vectors, Bodo automatically optimizes and parallelizes your code, scaling from laptop to large cloud clusters with minimal fiction.
+Bodo is an essential tool-kit for large scale Python data processing, AI, and ML workloads. Whether you are using Pandas, Numpy or SQL, calling LLMs or working with vectors, Bodo automatically optimizes and parallelizes your code, scaling from laptop to large cloud clusters with minimal friction.
 
-Bodo consists of three modes: DataFrames, JIT, and SQL with different strengths and use cases.
+<!-- TOOD: add updated graph with Taxi benchmark including bodo dataframes -->
+
+Bodo consists of three modes: DataFrames, JIT, and SQL each with their own strengths and use cases.
 All three modes offer enormous speedups thanks to an efficient, parallel backend:
 - Use Bodo DataFrames for scaling Pandas with the least amount of effort, just change the import to: `import bodo.pandas as pd`.
 - Use Bodo DataFrames AI APIs for simplifying and scaling AI workloads.
-- Use Bodo JIT for the best end-to-end native performance for workloads consisting of Pandas, Numpy and Sci-kit learn.
+- Use Bodo JIT for the best end-to-end native performance for workloads consisting of Pandas, Numpy and Scikit learn.
 - Use BodoSQL for an advanced vectorized query engine that integrates seemlessly with Python workflows.
 
 ## Goals
 
-Bodo makes Python run much (much!) faster than it normally does!
+Bodo {DataFrames, JIT, SQL} makes Python run much (much!) faster than it normally does!
 
 1. **Exceptional Performance:**
 Deliver HPC-grade performance and scalability for Python data workloads as if the code was written in C++/MPI, whether running on a laptop or across large cloud clusters.
 
 2. **Easy to Use:**
 Easily integrate into Python workflows, whether it is changing a single import to unlock the power of Bodo DataFrames,
-or adding a simple decorator to a performance-critical function with Bodo JIT.
+or adding a simple decorator to a performance-critical functions with Bodo JIT.
 
 3. **Interoperable:**
-Compatible with regular Python ecosystem, and can selectively speed up only the functions that are Bodo supported.
+Compatible with regular Python ecosystem, and can selectively speed up only the sections of the workload that are Bodo supported.
 
 4. **Integration with Modern Data Infrastructure:**
 Provide robust support for industry-leading data platforms like Apache Iceberg and Snowflake, enabling smooth interoperability with existing ecosystems.
@@ -55,10 +57,12 @@ Bodo is not yet optimized for small, fast workloads (e.g., workloads with execut
 
 ## Key Features
 
-- Automatic optimization & parallelization of Python programs using Pandas and NumPy.
-- Linear scalability from laptops to large-scale clusters and supercomputers.
-- Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
-- High performance SQL Engine that is natively integrated into Python.
+- Drop-in Pandas replacement with automatic optimization & parallelization, vectorized execution, and out-of-core processing (DataFrames).
+- Intuitive APIs for simiplifying and scaling AI workloads (DataFrames).
+- Automatic optimization & parallelization of Python programs using Pandas and NumPy (JIT).
+- High performance SQL Engine that is natively integrated into Python (BodoSQL).
+- Linear scalability from laptops to large-scale clusters and supercomputers (DataFrames, BodoSQL, and JIT).
+- Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access (DataFrames, BodoSQL, and JIT).
 
 See Bodo documentation to learn more: https://docs.bodo.ai/
 
@@ -94,6 +98,7 @@ with:
 ```python
 import bodo.pandas as pd
 ```
+which accelerates the following code segment by about 50-60x on a laptop.
 
 ```python
 import bodo.pandas as pd
