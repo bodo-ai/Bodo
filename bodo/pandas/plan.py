@@ -80,6 +80,69 @@ class LazyPlan:
 
     __repr__ = __str__
 
+    def get_subqueries(self, seen=None):
+        """Find a duplicated subquery in the current plan."""
+        if seen is None:
+            seen = set()
+        # Ignore seq or par Pandas reading as there is no possible
+        # materialization of an already materialized plan.
+        if isinstance(self, (LogicalGetPandasReadSeq, LogicalGetPandasReadParallel)):
+            return None
+        # seen will hold the id's of plans in the plan tree that
+        # we've seen thus far.  If the id of the current plan node
+        # has been seen before then we found a duplicated subplan so
+        # just return it.
+        if id(self) in seen:
+            return self
+        # Record that we've seen this plan node.
+        seen.add(id(self))
+        # Recursing into all args in the plan find too much duplication
+        # so only look at the part of args corresponding to source plans.
+        if isinstance(self, LogicalComparisonJoin):
+            # For comparison join, the first two args contain source plans.
+            for arg in self.args[0:2]:
+                if isinstance(arg, LazyPlan):
+                    ret = arg.get_subqueries(seen=seen)
+                    # If we've seen the given arg before then return it.
+                    if ret is not None:
+                        return ret
+        elif isinstance(self.args[0], LazyPlan):
+            # For all other node types, just look at the first arg for a
+            # source plan.
+            ret = self.args[0].get_subqueries(seen=seen)
+            if ret is not None:
+                # If we've seen the given arg before then return it.
+                return ret
+        return None
+
+    @classmethod
+    def replace(cls, self, old, new, seen=None):
+        """Look in a plan tree and find instances of a materialized
+        plan and replace the source plan with a materialized source
+        plan.  This looks in more nodes than get_subqueries above
+        because we also have to replace materialized plans in
+        ColRefExpressions.
+        """
+        if seen is None:
+            seen = set()
+        # Only check each node once since the plan tree has multiple
+        # references to the same objects.
+        if id(self) in seen:
+            return
+        seen.add(id(self))
+        if isinstance(self, LazyPlan):
+            for idx in range(len(self.args)):
+                if id(self.args[idx]) == id(old):
+                    self.args = (*self.args[:idx], new, *self.args[idx + 1 :])
+                else:
+                    cls.replace(self.args[idx], old, new, seen=seen)
+        elif isinstance(self, ColRefExpression):
+            if id(self.source) == id(old):
+                self.source = new
+        elif isinstance(self, (list, tuple)):
+            for elem in self:
+                cls.replace(elem, old, new, seen=seen)
+
     def generate_duckdb(self, cache=None):
         from bodo.ext import plan_optimizer
 
@@ -655,6 +718,29 @@ def execute_plan(plan: LazyPlan):
 
         if bodo.libs.distributed_api.get_rank() == 0:
             start_time = time.perf_counter()
+        # Find duplicated subqueries in the given plan and materialize them.
+        while True:
+            # Find the next duplicated subquery in the given plan.
+            top_most_subquery = plan.get_subqueries()
+            if top_most_subquery is not None:
+                # If there is one then go back from the plan to the
+                # dataframe or series object.
+                materialized_frame_or_series = top_most_subquery.back_ref
+                if (
+                    bodo.dataframe_library_profile
+                    and bodo.libs.distributed_api.get_rank() == 0
+                ):
+                    print("Materializing subquery plan", top_most_subquery)
+                # Force that subquery to execute.
+                materialized_frame_or_series.execute_plan()
+                # Replace all instances of the duplicated subquery plan in
+                # the larger input plan with the read dataframe plan type
+                # that we get from _plan of of the materialized frame.
+                LazyPlan.replace(
+                    plan, top_most_subquery, materialized_frame_or_series._plan
+                )
+            else:
+                break
         duckdb_plan = plan.generate_duckdb()
         if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
             print("profile_time gen", time.perf_counter() - start_time)
