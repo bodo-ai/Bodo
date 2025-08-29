@@ -515,7 +515,7 @@ class Spawner:
             return None
 
         # Import compiler lazily
-        import bodo.decorators  # isort:skip
+        import bodo.decorators  # isort:skip # noqa
 
         if bodo.utils.utils.is_distributable_typ(data_type) and not is_replicated:
             dist_flags["distributed_block"].add(arg_name)
@@ -556,7 +556,7 @@ class Spawner:
         if isinstance(arg_meta, ArgMetadata):
             if arg_meta == ArgMetadata.BROADCAST:
                 # Import compiler lazily
-                import bodo.decorators  # isort:skip
+                import bodo.decorators  # isort:skip # noqa
 
                 bodo.libs.distributed_api.bcast(
                     arg, root=self.bcast_root, comm=spawner.worker_intercomm
@@ -573,7 +573,7 @@ class Spawner:
             for tname, tmeta in arg_meta.tables.items():
                 if tmeta is ArgMetadata.BROADCAST:
                     # Import compiler lazily
-                    import bodo.decorators  # isort:skip
+                    import bodo.decorators  # isort:skip # noqa
 
                     bodo.libs.distributed_api.bcast(
                         arg.tables[tname],
