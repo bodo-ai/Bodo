@@ -77,7 +77,7 @@ def _recv_arg(
     if isinstance(arg, ArgMetadata):
         if arg == ArgMetadata.BROADCAST:
             # Import compiler lazily
-            import bodo.decorators  # isort:skip
+            import bodo.decorators  # isort:skip # noqa
 
             return (
                 bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm),
@@ -239,7 +239,7 @@ def _is_table_type(t):
     """Helper for checking Table type that imports the JIT compiler lazily."""
     # Import compiler lazily
     import bodo
-    import bodo.decorators  # isort:skip
+    import bodo.decorators  # isort:skip # noqa
 
     import bodo.hiframes
     import bodo.hiframes.table
@@ -393,7 +393,7 @@ def _is_distributable_result(res):
         return False
 
     # Import compiler lazily
-    import bodo.decorators  # isort:skip
+    import bodo.decorators  # isort:skip # noqa
 
     return bodo.utils.utils.is_distributable_typ(bodo.typeof(res))
 
@@ -673,7 +673,7 @@ def worker_loop(
             return
         elif command == CommandType.BROADCAST.value:
             # Import compiler lazily
-            import bodo.decorators  # isort:skip
+            import bodo.decorators  # isort:skip # noqa
 
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
             debug_worker_msg(logger, "Broadcast done")

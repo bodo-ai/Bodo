@@ -39,7 +39,7 @@ from numba.core.untyped_passes import PreserveIR
 import bodo
 
 # Import compiler
-import bodo.decorators  # isort:skip
+import bodo.decorators  # isort:skip # noqa
 import bodo.pandas as bodo_pd
 from bodo.mpi4py import MPI
 from bodo.spawn.spawner import SpawnDispatcher
