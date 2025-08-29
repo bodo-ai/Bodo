@@ -447,7 +447,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise ValueError(
                 "DataFrame.to_parquet(): row_group_size must be an integer"
             )
-        import bodo.io.fs_io
 
         bucket_region = get_s3_bucket_region_wrapper(path, False)
 
