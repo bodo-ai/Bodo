@@ -1273,7 +1273,7 @@ class JITFallback:
         # only JIT fallback for methods that we have tested.
         if self.name in ("duplicated", "pivot") and cache_entry != False:
             # Import compiler
-            import bodo.decorators  # isort:skip
+            import bodo.decorators  # isort:skip # noqa
 
             bodo.spawn.utils.import_compiler_on_workers()
 

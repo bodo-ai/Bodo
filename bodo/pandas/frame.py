@@ -420,6 +420,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         row_group_size: int = -1,
         **kwargs,
     ) -> bytes | None:
+        from bodo.io.fs_io import get_s3_bucket_region_wrapper
         from bodo.pandas.base import _empty_like
 
         if not isinstance(path, str):
@@ -448,7 +449,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             )
         import bodo.io.fs_io
 
-        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, False)
+        bucket_region = get_s3_bucket_region_wrapper(path, False)
 
         write_plan = LogicalParquetWrite(
             _empty_like(self),
@@ -484,7 +485,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         import pyiceberg.table.sorting
 
         # TODO(ehsan): avoid compiler import in Iceberg write
-        import bodo.decorators  # isort:skip
+        import bodo.decorators  # isort:skip # noqa
         import bodo.io.iceberg
         import bodo.io.iceberg.stream_iceberg_write
         from bodo.pandas.base import _empty_like
@@ -737,7 +738,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         storage_options=None,
     ):
         # Import compiler lazily
-        import bodo.decorators  # isort:skip
+        import bodo.decorators  # isort:skip # noqa
         from bodo.utils.typing import check_unsupported_args
         # argument defaults should match that of to_csv_overload in pd_dataframe_ext.py
 
@@ -1271,7 +1272,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 followed by the errors.
         """
         # Import compiler lazily
-        import bodo.decorators  # isort:skip
+        import bodo.decorators  # isort:skip # noqa
         from bodo.hiframes.table import TableType
         from bodo.pandas.utils_jit import (
             cpp_table_to_df_jit,

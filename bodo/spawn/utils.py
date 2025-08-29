@@ -188,6 +188,6 @@ def import_compiler_on_workers():
     """
 
     def import_compiler():
-        pass
+        import bodo.decorators  # isort:skip # noqa
 
     bodo.spawn.spawner.submit_func_to_workers(lambda: import_compiler(), [])
