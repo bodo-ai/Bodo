@@ -718,29 +718,6 @@ def execute_plan(plan: LazyPlan):
 
         if bodo.libs.distributed_api.get_rank() == 0:
             start_time = time.perf_counter()
-        # Find duplicated subqueries in the given plan and materialize them.
-        while True:
-            # Find the next duplicated subquery in the given plan.
-            top_most_subquery = plan.get_subqueries()
-            if top_most_subquery is not None:
-                # If there is one then go back from the plan to the
-                # dataframe or series object.
-                materialized_frame_or_series = top_most_subquery.back_ref
-                if (
-                    bodo.dataframe_library_profile
-                    and bodo.libs.distributed_api.get_rank() == 0
-                ):
-                    print("Materializing subquery plan", top_most_subquery)
-                # Force that subquery to execute.
-                materialized_frame_or_series.execute_plan()
-                # Replace all instances of the duplicated subquery plan in
-                # the larger input plan with the read dataframe plan type
-                # that we get from _plan of of the materialized frame.
-                LazyPlan.replace(
-                    plan, top_most_subquery, materialized_frame_or_series._plan
-                )
-            else:
-                break
         duckdb_plan = plan.generate_duckdb()
         if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
             print("profile_time gen", time.perf_counter() - start_time)
@@ -786,6 +763,30 @@ def execute_plan(plan: LazyPlan):
         if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
             print("profile_time execute", time.perf_counter() - start_time)
         return ret
+
+    # Find duplicated subqueries in the given plan and materialize them.
+    while True:
+        # Find the next duplicated subquery in the given plan.
+        top_most_subquery = plan.get_subqueries()
+        if top_most_subquery is not None:
+            # If there is one then go back from the plan to the
+            # dataframe or series object.
+            materialized_frame_or_series = top_most_subquery.back_ref
+            if (
+                bodo.dataframe_library_profile
+                and bodo.libs.distributed_api.get_rank() == 0
+            ):
+                print("Materializing subquery plan", top_most_subquery)
+            # Force that subquery to execute.
+            materialized_frame_or_series.execute_plan()
+            # Replace all instances of the duplicated subquery plan in
+            # the larger input plan with the read dataframe plan type
+            # that we get from _plan of of the materialized frame.
+            LazyPlan.replace(
+                plan, top_most_subquery, materialized_frame_or_series._plan
+            )
+        else:
+            break
 
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner
