@@ -246,12 +246,12 @@ def from_product_overload(iterables, sortorder=None, names=None):
     setattr(types, t_name, multiindex_type)
     func_text = f"""
 def impl(iterables, sortorder=None, names=None):
-    with bodo.objmode(mi='{t_name}'):
+    with numba.objmode(mi='{t_name}'):
         mi = pd.MultiIndex.from_product(iterables, names=names)
     return mi
 """
     loc_vars = {}
-    exec(func_text, {"pd": pd, "bodo": bodo}, loc_vars)
+    exec(func_text, {"pd": pd, "bodo": bodo, "numba": numba}, loc_vars)
     impl = loc_vars["impl"]
     return impl
 

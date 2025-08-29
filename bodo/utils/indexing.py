@@ -283,14 +283,17 @@ def overload_init_nested_counts(arr_typ):
     arr_typ = arr_typ.instance_type
     if (
         isinstance(arr_typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType)
-        or arr_typ == bodo.string_array_type
+        or arr_typ == bodo.types.string_array_type
     ):
         data_arr_typ = arr_typ.dtype
         return lambda arr_typ: (0,) + init_nested_counts(
             data_arr_typ
         )  # pragma: no cover
 
-    if bodo.utils.utils.is_array_typ(arr_typ, False) or arr_typ == bodo.string_type:
+    if (
+        bodo.utils.utils.is_array_typ(arr_typ, False)
+        or arr_typ == bodo.types.string_type
+    ):
         return lambda arr_typ: (0,)  # pragma: no cover
 
     return lambda arr_typ: ()  # pragma: no cover
@@ -324,7 +327,7 @@ def overload_add_nested_counts(nested_counts, arr_item):
         )  # pragma: no cover
 
     # string array
-    if arr_item == bodo.string_array_type:
+    if arr_item == bodo.types.string_array_type:
         return lambda nested_counts, arr_item: (
             nested_counts[0] + len(arr_item),
             nested_counts[1]
@@ -338,7 +341,7 @@ def overload_add_nested_counts(nested_counts, arr_item):
         )  # pragma: no cover
 
     # string
-    if arr_item == bodo.string_type:
+    if arr_item == bodo.types.string_type:
         return lambda nested_counts, arr_item: (
             nested_counts[0] + get_utf8_size(arr_item),
         )  # pragma: no cover
@@ -372,7 +375,7 @@ def none_optional_setitem_overload(A, idx, val):
             bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
         ):
             # Handle string array specially because we need to copy the data
-            if A == bodo.string_array_type:
+            if A == bodo.types.string_array_type:
 
                 def string_arr_impl(A, idx, val):  # pragma: no cover
                     n = len(A)
@@ -442,7 +445,7 @@ def none_optional_setitem_overload(A, idx, val):
             bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
         ):
             # Handle string array specially because we need to copy the data
-            if A == bodo.string_array_type:
+            if A == bodo.types.string_array_type:
 
                 def string_arr_impl(A, idx, val):
                     if val is None:

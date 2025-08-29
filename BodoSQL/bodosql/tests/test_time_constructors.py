@@ -55,24 +55,24 @@ def to_time_fn(request):
                 ),
                 pd.Series(
                     [
-                        bodo.Time(11, 2, 45, millisecond=999, precision=9),
-                        bodo.Time(1, 23, 45, precision=9),
+                        bodo.types.Time(11, 2, 45, millisecond=999, precision=9),
+                        bodo.types.Time(1, 23, 45, precision=9),
                         None,
-                        bodo.Time(1, 23, 45, microsecond=675880, precision=9),
-                        bodo.Time(1, 0, 2, precision=9),
-                        bodo.Time(11, 59, 59, precision=9),
-                        bodo.Time(1, 23, 4, nanosecond=675888330, precision=9),
-                        bodo.Time(0, 0, 100, precision=9),
-                        bodo.Time(0, 0, 1000, precision=9),
-                        bodo.Time(0, 0, 1, precision=9),
-                        bodo.Time(0, 0, 4240, precision=9),
-                        bodo.Time(0, 0, 12345, precision=9),
+                        bodo.types.Time(1, 23, 45, microsecond=675880, precision=9),
+                        bodo.types.Time(1, 0, 2, precision=9),
+                        bodo.types.Time(11, 59, 59, precision=9),
+                        bodo.types.Time(1, 23, 4, nanosecond=675888330, precision=9),
+                        bodo.types.Time(0, 0, 100, precision=9),
+                        bodo.types.Time(0, 0, 1000, precision=9),
+                        bodo.types.Time(0, 0, 1, precision=9),
+                        bodo.types.Time(0, 0, 4240, precision=9),
+                        bodo.types.Time(0, 0, 12345, precision=9),
                         None,
-                        bodo.Time(0, 0, 1200, precision=9),
-                        bodo.Time(0, 0, 0, precision=9),
-                        bodo.Time(12, 30, 5, precision=9),
-                        bodo.Time(22, 15, 0, precision=9),
-                        bodo.Time(16, 15, 14, microsecond=131200, precision=9),
+                        bodo.types.Time(0, 0, 1200, precision=9),
+                        bodo.types.Time(0, 0, 0, precision=9),
+                        bodo.types.Time(12, 30, 5, precision=9),
+                        bodo.types.Time(22, 15, 0, precision=9),
+                        bodo.types.Time(16, 15, 14, microsecond=131200, precision=9),
                     ]
                 ),
             ),
@@ -92,12 +92,12 @@ def to_time_fn(request):
                 ),
                 pd.Series(
                     [
-                        bodo.Time(1, 15, 59, millisecond=995, precision=9),
-                        bodo.Time(12, 0, 0, precision=9),
+                        bodo.types.Time(1, 15, 59, millisecond=995, precision=9),
+                        bodo.types.Time(12, 0, 0, precision=9),
                         None,
-                        bodo.Time(20, 21, 22, precision=9),
-                        bodo.Time(8, 30, 0, nanosecond=123456789, precision=9),
-                        bodo.Time(0, 0, 0, precision=9),
+                        bodo.types.Time(20, 21, 22, precision=9),
+                        bodo.types.Time(8, 30, 0, nanosecond=123456789, precision=9),
+                        bodo.types.Time(0, 0, 0, precision=9),
                     ]
                 ),
             ),
@@ -118,12 +118,12 @@ def to_time_fn(request):
                 ),
                 pd.Series(
                     [
-                        bodo.Time(1, 15, 59, millisecond=995, precision=9),
-                        bodo.Time(12, 0, 0, precision=9),
+                        bodo.types.Time(1, 15, 59, millisecond=995, precision=9),
+                        bodo.types.Time(12, 0, 0, precision=9),
                         None,
-                        bodo.Time(20, 21, 22, precision=9),
-                        bodo.Time(8, 30, 0, nanosecond=123456789, precision=9),
-                        bodo.Time(0, 0, 0, precision=9),
+                        bodo.types.Time(20, 21, 22, precision=9),
+                        bodo.types.Time(8, 30, 0, nanosecond=123456789, precision=9),
+                        bodo.types.Time(0, 0, 0, precision=9),
                     ]
                 ),
             ),
@@ -186,7 +186,7 @@ def to_time_invalid_data():
             }
         )
     }
-    answer = pd.DataFrame({"T": [None, bodo.Time(12, 0, 0, precision=9)] * 18})
+    answer = pd.DataFrame({"T": [None, bodo.types.Time(12, 0, 0, precision=9)] * 18})
     return ctx, answer
 
 
@@ -223,10 +223,10 @@ def test_to_time_valid(to_time_fn, to_time_valid_data, use_case, memory_leak_che
             "HH24:MI:SS",
             pd.Series(
                 [
-                    bodo.Time(12, 50, 45, precision=9),
-                    bodo.Time(2, 43, 30, precision=9),
-                    bodo.Time(10, 23, 0, precision=9),
-                    bodo.Time(20, 0, 10, precision=9),
+                    bodo.types.Time(12, 50, 45, precision=9),
+                    bodo.types.Time(2, 43, 30, precision=9),
+                    bodo.types.Time(10, 23, 0, precision=9),
+                    bodo.types.Time(20, 0, 10, precision=9),
                 ]
             ),
             id="format-24",
@@ -243,10 +243,10 @@ def test_to_time_valid(to_time_fn, to_time_valid_data, use_case, memory_leak_che
             "HH12:MI:SS PM",
             pd.Series(
                 [
-                    bodo.Time(1, 15, 30, precision=9),
-                    bodo.Time(23, 45, 15, precision=9),
-                    bodo.Time(0, 0, 0, precision=9),
-                    bodo.Time(12, 30, 45, precision=9),
+                    bodo.types.Time(1, 15, 30, precision=9),
+                    bodo.types.Time(23, 45, 15, precision=9),
+                    bodo.types.Time(0, 0, 0, precision=9),
+                    bodo.types.Time(12, 30, 45, precision=9),
                 ]
             ),
             id="format-12",
@@ -323,13 +323,13 @@ def time_from_parts_fn(request):
                     {
                         "A": pd.Series(
                             [
-                                bodo.Time(0, 30, 0, precision=9),
-                                bodo.Time(9, 59, 0, precision=9),
+                                bodo.types.Time(0, 30, 0, precision=9),
+                                bodo.types.Time(9, 59, 0, precision=9),
                                 None,
-                                bodo.Time(20, 0, 15, precision=9),
-                                bodo.Time(7, 31, 40, precision=9),
-                                bodo.Time(16, 14, 59, precision=9),
-                                bodo.Time(23, 58, 59, precision=9),
+                                bodo.types.Time(20, 0, 15, precision=9),
+                                bodo.types.Time(7, 31, 40, precision=9),
+                                bodo.types.Time(16, 14, 59, precision=9),
+                                bodo.types.Time(23, 58, 59, precision=9),
                             ]
                         )
                     }
@@ -367,31 +367,33 @@ def time_from_parts_fn(request):
                     {
                         "A": pd.Series(
                             [
-                                bodo.Time(1, 40, 0, precision=9),
-                                bodo.Time(15, 25, 45, precision=9),
-                                bodo.Time(1, 30, 0, precision=9),
-                                bodo.Time(22, 59, 0, precision=9),
-                                bodo.Time(0, 0, 0, precision=9),
-                                bodo.Time(
+                                bodo.types.Time(1, 40, 0, precision=9),
+                                bodo.types.Time(15, 25, 45, precision=9),
+                                bodo.types.Time(1, 30, 0, precision=9),
+                                bodo.types.Time(22, 59, 0, precision=9),
+                                bodo.types.Time(0, 0, 0, precision=9),
+                                bodo.types.Time(
                                     23, 59, 59, nanosecond=999999999, precision=9
                                 ),
-                                bodo.Time(23, 58, 5, precision=9),
+                                bodo.types.Time(23, 58, 5, precision=9),
                                 None,
-                                bodo.Time(
+                                bodo.types.Time(
                                     hour=4,
                                     minute=53,
                                     second=12,
                                     nanosecond=186044416,
                                     precision=9,
                                 ),
-                                bodo.Time(
+                                bodo.types.Time(
                                     hour=20,
                                     minute=8,
                                     second=18,
                                     nanosecond=926258176,
                                     precision=9,
                                 ),
-                                bodo.Time(10, 40, 0, nanosecond=1234, precision=9),
+                                bodo.types.Time(
+                                    10, 40, 0, nanosecond=1234, precision=9
+                                ),
                             ]
                         )
                     }
@@ -452,31 +454,33 @@ def time_from_parts_fn(request):
                     {
                         "A": pd.Series(
                             [
-                                bodo.Time(1, 40, 0, precision=9),
-                                bodo.Time(15, 25, 45, precision=9),
-                                bodo.Time(1, 30, 0, precision=9),
-                                bodo.Time(22, 59, 0, precision=9),
-                                bodo.Time(0, 0, 0, precision=9),
-                                bodo.Time(
+                                bodo.types.Time(1, 40, 0, precision=9),
+                                bodo.types.Time(15, 25, 45, precision=9),
+                                bodo.types.Time(1, 30, 0, precision=9),
+                                bodo.types.Time(22, 59, 0, precision=9),
+                                bodo.types.Time(0, 0, 0, precision=9),
+                                bodo.types.Time(
                                     23, 59, 59, nanosecond=999999999, precision=9
                                 ),
-                                bodo.Time(23, 58, 5, precision=9),
+                                bodo.types.Time(23, 58, 5, precision=9),
                                 None,
-                                bodo.Time(
+                                bodo.types.Time(
                                     hour=4,
                                     minute=53,
                                     second=12,
                                     nanosecond=186044416,
                                     precision=9,
                                 ),
-                                bodo.Time(
+                                bodo.types.Time(
                                     hour=20,
                                     minute=8,
                                     second=18,
                                     nanosecond=926258176,
                                     precision=9,
                                 ),
-                                bodo.Time(10, 40, 0, nanosecond=1234, precision=9),
+                                bodo.types.Time(
+                                    10, 40, 0, nanosecond=1234, precision=9
+                                ),
                             ]
                         )
                     }

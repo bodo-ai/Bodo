@@ -447,7 +447,7 @@ def test_to_array_scalars(basic_df, memory_leak_check):
             "FLOAT": pd.Series([pd.array([456.789])]),
             "STRING": pd.Series([pd.array(["asdafa"], "string[pyarrow]")]),
             "BOOL": pd.Series([pd.array([True])]),
-            "TIME": pd.Series([pd.array([bodo.Time(5, 34, 51)])]),
+            "TIME": pd.Series([pd.array([bodo.types.Time(5, 34, 51)])]),
             "DATE": pd.Series([pd.array([datetime.date(2023, 5, 18)])]),
             "TIMESTAMP": pd.Series([pd.array([pd.Timestamp("2024-06-29 17:00:00")])]),
         }
@@ -569,21 +569,21 @@ def ignore_scalar_dtype(pa_dtype):
             (
                 pd.Series(
                     [
-                        bodo.Time(11, 19, 34),
-                        bodo.Time(12, 30, 15),
-                        bodo.Time(12, 34, 56),
+                        bodo.types.Time(11, 19, 34),
+                        bodo.types.Time(12, 30, 15),
+                        bodo.types.Time(12, 34, 56),
                         None,
-                        bodo.Time(12, 34, 56),
+                        bodo.types.Time(12, 34, 56),
                     ]
                     * 4
                 ),
                 pd.Series(
                     [
-                        pd.array([bodo.Time(11, 19, 34)]),
-                        pd.array([bodo.Time(12, 30, 15)]),
-                        pd.array([bodo.Time(12, 34, 56)]),
+                        pd.array([bodo.types.Time(11, 19, 34)]),
+                        pd.array([bodo.types.Time(12, 30, 15)]),
+                        pd.array([bodo.types.Time(12, 34, 56)]),
                         None,
-                        pd.array([bodo.Time(12, 34, 56)]),
+                        pd.array([bodo.types.Time(12, 34, 56)]),
                     ]
                     * 4
                 ),
@@ -870,29 +870,29 @@ def array_df():
                     [
                         None,
                         [
-                            bodo.Time(12, 0),
-                            bodo.Time(1, 1, 3),
-                            bodo.Time(2),
-                            bodo.Time(
+                            bodo.types.Time(12, 0),
+                            bodo.types.Time(1, 1, 3),
+                            bodo.types.Time(2),
+                            bodo.types.Time(
                                 15,
                                 0,
                                 50,
                             ),
-                            bodo.Time(9, 1, 3),
+                            bodo.types.Time(9, 1, 3),
                         ],
                         [],
                         [
-                            bodo.Time(6, 11, 3),
-                            bodo.Time(12, 30, 42),
-                            bodo.Time(4, 5, 6),
+                            bodo.types.Time(6, 11, 3),
+                            bodo.types.Time(12, 30, 42),
+                            bodo.types.Time(4, 5, 6),
                         ],
                         [
-                            bodo.Time(5, 6, 7),
-                            bodo.Time(12, 13, 14),
-                            bodo.Time(17, 33, 26),
-                            bodo.Time(0, 24, 43),
-                            bodo.Time(3, 59, 6),
-                            bodo.Time(11, 59, 59),
+                            bodo.types.Time(5, 6, 7),
+                            bodo.types.Time(12, 13, 14),
+                            bodo.types.Time(17, 33, 26),
+                            bodo.types.Time(0, 24, 43),
+                            bodo.types.Time(3, 59, 6),
+                            bodo.types.Time(11, 59, 59),
                         ],
                     ]
                     * 4

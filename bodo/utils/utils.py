@@ -9,14 +9,12 @@ import hashlib
 import importlib
 import inspect
 import keyword
-import os
 import re
 import sys
 import traceback
 import typing as pt
 import warnings
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
 from enum import Enum
 
 import numba
@@ -260,19 +258,21 @@ def numba_to_c_types(
     """
     c_types = []
     for arr_type in arr_types:
-        if isinstance(arr_type, (bodo.StructArrayType, bodo.TupleArrayType)):
+        if isinstance(
+            arr_type, (bodo.types.StructArrayType, bodo.types.TupleArrayType)
+        ):
             c_types.append(CTypeEnum.STRUCT.value)
             c_types.append(len(arr_type.data))
             c_types.extend(numba_to_c_types(arr_type.data))
-        elif isinstance(arr_type, bodo.MapArrayType):
+        elif isinstance(arr_type, bodo.types.MapArrayType):
             c_types.append(CTypeEnum.Map.value)
             c_types.extend(
                 numba_to_c_types((arr_type.key_arr_type, arr_type.value_arr_type))
             )
-        elif isinstance(arr_type, bodo.ArrayItemArrayType):
+        elif isinstance(arr_type, bodo.types.ArrayItemArrayType):
             c_types.append(CTypeEnum.LIST.value)
             c_types.extend(numba_to_c_types((arr_type.dtype,)))
-        elif isinstance(arr_type, bodo.DecimalArrayType):
+        elif isinstance(arr_type, bodo.types.DecimalArrayType):
             c_types.append(numba_to_c_type(arr_type.dtype))
             c_types.append(arr_type.dtype.precision)
             c_types.append(arr_type.dtype.scale)
@@ -294,30 +294,33 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
     """
     if isinstance(arr_type, types.Array):
         return CArrayTypeEnum.NUMPY.value
-    elif arr_type == bodo.string_array_type or arr_type == bodo.binary_array_type:
+    elif (
+        arr_type == bodo.types.string_array_type
+        or arr_type == bodo.types.binary_array_type
+    ):
         return CArrayTypeEnum.STRING.value
     elif arr_type in (
-        bodo.null_array_type,
-        bodo.datetime_date_array_type,
-        bodo.boolean_array_type,
+        bodo.types.null_array_type,
+        bodo.types.datetime_date_array_type,
+        bodo.types.boolean_array_type,
     ) or isinstance(
         arr_type,
         (
-            bodo.IntegerArrayType,
-            bodo.FloatingArrayType,
-            bodo.TimeArrayType,
-            bodo.DecimalArrayType,
-            bodo.DatetimeArrayType,
+            bodo.types.IntegerArrayType,
+            bodo.types.FloatingArrayType,
+            bodo.types.TimeArrayType,
+            bodo.types.DecimalArrayType,
+            bodo.types.DatetimeArrayType,
         ),
     ):
         return CArrayTypeEnum.NULLABLE_INT_BOOL.value
-    elif isinstance(arr_type, bodo.CategoricalArrayType):
+    elif isinstance(arr_type, bodo.types.CategoricalArrayType):
         return CArrayTypeEnum.CATEGORICAL.value
-    elif isinstance(arr_type, bodo.IntervalArrayType):
+    elif isinstance(arr_type, bodo.types.IntervalArrayType):
         return CArrayTypeEnum.INTERVAL.value
     elif arr_type == timestamptz_array_type:
         return CArrayTypeEnum.TIMESTAMPTZ.value
-    elif arr_type == bodo.dict_str_arr_type:
+    elif arr_type == bodo.types.dict_str_arr_type:
         return CArrayTypeEnum.DICT.value
     else:
         raise BodoError(f"Unsupported Array Type '{arr_type}' in numba_to_c_array_type")
@@ -337,19 +340,21 @@ def numba_to_c_array_types(
     """
     c_arr_types = []
     for arr_type in arr_types:
-        if isinstance(arr_type, (bodo.StructArrayType, bodo.TupleArrayType)):
+        if isinstance(
+            arr_type, (bodo.types.StructArrayType, bodo.types.TupleArrayType)
+        ):
             c_arr_types.append(CArrayTypeEnum.STRUCT.value)
             c_arr_types.append(len(arr_type.data))
             c_arr_types.extend(numba_to_c_array_types(arr_type.data))
-        elif isinstance(arr_type, bodo.MapArrayType):
+        elif isinstance(arr_type, bodo.types.MapArrayType):
             c_arr_types.append(CArrayTypeEnum.MAP.value)
             c_arr_types.extend(
                 numba_to_c_array_types((arr_type.key_arr_type, arr_type.value_arr_type))
             )
-        elif isinstance(arr_type, bodo.ArrayItemArrayType):
+        elif isinstance(arr_type, bodo.types.ArrayItemArrayType):
             c_arr_types.append(CArrayTypeEnum.ARRAY_ITEM.value)
             c_arr_types.extend(numba_to_c_array_types((arr_type.dtype,)))
-        elif isinstance(arr_type, bodo.DecimalArrayType):
+        elif isinstance(arr_type, bodo.types.DecimalArrayType):
             c_arr_types.append(numba_to_c_array_type(arr_type))
             c_arr_types.append(arr_type.dtype.precision)
             c_arr_types.append(arr_type.dtype.scale)
@@ -534,6 +539,9 @@ def is_np_array_typ(var_typ):
 
 
 def is_distributable_typ(var_typ):
+    # Import compiler lazily
+    import bodo.decorators  # isort:skip # noqa
+
     return (
         is_array_typ(var_typ)
         or isinstance(var_typ, bodo.hiframes.table.TableType)
@@ -913,7 +921,9 @@ def create_categorical_type(categories, data, is_ordered):
     # following two types:
     # Int
     # Float
-    if data == bodo.string_array_type or bodo.utils.typing.is_dtype_nullable(data):
+    if data == bodo.types.string_array_type or bodo.utils.typing.is_dtype_nullable(
+        data
+    ):
         new_cats_arr = pd.CategoricalDtype(
             pd.array(categories), is_ordered
         ).categories.array
@@ -948,7 +958,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
 
     # Dictionary-encoded arrays can be allocated if a reference array is provided to
     # reuse its dictionary
-    if typ == bodo.dict_str_arr_type and not is_overload_none(dict_ref_arr):
+    if typ == bodo.types.dict_str_arr_type and not is_overload_none(dict_ref_arr):
         return (
             lambda n,
             t,
@@ -972,7 +982,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             dict_ref_arr=None: bodo.libs.str_arr_ext.pre_alloc_string_array(n, s[0])
         )  # pragma: no cover
 
-    if typ == bodo.null_array_type:
+    if typ == bodo.types.null_array_type:
         return (
             lambda n,
             t,
@@ -980,7 +990,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             dict_ref_arr=None: bodo.libs.null_arr_ext.init_null_array(n)
         )  # pragma: no cover
 
-    if typ == bodo.binary_array_type:
+    if typ == bodo.types.binary_array_type:
         return (
             lambda n,
             t,
@@ -1128,7 +1138,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             )
         )  # pragma: no cover
 
-    if isinstance(typ, bodo.DatetimeArrayType) or isinstance(
+    if isinstance(typ, bodo.types.DatetimeArrayType) or isinstance(
         type,
         (
             PandasTimestampType,
@@ -1234,7 +1244,10 @@ def overload_astype(A, t):
     # Convert dictionary array to regular string array. This path is used
     # by join when 1 key is a regular string array and the other is a
     # dictionary array.
-    if A == bodo.libs.dict_arr_ext.dict_str_arr_type and typ == bodo.string_array_type:
+    if (
+        A == bodo.libs.dict_arr_ext.dict_str_arr_type
+        and typ == bodo.types.string_array_type
+    ):
         return lambda A, t: bodo.utils.typing.decode_if_dict_array(
             A
         )  # pragma: no cover
@@ -1584,7 +1597,7 @@ def inlined_check_and_propagate_cpp_exception(context, builder):
 
 @numba.njit(cache=True)
 def check_java_installation(fname):
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         check_java_installation_(fname)
 
 
@@ -1806,7 +1819,7 @@ def synchronize_error_njit(exception_str, error_message):
         exception_str (string): string representation of exception, e.x. 'RuntimeError', 'ValueError'
         error_message (string): error message, empty string means no error
     """
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         synchronize_error(exception_str, error_message)
 
 
@@ -1897,37 +1910,6 @@ def is_ml_support_loaded():
         "bodo.ml_support.sklearn_utils_ext",
     )
     return any(module in sys.modules for module in ml_support_modules)
-
-
-def is_jupyter_on_windows() -> bool:
-    """Returns True if running in Jupyter on Windows"""
-
-    # Flag for testing purposes
-    if os.environ.get("BODO_OUTPUT_REDIRECT_TEST", "0") == "1":
-        return True
-
-    return sys.platform == "win32" and (
-        "JPY_SESSION_NAME" in os.environ
-        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
-    )
-
-
-def is_jupyter_on_bodo_platform() -> bool:
-    """Returns True if running in Jupyter on Bodo Platform"""
-
-    platform_cloud_provider = os.environ.get("BODO_PLATFORM_CLOUD_PROVIDER", None)
-    return (platform_cloud_provider is not None) and (
-        "JPY_SESSION_NAME" in os.environ
-        or "PYDEVD_IPYTHON_COMPATIBLE_DEBUGGING" in os.environ
-    )
-
-
-@dataclass
-class AWSCredentials:
-    access_key: str
-    secret_key: str
-    session_token: str | None = None
-    region: str | None = None
 
 
 def create_arg_hash(*args, **kwargs):

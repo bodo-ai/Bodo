@@ -1014,7 +1014,7 @@ def test_boolean_logic_filter_pushdown(datapath, memory_leak_check):
         )
         return bc.sql(query)
 
-    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
+    filename = datapath("tpch-test-data/parquet/lineitem.pq")
     read_df = pd.read_parquet(filename)
 
     expr_a = "L_ORDERKEY > 10"
@@ -1466,7 +1466,7 @@ def test_multiple_loads_filter_pushdown(datapath, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
+    filename = datapath("tpch-test-data/parquet/lineitem.pq")
     read_df = pd.read_parquet(filename)
     t1 = read_df[read_df.L_LINENUMBER == 3]
     t2 = read_df[read_df.L_SHIPMODE == "SHIP"]
@@ -1511,7 +1511,7 @@ def test_length_filter_pushdown(datapath, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
+    filename = datapath("tpch-test-data/parquet/lineitem.pq")
     read_df = pd.read_parquet(filename)
     expected_output = read_df[read_df.L_SHIPMODE.str.len() == 4][["L_LINENUMBER"]]
     bc = bodosql.BodoSQLContext(
@@ -1572,7 +1572,7 @@ def test_trim_filter_pushdown(func_args, datapath, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
+    filename = datapath("tpch-test-data/parquet/lineitem.pq")
     read_df = pd.read_parquet(filename)
 
     shipmode_col = getattr(read_df.L_SHIPMODE.str, pd_func_name)()
@@ -1620,7 +1620,7 @@ def test_reverse_filter_pushdown(datapath, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
+    filename = datapath("tpch-test-data/parquet/lineitem.pq")
     read_df = pd.read_parquet(filename)
 
     shipmode_col = read_df.L_SHIPMODE.apply(lambda x: x[::-1])

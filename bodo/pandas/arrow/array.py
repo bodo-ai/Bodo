@@ -10,7 +10,6 @@ import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadata, LazyMetadataMixin
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.spawn.utils import debug_msg
-from bodo.utils.typing import BodoError
 
 
 class LazyArrowExtensionArray(
@@ -119,7 +118,7 @@ class LazyArrowExtensionArray(
         return False
 
     def execute_plan(self):
-        raise BodoError("execute_plan not possible on ArrowExtensionArray")
+        raise ValueError("execute_plan not possible on ArrowExtensionArray")
 
     def __getattribute__(self, name: str) -> pt.Any:
         """

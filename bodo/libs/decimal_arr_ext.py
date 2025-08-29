@@ -342,7 +342,7 @@ def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
     """convert string to decimal128. This returns a tuple of
     (Decimal128Type, bool) where the bool indicates if the value
     errored in parsing or fitting in the final decimal value."""
-    assert val == bodo.string_type or is_overload_constant_str(val)
+    assert val == bodo.types.string_type or is_overload_constant_str(val)
     assert_bodo_error(is_overload_constant_int(precision_tp))
     assert_bodo_error(is_overload_constant_int(scale_tp))
 
@@ -487,7 +487,7 @@ def overload_decimal_array_to_str_array(arr):
     def impl(arr):  # pragma: no cover
         input_info = array_to_info(arr)
         out_info = _decimal_array_to_str_array(input_info)
-        out_arr = info_to_array(out_info, bodo.string_array_type)
+        out_arr = info_to_array(out_info, bodo.types.string_array_type)
         delete_info(out_info)
         return out_arr
 
@@ -577,7 +577,7 @@ def _decimal_scalar_to_str(typingctx, arr_t, remove_trailing_zeros_t):
         uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
         return uni_str._getvalue()
 
-    return bodo.string_type(arr_t, remove_trailing_zeros_t), codegen
+    return bodo.types.string_type(arr_t, remove_trailing_zeros_t), codegen
 
 
 # We cannot have exact matching between Python and Bodo
@@ -834,7 +834,7 @@ def decimal_constructor_overload(value="0", context=None):
     if not is_overload_none(context):  # pragma: no cover
         raise BodoError("decimal.Decimal() context argument not supported yet")
 
-    if is_overload_constant_str(value) or value == bodo.string_type:
+    if is_overload_constant_str(value) or value == bodo.types.string_type:
 
         def impl(value="0", context=None):  # pragma: no cover
             return str_to_decimal_scalar(value, 38, 18, False)
@@ -937,7 +937,7 @@ def overload_decimal_arr_to_float64(arr):
         "decimal_arr_to_float64: decimal array expected"
     )
 
-    output_arr_type = bodo.FloatingArrayType(types.float64)
+    output_arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(arr):  # pragma: no cover
         arr_info = array_to_info(arr)
@@ -1596,7 +1596,7 @@ def overload_decimal_array_sign(arr):
         "decimal_array_sign: DecimalArrayType expected"
     )
 
-    output_arr_type = bodo.IntegerArrayType(types.int8)
+    output_arr_type = bodo.types.IntegerArrayType(types.int8)
 
     def impl(arr):  # pragma: no cover
         arr_info = array_to_info(arr)
@@ -3580,7 +3580,7 @@ def decimal_arr_setitem(A, idx, val):
             )  # pragma: no cover
 
     if not (
-        (is_iterable_type(val) and isinstance(val.dtype, bodo.Decimal128Type))
+        (is_iterable_type(val) and isinstance(val.dtype, bodo.types.Decimal128Type))
         or isinstance(val, Decimal128Type)
     ):
         raise BodoError(typ_err_msg)
@@ -3790,7 +3790,7 @@ def call_arrow_compute_cmp(op, lhs, rhs):
     )
 
     op_enum = cmp_op_to_enum[op].value
-    out_array_type = bodo.boolean_array_type
+    out_array_type = bodo.types.boolean_array_type
 
     def impl_pc_binop(lhs, rhs):  # pragma: no cover
         # For simplicity, convert scalar inputs to arrays and pass a flag to C++ to
@@ -3815,8 +3815,8 @@ def create_cmp_op_overload(op):
         if isinstance(lhs, DecimalArrayType) or isinstance(rhs, DecimalArrayType):
             allowed_types = (
                 DecimalArrayType,
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
                 types.Array,
                 types.Integer,
                 types.Float,

@@ -3297,17 +3297,21 @@ def test_read_timestamptz(test_db_snowflake_catalog, memory_leak_check):
                 {
                     "A": np.array(
                         [
-                            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
-                            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 367),
-                            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", -367),
+                            bodo.types.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
+                            bodo.types.TimestampTZ.fromLocal(
+                                "2020-01-02 03:04:05", 367
+                            ),
+                            bodo.types.TimestampTZ.fromLocal(
+                                "2020-01-02 03:04:05", -367
+                            ),
                             None,
-                            bodo.TimestampTZ.fromLocal(
+                            bodo.types.TimestampTZ.fromLocal(
                                 "2020-01-01 00:00:00.123456789", -480
                             ),
-                            bodo.TimestampTZ.fromLocal(
+                            bodo.types.TimestampTZ.fromLocal(
                                 "2020-01-01 00:00:00.123456789", 0
                             ),
-                            bodo.TimestampTZ.fromLocal("1980-01-01 01:01:01", 0),
+                            bodo.types.TimestampTZ.fromLocal("1980-01-01 01:01:01", 0),
                         ]
                     )
                 }
@@ -3361,16 +3365,16 @@ def test_write_timestamptz(test_db_snowflake_catalog, memory_leak_check):
 
         bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
         ttz_values = [
-            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
-            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 367),
-            bodo.TimestampTZ.fromLocal("2020-01-01 00:00:00.123456789", -480),
-            bodo.TimestampTZ.fromLocal("1970-01-01 01:01:01", 0),
+            bodo.types.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
+            bodo.types.TimestampTZ.fromLocal("2020-01-02 03:04:05", 367),
+            bodo.types.TimestampTZ.fromLocal("2020-01-01 00:00:00.123456789", -480),
+            bodo.types.TimestampTZ.fromLocal("1970-01-01 01:01:01", 0),
             None,
             None,
-            bodo.TimestampTZ.fromUTC("2024-03-10 12:30:00", -480),
-            bodo.TimestampTZ.fromUTC("2024-03-10 12:30:00", 0),
-            bodo.TimestampTZ.fromUTC("1970-01-01 00:00:00", 0),
-            bodo.TimestampTZ.fromUTC("1970-01-01 00:00:00", 60),
+            bodo.types.TimestampTZ.fromUTC("2024-03-10 12:30:00", -480),
+            bodo.types.TimestampTZ.fromUTC("2024-03-10 12:30:00", 0),
+            bodo.types.TimestampTZ.fromUTC("1970-01-01 00:00:00", 0),
+            bodo.types.TimestampTZ.fromUTC("1970-01-01 00:00:00", 60),
         ] * 2
         ttz_df = pd.DataFrame({"A": pd.Series(ttz_values)})
 

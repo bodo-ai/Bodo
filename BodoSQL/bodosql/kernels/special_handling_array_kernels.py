@@ -144,7 +144,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as=None, is_parallel
             return out_arr
 
         return impl
-    elif arr_to_check == bodo.dict_str_arr_type:
+    elif arr_to_check == bodo.types.dict_str_arr_type:
         """
         Special implementation to handle dict encoded arrays.
         In this case, instead of converting arr_to_check to regular string array, we convert
@@ -157,7 +157,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, null_as=None, is_parallel
         """
 
         # Check the types match
-        assert arr_search_vals.dtype == bodo.string_type, (
+        assert arr_search_vals.dtype == bodo.types.string_type, (
             "Internal error: arr_to_check is dict encoded, but arr_search_vals does not have string dtype"
         )
 

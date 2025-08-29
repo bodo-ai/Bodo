@@ -684,7 +684,7 @@ def overload_savefig(
         pad_inches=0.1,
         metadata=None,
     ):  # pragma: no cover
-        with bodo.no_warning_objmode():
+        with bodo.ir.object_mode.no_warning_objmode():
             plt.savefig(
                 fname=fname,
                 dpi=dpi,
@@ -736,7 +736,7 @@ def overload_subplots(
         subplot_kw=None,
         gridspec_kw=None,
     ):
-        with bodo.no_warning_objmode(axes="{type_name}"):
+        with bodo.ir.object_mode.no_warning_objmode(axes="{type_name}"):
             axes = fig.subplots(
                 nrows=nrows,
                 ncols=ncols,

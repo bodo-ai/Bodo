@@ -437,22 +437,22 @@ def bodosql_datetime_types(request):
             "TABLE1": pd.DataFrame(
                 {
                     "A": [
-                        bodo.Time(19, 53, 6, 15),
-                        bodo.Time(14, 28, 57),
-                        bodo.Time(8, 2, 5, 0, 1, 4),
+                        bodo.types.Time(19, 53, 6, 15),
+                        bodo.types.Time(14, 28, 57),
+                        bodo.types.Time(8, 2, 5, 0, 1, 4),
                         None,
                     ]
                     * 3,
                     "B": [
-                        bodo.Time(5, 13, 29),
+                        bodo.types.Time(5, 13, 29),
                         None,
-                        bodo.Time(22, 7, 16),
+                        bodo.types.Time(22, 7, 16),
                     ]
                     * 4,
                     "C": [
                         None,
-                        bodo.Time(13, 37, 45),
-                        bodo.Time(1, 47, 59, 290, 574, 817),
+                        bodo.types.Time(13, 37, 45),
+                        bodo.types.Time(1, 47, 59, 290, 574, 817),
                     ]
                     * 4,
                 }
@@ -462,7 +462,7 @@ def bodosql_datetime_types(request):
 )
 def bodosql_time_types(request):
     """
-    Fixture used to test bodo.Time type.
+    Fixture used to test bodo.types.Time type.
     """
     return request.param
 
@@ -918,21 +918,21 @@ def bodosql_nullable_numeric_types(request):
                 {
                     "A": pd.Series(
                         [
-                            bodo.Time(23, 55, 55, precision=0),
-                            bodo.Time(0, 0, 0, precision=0),
+                            bodo.types.Time(23, 55, 55, precision=0),
+                            bodo.types.Time(0, 0, 0, precision=0),
                             None,
-                            bodo.Time(23, 59, 59, precision=0),
+                            bodo.types.Time(23, 59, 59, precision=0),
                             None,
                         ]
                         * 3
                     ),
                     "B": pd.Series(
                         [
-                            bodo.Time(9, 9, 9, precision=0),
+                            bodo.types.Time(9, 9, 9, precision=0),
                             None,
                             None,
                             None,
-                            bodo.Time(14, 11, 4, precision=0),
+                            bodo.types.Time(14, 11, 4, precision=0),
                         ]
                         * 3
                     ),
@@ -941,8 +941,8 @@ def bodosql_nullable_numeric_types(request):
                             None,
                             None,
                             None,
-                            bodo.Time(12, 55, 56, precision=0),
-                            bodo.Time(1, 34, 51, precision=0),
+                            bodo.types.Time(12, 55, 56, precision=0),
+                            bodo.types.Time(1, 34, 51, precision=0),
                         ]
                         * 3
                     ),
@@ -1216,14 +1216,14 @@ def load_tpch_data(dir_name):
     We use bodo.jit so we can read easily from a directory.
 
     If rows is not None, only fetches that many rows from each table"""
-    customer_df = pd.read_parquet(dir_name + "/customer.parquet/")
-    orders_df = pd.read_parquet(dir_name + "/orders.parquet/")
-    lineitem_df = pd.read_parquet(dir_name + "/lineitem.parquet/")
-    nation_df = pd.read_parquet(dir_name + "/nation.parquet/")
-    region_df = pd.read_parquet(dir_name + "/region.parquet/")
-    supplier_df = pd.read_parquet(dir_name + "/supplier.parquet/")
-    part_df = pd.read_parquet(dir_name + "/part.parquet/")
-    partsupp_df = pd.read_parquet(dir_name + "/partsupp.parquet/")
+    customer_df = pd.read_parquet(dir_name + "/customer.pq/")
+    orders_df = pd.read_parquet(dir_name + "/orders.pq/")
+    lineitem_df = pd.read_parquet(dir_name + "/lineitem.pq/")
+    nation_df = pd.read_parquet(dir_name + "/nation.pq/")
+    region_df = pd.read_parquet(dir_name + "/region.pq/")
+    supplier_df = pd.read_parquet(dir_name + "/supplier.pq/")
+    part_df = pd.read_parquet(dir_name + "/part.pq/")
+    partsupp_df = pd.read_parquet(dir_name + "/partsupp.pq/")
     return (
         customer_df,
         orders_df,
@@ -1855,7 +1855,9 @@ def timeadd_dataframe():
                 "T": [
                     None
                     if t is None
-                    else bodo.Time(hour=t[0], minute=t[1], second=t[2], nanosecond=t[3])
+                    else bodo.types.Time(
+                        hour=t[0], minute=t[1], second=t[2], nanosecond=t[3]
+                    )
                     for t in time_args_list
                 ],
                 "N": [-50, 7, -22, 13, -42, -17, 122],
@@ -1939,7 +1941,9 @@ def timeadd_arguments(request, timeadd_dataframe):
             1: [
                 None
                 if t is None
-                else bodo.Time(hour=t[0], minute=t[1], second=t[2], nanosecond=t[3])
+                else bodo.types.Time(
+                    hour=t[0], minute=t[1], second=t[2], nanosecond=t[3]
+                )
                 for t in time_args_lists[request.param]
             ],
         }

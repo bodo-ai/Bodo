@@ -1031,7 +1031,7 @@ def create_nullable_logical_op_overload(op):
 
         func_text = "def impl(val1, val2):\n"
         func_text += f"  n = len({len_arr})\n"
-        func_text += "  out_arr = bodo.utils.utils.alloc_type(n, bodo.boolean_array_type, (-1,))\n"
+        func_text += "  out_arr = bodo.utils.utils.alloc_type(n, bodo.types.boolean_array_type, (-1,))\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         if is_val1_arr:
             null1 = "bodo.libs.array_kernels.isna(val1, i)\n"
@@ -1174,7 +1174,7 @@ def is_valid_boolean_array_logical_op(typ1, typ2):
     on a boolean array type"""
 
     is_valid = (
-        (typ1 == bodo.boolean_array_type or typ2 == bodo.boolean_array_type)
+        (typ1 == bodo.types.boolean_array_type or typ2 == bodo.types.boolean_array_type)
         and (
             (bodo.utils.utils.is_array_typ(typ1, False) and typ1.dtype == types.bool_)
             or typ1 == types.bool_

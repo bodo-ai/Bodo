@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import boto3
+import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -5474,7 +5475,7 @@ def test_array_unpinned():
         # Get initial statistics
         initial_allocated = 0
         initial_pinned = 0
-        with bodo.objmode(initial_allocated="int64", initial_pinned="int64"):
+        with numba.objmode(initial_allocated="int64", initial_pinned="int64"):
             initial_allocated = default_buffer_pool_bytes_allocated()
             initial_pinned = default_buffer_pool_bytes_pinned()
 
@@ -5484,7 +5485,7 @@ def test_array_unpinned():
 
         # Check Metrics before Unpinning
         passed_checks = True
-        with bodo.objmode(passed_checks="boolean"):
+        with numba.objmode(passed_checks="boolean"):
             bytes_allocated = default_buffer_pool_bytes_allocated()
             bytes_pinned = default_buffer_pool_bytes_pinned()
             passed_checks = (bytes_allocated - initial_allocated) == 64 * 1024 and (
@@ -5499,7 +5500,7 @@ def test_array_unpinned():
         _array_info_unpin(arr_info)
 
         # Check Metrics after Unpinning
-        with bodo.objmode(passed_checks="boolean"):
+        with numba.objmode(passed_checks="boolean"):
             bytes_allocated = default_buffer_pool_bytes_allocated()
             bytes_pinned = default_buffer_pool_bytes_pinned()
             passed_checks = (bytes_allocated - initial_allocated) == 64 * 1024 and (

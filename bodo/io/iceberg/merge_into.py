@@ -44,7 +44,7 @@ def iceberg_merge_cow(
     # so we're not implementing it for now. It will be added in a following PR.
     assert is_parallel, "Iceberg Write only supported for distributed DataFrames"
 
-    with bodo.no_warning_objmode(
+    with bodo.ir.object_mode.no_warning_objmode(
         already_exists="bool_",
         table_loc="unicode_type",
         partition_spec="python_list_of_heterogeneous_tuples_type",
@@ -103,7 +103,7 @@ def iceberg_merge_cow(
         bucket_region,
     )
 
-    with bodo.no_warning_objmode(success="bool_"):
+    with bodo.ir.object_mode.no_warning_objmode(success="bool_"):
         fnames, file_size_bytes, metrics = generate_data_file_info(iceberg_files_info)
 
         # Send file names, metrics and schema to Iceberg connector

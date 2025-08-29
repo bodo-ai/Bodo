@@ -37,6 +37,9 @@ from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
 
 import bodo
+
+# Import compiler
+import bodo.decorators  # isort:skip # noqa
 import bodo.pandas as bodo_pd
 from bodo.mpi4py import MPI
 from bodo.spawn.spawner import SpawnDispatcher
@@ -525,7 +528,7 @@ def check_func(
 
     # test non-table format case if there is any dataframe in input
     if use_table_format is None and any(
-        isinstance(_typeof(a), bodo.DataFrameType) for a in args
+        isinstance(_typeof(a), bodo.types.DataFrameType) for a in args
     ):
         inner_funcs = check_func(
             func,
@@ -644,11 +647,14 @@ def _type_has_str_array(t):
         bool: True if input type 't' has a string array component
     """
     return (
-        (t == bodo.string_array_type)
-        or (isinstance(t, bodo.SeriesType) and t.data == bodo.string_array_type)
+        (t == bodo.types.string_array_type)
         or (
-            isinstance(t, bodo.DataFrameType)
-            and any(a == bodo.string_array_type for a in t.data)
+            isinstance(t, bodo.types.SeriesType)
+            and t.data == bodo.types.string_array_type
+        )
+        or (
+            isinstance(t, bodo.types.DataFrameType)
+            and any(a == bodo.types.string_array_type for a in t.data)
         )
     )
 
@@ -1214,7 +1220,7 @@ def _to_pa_array(py_out, bodo_arr_type):
     if isinstance(py_out, np.ndarray) and isinstance(py_out.dtype, np.dtypes.StrDType):
         py_out = py_out.astype(object)
     if (
-        isinstance(bodo_arr_type, bodo.IntegerArrayType)
+        isinstance(bodo_arr_type, bodo.types.IntegerArrayType)
         and isinstance(py_out, np.ndarray)
         and np.issubdtype(py_out.dtype, np.floating)
     ):
@@ -1624,9 +1630,9 @@ def _typeof(val):
             (isinstance(a, float) and np.isnan(a)) or isinstance(a, int) for a in val
         )
     ):
-        return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
+        return bodo.libs.int_arr_ext.IntegerArrayType(bodo.types.int64)
     elif isinstance(val, pd.arrays.FloatingArray):
-        return bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+        return bodo.libs.float_arr_ext.FloatingArrayType(bodo.types.float64)
     # TODO: add handling of Series with Float64 values here
     elif isinstance(val, pd.DataFrame) and any(
         isinstance(val.iloc[:, i].dtype, pd.core.arrays.floating.FloatingDtype)
@@ -1644,11 +1650,11 @@ def _typeof(val):
         col_typs = (dtype_to_array_type(typ) for typ in col_typs)
         col_names = tuple(val.columns.to_list())
         index_typ = numba.typeof(val.index)
-        return bodo.DataFrameType(col_typs, index_typ, col_names)
+        return bodo.types.DataFrameType(col_typs, index_typ, col_names)
     elif isinstance(val, pd.Series) and isinstance(
         val.dtype, pd.core.arrays.floating.FloatingDtype
     ):
-        return bodo.SeriesType(
+        return bodo.types.SeriesType(
             bodo.libs.float_arr_ext.typeof_pd_float_dtype(val.dtype, None),
             index=numba.typeof(val.index),
             name_typ=numba.typeof(val.name),

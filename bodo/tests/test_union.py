@@ -139,16 +139,16 @@ def test_stream_union_integer_promotion(memory_leak_check):
     """
 
     nn_int8_arr = types.Array(types.int8, 1, "C")
-    null_int8_arr = bodo.IntegerArrayType(types.int8)
+    null_int8_arr = bodo.types.IntegerArrayType(types.int8)
     nn_int32_arr = types.Array(types.int32, 1, "C")
-    null_int32_arr = bodo.IntegerArrayType(types.int32)
+    null_int32_arr = bodo.types.IntegerArrayType(types.int32)
     nn_int64_arr = types.Array(types.int64, 1, "C")
-    null_int64_arr = bodo.IntegerArrayType(types.int64)
+    null_int64_arr = bodo.types.IntegerArrayType(types.int64)
 
     state = UnionStateType(
         in_table_types=(
             TableType((nn_int32_arr, null_int8_arr, nn_int64_arr)),
-            TableType((nn_int8_arr, nn_int32_arr, bodo.null_array_type)),
+            TableType((nn_int8_arr, nn_int32_arr, bodo.types.null_array_type)),
             TableType((nn_int64_arr, null_int8_arr, null_int32_arr)),
         )
     )
@@ -177,10 +177,10 @@ def test_stream_union_float_promotion(memory_leak_check):
 
     # Float and Integer + Float Tests
     nn_int8_arr = types.Array(types.int8, 1, "C")
-    null_int32_arr = bodo.IntegerArrayType(types.int32)
-    null_int64_arr = bodo.IntegerArrayType(types.int64)
+    null_int32_arr = bodo.types.IntegerArrayType(types.int32)
+    null_int64_arr = bodo.types.IntegerArrayType(types.int64)
     nn_f32_arr = types.Array(types.float32, 1, "C")
-    null_f64_arr = bodo.FloatingArrayType(types.float64)
+    null_f64_arr = bodo.types.FloatingArrayType(types.float64)
 
     state = UnionStateType(
         in_table_types=(
@@ -221,32 +221,32 @@ def test_stream_union_decimal_promotion(memory_leak_check):
         in_table_types=(
             TableType(
                 (
-                    bodo.DecimalArrayType(12, 5),
-                    bodo.DecimalArrayType(15, 6),
-                    bodo.DecimalArrayType(16, 0),
-                    bodo.IntegerArrayType(types.int32),
+                    bodo.types.DecimalArrayType(12, 5),
+                    bodo.types.DecimalArrayType(15, 6),
+                    bodo.types.DecimalArrayType(16, 0),
+                    bodo.types.IntegerArrayType(types.int32),
                     types.Array(types.float32, 1, "C"),
-                    bodo.FloatingArrayType(types.float64),
+                    bodo.types.FloatingArrayType(types.float64),
                 )
             ),
             TableType(
                 (
-                    bodo.DecimalArrayType(15, 6),
-                    bodo.DecimalArrayType(12, 5),
-                    bodo.IntegerArrayType(types.int64),
-                    bodo.DecimalArrayType(26, 0),
-                    bodo.DecimalArrayType(15, 6),
-                    bodo.DecimalArrayType(38, 18),
+                    bodo.types.DecimalArrayType(15, 6),
+                    bodo.types.DecimalArrayType(12, 5),
+                    bodo.types.IntegerArrayType(types.int64),
+                    bodo.types.DecimalArrayType(26, 0),
+                    bodo.types.DecimalArrayType(15, 6),
+                    bodo.types.DecimalArrayType(38, 18),
                 )
             ),
             TableType(
                 (
-                    bodo.DecimalArrayType(25, 0),
-                    bodo.DecimalArrayType(15, 14),
+                    bodo.types.DecimalArrayType(25, 0),
+                    bodo.types.DecimalArrayType(15, 14),
                     types.Array(types.int32, 1, "C"),
                     types.Array(types.int8, 1, "C"),
-                    bodo.IntegerArrayType(types.int32),
-                    bodo.DecimalArrayType(38, 4),
+                    bodo.types.IntegerArrayType(types.int32),
+                    bodo.types.DecimalArrayType(38, 4),
                 )
             ),
         )
@@ -256,22 +256,22 @@ def test_stream_union_decimal_promotion(memory_leak_check):
         (
             # All sources are decimal, so continue as decimal
             # Max Scale=6, Max Non-Scale=25
-            bodo.DecimalArrayType(31, 6),
+            bodo.types.DecimalArrayType(31, 6),
             # All sources are decimal, so continue as decimal
             # This is not converted to float64 for Numeric safety
-            bodo.DecimalArrayType(23, 14),
+            bodo.types.DecimalArrayType(23, 14),
             # All are decimal with 0 scale or integer
             # Scale=0, Max Non-Scale=16 => int64
-            bodo.IntegerArrayType(types.int64),
+            bodo.types.IntegerArrayType(types.int64),
             # All are decimal with 0 scale or integer
             # Scale=0, Max Non-Scale=26 which is above max int size
-            bodo.DecimalArrayType(26, 0),
+            bodo.types.DecimalArrayType(26, 0),
             # Merging a float, so must cast to float at end
             # Max Precision=15 => float64
-            bodo.FloatingArrayType(types.float64),
+            bodo.types.FloatingArrayType(types.float64),
             # Merging a float, so must cast to float at end
             # Max Precision=38 => overflow but truncate to float64
-            bodo.FloatingArrayType(types.float64),
+            bodo.types.FloatingArrayType(types.float64),
         )
     )
 
@@ -288,22 +288,34 @@ def test_stream_union_dict_encoding_combo(memory_leak_check):
     state = UnionStateType(
         in_table_types=(
             TableType(
-                (bodo.string_array_type, bodo.dict_str_arr_type, bodo.string_array_type)
+                (
+                    bodo.types.string_array_type,
+                    bodo.types.dict_str_arr_type,
+                    bodo.types.string_array_type,
+                )
             ),
             TableType(
-                (bodo.dict_str_arr_type, bodo.null_array_type, bodo.dict_str_arr_type)
+                (
+                    bodo.types.dict_str_arr_type,
+                    bodo.types.null_array_type,
+                    bodo.types.dict_str_arr_type,
+                )
             ),
             TableType(
-                (bodo.string_array_type, bodo.null_array_type, bodo.string_array_type)
+                (
+                    bodo.types.string_array_type,
+                    bodo.types.null_array_type,
+                    bodo.types.string_array_type,
+                )
             ),
         )
     )
 
     assert state.out_table_type == TableType(
         (
-            bodo.dict_str_arr_type,
-            bodo.dict_str_arr_type,
-            bodo.dict_str_arr_type,
+            bodo.types.dict_str_arr_type,
+            bodo.types.dict_str_arr_type,
+            bodo.types.dict_str_arr_type,
         )
     )
 
@@ -325,17 +337,17 @@ def test_stream_union_null(memory_leak_check):
             TableType(
                 (
                     non_null_bool_arr,
-                    bodo.string_array_type,
-                    bodo.boolean_array_type,
-                    bodo.null_array_type,
+                    bodo.types.string_array_type,
+                    bodo.types.boolean_array_type,
+                    bodo.types.null_array_type,
                 )
             ),
             TableType(
                 (
-                    bodo.null_array_type,
-                    bodo.null_array_type,
+                    bodo.types.null_array_type,
+                    bodo.types.null_array_type,
                     non_null_bool_arr,
-                    bodo.null_array_type,
+                    bodo.types.null_array_type,
                 )
             ),
         )
@@ -343,10 +355,10 @@ def test_stream_union_null(memory_leak_check):
 
     assert state.out_table_type == TableType(
         (
-            bodo.boolean_array_type,
-            bodo.string_array_type,
-            bodo.boolean_array_type,
-            bodo.null_array_type,
+            bodo.types.boolean_array_type,
+            bodo.types.string_array_type,
+            bodo.types.boolean_array_type,
+            bodo.types.null_array_type,
         )
     )
 
@@ -357,8 +369,8 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
     Basic test for Streaming Union, especially for testing coverage
     The BodoSQL UNION tests cover edge cases
     """
-    customer_path: str = datapath("tpch-test_data/parquet/customer.parquet")
-    orders_path: str = datapath("tpch-test_data/parquet/orders.parquet")
+    customer_path: str = datapath("tpch-test_data/parquet/customer.pq")
+    orders_path: str = datapath("tpch-test_data/parquet/orders.pq")
     global_1 = ColNamesMetaType(("c_custkey",))
     global_2 = MetaType((0,))
     global_3 = MetaType((1,))
@@ -432,8 +444,8 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
     multiple pipelines where the number of input batches on different ranks
     might be different.
     """
-    customer_path: str = datapath("tpch-test_data/parquet/customer.parquet")
-    orders_path: str = datapath("tpch-test_data/parquet/orders.parquet")
+    customer_path: str = datapath("tpch-test_data/parquet/customer.pq")
+    orders_path: str = datapath("tpch-test_data/parquet/orders.pq")
     global_1 = ColNamesMetaType(("c_custkey",))
     global_2 = MetaType((0,))
     global_3 = MetaType((0,))

@@ -598,7 +598,7 @@ class TypingTransforms:
             isinstance(target_typ, (DataFrameType, DataFrameGroupByType, RollingType))
             and not is_literal_type(idx_typ)
             and (
-                idx_typ == bodo.string_type
+                idx_typ == bodo.types.string_type
                 or isinstance(idx_typ, types.Integer)
                 or (
                     isinstance(idx_typ, types.List) and not idx_typ.dtype == types.bool_
@@ -1824,7 +1824,7 @@ class TypingTransforms:
         list_set_typ = self.typemap.get(list_set_arg.name, None)
         require(
             isinstance(list_set_typ, (types.List, types.Set))
-            and list_set_typ.dtype != bodo.datetime64ns
+            and list_set_typ.dtype != bodo.types.datetime64ns
             and not isinstance(
                 list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
@@ -1865,7 +1865,7 @@ class TypingTransforms:
         # TODO: check if this requirement needs to be enforced
         require(
             is_arg1_global
-            and arg1_arr_type.dtype != bodo.datetime64ns
+            and arg1_arr_type.dtype != bodo.types.datetime64ns
             and not isinstance(
                 arg1_arr_type.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
@@ -4088,7 +4088,7 @@ class TypingTransforms:
 
         df_type = DataFrameType(
             tuple(arr_types),
-            bodo.RangeIndexType(None),
+            bodo.types.RangeIndexType(None),
             tuple(col_names),
             is_table_format=True,
         )
@@ -6009,7 +6009,7 @@ class TypingTransforms:
             # filter pushdown in that situation.
             return (
                 isinstance(list_set_typ, (types.List, types.Set))
-                and list_set_typ.dtype != bodo.datetime64ns
+                and list_set_typ.dtype != bodo.types.datetime64ns
                 and not isinstance(
                     list_set_typ.dtype,
                     bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
@@ -6035,7 +6035,7 @@ class TypingTransforms:
             # series isin implementation does.
             return (
                 is_arg1_global
-                and arg1_arr_type.dtype != bodo.datetime64ns
+                and arg1_arr_type.dtype != bodo.types.datetime64ns
                 and not isinstance(
                     arg1_arr_type.dtype,
                     bodo.hiframes.pd_timestamp_ext.PandasTimestampType,

@@ -527,7 +527,7 @@ def create_timestamp_cast_util(func, error_on_fail):
                 scalar_text = f"res[i] = {unbox_str}(arg0.utc_timestamp.tz_localize('UTC').tz_convert('{time_zone}'))\n"
             else:
                 scalar_text = f"res[i] = {unbox_str}(arg0.local_timestamp())\n"
-        elif conversion_val == bodo.null_array_type:
+        elif conversion_val == bodo.types.null_array_type:
             # Note: We could just pass a null array, but this adds typing information
             # + validates the other arguments.
             scalar_text = "res[i] = None\n"
@@ -557,9 +557,9 @@ def create_timestamp_cast_util(func, error_on_fail):
         # Determine the output dtype. If a timezone is provided then we have a
         # tz-aware output. Otherwise we output datetime64ns.
         if time_zone is not None:
-            out_dtype = bodo.DatetimeArrayType(time_zone)
+            out_dtype = bodo.types.DatetimeArrayType(time_zone)
         else:
-            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+            out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
 
         extra_globals = {
             "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
@@ -860,7 +860,7 @@ def overload_to_timestamptz_util(
         [conversion_val, time_zone, dict_encoding_state, func_id],
         [True, False, False, False],
         scalar_text,
-        bodo.timestamptz_array_type,
+        bodo.types.timestamptz_array_type,
         prefix_code=prefix_code,
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
@@ -971,10 +971,10 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
         False,
     ]
     inner_type = arr.dtype if are_arrays[0] else arr
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
     convert_func_str = "bodosql.kernels.snowflake_conversion_array_kernels.convert_snowflake_date_format_str_to_py_format"
     # Check if we can use one of our array kernels to handle the conversion.
-    if is_array_typ(arr) and isinstance(arr, bodo.DecimalArrayType):
+    if is_array_typ(arr) and isinstance(arr, bodo.types.DecimalArrayType):
 
         def impl(arr, format_str, is_scalar):  # pragma: no cover
             return bodosql.kernels.numeric_array_kernels.decimal_array_to_str_array(arr)
@@ -997,7 +997,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
     elif is_valid_binary_arg(inner_type):
         # TODO(Yipeng): Support all binary encoding. Currently only hex encoding is supported.
         # Using bodosql.kernels.hex_encode(arg0, 0) here will break test_cast_char_other[Bytes]
-        scalar_text = "with bodo.objmode(r=bodo.string_type):\n"
+        scalar_text = "with numba.objmode(r=bodo.types.string_type):\n"
         scalar_text += "  r = arg0.hex()\n"
         scalar_text += "res[i] = r"
     elif is_valid_time_arg(inner_type):
@@ -1012,7 +1012,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
         scalar_text += f"  res[i] = arg0.strftime({convert_func_str}(arg1))"
     elif is_valid_timedelta_arg(inner_type):
         scalar_text = "arg0 = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg0)\n"
-        scalar_text += "with bodo.objmode(r=bodo.string_type):\n"
+        scalar_text += "with numba.objmode(r=bodo.types.string_type):\n"
         scalar_text += "  r = str(arg0)\n"
         scalar_text += "res[i] = r"
     elif is_valid_datetime_or_date_arg(inner_type):
@@ -1077,7 +1077,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
         scalar_text += f"  res[i] = '{np.iinfo(int_types[inner_type.bitwidth]).min}'\n"
         scalar_text += "else:\n"
         scalar_text += "  res[i] = str(arg0)"
-    elif isinstance(inner_type, bodo.StructType):
+    elif isinstance(inner_type, bodo.types.StructType):
         scalar_text = "arr_str = ''\n"
         for i in range(len(inner_type.names)):
             name_w_quotes = '"' + inner_type.names[i] + '"'
@@ -1402,7 +1402,7 @@ def pd_to_datetime_error_checked(
             if not (is_date_format_1 or is_date_format_2):
                 return (False, pd.Timestamp(0))
 
-    with bodo.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
+    with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
         ret_val = pd.Timestamp(0)
 
@@ -1438,7 +1438,7 @@ def to_date_error_checked(val, format):  # pragma: no cover
     py_format = convert_snowflake_date_format_str_to_py_format(format)
     if py_format == "":
         return (False, None)
-    with bodo.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
+    with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
         ret_val = pd.Timestamp(0)
 
@@ -1467,7 +1467,7 @@ def to_date_strings_conversion(year_str, month_str, day_str):  # pragma: no cove
         val (types.unicode_type): An input string to convert to a date.
 
     Returns:
-        types.Tuple(types.bool_, bodo.datetime_date_type): A tuple of where the conversion
+        types.Tuple(types.bool_, bodo.types.datetime_date_type): A tuple of where the conversion
         was a success and the resulting date. If the success is false the date is garbage.
     """
     # Initialize date_val for an invalid value.
@@ -1522,7 +1522,7 @@ def to_date_auto_error_checked(val):  # pragma: no cover
         val (types.unicode_type): An input string to convert to a date.
 
     Returns:
-        types.Tuple(types.bool_, bodo.datetime_date_type): A tuple of where the conversion
+        types.Tuple(types.bool_, bodo.types.datetime_date_type): A tuple of where the conversion
         was a success and the resulting date. If the success is false the date is garbage.
     """
     is_valid = False
@@ -1625,7 +1625,7 @@ def overload_cast_tz_naive_to_tz_aware_util(arr, tz):
     )
     scalar_text = f"res[i] = {box_str}(arg0).tz_localize(arg1)"
     tz = get_literal_value(tz)
-    out_dtype = bodo.DatetimeArrayType(tz)
+    out_dtype = bodo.types.DatetimeArrayType(tz)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1671,7 +1671,7 @@ def overload_cast_date_to_tz_aware_util(arr, tz):
     propagate_null = [True, False]
     scalar_text = "res[i] = pd.Timestamp(arg0).tz_localize(arg1)"
     tz = get_literal_value(tz)
-    out_dtype = bodo.DatetimeArrayType(tz)
+    out_dtype = bodo.types.DatetimeArrayType(tz)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1718,7 +1718,7 @@ def overload_cast_tz_aware_to_tz_naive_util(arr):
     )
     scalar_text = "ts = arg0.tz_localize(None)\n"
     scalar_text += f"res[i] = {unbox_str}(ts)"
-    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1770,7 +1770,7 @@ def overload_cast_str_to_tz_aware_util(arr, tz, dict_encoding_state, func_id):
     # Note: pd.to_datetime doesn't support tz as an argument.
     scalar_text = "res[i] = pd.to_datetime(arg0).tz_localize(arg1)"
     tz = get_literal_value(tz)
-    out_dtype = bodo.DatetimeArrayType(tz)
+    out_dtype = bodo.types.DatetimeArrayType(tz)
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
@@ -1819,7 +1819,7 @@ def create_to_binary_util_overload(fn_name, error_on_fail):
         arg_names = ["arr", "dict_encoding_state", "func_id"]
         arg_types = [arr, dict_encoding_state, func_id]
         propagate_null = [True, False, False]
-        out_dtype = bodo.binary_array_type
+        out_dtype = bodo.types.binary_array_type
         use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
@@ -1949,7 +1949,7 @@ def string_to_decimal_overload(expr, precision, scale, null_on_error):
 
         return impl
 
-    elif expr == bodo.string_type or is_overload_constant_str(expr):
+    elif expr == bodo.types.string_type or is_overload_constant_str(expr):
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.str_to_decimal_scalar(
@@ -1957,7 +1957,7 @@ def string_to_decimal_overload(expr, precision, scale, null_on_error):
             )
 
         return impl
-    elif expr == bodo.string_array_type:
+    elif expr == bodo.types.string_array_type:
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.str_to_decimal_array(
@@ -1967,7 +1967,7 @@ def string_to_decimal_overload(expr, precision, scale, null_on_error):
         return impl
 
     else:
-        assert expr == bodo.dict_str_arr_type, (
+        assert expr == bodo.types.dict_str_arr_type, (
             "string_to_decimal_overload: dictionary-encoded string array type expected"
         )
 
@@ -2044,7 +2044,7 @@ def numeric_to_decimal_overload(expr, precision, scale, null_on_error):
             return None
 
         return impl
-    elif isinstance(expr, bodo.DecimalArrayType):
+    elif isinstance(expr, bodo.types.DecimalArrayType):
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.cast_decimal_to_decimal_array(
@@ -2052,7 +2052,7 @@ def numeric_to_decimal_overload(expr, precision, scale, null_on_error):
             )
 
         return impl
-    elif isinstance(expr, bodo.Decimal128Type):
+    elif isinstance(expr, bodo.types.Decimal128Type):
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.cast_decimal_to_decimal_scalar(
@@ -2177,7 +2177,7 @@ def to_number_util_overload(
     scale = get_overload_const_int(scale)
     outputs_decimal = get_overload_const_bool(outputs_decimal)
 
-    is_null_arg = is_overload_none(expr) or expr == bodo.null_array_type
+    is_null_arg = is_overload_none(expr) or expr == bodo.types.null_array_type
     is_string = is_valid_string_arg(expr)
     if not is_string:
         verify_numeric_arg(expr, "TO_NUMBER", "expr")
@@ -2220,9 +2220,9 @@ def to_number_util_overload(
         output_scalar_int_type = types.int64
 
     if scale == 0:
-        out_dtype = bodo.IntegerArrayType(output_scalar_int_type)
+        out_dtype = bodo.types.IntegerArrayType(output_scalar_int_type)
     else:
-        out_dtype = bodo.FloatingArrayType(types.float64)
+        out_dtype = bodo.types.FloatingArrayType(types.float64)
 
     # NOTE: we can't use continue/early return with gen vectorized,
     # so we use a flag to indicate if we've already seen an invalid value/should skip
@@ -2367,7 +2367,7 @@ def overload_convert_timezone_ntz_util(source_tz, target_tz, data):
         else ""
     )
 
-    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
     scalar_text = f"res[i] = {unbox_str}({box_str}(arg2).tz_localize(None).tz_localize(arg0).tz_convert(arg1).tz_localize(None))\n"
 
     return gen_vectorized(
@@ -2429,7 +2429,7 @@ def overload_convert_timezone_tz_util(target_tz, data):
     arg_names = ["target_tz", "data"]
     arg_types = [target_tz, data]
     propagate_null = [True, True]
-    out_dtype = bodo.timestamptz_array_type
+    out_dtype = bodo.types.timestamptz_array_type
     scalar_text = "current_target_offset = arg1.utc_timestamp.tz_localize(arg0).utcoffset().value // 60_000_000_000\n"
     scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(arg1.utc_timestamp, current_target_offset)\n"
 

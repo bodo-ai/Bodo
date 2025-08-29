@@ -146,7 +146,7 @@ class TableBuilderStateType(StreamingStateType):
     @property
     def build_table_type(self):
         if self._build_table_type == types.unknown:
-            return bodo.TableType(())
+            return bodo.types.TableType(())
         else:
             return self._build_table_type
 

@@ -737,7 +737,7 @@ def overload_offset_to_nanos(w):
         return lambda w: w  # pragma: no cover
 
     def impl(w):  # pragma: no cover
-        with bodo.objmode(out="int64", status="int64"):
+        with numba.objmode(out="int64", status="int64"):
             out, status = get_offset_nanos(w)
         if status != 0:
             raise ValueError("Invalid offset value")
@@ -1555,7 +1555,7 @@ def is_str_binary_array(arr):  # pragma: no cover
 @overload(is_str_binary_array)
 def overload_is_str_binary_array(arr):
     """return True if 'arr' is a string or binary array"""
-    if arr in [bodo.string_array_type, bodo.binary_array_type]:
+    if arr in [bodo.types.string_array_type, bodo.types.binary_array_type]:
         return lambda arr: True  # pragma: no cover
 
     return lambda arr: False  # pragma: no cover
@@ -1568,26 +1568,26 @@ def is_supported_shift_array_type(arr_type):
             isinstance(arr_type, types.Array)
             and (
                 isinstance(arr_type.dtype, types.Number)
-                or arr_type.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                or arr_type.dtype in [bodo.types.datetime64ns, bodo.types.timedelta64ns]
             )
         )
         or isinstance(
             arr_type,
             (
-                bodo.IntegerArrayType,
-                bodo.FloatingArrayType,
-                bodo.DecimalArrayType,
-                bodo.DatetimeArrayType,
-                bodo.TimeArrayType,
+                bodo.types.IntegerArrayType,
+                bodo.types.FloatingArrayType,
+                bodo.types.DecimalArrayType,
+                bodo.types.DatetimeArrayType,
+                bodo.types.TimeArrayType,
             ),
         )
         or arr_type
         in (
-            bodo.boolean_array_type,
-            bodo.datetime_date_array_type,
-            bodo.string_array_type,
-            bodo.binary_array_type,
-            bodo.dict_str_arr_type,
+            bodo.types.boolean_array_type,
+            bodo.types.datetime_date_array_type,
+            bodo.types.string_array_type,
+            bodo.types.binary_array_type,
+            bodo.types.dict_str_arr_type,
         )
     )
 
@@ -1937,7 +1937,7 @@ def bcast_n_chars_if_str_binary_arr(arr):
 @overload(bcast_n_chars_if_str_binary_arr)
 def overload_bcast_n_chars_if_str_binary_arr(arr):
     """broadcast number of characters if 'arr' is a string or binary array"""
-    if arr in [bodo.binary_array_type, bodo.string_array_type]:
+    if arr in [bodo.types.binary_array_type, bodo.types.string_array_type]:
 
         def impl(arr):  # pragma: no cover
             return bodo.libs.distributed_api.bcast_scalar(

@@ -35,7 +35,7 @@ def test_csv_invalid_path():
     def test_impl(fname):
         return pd.read_csv(fname, names=["A"], dtype={"A": np.int64})
 
-    with pytest.raises(BodoError, match=r"FileNotFoundError"):
+    with pytest.raises(ValueError, match=r"FileNotFoundError"):
         bodo.jit(test_impl)("f.csv")
 
 
@@ -770,7 +770,7 @@ def test_csv_dtype_unsupported(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        return pd.read_csv(fname, dtype=bodo.string_type)
+        return pd.read_csv(fname, dtype=bodo.types.string_type)
 
     with pytest.raises(
         BodoError,

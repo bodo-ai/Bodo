@@ -1,3 +1,6 @@
+# Initialize JIT compiler
+import bodo.decorators
+
 # Import BodoSQL types
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog, DatabaseCatalogType
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
