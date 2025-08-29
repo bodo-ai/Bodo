@@ -12,18 +12,17 @@ NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart
   <a href="https://www.bodo.ai/benchmarks/" target="_blank"><b>Benchmarks</b></a>
 </h3>
 
-# Bodo {DataFrames, JIT, SQL}:
+# Bodo + {DataFrames, JIT, SQL}: Simple Python Acceleration and Scaling for Data and AI
 
 Bodo is an essential tool-kit for large scale Python data processing, AI, and ML workloads. Whether you are using Pandas, Numpy or SQL, calling LLMs or working with vectors, Bodo automatically optimizes and parallelizes your code, scaling from laptop to large cloud clusters with minimal friction.
 
 <!-- TOOD: add updated graph with Taxi benchmark including bodo dataframes -->
 
-Bodo consists of three modes: DataFrames, JIT, and SQL each with their own strengths and use cases.
-All three modes offer enormous speedups thanks to an efficient, parallel backend:
-- Use Bodo DataFrames for scaling Pandas with the least amount of effort, just change the import to: `import bodo.pandas as pd`.
-- Use Bodo DataFrames AI APIs for simplifying and scaling AI workloads.
+Bodo consists of three modes (which can be used together): DataFrames, JIT, and SQL, each offering enormous speedups thanks to an optimized, parallel (MPI) backend:
+- Use Bodo DataFrames for scaling Pandas with the least amount of effort, just change the import to: `import bodo.pandas as pd` or
+use the Bodo DataFrames AI API for simplifying and scaling AI workloads.
 - Use Bodo JIT for the best end-to-end native performance for workloads consisting of Pandas, Numpy and Scikit learn.
-- Use BodoSQL for an advanced vectorized query engine that integrates seemlessly with Python workflows.
+- Use BodoSQL for an advanced, vectorized query engine that integrates seemlessly with Python workflows.
 
 ## Goals
 
