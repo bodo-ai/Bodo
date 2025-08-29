@@ -420,6 +420,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         row_group_size: int = -1,
         **kwargs,
     ) -> bytes | None:
+        from bodo.io.fs_io import get_s3_bucket_region_wrapper
         from bodo.pandas.base import _empty_like
 
         if not isinstance(path, str):
@@ -447,7 +448,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.to_parquet(): row_group_size must be an integer"
             )
 
-        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, False)
+        bucket_region = get_s3_bucket_region_wrapper(path, False)
 
         write_plan = LogicalParquetWrite(
             _empty_like(self),
