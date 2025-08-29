@@ -16,7 +16,7 @@ We compared Bodo's performance on this workload to other systems including [Dask
 |----------------|----------------|
 | bodo   | 2024.10   |
 | bodosdk | 2.2.0 |
-| daft   | 0.4.7 |
+| getdaft   | 0.4.7 |
 | dask   | 2024.9.1  |
 | dask-cloudprovider  | 2024.9.1  |
 | modin   | 0.32.0   |
@@ -179,7 +179,7 @@ In order to run the Spark benchmark:
 You can start to see the benefits of using Bodo from your laptop by running the notebooks found in [`./nyc_taxi/notebooks`](./nyc_taxi/notebooks) which include a smaller version of the NYC Taxi Monthly Trips with Precipitation benchmark. To set up, install the required packages using pip in a clean environment that includes Python 3.12:
 
 ``` shell
-pip install bodo==2024.12.1 "dask[dataframe]"==2024.12.0 "modin[all]"==0.32.0 pyspark==3.5.3 pandas==2.2.3 daft==0.4.7 polars==1.25.2 boto3
+pip install bodo==2024.12.1 "dask[dataframe]"==2024.12.0 "modin[all]"==0.32.0 pyspark==3.5.3 pandas==2.2.3 getdaft==0.4.7 polars==1.25.2 boto3
 ```
 
 We use a smaller subset of the [For Hire Vehicle High Volume dataset](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) to allow the workload to run locally (example setup: an Apple M2 Macbook Pro with 10 cores and 16 GB memory). We have also included an implementation using Pandas, which is often on par with or better than other distributed frameworks when data size is smaller due to the overhead from coordinating parallel workers. Even at this smaller scale, Bodo shows a roughly 3x improvement over Pandas by just adding a single decorator. Polars shows a similar improvement over Pandas but requires rewriting the entire workload.
@@ -191,7 +191,7 @@ The results below were collected December 18th, 2024. Note that these numbers mi
 |----------------|----------------|
 | Bodo   | 1.007   |
 | Polars | 1.244   |
-| Daft | 2.328 |
+| Daft (getdaft) | 2.328 |
 | Dask   | 3.091  |
 | Pandas | 3.58 |
 | Modin/Ray | 13.65 |
@@ -205,7 +205,7 @@ The code to run the larger dataset is also included in the notebooks section. Re
 |----------------|----------------|
 | Bodo   | 4.228   |
 | Polars | 4.744   |
-| Daft | 7.436 |
+| Daft (getdaft) | 7.436 |
 | Pandas | 17.990 |
 | Dask   | 21.41  |
 | Modin/Ray | 118.52 |

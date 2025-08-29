@@ -5,16 +5,17 @@ Similar to:
 https://github.com/toddwschneider/nyc-taxi-data/blob/c65ad8332a44f49770644b11576c0529b40bbc76/citibike_comparison/analysis/analysis_queries.sql#L1
 """
 
+import argparse
 import time
 
 import pandas as pd
 
 import bodo
+import bodo.pandas
 
 
-@bodo.jit(cache=True)
 def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
-    start_read = time.time()
+    start = time.time()
     central_park_weather_observations = pd.read_csv(
         weather_dataset,
         parse_dates=["DATE"],
@@ -23,10 +24,6 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
         columns={"DATE": "date", "PRCP": "precipitation"}, copy=False
     )
     fhvhv_tripdata = pd.read_parquet(hvfhv_dataset)
-    end = time.time()
-    print("Reading Time: ", (end - start_read))
-
-    start_compute = time.time()
 
     central_park_weather_observations["date"] = central_park_weather_observations[
         "date"
@@ -88,18 +85,29 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
         },
         copy=False,
     )
-    end = time.time()
-    print("Monthly Taxi Travel Times Computation Time: ", end - start_compute)
 
-    start_write = time.time()
     monthly_trips_weather.to_parquet("monthly_trips_weather.pq")
     end = time.time()
-    print("Writing time:", (end - start_write))
-    print("Total E2E time:", (end - start_read))
+    print("Total E2E time:", (end - start))
     return monthly_trips_weather
 
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--use_jit", action="store_true")
+    args = parser.parse_args()
+
     weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
     hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
-    get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
+
+    if args.use_jit:
+        bodo.jit(cache=True)(get_monthly_travels_weather)(
+            weather_dataset, hvfhv_dataset
+        )
+    else:
+        get_monthly_travels_weather.__globals__.update({"pd": bodo.pandas})
+        get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
+
+
+if __name__ == "__main__":
+    main()
