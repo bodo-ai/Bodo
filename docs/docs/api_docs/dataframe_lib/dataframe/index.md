@@ -1,12 +1,12 @@
 # DataFrame API
-The Bodo DataFrame Library supports Pandas DataFrame methods and accessors that are listed below. They can be accessed through `BodoDataFrame` and follow the same behavior as their Pandas equivalents. For details on usage, we link to either the corresponding Pandas documentation or relevant sections of the Bodo documentation, depending on the context.
+Bodo DataFrames supports Pandas DataFrame methods and accessors that are listed below. They can be accessed through `BodoDataFrame` and follow the same behavior as their Pandas equivalents. For details on usage, we link to either the corresponding Pandas documentation or relevant sections of the Bodo documentation, depending on the context.
 
 !!! note
     If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo
-	 DataFrame Library gracefully falls back to native Pandas. See [overview][overview] of 
-	 the Bodo DataFrame Library for more info.
+	DataFrames gracefully falls back to native Pandas. See [overview][overview] of
+	Bodo DataFrames for more info.
 
-     
+
 ## Function application, GroupBy & window
 - [`bodo.pandas.BodoDataFrame.apply`][bododfapply]
 - [`bodo.pandas.BodoDataFrame.groupby`][bododfgroupby]

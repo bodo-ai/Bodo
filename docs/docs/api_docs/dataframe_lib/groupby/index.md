@@ -1,11 +1,11 @@
 # GroupBy {#df-lib-groupby}
 
-The DataFrame Library supports grouping BodoDataFrames on columns
+Bodo DataFrames supports grouping BodoDataFrames on columns
 and aggregating the grouped data via the `bodo.pandas.DataFrameGroupBy` and `bodo.pandas.SeriesGroupBy` classes.
 An instance of one of these classes will be returned when using the [`BodoDataFrame.groupby()`][frame-groupby] method.
 
 !!! note
-	Currently, the DataFrame Library supports a subset of aggregation functions with the default parameters (listed below).
+	Currently, Bodo DataFrames supports a subset of aggregation functions with the default parameters (listed below).
 	Future releases will add more functionality including transformation and filtering.
 	For now, if an unsupported method or property of a `bodo.pandas.SeriesGroupBy` or `bodo.pandas.DataFrameGroupBy` is encountered,
 	the user's code [will gracefully fall back to Pandas][lazy-evaluation-and-fallback-to-pandas].

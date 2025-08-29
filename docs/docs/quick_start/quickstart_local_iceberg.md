@@ -10,7 +10,7 @@ This quickstart guide will walk you through the process of creating and reading 
 [Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo[iceberg]` or `conda install bodo pyiceberg -c conda-forge`).
 
 
-## Create a Local Iceberg Table with Bodo DataFrame Library
+## Create a Local Iceberg Table with Bodo DataFrames
 
 This example demonstrates simple write of a table on the filesystem without a catalog:
 
@@ -29,7 +29,7 @@ Now let's read the Iceberg table:
 print(pd.read_iceberg("test_table", location="./iceberg_warehouse"))
 ```
 
-See [DataFrame Library API reference][dataframe-lib] for more information.
+See the [Bodo DataFrames API reference][dataframe-lib] for more information.
 Note that this quickstart uses a local Iceberg table, but you can also use Bodo with Iceberg tables on S3, ADLS, and GCS as well.
 
 
