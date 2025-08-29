@@ -94,7 +94,6 @@ with:
 ```python
 import bodo.pandas as pd
 ```
-Change the import back to
 
 ```python
 import bodo.pandas as pd
