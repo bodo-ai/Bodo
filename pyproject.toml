@@ -6,7 +6,7 @@ requires = [
     "cython>=3.0",
     # Build Libraries
     "numpy>=1.24",
-    "pyarrow>=19.0,<19.1",
+    "pyarrow>=19.0",
     "mpi4py>=4.0,<4.1",
     "pip"
 ]
