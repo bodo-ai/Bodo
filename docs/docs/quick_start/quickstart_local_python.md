@@ -4,7 +4,7 @@ NOTE: the examples in this file are covered by tests in bodo/tests/test_quicksta
 
 # Bodo Python Quick Start {#quickstart-local-python}
 
-This quickstart guide will walk you through the process of running a simple Python computation using Bodo on your local machine.
+This quickstart guide will walk you through the process of running a simple Python computation using Bodo DataFrames on your local machine.
 
 ## Installation
 
@@ -48,12 +48,12 @@ See the [Bodo DataFrames API reference][dataframe-lib] for supported Pandas APIs
 
 JIT compilation converts Python functions to optimized parallel binaries.
 Unlike Bodo DataFrames, JIT can optimize both Pandas and Numpy operations together and
-in some cases provide better performance over Bodo DataFrames.
+in some cases provide better performance than using Bodo DataFrames Pandas APIs.
 For example:
 
 ```python
 import bodo
-import pandas as pd
+import bodo.pandas as pd
 import numpy as np
 import time
 

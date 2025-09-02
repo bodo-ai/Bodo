@@ -12,17 +12,19 @@ NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart
   <a href="https://www.bodo.ai/benchmarks/" target="_blank"><b>Benchmarks</b></a>
 </h3>
 
-# Bodo + {DataFrames, JIT, SQL}: Simple Python Acceleration and Scaling for Data and AI
+# Bodo DataFrames: Simple Python Acceleration and Scaling for Data and AI
 
-Bodo is an essential tool-kit for large scale Python data processing, AI, and ML workloads. Whether you are using Pandas, Numpy or SQL, calling LLMs or working with vectors, Bodo automatically optimizes and parallelizes your code, scaling from laptop to large cloud clusters with minimal friction.
+Bodo DataFrames is a high performance dataframe library for large scale Python data processing, AI, and ML use cases.
+It functions as a drop-in replacement for accelerating and scaling existing Pandas workloads with a single line of code change,
+with extra Pandas-compatible APIs for simplifying and scaling AI workloads.
+Bodo DataFrames also provides a Just In Time (JIT) compiler as well as an integrated SQL engine for better performance and flexibility.
 
 <!-- TOOD: add updated graph with Taxi benchmark including bodo dataframes -->
 
-Bodo consists of three modes (which can be used together): DataFrames, JIT, and SQL, each offering enormous speedups thanks to an optimized, parallel (MPI) backend:
-- Use Bodo DataFrames for scaling Pandas with the least amount of effort, just change the import to: `import bodo.pandas as pd` or
-use the Bodo DataFrames AI API for simplifying and scaling AI workloads.
-- Use Bodo JIT for the best end-to-end native performance for workloads consisting of Pandas, Numpy and Scikit learn.
-- Use BodoSQL for an advanced, vectorized query engine that integrates seemlessly with Python workflows.
+Unlike traditional distributed computing frameworks, Bodo DataFrames:
+- Automatically scales and accelerates Pandas workloads with a single line of code change.
+- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) tech for true distributed execution.
+
 
 ## Goals
 
@@ -32,8 +34,7 @@ Bodo makes Python run much (much!) faster than it normally does!
 Deliver HPC-grade performance and scalability for Python data workloads as if the code was written in C++/MPI, whether running on a laptop or across large cloud clusters.
 
 2. **Easy to Use:**
-Easily integrate into Python workflows, whether it's changing a single import to unlock the power of Bodo DataFrames,
-or adding a simple Bodo JIT decorator to a performance-critical function.
+Easily integrate into Python workflows, and in most cases it's as simple as changing `import pandas as pd` to `import bodo.pandas as pd`.
 
 3. **Interoperable:**
 Compatible with regular Python ecosystem, and can selectively speed up only the sections of the workload that are Bodo supported.
@@ -51,17 +52,21 @@ We are currently focused on a targeted subset of Python used for data-intensive 
 Prioritize applications in data engineering, data science, and AI/ML. Bodo is not designed for general-purpose use cases that are non-data-centric.
 
 3. *Real-time:*
-Bodo DataFrames, JIT and BodoSQL are not yet optimized for small, fast workloads (e.g., workloads with execution times of only a few seconds).
+Bodo DataFrames, is not yet optimized for small, fast workloads (e.g., workloads with execution times of only a few seconds).
 
 
 ## Key Features
 
-- Drop-in Pandas replacement with automatic optimization & parallelization, vectorized execution, and out-of-core processing (DataFrames).
-- Intuitive APIs for simiplifying and scaling AI workloads (DataFrames).
-- Automatic optimization & parallelization of Python programs using Pandas and NumPy (JIT).
-- High performance SQL Engine that is natively integrated into Python (BodoSQL).
-- Linear scalability from laptops to large-scale clusters and supercomputers (DataFrames, BodoSQL, and JIT).
-- Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access (DataFrames, BodoSQL, and JIT).
+- Drop-in Pandas replacement, (simply change the import!) with automatic fallback to vanilla Pandas to avoid breaking existing workloads.
+- Intuitive APIs for simplifying and scaling AI workloads.
+- Advanced query optimizations,
+efficient C++ runtime,
+and parallel execution using MPI to achieves best possible performance while leveraging all availible hardware.
+- Streaming execution to process larger-than-memory datasets.
+- Just in Time (JIT) compilation with native support for Pandas, Numpy and Scikit-learn
+for accelerating custom transformations or performance-critical functions.
+- High performance SQL engine that is natively integrated into Python.
+- Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
 
 See Bodo documentation to learn more: https://docs.bodo.ai/
 
