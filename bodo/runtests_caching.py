@@ -8,7 +8,6 @@ import shutil
 import subprocess
 import sys
 
-import numpy as np
 import pandas as pd
 from numba.misc.appdirs import AppDirs
 
@@ -44,7 +43,7 @@ def recursive_count_dir(start_dir, to_count):
     return ret
 
 
-def test_internal_caching(df):
+def test_internal_caching(S):
     """This test is here because if we put it in a regular pytest file then you
     have no control over the order in which it is run.  You could check the
     output of the function there but that isn't what we are trying to test
@@ -54,25 +53,21 @@ def test_internal_caching(df):
     function which invalidates the purpose of this test.  This test included
     here has to be the first thing run after clearing the internal caches.
     """
-    df1 = df.groupby(["A"], as_index=False)
-    df2 = df1.agg({"B": ["sum", "count"], "C": ["sum", "count"]})
-    return df2.columns
+    return S.dt.year
 
 
 def run_test_internal_caching(ic_queue, first_time):
     """
     Run test_internal_caching and check if the cache hits and misses are appropriate.
     """
-    df = pd.DataFrame(
-        {"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1], "C": [2, 3, 1, 5]}
-    )
+    S = pd.date_range("2020-01-01", periods=100).to_series()
     # Do bodo.jit here to avoid potential problems of pickling dispatchers.
-    bodo_jit_func = bodo.jit(test_internal_caching)
+    bodo_jit_func = bodo.jit(spawn=False, distributed=False)(test_internal_caching)
     # Run the test on the example dataframe above.
-    bodo_jit_func(df)
+    bodo_jit_func(S)
     ret = 0
     # We know the above test uses bodo.libs.distributed.get_size.
-    bodo_func = bodo.libs.distributed_api.get_size
+    bodo_func = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp
     sig = bodo_func.signatures[0]
     if first_time:
         # First time run make sure it was a cache miss.
