@@ -259,7 +259,8 @@ def test_agg_null_keys(dropna, as_index):
     with assert_executed_plan_count(0):
         bdf2 = bdf.groupby("A", dropna=dropna, as_index=as_index).agg(lambda x: x.sum())
 
-    _test_equal(bdf2, df2, sort_output=True)
+    # If as_index=False then we sort the output
+    _test_equal(bdf2, df2, sort_output=True, reset_index=(not as_index))
 
 
 def test_apply_basic(dropna, as_index):
@@ -294,7 +295,9 @@ def test_apply_basic(dropna, as_index):
     if not as_index:
         df2 = df2.rename(columns={None: "None"})
 
-    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+    _test_equal(
+        bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=(not as_index)
+    )
 
 
 @pytest.mark.parametrize(
@@ -332,7 +335,9 @@ def test_series_udf(dropna, as_index, impl):
     with assert_executed_plan_count(0):
         bdf2 = impl(bdf, udf)
 
-    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+    _test_equal(
+        bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=(not as_index)
+    )
 
 
 def test_apply_fallback(groupby_df: pd.DataFrame, as_index):
@@ -372,4 +377,6 @@ def test_apply_fallback(groupby_df: pd.DataFrame, as_index):
         df2 = df2.rename(columns={None: "None"})
         bdf2 = df2.rename(columns={None: "None"})
 
-    _test_equal(bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=True)
+    _test_equal(
+        bdf2, df2, sort_output=True, check_pandas_types=True, reset_index=(not as_index)
+    )
