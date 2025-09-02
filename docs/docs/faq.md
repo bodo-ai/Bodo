@@ -24,7 +24,7 @@ Bodo DataFrames can run on any on-premises or cloud environment.
 Unlike traditional distributed computing frameworks, Bodo DataFrames:
 
 - Automatically scales and accelerates Pandas workloads with a single line of code change.
-- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) tech for true distributed execution.
+- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) technology for true parallel execution.
 
 ### Will Bodo DataFrames “just work” on my existing code?
 
@@ -125,9 +125,9 @@ We plan to investigate and provide a solution.
 
 Yes, Bodo DataFrames is particularly good at accelerating UDFs in Pandas APIs such as `DataFrame.apply` and `Series.map`.
 
-### What is the difference between the open source compute engine and the Bodo Cloud Platform?
+### What is the difference between the open source Bodo DataFrames and the Bodo Cloud Platform?
 
-The Bodo Cloud Platform simplifies managing compute clusters, notebooks and jobs that use the Bodo engine.
+The Bodo Cloud Platform simplifies managing compute clusters, notebooks and jobs that use Bodo DataFrames.
 Bodo Cloud Platform currently supports AWS and Azure.
 
 ### Does Bodo DataFrames have a SQL interface?

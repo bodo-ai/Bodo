@@ -23,7 +23,7 @@ a Just-In-Time (JIT) compiler for accelerating custom transformations, as well a
 
 Unlike traditional distributed computing frameworks, Bodo DataFrames:
 - Automatically scales and accelerates Pandas workloads with a single line of code change.
-- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) tech for true distributed execution.
+- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) technology for true parallel execution.
 
 
 ## Goals
@@ -60,8 +60,8 @@ Bodo DataFrames, is not yet optimized for small, fast workloads (e.g., workloads
 - Drop-in Pandas replacement, (just change the import!) with a seamless fallback to vanilla Pandas to avoid breaking existing workloads.
 - Intuitive APIs for simplifying and scaling AI workloads.
 - Advanced query optimization,
-efficient C++ runtime,
-and parallel execution using MPI to achieves best possible performance while leveraging all availible hardware.
+C++ runtime,
+and parallel execution using MPI to achieve the best possible performance while leveraging all availible cores.
 - Streaming execution to process larger-than-memory datasets.
 - Just in Time (JIT) compilation with native support for Pandas, Numpy and Scikit-learn
 for accelerating custom transformations or performance-critical functions.
