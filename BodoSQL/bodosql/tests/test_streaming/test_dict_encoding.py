@@ -79,7 +79,7 @@ def test_basic_caching(memory_leak_check):
                     dict_encoding_state,
                     func_id,
                     section._dict_id,
-                    bodo.string_array_type,
+                    bodo.types.string_array_type,
                 )
             else:
                 new_dict = bodosql.kernels.lower(section._data)
@@ -149,7 +149,7 @@ def test_multi_dictionary(memory_leak_check):
                             dict_encoding_state,
                             func_id,
                             section._dict_id,
-                            bodo.string_array_type,
+                            bodo.types.string_array_type,
                         )
                     )
                 else:
@@ -240,7 +240,7 @@ def test_multi_function(memory_leak_check):
                     dict_encoding_state,
                     func_id1,
                     section._dict_id,
-                    bodo.string_array_type,
+                    bodo.types.string_array_type,
                 )
             else:
                 new_dict = bodosql.kernels.lower(section._data)
@@ -271,7 +271,7 @@ def test_multi_function(memory_leak_check):
                     dict_encoding_state,
                     func_id2,
                     out_arr1._dict_id,
-                    bodo.string_array_type,
+                    bodo.types.string_array_type,
                 )
             else:
                 new_dict = bodosql.kernels.ltrim(out_arr1._data, " ")

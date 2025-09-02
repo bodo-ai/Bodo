@@ -749,7 +749,7 @@ void arrow_buffer_dtor(void *ptr, size_t size, void *dtor_info_raw) {
     delete arrow_buf;
 
     // Free the DtorInfo struct
-    NRT_MemSys::instance()->mi_allocator.free(dtor_info);
+    global_memsys->mi_allocator.free(dtor_info);
 }
 
 }  // extern "C"
@@ -1564,136 +1564,6 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
     return out_table;
 }
 
-std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
-    const std::shared_ptr<arrow::DataType> arrow_type) {
-    switch (arrow_type->id()) {
-        // String array
-        case arrow::Type::LARGE_STRING:
-        case arrow::Type::STRING: {
-            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
-                                                    Bodo_CTypes::STRING);
-        }
-        // Binary array
-        case arrow::Type::LARGE_BINARY:
-        case arrow::Type::BINARY: {
-            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
-                                                    Bodo_CTypes::BINARY);
-        }
-        // array(item) array
-        case arrow::Type::LARGE_LIST:
-        case arrow::Type::LIST: {
-            assert(arrow_type->num_fields() == 1);
-            std::unique_ptr<bodo::DataType> inner =
-                arrow_type_to_bodo_data_type(arrow_type->field(0)->type());
-            return std::make_unique<bodo::ArrayType>(std::move(inner));
-        }
-        // map array
-        case arrow::Type::MAP: {
-            std::shared_ptr<arrow::MapType> map_type =
-                std::static_pointer_cast<arrow::MapType>(arrow_type);
-            std::unique_ptr<bodo::DataType> key_type =
-                arrow_type_to_bodo_data_type(map_type->key_type());
-            std::unique_ptr<bodo::DataType> value_type =
-                arrow_type_to_bodo_data_type(map_type->item_type());
-            return std::make_unique<bodo::MapType>(std::move(key_type),
-                                                   std::move(value_type));
-        }
-        // struct array
-        case arrow::Type::STRUCT: {
-            std::vector<std::unique_ptr<bodo::DataType>> field_types;
-            for (int i = 0; i < arrow_type->num_fields(); i++) {
-                field_types.push_back(
-                    arrow_type_to_bodo_data_type(arrow_type->field(i)->type()));
-            }
-            return std::make_unique<bodo::StructType>(std::move(field_types));
-        }
-        // all fixed-size nullable types
-        case arrow::Type::DOUBLE:
-        case arrow::Type::FLOAT:
-        case arrow::Type::BOOL:
-        case arrow::Type::UINT64:
-        case arrow::Type::INT64:
-        case arrow::Type::UINT32:
-        case arrow::Type::DATE32:
-        case arrow::Type::TIMESTAMP:
-        case arrow::Type::DURATION:
-        case arrow::Type::INT32:
-        case arrow::Type::UINT16:
-        case arrow::Type::INT16:
-        case arrow::Type::UINT8:
-        case arrow::Type::INT8: {
-            return std::make_unique<bodo::DataType>(
-                bodo_array_type::NULLABLE_INT_BOOL,
-                arrow_to_bodo_type(arrow_type->id()));
-        }
-
-        case arrow::Type::TIME32:
-        case arrow::Type::TIME64: {
-            std::shared_ptr<arrow::TimeType> time_type =
-                std::static_pointer_cast<arrow::TimeType>(arrow_type);
-            int8_t precision;
-            switch (time_type->unit()) {
-                case arrow::TimeUnit::SECOND:
-                    precision = 0;
-                    break;
-                case arrow::TimeUnit::MILLI:
-                    precision = 3;
-                    break;
-                case arrow::TimeUnit::MICRO:
-                    precision = 6;
-                    break;
-                case arrow::TimeUnit::NANO:
-                    precision = 9;
-                    break;
-                default:
-                    throw std::runtime_error(
-                        "Unsupported time unit passed to "
-                        "arrow_type_to_bodo_data_type: " +
-                        time_type->ToString());
-            }
-            return std::make_unique<bodo::DataType>(
-                bodo_array_type::NULLABLE_INT_BOOL,
-                arrow_to_bodo_type(arrow_type->id()), precision);
-        }
-
-        // decimal array
-        case arrow::Type::DECIMAL128: {
-            auto arrow_decimal_type =
-                std::static_pointer_cast<arrow::Decimal128Type>(arrow_type);
-            return std::make_unique<bodo::DataType>(
-                bodo_array_type::NULLABLE_INT_BOOL,
-                arrow_to_bodo_type(arrow_type->id()),
-                arrow_decimal_type->precision(), arrow_decimal_type->scale());
-        }
-        // dictionary-encoded array
-        case arrow::Type::DICTIONARY: {
-            return std::make_unique<bodo::DataType>(bodo_array_type::DICT,
-                                                    Bodo_CTypes::STRING);
-        }
-        // null array
-        case arrow::Type::NA: {
-            // null array is currently stored as string array in C++
-            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
-                                                    Bodo_CTypes::STRING);
-        }
-        case arrow::Type::EXTENSION: {
-            // Cast the type to an ExtensionArray to access the extension name
-            auto ext_type =
-                std::static_pointer_cast<arrow::ExtensionType>(arrow_type);
-            auto name = ext_type->extension_name();
-            if (name == "arrow_timestamp_tz") {
-                return std::make_unique<bodo::DataType>(
-                    bodo_array_type::TIMESTAMPTZ, Bodo_CTypes::TIMESTAMPTZ);
-            }
-            [[fallthrough]];
-        }
-        default:
-            throw std::runtime_error(
-                "arrow_type_to_bodo_data_type(): Arrow type " +
-                arrow_type->ToString() + " not supported");
-    }
-}
-
 std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
     std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length) {
     std::vector<std::shared_ptr<array_info>> cols;
@@ -1744,4 +1614,12 @@ std::optional<std::shared_ptr<arrow::Buffer>> get_dictionary_hits(
         }
     }
     return null_bitmap;
+}
+
+std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    return bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
+                               false /*convert_timedelta_to_int64*/, "",
+                               time_unit, false /*downcast_time_ns_to_us*/,
+                               bodo::default_buffer_memory_manager());
 }

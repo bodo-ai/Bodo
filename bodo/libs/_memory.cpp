@@ -2196,4 +2196,21 @@ std::shared_ptr<::arrow::MemoryManager> default_buffer_memory_manager() {
     return mm_;
 }
 
+/**
+ * @brief Dummy no-op deleter to pass to shared_pointer
+ * constructor when wrapping global pointer.
+ */
+class DummyDeleter {
+   public:
+    void operator()(bodo::BufferPool* ptr) const {
+        // No-op
+    }
+};
+
+void init_buffer_pool_ptr(int64_t ptr) {
+    global_memory_pool = reinterpret_cast<bodo::BufferPool*>(ptr);
+    global_memory_pool_shared =
+        std::shared_ptr<BufferPool>(global_memory_pool, DummyDeleter());
+}
+
 }  // namespace bodo

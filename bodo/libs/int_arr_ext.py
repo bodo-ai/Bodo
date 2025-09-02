@@ -4,7 +4,6 @@ However, nulls are stored in bit arrays similar to Arrow's arrays.
 
 import operator
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -30,15 +29,8 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-from bodo.libs.str_arr_ext import kBitmask
-
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import hstr_ext  # isort:skip
-
-ll.add_symbol("mask_arr_to_bitmap", hstr_ext.mask_arr_to_bitmap)
-
-
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
+from bodo.libs.str_arr_ext import kBitmask
 from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
@@ -428,7 +420,7 @@ def int_arr_setitem(A, idx, val):
     # See test_bitwise.py::test_bitshiftright[vector_scalar_uint64_case]
     # TODO(Nick): Verify inputs can be safely cast to an integer
     is_scalar = isinstance(
-        val, (types.Integer, types.Boolean, types.Float, bodo.Decimal128Type)
+        val, (types.Integer, types.Boolean, types.Float, bodo.types.Decimal128Type)
     )
 
     # scalar case
@@ -597,7 +589,7 @@ def overload_int_arr_astype(A, dtype, copy=True):
             bodo.libs.int_arr_ext.get_int_arr_bitmap(A).copy(),
         )
 
-    if isinstance(dtype, bodo.Decimal128Type):
+    if isinstance(dtype, bodo.types.Decimal128Type):
         precision = dtype.precision
         scale = dtype.scale
 

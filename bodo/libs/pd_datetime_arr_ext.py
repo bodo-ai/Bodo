@@ -402,7 +402,7 @@ def overload_pd_datetime_dtype(A):
     if A.tz is None:
 
         def impl(A):  # pragma: no cover
-            return bodo.datetime64ns
+            return bodo.types.datetime64ns
 
         return impl
     else:
@@ -474,13 +474,13 @@ def timestamp_to_dt64(val):
 
 @overload(timestamp_to_dt64)
 def overload_timestamp_to_dt64(val):
-    if isinstance(val, bodo.PandasTimestampType):
+    if isinstance(val, bodo.types.PandasTimestampType):
 
         def impl(val):  # pragma: no cover
             return bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
 
         return impl
-    elif val == bodo.datetime64ns:  # pragma: no cover
+    elif val == bodo.types.datetime64ns:  # pragma: no cover
 
         def impl(val):  # pragma: no cover
             return val
@@ -499,8 +499,8 @@ def overload_setitem(A, ind, val):
     # Check the possible values
     if not (
         isinstance(val, DatetimeArrayType)
-        or isinstance(val, bodo.PandasTimestampType)
-        or val == bodo.datetime64ns
+        or isinstance(val, bodo.types.PandasTimestampType)
+        or val == bodo.types.datetime64ns
     ):  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires a Timestamp value or DatetimeArrayType"
@@ -519,7 +519,7 @@ def overload_setitem(A, ind, val):
         )
 
     if isinstance(ind, types.Integer):
-        if isinstance(val, bodo.PandasTimestampType):
+        if isinstance(val, bodo.types.PandasTimestampType):
 
             def impl(A, ind, val):  # pragma: no cover
                 dt64_val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
@@ -653,12 +653,12 @@ def numpy_arr_setitem(A, idx, val):
     """Support setitem of Numpy arrays with nullable datetime arrays"""
     if not (
         isinstance(A, types.Array)
-        and (A.dtype == bodo.datetime64ns)
+        and (A.dtype == bodo.types.datetime64ns)
         and isinstance(val, DatetimeArrayType)
     ):
         return
 
-    nat = bodo.datetime64ns("NaT")
+    nat = bodo.types.datetime64ns("NaT")
 
     def impl_np_setitem_datetime_arr(A, idx, val):  # pragma: no cover
         # Make sure data elements of NA values are NaT to pass the NAs to output
@@ -708,7 +708,7 @@ def create_cmp_op_overload_arr(op):
 
         # DatetimeArrayType + Scalar tz-aware or date
         if isinstance(lhs, DatetimeArrayType) and (
-            isinstance(rhs, PandasTimestampType) or rhs == bodo.datetime_date_type
+            isinstance(rhs, PandasTimestampType) or rhs == bodo.types.datetime_date_type
         ):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover
@@ -726,7 +726,7 @@ def create_cmp_op_overload_arr(op):
 
         # Scalar tz-aware or date + DatetimeArrayType.
         elif (
-            isinstance(lhs, PandasTimestampType) or lhs == bodo.datetime_date_type
+            isinstance(lhs, PandasTimestampType) or lhs == bodo.types.datetime_date_type
         ) and isinstance(rhs, DatetimeArrayType):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover
@@ -744,9 +744,11 @@ def create_cmp_op_overload_arr(op):
 
         # DatetimeArrayType or date array + DatetimeArrayType or date array
         elif (
-            isinstance(lhs, DatetimeArrayType) or lhs == bodo.datetime_date_array_type
+            isinstance(lhs, DatetimeArrayType)
+            or lhs == bodo.types.datetime_date_array_type
         ) and (
-            isinstance(rhs, DatetimeArrayType) or rhs == bodo.datetime_date_array_type
+            isinstance(rhs, DatetimeArrayType)
+            or rhs == bodo.types.datetime_date_array_type
         ):
             # Note: Checking that tz values match is handled by the scalar comparison.
             def impl(lhs, rhs):  # pragma: no cover
@@ -767,9 +769,9 @@ def create_cmp_op_overload_arr(op):
         # Tz-Aware timestamp + Tz-Naive timestamp
         elif (
             isinstance(lhs, DatetimeArrayType)
-            and (isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns)
+            and (isinstance(rhs, types.Array) and rhs.dtype == bodo.types.datetime64ns)
         ) or (
-            (isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns)
+            (isinstance(lhs, types.Array) and lhs.dtype == bodo.types.datetime64ns)
             and isinstance(rhs, DatetimeArrayType)
         ):
 
@@ -812,7 +814,7 @@ def overload_add_operator_datetime_arr(lhs, rhs):
     """
     if isinstance(lhs, DatetimeArrayType):
         # TODO: Support more types
-        if rhs == bodo.week_type:
+        if rhs == bodo.types.week_type:
             tz_literal = lhs.tz
 
             def impl(lhs, rhs):  # pragma: no cover
@@ -837,7 +839,7 @@ def overload_add_operator_datetime_arr(lhs, rhs):
     else:
         # Note this function is only called if at least one input is a DatetimeArrayType
         # TODO: Support more types
-        if lhs == bodo.week_type:
+        if lhs == bodo.types.week_type:
             tz_literal = rhs.tz
 
             def impl(lhs, rhs):  # pragma: no cover

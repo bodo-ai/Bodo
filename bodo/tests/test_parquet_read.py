@@ -1826,12 +1826,12 @@ def test_pq_non_constant_filepath_error(datapath):
     @bodo.jit(
         locals={
             "df": {
-                "one": bodo.float64[:],
-                "two": bodo.string_array_type,
-                "three": bodo.boolean_array_type,
-                "four": bodo.float64[:],
-                "five": bodo.string_array_type,
-                "__index_level_0__": bodo.int64[:],
+                "one": bodo.types.float64[:],
+                "two": bodo.types.string_array_type,
+                "three": bodo.types.boolean_array_type,
+                "four": bodo.types.float64[:],
+                "five": bodo.types.string_array_type,
+                "__index_level_0__": bodo.types.int64[:],
             }
         }
     )
@@ -1863,7 +1863,7 @@ def test_read_parquet_invalid_path():
         return df
 
     with pytest.raises(BodoError, match="error from pyarrow: FileNotFoundError"):
-        bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
+        bodo.jit(locals={"df": {"A": bodo.types.int64[:]}})(test_impl)()
 
 
 @pytest_mark_not_df_lib
@@ -1873,7 +1873,7 @@ def test_read_parquet_invalid_path_glob():
         return df
 
     with pytest.raises(BodoError, match="No files found matching glob pattern"):
-        bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
+        bodo.jit(locals={"df": {"A": bodo.types.int64[:]}})(test_impl)()
 
 
 @pytest_mark_not_df_lib
@@ -2356,13 +2356,13 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
         return df
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match="ParquetReader: `storage_options` is not supported for protocol",
     ):
         bodo.jit(distributed=["df"])(test_impl1)()
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match="ParquetReader: `storage_options` is not supported for protocol",
     ):
         bodo.jit(distributed=["df"])(test_impl2)()
@@ -2387,7 +2387,7 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
         return df
 
     with pytest.raises(
-        BodoError,
+        ValueError,
         match=re.escape(
             "ParquetReader: `storage_options` is not supported for protocol"
         ),
@@ -2674,12 +2674,12 @@ def test_pq_schema(datapath, memory_leak_check):
         distributed=False,
         locals={
             "df": {
-                "one": bodo.float64[:],
-                "two": bodo.string_array_type,
-                "three": bodo.bool_[:],
-                "four": bodo.float64[:],
-                "five": bodo.string_array_type,
-                "__index_level_0__": bodo.int64[:],
+                "one": bodo.types.float64[:],
+                "two": bodo.types.string_array_type,
+                "three": bodo.types.bool_[:],
+                "four": bodo.types.float64[:],
+                "five": bodo.types.string_array_type,
+                "__index_level_0__": bodo.types.int64[:],
             }
         },
     )(impl)
@@ -3033,7 +3033,7 @@ def test_batched_read_agg(datapath, memory_leak_check):
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
         check_func(
-            impl, (datapath("tpch-test_data/parquet/lineitem.parquet"),), py_output=4000
+            impl, (datapath("tpch-test_data/parquet/lineitem.pq"),), py_output=4000
         )
         check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(stream, "Columns loaded ['L_PARTKEY']")
@@ -3066,7 +3066,7 @@ def test_batched_read_only_len(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         check_func(
             impl,
-            (datapath("tpch-test_data/parquet/lineitem.parquet"),),
+            (datapath("tpch-test_data/parquet/lineitem.pq"),),
             py_output=120515,
         )
         check_logger_msg(stream, "Columns loaded []")

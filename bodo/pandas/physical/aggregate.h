@@ -1,14 +1,18 @@
 #pragma once
 
+#include <object.h>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include "../_util.h"
 #include "../io/arrow_reader.h"
 #include "../libs/_array_utils.h"
 #include "../libs/_query_profile_collector.h"
+#include "../libs/_table_builder_utils.h"
 #include "../libs/_utils.h"
 #include "../libs/groupby/_groupby_ftypes.h"
+#include "../libs/groupby/_groupby_udf.h"
 #include "../libs/streaming/_groupby.h"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
@@ -23,6 +27,35 @@ struct PhysicalAggregateMetrics {
     time_t consume_time = 0;  // stage_1
     time_t produce_time = 0;  // stage_2
 };
+
+/**
+ * @brief Gets a cfunc for computing the output of a single UDF.
+ *
+ * @param cfunc_wrapper Python function that takes no arguments, called on
+ * workers to compile a cfunc for computing a UDF and expose its address.
+ * @return stream_udf_t* cfunc for applying UDFs on a grouped table.
+ */
+stream_udf_t* get_cfunc_from_wrapper(PyObject* cfunc_wrapper) {
+    if (cfunc_wrapper == Py_None) {
+        throw std::runtime_error("agg: No cfunc_wrapper found for aggfunc.");
+    }
+
+    PyObject* result = PyObject_CallNoArgs(cfunc_wrapper);
+
+    if (!result) {
+        PyErr_Print();
+        throw std::runtime_error("agg: Error calling cfunc wrapper.");
+    }
+
+    if (!PyLong_Check(result)) {
+        throw std::runtime_error(
+            "agg: Expected cfunc wrapper to return an integer.");
+    }
+
+    auto udf_cfunc = reinterpret_cast<stream_udf_t*>(PyLong_AsLongLong(result));
+    Py_DECREF(result);
+    return udf_cfunc;
+}
 
 /**
  * @brief Physical node for groupby aggregation
@@ -42,57 +75,88 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                                 in_table_schema_reordered, cols_to_keep_vec);
 
         std::vector<int32_t> ftypes;
-        // Create input data column indices (only single data column for now)
+        // Create input data column indices
         std::vector<int32_t> f_in_cols;
+        std::vector<int32_t> f_in_offsets = {0};
         std::optional<bool> dropna = std::nullopt;
-        for (const auto& expr : op.expressions) {
+
+        std::vector<stream_udf_t*> udf_cfuncs;
+        std::vector<int> udf_idxs;
+
+        for (size_t i = 0; i < op.expressions.size(); i++) {
+            const auto& expr = op.expressions[i];
+
             if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
                 throw std::runtime_error(
                     "Aggregate expression is not a bound aggregate: " +
                     expr->ToString());
             }
             auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
-            if (agg_expr.children.size() != 1 ||
-                agg_expr.children[0]->type !=
-                    duckdb::ExpressionType::BOUND_COLUMN_REF) {
-                throw std::runtime_error(
-                    "Aggregate expression does not have a single column "
-                    "reference child: " +
-                    expr->ToString());
-            }
-            auto& colref =
-                agg_expr.children[0]->Cast<duckdb::BoundColumnRefExpression>();
-            size_t col_idx = col_ref_map.at(
-                {colref.binding.table_index, colref.binding.column_index});
-
-            size_t reorder_col_idx =
-                std::find(this->input_col_inds.begin(),
-                          this->input_col_inds.end(), col_idx) -
-                this->input_col_inds.begin();
-            f_in_cols.push_back(reorder_col_idx);
 
             // Check if the aggregate function is supported
+            bool is_udf = agg_expr.function.name.starts_with("udf");
             if (function_to_ftype.find(agg_expr.function.name) ==
-                function_to_ftype.end()) {
+                    function_to_ftype.end() &&
+                !is_udf) {
                 throw std::runtime_error("Unsupported aggregate function: " +
                                          agg_expr.function.name);
             }
 
-            ftypes.push_back(function_to_ftype.at(agg_expr.function.name));
+            if (!is_udf && agg_expr.children.size() != 1) {
+                throw std::runtime_error(
+                    "Aggregate expression for builtin funcs must have exactly "
+                    "one child expression" +
+                    expr->ToString());
+            }
 
-            std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
-                out_arr_type = get_groupby_output_dtype(
-                    ftypes.back(),
-                    in_table_schema->column_types[col_idx]->array_type,
-                    in_table_schema->column_types[col_idx]->c_type);
+            size_t col_idx = 0;
+            for (auto& child_expr : agg_expr.children) {
+                if (child_expr->type !=
+                    duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                    throw std::runtime_error(
+                        "Aggregate expression must have only col ref "
+                        "expression children" +
+                        expr->ToString());
+                }
+                auto& colref =
+                    child_expr->Cast<duckdb::BoundColumnRefExpression>();
+                col_idx = col_ref_map.at(
+                    {colref.binding.table_index, colref.binding.column_index});
 
-            this->output_schema->append_column(std::make_unique<bodo::DataType>(
-                std::get<0>(out_arr_type), std::get<1>(out_arr_type)));
-            this->output_schema->column_names.push_back(agg_expr.function.name);
+                size_t reorder_col_idx =
+                    std::find(this->input_col_inds.begin(),
+                              this->input_col_inds.end(), col_idx) -
+                    this->input_col_inds.begin();
+                f_in_cols.push_back(reorder_col_idx);
+            }
+            f_in_offsets.push_back(f_in_cols.size());
 
             // Extract bind_info
             BodoAggFunctionData& bind_info =
                 agg_expr.bind_info->Cast<BodoAggFunctionData>();
+
+            std::unique_ptr<bodo::DataType> out_arr_type;
+            if (is_udf) {
+                ftypes.push_back(Bodo_FTypes::stream_udf);
+                out_arr_type = arrow_type_to_bodo_data_type(
+                    bind_info.out_schema->field(0)->type());
+                udf_cfuncs.push_back(
+                    get_cfunc_from_wrapper(bind_info.py_udf_args));
+                udf_idxs.push_back(i + this->keys.size());
+            } else {
+                ftypes.push_back(function_to_ftype.at(agg_expr.function.name));
+                std::tuple<bodo_array_type::arr_type_enum,
+                           Bodo_CTypes::CTypeEnum>
+                    output_dtype = get_groupby_output_dtype(
+                        ftypes.back(),
+                        in_table_schema->column_types[col_idx]->array_type,
+                        in_table_schema->column_types[col_idx]->c_type);
+                out_arr_type = std::make_unique<bodo::DataType>(
+                    std::get<0>(output_dtype), std::get<1>(output_dtype));
+            }
+
+            this->output_schema->append_column(std::move(out_arr_type));
+            this->output_schema->column_names.push_back(agg_expr.function.name);
 
             // NOTE: drop_na must be consistent accross all expressions
             // This is a little awkward but AFAICT there is no bind_info for
@@ -108,10 +172,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             }
         }
 
-        // Offsets for the input data columns, which are trivial since we have a
-        // single data column
-        std::vector<int32_t> f_in_offsets(f_in_cols.size() + 1);
-        std::iota(f_in_offsets.begin(), f_in_offsets.end(), 0);
+        auto udf_table = alloc_table(this->output_schema->Project(udf_idxs));
 
         // TODO: propagate dropna value when agg columns are pruned out.
         if (!dropna.has_value()) {
@@ -123,7 +184,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
             get_streaming_batch_size(), true, -1, getOpId(), -1, false,
             std::nullopt,
-            /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value());
+            /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value(),
+            udf_table, udf_cfuncs);
         this->metrics.init_time += end_timer(start_init);
     }
 

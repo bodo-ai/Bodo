@@ -1,6 +1,4 @@
-import atexit
 import datetime
-import sys
 import time
 import warnings
 from collections import defaultdict
@@ -27,6 +25,10 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+
+# Import compiler
+import bodo.decorators  # isort:skip # noqa
+
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
@@ -82,7 +84,6 @@ from bodo.utils.utils import (
     numba_to_c_type,
 )
 
-ll.add_symbol("dist_get_time", hdist.dist_get_time)
 ll.add_symbol("get_time", hdist.get_time)
 ll.add_symbol("dist_reduce", hdist.dist_reduce)
 ll.add_symbol("dist_arr_reduce", hdist.dist_arr_reduce)
@@ -116,16 +117,20 @@ ll.add_symbol("decimal_reduce", hdist.decimal_reduce)
 ll.add_symbol("gather_table_py_entry", hdist.gather_table_py_entry)
 ll.add_symbol("gather_array_py_entry", hdist.gather_array_py_entry)
 ll.add_symbol("get_cpu_id", hdist.get_cpu_id)
+ll.add_symbol("broadcast_array_py_entry", hdist.broadcast_array_py_entry)
+ll.add_symbol("broadcast_table_py_entry", hdist.broadcast_table_py_entry)
 
-
-# get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
-mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
 
 DEFAULT_ROOT = 0
-ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+
 
 # Wrapper for getting process rank from C (MPI rank currently)
-get_rank = hdist.get_rank_py_wrapper
+def get_rank():
+    return hdist.get_rank_py_wrapper()
+
+
+def get_size():
+    return hdist.get_size_py_wrapper()
 
 
 # XXX same as _distributed.h::BODO_ReduceOps::ReduceOpsEnum
@@ -146,15 +151,14 @@ class Reduce_Type(Enum):
     No_Op = 13
 
 
-_get_rank = types.ExternalFunction("c_get_rank", types.int32())
-_get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
-_dist_transpose_comm = types.ExternalFunction(
-    "_dist_transpose_comm",
-    types.void(types.voidptr, types.voidptr, types.int32, types.int64, types.int64),
-)
 _get_cpu_id = types.ExternalFunction("get_cpu_id", types.int32())
 get_remote_size = types.ExternalFunction("c_get_remote_size", types.int32(types.int64))
+
+
+@infer_global(get_rank)
+class GetRankInfer(ConcreteTemplate):
+    cases = [signature(types.int32)]
 
 
 @lower_builtin(
@@ -171,10 +175,23 @@ def lower_get_rank(context, builder, sig, args):
     return out
 
 
-@numba.njit(cache=True)
-def get_size():  # pragma: no cover
-    """wrapper for getting number of processes (MPI COMM size currently)"""
-    return _get_size()
+@infer_global(get_size)
+class GetSizeInfer(ConcreteTemplate):
+    cases = [signature(types.int32)]
+
+
+@lower_builtin(
+    get_size,
+)
+def lower_get_size(context, builder, sig, args):
+    fnty = lir.FunctionType(
+        lir.IntType(32),
+        [],
+    )
+    fn_typ = cgutils.get_or_insert_function(builder.module, fnty, name="c_get_size")
+    out = builder.call(fn_typ, args)
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return out
 
 
 @numba.njit(cache=True)
@@ -195,10 +212,6 @@ def get_cpu_id():  # pragma: no cover
     return _get_cpu_id()
 
 
-_get_time = types.ExternalFunction("get_time", types.float64())
-dist_time = types.ExternalFunction("dist_get_time", types.float64())
-
-
 @infer_global(time.time)
 class TimeInfer(ConcreteTemplate):
     cases = [signature(types.float64)]
@@ -206,6 +219,8 @@ class TimeInfer(ConcreteTemplate):
 
 @lower_builtin(time.time)
 def lower_time_time(context, builder, sig, args):
+    _get_time = types.ExternalFunction("get_time", types.float64())
+
     return cached_call_internal(context, builder, lambda: _get_time(), sig, args)
 
 
@@ -219,8 +234,6 @@ def get_type_enum(arr):
     typ_val = numba_to_c_type(dtype)
     return lambda arr: np.int32(typ_val)
 
-
-INT_MAX = np.iinfo(np.int32).max
 
 _send = types.ExternalFunction(
     "c_send",
@@ -251,17 +264,23 @@ def recv(dtype, rank, tag):  # pragma: no cover
     return recv_arr[0]
 
 
-_isend = types.ExternalFunction(
-    "dist_isend",
-    mpi_req_numba_type(
-        types.voidptr, types.int32, types.int32, types.int32, types.int32, types.bool_
-    ),
-)
-
-
 @numba.generated_jit(nopython=True)
 def isend(arr, size, pe, tag, cond=True):
     """call MPI isend with input data"""
+    # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
+    mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
+    _isend = types.ExternalFunction(
+        "dist_isend",
+        mpi_req_numba_type(
+            types.voidptr,
+            types.int32,
+            types.int32,
+            types.int32,
+            types.int32,
+            types.bool_,
+        ),
+    )
+
     # Numpy array
     if isinstance(arr, types.Array):
 
@@ -401,6 +420,18 @@ def gather_scalar_impl_jit(
     typ_val = numba_to_c_type(data)
     dtype = data
 
+    c_gather_scalar = types.ExternalFunction(
+        "c_gather_scalar",
+        types.void(
+            types.voidptr,
+            types.voidptr,
+            types.int32,
+            types.bool_,
+            types.int32,
+            types.int64,
+        ),
+    )
+
     def gather_scalar_impl(
         data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
     ):  # pragma: no cover
@@ -421,14 +452,6 @@ def gather_scalar_impl_jit(
         return res
 
     return gather_scalar_impl
-
-
-c_gather_scalar = types.ExternalFunction(
-    "c_gather_scalar",
-    types.void(
-        types.voidptr, types.voidptr, types.int32, types.bool_, types.int32, types.int64
-    ),
-)
 
 
 @intrinsic
@@ -466,26 +489,6 @@ def load_val_ptr(typingctx, ptr_tp, val_tp=None):
     return val_tp(ptr_tp, val_tp), codegen
 
 
-_dist_reduce = types.ExternalFunction(
-    "dist_reduce",
-    types.void(types.voidptr, types.voidptr, types.int32, types.int32, types.int64),
-)
-
-_dist_arr_reduce = types.ExternalFunction(
-    "dist_arr_reduce", types.void(types.voidptr, types.int64, types.int32, types.int32)
-)
-
-_timestamptz_reduce = types.ExternalFunction(
-    "timestamptz_reduce",
-    types.void(types.int64, types.int64, types.voidptr, types.voidptr, types.boolean),
-)
-
-_decimal_reduce = types.ExternalFunction(
-    "decimal_reduce",
-    types.void(types.int64, types.voidptr, types.voidptr, types.int32, types.int32),
-)
-
-
 @numba.njit(cache=True)
 def dist_reduce(value, reduce_op, comm=0):
     return dist_reduce_impl(value, reduce_op, comm)
@@ -495,6 +498,11 @@ def dist_reduce(value, reduce_op, comm=0):
 def dist_reduce_impl(value, reduce_op, comm):
     if isinstance(value, types.Array):
         typ_enum = np.int32(numba_to_c_type(value.dtype))
+
+        _dist_arr_reduce = types.ExternalFunction(
+            "dist_arr_reduce",
+            types.void(types.voidptr, types.int64, types.int32, types.int32),
+        )
 
         def impl_arr(value, reduce_op, comm):  # pragma: no cover
             assert comm == 0, "dist_reduce_impl: intercomm not supported for arrays"
@@ -518,22 +526,30 @@ def dist_reduce_impl(value, reduce_op, comm):
             types.float32,
             types.float64,
             types.int64,
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
-            bodo.datetime_date_type,
-            bodo.TimeType,
+            bodo.types.datetime64ns,
+            bodo.types.timedelta64ns,
+            bodo.types.datetime_date_type,
+            bodo.types.TimeType,
         ]
 
         if target_typ not in supported_typs and not isinstance(
-            target_typ, (bodo.Decimal128Type, bodo.PandasTimestampType)
+            target_typ, (bodo.types.Decimal128Type, bodo.types.PandasTimestampType)
         ):  # pragma: no cover
             raise BodoError(f"argmin/argmax not supported for type {target_typ}")
 
     typ_enum = np.int32(numba_to_c_type(target_typ))
 
-    if isinstance(target_typ, bodo.Decimal128Type):
+    if isinstance(target_typ, bodo.types.Decimal128Type):
         # For index-value types, the data pointed to has different amounts of padding depending on machine type.
         # as a workaround, we can pass the index separately.
+
+        _decimal_reduce = types.ExternalFunction(
+            "decimal_reduce",
+            types.void(
+                types.int64, types.voidptr, types.voidptr, types.int32, types.int32
+            ),
+        )
+
         if isinstance(types.unliteral(value), IndexValueType):
 
             def impl(value, reduce_op, comm):  # pragma: no cover
@@ -566,7 +582,7 @@ def dist_reduce_impl(value, reduce_op, comm):
 
         return impl
 
-    if isinstance(value, bodo.TimestampTZType):
+    if isinstance(value, bodo.types.TimestampTZType):
         # This requires special handling because TimestampTZ's scalar
         # representation isn't the same as it's array representation - as such,
         # we need to extract the timestamp and offset separately, otherwise the
@@ -580,6 +596,14 @@ def dist_reduce_impl(value, reduce_op, comm):
         # portable).
         # TODO(aneesh): unify array and scalar representations of TimestampTZ to
         # avoid this.
+
+        _timestamptz_reduce = types.ExternalFunction(
+            "timestamptz_reduce",
+            types.void(
+                types.int64, types.int64, types.voidptr, types.voidptr, types.boolean
+            ),
+        )
+
         def impl(value, reduce_op, comm):  # pragma: no cover
             assert comm == 0, "dist_reduce_impl: intercomm not supported for arrays"
             if reduce_op not in {Reduce_Type.Min.value, Reduce_Type.Max.value}:
@@ -600,9 +624,14 @@ def dist_reduce_impl(value, reduce_op, comm):
             )
             out_ts = load_val_ptr(out_ts_ptr, value_ts)
             out_offset = load_val_ptr(out_offset_ptr, value_ts)
-            return bodo.TimestampTZ(pd.Timestamp(out_ts), out_offset)
+            return bodo.types.TimestampTZ(pd.Timestamp(out_ts), out_offset)
 
         return impl
+
+    _dist_reduce = types.ExternalFunction(
+        "dist_reduce",
+        types.void(types.voidptr, types.voidptr, types.int32, types.int32, types.int64),
+    )
 
     def impl(value, reduce_op, comm):  # pragma: no cover
         in_ptr = value_to_ptr(value)
@@ -611,11 +640,6 @@ def dist_reduce_impl(value, reduce_op, comm):
         return load_val_ptr(out_ptr, value)
 
     return impl
-
-
-_dist_exscan = types.ExternalFunction(
-    "dist_exscan", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
-)
 
 
 @numba.njit(cache=True)
@@ -628,6 +652,11 @@ def dist_exscan_impl(value, reduce_op):
     target_typ = types.unliteral(value)
     typ_enum = np.int32(numba_to_c_type(target_typ))
     zero = target_typ(0)
+
+    _dist_exscan = types.ExternalFunction(
+        "dist_exscan",
+        types.void(types.voidptr, types.voidptr, types.int32, types.int32),
+    )
 
     def impl(value, reduce_op):  # pragma: no cover
         in_ptr = value_to_ptr(value)
@@ -725,6 +754,10 @@ def overload_distributed_transpose(arr):
         "distributed_transpose: 2D array expected"
     )
     c_type = numba_to_c_type(arr.dtype)
+    _dist_transpose_comm = types.ExternalFunction(
+        "_dist_transpose_comm",
+        types.void(types.voidptr, types.voidptr, types.int32, types.int64, types.int64),
+    )
 
     def impl(arr):  # pragma: no cover
         n_loc_rows, n_cols = arr.shape
@@ -1009,7 +1042,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     if dtype == string_array_type:
         return pd.array(["A"], "string")
 
-    if dtype == bodo.dict_str_arr_type:
+    if dtype == bodo.types.dict_str_arr_type:
         return pd.array(["a"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())))
 
     if dtype == binary_array_type:
@@ -1056,7 +1089,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
             return pd.RangeIndex(1, name=name)
         arr_type = bodo.utils.typing.get_index_data_arr_types(dtype)[0]
         arr = get_value_for_type(arr_type)
-        if isinstance(dtype, bodo.PeriodIndexType):
+        if isinstance(dtype, bodo.types.PeriodIndexType):
             return pd.period_range(
                 start="2023-01-01", periods=1, freq=dtype.freq, name=name
             )
@@ -1090,7 +1123,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return df
 
     # Table
-    if isinstance(dtype, bodo.TableType):
+    if isinstance(dtype, bodo.types.TableType):
         arrs = tuple(get_value_for_type(t) for t in dtype.arr_types)
         return bodo.hiframes.table.Table(arrs)
 
@@ -1125,8 +1158,8 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         )
 
     # TimestampTZ array
-    if dtype == bodo.timestamptz_array_type:
-        return np.array([bodo.TimestampTZ(pd.Timestamp(0), 0)])
+    if dtype == bodo.types.timestamptz_array_type:
+        return np.array([bodo.types.TimestampTZ(pd.Timestamp(0), 0)])
 
     # TimeArray
     if isinstance(dtype, TimeArrayType):
@@ -1136,18 +1169,19 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
                 "get_value_for_type: only nanosecond precision is supported for nested data"
             )
             return pd.array(
-                [bodo.Time(3, precision=precision)], pd.ArrowDtype(pa.time64("ns"))
+                [bodo.types.Time(3, precision=precision)],
+                pd.ArrowDtype(pa.time64("ns")),
             )
-        return np.array([bodo.Time(3, precision=precision)], object)
+        return np.array([bodo.types.Time(3, precision=precision)], object)
 
     # NullArray
-    if dtype == bodo.null_array_type:
+    if dtype == bodo.types.null_array_type:
         return pd.arrays.ArrowExtensionArray(pa.nulls(1))
 
     # StructArray
-    if isinstance(dtype, bodo.StructArrayType):
+    if isinstance(dtype, bodo.types.StructArrayType):
         # Handle empty struct corner case which can have typing issues
-        if dtype == bodo.StructArrayType((), ()):
+        if dtype == bodo.types.StructArrayType((), ()):
             return pd.array([{}], pd.ArrowDtype(pa.struct([])))
 
         pa_arr = pa.StructArray.from_arrays(
@@ -1156,7 +1190,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # TupleArray
-    if isinstance(dtype, bodo.TupleArrayType):
+    if isinstance(dtype, bodo.types.TupleArrayType):
         # TODO[BSE-4213]: Use Arrow arrays
         return pd.array(
             [
@@ -1169,7 +1203,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         )._ndarray
 
     # MapArrayType
-    if isinstance(dtype, bodo.MapArrayType):
+    if isinstance(dtype, bodo.types.MapArrayType):
         pa_arr = pa.MapArray.from_arrays(
             [0, 1],
             get_value_for_type(dtype.key_arr_type, True),
@@ -1178,7 +1212,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
         return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # Numpy Matrix
-    if isinstance(dtype, bodo.MatrixType):
+    if isinstance(dtype, bodo.types.MatrixType):
         return np.asmatrix(
             get_value_for_type(types.Array(dtype.dtype, 2, dtype.layout))
         )
@@ -1191,7 +1225,7 @@ def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
             get_value_for_type(dtype.key_type): get_value_for_type(dtype.value_type)
         }
 
-    if dtype == bodo.string_type:
+    if dtype == bodo.types.string_type:
         # make names unique with next_label to avoid MultiIndex unboxing issue #811
         return "_" + str(ir_utils.next_label())
 
@@ -1287,6 +1321,8 @@ def bcast_preallocated_overload(data, root=DEFAULT_ROOT):
     ranks.
     Only supports basic numeric and string data types (e.g. no nested arrays).
     """
+    INT_MAX = np.iinfo(np.int32).max
+
     # Numpy arrays
     if isinstance(data, types.Array):
 
@@ -1388,18 +1424,18 @@ class BcastScalarInfer(AbstractTemplate):
                 (
                     types.Integer,
                     types.Float,
-                    bodo.PandasTimestampType,
+                    bodo.types.PandasTimestampType,
                 ),
             )
             or val
             in [
-                bodo.datetime64ns,
-                bodo.timedelta64ns,
-                bodo.string_type,
+                bodo.types.datetime64ns,
+                bodo.types.timedelta64ns,
+                bodo.types.string_type,
                 types.none,
                 types.bool_,
-                bodo.datetime_date_type,
-                bodo.timestamptz_type,
+                bodo.types.datetime_date_type,
+                bodo.types.timestamptz_type,
             ]
         ):
             raise BodoError(
@@ -1413,7 +1449,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
     if val == types.none:
         return lambda val, root=DEFAULT_ROOT, comm=0: None
 
-    if val == bodo.timestamptz_type:
+    if val == bodo.types.timestamptz_type:
 
         def impl(val, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
             updated_timestamp = bodo.libs.distributed_api.bcast_scalar(
@@ -1422,11 +1458,11 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
             updated_offset = bodo.libs.distributed_api.bcast_scalar(
                 val.offset_minutes, root, comm
             )
-            return bodo.TimestampTZ(updated_timestamp, updated_offset)
+            return bodo.types.TimestampTZ(updated_timestamp, updated_offset)
 
         return impl
 
-    if val == bodo.datetime_date_type:
+    if val == bodo.types.datetime_date_type:
         c_type = numba_to_c_type(types.int32)
 
         # Note: There are issues calling this function with recursion.
@@ -1439,7 +1475,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
         return impl
 
-    if isinstance(val, bodo.PandasTimestampType):
+    if isinstance(val, bodo.types.PandasTimestampType):
         c_type = numba_to_c_type(types.int64)
         tz = val.tz
 
@@ -1454,7 +1490,7 @@ def gen_bcast_scalar_impl(val, root=DEFAULT_ROOT, comm=0):
 
         return impl
 
-    if val == bodo.string_type:
+    if val == bodo.types.string_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def impl_str(val, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
@@ -1617,9 +1653,6 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len):
     return getitem_impl
 
 
-dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
-
-
 def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
     return arr[ind]
 
@@ -1642,7 +1675,7 @@ def transform_str_getitem_output(data, length):
 
 @overload(transform_str_getitem_output)
 def overload_transform_str_getitem_output(data, length):
-    if data == bodo.string_type:
+    if data == bodo.types.string_type:
         return lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
             data._data, length
         )  # pragma: no cover
@@ -1655,7 +1688,10 @@ def overload_transform_str_getitem_output(data, length):
 
 @overload(int_getitem, no_unliteral=True)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
-    if is_str_arr_type(arr) or arr == bodo.binary_array_type:
+    ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+    dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
+
+    if is_str_arr_type(arr) or arr == bodo.types.binary_array_type:
         # TODO: other kinds, unicode
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
@@ -1729,7 +1765,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return str_getitem_impl
 
-    if isinstance(arr, bodo.CategoricalArrayType):
+    if isinstance(arr, bodo.types.CategoricalArrayType):
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def cat_getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
@@ -1805,7 +1841,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return tz_aware_getitem_impl
 
-    if arr == bodo.null_array_type:
+    if arr == bodo.types.null_array_type:
 
         def null_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -1816,7 +1852,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return null_getitem_impl
 
-    if arr == bodo.datetime_date_array_type:
+    if arr == bodo.types.datetime_date_array_type:
 
         def date_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -1851,7 +1887,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return date_getitem_impl
 
-    if arr == bodo.timestamptz_array_type:
+    if arr == bodo.types.timestamptz_array_type:
 
         def timestamp_tz_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
@@ -1989,7 +2025,10 @@ def int_optional_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
 
 @overload(int_isna, no_unliteral=True)
-def int_isn_overload(arr, ind, arr_start, total_len, is_1D):
+def int_isna_overload(arr, ind, arr_start, total_len, is_1D):
+    ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
+    dummy_use = numba.njit(cache=True, no_cpython_wrapper=True)(lambda a: None)
+
     def impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
         if ind >= total_len:
             raise IndexError("index out of bounds")
@@ -2331,12 +2370,16 @@ def overload_print_if_not_empty(*args):
     return impl
 
 
-_wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
-
-
 @numba.generated_jit(nopython=True)
 def wait(req, cond=True):
     """wait on MPI request"""
+
+    # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
+    mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
+    _wait = types.ExternalFunction(
+        "dist_wait", types.void(mpi_req_numba_type, types.bool_)
+    )
+
     # Tuple of requests (e.g. nullable arrays)
     if isinstance(req, types.BaseTuple):
         count = len(req.types)
@@ -2473,44 +2516,6 @@ def dist_permutation_array_index(
     check_and_propagate_cpp_exception()
 
 
-########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
-
-
-from bodo.io import hdfs_reader
-
-finalize = hdist.finalize_py_wrapper
-disconnect_hdfs_py_wrapper = hdfs_reader.disconnect_hdfs_py_wrapper
-
-
-def call_finalize():  # pragma: no cover
-    finalize()
-    disconnect_hdfs_py_wrapper()
-
-
-def flush_stdout():
-    # using a function since pytest throws an error sometimes
-    # if flush function is passed directly to atexit
-    if not sys.stdout.closed:
-        sys.stdout.flush()
-
-
-atexit.register(call_finalize)
-# Flush output before finalize
-atexit.register(flush_stdout)
-
-
-ll.add_symbol("broadcast_array_py_entry", hdist.broadcast_array_py_entry)
-c_broadcast_array = ExternalFunctionErrorChecked(
-    "broadcast_array_py_entry",
-    array_info_type(array_info_type, array_info_type, types.int32, types.int64),
-)
-ll.add_symbol("broadcast_table_py_entry", hdist.broadcast_table_py_entry)
-c_broadcast_table = ExternalFunctionErrorChecked(
-    "broadcast_table_py_entry",
-    table_type(table_type, array_info_type, types.int32, types.int64),
-)
-
-
 def bcast(data, comm_ranks=None, root=DEFAULT_ROOT, comm=None):  # pragma: no cover
     """bcast() sends data from rank 0 to comm_ranks."""
     from bodo.mpi4py import MPI
@@ -2558,6 +2563,10 @@ def bcast_overload(data, comm_ranks, root=DEFAULT_ROOT, comm=0):
 def bcast_impl(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
     """nopython implementation of bcast()"""
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(data, "bodo.bcast()")
+    c_broadcast_array = ExternalFunctionErrorChecked(
+        "broadcast_array_py_entry",
+        array_info_type(array_info_type, array_info_type, types.int32, types.int64),
+    )
 
     if isinstance(data, types.Array) and data.ndim > 1:
         ndim = data.ndim
@@ -2653,6 +2662,10 @@ def bcast_impl(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
     if isinstance(data, bodo.hiframes.table.TableType):
         data_type = data
         out_cols_arr = np.arange(len(data.arr_types), dtype=np.int64)
+        c_broadcast_table = ExternalFunctionErrorChecked(
+            "broadcast_table_py_entry",
+            table_type(table_type, array_info_type, types.int32, types.int64),
+        )
 
         def impl_table(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
             data_cpp = py_table_to_cpp_table(data, data_type)
@@ -2888,3 +2901,16 @@ init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_
 sync_is_last_non_blocking = types.ExternalFunction(
     "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
 )
+
+
+# Replace top export wrappers to help function matching inside JIT compilation
+bodo.allgatherv = allgatherv
+bodo.barrier = barrier
+bodo.gatherv = gatherv
+bodo.get_rank = get_rank
+bodo.get_size = get_size
+bodo.get_nodes_first_ranks = get_nodes_first_ranks
+bodo.parallel_print = parallel_print
+bodo.rebalance = rebalance
+bodo.random_shuffle = random_shuffle
+bodo.scatterv = scatterv

@@ -507,29 +507,32 @@ if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
 endif()
 install(TARGETS memory_tester DESTINATION "bodo/tests/")
 
-# ---------------------- Cython Target - bodo.transforms.type_inference.native_typer -----------------------
-add_custom_command(
-  OUTPUT bodo/transforms/type_inference/native_typer.cpp
-  DEPENDS bodo/transforms/type_inference/native_typer.pyx
-  VERBATIM
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/transforms/type_inference/native_typer.cpp" "bodo/transforms/type_inference/native_typer.pyx"
-  COMMAND "${CMAKE_COMMAND}" -E copy "bodo/transforms/type_inference/native_typer.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/native_typer.cpp"
-  COMMENT "Cythonizing Source bodo/transforms/type_inference/native_typer.pyx into bodo/transforms/type_inference/native_typer.cpp"
-)
 
-python_add_library(
-  native_typer
-  MODULE WITH_SOABI
-    "bodo/transforms/type_inference/native_typer.cpp"
-    "bodo/transforms/type_inference/type.cpp"
-    "bodo/transforms/type_inference/typeinfer.cpp"
-    "bodo/transforms/type_inference/ir.cpp"
-)
-target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/type_inference/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/")
-target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
-target_link_libraries(native_typer PRIVATE fmt::fmt)
-install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
+# TODO[BSE-5071]: Re-enable native typer when its coverage improved
+# # ---------------------- Cython Target - bodo.transforms.type_inference.native_typer -----------------------
+# add_custom_command(
+#   OUTPUT bodo/transforms/type_inference/native_typer.cpp
+#   DEPENDS bodo/transforms/type_inference/native_typer.pyx
+#   VERBATIM
+#   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+#   COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/transforms/type_inference/native_typer.cpp" "bodo/transforms/type_inference/native_typer.pyx"
+#   COMMAND "${CMAKE_COMMAND}" -E copy "bodo/transforms/type_inference/native_typer.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/native_typer.cpp"
+#   COMMENT "Cythonizing Source bodo/transforms/type_inference/native_typer.pyx into bodo/transforms/type_inference/native_typer.cpp"
+# )
+
+# python_add_library(
+#   native_typer
+#   MODULE WITH_SOABI
+#     "bodo/transforms/type_inference/native_typer.cpp"
+#     "bodo/transforms/type_inference/type.cpp"
+#     "bodo/transforms/type_inference/typeinfer.cpp"
+#     "bodo/transforms/type_inference/ir.cpp"
+# )
+# target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/type_inference/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/")
+# target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
+# target_link_libraries(native_typer PRIVATE fmt::fmt)
+# install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
+
 
 # ---------------------- Cython Target - plan_optimizer -----------------------
 add_custom_command(
@@ -541,6 +544,38 @@ add_custom_command(
   COMMAND "${CMAKE_COMMAND}" -E copy "bodo/pandas/plan_optimizer.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/pandas/plan_optimizer.cpp"
   COMMENT "Cythonizing Source bodo/pandas/plan_optimizer.pyx into bodo/pandas/plan_optimizer.cpp"
 )
+
+
+# ---------------------- Native Target - crypto_funcs -----------------------
+
+python_add_library(crypto_funcs
+  MODULE WITH_SOABI
+  "bodo/libs/_crypto_funcs.cpp"
+  "bodo/libs/_base64.cpp"
+)
+target_include_directories(crypto_funcs PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(crypto_funcs PRIVATE ${CONDA_LIB_DIR})
+if (WIN32)
+  target_link_libraries(crypto_funcs PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+else()
+  target_link_libraries(crypto_funcs PRIVATE ssl crypto)
+endif()
+install(TARGETS crypto_funcs DESTINATION "bodo/libs/")
+
+
+# ---------------------- Native Target - memory_cpp -----------------------
+
+python_add_library(memory_cpp
+  MODULE WITH_SOABI
+  "bodo/libs/_pymemory.cpp"
+  "bodo/libs/_memory.cpp"
+  "bodo/libs/_utils.cpp"
+  "bodo/libs/_storage_manager.cpp"
+)
+target_include_directories(memory_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
+target_link_directories(memory_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIB_DIR} ${MPI_LIB_DIR})
+target_link_libraries(memory_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
+install(TARGETS memory_cpp DESTINATION "bodo/")
 
 
 # ------------------------- Main Bodo Extension -------------------------
@@ -576,7 +611,7 @@ set(sources_list
   "bodo/libs/_array_hash.cpp"
   "bodo/libs/_array_operations.cpp"
   "bodo/libs/_array_utils.cpp"
-  "bodo/libs/_base64.cpp"
+  "bodo/libs/_bodo_ext.cpp"
   "bodo/libs/_bodo_common.cpp"
   "bodo/libs/_bodo_tdigest.cpp"
   "bodo/libs/_bodo_to_arrow.cpp"
@@ -601,7 +636,6 @@ set(sources_list
   "bodo/libs/_interval_join.cpp"
   "bodo/libs/_join_hashing.cpp"
   "bodo/libs/_lead_lag.cpp"
-  "bodo/libs/_crypto_funcs.cpp"
   "bodo/libs/_memory.cpp"
   "bodo/libs/_memory_budget.cpp"
   "bodo/libs/_memory_budget_pymod.cpp"
@@ -631,7 +665,6 @@ set(sources_list
   "bodo/libs/_utils.cpp"
   "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
-  "bodo/libs/_pymemory.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_io_cpu_thread_pool.cpp"
@@ -772,7 +805,7 @@ if (NOT WIN32)
 endif()
 
 target_link_directories(ext PRIVATE ${PYARROW_LIB_DIR} "${Python_NumPy_INCLUDE_DIR}/../lib")
-target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
+target_include_directories(ext SYSTEM PRIVATE ${datasketches_INSTALL_DIR}/include)
 target_compile_definitions(ext PRIVATE ARROW_PYTHON_EXPORTING)
 target_link_libraries(ext PRIVATE
   npymath
@@ -788,11 +821,6 @@ target_link_libraries(ext PRIVATE
 
 if (NOT WIN32)
   target_link_libraries(ext PRIVATE pthread)
-else()
-  target_link_libraries(ext PRIVATE
-    OpenSSL::SSL
-    OpenSSL::Crypto
-  )
 endif()
 
 set(IS_PLATFORM "$ENV{IS_BODO_PLATFORM}")

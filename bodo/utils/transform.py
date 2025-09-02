@@ -33,7 +33,8 @@ from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import fold_arguments
 
 import bodo
-from bodo.decorators import WrapPythonDispatcher, WrapPythonDispatcherType
+import bodo.ir.object_mode
+import bodo.libs.distributed_api
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -324,11 +325,12 @@ no_side_effect_call_tuples = {
     ("str_isdecimal", "dict_arr_ext", "libs", bodo),
     ("str_match", "dict_arr_ext", "libs", bodo),
     ("prange", bodo),
-    (bodo.prange,),
+    (numba.prange,),
     ("objmode", bodo),
-    (bodo.objmode,),
+    ("objmode", numba),
+    (numba.objmode,),
     ("no_warning_objmode", bodo),
-    (bodo.no_warning_objmode,),
+    (bodo.ir.object_mode.no_warning_objmode,),
     # Helper functions, inlined in astype
     ("get_label_dict_from_categories", "pd_categorial_ext", "hiframes", bodo),
     (
@@ -1080,11 +1082,11 @@ def get_const_value_inner(
         }
         return getattr(val, call_name[0])(*args, **kws)
 
-    # bodo data type calls like bodo.DataFrameType()
+    # bodo data type calls like bodo.types.DataFrameType()
     if (
         call_name is not None
         and len(call_name) == 2
-        and call_name[1] == "bodo"
+        and call_name[1] == "bodo.types"
         and call_name[0] in bodo_types_with_params
     ):
         args = tuple(
@@ -1097,7 +1099,7 @@ def get_const_value_inner(
             )
             for name, v in dict(var_def.kws).items()
         }
-        return getattr(bodo, call_name[0])(*args, **kwargs)
+        return getattr(bodo.types, call_name[0])(*args, **kwargs)
 
     # evaluate JIT function at compile time if arguments can be constant and it is a
     # "pure" function (has no side effects and only depends on input values for output)
@@ -1201,7 +1203,7 @@ def _func_is_pure(py_func, arg_types, kw_types):
                         if isinstance(typ, types.Array) and func_name == "tofile":
                             return False
                         # logging calls have side effects
-                        if isinstance(typ, bodo.LoggingLoggerType):
+                        if isinstance(typ, bodo.types.LoggingLoggerType):
                             return False
                         # matplotlib types
                         if str(typ).startswith("Mpl"):
@@ -1256,6 +1258,7 @@ def get_const_func_output_type(
     'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
     'is_udf' prepares the output for UDF cases like Series.apply()
     """
+    from bodo.decorators import WrapPythonDispatcher, WrapPythonDispatcherType
     from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 
     # wrap_python functions have output type available already
@@ -1781,6 +1784,13 @@ def replace_func(
     run_full_pipeline=False,
 ):
     """"""
+    # We can't leave globals updated outside this function so we save, update, then restore.
+    saved = {
+        name: func.__globals__[name]
+        for name in ("numba", "np", "bodo", "pd")
+        if name in func.__globals__
+    }
+
     glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd}
     if extra_globals is not None:
         glbls.update(extra_globals)
@@ -1823,9 +1833,11 @@ def replace_func(
             else:
                 new_args.append(arg_typs[i])
         arg_typs = tuple(new_args)
-    return ReplaceFunc(
+    ret = ReplaceFunc(
         func, arg_typs, args, glbls, inline_bodo_calls, run_full_pipeline, pre_nodes
     )
+    func.__globals__.update(saved)
+    return ret
 
 
 ############################# UDF utils ############################
@@ -1892,7 +1904,7 @@ def get_type_alloc_counts(t):
     if isinstance(t, (StructArrayType, TupleArrayType)):
         return 1 + sum(get_type_alloc_counts(d.dtype) for d in t.data)
 
-    if t == string_array_type or t == bodo.binary_array_type:
+    if t == string_array_type or t == bodo.types.binary_array_type:
         return 2
 
     if isinstance(t, ArrayItemArrayType):
@@ -1905,7 +1917,7 @@ def get_type_alloc_counts(t):
             t.value_arr_type
         )
 
-    if bodo.utils.utils.is_array_typ(t, False) or t == bodo.string_type:
+    if bodo.utils.utils.is_array_typ(t, False) or t == bodo.types.string_type:
         return 1
 
     if isinstance(t, StructType):

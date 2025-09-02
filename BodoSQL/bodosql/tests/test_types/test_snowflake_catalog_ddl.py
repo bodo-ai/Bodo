@@ -2,12 +2,14 @@
 Tests DDL operations on a BodoSQL catalog.
 """
 
+import os
 from contextlib import contextmanager
 from copy import deepcopy
 from decimal import Decimal
 
 import pandas as pd
 import pytest
+import snowflake.connector
 
 import bodo
 import bodosql
@@ -1783,181 +1785,34 @@ def test_show_tables(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Show Tables test failed"
 
 
-def _show_views_snowflake_sample_data_output(terse=True):
-    # This is a long test, yes, but this is the only reliably available
-    # query for SHOW VIEWS in the Snowflake sample database.
-    if terse:
-        return pd.DataFrame(
-            {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 48,
-                "NAME": [
-                    "APPLICABLE_ROLES",
-                    "CLASSES",
-                    "CLASS_INSTANCES",
-                    "CLASS_INSTANCE_FUNCTIONS",
-                    "CLASS_INSTANCE_PROCEDURES",
-                    "COLUMNS",
-                    "CORTEX_SEARCH_SERVICES",
-                    "CURRENT_PACKAGES_POLICY",
-                    "DATABASES",
-                    "ELEMENT_TYPES",
-                    "ENABLED_ROLES",
-                    "EVENT_TABLES",
-                    "EXTERNAL_TABLES",
-                    "FIELDS",
-                    "FILE_FORMATS",
-                    "FUNCTIONS",
-                    "GIT_REPOSITORIES",
-                    "HYBRID_TABLES",
-                    "INDEXES",
-                    "INDEX_COLUMNS",
-                    "INFORMATION_SCHEMA_CATALOG_NAME",
-                    "LOAD_HISTORY",
-                    "MODEL_VERSIONS",
-                    "NOTEBOOKS",
-                    "OBJECT_PRIVILEGES",
-                    "PACKAGES",
-                    "PIPES",
-                    "PROCEDURES",
-                    "REFERENTIAL_CONSTRAINTS",
-                    "REPLICATION_DATABASES",
-                    "REPLICATION_GROUPS",
-                    "SCHEMATA",
-                    "SEMANTIC_DIMENSIONS",
-                    "SEMANTIC_FACTS",
-                    "SEMANTIC_METRICS",
-                    "SEMANTIC_RELATIONSHIPS",
-                    "SEMANTIC_TABLES",
-                    "SEMANTIC_VIEWS",
-                    "SEQUENCES",
-                    "SERVICES",
-                    "STAGES",
-                    "STREAMLITS",
-                    "TABLES",
-                    "TABLE_CONSTRAINTS",
-                    "TABLE_PRIVILEGES",
-                    "TABLE_STORAGE_METRICS",
-                    "USAGE_PRIVILEGES",
-                    "VIEWS",
-                ],
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 48,
-                "KIND": ["VIEW"] * 48,
-            }
+def _show_views_snowflake_sample_data_output(terse: bool = True) -> pd.DataFrame:
+    """Fetch the SHOW VIEWS output directly from Snowflake sample DB."""
+    maybe_terse = " TERSE " if terse else ""
+
+    conn = snowflake.connector.connect(
+        user=os.environ["SF_USERNAME"],
+        password=os.environ["SF_PASSWORD"],
+        account="bodopartner.us-east-1",
+        warehouse="DEMO_WH",
+    )
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"SHOW {maybe_terse} VIEWS in SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"
         )
-    else:
-        return pd.DataFrame(
-            {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 48,
-                "NAME": [
-                    "APPLICABLE_ROLES",
-                    "CLASSES",
-                    "CLASS_INSTANCES",
-                    "CLASS_INSTANCE_FUNCTIONS",
-                    "CLASS_INSTANCE_PROCEDURES",
-                    "COLUMNS",
-                    "CORTEX_SEARCH_SERVICES",
-                    "CURRENT_PACKAGES_POLICY",
-                    "DATABASES",
-                    "ELEMENT_TYPES",
-                    "ENABLED_ROLES",
-                    "EVENT_TABLES",
-                    "EXTERNAL_TABLES",
-                    "FIELDS",
-                    "FILE_FORMATS",
-                    "FUNCTIONS",
-                    "GIT_REPOSITORIES",
-                    "HYBRID_TABLES",
-                    "INDEXES",
-                    "INDEX_COLUMNS",
-                    "INFORMATION_SCHEMA_CATALOG_NAME",
-                    "LOAD_HISTORY",
-                    "MODEL_VERSIONS",
-                    "NOTEBOOKS",
-                    "OBJECT_PRIVILEGES",
-                    "PACKAGES",
-                    "PIPES",
-                    "PROCEDURES",
-                    "REFERENTIAL_CONSTRAINTS",
-                    "REPLICATION_DATABASES",
-                    "REPLICATION_GROUPS",
-                    "SCHEMATA",
-                    "SEMANTIC_DIMENSIONS",
-                    "SEMANTIC_FACTS",
-                    "SEMANTIC_METRICS",
-                    "SEMANTIC_RELATIONSHIPS",
-                    "SEMANTIC_TABLES",
-                    "SEMANTIC_VIEWS",
-                    "SEQUENCES",
-                    "SERVICES",
-                    "STAGES",
-                    "STREAMLITS",
-                    "TABLES",
-                    "TABLE_CONSTRAINTS",
-                    "TABLE_PRIVILEGES",
-                    "TABLE_STORAGE_METRICS",
-                    "USAGE_PRIVILEGES",
-                    "VIEWS",
-                ],
-                "RESERVED": [""] * 48,
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 48,
-                "COMMENT": [
-                    "The roles that can be applied to the current user.",
-                    "The BUNDLE CLASS that the current user has privileges to view.",
-                    "The BUNDLE INSTANCE that the current user has privileges to view.",
-                    "The functions defined in a bundle that are accessible to the current user's role.",
-                    "The procedures defined in a bundle that are accessible to the current user's role.",
-                    "The columns of tables defined in this database that are accessible to the current user's role.",
-                    "The Cortex Search Services defined in this database that are accessible to the current user's role.",
-                    "The packages policy set on the current account",
-                    "The databases that are accessible to the current user's role.",
-                    "The element types of structured array types defined in this database that are accessible to the current user's role.",
-                    "The roles that are enabled to the current user.",
-                    "The event tables defined in this database that are accessible to the current user's role.",
-                    "The external tables defined in this database that are accessible to the current user's role.",
-                    "The fields of structured object and map types defined in this database that are accessible to the current user's role.",
-                    "The file formats defined in this database that are accessible to the current user's role.",
-                    "The user-defined functions defined in this database that are accessible to the current user's role.",
-                    "Git repositories in this database that are accessible by the current user's role",
-                    "The hybrid tables defined in this database that are accessible to the current user's role.",
-                    "The indexes defined in this database that are accessible to the current user's role.",
-                    "The columns of indexes defined in this database that are accessible to the current user's role.",
-                    "Identifies the database (or catalog, in SQL terminology) that contains the information_schema",
-                    "The loading information of the copy command",
-                    "The MODEL VERSIONS that the current user has privileges to view ",
-                    "Notebooks in this database that are accessible by the current user's role",
-                    "The privileges on all objects defined in this database that are accessible to the current user's role.",
-                    "Available packages in current account",
-                    "The pipes defined in this database that are accessible to the current user's role.",
-                    "The stored procedures defined in this database that are accessible to the current user's role.",
-                    "Referential Constraints in this database that are accessible to the current user",
-                    "The databases for replication that are accessible to the current user's role.",
-                    "The replication groups that are accessible to the current user's role.",
-                    "The schemas defined in this database that are accessible to the current user's role.",
-                    "The dimensions of Semantic Views defined in this database that are accessible to the current user's role.",
-                    "The facts of Semantic Views defined in this database that are accessible to the current user's role.",
-                    "The metrics of Semantic Views defined in this database that are accessible to the current user's role.",
-                    "The relationships of Semantic Views defined in this database that are accessible to the current user's role.",
-                    "The tables of Semantic Views defined in this database that are accessible to the current user's role.",
-                    "The Semantic Views defined in this database that are accessible to the current user's role.",
-                    "The sequences defined in this database that are accessible to the current user's role.",
-                    "The services in this database that are accessible to the current user's role.",
-                    "Stages in this database that are accessible by the current user's role",
-                    "Streamlits in this database that are accessible by the current user's role",
-                    "The tables defined in this database that are accessible to the current user's role.",
-                    "Constraints defined on the tables in this database that are accessible to the current user",
-                    "The privileges on tables defined in this database that are accessible to the current user's role.",
-                    "All tables within an account, including expired tables.",
-                    "The usage privileges on sequences defined in this database that are accessible to the current user's role.",
-                    "The views defined in this database that are accessible to the current user's role.",
-                ],
-                "OWNER": [""] * 48,
-                "TEXT": [""] * 48,
-                "IS_SECURE": ["false"] * 48,
-                "IS_MATERIALIZED": ["false"] * 48,
-                "OWNER_ROLE_TYPE": [""] * 48,
-                "CHANGE_TRACKING": ["OFF"] * 48,
-            }
-        )
+        rows = cur.fetchall()
+        colnames = [desc[0].upper() for desc in cur.description]
+        df = pd.DataFrame(rows, columns=colnames)
+
+        # Fix expected output to match format of bodo
+        df = df.drop(columns=["DATABASE_NAME"])
+        df["CREATED_ON"] = ["1969-12-31 16:00:00.000 -0800"] * len(df)
+        df["SCHEMA_NAME"] = ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * len(df)
+
+        return df
+    finally:
+        cur.close()
+        conn.close()
 
 
 def test_show_views_terse(test_db_snowflake_catalog, memory_leak_check):
@@ -1967,8 +1822,9 @@ def test_show_views_terse(test_db_snowflake_catalog, memory_leak_check):
     bodo_output = bc.execute_ddl(
         "SHOW TERSE VIEWS in SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"
     )
-
     expected_output = _show_views_snowflake_sample_data_output()
+    # Columns might be in a different order:
+    expected_output = expected_output[list(bodo_output.columns)]
     passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -1986,8 +1842,10 @@ def test_show_views_terse_jit(test_db_snowflake_catalog, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    expected_output = _show_views_snowflake_sample_data_output()
     bodo_output = impl(bc, query)
+    expected_output = _show_views_snowflake_sample_data_output()
+    # Columns might be in a different order:
+    expected_output = expected_output[list(bodo_output.columns)]
     passed = _test_equal_guard(
         bodo_output,
         expected_output,
@@ -2008,6 +1866,8 @@ def test_show_views(test_db_snowflake_catalog, memory_leak_check):
     )
 
     expected_output = _show_views_snowflake_sample_data_output(terse=False)
+    # Columns might be in a different order:
+    expected_output = expected_output[list(bodo_output.columns)]
     passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs

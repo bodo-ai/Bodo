@@ -2,7 +2,6 @@
 import argparse
 import functools
 import inspect
-import os
 import time
 from collections.abc import Callable
 
@@ -12,7 +11,7 @@ import bodo.pandas as pd
 @functools.lru_cache
 def load_lineitem(data_folder: str, pd=pd):
     print("Loading lineitem")
-    data_path = data_folder + "/lineitem.parquet"
+    data_path = data_folder + "/lineitem.pq"
     df = pd.read_parquet(data_path)
     df["L_SHIPDATE"] = pd.to_datetime(df.L_SHIPDATE, format="%Y-%m-%d")
     df["L_RECEIPTDATE"] = pd.to_datetime(df.L_RECEIPTDATE, format="%Y-%m-%d")
@@ -24,7 +23,7 @@ def load_lineitem(data_folder: str, pd=pd):
 @functools.lru_cache
 def load_part(data_folder: str, pd=pd):
     print("Loading part")
-    data_path = data_folder + "/part.parquet"
+    data_path = data_folder + "/part.pq"
     df = pd.read_parquet(data_path)
     print("Done loading part")
     return df
@@ -33,7 +32,7 @@ def load_part(data_folder: str, pd=pd):
 @functools.lru_cache
 def load_orders(data_folder: str, pd=pd):
     print("Loading orders")
-    data_path = data_folder + "/orders.parquet"
+    data_path = data_folder + "/orders.pq"
     df = pd.read_parquet(data_path)
     df["O_ORDERDATE"] = pd.to_datetime(df.O_ORDERDATE, format="%Y-%m-%d")
     print("Done loading orders")
@@ -43,7 +42,7 @@ def load_orders(data_folder: str, pd=pd):
 @functools.lru_cache
 def load_customer(data_folder: str, pd=pd):
     print("Loading customer")
-    data_path = data_folder + "/customer.parquet"
+    data_path = data_folder + "/customer.pq"
     df = pd.read_parquet(data_path)
     print("Done loading customer")
     return df
@@ -52,7 +51,7 @@ def load_customer(data_folder: str, pd=pd):
 @functools.lru_cache
 def load_nation(data_folder: str, pd=pd):
     print("Loading nation")
-    data_path = data_folder + "/nation.parquet"
+    data_path = data_folder + "/nation.pq"
     df = pd.read_parquet(data_path)
     print("Done loading nation")
     return df
@@ -61,7 +60,7 @@ def load_nation(data_folder: str, pd=pd):
 @functools.lru_cache
 def load_region(data_folder: str, pd=pd):
     print("Loading region")
-    data_path = data_folder + "/region.parquet"
+    data_path = data_folder + "/region.pq"
     df = pd.read_parquet(data_path)
     print("Done loading region")
     return df
@@ -70,7 +69,7 @@ def load_region(data_folder: str, pd=pd):
 @functools.lru_cache
 def load_supplier(data_folder: str, pd=pd):
     print("Loading supplier")
-    data_path = data_folder + "/supplier.parquet"
+    data_path = data_folder + "/supplier.pq"
     df = pd.read_parquet(data_path)
     print("Done loading supplier")
     return df
@@ -79,7 +78,7 @@ def load_supplier(data_folder: str, pd=pd):
 @functools.lru_cache
 def load_partsupp(data_folder: str, pd=pd):
     print("Loading partsupp")
-    data_path = data_folder + "/partsupp.parquet"
+    data_path = data_folder + "/partsupp.pq"
     df = pd.read_parquet(data_path)
     print("Done loading partsupp")
     return df
@@ -1089,10 +1088,7 @@ def main():
     parser.add_argument(
         "--folder",
         type=str,
-        default=os.path.join(
-            os.path.dirname(__file__),
-            "../../BodoSQL/bodosql/tests/data/tpch-test-data/parquet",
-        ),
+        default="s3://bodo-example-data/tpch/SF1",
         help="The folder containing TPCH data",
     )
     parser.add_argument(

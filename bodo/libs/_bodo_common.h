@@ -1212,11 +1212,6 @@ struct array_info {
         }
     }
 
-    /**
-     * Return string representation of value in position `idx` of this array.
-     */
-    std::string val_to_str(size_t idx);
-
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
     void set_null_bit(size_t idx, bool bit) {
@@ -1354,13 +1349,6 @@ struct array_info {
         }
     }
 };
-
-/**
- * @brief Convert array_info to equivalent Arrow array.
- *
- * @return std::shared_ptr<arrow::Array> equivalent Array array
- */
-std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
 
 std::unique_ptr<array_info> alloc_numpy(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
@@ -2156,6 +2144,15 @@ inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
 }
 }
 
+/**
+ * @brief Convert Arrow DataType to Bodo DataType, including nested types
+ *
+ * @param arrow_type input Arrow DataType
+ * @return std::unique_ptr<bodo::DataType> equivalent Bodo DataType
+ */
+std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
+    const std::shared_ptr<arrow::DataType> arrow_type);
+
 // Retrieve the bodo version as a string.
 std::string get_bodo_version();
 
@@ -2208,45 +2205,3 @@ struct numba_optional {
                       "numba_optional must be standard layout");
     }
 };
-
-extern "C" {
-PyMODINIT_FUNC PyInit_hdist(void);
-PyMODINIT_FUNC PyInit_hstr_ext(void);
-PyMODINIT_FUNC PyInit_decimal_ext(void);
-PyMODINIT_FUNC PyInit_quantile_alg(void);
-PyMODINIT_FUNC PyInit_lateral_cpp(void);
-PyMODINIT_FUNC PyInit_theta_sketches(void);
-PyMODINIT_FUNC PyInit_puffin_file(void);
-PyMODINIT_FUNC PyInit_lead_lag(void);
-PyMODINIT_FUNC PyInit_crypto_funcs(void);
-PyMODINIT_FUNC PyInit_hdatetime_ext(void);
-PyMODINIT_FUNC PyInit_hio(void);
-PyMODINIT_FUNC PyInit_array_ext(void);
-PyMODINIT_FUNC PyInit_s3_reader(void);
-PyMODINIT_FUNC PyInit_hdfs_reader(void);
-#ifndef NO_HDF5
-PyMODINIT_FUNC PyInit__hdf5(void);
-#endif
-PyMODINIT_FUNC PyInit_arrow_cpp(void);
-PyMODINIT_FUNC PyInit_csv_cpp(void);
-PyMODINIT_FUNC PyInit_json_cpp(void);
-PyMODINIT_FUNC PyInit_stream_join_cpp(void);
-PyMODINIT_FUNC PyInit_stream_sort_cpp(void);
-PyMODINIT_FUNC PyInit_listagg(void);
-PyMODINIT_FUNC PyInit_memory_budget_cpp(void);
-PyMODINIT_FUNC PyInit_stream_groupby_cpp(void);
-PyMODINIT_FUNC PyInit_stream_window_cpp(void);
-PyMODINIT_FUNC PyInit_stream_dict_encoding_cpp(void);
-PyMODINIT_FUNC PyInit_table_builder_cpp(void);
-PyMODINIT_FUNC PyInit_fft_cpp(void);
-#ifdef BUILD_WITH_V8
-PyMODINIT_FUNC PyInit_javascript_udf_cpp(void);
-#endif
-PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void);
-PyMODINIT_FUNC PyInit_uuid_cpp(void);
-PyMODINIT_FUNC PyInit_memory_cpp(void);
-#ifdef IS_TESTING
-PyMODINIT_FUNC PyInit_test_cpp(void);
-#endif
-PyMODINIT_FUNC PyInit_plan_optimizer(void);
-}  // extern "C"

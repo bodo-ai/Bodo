@@ -14,12 +14,6 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 import bodo
-from bodo.io.fs_io import (
-    expand_path_globs,
-    getfs,
-    parse_fpath,
-)
-from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
 
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
@@ -327,7 +321,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
-    cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object out_schema, c_string function_name, vector[int] input_column_indices, c_bool dropna) except +
+    cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object out_schema, c_string function_name, object py_udf_args, vector[int] input_column_indices, c_bool dropna) except +
     cdef unique_ptr[CLogicalCopyToFile] make_parquet_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string path, c_string compression, c_string bucket_region, int64_t row_group_size) except +
     cdef unique_ptr[CLogicalCopyToFile] make_iceberg_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string table_loc,
         c_string bucket_region, int64_t max_pq_chunksize, c_string compression, object partition_tuples, object sort_tuples, c_string iceberg_schema_str,
@@ -584,10 +578,10 @@ cdef class AggregateExpression(Expression):
     """
     cdef readonly str function_name
 
-    def __cinit__(self, object out_schema, LogicalOperator source, str function_name, vector[int] input_column_indices, c_bool dropna):
+    def __cinit__(self, object out_schema, LogicalOperator source, str function_name, object udf_args, vector[int] input_column_indices, c_bool dropna):
         self.out_schema = out_schema
         self.function_name = function_name
-        self.c_expression = make_agg_expr(source.c_logical_operator, out_schema, function_name.encode(), input_column_indices, dropna)
+        self.c_expression = make_agg_expr(source.c_logical_operator, out_schema, function_name.encode(), udf_args, input_column_indices, dropna)
 
     def __str__(self):
         return f"AggregateExpression({self.function_name})"
@@ -796,10 +790,12 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly int nrows
 
     def __cinit__(self, object out_schema, object parquet_path, object storage_options):
+        from bodo.ext import hdist
+
         self.out_schema = out_schema
         self.path = parquet_path
         self.storage_options = storage_options
-        self.nrows = bodo.libs.distributed_api.bcast_scalar(self._get_nrows() if bodo.get_rank() == 0 else 0)
+        self.nrows = hdist.bcast_int64_py_wrapper(self._get_nrows() if bodo.get_rank() == 0 else 0)
         cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, self.getCardinality())
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
@@ -810,6 +806,13 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         return self.nrows
 
     def _get_nrows(self):
+        from bodo.io.fs_io import (
+            expand_path_globs,
+            getfs,
+            parse_fpath,
+        )
+        from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
+
         fpath, parsed_url, protocol = parse_fpath(self.path)
         fs = getfs(fpath, protocol, self.storage_options, parallel=False)
 
@@ -873,6 +876,8 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     cdef readonly str table_identifier
 
     def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema, object snapshot_id, uint64_t table_len_estimate):
+        # TODO(ehsan): avoid compiler import in Iceberg read
+        import bodo.decorators  # isort:skip # noqa
         import pyiceberg.catalog
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
         self.out_schema = out_schema

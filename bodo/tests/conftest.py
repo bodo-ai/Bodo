@@ -212,8 +212,22 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodo_30of30,
     ]
 
+    # DataFrame library NP=1
+    azure_df_1p_markers = [pytest.mark.bodo_df_1of2, pytest.mark.bodo_df_2of2]
+
     # DataFrame library NP=2
-    azure_df_2p_markers = [pytest.mark.bodo_df_1of2, pytest.mark.bodo_df_2of2]
+    azure_df_2p_markers = [
+        pytest.mark.bodo_df_1of3,
+        pytest.mark.bodo_df_2of3,
+        pytest.mark.bodo_df_3of3,
+    ]
+
+    test_splits = [
+        azure_1p_markers,
+        azure_2p_markers,
+        azure_df_1p_markers,
+        azure_df_2p_markers,
+    ]
 
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
@@ -228,27 +242,22 @@ def pytest_collection_modifyitems(items):
 
     # If this assert fails, we need to get more than just the last byte from the
     # hash below, and then the limit can be updated to 2**(8 * num_bytes).
-    assert len(azure_1p_markers) < 128, "Need more bytes from hash to distribute tests"
-    assert len(azure_2p_markers) < 128, "Need more bytes from hash to distribute tests"
-    assert len(azure_df_2p_markers) < 128, (
+    assert all(len(split) < 128 for split in test_splits), (
         "Need more bytes from hash to distribute tests"
     )
+
     for item in items:
         hash_ = get_last_byte_of_test_hash(item)
         # Divide the tests evenly so long tests don't end up in 1 group
-        azure_1p_marker = azure_1p_markers[hash_ % len(azure_1p_markers)]
-        azure_2p_marker = azure_2p_markers[hash_ % len(azure_2p_markers)]
-        azure_df_2p_marker = azure_df_2p_markers[hash_ % len(azure_df_2p_markers)]
+        markers = [split[hash_ % len(split)] for split in test_splits]
         # All of the test_s3.py tests must be on the same rank because they
         # haven't been refactored to remove cross-test dependencies.
         testfile = item_file_name(item)
         if "test_s3.py" in testfile:
-            azure_1p_marker = azure_1p_markers[0]
-            azure_2p_marker = azure_2p_markers[0]
-            azure_df_2p_marker = azure_df_2p_markers[0]
-        item.add_marker(azure_1p_marker)
-        item.add_marker(azure_2p_marker)
-        item.add_marker(azure_df_2p_marker)
+            markers = [split[0] for split in test_splits]
+
+        for marker in markers:
+            item.add_marker(marker)
 
 
 def group_from_hash(testname, num_groups):
@@ -641,7 +650,7 @@ def cmp_op(request):
 @pytest.fixture
 def time_df():
     """
-    Fixture containing a representative set of bodo.Time object
+    Fixture containing a representative set of bodo.types.Time object
     for use in testing, including None object.
     """
     return {
@@ -649,30 +658,30 @@ def time_df():
             {
                 "A": pd.Series(
                     [
-                        bodo.Time(17, 33, 26, 91, 8, 79),
-                        bodo.Time(0, 24, 43, 365, 18, 74),
-                        bodo.Time(3, 59, 6, 25, 757, 3),
-                        bodo.Time(),
-                        bodo.Time(4),
-                        bodo.Time(6, 41),
-                        bodo.Time(22, 13, 57),
-                        bodo.Time(17, 34, 29, 90),
-                        bodo.Time(7, 3, 45, 876, 234),
+                        bodo.types.Time(17, 33, 26, 91, 8, 79),
+                        bodo.types.Time(0, 24, 43, 365, 18, 74),
+                        bodo.types.Time(3, 59, 6, 25, 757, 3),
+                        bodo.types.Time(),
+                        bodo.types.Time(4),
+                        bodo.types.Time(6, 41),
+                        bodo.types.Time(22, 13, 57),
+                        bodo.types.Time(17, 34, 29, 90),
+                        bodo.types.Time(7, 3, 45, 876, 234),
                         None,
                     ]
                 ),
                 "B": pd.Series(
                     [
-                        bodo.Time(20, 6, 26, 324, 4, 79),
-                        bodo.Time(3, 59, 6, 25, 57, 3),
-                        bodo.Time(7, 3, 45, 876, 234),
-                        bodo.Time(17, 34, 29, 90),
-                        bodo.Time(22, 13, 57),
-                        bodo.Time(6, 41),
-                        bodo.Time(4),
-                        bodo.Time(),
+                        bodo.types.Time(20, 6, 26, 324, 4, 79),
+                        bodo.types.Time(3, 59, 6, 25, 57, 3),
+                        bodo.types.Time(7, 3, 45, 876, 234),
+                        bodo.types.Time(17, 34, 29, 90),
+                        bodo.types.Time(22, 13, 57),
+                        bodo.types.Time(6, 41),
+                        bodo.types.Time(4),
+                        bodo.types.Time(),
                         None,
-                        bodo.Time(0, 24, 4, 512, 18, 74),
+                        bodo.types.Time(0, 24, 4, 512, 18, 74),
                     ]
                 ),
             }

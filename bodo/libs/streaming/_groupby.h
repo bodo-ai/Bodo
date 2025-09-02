@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <optional>
 #include "../_bodo_common.h"
 #include "../_chunked_table_builder.h"
 #include "../_dict_builder.h"
@@ -7,6 +9,7 @@
 #include "../_query_profile_collector.h"
 #include "../_table_builder.h"
 #include "../groupby/_groupby_col_set.h"
+#include "../groupby/_groupby_udf.h"
 #include "../vendored/hyperloglog.hpp"
 
 #include "_shuffle.h"
@@ -1166,7 +1169,9 @@ class GroupbyState {
         int64_t op_pool_size_bytes_, bool allow_any_work_stealing = true,
         std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
             key_dict_builders_ = std::nullopt,
-        bool use_sql_rules = true, bool pandas_drop_na_ = false);
+        bool use_sql_rules = true, bool pandas_drop_na_ = false,
+        std::shared_ptr<table_info> udf_out_types = nullptr,
+        std::vector<stream_udf_t*> udf_cfuncs = {});
 
     ~GroupbyState() { MPI_Comm_free(&this->shuffle_comm); }
 
@@ -1428,7 +1433,8 @@ class GroupbyState {
     std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         std::vector<std::shared_ptr<array_info>> local_input_cols,
         std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype,
-        int window_ftype, std::shared_ptr<table_info> window_args);
+        int window_ftype, std::shared_ptr<table_info> window_args,
+        std::shared_ptr<table_info> udf_output_type);
 
     /**
      * Helper function that gets the output column types for a given function.
@@ -1441,7 +1447,7 @@ class GroupbyState {
         std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
     getSeparateOutputColumns(
         std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype,
-        int window_ftype);
+        int window_ftype, std::shared_ptr<table_info> udf_output_type);
 
     /*@brief Split the partition at index 'idx' into two partitions.
      * This must only be called in the event of a threshold enforcement error.

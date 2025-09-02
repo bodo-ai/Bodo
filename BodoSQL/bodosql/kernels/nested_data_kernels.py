@@ -63,7 +63,9 @@ def object_keys_util(arr):
     arg_types = [arr]
     propagate_null = [True]
     # TODO: see if we can optimize this for dictionary encoding, at least for the struct cases?
-    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(bodo.string_array_type)
+    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(
+        bodo.types.string_array_type
+    )
     typ = arr
     if bodo.hiframes.pd_series_ext.is_series_type(typ):
         typ = typ.data
@@ -82,11 +84,11 @@ def object_keys_util(arr):
         or (isinstance(typ, types.DictType) and typ.key_type == types.unicode_type)
         or (
             isinstance(typ, bodo.libs.map_arr_ext.MapScalarType)
-            and typ.key_arr_type == bodo.string_array_type
+            and typ.key_arr_type == bodo.types.string_array_type
         )
     ):
         scalar_text = "res[i] = bodo.libs.str_arr_ext.str_list_to_array(list(arg0))\n"
-    elif typ == bodo.none:
+    elif typ == bodo.types.none:
         scalar_text = "res[i] = None"
     else:
         raise_bodo_error(f"object_keys: unsupported type {arr}")
@@ -529,7 +531,7 @@ def overload_arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):
     arg_names = ["array_0", "array_1", "is_scalar_0", "is_scalar_1"]
     arg_types = [array_0, array_1, is_scalar_0, is_scalar_1]
     propagate_null = [True, True, False, False]
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     scalar_text = "has_overlap = False\n"
     scalar_text += "for idx0 in range(len(arg0)):\n"
     scalar_text += "   null0 = bodo.libs.array_kernels.isna(arg0, idx0)\n"
@@ -614,10 +616,10 @@ def overload_array_position_util(elem, container, elem_is_scalar, container_is_s
     arg_names = ["elem", "container", "elem_is_scalar", "container_is_scalar"]
     arg_types = [elem, container, elem_is_scalar, container_is_scalar]
     propagate_null = [False, True, False, False]
-    out_dtype = bodo.IntegerArrayType(types.int32)
+    out_dtype = bodo.types.IntegerArrayType(types.int32)
     are_arrays = [not elem_is_scalar_bool, not container_is_scalar_bool, False, False]
     scalar_text = "match = -1\n"
-    if elem == bodo.none:
+    if elem == bodo.types.none:
         scalar_text += "null0 = True\n"
     elif are_arrays[0]:
         scalar_text += "null0 = bodo.libs.array_kernels.isna(elem, i)\n"
@@ -708,10 +710,10 @@ def overload_array_contains_util(
     arg_names = ["elem", "container", "elem_is_scalar", "container_is_scalar"]
     arg_types = [elem, container, elem_is_scalar, container_is_scalar]
     propagate_null = [False, True, False, False]
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     are_arrays = [not elem_is_scalar_bool, not container_is_scalar_bool, False, False]
     scalar_text = "found_match = False\n"
-    if elem == bodo.none:
+    if elem == bodo.types.none:
         scalar_text += "null0 = True\n"
     elif are_arrays[0]:
         scalar_text += "null0 = bodo.libs.array_kernels.isna(elem, i)\n"
@@ -783,7 +785,7 @@ def overload_array_to_string_util(arr, separator, is_scalar):  # pragma: no cove
     arg_names = ["arr", "separator", "is_scalar"]
     arg_types = [arr, separator, is_scalar]
     propagate_null = [True, True, False]
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
     scalar_text = "arr_str = ''\n"
     scalar_text += "for idx0 in range(len(arg0)):\n"
     scalar_text += "   arr_str += arg1 + ('' if bodo.libs.array_kernels.isna(arg0, idx0) else bodosql.kernels.to_char(arg0[idx0], None, True))\n"
@@ -878,7 +880,7 @@ def overload_array_size_util(arr, is_scalar):  # pragma: no cover
         is_scalar,
     ]
     propagate_null = [True, False, False, False]
-    out_dtype = bodo.IntegerArrayType(types.int32)
+    out_dtype = bodo.types.IntegerArrayType(types.int32)
     are_arrays = [arr_is_array] + [False] * 3
     return gen_vectorized(
         arg_names,
@@ -928,7 +930,7 @@ def overload_array_compact_util(arr, is_scalar):
     arg_types = [arr, is_scalar]
     propagate_null = [True, False]
     if is_scalar_bool:
-        out_dtype = bodo.null_array_type
+        out_dtype = bodo.types.null_array_type
     else:
         out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(arr.dtype)
     scalar_text = "elems_to_keep = np.ones(len(arg0), dtype=np.bool_)\n"
@@ -1007,7 +1009,7 @@ def overload_array_remove_util(
     arg_types = [arr, to_remove, is_scalar_0, is_scalar_1]
     propagate_null = [True, True, False, False]
     if is_overload_none(arr):
-        out_dtype = bodo.null_array_type
+        out_dtype = bodo.types.null_array_type
     else:
         out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(
             arr.dtype if are_arrays[0] else arr
@@ -1136,7 +1138,7 @@ def overload_array_slice_util(arr, from_, to, is_scalar):  # pragma: no cover
     arg_types = [arr, from_, to, is_scalar]
     propagate_null = [True, True, True, False]
     if is_overload_none(arr):
-        out_dtype = bodo.null_array_type
+        out_dtype = bodo.types.null_array_type
     else:
         inner_arr_type = arr if is_scalar_bool else arr.dtype
         out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
@@ -1182,19 +1184,23 @@ def overload_to_object(data):  # pragma: no cover
         isinstance(
             data,
             (
-                bodo.StructArrayType,
-                bodo.StructType,
-                bodo.MapArrayType,
+                bodo.types.StructArrayType,
+                bodo.types.StructType,
+                bodo.types.MapArrayType,
                 bodo.libs.map_arr_ext.MapScalarType,
                 types.DictType,
             ),
         )
-        or (data in (bodo.none, bodo.null_array_type))
+        or (data in (bodo.types.none, bodo.types.null_array_type))
         or (
             isinstance(data, types.optional)
             and isinstance(
                 data.type,
-                (bodo.StructType, bodo.libs.map_arr_ext.MapScalarType, types.DictType),
+                (
+                    bodo.types.StructType,
+                    bodo.libs.map_arr_ext.MapScalarType,
+                    types.DictType,
+                ),
             )
         )
     ):

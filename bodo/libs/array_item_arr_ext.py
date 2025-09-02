@@ -29,7 +29,6 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-from bodo.libs import array_ext  # noqa: F401
 from bodo.utils.cg_helpers import (
     gen_alloc_meminfo,
     gen_allocate_array,

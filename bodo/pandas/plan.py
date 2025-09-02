@@ -43,6 +43,11 @@ class LazyPlan:
 
         self.pa_schema = pa.Schema.from_pandas(self.empty_data)
 
+    def _update_column_names(self, new_cols):
+        """Update column names in empty_data and pa_schema."""
+        self.empty_data.columns = new_cols
+        self.pa_schema = pa.Schema.from_pandas(self.empty_data)
+
     def __str__(self):
         args = self.args
 
@@ -281,6 +286,12 @@ class LogicalGetIcebergRead(LogicalOperator):
         # Iceberg needs schema metadata
         # TODO: avoid this to support operations like renaming columns
         self.pa_schema = arrow_schema
+
+    def _update_column_names(self, new_cols):
+        """Update column names in empty_data and pa_schema."""
+        raise NotImplementedError(
+            "_update_column_names is not implemented for LogicalGetIcebergRead."
+        )
 
 
 class LogicalParquetWrite(LogicalOperator):
@@ -642,51 +653,45 @@ def execute_plan(plan: LazyPlan):
         import bodo
         from bodo.ext import plan_optimizer
 
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             start_time = time.perf_counter()
         duckdb_plan = plan.generate_duckdb()
-        if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time gen", time.perf_counter() - start_time)
 
-        if (
-            bodo.dataframe_library_dump_plans
-            and bodo.libs.distributed_api.get_rank() == 0
-        ):
+        if bodo.dataframe_library_dump_plans and bodo.get_rank() == 0:
             print("Unoptimized plan")
             print(duckdb_plan.toString())
 
         # Print the plan before optimization
-        if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.tracing_level >= 2 and bodo.get_rank() == 0:
             pre_optimize_graphviz = duckdb_plan.toGraphviz()
             with open("pre_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(pre_optimize_graphviz, file=f)
 
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             start_time = time.perf_counter()
         optimized_plan = plan_optimizer.py_optimize_plan(duckdb_plan)
-        if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time opt", time.perf_counter() - start_time)
 
-        if (
-            bodo.dataframe_library_dump_plans
-            and bodo.libs.distributed_api.get_rank() == 0
-        ):
+        if bodo.dataframe_library_dump_plans and bodo.get_rank() == 0:
             print("Optimized plan")
             print(optimized_plan.toString())
 
         # Print the plan after optimization
-        if bodo.tracing_level >= 2 and bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.tracing_level >= 2 and bodo.get_rank() == 0:
             post_optimize_graphviz = optimized_plan.toGraphviz()
             with open("post_optimize" + str(id(plan)) + ".dot", "w") as f:
                 print(post_optimize_graphviz, file=f)
 
         output_func = cpp_table_to_series if plan.is_series else cpp_table_to_df
-        if bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.get_rank() == 0:
             start_time = time.perf_counter()
         ret = plan_optimizer.py_execute_plan(
             optimized_plan, output_func, duckdb_plan.out_schema
         )
-        if bodo.dataframe_library_profile and bodo.libs.distributed_api.get_rank() == 0:
+        if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time execute", time.perf_counter() - start_time)
         return ret
 
@@ -893,6 +898,7 @@ def count_plan(self):
                 count_star_schema,
                 self._plan,
                 "count_star",
+                None,  # udf_args
                 # Adding column 0 as input to avoid deleting all input by the optimizer
                 # TODO: avoid materializing the input column
                 [0],

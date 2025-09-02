@@ -818,7 +818,8 @@ class PhysicalUDFExpression : public PhysicalExpression {
         // std::cout << "UDF cstr" << std::endl;
         if (scalar_func_data.is_cfunc) {
 #if APPROACH == 0
-            PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+            PyObject *bodo_module =
+                PyImport_ImportModule("bodo.pandas.utils_jit");
 
             if (!bodo_module) {
                 PyErr_Print();
@@ -854,7 +855,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
             PyObject *compile_callable = nullptr;
             {
                 PyObject *bodo_module =
-                    PyImport_ImportModule("bodo.pandas.utils");
+                    PyImport_ImportModule("bodo.pandas.utils_jit");
                 if (!bodo_module) {
                     PyErr_Print();
                     throw std::runtime_error(
@@ -984,7 +985,8 @@ class PhysicalUDFExpression : public PhysicalExpression {
 #if APPROACH == 3
             this->cfunc_ptr = (table_udf_t)1;
             PyObject *future_args = scalar_func_data.args;
-            PyObject *bodo_module = PyImport_ImportModule("bodo.pandas.utils");
+            PyObject *bodo_module =
+                PyImport_ImportModule("bodo.pandas.utils_jit");
             if (!bodo_module) {
                 PyErr_Print();
                 throw std::runtime_error(

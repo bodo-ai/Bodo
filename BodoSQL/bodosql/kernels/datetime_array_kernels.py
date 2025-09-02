@@ -734,17 +734,17 @@ def add_interval_util(start_dt, interval):
     if is_valid_time_arg(start_dt):
         scalar_text += "td_val = bodo.utils.conversion.box_if_dt64(arg1).value\n"
         scalar_text += "value = (arg0.value + td_val) % 86400000000000\n"
-        scalar_text += "res[i] = bodo.Time(nanosecond=value)"
-        out_dtype = bodo.TimeArrayType(9)
+        scalar_text += "res[i] = bodo.types.Time(nanosecond=value)"
+        out_dtype = bodo.types.TimeArrayType(9)
     elif is_valid_date_arg(start_dt):
         # If the time unit is smaller than or equal to hour, returns timestamp objects
         scalar_text += f"res[i] = {unbox_str}(pd.Timestamp(arg0) + {box_str1}(arg1))\n"
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
     # Modified logic from add_interval_xxx functions
     elif time_zone is not None:
         if (
             bodo.hiframes.pd_timestamp_ext.tz_has_transition_times(time_zone)
-            and interval != bodo.date_offset_type
+            and interval != bodo.types.date_offset_type
         ):
             tz_obj = pytz.timezone(time_zone)
             trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
@@ -769,7 +769,7 @@ def add_interval_util(start_dt, interval):
             scalar_text += "offset = deltas[start_trans] - deltas[end_trans]\n"
             scalar_text += "arg1 = pd.Timedelta(end_value - start_value + offset)\n"
         scalar_text += "res[i] = arg0 + arg1\n"
-        out_dtype = bodo.DatetimeArrayType(time_zone)
+        out_dtype = bodo.types.DatetimeArrayType(time_zone)
     elif is_valid_timestamptz_arg(start_dt):
         # For TIMESTAMP_TZ, add the timedelta to the local timestamp, then create
         # a new TIMESTAMP_TZ from that local timestamp and the original offset.
@@ -780,12 +780,12 @@ def add_interval_util(start_dt, interval):
         )
         scalar_text += "new_local_ts = local_ts + arg1\n"
         scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(new_local_ts, arg0.offset_minutes)\n"
-        out_dtype = bodo.timestamptz_array_type
+        out_dtype = bodo.types.timestamptz_array_type
     else:
         # For regular timestamps, perform the standard arithmetic on the datetime and
         # interval after unwrapping them, then re-wrap the result
         scalar_text = f"res[i] = {unbox_str}({box_str0}(arg0) + {box_str1}(arg1))\n"
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
 
     return gen_vectorized(
         arg_names,
@@ -1021,7 +1021,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                     scalar_text = f"td = pd.Timedelta({unit}=arg0)\n"
                 scalar_text += f"res[i] = {unbox_str}(pd.Timestamp(arg1) + td)"
                 # If the time unit is smaller than or equal to hour, returns timestamp objects
-                out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+                out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
 
         # Code path generated for timezone-aware data
         elif time_zone is not None:
@@ -1093,7 +1093,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
             # Add the calculated timedelta to the original timestamp
             scalar_text += "res[i] = arg1 + td\n"
 
-            out_dtype = bodo.DatetimeArrayType(time_zone)
+            out_dtype = bodo.types.DatetimeArrayType(time_zone)
 
         # Code path generated for timezone-native data by directly adding to
         # a DateOffset or TimeDelta with the corresponding units
@@ -1130,9 +1130,9 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                 scalar_text = f"res[i] = {wrap_str}({unwrap_str}(arg1) + pd.Timedelta({unit}=arg0){wrap_suffix})\n"
 
             out_dtype = (
-                bodo.timestamptz_array_type
+                bodo.types.timestamptz_array_type
                 if is_timestamp_tz
-                else types.Array(bodo.datetime64ns, 1, "C")
+                else types.Array(bodo.types.datetime64ns, 1, "C")
             )
 
         return gen_vectorized(
@@ -1789,11 +1789,11 @@ def overload_date_trunc(
     Args:
         date_or_time_part (types.Type): A string scalar or array stating how to truncate
             the timestamp
-        date_or_time_expr (types.Type): A bodo.Time object or bodo.Time array or tz-aware or tz-naive Timestamp or
+        date_or_time_expr (types.Type): A bodo.types.Time object or bodo.types.Time array or tz-aware or tz-naive Timestamp or
             Timestamp array to be truncated.
 
     Returns:
-        types.Type: The bodo.Time/timestamp after being truncated, which has same type as date_or_time_expr
+        types.Type: The bodo.types.Time/timestamp after being truncated, which has same type as date_or_time_expr
     """
     args = [date_or_time_part, date_or_time_expr]
     for i, arg in enumerate(args):
@@ -1831,16 +1831,16 @@ def overload_date_trunc_util(
     date_or_time_part, date_or_time_expr, dict_encoding_state, func_id
 ):
     """
-    Truncates a given bodo.Time/datetime.date/Timestamp argument to the provided
+    Truncates a given bodo.types.Time/datetime.date/Timestamp argument to the provided
     date_or_time_part. This corresponds to DATE_TRUNC inside snowflake
 
     Args:
         date_or_time_part (types.Type): A string scalar or array stating how to truncate
-            the bodo.Time/datetime.date/Timestamp.
-        date_or_time_expr (types.Type): bodo.Time/datetime.date/Timestamp object or array to be truncated.
+            the bodo.types.Time/datetime.date/Timestamp.
+        date_or_time_expr (types.Type): bodo.types.Time/datetime.date/Timestamp object or array to be truncated.
 
     Returns:
-        types.Type: The bodo.Time/datetime.date/Timestamp after being truncated,
+        types.Type: The bodo.types.Time/datetime.date/Timestamp after being truncated,
                     which has same type as date_or_time_expr.
     """
     verify_string_arg(date_or_time_part, "DATE_TRUNC", "date_or_time_part")
@@ -1857,37 +1857,37 @@ def overload_date_trunc_util(
     func_id_name = "func_id" if use_dict_caching else None
     # Standardize the input to limit the condition in the loop
     scalar_text = "part_str = bodosql.kernels.datetime_array_kernels.standardize_snowflake_date_time_part(arg0)\n"
-    if is_valid_time_arg(date_or_time_expr):  # truncate a bodo.Time object/array
+    if is_valid_time_arg(date_or_time_expr):  # truncate a bodo.types.Time object/array
         scalar_text += "if part_str in ('quarter', 'year', 'month', 'week', 'day'):\n"
         # date_or_time_part is too large, set everything to 0
-        scalar_text += "    res[i] = bodo.Time()\n"
+        scalar_text += "    res[i] = bodo.types.Time()\n"
         scalar_text += "else:\n"
         scalar_text += "    if part_str == 'hour':\n"
-        scalar_text += "        res[i] = bodo.Time(arg1.hour)\n"
+        scalar_text += "        res[i] = bodo.types.Time(arg1.hour)\n"
         scalar_text += "    elif part_str == 'minute':\n"
-        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute)\n"
+        scalar_text += "        res[i] = bodo.types.Time(arg1.hour, arg1.minute)\n"
         scalar_text += "    elif part_str == 'second':\n"
         scalar_text += (
-            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second)\n"
+            "        res[i] = bodo.types.Time(arg1.hour, arg1.minute, arg1.second)\n"
         )
         scalar_text += "    elif part_str == 'millisecond':\n"
         scalar_text += (
-            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, "
+            "        res[i] = bodo.types.Time(arg1.hour, arg1.minute, arg1.second, "
             "arg1.millisecond)\n"
         )
         scalar_text += "    elif part_str == 'microsecond':\n"
         scalar_text += (
-            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, "
+            "        res[i] = bodo.types.Time(arg1.hour, arg1.minute, arg1.second, "
             "arg1.millisecond, arg1.microsecond)\n"
         )
         scalar_text += "    elif part_str == 'nanosecond':\n"
         scalar_text += (
-            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, "
+            "        res[i] = bodo.types.Time(arg1.hour, arg1.minute, arg1.second, "
             "arg1.millisecond, arg1.microsecond, arg1.nanosecond)\n"
         )
         scalar_text += "    else:\n"
         scalar_text += "        raise ValueError('Invalid time part for DATE_TRUNC')\n"
-        out_dtype = bodo.TimeArrayType(9)
+        out_dtype = bodo.types.TimeArrayType(9)
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -1951,13 +1951,13 @@ def overload_date_trunc_util(
             scalar_text += (
                 "in_val = bodo.hiframes.timestamptz_ext.get_local_timestamp(arg1)\n"
             )
-            out_dtype = bodo.timestamptz_array_type
+            out_dtype = bodo.types.timestamptz_array_type
         elif tz_literal is None:
             scalar_text += f"in_val = {box_str}(arg1)\n"
-            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+            out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
         else:
             scalar_text += "in_val = arg1\n"
-            out_dtype = bodo.DatetimeArrayType(tz_literal)
+            out_dtype = bodo.types.DatetimeArrayType(tz_literal)
 
         scalar_text += "if part_str == 'quarter':\n"
         scalar_text += "    out_val = pd.Timestamp(year=in_val.year, month= (3*(in_val.quarter - 1)) + 1, day=1, tz=tz_literal)\n"
@@ -2077,7 +2077,7 @@ def construct_timestamp_util(
     propagate_null = [True] * 7 + [False]
 
     args = [year, month, day, hour, minute, second, nanosecond, time_zone]
-    if any(arg == bodo.none for arg in args):
+    if any(arg == bodo.types.none for arg in args):
         tz = None
         localize_str = ""
     elif is_overload_constant_str(time_zone):
@@ -2112,9 +2112,9 @@ def construct_timestamp_util(
     scalar_text += f"res[i] = {unbox_str}(ts{localize_str})"
 
     if tz is None:
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
     else:
-        out_dtype = bodo.DatetimeArrayType(tz)
+        out_dtype = bodo.types.DatetimeArrayType(tz)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -2183,7 +2183,7 @@ def overload_timestamp_tz_from_parts_util(
         "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(ts, offset)"
     )
 
-    out_dtype = bodo.timestamptz_array_type
+    out_dtype = bodo.types.timestamptz_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -2256,7 +2256,7 @@ def timestamp_from_date_and_time_util(date_expr, time_expr):
 
     Args:
         date_expr (types.Type): tz-naive Timestamp or Timestamp array
-        time_expr (types.Type): bodo.Time or bodo.Time array
+        time_expr (types.Type): bodo.types.Time or bodo.types.Time array
 
     Returns:
         timestamp array/scalar: a tz-naive timestamp with the date and time as
@@ -2284,7 +2284,7 @@ def timestamp_from_date_and_time_util(date_expr, time_expr):
     ts += ", nanosecond=arg1.nanosecond)"
     scalar_text += f"res[i] = {ts}\n"
 
-    out_dtype = bodo.DatetimeArrayType(None)
+    out_dtype = bodo.types.DatetimeArrayType(None)
 
     return gen_vectorized(
         arg_names,
@@ -2320,7 +2320,7 @@ def dayname_util(arr):
         scalar_text = f"val = {unwrap_str}(arg0).day_name()\n"
     scalar_text += "res[i] = val[:3]\n"
 
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     # If the input is an array, make the output dictionary encoded
     synthesize_dict_if_vector = ["V"]
@@ -2447,7 +2447,7 @@ def monthname_util(arr):
     else:
         scalar_text = f"val = {unwrap_str}(arg0).month_name()\n"
     scalar_text += "res[i] = val[:3]\n"
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     # If the input is an array or date object, make the output dictionary encoded
     synthesize_dict_if_vector = ["V"]
@@ -2746,7 +2746,7 @@ def overload_to_days_util(arr):
     prefix_code = "unix_days_to_year_zero = 719528\n"
     # divisor to convert value -> days
     prefix_code += "nanoseconds_divisor = 86400000000000\n"
-    out_dtype = bodo.IntegerArrayType(types.int64)
+    out_dtype = bodo.types.IntegerArrayType(types.int64)
     # Note if the input is an array then we just operate directly on datetime64
     # to avoid Timestamp boxing.
     is_input_arr = bodo.utils.utils.is_array_typ(arr, False)
@@ -2901,7 +2901,7 @@ def overload_to_seconds_util(arr):
     # divisor to convert value -> seconds.
     # Note: This function does a floordiv for < seconds
     prefix_code += "nanoseconds_divisor = 1000000000\n"
-    out_dtype = bodo.IntegerArrayType(types.int64)
+    out_dtype = bodo.types.IntegerArrayType(types.int64)
     is_input_arr = bodo.utils.utils.is_array_typ(arr, False)
     if is_input_arr and not timezone:
         # Note if the input is an array then we just operate directly on datetime64
@@ -3025,14 +3025,14 @@ def overload_tz_aware_interval_add_util(tz_arg, interval_arg):
     arg_types = [tz_arg, interval_arg]
     propagate_null = [True, True]
     if timezone is not None:
-        out_dtype = bodo.DatetimeArrayType(timezone)
+        out_dtype = bodo.types.DatetimeArrayType(timezone)
     else:
         # Handle a default case if the timezone value is NA.
         # Note this doesn't matter because we will output NA.
-        out_dtype = bodo.datetime64ns
+        out_dtype = bodo.types.datetime64ns
     # Note: We don't have support for TZAware + pd.DateOffset yet.
     # As a result we must compute a Timedelta from the DateOffset instead.
-    if interval_arg == bodo.date_offset_type:
+    if interval_arg == bodo.types.date_offset_type:
         # Although the pd.DateOffset should just have months and n, its unclear if
         # months >= 12 can ever roll over into months and years. As a result we convert
         # the years into months to be more robust (via years * 12).
@@ -3114,16 +3114,16 @@ def overload_interval_multiply_util(interval_arg, integer_arg):
     is_interval_arr = bodo.utils.utils.is_array_typ(interval_arg, True)
     is_integer_arr = bodo.utils.utils.is_array_typ(integer_arg, True)
 
-    if interval_arg == bodo.date_offset_type:
+    if interval_arg == bodo.types.date_offset_type:
         if is_integer_arr:
             raise BodoError(
                 "interval_multiply(): Integer array cannot be provided if multiplying a date offset."
             )
-        out_dtype = bodo.date_offset_type
+        out_dtype = bodo.types.date_offset_type
         # all year to month intervals are based on month
         scalar_text = "res[i] = pd.DateOffset(months=arg0._months * arg1)\n"
     else:
-        out_dtype = types.Array(bodo.timedelta64ns, 1, "C")
+        out_dtype = types.Array(bodo.types.timedelta64ns, 1, "C")
 
         unbox_str = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
@@ -3198,7 +3198,7 @@ def overload_interval_add_interval_util(arr0, arr1):
     arg_types = [arr0, arr1]
     propagate_null = [True, True]
 
-    out_dtype = types.Array(bodo.timedelta64ns, 1, "C")
+    out_dtype = types.Array(bodo.types.timedelta64ns, 1, "C")
     box_str0 = (
         "bodo.utils.conversion.box_if_dt64"
         if bodo.utils.utils.is_array_typ(arr0, True)
@@ -3277,7 +3277,7 @@ def overload_create_timestamp_util(
     arg_names = ["arr", "dict_encoding_state", "func_id"]
     arg_types = [arr, dict_encoding_state, func_id]
     propagate_null = [True, False, False]
-    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
     unbox_str = (
         "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if bodo.utils.utils.is_array_typ(arr, True)
@@ -3330,7 +3330,7 @@ def date_format_util(arr0, arr1):
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
     propagate_null = [True, True]
-    out_dtype = bodo.string_array_type
+    out_dtype = bodo.types.string_array_type
 
     box_str = (
         "bodo.utils.conversion.box_if_dt64"
@@ -3474,7 +3474,7 @@ def dayofweek_util(arr, week_start):
     scalar_text = "start_day = max(0, arg1 - 1)\n"
     scalar_text += f"res[i] = ({dayofweek_str} - start_day + 1) % 7\n"
 
-    out_dtype = bodo.IntegerArrayType(numba.int64)
+    out_dtype = bodo.types.IntegerArrayType(numba.int64)
 
     return gen_vectorized(
         arg_names,
@@ -3553,7 +3553,7 @@ def overload_get_epoch_util(arr, unit):
     propagate_null = [True, False] * 2
     unwrap_str = get_timestamp_unwrapping_str(arr, tz_to_utc=True)
     scalar_text = f"res[i] = {unwrap_str}(arg0).value // {divisor}\n"
-    out_dtype = bodo.IntegerArrayType(numba.int64)
+    out_dtype = bodo.types.IntegerArrayType(numba.int64)
 
     return gen_vectorized(
         arg_names,
@@ -3733,7 +3733,7 @@ def overload_get_timezone_offset_util(arr, unit):
     # Note: This might be smaller but snowflake bound it at a Number(9, 0), which is
     # an int32. Since they/we may need to support out dated transition times, we will
     # be conservative and match Snowflake.
-    out_dtype = bodo.IntegerArrayType(numba.int32)
+    out_dtype = bodo.types.IntegerArrayType(numba.int32)
 
     return gen_vectorized(
         arg_names,
@@ -3815,7 +3815,7 @@ def months_between_util(dt0, dt1):
     scalar_text += "  months_frac_count = round((arg0.day - arg1.day)/31.0, 6)\n"
     scalar_text += "res[i] = months_int_count + months_frac_count\n"
 
-    out_dtype = bodo.FloatingArrayType(bodo.float64)
+    out_dtype = bodo.types.FloatingArrayType(bodo.types.float64)
 
     return gen_vectorized(
         arg_names,
@@ -3938,7 +3938,7 @@ def weekofyear_util(arr, week_start, week_of_year_policy):
         )
         scalar_text += "res[i] = offset_date.isocalendar()[1]\n"
 
-    out_dtype = bodo.IntegerArrayType(numba.int64)
+    out_dtype = bodo.types.IntegerArrayType(numba.int64)
 
     return gen_vectorized(
         arg_names,
@@ -4043,7 +4043,7 @@ def yearofweek_util(arr, week_start, week_of_year_policy):
         scalar_text += "year_of_week = offset_date.isocalendar()[0]\n"
     scalar_text += "res[i] = year_of_week\n"
 
-    out_dtype = bodo.IntegerArrayType(numba.int64)
+    out_dtype = bodo.types.IntegerArrayType(numba.int64)
 
     return gen_vectorized(
         arg_names,
@@ -4120,14 +4120,14 @@ def add_months_util(dt0, num_months):
     scalar_text += "  new_arg = arg0 + pd.DateOffset(months=arg1)\n"
 
     if time_zone is not None:
-        out_dtype = bodo.DatetimeArrayType(time_zone)
+        out_dtype = bodo.types.DatetimeArrayType(time_zone)
         scalar_text += "res[i] = new_arg\n"
     else:
         if is_valid_date_arg(dt0):
-            out_dtype = bodo.datetime_date_array_type
+            out_dtype = bodo.types.datetime_date_array_type
             scalar_text += f"res[i] = {unbox_str}(new_arg.date())\n"
         else:
-            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+            out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
             scalar_text += f"res[i] = {unbox_str}(new_arg)\n"
 
     return gen_vectorized(
@@ -4232,7 +4232,7 @@ def time_slice_util(arr, slice_length, date_time_part, start_or_end, start_day):
             f"res[i] = {unbox_str}(time_slice_helper(arg0, arg1, arg2, arg3))\n"
         )
 
-    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
     return gen_vectorized(
         arg_names,
         arg_types,

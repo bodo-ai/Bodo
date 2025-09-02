@@ -21,12 +21,12 @@ from pandas._typing import (
 )
 
 import bodo
+import bodo.ai
 from bodo.ai.backend import Backend
 from bodo.ai.utils import (
     get_default_bedrock_request_formatter,
     get_default_bedrock_response_formatter,
 )
-from bodo.ext import plan_optimizer
 from bodo.pandas.array_manager import LazySingleArrayManager
 from bodo.pandas.lazy_metadata import LazyMetadata
 from bodo.pandas.lazy_wrapper import BodoLazyWrapper, ExecState
@@ -74,16 +74,12 @@ from bodo.pandas.utils import (
     _get_empty_series_arrow,
     arrow_to_empty_df,
     check_args_fallback,
-    cpp_table_to_series_jit,
     fallback_wrapper,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
-    get_udf_cfunc_decorator,
-    series_to_cpp_table_jit,
     wrap_plan,
 )
-from bodo.utils.typing import BodoError
 
 
 class BodoSeries(pd.Series, BodoLazyWrapper):
@@ -465,7 +461,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
-
+        from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
         # Only selecting columns or filtering with BodoSeries is supported
@@ -656,12 +652,23 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Map values of Series according to an input mapping or function.
         """
+        import bodo
+
         if engine not in ("bodo", "python"):
             raise TypeError(
                 f"Series.map() got unsupported engine: {engine}, expected one of ('bodo', 'python')."
             )
 
         if engine == "bodo":
+            # Import compiler
+            import bodo.decorators  # isort:skip # noqa
+            from bodo.pandas.utils_jit import (
+                cpp_table_to_series_jit,
+                get_udf_cfunc_decorator,
+                series_to_cpp_table_jit,
+            )
+            from bodo.utils.typing import BodoError
+
             empty_series = self.head(0)
 
             arr_type = bodo.typeof(empty_series).data
@@ -693,6 +700,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 error_msg = "Jit could not determine pyarrow return type from UDF."
 
             if empty_series is not None:
+                bodo.spawn.utils.import_compiler_on_workers()
                 # Compile the cfunc and get pointer
                 return _get_series_func_plan(
                     self._plan,
@@ -865,16 +873,16 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Validate ascending argument.
         if not isinstance(ascending, bool):
-            raise BodoError(
+            raise ValueError(
                 "DataFrame.sort_values(): argument ascending iterable does not contain only boolean"
             )
 
         # Validate na_position argument.
         if not isinstance(na_position, str):
-            raise BodoError("Series.sort_values(): argument na_position not a string")
+            raise ValueError("Series.sort_values(): argument na_position not a string")
 
         if na_position not in ["first", "last"]:
-            raise BodoError(
+            raise ValueError(
                 "Series.sort_values(): argument na_position does not contain only 'first' or 'last'"
             )
 
@@ -1035,6 +1043,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 zero_size_self,
                 self._plan,
                 func_name,
+                None,  # udf_args
                 [0],
                 True,  # dropna
             )
@@ -1109,6 +1118,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         Return a boolean Series showing whether each element in the Series
         matches an element in the passed sequence of `values` exactly.
         """
+        from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
         new_metadata = pd.Series(
@@ -1217,6 +1227,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 else pd.NA
             )
 
+        if not (pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type)):
+            raise BodoLibNotImplementedException(
+                "BodoSeries.quantile() is not supported for non-numeric dtypes."
+            )
+
         new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])
         zero_size_self = arrow_to_empty_df(new_arrow_schema)
 
@@ -1225,6 +1240,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 zero_size_self,
                 self._plan,
                 func_name,
+                None,  # udf_args
                 [0],
                 True,  # dropna
             )
@@ -1521,7 +1537,6 @@ class BodoSeriesAiMethods:
             )
 
         # OpenAI backend
-        api_key = api_key or ""
         if request_formatter is not None or response_formatter is not None:
             raise ValueError(
                 "Series.ai.llm_generate() does not support request_formatter or response_formatter with the OpenAI backend."
@@ -1674,7 +1689,6 @@ class BodoSeriesAiMethods:
             )
 
         # OpenAI backend
-        api_key = api_key or ""
         if request_formatter is not None or response_formatter is not None:
             raise ValueError(
                 "Series.ai.embed() does not support request_formatter or response_formatter with the OpenAI backend."
@@ -2161,6 +2175,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
             zero_size_self,
             bodo_series._plan,
             func_name,
+            None,  # udf_args
             [0],
             True,  # dropna
         )

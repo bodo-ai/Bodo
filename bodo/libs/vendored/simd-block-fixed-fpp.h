@@ -551,7 +551,7 @@ template <typename HashFamily>
 /// 16-byte version (not very good)
 ///////////////////////////////////////////////////////////////////
 
-#elif defined(__SSE41__)
+#elif defined(__SSE4_1__)
 
 #include <smmintrin.h>
 
@@ -633,7 +633,7 @@ template <typename HashFamily>
     return _mm_testc_si128(bucketvalue, mask);
 }
 
-// #endif // #ifdef __SSE41__
+// #endif // #ifdef __SSE4_1__
 #else
 
 static inline size_t bloom_size_bytes(size_t n_bits) { return 0; }

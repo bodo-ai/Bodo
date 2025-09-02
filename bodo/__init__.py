@@ -84,6 +84,13 @@ _orig_except_hook = sys.excepthook
 sys.excepthook = _global_except_hook
 
 
+class BodoWarning(Warning):
+    """
+    Warning class for Bodo-related potential issues such as prevention of
+    parallelization by unsupported functions.
+    """
+
+
 # ------------------------------ Version Import ------------------------------
 from importlib.metadata import version, PackageNotFoundError
 
@@ -237,210 +244,119 @@ os.environ["MKL_NUM_THREADS"] = "1"
 # patches are applied before Bodo's use.
 import bodo.pandas_compat
 
-# NOTE: 'numba_compat' has to be imported first in bodo package to make sure all Numba
-# patches are applied before Bodo's Numba use (e.g. 'overload' is replaced properly)
-import bodo.numba_compat  # isort:skip
-import numba
-from numba import (  # re-export from Numba
-    gdb,
-    gdb_breakpoint,
-    gdb_init,
-    pndindex,
-    prange,
-    stencil,
-    threading_layer,
-    typed,
-    typeof,
-)
-from numba.core.types import *
 
-from bodo.ir.object_mode import (
-    warning_objmode as objmode,
-    no_warning_objmode,
-)
-from bodo.ir.unsupported_method_template import (
-    overload_unsupported_attribute,
-    overload_unsupported_method,
-)
+def jit(*args, **kwargs):
+    # Import compiler lazily
+    from bodo.decorators import jit as _jit
+    return _jit(*args, **kwargs)
 
 
-def set_numba_environ_vars():
+class prange:
+    """Dummy prange that is replaced in bodo.compiler when JIT is imported.
     """
-    Set environment variables so that the Numba configuration can persist after reloading by re-setting config
-    variables directly from environment variables.
-    These should be tested in `test_numba_warn_config.py`.
-    """
-    # This env variable is set by the platform and points to the central cache directory
-    # on the shared filesystem.
-    in_spawn = "PMI_SIZE" in os.environ or "PMI_RANK" in os.environ
-    #print("set_numba_environ_vars", in_spawn)
-    from bodo.mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-
-    if (cache_loc := os.environ.get("BODO_PLATFORM_CACHE_LOCATION")) is not None:
-        if ("NUMBA_CACHE_DIR" in os.environ) and (
-            os.environ["NUMBA_CACHE_DIR"] != cache_loc
-        ):
-            import warnings
-
-            warnings.warn(
-                "Since BODO_PLATFORM_CACHE_LOC is set, the value set for NUMBA_CACHE_DIR will be ignored"
-            )
-
-    cache_loc = (os.environ.get("BODO_PLATFORM_CACHE_LOCATION") or
-                 os.environ.get("NUMBA_CACHE_DIR") or "__bodo_pycache__")
-
-    #cache_loc = "/mnt/nfs_client_test1/__bodo_pycache__"
-    #if in_spawn:
-    #    cache_loc = os.path.join(cache_loc, str(rank))
-
-    numba.config.CACHE_DIR = cache_loc
-    #print("cache_loc", cache_loc)
-    # In certain cases, numba reloads its config variables from the
-    # environment. In those cases, the above line would be overridden.
-    # Therefore, we also set it to the env var that numba reloads from.
-    os.environ["NUMBA_CACHE_DIR"] = cache_loc
-
-    # avoid Numba parallel performance warning when there is no Parfor in the IR
-    numba.config.DISABLE_PERFORMANCE_WARNINGS = 1
-    bodo_env_vars = {
-        "NUMBA_DISABLE_PERFORMANCE_WARNINGS": "1",
-    }
-    os.environ.update(bodo_env_vars)
+    def __new__(cls, *args):
+        return range(*args)
 
 
-set_numba_environ_vars()
+def typeof(*args, **kwargs):
+    import numba
+    # Import compiler lazily
+    import bodo.decorators
 
-from bodo.numba_compat import jitclass
+    return numba.typeof(*args, **kwargs)
 
-datetime64ns = numba.core.types.NPDatetime("ns")
-timedelta64ns = numba.core.types.NPTimedelta("ns")
 
-from numba.core.types import List
+# The JIT version is replaced in decorators.py
+def is_jit_execution():  # pragma: no cover
+    return False
 
-import bodo.ai
-import bodo.ext
-import bodo.libs
-import bodo.libs.distributed_api
-import bodo.libs.memory_budget
-import bodo.libs.query_profile_collector
-import bodo.libs.streaming.join
-import bodo.libs.streaming.groupby
-import bodo.libs.streaming.dict_encoding
-import bodo.libs.streaming.sort
-import bodo.libs.streaming.union
-import bodo.libs.streaming.window
-import bodo.libs.table_builder
 
-import bodo.io
+def wrap_python(*args, **kwargs):
+    # Import compiler lazily
+    from bodo.decorators import wrap_python as _wrap_python
+    return _wrap_python(*args, **kwargs)
 
-# Rexport HDFS Locations
-import bodo.io.np_io
-import bodo.io.csv_iterator_ext
-import bodo.io.stream_parquet_write
 
-from bodo.libs.distributed_api import (
-    allgatherv,
-    barrier,
-    dist_time,
-    gatherv,
-    get_rank,
-    get_size,
-    get_nodes_first_ranks,
-    parallel_print,
-    rebalance,
-    random_shuffle,
-    scatterv,
-)
-import bodo.hiframes.boxing
-import bodo.hiframes.pd_timestamp_ext
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
-from bodo.libs.null_arr_ext import null_array_type, null_dtype
-from bodo.libs.str_ext import string_type
-import bodo.libs.binops_ext
-import bodo.libs.array_ops
-from bodo.utils.utils import cprint
-from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
-from bodo.hiframes.time_ext import (
-    TimeType,
-    TimeArrayType,
-    Time,
-    parse_time_string,
-)
-from bodo.hiframes.timestamptz_ext import (
-    TimestampTZ,
-    TimestampTZType,
-    timestamptz_type,
-    timestamptz_array_type,
-)
-from bodo.hiframes.datetime_timedelta_ext import (
-    datetime_timedelta_type,
-    timedelta_array_type,
-    pd_timedelta_type,
-)
-from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.hiframes.pd_timestamp_ext import (
-    PandasTimestampType,
-    pd_timestamp_tz_naive_type,
-)
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.bool_arr_ext import boolean_array_type
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
-from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.libs.interval_arr_ext import IntervalArrayType
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.float_arr_ext import FloatingArrayType
-from bodo.libs.primitive_arr_ext import PrimitiveArrayType
-from bodo.libs.map_arr_ext import MapArrayType, MapScalarType
-from bodo.libs.nullable_tuple_ext import NullableTupleType
-from bodo.libs.struct_arr_ext import StructArrayType, StructType
-from bodo.libs.tuple_arr_ext import TupleArrayType
-from bodo.libs.csr_matrix_ext import CSRMatrixType
-from bodo.libs.matrix_ext import MatrixType
-from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType, pd_datetime_tz_naive_type
-from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.hiframes.pd_index_ext import (
-    DatetimeIndexType,
-    NumericIndexType,
-    PeriodIndexType,
-    IntervalIndexType,
-    CategoricalIndexType,
-    RangeIndexType,
-    StringIndexType,
-    BinaryIndexType,
-    TimedeltaIndexType,
-)
-from bodo.hiframes.pd_offsets_ext import (
-    month_begin_type,
-    month_end_type,
-    week_type,
-    date_offset_type,
-)
-from bodo.hiframes.pd_categorical_ext import (
-    PDCategoricalDtype,
-    CategoricalArrayType,
-)
-from bodo.utils.typing import register_type
-from bodo.libs.logging_ext import LoggingLoggerType
-from bodo.hiframes.table import TableType
+def jitclass(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.numba_compat import jitclass as _jitclass
+    return _jitclass(*args, **kwargs)
+
+
+def get_rank():
+    # Avoid compiler imports
+    from bodo.ext import hdist
+    return hdist.get_rank_py_wrapper()
+
+
+def get_size():
+    # Avoid compiler imports
+    from bodo.ext import hdist
+    return hdist.get_size_py_wrapper()
+
+
+def barrier():
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import barrier
+    barrier()
+
+
+def parallel_print(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import parallel_print
+    parallel_print(*args, **kwargs)
+
+
+def allgatherv(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import allgatherv
+    return allgatherv(*args, **kwargs)
+
+
+def gatherv(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import gatherv
+    return gatherv(*args, **kwargs)
+
+
+def scatterv(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import scatterv
+    return scatterv(*args, **kwargs)
+
+
+def get_nodes_first_ranks(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import get_nodes_first_ranks
+    return get_nodes_first_ranks(*args, **kwargs)
+
+
+def rebalance(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import rebalance
+    return rebalance(*args, **kwargs)
+
+
+def random_shuffle(*args, **kwargs):
+    # Import compiler lazily
+    import bodo.decorators
+    from bodo.libs.distributed_api import random_shuffle
+    return random_shuffle(*args, **kwargs)
+
+
 from bodo.spawn.spawner import spawn_process_on_nodes, stop_process_on_nodes
 
 
-import bodo.compiler  # isort:skip
-
-use_pandas_join = False
-use_cpp_drop_duplicates = True
-from bodo.decorators import is_jit_execution, jit, wrap_python
-
-multithread_mode = False
 parquet_validate_schema = True
 
-import bodo.utils.tracing
-import bodo.utils.tracing_py
 from bodo.user_logging import set_bodo_verbose_logger, set_verbose_level
 
 # Restore thread limit. We don't want to limit other libraries like Arrow.
@@ -465,7 +381,33 @@ COMPLEX_CASE_THRESHOLD = 100
 # Note that this will initialize the Buffer Pool.
 import bodo.memory
 
-# Check for addition of new methods and attributes in pandas documentation for Series. Needs to be checked for every new Pandas release.
-# New methods and attributes need to be added to the unsupported_xxx list in the appropriate _ext.py file.
-# NOTE: This check needs to happen last.
-import bodo.utils.pandas_coverage_tracking
+
+
+########### finalize MPI, disconnect hdfs when exiting ############
+
+
+
+def call_finalize():  # pragma: no cover
+    from bodo.spawn.spawner import destroy_spawner
+    from bodo.io import hdfs_reader
+    from bodo.ext import hdist
+
+    # Destroy the spawner before finalize since it uses MPI
+    destroy_spawner()
+    # Cleanup default buffer pool before finalize since it uses MPI inside
+    bodo.memory_cpp.default_buffer_pool_cleanup()
+    hdist.finalize_py_wrapper()
+    hdfs_reader.disconnect_hdfs_py_wrapper()
+
+
+def flush_stdout():
+    # using a function since pytest throws an error sometimes
+    # if flush function is passed directly to atexit
+    if not sys.stdout.closed:
+        sys.stdout.flush()
+
+
+import atexit
+atexit.register(call_finalize)
+# Flush output before finalize
+atexit.register(flush_stdout)

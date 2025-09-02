@@ -147,7 +147,7 @@ def test_unbox(dict_arr_value, memory_leak_check):
     def impl(arr_arg):
         return True
 
-    assert bodo.typeof(dict_arr_value) == bodo.dict_str_arr_type
+    assert bodo.typeof(dict_arr_value) == bodo.types.dict_str_arr_type
     check_func(impl, (dict_arr_value,))
 
     # unbox and box
@@ -310,7 +310,7 @@ def test_str_to_dict_astype(memory_leak_check):
     """Test .astype() Casting from String to Dict Array"""
 
     def impl(S):
-        return S.astype(bodo.dict_str_arr_type)
+        return S.astype(bodo.types.dict_str_arr_type)
 
     data = ["a", "b", "a", "c", "a", "b", "c"] * 20
     py_out = pd.Series(

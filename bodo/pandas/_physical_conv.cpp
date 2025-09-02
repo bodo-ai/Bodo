@@ -159,13 +159,33 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                 }
                 quantiles.push_back(std::stod(it.substr(9)));
             }
-            auto physical_op =
-                std::make_shared<PhysicalQuantile>(bodo_schema, quantiles);
-            finished_pipelines.emplace_back(
-                this->active_pipeline->Build(physical_op));
-            this->active_pipeline =
-                std::make_shared<PipelineBuilder>(physical_op);
-            return;
+
+#define CREATE_QUANTILE(dtype)                                              \
+    if (in_table_schema->column_types[0]->c_type == dtype) {                \
+        auto physical_op =                                                  \
+            std::make_shared<PhysicalQuantile<dtype_to_type<dtype>::type>>( \
+                bodo_schema, quantiles);                                    \
+        finished_pipelines.emplace_back(                                    \
+            this->active_pipeline->Build(physical_op));                     \
+        this->active_pipeline =                                             \
+            std::make_shared<PipelineBuilder>(physical_op);                 \
+        return;                                                             \
+    }
+            // Tried to roughly order by how common the types are
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::FLOAT64);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT64);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT32);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::FLOAT32);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT16);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::INT8);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT16);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT8);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT32);
+            CREATE_QUANTILE(Bodo_CTypes::CTypeEnum::UINT64);
+            throw std::runtime_error(
+                "quantile function is not supported for the type: " +
+                bodo_schema->column_types[0]->ToString());
+#undef CREATE_QUANTILE
         }
 
         // Otherwise, create a PhysicalReduce operator

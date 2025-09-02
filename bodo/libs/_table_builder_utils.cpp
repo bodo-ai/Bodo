@@ -91,3 +91,26 @@ std::shared_ptr<table_info> alloc_table_like(
     return std::make_shared<table_info>(arrays, table->nrows(),
                                         table->column_names, table->metadata);
 }
+
+std::shared_ptr<table_info> unify_dictionary_arrays_helper(
+    const std::shared_ptr<table_info>& in_table,
+    std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    uint64_t n_keys, bool only_transpose_existing_on_key_cols) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(in_table->ncols());
+    for (size_t i = 0; i < in_table->ncols(); i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        std::shared_ptr<array_info> out_arr;
+        if (dict_builders[i] == nullptr) {
+            out_arr = in_arr;
+        } else {
+            if (only_transpose_existing_on_key_cols && (i < n_keys)) {
+                out_arr = dict_builders[i]->TransposeExisting(in_arr);
+            } else {
+                out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
+            }
+        }
+        out_arrs.emplace_back(out_arr);
+    }
+    return std::make_shared<table_info>(out_arrs);
+}

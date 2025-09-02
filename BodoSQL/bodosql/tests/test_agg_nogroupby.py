@@ -731,14 +731,14 @@ def timestamptz_data():
     return np.array(
         [
             None,
-            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
             None,
-            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 100),
-            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", -100),
+            bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", -100),
             None,
-            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
-            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 100),
-            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", -100),
+            bodo.types.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
+            bodo.types.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 100),
+            bodo.types.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", -100),
             None,
         ]
     )
@@ -752,8 +752,8 @@ def test_max_min_timestamptz(timestamptz_data, memory_leak_check):
     ctx = {"TABLE1": df}
     py_output = pd.DataFrame(
         {
-            "OUT1": bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
-            "OUT2": bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
+            "OUT1": bodo.types.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
+            "OUT2": bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
         },
         index=pd.RangeIndex(0, 1, 1),
     )
@@ -797,7 +797,7 @@ def test_anyvalue_timestamptz(timestamptz_data, memory_leak_check):
     df = pd.DataFrame({"A": timestamptz_data})
     ctx = {"TABLE1": df}
     py_output = pd.DataFrame(
-        {"OUTPUT": bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0)},
+        {"OUTPUT": bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0)},
         index=pd.RangeIndex(0, 1),
     )
     query = "Select ANY_VALUE(A) as output from table1"

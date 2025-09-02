@@ -6,6 +6,7 @@
 #include "../libs/_array_utils.h"
 #include "../libs/_distributed.h"
 #include "../libs/_table_builder.h"
+#include "../libs/_table_builder_utils.h"
 #include "operator.h"
 
 /**

@@ -99,7 +99,7 @@ jobs:
         id: download-artifact
         with:
           pattern: cibw-wheels-linux-x86-3.13
-          path: .
+          path: ./cibw-wheels-linux-x86-3.13
 
       - name: Build BodoSQL Wheels
         run: |
@@ -128,12 +128,12 @@ jobs:
         id: download-bodo-artifact
         with:
           pattern: cibw-wheels-linux-x86-${{ matrix.python_version }}
-          path: .
+          path: ./cibw-wheels-linux-x86-${{ matrix.python_version }}
       - uses: actions/download-artifact@v5
         id: download-bodosql-artifact
         with:
           pattern: bodosql-wheel-no-arch
-          path: .
+          path: ./bodosql-wheel-no-arch
       - name: Install
         run: |
           # Install bodo and bodosql from the local wheel

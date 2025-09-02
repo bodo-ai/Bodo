@@ -42,6 +42,10 @@ from bodo.ir.argument_checkers import (
     StringSeriesArgumentChecker,
 )
 from bodo.ir.declarative_templates import overload_method_declarative
+from bodo.ir.unsupported_method_template import (
+    overload_unsupported_attribute,
+    overload_unsupported_method,
+)
 from bodo.libs.array import (
     array_info_type,
     array_to_info,
@@ -187,7 +191,7 @@ def overload_series_str(S):
 @overload_method(SeriesStrMethodType, "len", inline="always", no_unliteral=True)
 def overload_str_method_len(S_str):
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_len_dict_impl(S_str):  # pragma: no cover
             S = S_str._obj
@@ -323,7 +327,7 @@ def overload_str_method_get(S_str, i):
         return _str_get_split_impl
 
     # optimized version for dictionary encode arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_get_dict_impl(S_str, i):  # pragma: no cover
             S = S_str._obj
@@ -401,7 +405,7 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
     int_arg_check("replace", "flags", flags)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_replace_dict_impl(
             S_str, pat, repl, n=-1, case=None, flags=0, regex=True
@@ -555,21 +559,21 @@ def overload_str_method_partition(S, sep=" ", expand=True):
 
 @numba.njit
 def series_contains_regex(S, pat, case, flags, na, regex):  # pragma: no cover
-    with bodo.objmode(out_arr=bodo.boolean_array_type):
+    with numba.objmode(out_arr=bodo.types.boolean_array_type):
         out_arr = pd.array(S.array, "string")._str_contains(pat, case, flags, na, regex)
     return out_arr
 
 
 @numba.njit
 def series_match_regex(S, pat, case, flags, na):  # pragma: no cover
-    with bodo.objmode(out_arr=bodo.boolean_array_type):
+    with numba.objmode(out_arr=bodo.types.boolean_array_type):
         out_arr = S.array._str_match(pat, case, flags, na)
     return out_arr
 
 
 @numba.njit
 def series_fullmatch_regex(S, pat, case, flags, na):  # pragma: no cover
-    with bodo.objmode(out_arr=bodo.boolean_array_type):
+    with numba.objmode(out_arr=bodo.types.boolean_array_type):
         out_arr = S.array._str_fullmatch(pat, case, flags, na)
     return out_arr
 
@@ -658,7 +662,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=None, regex=
         # use Python's re.search in objmode
         if is_regex_unsupported(pat) or flags:
             # optimized version for dictionary encoded arrays
-            if S_str.stype.data == bodo.dict_str_arr_type:
+            if S_str.stype.data == bodo.types.dict_str_arr_type:
                 func_text += "  out_arr = bodo.libs.dict_arr_ext.str_series_contains_regex(arr, pat, case, flags, na, regex)\n"
             else:
                 func_text += "  out_arr = bodo.hiframes.series_str_impl.series_contains_regex(S, pat, case, flags, na, regex)\n"
@@ -668,7 +672,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=None, regex=
 
     else:
         # optimized version for dictionary encoded arrays
-        if S_str.stype.data == bodo.dict_str_arr_type:
+        if S_str.stype.data == bodo.types.dict_str_arr_type:
             func_text += "  out_arr = bodo.libs.dict_arr_ext.str_contains_non_regex(arr, pat, case)\n"
         else:
             func_text += "  numba.parfors.parfor.init_prange()\n"
@@ -721,7 +725,7 @@ def gen_str_match_impl(S_str, pat, do_full_match, flags):
         func_text += "        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
         func_text += f"        get_search_regex(arr, case, True, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr, do_full_match={do_full_match})\n"
     # optimized version for dictionary encoded array
-    elif S_str.stype.data == bodo.dict_str_arr_type:
+    elif S_str.stype.data == bodo.types.dict_str_arr_type:
         func_text += f"        out_arr = bodo.libs.dict_arr_ext.str_match(arr, pat, case, flags, na, do_full_match={do_full_match})\n"
     else:
         func_text += "        out_arr = series_match_impl(S, pat, case, flags, na)\n"
@@ -802,8 +806,8 @@ def overload_str_method_cat(S_str, others=None, sep=None, na_rep=None, join="lef
         func_text += f"  data{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(others, {i})\n"
 
     # optimized path for dictionar-encoded string arrays
-    if S_str.stype.data == bodo.dict_str_arr_type and all(
-        t == bodo.dict_str_arr_type for t in others.data
+    if S_str.stype.data == bodo.types.dict_str_arr_type and all(
+        t == bodo.types.dict_str_arr_type for t in others.data
     ):
         in_data = ", ".join(f"data{i}" for i in range(len(others.columns)))
         func_text += (
@@ -858,7 +862,7 @@ def overload_str_method_count(S_str, pat, flags=0):
     int_arg_check("count", "flags", flags)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_count_dict_impl(S_str, pat, flags=0):  # pragma: no cover
             S = S_str._obj
@@ -897,7 +901,7 @@ def overload_str_method_find(S_str, sub, start=0, end=None):
         int_arg_check("find", "end", end)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_find_dict_impl(S_str, sub, start=0, end=None):  # pragma: no cover
             S = S_str._obj
@@ -936,7 +940,7 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
         int_arg_check("rfind", "end", end)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_rfind_dict_impl(S_str, sub, start=0, end=None):  # pragma: no cover
             S = S_str._obj
@@ -985,7 +989,7 @@ def overload_str_method_index(S_str, sub, start=0, end=None):
         int_arg_check("index", "end", end)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_index_dict_impl(S_str, sub, start=0, end=None):  # pragma: no cover
             S = S_str._obj
@@ -1042,7 +1046,7 @@ def overload_str_method_rindex(S_str, sub, start=0, end=None):
         int_arg_check("rindex", "end", end)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_rindex_dict_impl(S_str, sub, start=0, end=None):  # pragma: no cover
             S = S_str._obj
@@ -1113,7 +1117,7 @@ def overload_str_method_slice_replace(S_str, start=0, stop=None, repl=""):
 def overload_str_method_repeat(S_str, repeats):
     if isinstance(repeats, types.Integer) or is_overload_constant_int(repeats):
         # optimized version for dictionary encode arrays
-        if S_str.stype.data == bodo.dict_str_arr_type:
+        if S_str.stype.data == bodo.types.dict_str_arr_type:
 
             def _str_repeat_int_dict_impl(S_str, repeats):  # pragma: no cover
                 S = S_str._obj
@@ -1213,7 +1217,7 @@ def create_ljust_rjust_center_overload(func_name):
     def overload_ljust_rjust_center_method(S_str, width, fillchar=" "):
         common_validate_padding(func_name, width, fillchar)
 
-        if S_str.stype.data == bodo.dict_str_arr_type:
+        if S_str.stype.data == bodo.types.dict_str_arr_type:
             return dict_impl
         return impl
 
@@ -1250,7 +1254,7 @@ _install_ljust_rjust_center()
 )
 def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_pad_dict_impl(
             S_str, width, side="left", fillchar=" "
@@ -1298,7 +1302,7 @@ def overload_str_method_zfill(S_str, width):
     int_arg_check("zfill", "width", width)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_zfill_dict_impl(S_str, width):  # pragma: no cover
             S = S_str._obj
@@ -1339,7 +1343,7 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
         int_arg_check("slice", "step", step)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_slice_dict_impl(
             S_str, start=None, stop=None, step=None
@@ -1378,7 +1382,7 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
     str_arg_check("startswith", "pat", pat)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_startswith_dict_impl(S_str, pat, na=np.nan):  # pragma: no cover
             S = S_str._obj
@@ -1414,7 +1418,7 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
     str_arg_check("endswith", "pat", pat)
 
     # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
 
         def _str_endswith_dict_impl(S_str, pat, na=np.nan):  # pragma: no cover
             S = S_str._obj
@@ -1486,7 +1490,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
     n_cols = len(columns)
 
     # check if the array is dictionary encoded
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
         # optimized version for dictionary encoded arrays
         func_text = "def impl(S_str, pat, flags=0, expand=True):\n"
         func_text += "  S = S_str._obj\n"
@@ -1564,7 +1568,7 @@ def overload_str_method_extractall(S_str, pat, flags=0):
     multi_group = "_multi" if is_multi_group else ""
 
     # check if the string array is dictionary encoded
-    if S_str.stype.data == bodo.dict_str_arr_type:
+    if S_str.stype.data == bodo.types.dict_str_arr_type:
         # optimized version for dictionary encoded arrays
         func_text = "def impl(S_str, pat, flags=0):\n"
         func_text += "  S = S_str._obj\n"
@@ -1751,7 +1755,7 @@ def create_str2str_methods_overload(func_name):
         def overload_strip_method(S_str, to_strip=None):
             if not is_overload_none(to_strip):
                 str_arg_check(func_name, "to_strip", to_strip)
-            if S_str.stype.data == bodo.dict_str_arr_type:
+            if S_str.stype.data == bodo.types.dict_str_arr_type:
                 return _dict_impl
             return f
 
@@ -1759,7 +1763,7 @@ def create_str2str_methods_overload(func_name):
     else:
 
         def overload_str_method_dict_supported(S_str):
-            if S_str.stype.data == bodo.dict_str_arr_type:
+            if S_str.stype.data == bodo.types.dict_str_arr_type:
                 return _dict_impl
             return f
 
@@ -1805,7 +1809,7 @@ def create_str2bool_methods_overload(func_name):
     dict_impl = loc_vars["dict_impl"]
 
     def overload_str2bool_methods(S_str):
-        if S_str.stype.data == bodo.dict_str_arr_type:
+        if S_str.stype.data == bodo.types.dict_str_arr_type:
             return dict_impl
         return impl
 
@@ -1923,11 +1927,11 @@ def _install_catseries_unsupported():
 
     for attr_name in unsupported_cat_attrs:
         full_name = "Series.cat." + attr_name
-        bodo.overload_unsupported_attribute(SeriesCatMethodType, attr_name, full_name)
+        overload_unsupported_attribute(SeriesCatMethodType, attr_name, full_name)
 
     for fname in unsupported_cat_methods:
         full_name = "Series.cat." + fname
-        bodo.overload_unsupported_method(SeriesCatMethodType, fname, full_name)
+        overload_unsupported_method(SeriesCatMethodType, fname, full_name)
 
 
 _install_catseries_unsupported()
@@ -1950,7 +1954,7 @@ def _install_strseries_unsupported():
 
     for fname in unsupported_str_methods:
         full_name = "Series.str." + fname
-        bodo.overload_unsupported_method(SeriesStrMethodType, fname, full_name)
+        overload_unsupported_method(SeriesStrMethodType, fname, full_name)
 
 
 _install_strseries_unsupported()

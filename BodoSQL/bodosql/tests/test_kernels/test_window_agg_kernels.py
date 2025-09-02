@@ -149,9 +149,9 @@ def test_approx_percentile(data, memory_leak_check):
             id="date",
         ),
         pytest.param(
-            [bodo.Time(second=i) for i in [45000, 86399, 21600, 1, 1020]],
+            [bodo.types.Time(second=i) for i in [45000, 86399, 21600, 1, 1020]],
             None,
-            bodo.Time(0, 0, 0),
+            bodo.types.Time(0, 0, 0),
             id="time",
         ),
         pytest.param(
@@ -728,7 +728,7 @@ def window_kernel_all_types_data():
             [
                 None
                 if ns is None
-                else bodo.Time(0, 0, 0, nanosecond=123456789 * ns, precision=9)
+                else bodo.types.Time(0, 0, 0, nanosecond=123456789 * ns, precision=9)
                 for tup in zip(
                     [(i**3) % 900000 for i in range(50)],
                     [(i + 15) ** 2 for i in range(50)],

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import typing as pt
 from collections.abc import Callable
 
 from bodo.ai.backend import Backend
-from bodo.pandas import BodoSeries
+
+if pt.TYPE_CHECKING:
+    from bodo.pandas import BodoSeries
 
 
 def tokenize(

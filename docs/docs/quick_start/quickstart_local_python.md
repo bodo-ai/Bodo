@@ -13,7 +13,7 @@ This quickstart guide will walk you through the process of running a simple Pyth
 
 ## Drop-in Pandas Replacement with Bodo DataFrames
 
-Bodo DataFrame library can be used as a drop-in replacement for Pandas by changing `import pandas as pd` with `import bodo.pandas as pd`. For example:
+Bodo DataFrames can be used as a drop-in replacement for Pandas by changing `import pandas as pd` with `import bodo.pandas as pd`. For example:
 
 ```python
 import bodo.pandas as pd
@@ -25,9 +25,9 @@ df2 = df.groupby("A", as_index=False)["B"].max()
 df2.to_parquet("my_data.pq")
 ```
 
-Bodo DataFrame library will optimize and parallelize the code automatically when possible.
+Bodo DataFrames will optimize and parallelize the code automatically when possible.
 It will fall back to Pandas seamlessly when some API isn't supported yet and throw a warning.
-See the [DataFrame Library API reference][dataframe-lib] for supported Pandas APIs.
+See the [Bodo DataFrames API reference][dataframe-lib] for supported Pandas APIs.
 
 
 ## Bodo JIT Compilation for Custom Code

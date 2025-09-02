@@ -4,9 +4,6 @@
 #include <boost/xpressive/xpressive.hpp>
 #include "_bodo_common.h"
 
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include <numpy/arrayobject.h>
-
 #include "_array_hash.h"
 #include "_datetime_ext.h"
 #include "_datetime_utils.h"
@@ -111,8 +108,8 @@ std::shared_ptr<array_info> convert_datetime_ns_to_us(
 // Copied from _datetime_ext.cpp
 int64_t extract_unit(int64_t* d, int64_t unit) {
     assert(unit > 0);
-    npy_int64 div = *d / unit;
-    npy_int64 mod = *d % unit;
+    int64_t div = *d / unit;
+    int64_t mod = *d % unit;
     if (mod < 0) {
         mod += unit;
         div -= 1;
@@ -751,7 +748,7 @@ std::string transform_val_to_str(std::string transform_name,
     }
     if ((transform_name == "identity" || transform_name == "day") &&
         in_arr->dtype == Bodo_CTypes::DATE) {
-        return in_arr->val_to_str(idx);
+        return array_val_to_str(in_arr, idx);
     }
     if (transform_name == "day") {
         // day transform is only supported for DATETIME and DATE types.
@@ -785,7 +782,7 @@ std::string transform_val_to_str(std::string transform_name,
         date_str += std::to_string(day);
         return date_str;
     }
-    return transformed_arr->val_to_str(idx);
+    return array_val_to_str(transformed_arr, idx);
 }
 
 PyObject* iceberg_transformed_val_to_py(std::shared_ptr<array_info> arr,

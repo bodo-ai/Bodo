@@ -10,6 +10,7 @@ import threading
 import uuid
 from typing import TYPE_CHECKING
 
+import llvmlite.binding as ll
 import numba
 import numpy as np
 import pyarrow as pa
@@ -20,6 +21,7 @@ from numba.extending import (
     NativeValue,
     box,
     models,
+    overload,
     register_model,
     typeof_impl,
     unbox,
@@ -37,21 +39,25 @@ from bodo.hiframes.pd_categorical_ext import (
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.time_ext import TimeArrayType, TimeType
 from bodo.hiframes.timestamptz_ext import ArrowTimestampTZType
+from bodo.io import csv_cpp
+from bodo.io.fs_io import get_s3_bucket_region_wrapper
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
+from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_opaque_class
 from bodo.utils.typing import (
     BodoError,
+    get_overload_constant_dict,
     is_nullable_ignore_sentinels,
     raise_bodo_error,
 )
@@ -104,22 +110,6 @@ def lower_pyarrow_table_schema(context, builder, ty, pyval):
     # pyval = pyval.remove_metadata()
     pyapi = context.get_python_api(builder)
     return pyapi.unserialize(pyapi.serialize_object(pyval))
-
-
-# Create an mpi4py reduction function.
-def pa_schema_unify_reduction(schema_a_and_row_count, schema_b_and_row_count, unused):
-    # Attempt to unify the schemas, but if any schema is associated with a row
-    # count of 0, disregard it.
-    schema_a, count_a = schema_a_and_row_count
-    schema_b, count_b = schema_b_and_row_count
-    if count_a == 0 and count_b > 0:
-        return (schema_b, count_b)
-    if count_a > 0 and count_b == 0:
-        return (schema_a, count_a)
-    return (pa.unify_schemas([schema_a, schema_b]), count_a + count_b)
-
-
-pa_schema_unify_mpi_op = MPI.Op.Create(pa_schema_unify_reduction, commute=True)
 
 
 this_module = sys.modules[__name__]
@@ -194,7 +184,7 @@ def get_arrow_timestamp_type(pa_ts_typ):
     if pa_ts_typ.unit not in supported_units:
         # Unsupported units get typed as numpy dt64 array but
         # marked not supported.
-        return types.Array(bodo.datetime64ns, 1, "C"), False
+        return types.Array(bodo.types.datetime64ns, 1, "C"), False
     elif pa_ts_typ.tz is not None:
         # Timezones use the PandasDatetimeArrayType. Timezone information
         # is stored in the Pandas type.
@@ -203,10 +193,10 @@ def get_arrow_timestamp_type(pa_ts_typ):
         # https://www.iana.org/time-zones
         tz_type = pa_ts_typ.to_pandas_dtype().tz
         tz_val = bodo.libs.pd_datetime_arr_ext.get_tz_type_info(tz_type)
-        return bodo.DatetimeArrayType(tz_val), True
+        return bodo.types.DatetimeArrayType(tz_val), True
     else:
         # Without timezones Arrow ts arrays are converted to dt64 arrays.
-        return types.Array(bodo.datetime64ns, 1, "C"), True
+        return types.Array(bodo.types.datetime64ns, 1, "C"), True
 
 
 def _get_numba_typ_from_pa_typ(
@@ -280,7 +270,7 @@ def _get_numba_typ_from_pa_typ(
         int_type = _pyarrow_numba_type_map[pa_typ.type.index_type]
         cat_dtype = PDCategoricalDtype(
             category_info[pa_typ.name],
-            bodo.string_type,
+            bodo.types.string_type,
             pa_typ.type.ordered,
             int_type=int_type,
         )
@@ -289,7 +279,7 @@ def _get_numba_typ_from_pa_typ(
     if isinstance(pa_typ.type, pa.lib.TimestampType):
         return get_arrow_timestamp_type(pa_typ.type)
     elif isinstance(pa_typ.type, ArrowTimestampTZType):
-        return bodo.timestamptz_array_type, True
+        return bodo.types.timestamptz_array_type, True
     elif pa_typ.type in _pyarrow_numba_type_map:
         dtype = _pyarrow_numba_type_map[pa_typ.type]
         supported = True
@@ -368,10 +358,10 @@ def is_nullable_arrow_out(numba_type: types.ArrayCompatible) -> bool:
 
     return (
         is_nullable_ignore_sentinels(numba_type)
-        or isinstance(numba_type, bodo.DatetimeArrayType)
+        or isinstance(numba_type, bodo.types.DatetimeArrayType)
         or (
             isinstance(numba_type, types.Array)
-            and numba_type.dtype == bodo.datetime64ns
+            and numba_type.dtype == bodo.types.datetime64ns
         )
     )
 
@@ -409,14 +399,14 @@ def _numba_to_pyarrow_type(
             fields.append(pa.field(name, pa_type, True))
         dtype = pa.struct(fields)
 
-    elif isinstance(numba_type, bodo.TupleArrayType):
+    elif isinstance(numba_type, bodo.types.TupleArrayType):
         fields = []
         for i, inner_type in enumerate(numba_type.data):
             pa_type, _ = _numba_to_pyarrow_type(inner_type, is_iceberg, use_dict_arr)
             fields.append(pa.field(f"{TUPLE_ARRAY_SENTINEL}{i}", pa_type, True))
         dtype = pa.struct(fields)
 
-    elif isinstance(numba_type, bodo.MapArrayType):
+    elif isinstance(numba_type, bodo.types.MapArrayType):
         key_type, _ = _numba_to_pyarrow_type(
             numba_type.key_arr_type, is_iceberg, use_dict_arr
         )
@@ -438,16 +428,17 @@ def _numba_to_pyarrow_type(
 
     elif numba_type == boolean_array_type:
         dtype = pa.bool_()
-    elif use_dict_arr and numba_type == bodo.dict_str_arr_type:
+    elif use_dict_arr and numba_type == bodo.types.dict_str_arr_type:
         dtype = pa.dictionary(pa.int32(), pa.large_string())
-    elif numba_type in (string_array_type, bodo.dict_str_arr_type):
+    elif numba_type in (string_array_type, bodo.types.dict_str_arr_type):
         dtype = pa.large_string()
     elif numba_type == binary_array_type:
         dtype = pa.large_binary()
     elif numba_type == datetime_date_array_type:
         dtype = pa.date32()
-    elif isinstance(numba_type, bodo.DatetimeArrayType) or (
-        isinstance(numba_type, types.Array) and numba_type.dtype == bodo.datetime64ns
+    elif isinstance(numba_type, bodo.types.DatetimeArrayType) or (
+        isinstance(numba_type, types.Array)
+        and numba_type.dtype == bodo.types.datetime64ns
     ):
         # For Iceberg, all timestamp data needs to be written
         # as microseconds, so that's the type we
@@ -461,25 +452,35 @@ def _numba_to_pyarrow_type(
         # The underlying already is in UTC already
         # for timezone aware types, and for timezone
         # naive, it won't matter.
-        tz = numba_type.tz if isinstance(numba_type, bodo.DatetimeArrayType) else None
+        tz = (
+            numba_type.tz
+            if isinstance(numba_type, bodo.types.DatetimeArrayType)
+            else None
+        )
         if isinstance(tz, int):
             tz = bodo.libs.pd_datetime_arr_ext.nanoseconds_to_offset(tz)
         dtype = pa.timestamp("us", "UTC") if is_iceberg else pa.timestamp("ns", tz)
 
     # TODO: Figure out how to raise an error here for Iceberg (is_iceberg is set to True).
-    elif numba_type == bodo.timedelta_array_type or (
-        isinstance(numba_type, types.Array) and numba_type.dtype == bodo.timedelta64ns
+    elif numba_type == bodo.types.timedelta_array_type or (
+        isinstance(numba_type, types.Array)
+        and numba_type.dtype == bodo.types.timedelta64ns
     ):
         dtype = pa.duration("ns")
     elif (
         isinstance(
             numba_type,
-            (types.Array, IntegerArrayType, FloatingArrayType, bodo.PrimitiveArrayType),
+            (
+                types.Array,
+                IntegerArrayType,
+                FloatingArrayType,
+                bodo.types.PrimitiveArrayType,
+            ),
         )
         and numba_type.dtype in _numba_pyarrow_type_map
     ):
         dtype = _numba_pyarrow_type_map[numba_type.dtype]  # type: ignore
-    elif isinstance(numba_type, bodo.TimeArrayType):
+    elif isinstance(numba_type, bodo.types.TimeArrayType):
         if numba_type.precision == 0:
             dtype = pa.time32("s")
         elif numba_type.precision == 3:
@@ -488,7 +489,7 @@ def _numba_to_pyarrow_type(
             dtype = pa.time64("us")
         elif numba_type.precision == 9:
             dtype = pa.time64("ns")
-    elif numba_type == bodo.null_array_type:
+    elif numba_type == bodo.types.null_array_type:
         dtype = pa.null()
     else:
         raise BodoError(
@@ -589,22 +590,22 @@ def pyarrow_type_to_numba(arrow_type):
         return DecimalArrayType(arrow_type.precision, arrow_type.scale)
 
     if pa.types.is_timestamp(arrow_type):
-        return bodo.DatetimeArrayType(arrow_type.tz)
+        return bodo.types.DatetimeArrayType(arrow_type.tz)
 
     if pa.types.is_null(arrow_type):
-        return bodo.null_array_type
+        return bodo.types.null_array_type
 
     if pa.types.is_time64(arrow_type):
         precision = 9 if arrow_type.unit == "ns" else 6
-        return bodo.TimeArrayType(precision)
+        return bodo.types.TimeArrayType(precision)
 
     if pa.types.is_time32(arrow_type):
         precision = 3 if arrow_type.unit == "ms" else 0
-        return bodo.TimeArrayType(precision)
+        return bodo.types.TimeArrayType(precision)
 
     if pa.types.is_duration(arrow_type):
         if arrow_type.unit == "ns":
-            return bodo.timedelta_array_type
+            return bodo.types.timedelta_array_type
         else:
             raise BodoError(
                 f"Unsupported Arrow duration type {arrow_type}, only nanoseconds supported"
@@ -746,7 +747,7 @@ def uuid4_helper():  # pragma: no cover
     Returns
         out (str): String output of `uuid4()`
     """
-    with bodo.no_warning_objmode(out="unicode_type"):
+    with bodo.ir.object_mode.no_warning_objmode(out="unicode_type"):
         out = str(uuid.uuid4())
     return out
 
@@ -763,7 +764,7 @@ def makedirs_helper(path, exist_ok=False):  # pragma: no cover
             exists. If False, raise an exception if the directory exists.
 
     """
-    with bodo.no_warning_objmode():
+    with bodo.ir.object_mode.no_warning_objmode():
         os.makedirs(path, exist_ok=exist_ok)
 
 
@@ -825,69 +826,6 @@ def get_table_iterator(rhs: ir.Inst, func_ir: ir.FunctionIR) -> str:
         == ("read_arrow_next", "bodo.io.arrow_reader")
     )
     return tup_def.args[0].name
-
-
-def sync_and_reraise_error(
-    err,
-    _is_parallel=False,
-    bcast_lowest_err: bool = True,
-    default_generic_err_msg: str | None = None,
-):  # pragma: no cover
-    """
-    If `err` is an Exception on any rank, raise an error on all ranks.
-    If 'bcast_lowest_err' is True, we will broadcast the error from the
-    "lowest" rank that has an error and raise it on all the ranks without
-    their own error. If 'bcast_lowest_err' is False, we will raise a
-    generic error on ranks without their own error. This is useful in
-    cases where the error could be something that's not safe to broadcast
-    (e.g. not pickle-able).
-    This is a no-op if all ranks are exception-free.
-
-    Args:
-        err (Exception or None): Could be None or an exception
-        _is_parallel (bool): Whether this is being called from many ranks
-        bcast_lowest_err (bool): Whether to broadcast the error from the
-            lowest rank. Only applicable in the _is_parallel case.
-        default_generic_err_msg (str, optional): If bcast_lowest_err = False,
-            this message will be used for the exception raised on
-            ranks without their own error. Only applicable in the
-            _is_parallel case.
-    """
-    comm = MPI.COMM_WORLD
-
-    if _is_parallel:
-        # If any rank raises an exception, re-raise that error on all non-failing
-        # ranks to prevent deadlock on future MPI collective ops.
-        # We use allreduce with MPI.MAXLOC to communicate the rank of the lowest
-        # failing process, then broadcast the error backtrace across all ranks.
-        err_on_this_rank = int(err is not None)
-        err_on_any_rank, failing_rank = comm.allreduce(
-            (err_on_this_rank, comm.Get_rank()), op=MPI.MAXLOC
-        )
-        if err_on_any_rank:
-            if comm.Get_rank() == failing_rank:
-                lowest_err = err
-            else:
-                lowest_err = None
-            if bcast_lowest_err:
-                lowest_err = comm.bcast(lowest_err, root=failing_rank)
-            else:
-                err_msg = (
-                    default_generic_err_msg
-                    if (default_generic_err_msg is not None)
-                    else "Exception on some ranks. See other ranks for error."
-                )
-                lowest_err = Exception(err_msg)
-
-            # Each rank that already has an error will re-raise their own error, and
-            # any rank that doesn't have an error will re-raise the lowest rank's error.
-            if err_on_this_rank:
-                raise err
-            else:
-                raise lowest_err
-    else:
-        if err is not None:
-            raise err
 
 
 def _get_stream_writer_payload(
@@ -1008,3 +946,103 @@ def is_pyarrow_list_type(arrow_type):
         or pa.types.is_large_list(arrow_type)
         or pa.types.is_fixed_size_list(arrow_type)
     )
+
+
+_csv_write = types.ExternalFunction(
+    "csv_write",
+    types.void(
+        types.voidptr,  # char *_path_name
+        types.voidptr,  # char *buff
+        types.int64,  # int64_t start
+        types.int64,  # int64_t count
+        types.bool_,  # bool is_parallel
+        types.voidptr,  # char *bucket_region
+        types.voidptr,  # char *prefix
+    ),
+)
+ll.add_symbol("csv_write", csv_cpp.csv_write)
+
+
+def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
+    # This is a dummy function used to allow overload.
+    return None
+
+
+@overload(csv_write, no_unliteral=True, jit_options={"cache": True})
+def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
+    def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
+        # Assuming that path_or_buf is a string
+        bucket_region = get_s3_bucket_region_wrapper(path_or_buf, parallel=is_parallel)
+        # TODO: support non-ASCII file names?
+        utf8_str, utf8_len = unicode_to_utf8_and_len(D)
+        offset = 0
+        if is_parallel:
+            offset = bodo.libs.distributed_api.dist_exscan(
+                utf8_len, np.int32(Reduce_Type.Sum.value)
+            )
+        _csv_write(
+            unicode_to_utf8(path_or_buf),
+            utf8_str,
+            offset,
+            utf8_len,
+            is_parallel,
+            unicode_to_utf8(bucket_region),
+            unicode_to_utf8(filename_prefix),
+        )
+        # Check if there was an error in the C++ code. If so, raise it.
+        bodo.utils.utils.check_and_propagate_cpp_exception()
+
+    return impl
+
+
+@overload(get_s3_bucket_region_wrapper, jit_options={"cache": True})
+def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
+    def impl(s3_filepath, parallel):
+        with bodo.ir.object_mode.no_warning_objmode(bucket_loc="unicode_type"):
+            bucket_loc = get_s3_bucket_region_wrapper(s3_filepath, parallel)
+        return bucket_loc
+
+    return impl
+
+
+class StorageOptionsDictType(types.Opaque):
+    def __init__(self):
+        super().__init__(name="StorageOptionsDictType")
+
+
+storage_options_dict_type = StorageOptionsDictType()
+types.storage_options_dict_type = storage_options_dict_type  # type: ignore
+register_model(StorageOptionsDictType)(models.OpaqueModel)
+
+
+@unbox(StorageOptionsDictType)
+def unbox_storage_options_dict_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+def get_storage_options_pyobject(storage_options):  # pragma: no cover
+    pass
+
+
+@overload(get_storage_options_pyobject, no_unliteral=True)
+def overload_get_storage_options_pyobject(storage_options):
+    """generate a pyobject for the storage_options to pass to C++"""
+    storage_options_val = get_overload_constant_dict(storage_options)
+    func_text = "def impl(storage_options):\n"
+    func_text += "  with bodo.ir.object_mode.no_warning_objmode(storage_options_py='storage_options_dict_type'):\n"
+    func_text += f"    storage_options_py = {str(storage_options_val)}\n"
+    func_text += "  return storage_options_py\n"
+    loc_vars = {}
+    exec(func_text, globals(), loc_vars)
+    return loc_vars["impl"]
+
+
+this_module = sys.modules[__name__]
+PyArrowFSType, pyarrow_fs_type = install_opaque_class(
+    types_name="pyarrow_fs_type",
+    python_type=pa.fs.FileSystem,
+    module=this_module,
+    class_name="PyArrowFSType",
+)
