@@ -134,7 +134,7 @@ def test_tpch_q20():
 
 
 def test_tpch_q21():
-    run_tpch_query_test(tpch.tpch_q21, plan_executions=2)
+    run_tpch_query_test(tpch.tpch_q21, plan_executions=4)
 
 
 @pytest.mark.skip("hanging?")
