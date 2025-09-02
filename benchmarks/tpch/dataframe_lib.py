@@ -921,12 +921,10 @@ def tpch_q22(customer, orders, pd=pd):
         customer_filtered, on="C_CUSTKEY", how="inner"
     )
     customer_selected = customer_selected.loc[:, ["CNTRYCODE", "C_ACCTBAL"]]
-    agg1 = customer_selected.groupby(["CNTRYCODE"], as_index=False, sort=False).size()
-    agg1.columns = ["CNTRYCODE", "NUMCUST"]
-    agg2 = customer_selected.groupby(["CNTRYCODE"], as_index=False, sort=False).agg(
-        TOTACCTBAL=pd.NamedAgg(column="C_ACCTBAL", aggfunc="sum")
+    total = customer_selected.groupby(["CNTRYCODE"], as_index=False, sort=False).agg(
+        ["size", "sum"]
     )
-    total = agg1.merge(agg2, on="CNTRYCODE", how="inner")
+    total.columns = ["CNTRYCODE", "NUMCUST", "TOTACCTBAL"]
     total = total.sort_values(by=["CNTRYCODE"], ascending=[True])
     return total
 
