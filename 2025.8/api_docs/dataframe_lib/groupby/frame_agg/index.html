@@ -18,7 +18,7 @@
         <link rel="prev" href="../../series/ai/tokenize/">
       
       
-        <link rel="next" href="../">
+        <link rel="next" href="../frame_apply/">
       
       
       <link rel="icon" href="../../../../assets/favicon.png">
@@ -2175,6 +2175,8 @@
       
         
       
+        
+      
     
     
     
@@ -2283,6 +2285,27 @@
   
   
     <li class="md-nav__item">
+      <a href="../../series/map_partitions_with_state/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    bodo.pandas.BodoSeries.map_with_state
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../series/map_with_state/" class="md-nav__link">
         
   
@@ -2342,10 +2365,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2_5_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2_5_8" >
         
           
-          <label class="md-nav__link" for="__nav_5_2_5_7" id="__nav_5_2_5_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_2_5_8" id="__nav_5_2_5_8_label" tabindex="0">
             
   
   <span class="md-ellipsis">
@@ -2356,8 +2379,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_2_5_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_2_5_7">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_2_5_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2_5_8">
             <span class="md-nav__icon md-icon"></span>
             ai
           </label>
@@ -2477,7 +2500,11 @@
         
       
         
+      
+        
           
+        
+      
         
       
         
@@ -2550,6 +2577,27 @@
               
             
               
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../frame_apply/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    DataFrameGroupBy.apply
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
             
               
                 
@@ -2563,6 +2611,27 @@
   
   <span class="md-ellipsis">
     SeriesGroupBy.agg
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../series_apply/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SeriesGroupBy.apply
   </span>
   
 
@@ -25802,7 +25871,8 @@
 <li>A dictionary mapping column name to aggregate function e.g. <code>{"col_1": "sum", "col_2": "mean"}</code></li>
 <li>None along with key word arguments specifying Named Aggregates.</li>
 </ul>
-<p><a class="autorefs autorefs-internal" href="../#df-lib-groupby">Refer to our documentation</a> for aggregate functions that are currently supported. Any other combination of arguments or user defined functions will either fallback to Pandas <a href="https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.agg.html#pandas.core.groupby.DataFrameGroupBy.agg"><code>DataFrameGroupBy.agg</code></a> or raise a descriptive error.</p>
+<p><a class="autorefs autorefs-internal" href="../#df-lib-groupby">Refer to our documentation</a> for aggregate functions that are currently supported in addition to most user defined functions.
+Any other combination of arguments will either fallback to Pandas <a href="https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.agg.html#pandas.core.groupby.DataFrameGroupBy.agg"><code>DataFrameGroupBy.agg</code></a> or raise a descriptive error.</p>
 </dd>
 <dd>
 <p><strong>**kwargs</strong> Key word arguments are used to create Named Aggregations and should be in the form <code>new_name=pd.NamedAgg(column_name, function)</code> or simply <code>new_name=(column_name, function)</code>.</p>
@@ -25926,13 +25996,13 @@ Output:
         
         
           
-          <a href="../" class="md-footer__link md-footer__link--next" aria-label="Next: GroupBy">
+          <a href="../frame_apply/" class="md-footer__link md-footer__link--next" aria-label="Next: DataFrameGroupBy.apply">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                GroupBy
+                DataFrameGroupBy.apply
               </div>
             </div>
             <div class="md-footer__button md-icon">
