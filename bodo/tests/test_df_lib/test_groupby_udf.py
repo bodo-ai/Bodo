@@ -259,7 +259,8 @@ def test_agg_null_keys(dropna, as_index):
     with assert_executed_plan_count(0):
         bdf2 = bdf.groupby("A", dropna=dropna, as_index=as_index).agg(lambda x: x.sum())
 
-    # If as_index=False then we sort the output
+    # If as_index=False, then the output before sorting will use a RangeIndex,
+    # which will result in mismatched indexes after sorting, so we need to reset the index.
     _test_equal(bdf2, df2, sort_output=True, reset_index=(not as_index))
 
 
