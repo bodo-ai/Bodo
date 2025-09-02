@@ -8,7 +8,7 @@ This quickstart guide will walk you through the process of running a simple Pyth
 
 ## Installation
 
-[Install Bodo](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo` or `conda install bodo -c conda-forge`).
+[Install Bodo DataFrames](../installation_and_setup/install.md) to get started (e.g., `pip install -U bodo` or `conda install bodo -c conda-forge`).
 
 
 ## Drop-in Pandas Replacement with Bodo DataFrames
@@ -53,7 +53,7 @@ For example:
 
 ```python
 import bodo
-import bodo.pandas as pd
+import pandas as pd
 import numpy as np
 import time
 

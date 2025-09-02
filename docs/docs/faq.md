@@ -4,7 +4,7 @@
 ### How well does Bodo DataFrames scale?
 
 Bodo DataFrames scales linearly across cores and nodes by using HPC technologies such as MPI in the backend.
-Bodo DataFrames can parallelize applications from local laptops all the way to large clusters (5000+ cores) effectively.
+It can parallelize applications from local laptops all the way to large clusters (5000+ cores) effectively.
 
 ### What data formats does Bodo DataFrames support?
 
@@ -15,8 +15,8 @@ See the [File I/O][file_io] docs for more details.
 ### What are the hardware requirements to run Bodo DataFrames?
 
 Bodo DataFrames is fully portable across various CPU architectures and environments.
-We currently distribute packages for Mac and Linux with x86 and ARM CPU architectures (Windows support is in progress).
-Bodo can run on any on-premises or cloud environment.
+We currently distribute packages for Mac with x86 and ARM CPU architectures and x86 Linux and Windows.
+Bodo DataFrames can run on any on-premises or cloud environment.
 
 
 ### How is Bodo DataFrames different from Dask, Ray, or Spark?
@@ -54,15 +54,15 @@ Bodo cloud service simplifies managing compute clusters and jobs on AWS and Azur
 
 Bodo DataFrames provides two methods of accelerating and scaling Pandas code. The first method involves using the
 Pandas API through the `bodo.pandas` module, which will lazily accumulate operations,
-optimize, then run in a parallel, C++ runtime using MPI.
+optimize and then run them in a parallel, C++ runtime using MPI.
 The second method involes annotating functions with the Just-In-Time (JIT) compilation decorator (`bodo.jit`) in order to
 compile Python code to optimized, parallel binaries that run on an MPI backend.
 The Pandas API is easier to use; just replace the `import pandas as pd` with `import bodo.pandas as pd`,
 while JIT provides better performance in some cases at the cost of extra set up such as
-moving performance critical pieces to functions and ensuring those functions are jittable.
+moving performance critical pieces to separate functions and ensuring those functions are jittable.
 In addition to Pandas, JIT also natively supports Numpy and Scikit-learn.
 We recommend using Bodo DataFrames' Pandas APIs when getting started and experimenting with JIT
-for even better performance. See our [Python local quick start guide][quickstart-local-python] for more details.
+for even better performance. See our [Python local quick start guide][quickstart-local-python] for examples.
 
 ### How can I get help if I encounter an issue?
 
@@ -72,13 +72,13 @@ You can also refer to the documentation or raise an issue on GitHub if you’ve 
 
 ### Are there any usage limits or restrictions?
 
-No, there are no usage limits. Bodo DataFrames is open source and distributed under the Apache-2.0 License. You can use Bodo in personal, academic, and commercial projects.
+No, there are no usage limits. Bodo DataFrames is open source and distributed under the Apache-2.0 License. You can use Bodo DataFrames in personal, academic, and commercial projects.
 
-### How does Bodo handle security and privacy?
+### How does Bodo DataFrames handle security and privacy?
 
 Since Bodo DataFrmaes runs in your environment, you have complete control over the data and compute resources, ensuring that sensitive information remains secure.
 
-### How does Bodo handle fault tolerance and failures?
+### How does Bodo DataFrames handle fault tolerance and failures?
 
 Bodo DataFrames runs parallel processes in an efficient, C++ runtime, eliminating most software failures
 of other framework (e.g., scheduler errors, JVM errors, ...).
@@ -95,14 +95,16 @@ Bodo DataFrames does not bundle its own job scheduler.
 
 MPI setup is required for distributed execution, which involves passwordless SSH access across nodes. See [cluster installation docs][cluster_setup].
 
-### How do I know if my function is actually being parallelized?
+### How do I know if my workload is actually being parallelized?
 
-You can see distributed diagnostics of the compiled function to understand parallelism decisions by the compiler. See [parallism docs][basics].
+If you are using Bodo DataFrames' Pandas API (`bodo.pandas`), all operations will automatically be executed in parallel
+unless otherwise indicated in the form of a user warning. For functions annotated with `bodo.jit`,
+you can see distributed diagnostics of the compiled function to understand parallelism decisions by the compiler. See [parallism docs][basics].
 In addition, the Bodo compiler throws a warning if it didn't find any parallelism opportunities in a function.
-You can also see your local machine's CPU usage using tools like `top` and `htop`.
+You can also see your local machine's CPU usage using tools like `top` and `htop` for both Pandas API and JIT.
 
 
-### How do I handle unsupported operations or libraries?
+### How do I handle unsupported operations or libraries inside of JIT?
 
 You can use unsupported operations and libraries outside JIT functions, or use
 the `@bodo.wrap_python` decorator to use any regular Python function inside JIT functions.
@@ -137,5 +139,5 @@ good for large batch jobs.
 
 
 ### When is Bodo DataFrames *Not* appropriate? What is it *not* designed for?
-Bodo is designed for large-scale data processing and may not be appropriate for other use cases
+Bodo DataFrames is designed for large-scale data processing and may not be appropriate for other use cases
 such as accelerating Python web frameworks (e.g. Django) and other non-compute Python applications.

@@ -15,11 +15,11 @@ NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart
 # Bodo DataFrames: Simple Python Acceleration and Scaling for Data and AI
 
 Bodo DataFrames is a high performance dataframe library for large scale Python data processing, AI, and ML use cases.
-It functions as a drop-in replacement for accelerating and scaling existing Pandas workloads with a single line of code change,
-with extra Pandas-compatible APIs for simplifying and scaling AI workloads.
-Bodo DataFrames also provides a Just In Time (JIT) compiler as well as an integrated SQL engine for better performance and flexibility.
+It functions as a drop-in replacement for Pandas while providing additional Pandas-compatible APIs for simplifying and scaling AI workloads,
+a Just-In-Time (JIT) compiler for accelerating custom transformations, as well as an integrated SQL engine for extra flexibility.
 
-<!-- TOOD: add updated graph with Taxi benchmark including bodo dataframes -->
+<!-- TOOD: updated graph with Taxi benchmark including Bodo DataFrames Pandas API -->
+<img src="benchmarks/img/nyc-taxi-benchmark.png" alt="NYC Taxi Benchmark" width="500"/>
 
 Unlike traditional distributed computing frameworks, Bodo DataFrames:
 - Automatically scales and accelerates Pandas workloads with a single line of code change.
@@ -28,13 +28,13 @@ Unlike traditional distributed computing frameworks, Bodo DataFrames:
 
 ## Goals
 
-Bodo makes Python run much (much!) faster than it normally does!
+Bodo DataFrames makes Python run much (much!) faster than it normally does!
 
 1. **Exceptional Performance:**
 Deliver HPC-grade performance and scalability for Python data workloads as if the code was written in C++/MPI, whether running on a laptop or across large cloud clusters.
 
 2. **Easy to Use:**
-Easily integrate into Python workflows, and in most cases it's as simple as changing `import pandas as pd` to `import bodo.pandas as pd`.
+Easily integrate into Python workflows— it's as simple as changing `import pandas as pd` to `import bodo.pandas as pd`.
 
 3. **Interoperable:**
 Compatible with regular Python ecosystem, and can selectively speed up only the sections of the workload that are Bodo supported.
@@ -57,9 +57,9 @@ Bodo DataFrames, is not yet optimized for small, fast workloads (e.g., workloads
 
 ## Key Features
 
-- Drop-in Pandas replacement, (simply change the import!) with automatic fallback to vanilla Pandas to avoid breaking existing workloads.
+- Drop-in Pandas replacement, (just change the import!) with a seamless fallback to vanilla Pandas to avoid breaking existing workloads.
 - Intuitive APIs for simplifying and scaling AI workloads.
-- Advanced query optimizations,
+- Advanced query optimization,
 efficient C++ runtime,
 and parallel execution using MPI to achieves best possible performance while leveraging all availible hardware.
 - Streaming execution to process larger-than-memory datasets.
@@ -68,14 +68,14 @@ for accelerating custom transformations or performance-critical functions.
 - High performance SQL engine that is natively integrated into Python.
 - Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
 
-See Bodo documentation to learn more: https://docs.bodo.ai/
+See Bodo DataFrames documentation to learn more: https://docs.bodo.ai/
 
 
 ## Installation
 
-Note: Bodo requires Python 3.9+.
+Note: Bodo DataFrames requires Python 3.9+.
 
-Bodo can be installed using Pip or Conda:
+Bodo DataFrames can be installed using Pip or Conda:
 
 ```bash
 pip install -U bodo
@@ -89,7 +89,7 @@ conda activate Bodo
 conda install bodo -c conda-forge
 ```
 
-Bodo works with Linux x86, both Mac x86 and Mac ARM, and Windows right now. We will have Linux ARM support (and more) coming soon!
+Bodo DataFrames works with Linux x86, both Mac x86 and Mac ARM, and Windows right now. We will have Linux ARM support (and more) coming soon!
 
 ## Bodo DataFrames Example
 
