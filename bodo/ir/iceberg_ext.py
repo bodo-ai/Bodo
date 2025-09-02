@@ -1714,7 +1714,7 @@ def _gen_iceberg_reader_py(
             f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),  # type: ignore
             "get_filters_pyobject": get_filters_pyobject,
             f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
-            "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
+            "get_filter_scalars_pyobject": get_filter_scalars_pyobject,
             "iceberg_pq_read_py_entry": iceberg_pq_read_py_entry,
             "conn_str_to_catalog": conn_str_to_catalog,
         }
