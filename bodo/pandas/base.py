@@ -1,3 +1,7 @@
+"""Support for top level pandas functions.
+This file should import JIT lazily to avoid slowing down non-JIT code paths.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -54,7 +58,6 @@ from bodo.pandas.utils import (
     ensure_datetime64ns,
     wrap_plan,
 )
-from bodo.utils.utils import bodo_spawn_exec
 
 if pt.TYPE_CHECKING:
     from pyiceberg.table import Table as PyIcebergTable
@@ -186,8 +189,12 @@ def read_iceberg(
     import pyiceberg.expressions
     import pyiceberg.table
 
+    # TODO(ehsan): avoid compiler import in Iceberg read
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.iceberg.read_metadata import get_table_length
     from bodo.pandas.utils import BodoLibNotImplementedException
+
+    bodo.spawn.utils.import_compiler_on_workers()
 
     # Support simple directory only calls like:
     # pd.read_iceberg("table", location="/path/to/table")
@@ -365,6 +372,12 @@ def read_csv(
     storage_options: StorageOptions | None = None,
     dtype_backend: DtypeBackend | lib.NoDefault = lib.no_default,
 ) -> BodoDataFrame:
+    # Import compiler
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.utils.utils import bodo_spawn_exec
+
+    bodo.spawn.utils.import_compiler_on_workers()
+
     func = "def bodo_read_csv(filepath"
     if names != lib.no_default:
         func += ", names"

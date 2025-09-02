@@ -1,44 +1,38 @@
 """
-S3 & Hadoop file system supports, and file system dependent calls
+S3 & Hadoop file system supports, and file system dependent calls.
+This file should import JIT lazily to avoid slowing down non-JIT code paths.
 """
 
 from __future__ import annotations
 
 import os
-import sys
 import typing as pt
 import warnings
+from dataclasses import dataclass
 from glob import has_magic
 from urllib.parse import ParseResult, urlparse
 
-import llvmlite.binding as ll
-import numpy as np
 import pyarrow as pa
 from fsspec.implementations.arrow import (
     ArrowFile,
     ArrowFSWrapper,
     wrap_exceptions,
 )
-from numba.core import types
-from numba.extending import (
-    NativeValue,
-    models,
-    overload,
-    register_model,
-    unbox,
-)
-from pyarrow.fs import FileSystem, FSSpecHandler, PyFileSystem
+from pyarrow.fs import FSSpecHandler, PyFileSystem
 
 import bodo
-from bodo.io import csv_cpp
-from bodo.libs.distributed_api import Reduce_Type
-from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
-from bodo.utils.py_objs import install_opaque_class
-from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
-from bodo.utils.utils import AWSCredentials
+from bodo import BodoWarning
 
 # Same as _fs_io.cpp
 GCS_RETRY_LIMIT_SECONDS = 2
+
+
+@dataclass
+class AWSCredentials:
+    access_key: str
+    secret_key: str
+    session_token: str | None = None
+    region: str | None = None
 
 
 # ----- monkey-patch fsspec.implementations.arrow.ArrowFSWrapper._open --------
@@ -60,20 +54,6 @@ def fsspec_arrowfswrapper__open(self, path, mode="rb", block_size=None, **kwargs
 ArrowFSWrapper._open = wrap_exceptions(fsspec_arrowfswrapper__open)
 # -----------------------------------------------------------------------------
 
-
-_csv_write = types.ExternalFunction(
-    "csv_write",
-    types.void(
-        types.voidptr,  # char *_path_name
-        types.voidptr,  # char *buff
-        types.int64,  # int64_t start
-        types.int64,  # int64_t count
-        types.bool_,  # bool is_parallel
-        types.voidptr,  # char *bucket_region
-        types.voidptr,  # char *prefix
-    ),
-)
-ll.add_symbol("csv_write", csv_cpp.csv_write)
 
 bodo_error_msg = """
     Some possible causes:
@@ -113,7 +93,7 @@ def validate_s3fs_installed():
     try:
         import s3fs  # noqa
     except ImportError:
-        raise BodoError(
+        raise ValueError(
             "Couldn't import s3fs, which is required for certain types of S3 access."
             " s3fs can be installed by calling"
             " 'conda install -c conda-forge s3fs'.\n"
@@ -127,7 +107,7 @@ def validate_huggingface_hub_installed():
     try:
         import huggingface_hub  # noqa
     except ImportError:
-        raise BodoError(
+        raise ValueError(
             "Cannot import huggingface_hub, which is required for reading from Hugging Face."
             " Please make sure the huggingface_hub package is installed."
         )
@@ -286,7 +266,7 @@ def get_hdfs_fs(path):  # pragma: no cover
     try:
         fs = HdFS(host=host, port=port, user=user)
     except Exception as e:
-        raise BodoError(f"Hadoop file system cannot be created: {e}")
+        raise ValueError(f"Hadoop file system cannot be created: {e}")
 
     return fs
 
@@ -306,13 +286,13 @@ def pa_fs_is_directory(fs, path):
         return False
     except (FileNotFoundError, OSError):
         raise
-    except BodoError:  # pragma: no cover
+    except ValueError:  # pragma: no cover
         raise
     except Exception as e:  # pragma: no cover
         # There doesn't seem to be a way to get special errors for
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
-        raise BodoError(
+        raise ValueError(
             f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
@@ -342,13 +322,13 @@ def pa_fs_list_dir_fnames(fs, path):
                 ]
             else:
                 file_names.append(p)
-        except BodoError:  # pragma: no cover
+        except ValueError:  # pragma: no cover
             raise
         except Exception as e:  # pragma: no cover
             # There doesn't seem to be a way to get special errors for
             # credential issues, region issues, etc. in pyarrow (unlike s3fs).
             # So we include a blanket message to verify these details.
-            raise BodoError(
+            raise ValueError(
                 f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
             )
 
@@ -384,7 +364,7 @@ def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
     account_key = get_attr("account_key", "AZURE_STORAGE_ACCOUNT_KEY")
 
     if account_name is None:
-        raise BodoError(
+        raise ValueError(
             "abfs_get_fs: Azure storage account name is not provided. Please set either the account_name in the storage_options or the AZURE_STORAGE_ACCOUNT_NAME environment variable."
         )
 
@@ -448,7 +428,7 @@ def expand_glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[s
         # Arrow's FileSystem.glob() doesn't support Windows backslashes
         files = fs.glob(path.replace("\\", "/"))
     except Exception:  # pragma: no cover
-        raise BodoError(f"glob pattern expansion not supported for {protocol}")
+        raise ValueError(f"glob pattern expansion not supported for {protocol}")
 
     return files
 
@@ -462,7 +442,7 @@ def expand_path_globs(fpath: str | list[str], protocol: str, fs) -> list[str]:
         fs (pa.fs.FileSystem): filesystem object
 
     Raises:
-        BodoError: error if no files found matching glob pattern
+        ValueError: error if no files found matching glob pattern
 
     Returns:
         list[str]: expanded list of paths
@@ -482,12 +462,12 @@ def expand_path_globs(fpath: str | list[str], protocol: str, fs) -> list[str]:
             else:
                 new_fpath.append(p)
         if len(new_fpath) == 0:
-            raise BodoError("No files found matching glob pattern")
+            raise ValueError("No files found matching glob pattern")
 
     elif has_magic(fpath):
         new_fpath = expand_glob(protocol, fs, fpath)
         if len(new_fpath) == 0:
-            raise BodoError("No files found matching glob pattern")
+            raise ValueError("No files found matching glob pattern")
 
     return new_fpath
 
@@ -548,7 +528,7 @@ def getfs(
             )
         )
     if storage_options is not None and len(storage_options) > 0:
-        raise BodoError(
+        raise ValueError(
             f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
         )
 
@@ -627,11 +607,11 @@ def parse_fpath(fpath: str | list[str]) -> tuple[str | list[str], ParseResult, s
             u_p = urlparse(f)
             # make sure protocol and bucket name of every file matches
             if u_p.scheme != protocol:
-                raise BodoError(
+                raise ValueError(
                     "All parquet files must use the same filesystem protocol"
                 )
             if u_p.netloc != bucket_name:
-                raise BodoError("All parquet files must be in the same S3 bucket")
+                raise ValueError("All parquet files must be in the same S3 bucket")
             fpath[i] = f.rstrip("/")
     else:
         parsed_url: ParseResult = urlparse(fpath)
@@ -697,7 +677,7 @@ def get_all_csv_json_data_files(
         err_msg (str): error message to raise if no data files are found
 
     Raises:
-        BodoError: error when there are no data files found
+        ValueError: error when there are no data files found
 
     Returns:
         list[str]: list of files to read
@@ -717,7 +697,7 @@ def get_all_csv_json_data_files(
 
     if len(all_data_files) == 0:  # pragma: no cover
         # TODO: test
-        raise BodoError(err_msg)
+        raise ValueError(err_msg)
 
     return all_data_files
 
@@ -821,88 +801,3 @@ def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     if s3_filepath.startswith("s3://") or s3_filepath.startswith("s3a://"):
         bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
     return bucket_loc
-
-
-@overload(get_s3_bucket_region_wrapper, jit_options={"cache": True})
-def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
-    def impl(s3_filepath, parallel):
-        with bodo.no_warning_objmode(bucket_loc="unicode_type"):
-            bucket_loc = get_s3_bucket_region_wrapper(s3_filepath, parallel)
-        return bucket_loc
-
-    return impl
-
-
-def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
-    # This is a dummy function used to allow overload.
-    return None
-
-
-@overload(csv_write, no_unliteral=True, jit_options={"cache": True})
-def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
-    def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
-        # Assuming that path_or_buf is a string
-        bucket_region = get_s3_bucket_region_wrapper(path_or_buf, parallel=is_parallel)
-        # TODO: support non-ASCII file names?
-        utf8_str, utf8_len = unicode_to_utf8_and_len(D)
-        offset = 0
-        if is_parallel:
-            offset = bodo.libs.distributed_api.dist_exscan(
-                utf8_len, np.int32(Reduce_Type.Sum.value)
-            )
-        _csv_write(
-            unicode_to_utf8(path_or_buf),
-            utf8_str,
-            offset,
-            utf8_len,
-            is_parallel,
-            unicode_to_utf8(bucket_region),
-            unicode_to_utf8(filename_prefix),
-        )
-        # Check if there was an error in the C++ code. If so, raise it.
-        bodo.utils.utils.check_and_propagate_cpp_exception()
-
-    return impl
-
-
-class StorageOptionsDictType(types.Opaque):
-    def __init__(self):
-        super().__init__(name="StorageOptionsDictType")
-
-
-storage_options_dict_type = StorageOptionsDictType()
-types.storage_options_dict_type = storage_options_dict_type  # type: ignore
-register_model(StorageOptionsDictType)(models.OpaqueModel)
-
-
-@unbox(StorageOptionsDictType)
-def unbox_storage_options_dict_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return NativeValue(val)
-
-
-def get_storage_options_pyobject(storage_options):  # pragma: no cover
-    pass
-
-
-@overload(get_storage_options_pyobject, no_unliteral=True)
-def overload_get_storage_options_pyobject(storage_options):
-    """generate a pyobject for the storage_options to pass to C++"""
-    storage_options_val = get_overload_constant_dict(storage_options)
-    func_text = "def impl(storage_options):\n"
-    func_text += "  with bodo.no_warning_objmode(storage_options_py='storage_options_dict_type'):\n"
-    func_text += f"    storage_options_py = {str(storage_options_val)}\n"
-    func_text += "  return storage_options_py\n"
-    loc_vars = {}
-    exec(func_text, globals(), loc_vars)
-    return loc_vars["impl"]
-
-
-this_module = sys.modules[__name__]
-PyArrowFSType, pyarrow_fs_type = install_opaque_class(
-    types_name="pyarrow_fs_type",
-    python_type=FileSystem,
-    module=this_module,
-    class_name="PyArrowFSType",
-)

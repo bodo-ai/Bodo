@@ -1,6 +1,7 @@
 import re
 from decimal import Decimal
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
@@ -390,8 +391,8 @@ def test_groupby_apply_udf_non_numba_err(memory_leak_check):
 
     @bodo.jit
     def apply_func(df):
-        with bodo.objmode(
-            out='bodo.DataFrameType((bodo.float64[::1],), bodo.RangeIndexType(bodo.none), ("0",))'
+        with numba.objmode(
+            out='bodo.types.DataFrameType((bodo.types.float64[::1],), bodo.types.RangeIndexType(bodo.types.none), ("0",))'
         ):
             out = pd.Series([9, 8, 7, 6, 5])
         return out

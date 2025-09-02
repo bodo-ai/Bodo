@@ -105,7 +105,7 @@ def precision_recall_fscore_parallel(
     # see https://github.com/scikit-learn/scikit-learn/blob/e0abd262ea3328f44ae8e612f5b2f2cece7434b6/sklearn/metrics/_classification.py#L541
     tn = y_true.shape[0] - tp - fp - fn
 
-    with bodo.objmode(result="float64[:]"):
+    with numba.objmode(result="float64[:]"):
         # see https://github.com/scikit-learn/scikit-learn/blob/e0abd262ea3328f44ae8e612f5b2f2cece7434b6/sklearn/metrics/_classification.py#L543
         MCM = np.array([tn, fp, fn, tp]).T.reshape(-1, 2, 2)
         if operation == "precision":
@@ -151,7 +151,7 @@ def overload_precision_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(score="float64[:]"):
+                with numba.objmode(score="float64[:]"):
                     score = sklearn.metrics.precision_score(
                         y_true,
                         y_pred,
@@ -199,7 +199,7 @@ def overload_precision_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(score="float64"):
+                with numba.objmode(score="float64"):
                     score = sklearn.metrics.precision_score(
                         y_true,
                         y_pred,
@@ -261,7 +261,7 @@ def overload_recall_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(score="float64[:]"):
+                with numba.objmode(score="float64[:]"):
                     score = sklearn.metrics.recall_score(
                         y_true,
                         y_pred,
@@ -309,7 +309,7 @@ def overload_recall_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(score="float64"):
+                with numba.objmode(score="float64"):
                     score = sklearn.metrics.recall_score(
                         y_true,
                         y_pred,
@@ -371,7 +371,7 @@ def overload_f1_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(score="float64[:]"):
+                with numba.objmode(score="float64[:]"):
                     score = sklearn.metrics.f1_score(
                         y_true,
                         y_pred,
@@ -419,7 +419,7 @@ def overload_f1_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(score="float64"):
+                with numba.objmode(score="float64"):
                     score = sklearn.metrics.f1_score(
                         y_true,
                         y_pred,
@@ -547,7 +547,7 @@ def overload_mean_squared_error(
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(err="float64[:]"):
+                with numba.objmode(err="float64[:]"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -578,7 +578,7 @@ def overload_mean_squared_error(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with bodo.objmode(err="float64[:]"):
+                with numba.objmode(err="float64[:]"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -612,7 +612,7 @@ def overload_mean_squared_error(
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(err="float64"):
+                with numba.objmode(err="float64"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -643,7 +643,7 @@ def overload_mean_squared_error(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with bodo.objmode(err="float64"):
+                with numba.objmode(err="float64"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -697,7 +697,7 @@ def overload_mean_absolute_error(
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(err="float64[:]"):
+                with numba.objmode(err="float64[:]"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -728,7 +728,7 @@ def overload_mean_absolute_error(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with bodo.objmode(err="float64[:]"):
+                with numba.objmode(err="float64[:]"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -762,7 +762,7 @@ def overload_mean_absolute_error(
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(err="float64"):
+                with numba.objmode(err="float64"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -793,7 +793,7 @@ def overload_mean_absolute_error(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with bodo.objmode(err="float64"):
+                with numba.objmode(err="float64"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -905,7 +905,7 @@ def overload_log_loss(
         )
         func_text += "    labels = bodo.allgatherv(labels, False)\n"
 
-    func_text += "    with bodo.objmode(loss='float64'):\n"
+    func_text += "    with numba.objmode(loss='float64'):\n"
     if is_overload_false(_is_data_distributed):
         # For replicated data, directly call sklearn
         func_text += "        loss = sklearn.metrics.log_loss(\n"
@@ -984,7 +984,7 @@ def overload_metrics_cosine_similarity(
 
         # Indexing by [:,::1] instead of [:,:] forces C-style memory layout.
         # This is needed to prevent ambiguous typing of output array
-        func_text += "    with bodo.objmode(out='float64[:,::1]'):\n"
+        func_text += "    with numba.objmode(out='float64[:,::1]'):\n"
         func_text += "        out = sklearn.metrics.pairwise.cosine_similarity(\n"
         func_text += "            X, Y, dense_output=dense_output\n"
         func_text += "        )\n"
@@ -1120,7 +1120,7 @@ def overload_accuracy_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
 
-                with bodo.objmode(score="float64"):
+                with numba.objmode(score="float64"):
                     score = sklearn.metrics.accuracy_score(
                         y_true, y_pred, normalize=normalize, sample_weight=sample_weight
                     )
@@ -1141,7 +1141,7 @@ def overload_accuracy_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with bodo.objmode(score="float64"):
+                with numba.objmode(score="float64"):
                     score = sklearn.metrics.accuracy_score(
                         y_true, y_pred, normalize=normalize, sample_weight=sample_weight
                     )
@@ -1163,7 +1163,7 @@ def overload_accuracy_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(score="float64"):
+                with numba.objmode(score="float64"):
                     score = accuracy_score_dist_helper(
                         y_true,
                         y_pred,
@@ -1187,7 +1187,7 @@ def overload_accuracy_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with bodo.objmode(score="float64"):
+                with numba.objmode(score="float64"):
                     score = accuracy_score_dist_helper(
                         y_true,
                         y_pred,
@@ -1362,7 +1362,7 @@ def overload_r2_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(score="float64[:]"):
+                with numba.objmode(score="float64[:]"):
                     if _is_data_distributed:
                         score = r2_score_dist_helper(
                             y_true,
@@ -1395,7 +1395,7 @@ def overload_r2_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with bodo.objmode(score="float64[:]"):
+                with numba.objmode(score="float64[:]"):
                     if _is_data_distributed:
                         score = r2_score_dist_helper(
                             y_true,
@@ -1430,7 +1430,7 @@ def overload_r2_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with bodo.objmode(score="float64"):
+                with numba.objmode(score="float64"):
                     if _is_data_distributed:
                         score = r2_score_dist_helper(
                             y_true,
@@ -1464,7 +1464,7 @@ def overload_r2_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with bodo.objmode(score="float64"):
+                with numba.objmode(score="float64"):
                     if _is_data_distributed:
                         score = r2_score_dist_helper(
                             y_true,
@@ -1626,7 +1626,7 @@ def overload_confusion_matrix(
             func_text += "    labels = bodo.allgatherv(labels, False)\n"
             func_text += "    labels = bodo.libs.array_kernels.sort(labels, ascending=True, inplace=False)\n"
 
-    func_text += f"    with bodo.objmode(cm='{cm_dtype[0]}'):\n"
+    func_text += f"    with numba.objmode(cm='{cm_dtype[0]}'):\n"
     if is_overload_false(_is_data_distributed):
         func_text += "      cm = sklearn.metrics.confusion_matrix(\n"
     else:

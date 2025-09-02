@@ -164,7 +164,7 @@ def overload_like_kernel_const_pattern_util(
     arg_types = [arr, pattern, escape, case_insensitive, dict_encoding_state, func_id]
     # By definition only the array can contain nulls.
     propagate_null = [True, False, False, False, False, False]
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     # Some paths have prefix and/or need extra globals
     prefix_code = None
     extra_globals = {}
@@ -250,7 +250,7 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
     arg_types = [arr, pattern, escape, case_insensitive]
     # By definition case_insensitive cannot be null.
     propagate_null = [True, True, True, False]
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     extra_globals = {
         "convert_sql_pattern": convert_sql_pattern_to_python_runtime,
         # Dictionary encoding optimized function.
@@ -265,18 +265,18 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
     scalar_text = ""
     pattern_conversion_use_dict_encoding = not is_overload_none(arr) and (
         (
-            pattern == bodo.dict_str_arr_type
+            pattern == bodo.types.dict_str_arr_type
             and types.unliteral(escape) == types.unicode_type
         )
         or (
             types.unliteral(pattern) == types.unicode_type
-            and escape == bodo.dict_str_arr_type
+            and escape == bodo.types.dict_str_arr_type
         )
     )
     # If we have two dictionary encoded arrays we can use the indices array to
     # cache results.
     use_multiple_dict_encoding_path = (
-        arr == bodo.dict_str_arr_type and pattern_conversion_use_dict_encoding
+        arr == bodo.types.dict_str_arr_type and pattern_conversion_use_dict_encoding
     )
     prefix_code = ""
     suffix_code = None
@@ -289,7 +289,7 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
         # If we are using dictionary encoding we convert the patterns before the for loop
         prefix_code += "(python_pattern_arr, requires_regex_arr, must_match_start_arr, must_match_end_arr, match_anything_arr) = convert_sql_pattern_dict_encoding(pattern, escape, case_insensitive)\n"
         # We will access these outputs using the indices array.
-        if pattern == bodo.dict_str_arr_type:
+        if pattern == bodo.types.dict_str_arr_type:
             prefix_code += "conversion_indices_arr = pattern._indices\n"
         else:
             prefix_code += "conversion_indices_arr = escape._indices\n"
@@ -414,7 +414,7 @@ def overload_like_kernel_scalar_pattern_util(
     arg_types = [arr, pattern, escape, case_insensitive, dict_encoding_state, func_id]
     # By definition case_insensitive cannot be null.
     propagate_null = [True, True, True, False, False, False]
-    out_dtype = bodo.boolean_array_type
+    out_dtype = bodo.types.boolean_array_type
     extra_globals = {
         "convert_sql_pattern": convert_sql_pattern_to_python_runtime,
         # A dummy matcher used to ensure type stability if we don't
@@ -488,22 +488,22 @@ def overload_convert_sql_pattern_to_python_runtime_dict_encoding(
     case based on experimentation in the query.
 
     Args:
-        pattern (Union[types.unicode_type | bodo.dict_str_arr_type]): The pattern to convert. This is either
+        pattern (Union[types.unicode_type | bodo.types.dict_str_arr_type]): The pattern to convert. This is either
             a scalar or a dictionary encoded array. If this is an array escape must be a scalar.
-        escape (Union[types.unicode_type | bodo.dict_str_arr_type]): The escape character. This is either
+        escape (Union[types.unicode_type | bodo.types.dict_str_arr_type]): The escape character. This is either
             a scalar or a dictionary encoded array. If this is an array pattern must be a scalar.
         case_insensitive (types.boolean): Is the conversion case insensitive.
 
-    Returns: Tuple[bodo.string_array, bodo.boolean_array_type, bodo.boolean_array_type, bodo.boolean_array_type, bodo.boolean_array_type]
+    Returns: Tuple[bodo.string_array, bodo.types.boolean_array_type, bodo.types.boolean_array_type, bodo.types.boolean_array_type, bodo.types.boolean_array_type]
     """
-    if pattern == bodo.dict_str_arr_type:
+    if pattern == bodo.types.dict_str_arr_type:
         assert types.unliteral(escape) == types.unicode_type, (
             "escape must be a scalar if pattern is a dictionary encoded array"
         )
         dict_input = "pattern"
         call_inputs = "dict_arr[i], escape, case_insensitive"
     else:
-        assert escape == bodo.dict_str_arr_type, (
+        assert escape == bodo.types.dict_str_arr_type, (
             "At least one of pattern or escape must be a dictionary encoded array"
         )
         assert types.unliteral(pattern) == types.unicode_type, (

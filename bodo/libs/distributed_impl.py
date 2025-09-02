@@ -485,7 +485,7 @@ def gatherv_impl_jit(
 
         return impl_cat
 
-    if isinstance(data, bodo.MatrixType):
+    if isinstance(data, bodo.types.MatrixType):
 
         def impl_matrix(
             data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
@@ -1013,7 +1013,7 @@ def scatterv_impl_jit(
         return impl_interval_arr
 
     # NullArray
-    if data == bodo.null_array_type:
+    if data == bodo.types.null_array_type:
 
         def impl_null_arr(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
@@ -1029,7 +1029,7 @@ def scatterv_impl_jit(
         return impl_null_arr
 
     # TimestampTZ array
-    if data == bodo.timestamptz_array_type:
+    if data == bodo.types.timestamptz_array_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def impl_timestamp_tz_arr(
@@ -1224,7 +1224,7 @@ def scatterv_impl_jit(
         impl_df = loc_vars["impl_df"]
         return impl_df
 
-    if isinstance(data, bodo.TableType):
+    if isinstance(data, bodo.types.TableType):
         func_text = f"def impl_table(data, send_counts=None, warn_if_dist=True, root={DEFAULT_ROOT}, comm=0):\n"
         func_text += "  T = data\n"
         func_text += "  T2 = init_table(T, False)\n"
@@ -1264,7 +1264,7 @@ def scatterv_impl_jit(
         exec(func_text, glbls, loc_vars)
         return loc_vars["impl_table"]
 
-    if data == bodo.dict_str_arr_type:
+    if data == bodo.types.dict_str_arr_type:
         empty_int32_arr = np.array([], np.int32)
 
         def impl_dict_arr(
@@ -1367,7 +1367,7 @@ def scatterv_impl_jit(
         return impl_dict
 
     # StructArray
-    if isinstance(data, bodo.StructArrayType):
+    if isinstance(data, bodo.types.StructArrayType):
         n_fields = len(data.data)
         func_text = f"def impl_struct(data, send_counts=None, warn_if_dist=True, root={DEFAULT_ROOT}, comm=0):\n"
         func_text += "  inner_data_arrs = bodo.libs.struct_arr_ext.get_data(data)\n"
@@ -1403,7 +1403,7 @@ def scatterv_impl_jit(
         return impl_struct
 
     # MapArrayType
-    if isinstance(data, bodo.MapArrayType):
+    if isinstance(data, bodo.types.MapArrayType):
 
         def impl(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
@@ -1419,7 +1419,7 @@ def scatterv_impl_jit(
         return impl
 
     # TupleArray
-    if isinstance(data, bodo.TupleArrayType):
+    if isinstance(data, bodo.types.TupleArrayType):
 
         def impl_tuple(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
@@ -1440,7 +1440,7 @@ def scatterv_impl_jit(
             comm=0: None
         )
 
-    if isinstance(data, bodo.MatrixType):
+    if isinstance(data, bodo.types.MatrixType):
 
         def impl_matrix(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0

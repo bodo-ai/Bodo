@@ -179,7 +179,7 @@ nav:
       - Deploying Bodo with Kubernetes: integrating_bodo/kubernetes.md
   - API Reference:
       - api_docs/index.md
-      - Bodo DataFrame Library API:
+      - Bodo DataFrames API:
           - api_docs/dataframe_lib/index.md
           - General Functions: api_docs/dataframe_lib/general_functions
           - DataFrame: api_docs/dataframe_lib/dataframe

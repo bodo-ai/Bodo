@@ -103,7 +103,7 @@ def test_literal_argument_checkers(args, kwargs, expected_err_msg):
     )
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "do_something",
         path="pd.Series.do_something",
         unsupported_args=["arg4"],
@@ -199,7 +199,7 @@ def test_primative_type_argument_checkers(args, kwargs, expected_err_msg, use_co
     )
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "do_something2",
         path="pd.Series.do_something2",
         unsupported_args=[],
@@ -335,7 +335,7 @@ def test_numeric_series_argument_checkers(
     )
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "sub2",
         path="pd.Series.sub2",
         unsupported_args=[],
@@ -422,7 +422,7 @@ def test_series_self_argument_checkers(S, arg1, arg2, expected_err_msg):
     """Verify that the numeric argument checkers for Series methods work as expected using Series.sub"""
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "do_something3",
         path="pd.Series.do_something3",
         unsupported_args=[],
@@ -517,7 +517,7 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
         return 'only supports constant value "int" for Series of integer data and "float" for Series of float data.'
 
     @overload_method_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "do_something4",
         path="pd.Series.do_something4",
         unsupported_args=[],
@@ -570,7 +570,7 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
 )
 def test_overload_attr(S, expected_err_msg):
     @overload_attribute_declarative(
-        bodo.SeriesType,
+        bodo.types.SeriesType,
         "some_attr",
         "pd.Series.some_attr",
         description="this is an attribute",

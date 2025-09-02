@@ -411,7 +411,7 @@ By default, all non-JIT code will only be run on a single rank. Within a JIT
 function, if there's some code you want to only run from a single rank, you can
 do so as follows:
 ```py
-@bodo.wrap_python(bodo.none)
+@bodo.wrap_python(bodo.types.none)
 def rm_dir():
     # Remove directory
     import os, shutil

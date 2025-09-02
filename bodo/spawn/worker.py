@@ -2,7 +2,10 @@ from __future__ import annotations
 
 """Worker process to handle compiling and running python functions with
 Bodo - note that this module should only be run with MPI.Spawn and not invoked
-directly"""
+directly
+This file should import JIT lazily to
+avoid slowing down non-JIT code paths.
+"""
 
 import logging
 import os
@@ -16,20 +19,14 @@ import warnings
 from copy import deepcopy
 
 import cloudpickle
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-from numba import typed
-from numba.core import types
 from pandas.core.arrays.arrow import ArrowExtensionArray
 from pandas.core.base import ExtensionArray
 
 import bodo
-import bodo.hiframes
-import bodo.hiframes.table
 from bodo.mpi4py import MPI
-from bodo.pandas import LazyMetadata
 from bodo.spawn.spawner import BodoSQLContextMetadata, env_var_prefix
 from bodo.spawn.utils import (
     ArgMetadata,
@@ -40,8 +37,17 @@ from bodo.spawn.utils import (
     set_global_config,
 )
 from bodo.spawn.worker_state import set_is_worker
-from bodo.utils.typing import BodoWarning
-from bodo.utils.utils import is_distributable_typ
+
+if pt.TYPE_CHECKING:
+    from bodo.pandas import LazyMetadata
+
+    distributed_return_metadata_t = pt.Union[
+        LazyMetadata,
+        list["distributed_return_metadata_t"],
+        dict[pt.Any, "distributed_return_metadata_t"],
+        ExtensionArray,
+    ]
+
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 
@@ -66,17 +72,20 @@ def _recv_arg(
     Returns:
         Any: received function argument
     """
+    import bodo
+
     if isinstance(arg, ArgMetadata):
         if arg == ArgMetadata.BROADCAST:
+            # Import compiler lazily
+            import bodo.decorators  # isort:skip # noqa
+
             return (
                 bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm),
                 arg,
             )
         elif arg == ArgMetadata.SCATTER:
             return (
-                bodo.libs.distributed_api.scatterv(
-                    None, root=0, comm=spawner_intercomm
-                ),
+                bodo.scatterv(None, root=0, comm=spawner_intercomm),
                 arg,
             )
         elif arg == ArgMetadata.LAZY:
@@ -112,14 +121,6 @@ PROCESS_REGISTRY: dict[uuid.UUID, subprocess.Popen | None] = {}
 # type is_distributed_t = bool + list[is_distributed_t] | tuple[is_distributed_t]
 is_distributed_t = pt.Union[
     bool, list["is_distributed_t"], tuple["is_distributed_t", ...]
-]
-
-
-distributed_return_metadata_t = pt.Union[
-    LazyMetadata,
-    list["distributed_return_metadata_t"],
-    dict[pt.Any, "distributed_return_metadata_t"],
-    ExtensionArray,
 ]
 
 
@@ -164,6 +165,11 @@ def _build_index_data(
 def _build_distributed_return_metadata(
     res: pt.Any, logger: logging.Logger
 ) -> distributed_return_metadata_t:
+    from numba import typed
+
+    import bodo
+    from bodo.pandas import LazyMetadata
+
     global RESULT_REGISTRY
 
     if isinstance(res, list):
@@ -229,12 +235,27 @@ def _send_output(
             spawner_intercomm.send(res, dest=0)
 
 
+def _is_table_type(t):
+    """Helper for checking Table type that imports the JIT compiler lazily."""
+    # Import compiler lazily
+    import bodo
+    import bodo.decorators  # isort:skip # noqa
+
+    import bodo.hiframes
+    import bodo.hiframes.table
+
+    return isinstance(t, bodo.hiframes.table.Table)
+
+
 def _gather_res(
     is_distributed: is_distributed_t, res: pt.Any
 ) -> tuple[is_distributed_t, pt.Any]:
     """
     If any output is marked as distributed and empty on rank 0, gather the results and return an updated is_distributed flag and result
     """
+
+    from bodo import BodoWarning
+
     if isinstance(res, tuple) and isinstance(is_distributed, (tuple, list)):
         all_updated_is_distributed = []
         all_updated_res = []
@@ -271,12 +292,12 @@ def _gather_res(
         or isinstance(res, np.ndarray)
         # TODO[BSE-4198]: support lazy Index wrappers
         or isinstance(res, pd.Index)
-        or isinstance(res, bodo.hiframes.table.Table)
         or isinstance(res, pd.Categorical)
         or isinstance(res, pd.arrays.IntervalArray)
         # TODO[BSE-4205]: move DatetimeArray to use Arrow
         or isinstance(res, pd.arrays.DatetimeArray)
         or isinstance(res, pa.lib.NullArray)
+        or (type(res).__name__ == "Table" and _is_table_type(res))
     ):
         # If the result is empty on rank 0, we can't send a head to the spawner
         # so just gather the results and send it all to to the spawner
@@ -354,11 +375,38 @@ def _update_env_var(new_env_var, propagate_env):
                 del os.environ[env_var]
 
 
+def _is_distributable_result(res):
+    """
+    Check if the worker result is a distributable type which requires gather to spawner.
+    Avoids importing the compiler as much as possible to reduce overheads.
+    """
+    from pandas.core.arrays.arrow import ArrowExtensionArray
+
+    import bodo
+
+    if isinstance(
+        res, (pd.DataFrame, pd.Series, pd.Index, np.ndarray, ArrowExtensionArray)
+    ):
+        return True
+
+    if pd.api.types.is_scalar(res):
+        return False
+
+    # Import compiler lazily
+    import bodo.decorators  # isort:skip # noqa
+
+    return bodo.utils.utils.is_distributable_typ(bodo.typeof(res))
+
+
 def exec_func_handler(
     comm_world: MPI.Intracomm, spawner_intercomm: MPI.Intercomm, logger: logging.Logger
 ):
     """Callback to compile and execute the function being sent over
     driver_intercomm by the spawner"""
+    import numba
+
+    import bodo
+
     global RESULT_REGISTRY
     debug_worker_msg(logger, "Begin listening for function.")
 
@@ -453,7 +501,7 @@ def exec_func_handler(
     # not be replicated in the non-JIT cases like map_partitions, so we have to define
     # the semantics (e.g. gather all values across ranks in a list?).
     if not is_dispatcher:
-        is_distributed = is_distributable_typ(bodo.typeof(res))
+        is_distributed = _is_distributable_result(res)
 
     debug_worker_msg(logger, f"Function result {is_distributed=}")
 
@@ -485,7 +533,7 @@ def handle_spawn_process(
     """Handle spawning a new process and return the process handle"""
     pid = None
     popen = None
-    if bodo.get_rank() in bodo.libs.distributed_api.get_nodes_first_ranks(comm_world):
+    if bodo.get_rank() in bodo.get_nodes_first_ranks(comm_world):
         debug_worker_msg(logger, f"Spawning process with command {command}")
         popen = subprocess.Popen(
             command,
@@ -574,9 +622,10 @@ def worker_loop(
     comm_world: MPI.Intracomm, spawner_intercomm: MPI.Intercomm, logger: logging.Logger
 ):
     """Main loop for the worker to listen and receive commands from driver_intercomm"""
+    import bodo
+
     global RESULT_REGISTRY
     global spawnerpid
-    # Stored last data value received from scatterv/bcast for testing gatherv purposes
 
     spawnerpid = spawner_intercomm.bcast(None, 0)
     if bodo.get_rank() == 0:
@@ -589,8 +638,8 @@ def worker_loop(
     # don't inherit file descriptors from the parent process.
     out_socket = None
     if (
-        bodo.utils.utils.is_jupyter_on_windows()
-        or bodo.utils.utils.is_jupyter_on_bodo_platform()
+        bodo.spawn.utils.is_jupyter_on_windows()
+        or bodo.spawn.utils.is_jupyter_on_bodo_platform()
     ):
         import zmq
 
@@ -623,12 +672,13 @@ def worker_loop(
 
             return
         elif command == CommandType.BROADCAST.value:
+            # Import compiler lazily
+            import bodo.decorators  # isort:skip # noqa
+
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
             debug_worker_msg(logger, "Broadcast done")
         elif command == CommandType.SCATTER.value:
-            data = bodo.libs.distributed_api.scatterv(
-                None, root=0, comm=spawner_intercomm
-            )
+            data = bodo.scatterv(None, root=0, comm=spawner_intercomm)
             res_id = str(
                 comm_world.bcast(uuid.uuid4() if bodo.get_rank() == 0 else None, root=0)
             )
@@ -638,7 +688,7 @@ def worker_loop(
             debug_worker_msg(logger, "Scatter done")
         elif command == CommandType.GATHER.value:
             res_id = spawner_intercomm.bcast(None, 0)
-            bodo.libs.distributed_api.gatherv(
+            bodo.gatherv(
                 RESULT_REGISTRY.pop(res_id, None), root=0, comm=spawner_intercomm
             )
             debug_worker_msg(logger, f"Gather done for result {res_id}")
@@ -648,6 +698,8 @@ def worker_loop(
             del RESULT_REGISTRY[res_id]
             debug_worker_msg(logger, f"Deleted result {res_id}")
         elif command == CommandType.REGISTER_TYPE.value:
+            from numba.core import types
+
             (type_name, type_value) = spawner_intercomm.bcast(None, 0)
             setattr(types, type_name, type_value)
             debug_worker_msg(logger, f"Added type {type_name}")

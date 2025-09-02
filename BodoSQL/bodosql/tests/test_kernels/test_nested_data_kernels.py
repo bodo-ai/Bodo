@@ -1480,9 +1480,9 @@ def test_array_remove(
             id="vector_string",
         ),
         pytest.param(
-            bodo.Time(18, 32, 59),
+            bodo.types.Time(18, 32, 59),
             True,
-            pd.array([bodo.Time(18, 32, 59)]),
+            pd.array([bodo.types.Time(18, 32, 59)]),
             id="scalar_time",
         ),
         pytest.param(

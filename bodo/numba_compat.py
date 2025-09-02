@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 
 import numba
+import numba.core.ccallback
 import numba.core.boxing
 import numba.core.dispatcher
 import numba.core.funcdesc
@@ -34,6 +35,7 @@ import numba.np.linalg
 import numba.np.ufunc.array_exprs as array_exprs
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.compiler import Compiler
+from numba.core.compiler_lock import global_compiler_lock
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
 from numba.core.ir_utils import (
     _create_function_from_code_obj,
@@ -1411,7 +1413,7 @@ def resolve_join_general_cond_funcs(cres):
             join_gen_cond_cfunc_addr[sym] = cres.library.get_pointer_to_function(sym)
 
 
-def compile(self, sig):
+def Dispatcher_compile(self, sig):
     import numba.core.event as ev
     from numba.core import sigutils
     from numba.core.compiler_lock import global_compiler_lock
@@ -1483,7 +1485,7 @@ def compile(self, sig):
             else:
                 # Even when not on platform, it's best to minimize I/O contention, so we
                 # write cache files from one rank on each node.
-                first_ranks = bodo.get_nodes_first_ranks()
+                first_ranks = bodo.libs.distributed_api.get_nodes_first_ranks()
                 if bodo.get_rank() in first_ranks:
                     self._cache.save_overload(sig, cres)
             return cres.entry_point
@@ -1497,8 +1499,47 @@ if _check_numba_change:  # pragma: no cover
     ):  # pragma: no cover
         warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
 
-numba.core.dispatcher.Dispatcher.compile = compile
+numba.core.dispatcher.Dispatcher.compile = Dispatcher_compile
 
+
+@global_compiler_lock
+def CFunc_compile(self):
+    import bodo
+    # Try to load from cache
+    cres = self._cache.load_overload(self._sig,
+                                        self._targetdescr.target_context)
+    if cres is None:
+        cres = self._compile_uncached()
+        # bodo change: Only write to cache on at most one rank per node.
+        if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
+            # Since we used a shared file system on the platform, writing with just one rank is
+            # sufficient, and desirable (to avoid I/O contention due to filesystem limitations).
+            if bodo.get_rank() == 0:
+                self._cache.save_overload(self._sig, cres)
+        else:
+            # Even when not on platform, it's best to minimize I/O contention, so we
+            # write cache files from one rank on each node.
+            first_ranks = bodo.get_nodes_first_ranks()
+            if bodo.get_rank() in first_ranks:
+                self._cache.save_overload(self._sig, cres)
+    else:
+        self._cache_hits += 1
+
+    self._library = cres.library
+    self._wrapper_name = cres.fndesc.llvm_cfunc_wrapper_name
+    self._wrapper_address = self._library.get_pointer_to_function(
+        self._wrapper_name)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.ccallback.CFunc.compile)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "08edc561907b33be181e3377776782b5d8c43f67df4dccfe2f567fdaf810cf53"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.ccallback.CFunc.compile has changed")
+
+numba.core.ccallback.CFunc.compile = CFunc_compile
 
 def _get_module_for_linking(self):
     """
@@ -3216,7 +3257,7 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
 
     for k, v in kwargs.items():
         # Bodo change: use get_const_value_inner to find constant type value to support
-        # more complex cases like bodo.int64[::1]
+        # more complex cases like bodo.types.int64[::1]
         v_const = None
         try:
             # create a dummy var to pass to get_const_value_inner since v is an IR node
@@ -3231,8 +3272,8 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
                 raise BodoError(
                     (
                         f"objmode type annotations require full data types, not just data type "
-                        f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
-                        f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
+                        f"classes. For example, 'bodo.types.DataFrameType((bodo.types.float64[::1],), "
+                        f"bodo.types.RangeIndexType(), ('A',))' is a valid data type but 'bodo.types.DataFrameType' is not.\n"
                         f"Variable {k} is annotated as type class {v_const}."
                     )
                 )
@@ -7040,3 +7081,37 @@ numba.core.inline_closurecall.find_callname = find_callname
 numba.parfors.array_analysis.find_callname = find_callname
 numba.parfors.parfor.find_callname = find_callname
 numba.stencils.stencilparfor.find_callname = find_callname
+
+
+def set_numba_environ_vars():
+    """
+    Set environment variables so that the Numba configuration can persist after reloading by re-setting config
+    variables directly from environment variables.
+    These should be tested in `test_numba_warn_config.py`.
+    """
+    # This env variable is set by the platform and points to the central cache directory
+    # on the shared filesystem.
+    if (cache_loc := os.environ.get("BODO_PLATFORM_CACHE_LOCATION")) is not None:
+        if ("NUMBA_CACHE_DIR" in os.environ) and (
+            os.environ["NUMBA_CACHE_DIR"] != cache_loc
+        ):
+            import warnings
+
+            warnings.warn(
+                "Since BODO_PLATFORM_CACHE_LOC is set, the value set for NUMBA_CACHE_DIR will be ignored"
+            )
+        numba.config.CACHE_DIR = cache_loc
+        # In certain cases, numba reloads its config variables from the
+        # environment. In those cases, the above line would be overridden.
+        # Therefore, we also set it to the env var that numba reloads from.
+        os.environ["NUMBA_CACHE_DIR"] = cache_loc
+
+    # avoid Numba parallel performance warning when there is no Parfor in the IR
+    numba.config.DISABLE_PERFORMANCE_WARNINGS = 1
+    bodo_env_vars = {
+        "NUMBA_DISABLE_PERFORMANCE_WARNINGS": "1",
+    }
+    os.environ.update(bodo_env_vars)
+
+
+set_numba_environ_vars()

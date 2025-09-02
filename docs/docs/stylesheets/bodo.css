@@ -294,7 +294,7 @@ img[src*='#center'] {
     font-size: 0.75rem;
 }
 
-/* For styling Parameter, Rerturn, Example headers in DataFrame Library
+/* For styling Parameter, Rerturn, Example headers in Bodo DataFrames
 API Docs.*/
 p.api-header {
     font-size: 1.1em !important;

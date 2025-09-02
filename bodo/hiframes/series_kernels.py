@@ -83,7 +83,7 @@ def _get_type_max_value(dtype):  # pragma: no cover
 def _get_type_max_value_overload(dtype):
     # nullable float and int data
     if isinstance(
-        dtype, (bodo.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
+        dtype, (bodo.types.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
     ):
         _dtype = dtype.dtype
         return lambda dtype: numba.cpython.builtins.get_type_max_value(
@@ -91,10 +91,10 @@ def _get_type_max_value_overload(dtype):
         )  # pragma: no cover
 
     # datetime.date array
-    if dtype == bodo.datetime_date_array_type:
+    if dtype == bodo.types.datetime_date_array_type:
         return lambda dtype: _get_date_max_value()  # pragma: no cover
 
-    # bodo.Time array
+    # bodo.types.Time array
     if dtype == TimeArrayType:
         return lambda dtype: _get_time_max_value()  # pragma: no cover
 
@@ -111,7 +111,7 @@ def _get_type_max_value_overload(dtype):
         )  # pragma: no cover
 
     # tz-aware timestamp array
-    if isinstance(dtype, bodo.DatetimeArrayType):
+    if isinstance(dtype, bodo.types.DatetimeArrayType):
         tz = dtype.tz
 
         def impl(dtype):  # pragma: no cover
@@ -126,13 +126,13 @@ def _get_type_max_value_overload(dtype):
         return impl
 
     # timestamptz array
-    if dtype == bodo.timestamptz_array_type:
+    if dtype == bodo.types.timestamptz_array_type:
         return lambda dtype: _get_timestamptz_max_value()
 
     if dtype.dtype == types.bool_:
         return lambda dtype: True  # pragma: no cover
 
-    if isinstance(dtype, bodo.DecimalArrayType):
+    if isinstance(dtype, bodo.types.DecimalArrayType):
         scale = dtype.dtype.scale
         precision = dtype.dtype.precision
 
@@ -156,12 +156,12 @@ def _get_date_max_value():  # pragma: no cover
 
 @register_jitable
 def _get_time_max_value():  # pragma: no cover
-    return bodo.Time(23, 59, 59, 999, 999, 999)
+    return bodo.types.Time(23, 59, 59, 999, 999, 999)
 
 
 @register_jitable
 def _get_timestamptz_max_value():  # pragma: no cover
-    return bodo.TimestampTZ(
+    return bodo.types.TimestampTZ(
         pd.Timestamp(numba.cpython.builtins.get_type_max_value(numba.core.types.int64)),
         0,
     )
@@ -175,7 +175,7 @@ def _get_type_min_value(dtype):  # pragma: no cover
 def _get_type_min_value_overload(dtype):
     # nullable float and int data
     if isinstance(
-        dtype, (bodo.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
+        dtype, (bodo.types.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
     ):
         _dtype = dtype.dtype
         return lambda dtype: numba.cpython.builtins.get_type_min_value(
@@ -183,10 +183,10 @@ def _get_type_min_value_overload(dtype):
         )  # pragma: no cover
 
     # datetime.date array
-    if dtype == bodo.datetime_date_array_type:
+    if dtype == bodo.types.datetime_date_array_type:
         return lambda dtype: _get_date_min_value()  # pragma: no cover
 
-    # bodo.Time array
+    # bodo.types.Time array
     if dtype == TimeArrayType:
         return lambda dtype: _get_time_min_value()  # pragma: no cover
 
@@ -221,13 +221,13 @@ def _get_type_min_value_overload(dtype):
         )  # pragma: no cover
 
     # timestamptz array
-    if dtype == bodo.timestamptz_array_type:
+    if dtype == bodo.types.timestamptz_array_type:
         return lambda dtype: _get_timestamptz_min_value()
 
     if dtype.dtype == types.bool_:
         return lambda dtype: False  # pragma: no cover
 
-    if isinstance(dtype, bodo.DecimalArrayType):
+    if isinstance(dtype, bodo.types.DecimalArrayType):
         scale = dtype.dtype.scale
         precision = dtype.dtype.precision
 
@@ -251,12 +251,12 @@ def _get_date_min_value():  # pragma: no cover
 
 @register_jitable
 def _get_time_min_value():  # pragma: no cover
-    return bodo.Time()
+    return bodo.types.Time()
 
 
 @register_jitable
 def _get_timestamptz_min_value():  # pragma: no cover
-    return bodo.TimestampTZ(
+    return bodo.types.TimestampTZ(
         pd.Timestamp(numba.cpython.builtins.get_type_min_value(numba.core.types.int64)),
         0,
     )

@@ -52,7 +52,7 @@ public class LogicalValuesCodeGen {
       // Special code path with length 0 data. This is necessary to avoid
       // issues with lists.
       Expr.Tuple typeTuple = new Expr.Tuple(arrayTypes);
-      Expr tableType = new Expr.Call("bodo.TableType", typeTuple);
+      Expr tableType = new Expr.Call("bodo.types.TableType", typeTuple);
       // Move the table type to a global
       Variable global = bodoVisitorClass.lowerAsGlobal(tableType);
       return new Expr.Call("bodo.hiframes.table.create_empty_table", global);

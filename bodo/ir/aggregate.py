@@ -199,7 +199,7 @@ def add_agg_cfunc_sym(typingctx, func, sym):
 @numba.njit
 def get_agg_udf_addr(name):
     """Resolve address of cfunc given by its symbol name"""
-    with bodo.no_warning_objmode(addr="int64"):
+    with bodo.ir.object_mode.no_warning_objmode(addr="int64"):
         addr = bodo.ir.aggregate.gb_agg_cfunc_addr[name]
     return addr
 
@@ -1641,11 +1641,11 @@ def agg_distributed_run(
     }
     # TODO: Support for Categories not known at compile time
     for i, in_col_typ in enumerate(in_col_typs):
-        if isinstance(in_col_typ, bodo.CategoricalArrayType):
+        if isinstance(in_col_typ, bodo.types.CategoricalArrayType):
             glbs.update({f"in_cat_dtype_{i}": in_col_typ})
 
     for i, out_col_typ in enumerate(out_col_typs):
-        if isinstance(out_col_typ, bodo.CategoricalArrayType):
+        if isinstance(out_col_typ, bodo.types.CategoricalArrayType):
             glbs.update({f"out_cat_dtype_{i}": out_col_typ})
 
     udf_func_struct = get_udf_func_struct(
@@ -1756,7 +1756,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         return "bodo.libs.bool_arr_ext.alloc_bool_array(0)"
     elif isinstance(t, StringArrayType):
         return "pre_alloc_string_array(1, 1)"
-    elif t == bodo.dict_str_arr_type:
+    elif t == bodo.types.dict_str_arr_type:
         return "bodo.libs.dict_arr_ext.init_dict_arr(pre_alloc_string_array(1, 1), bodo.libs.int_arr_ext.alloc_int_array(1, np.int32), False, False, None)"
     elif isinstance(t, BinaryArrayType):
         return "pre_alloc_binary_array(1, 1)"
@@ -1766,7 +1766,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         return f"alloc_decimal_array(1, {t.precision}, {t.scale})"
     elif isinstance(t, DatetimeDateArrayType):
         return "bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))"
-    elif isinstance(t, bodo.CategoricalArrayType):
+    elif isinstance(t, bodo.types.CategoricalArrayType):
         if t.dtype.categories is None:
             raise BodoError(
                 "Groupby agg operations on Categorical types require constant categories"
@@ -2529,7 +2529,7 @@ def gen_top_level_agg_func(
         # as_index=True (part of Index)
         out_key_offset = (
             0
-            if isinstance(agg_node.out_type.index, bodo.RangeIndexType)
+            if isinstance(agg_node.out_type.index, bodo.types.RangeIndexType)
             # number of data columns is all logical columns minus keys minus Index
             else agg_node.n_out_cols - len(agg_node.in_key_inds) - 1
         )
@@ -2636,7 +2636,7 @@ def create_dummy_table(data_types):
     arr_types = tuple(
         unwrap_typeref(data_types.types[i]) for i in range(len(data_types.types))
     )
-    table_type = bodo.TableType(arr_types)
+    table_type = bodo.types.TableType(arr_types)
     glbls = {"table_type": table_type}
 
     func_text = "def impl(data_types):\n"
