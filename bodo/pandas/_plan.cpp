@@ -4,8 +4,11 @@
 #include <cstddef>
 #include <utility>
 
+#include <arrow/api.h>
+#include <arrow/builder.h>
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/python/api.h>
+#include <arrow/util/checked_cast.h>
 #include <object.h>
 #include "../io/arrow_compat.h"
 #include "_bodo_scan_function.h"
@@ -552,6 +555,163 @@ std::vector<int> get_projection_pushed_down_columns(
     return selected_columns;
 }
 
+std::shared_ptr<arrow::Array> duckdbVectorToArrowArray(duckdb::Vector &vec,
+                                                       duckdb::idx_t count) {
+    using namespace duckdb;
+
+    // Flatten to ensure contiguous data
+    vec.Flatten(count);
+
+    auto &type = vec.GetType();
+    auto type_id = type.id();
+
+    // Handle null mask
+    auto &validity = duckdb::FlatVector::Validity(vec);
+    arrow::Status status;
+
+    switch (type_id) {
+        case duckdb::LogicalTypeId::INTEGER: {
+            auto data = duckdb::FlatVector::GetData<int32_t>(vec);
+            arrow::Int32Builder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::DOUBLE: {
+            auto data = duckdb::FlatVector::GetData<double>(vec);
+            arrow::DoubleBuilder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::VARCHAR: {
+            auto data = duckdb::FlatVector::GetData<duckdb::string_t>(vec);
+            arrow::StringBuilder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    auto str = data[i].GetString();
+                    status = builder.Append(str);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        default:
+            throw std::runtime_error(
+                "Unsupported DuckDB type for Arrow conversion");
+    }
+}
+
+// Convert an Arrow array into a DuckDB Vector (copying data)
+void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
+                              duckdb::Vector &vec, duckdb::idx_t count) {
+    using namespace duckdb;
+
+    // Set the vector type based on Arrow type
+    auto arrow_type = arr->type_id();
+
+    // Ensure vector is flat for writing
+    vec.SetVectorType(VectorType::FLAT_VECTOR);
+    auto &validity = FlatVector::Validity(vec);
+
+    switch (arrow_type) {
+        case arrow::Type::BOOL: {
+            // Cast to the concrete Arrow boolean array type
+            auto bool_arr = std::static_pointer_cast<arrow::BooleanArray>(arr);
+            // Get a pointer to the DuckDB vector's boolean storage
+            auto data = duckdb::FlatVector::GetData<bool>(vec);
+            auto &validity = duckdb::FlatVector::Validity(vec);
+
+            for (duckdb::idx_t i = 0; i < count; i++) {
+                if (bool_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    // Arrow stores bools as bits; Value(i) reads the bit
+                    data[i] = bool_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::INT32: {
+            auto int_arr = std::static_pointer_cast<arrow::Int32Array>(arr);
+            auto data = FlatVector::GetData<int32_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (int_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = int_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::DOUBLE: {
+            auto dbl_arr = std::static_pointer_cast<arrow::DoubleArray>(arr);
+            auto data = FlatVector::GetData<double>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (dbl_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = dbl_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::STRING: {
+            auto str_arr = std::static_pointer_cast<arrow::StringArray>(arr);
+            auto data = FlatVector::GetData<string_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (str_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    auto view = str_arr->GetView(i);
+                    data[i] =
+                        StringVector::AddString(vec, view.data(), view.size());
+                }
+            }
+            break;
+        }
+        default:
+            std::cout << "arrow type " << static_cast<int>(arrow_type)
+                      << std::endl;
+            throw std::runtime_error("Unsupported Arrow type for conversion");
+    }
+}
+
 /**
  * @brief Dummy function to pass to DuckDB for UDFs. DuckDB runs some functions
  * during optimization for constant folding, but we avoid it by throwing an
@@ -560,7 +720,56 @@ std::vector<int> get_projection_pushed_down_columns(
  */
 static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
                         duckdb::Vector &result) {
-    throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
+    std::cout << "runFunction elements " << args.size() << " columns "
+              << args.ColumnCount() << std::endl;
+    std::vector<std::shared_ptr<array_info>> table_columns;
+    duckdb::idx_t num_rows = args.size();
+    for (duckdb::idx_t i = 0; i < args.ColumnCount(); ++i) {
+        duckdb::LogicalTypeId vtype = args.data[i].GetType().id();
+        std::cout << "vtype " << static_cast<int>(vtype) << std::endl;
+
+        std::shared_ptr<arrow::Array> arrow_array =
+            duckdbVectorToArrowArray(args.data[i], num_rows);
+        // std::cout << "arrow_array " << arrow_array->ToString() << std::endl;
+        table_columns.emplace_back(
+            arrow_array_to_bodo(arrow_array, bodo::BufferPool::DefaultPtr()));
+    }
+    // for (auto &vec : args.data) {
+    //     std::cout << vec.ToString() << std::endl;
+    // }
+    std::shared_ptr<table_info> in_table =
+        std::make_shared<table_info>(table_columns);
+
+    std::cout << "state.expr " << state.expr.ToString() << std::endl;
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> empty_col_ref_map;
+    auto expr_copy = state.expr.Copy();
+    std::shared_ptr<PhysicalExpression> temp_pe =
+        buildPhysicalExprTree(expr_copy, empty_col_ref_map, false);
+    std::shared_ptr<ExprResult> expr_res = temp_pe->ProcessBatch(in_table);
+
+    std::shared_ptr<ArrayExprResult> expr_res_as_array =
+        std::dynamic_pointer_cast<ArrayExprResult>(expr_res);
+    std::shared_ptr<ScalarExprResult> expr_res_as_scalar =
+        std::dynamic_pointer_cast<ScalarExprResult>(expr_res);
+
+    std::shared_ptr<array_info> expr_res_array_info;
+    if (expr_res_as_array) {
+        expr_res_array_info = expr_res_as_array->result;
+    } else if (expr_res_as_scalar) {
+        expr_res_array_info = expr_res_as_scalar->result;
+    } else {
+        throw std::runtime_error(
+            "expr_res ProcessBatch did not return an array or scalar.");
+    }
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    std::shared_ptr<arrow::Array> arrow_array =
+        bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), expr_res_array_info,
+                            false /*convert_timedelta_to_int64*/, "", time_unit,
+                            false, /*downcast_time_ns_to_us*/
+                            bodo::default_buffer_memory_manager());
+
+    arrowArrayToDuckdbVector(arrow_array, result, num_rows);
+    // throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
@@ -584,7 +793,8 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
         scalar_name, source->types, out_type, RunFunction, nullptr, nullptr,
         nullptr, nullptr, duckdb::LogicalTypeId::INVALID,
-        duckdb::FunctionStability::VOLATILE,
+        duckdb::FunctionStability::CONSISTENT,
+        // duckdb::FunctionStability::VOLATILE,
         duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
 
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =

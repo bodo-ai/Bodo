@@ -759,7 +759,7 @@ def execute_plan(plan: LazyPlan):
         return ret
 
     # Find duplicated subqueries in the given plan and materialize them.
-    while True:
+    while False:
         # Find the next duplicated subquery in the given plan.
         top_most_subquery = plan.get_subqueries()
         if top_most_subquery is not None:
