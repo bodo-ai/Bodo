@@ -3,6 +3,9 @@
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
 #include <arrow/type_traits.h>
+#include <future>
+#include <iostream>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include "../libs/_array_utils.h"
@@ -794,6 +797,7 @@ struct PhysicalUDFExpressionMetrics {
     timer_t udf_execution_time = 0;
     timer_t py_to_cpp_time = 0;
 };
+
 /**
  * @brief Physical expression tree node type for UDF.
  *
@@ -810,36 +814,58 @@ class PhysicalUDFExpression : public PhysicalExpression {
           cfunc_ptr(nullptr),
           init_state(nullptr) {
         if (scalar_func_data.is_cfunc) {
+            this->cfunc_ptr = (table_udf_t)1;
+            PyObject *future_args = scalar_func_data.args;
             PyObject *bodo_module =
                 PyImport_ImportModule("bodo.pandas.utils_jit");
-
             if (!bodo_module) {
                 PyErr_Print();
                 throw std::runtime_error(
                     "Failed to import bodo.pandas.utils module");
             }
+            // https://docs.python.org/3/c-api/init.html#thread-state-and-the-global-interpreter-lock
+            PyThreadState *save = PyEval_SaveThread();
 
-            PyObject *result = PyObject_CallMethod(bodo_module, "compile_cfunc",
-                                                   "O", scalar_func_data.args);
-            if (!result) {
-                PyErr_Print();
-                Py_DECREF(bodo_module);
-                throw std::runtime_error("Error calling compile_cfunc");
-            }
+            compile_future = std::async(
+                std::launch::async,
+                [bodo_module, future_args]() -> table_udf_t {
+                    // Ensure we hold the GIL in this thread.
+                    PyGILState_STATE gstate = PyGILState_Ensure();
+                    try {
+                        table_udf_t ptr = nullptr;
 
-            // Result should be a function pointer
-            if (!PyLong_Check(result)) {
-                Py_DECREF(result);
-                Py_DECREF(bodo_module);
-                throw std::runtime_error(
-                    "Expected an integer from compile_cfunc");
-            }
+                        PyObject *result = PyObject_CallMethod(
+                            bodo_module, "compile_cfunc", "O", future_args);
+                        if (!result) {
+                            PyErr_Print();
+                            Py_DECREF(bodo_module);
+                            throw std::runtime_error(
+                                "Error calling compile_cfunc");
+                        }
 
-            this->cfunc_ptr =
-                reinterpret_cast<table_udf_t>(PyLong_AsLongLong(result));
+                        if (!PyLong_Check(result)) {
+                            Py_DECREF(result);
+                            Py_DECREF(bodo_module);
+                            throw std::runtime_error(
+                                "Expected an integer from compile_cfunc");
+                        }
 
-            Py_DECREF(bodo_module);
-            Py_DECREF(result);
+                        ptr = reinterpret_cast<table_udf_t>(
+                            PyLong_AsLongLong(result));
+
+                        Py_DECREF(result);
+                        Py_DECREF(bodo_module);
+                        Py_XDECREF(future_args);
+                        PyGILState_Release(gstate);
+                        return ptr;
+                    } catch (...) {
+                        // Release GIL and DECREF args before propagating.
+                        PyGILState_Release(gstate);
+                        Py_XDECREF(future_args);
+                        throw;
+                    }
+                });
+            PyEval_RestoreThread(save);
         }
     }
 
@@ -878,6 +904,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
     BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalUDFExpressionMetrics metrics;
+    std::future<table_udf_t> compile_future;
     table_udf_t cfunc_ptr;
     PyObject *init_state;
 };
