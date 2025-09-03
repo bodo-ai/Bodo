@@ -912,13 +912,17 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def min(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
     ):
-        return _compute_series_reduce(self, ["min"])[0]
+        from bodo.pandas.scalar import BodoScalar
+
+        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["min"]))["0"])
 
     @check_args_fallback(unsupported="all")
     def max(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False
     ):
-        return _compute_series_reduce(self, ["max"])[0]
+        from bodo.pandas.scalar import BodoScalar
+
+        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["max"]))["0"])
 
     @check_args_fallback(unsupported="all")
     def sum(
@@ -929,7 +933,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         min_count=0,
         **kwargs,
     ):
-        return _compute_series_reduce(self, ["sum"])[0]
+        from bodo.pandas.scalar import BodoScalar
+
+        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["sum"]))["0"])
 
     @check_args_fallback(unsupported="all")
     def prod(
@@ -940,33 +946,33 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         min_count=0,
         **kwargs,
     ):
-        return _compute_series_reduce(self, ["product"])[0]
+        from bodo.pandas.scalar import BodoScalar
+
+        return BodoScalar(
+            wrap_plan(plan=_compute_series_reduce(self, ["product"]))["0"]
+        )
 
     product = prod
 
     @check_args_fallback(unsupported="all")
     def count(self):
-        return _compute_series_reduce(self, ["count"])[0]
+        from bodo.pandas.scalar import BodoScalar
+
+        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["count"]))["0"])
 
     @check_args_fallback(unsupported="all")
     def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
         """Returns sample mean."""
-        reduced = _compute_series_reduce(self, ["count", "sum"])
-        count, sum = reduced[0], reduced[1]
-        if count <= 0:
-            return pd.NA
-        return sum / count
+        from bodo.pandas.scalar import BodoScalar
+
+        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["mean"]))["0"])
 
     @check_args_fallback(supported=["ddof"])
     def std(self, axis=None, skipna=True, ddof=1, numeric_only=False, **kwargs):
         """Returns sample standard deviation."""
-        reduced_self = _compute_series_reduce(self, ["count", "sum"])
-        count, sum = reduced_self[0], reduced_self[1]
-        if count <= 0 or count <= ddof:
-            return pd.NA
-        squared = self.map(lambda x: x * x)
-        squared_sum = _compute_series_reduce(squared, ["sum"])[0]
-        return ((squared_sum - (sum**2) / count) / (count - ddof)) ** 0.5
+        from bodo.pandas.scalar import BodoScalar
+
+        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["std"]))["0"])
 
     @check_args_fallback(supported=["percentiles"])
     def describe(self, percentiles=None, include=None, exclude=None):
@@ -2188,6 +2194,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
         [],
         exprs,
     )
+    return plan
     out_rank = execute_plan(plan)
 
     df = pd.DataFrame(out_rank)

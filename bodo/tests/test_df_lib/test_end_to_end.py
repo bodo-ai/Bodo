@@ -2146,12 +2146,11 @@ def test_series_min_max():
     )
     bdf = bd.from_pandas(df)
     for c in df.columns:
+        bodo_min = bdf[c].min()
+        bodo_max = bdf[c].max()
+        py_min = df[c].min()
+        py_max = df[c].max()
         with assert_executed_plan_count(2):
-            bodo_min = bdf[c].min()
-            bodo_max = bdf[c].max()
-            py_min = df[c].min()
-            py_max = df[c].max()
-
             assert bodo_min == py_min
             assert bodo_max == py_max
 
