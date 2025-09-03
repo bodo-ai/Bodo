@@ -823,6 +823,7 @@ class PhysicalUDFExpression : public PhysicalExpression {
                 throw std::runtime_error(
                     "Failed to import bodo.pandas.utils module");
             }
+            // https://docs.python.org/3/c-api/init.html#thread-state-and-the-global-interpreter-lock
             PyThreadState *save = PyEval_SaveThread();
 
             compile_future = std::async(
