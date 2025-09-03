@@ -61,7 +61,7 @@ Bodo DataFrames, is not yet optimized for small, fast workloads (e.g., workloads
 - Intuitive APIs for simplifying and scaling AI workloads.
 - Advanced query optimization,
 C++ runtime,
-and parallel execution using MPI to achieve the best possible performance while leveraging all availible cores.
+and parallel execution using MPI to achieve the best possible performance while leveraging all available cores.
 - Streaming execution to process larger-than-memory datasets.
 - Just in Time (JIT) compilation with native support for Pandas, Numpy and Scikit-learn
 for accelerating custom transformations or performance-critical functions.

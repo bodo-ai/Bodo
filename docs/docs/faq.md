@@ -31,7 +31,7 @@ Unlike traditional distributed computing frameworks, Bodo DataFrames:
 Yes, Bodo DataFrames is designed as a drop-in replacement for Pandas,
 simply replace the import `import pandas as pd` with `import bodo.pandas as pd` to transparently accelerate and scale Pandas workloads.
 For cases where Bodo DataFrames does not support a specific Pandas operation,
-it will warn the user before collecting the data and continuing exectution in vanilla Pandas.
+it will warn the user before collecting the data and continuing execution in vanilla Pandas.
 
 ### What types of workloads are ideal for Bodo DataFrames?
 
@@ -55,7 +55,7 @@ Bodo cloud service simplifies managing compute clusters and jobs on AWS and Azur
 Bodo DataFrames provides two methods of accelerating and scaling Pandas code. The first method involves using the
 Pandas API through the `bodo.pandas` module, which will lazily accumulate operations,
 optimize and then run them in a parallel, C++ runtime using MPI.
-The second method involes annotating functions with the Just-In-Time (JIT) compilation decorator (`bodo.jit`) in order to
+The second method involves annotating functions with the Just-In-Time (JIT) compilation decorator (`bodo.jit`) in order to
 compile Python code to optimized, parallel binaries that run on an MPI backend.
 The Pandas API is easier to use; just replace the `import pandas as pd` with `import bodo.pandas as pd`,
 while JIT provides better performance in some cases at the cost of extra set up such as
@@ -76,7 +76,7 @@ No, there are no usage limits. Bodo DataFrames is open source and distributed un
 
 ### How does Bodo DataFrames handle security and privacy?
 
-Since Bodo DataFrmaes runs in your environment, you have complete control over the data and compute resources, ensuring that sensitive information remains secure.
+Since Bodo DataFrames runs in your environment, you have complete control over the data and compute resources, ensuring that sensitive information remains secure.
 
 ### How does Bodo DataFrames handle fault tolerance and failures?
 
@@ -84,7 +84,7 @@ Bodo DataFrames runs parallel processes in an efficient, C++ runtime, eliminatin
 of other framework (e.g., scheduler errors, JVM errors, ...).
 To handle rare case of hardware failures, we recommend simply configuring job restarts
 in your environment.
-Bodo DataFrames's high performance ensures fast restart and job completion even with failures.
+Bodo DataFrames' high performance ensures fast restart and job completion even with failures.
 
 ### Does Bodo DataFrames have a job scheduler?
 
@@ -99,7 +99,7 @@ MPI setup is required for distributed execution, which involves passwordless SSH
 
 If you are using Bodo DataFrames' Pandas API (`bodo.pandas`), all operations will automatically be executed in parallel
 unless otherwise indicated in the form of a user warning. For functions annotated with `bodo.jit`,
-you can see distributed diagnostics of the compiled function to understand parallelism decisions by the compiler. See [parallism docs][basics].
+you can see distributed diagnostics of the compiled function to understand parallelism decisions by the compiler. See [parallelism docs][basics].
 In addition, the Bodo compiler throws a warning if it didn't find any parallelism opportunities in a function.
 You can also see your local machine's CPU usage using tools like `top` and `htop` for both Pandas API and JIT.
 
