@@ -20,7 +20,7 @@ import argparse
 from bodosdk import BodoWorkspaceClient
 
 
-def run_bodo_benchmark(num_workers):
+def run_bodo_benchmark(num_workers, use_jit):
     bodo_workspace = BodoWorkspaceClient()
     benchmark_cluster = bodo_workspace.ClusterClient.create(
         name="Benchmark Bodo",
@@ -35,6 +35,7 @@ def run_bodo_benchmark(num_workers):
             code_type="PYTHON",
             source={"type": "WORKSPACE", "path": "/"},
             exec_file="nyc_taxi_precipitation.py",
+            args="--use_jit" if use_jit else None,
         )
         print(benchmark_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 
@@ -48,9 +49,13 @@ def main():
     parser.add_argument(
         "--num_workers", type=int, default=4, help="Number of workers in cluster."
     )
+    parser.add_argument(
+        "--use_jit",
+        action="store_true",
+        help="Whether to use Bodo JIT for running the workload. If False then run using Bodo DataFrames",
+    )
     args = parser.parse_args()
-
-    run_bodo_benchmark(args.num_workers)
+    run_bodo_benchmark(args.num_workers, args.use_jit)
 
 
 if __name__ == "__main__":

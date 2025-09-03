@@ -15,7 +15,9 @@ import dask.dataframe as dd
 from dask.distributed import Client
 
 
-def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=None):
+def get_monthly_travels_weather(
+    weather_dataset, hvfhv_dataset, out_path, storage_options=None
+):
     start = time.time()
     central_park_weather_observations = dd.read_csv(
         weather_dataset, parse_dates=["DATE"], storage_options=storage_options
@@ -89,14 +91,14 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset, storage_options=
         },
     )
 
-    monthly_trips_weather.to_parquet("s3://dask-results/result.pq", compute=True)
+    monthly_trips_weather.to_parquet(out_path, compute=True)
 
     end = time.time()
 
     return end - start
 
 
-def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
+def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset, out_path):
     """Run Dask on EC2 cluster."""
     from dask_cloudprovider.aws import EC2Cluster
 
@@ -106,7 +108,7 @@ def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
         # NOTE: Setting security = False to avoid large config size
         # https://github.com/dask/dask-cloudprovider/issues/249
         security=False,
-        n_workers=4,
+        n_workers=1,
         scheduler_instance_type="c6i.xlarge",
         worker_instance_type="r6i.16xlarge",
         docker_image="daskdev/dask:2024.9.1-py3.10",
@@ -122,6 +124,7 @@ def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
                     get_monthly_travels_weather,
                     weather_dataset,
                     hvfhv_dataset,
+                    out_path,
                 )
                 total_time = future.result()
                 client.restart()
@@ -131,4 +134,5 @@ def ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
 if __name__ == "__main__":
     hvfhv_dataset = "s3://bodo-example-data/nyc-taxi/fhvhv_tripdata/"
     weather_dataset = "s3://bodo-example-data/nyc-taxi/central_park_weather.csv"
-    ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset)
+    out_path = "monthly_weather_trips.pq"
+    ec2_get_monthly_travels_weather(weather_dataset, hvfhv_dataset, out_path)
