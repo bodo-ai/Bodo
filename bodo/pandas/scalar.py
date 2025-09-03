@@ -38,8 +38,11 @@ class BodoScalar(BodoLazyWrapper):
         return self.wrapped_series.is_lazy_plan()
 
     def get_value(self):
+        import bodo.spawn.spawner
+
         self.wrapped_series.execute_plan()
-        assert len(self.wrapped_series) == 1
+        assert len(self.wrapped_series) == bodo.spawn.spawner.get_num_workers()
+        assert self.wrapped_series.nunique() == 1
         return self.wrapped_series[0]
 
     def __getattribute__(self, name):
@@ -86,8 +89,7 @@ class BodoScalar(BodoLazyWrapper):
         "__int__",
         "__float__",
         "__bool__",
-        "__hash____setattr__",
-        "__delattr__",
+        "__hash__",
         "__bytes__",
         "__format__",
         "__dir__",
@@ -114,7 +116,7 @@ class BodoScalar(BodoLazyWrapper):
         "__hash__",
         "__bool__",
     ]
-
+    # TODO: Support lazy operations if other is also a BodoScalar
     for _method_name in _dunder_methods:
         if _method_name not in locals():
             locals()[_method_name] = _make_delegator(_method_name)
