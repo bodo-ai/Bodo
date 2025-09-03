@@ -144,7 +144,7 @@ char *listagg_seq(std::shared_ptr<table_info> in_table,
     }
 
     // Step 1: Sort the input table
-    assert(num_order_cols = in_table->ncols());
+    assert((uint64_t)num_order_cols == in_table->ncols());
 
     // Convert bool* to int64_t*
     std::vector<int64_t> ascending_real(num_order_cols);
