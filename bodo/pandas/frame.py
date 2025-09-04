@@ -328,7 +328,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # count query before the actual plan which is unnecessary.
         if self._exec_state == ExecState.PLAN:
             self.execute_plan()
-        return super().__repr__()
+
+        # Avoid fallback warnings for prints
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+            return super().__repr__()
 
     @property
     def index(self):
