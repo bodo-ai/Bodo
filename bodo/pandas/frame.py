@@ -403,10 +403,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Most cases of copy=False we have are the idiom A=A.rename(copy=False) where there is still
         # only one possible reference to the data so we can treat this case like copy=True since for us
         # we only materialize as needed and so copying isn't an overhead.
-        if copy == False:
-            warnings.warn(
-                "BodoDataFrame::rename copy=False argument ignored assuming A=A.rename(copy=False) idiom."
-            )
+
         renamed_plan = orig_plan.replace_empty_data(
             orig_plan.empty_data.rename(columns=columns)
         )
