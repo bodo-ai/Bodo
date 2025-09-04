@@ -95,7 +95,7 @@ with:
 ```python
 import bodo.pandas as pd
 ```
-which accelerates the following code segment by about 50-60x on a laptop.
+which accelerates the following code segment by about 20-30x on a laptop.
 
 ```python
 import bodo.pandas as pd
