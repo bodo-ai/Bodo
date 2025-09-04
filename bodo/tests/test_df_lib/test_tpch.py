@@ -79,7 +79,6 @@ def test_tpch_q08():
     run_tpch_query_test(tpch.tpch_q08)
 
 
-# @pytest.mark.skip("hanging?")
 def test_tpch_q09():
     run_tpch_query_test(tpch.tpch_q09)
 
@@ -96,9 +95,6 @@ def test_tpch_q12():
     run_tpch_query_test(tpch.tpch_q12)
 
 
-@pytest.mark.skip(
-    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
-)
 def test_tpch_q13():
     run_tpch_query_test(tpch.tpch_q13)
 
@@ -107,12 +103,10 @@ def test_tpch_q14():
     run_tpch_query_test(tpch.tpch_q14, plan_executions=2)
 
 
-@pytest.mark.skip("Length mismatch")
 def test_tpch_q15():
-    run_tpch_query_test(tpch.tpch_q15)
+    run_tpch_query_test(tpch.tpch_q15, plan_executions=1)
 
 
-@pytest.mark.skip("Hanging?")
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
