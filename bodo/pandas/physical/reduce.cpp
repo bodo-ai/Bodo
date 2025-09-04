@@ -1,7 +1,55 @@
 #include "physical/reduce.h"
 #include "../libs/_shuffle.h"
 
-void ReductionFunctionMax::Finalize() {
+void ReductionFunction::ConsumeBatch(
+    std::shared_ptr<arrow::Array> in_arrow_array) {
+    for (size_t i = 0; i < this->function_names.size(); i++) {
+        const std::string& function_name = this->function_names[i];
+        const std::string& scalar_cmp_names = this->reduction_names[i];
+        const ReductionType& reduction_type = this->reduction_types[i];
+        // Current reduction result
+        std::shared_ptr<arrow::Scalar>& result = this->results[i];
+
+        // Reduce Arrow array using compute function
+        arrow::Result<arrow::Datum> cmp_res =
+            arrow::compute::CallFunction(function_name, {in_arrow_array});
+        CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
+        std::shared_ptr<arrow::Scalar> out_scalar_batch =
+            cmp_res.ValueOrDie().scalar();
+
+        // Update reduction result
+        if (!out_scalar_batch->is_valid) {
+            // If we get an empty batch which results in invalid
+            // arrow::Scalar result then just ignore it.
+            continue;
+        } else if (!result->is_valid) {
+            // The last result can be null if there have been no rows
+            // seen thus far.  In which case, use the current result
+            // just on this batch as the result thus far.
+            result = out_scalar_batch;
+        } else {
+            arrow::Result<arrow::Datum> cmp_res_scalar =
+                arrow::compute::CallFunction(scalar_cmp_names,
+                                             {out_scalar_batch, result});
+            CHECK_ARROW(cmp_res_scalar.status(),
+                        "Error in Arrow compute scalar comparison");
+            const std::shared_ptr<arrow::Scalar> cmp_scalar =
+                cmp_res_scalar.ValueOrDie().scalar();
+            if (reduction_type == ReductionType::COMPARISON) {
+                if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
+                    result = out_scalar_batch;
+                }
+            } else if (reduction_type == ReductionType::AGGREGATION) {
+                result = cmp_scalar;
+            } else {
+                throw std::runtime_error("Unsupported reduction function: " +
+                                         function_name);
+            }
+        }
+    }
+}
+
+void ReductionFunction::Finalize() {
     std::vector<std::shared_ptr<arrow::Array>> global_results;
     int n_ranks, rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -38,25 +86,7 @@ void ReductionFunctionMax::Finalize() {
     // Find global max, each receieved array has size 1
     std::shared_ptr<arrow::Scalar> global_max = results[0];
     for (const auto& arr : global_results) {
-        std::shared_ptr<arrow::Scalar> arr_scalar =
-            arr->GetScalar(0).ValueOrDie();
-        if (!arr_scalar->is_valid) {
-            continue;
-        } else if (!global_max->is_valid) {
-            global_max = arr_scalar;
-        } else {
-            arrow::Result<arrow::Datum> cmp_res_scalar =
-                arrow::compute::CallFunction("greater",
-                                             {arr_scalar, global_max});
-            CHECK_ARROW(cmp_res_scalar.status(),
-                        "Error in Arrow compute scalar comparison");
-            const std::shared_ptr<arrow::Scalar> cmp_scalar =
-                cmp_res_scalar.ValueOrDie().scalar();
-            if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
-                global_max = arr_scalar;
-            }
-        }
-        results[0] = global_max;
+        this->ConsumeBatch(arr);
     }
 }
 
@@ -72,15 +102,44 @@ OperatorResult PhysicalReduce::ConsumeBatch(
         bodo::default_buffer_memory_manager());
 
     if (iter == 0) {
-        // Initialize reduction functions on first batch
+        // Initialize reduction functions on first batch, we need to wait until
+        // we have the input array to get the type for initializing the result
+        // scalar.
         for (const auto& func_name : function_names) {
             if (func_name == "max") {
-                // Initialize with first value in the batch
+                // Initialize with first value in the batch, we really should do
+                // this from the result of the first reduction but reductions
+                // happen within the reduciton_functions and for all the
+                // functions we support the result is the same type as the input
+                // so this is ok for now.
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionMax>(arrow::ScalarVector(
                         {in_arrow_array->GetScalar(0).ValueOr(
                             arrow::MakeNullScalar(in_arrow_array->type()))})));
 
+            } else if (func_name == "min") {
+                reduction_functions.push_back(
+                    std::make_unique<ReductionFunctionMin>(arrow::ScalarVector(
+                        {in_arrow_array->GetScalar(0).ValueOr(
+                            arrow::MakeNullScalar(in_arrow_array->type()))})));
+            } else if (func_name == "sum") {
+                reduction_functions.push_back(
+                    std::make_unique<ReductionFunctionSum>(arrow::ScalarVector(
+                        {in_arrow_array->GetScalar(0).ValueOr(
+                            arrow::MakeNullScalar(in_arrow_array->type()))})));
+            } else if (func_name == "product") {
+                reduction_functions.push_back(
+                    std::make_unique<ReductionFunctionProduct>(
+                        arrow::ScalarVector(
+                            {in_arrow_array->GetScalar(0).ValueOr(
+                                arrow::MakeNullScalar(
+                                    in_arrow_array->type()))})));
+            } else if (func_name == "count") {
+                reduction_functions.push_back(
+                    std::make_unique<ReductionFunctionCount>(
+                        arrow::ScalarVector(
+                            {arrow::MakeScalar(arrow::uint64(), 0)
+                                 .ValueOrDie()})));
             } else {
                 throw std::runtime_error("Unsupported reduction function: " +
                                          func_name);
@@ -89,54 +148,7 @@ OperatorResult PhysicalReduce::ConsumeBatch(
     }
 
     for (auto& reduction_function : reduction_functions) {
-        for (size_t i = 0; i < reduction_function->function_names.size(); i++) {
-            const std::string& function_name =
-                reduction_function->function_names[i];
-            const std::string& scalar_cmp_names =
-                reduction_function->reduction_names[i];
-            const ReductionType& reduction_type =
-                reduction_function->reduction_types[i];
-            // Current reduction result
-            std::shared_ptr<arrow::Scalar>& output_scalar =
-                reduction_function->results[i];
-
-            // Reduce Arrow array using compute function
-            arrow::Result<arrow::Datum> cmp_res =
-                arrow::compute::CallFunction(function_name, {in_arrow_array});
-            CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
-            std::shared_ptr<arrow::Scalar> out_scalar_batch =
-                cmp_res.ValueOrDie().scalar();
-
-            // Update reduction result
-            if (!out_scalar_batch->is_valid) {
-                // If we get an empty batch which results in invalid
-                // arrow::Scalar result then just ignore it.
-                continue;
-            } else if (!output_scalar->is_valid) {
-                // The last result can be null if there have been no rows
-                // seen thus far.  In which case, use the current result
-                // just on this batch as the result thus far.
-                output_scalar = out_scalar_batch;
-            } else {
-                arrow::Result<arrow::Datum> cmp_res_scalar =
-                    arrow::compute::CallFunction(
-                        scalar_cmp_names, {out_scalar_batch, output_scalar});
-                CHECK_ARROW(cmp_res_scalar.status(),
-                            "Error in Arrow compute scalar comparison");
-                const std::shared_ptr<arrow::Scalar> cmp_scalar =
-                    cmp_res_scalar.ValueOrDie().scalar();
-                if (reduction_type == ReductionType::COMPARISON) {
-                    if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
-                        output_scalar = out_scalar_batch;
-                    }
-                } else if (reduction_type == ReductionType::AGGREGATION) {
-                    output_scalar = cmp_scalar;
-                } else {
-                    throw std::runtime_error(
-                        "Unsupported reduction function: " + function_name);
-                }
-            }
-        }
+        reduction_function->ConsumeBatch(in_arrow_array);
     }
 
     iter++;

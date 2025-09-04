@@ -35,7 +35,8 @@ struct PhysicalReduceMetrics {
 };
 
 struct ReductionFunction {
-    virtual void Finalize() = 0;
+    virtual void Finalize();
+    virtual void ConsumeBatch(std::shared_ptr<arrow::Array> in_arrow_array);
     virtual ~ReductionFunction() = default;
     std::vector<std::string> function_names;
     std::vector<std::string> reduction_names;
@@ -52,7 +53,75 @@ struct ReductionFunctionMax : public ReductionFunction {
         results = initial_results;
         reduction_types = {ReductionType::COMPARISON};
     }
+};
+
+struct ReductionFunctionMin : public ReductionFunction {
+    ReductionFunctionMin(arrow::ScalarVector initial_results) {
+        assert(initial_results.size() == 1);
+        function_names = {"min"};
+        reduction_names = {"less"};
+        results = initial_results;
+        reduction_types = {ReductionType::COMPARISON};
+    }
+};
+
+struct ReductionFunctionSum : public ReductionFunction {
+    ReductionFunctionSum(arrow::ScalarVector initial_results) {
+        assert(initial_results.size() == 1);
+        function_names = {"sum"};
+        reduction_names = {"add"};
+        results = initial_results;
+        reduction_types = {ReductionType::AGGREGATION};
+    }
+};
+
+struct ReductionFunctionProduct : public ReductionFunction {
+    ReductionFunctionProduct(arrow::ScalarVector initial_results) {
+        assert(initial_results.size() == 1);
+        function_names = {"product"};
+        reduction_names = {"multiply"};
+        results = initial_results;
+        reduction_types = {ReductionType::AGGREGATION};
+    }
+};
+
+struct ReductionFunctionCount : public ReductionFunction {
+    ReductionFunctionCount(arrow::ScalarVector initial_results) {
+        assert(initial_results.size() == 1);
+        function_names = {"count"};
+        reduction_names = {"add"};
+        results = initial_results;
+        reduction_types = {ReductionType::AGGREGATION};
+    }
+};
+
+struct ReductionFunctionMean : public ReductionFunction {
+    ReductionFunctionMean(arrow::ScalarVector initial_results) {
+        assert(initial_results.size() == 2);
+        function_names = {"sum", "count"};
+        reduction_names = {"add", "add"};
+        results = initial_results;
+        reduction_types = {ReductionType::AGGREGATION,
+                           ReductionType::AGGREGATION};
+    }
     void Finalize() override;
+};
+
+struct ReductionFunctionStd : public ReductionFunction {
+    ReductionFunctionStd(arrow::ScalarVector initial_results) {
+        assert(initial_results.size() == 3);
+        function_names = {"sum", "count", "sum_of_squares"};
+        reduction_names = {"add", "add", "add"};
+        results = initial_results;
+        reduction_types = {ReductionType::AGGREGATION,
+                           ReductionType::AGGREGATION,
+                           ReductionType::AGGREGATION};
+    }
+    void Finalize() override;
+    void ConsumeBatch(std::shared_ptr<arrow::Array> in_arrow_array) override {
+        // This needs to be implemented specifically for std since arrow does
+        // not have a sum_of_squares function
+    }
 };
 
 /**
@@ -128,59 +197,6 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     }
 
    private:
-    // TODO Remove all of these functions
-    static std::string getScalarOpName(std::string func_name) {
-        if (func_name == "max") {
-            return "greater";
-        } else if (func_name == "min") {
-            return "less";
-        } else if (func_name == "sum") {
-            return "add";
-        } else if (func_name == "product") {
-            return "multiply";
-        } else if (func_name == "count") {
-            return "add";
-        } else {
-            throw std::runtime_error("Unsupported reduction function: " +
-                                     func_name);
-        }
-    }
-
-    static std::vector<std::string> getScalarOpNames(
-        const std::vector<std::string>& func_names) {
-        std::vector<std::string> scalar_cmp_names;
-        for (const auto& func_name : func_names) {
-            scalar_cmp_names.push_back(getScalarOpName(func_name));
-        }
-        return scalar_cmp_names;
-    }
-
-    static ReductionType getReductionType(std::string func_name) {
-        if (func_name == "max") {
-            return ReductionType::COMPARISON;
-        } else if (func_name == "min") {
-            return ReductionType::COMPARISON;
-        } else if (func_name == "sum") {
-            return ReductionType::AGGREGATION;
-        } else if (func_name == "product") {
-            return ReductionType::AGGREGATION;
-        } else if (func_name == "count") {
-            return ReductionType::AGGREGATION;
-        } else {
-            throw std::runtime_error("Unsupported reduction function: " +
-                                     func_name);
-        }
-    }
-
-    static std::vector<ReductionType> getReductionTypes(
-        const std::vector<std::string>& func_names) {
-        std::vector<ReductionType> reduction_types;
-        for (const auto& func_name : func_names) {
-            reduction_types.push_back(getReductionType(func_name));
-        }
-        return reduction_types;
-    }
-
     const std::shared_ptr<bodo::Schema> out_schema;
     std::vector<std::unique_ptr<ReductionFunction>> reduction_functions;
     std::vector<std::string> function_names;
