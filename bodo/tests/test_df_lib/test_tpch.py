@@ -19,13 +19,12 @@ def run_tpch_query_test(query_func, plan_executions=0):
         plan_executions (int, optional): Expected number of LazyPlans to be executed.
           Defaults to 0.
     """
+    pd_kwargs = {"pd": pd}
     pd_args = [
-        getattr(tpch, f"load_{key}")(datapath)
+        getattr(tpch, f"load_{key}")(datapath, **pd_kwargs)
         for key in tpch._query_to_datasets[int(query_func.__name__[-2:])]
     ]
     bd_args = [bd.from_pandas(df) for df in pd_args]
-
-    pd_kwargs = {"pd": pd}
     pd_result = query_func(*pd_args, **pd_kwargs)
 
     with assert_executed_plan_count(plan_executions):
