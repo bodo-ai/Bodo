@@ -12,13 +12,13 @@ NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart
   <a href="https://www.bodo.ai/benchmarks/" target="_blank"><b>Benchmarks</b></a>
 </h3>
 
-# Bodo DataFrames: Simple Python Acceleration and Scaling for Data and AI
+# Bodo DataFrames: Drop-in Pandas Replacement for Acceleration and Scaling of Data and AI
 
 Bodo DataFrames is a high performance dataframe library for large scale Python data processing, AI, and ML use cases.
 It functions as a drop-in replacement for Pandas while providing additional Pandas-compatible APIs for simplifying and scaling AI workloads,
 a Just-In-Time (JIT) compiler for accelerating custom transformations, as well as an integrated SQL engine for extra flexibility.
 
-<!-- TOOD: updated graph with Taxi benchmark including Bodo DataFrames Pandas API -->
+<!-- TODO: updated graph with Taxi benchmark including Bodo DataFrames Pandas API -->
 <img src="benchmarks/img/nyc-taxi-benchmark.png" alt="NYC Taxi Benchmark" width="500"/>
 
 Unlike traditional distributed computing frameworks, Bodo DataFrames:
@@ -41,18 +41,6 @@ Compatible with regular Python ecosystem, and can selectively speed up only the 
 
 4. **Integration with Modern Data Infrastructure:**
 Provide robust support for industry-leading data platforms like Apache Iceberg and Snowflake, enabling smooth interoperability with existing ecosystems.
-
-
-## Non-goals
-
-1. *Full Python Language Support:*
-We are currently focused on a targeted subset of Python used for data-intensive and computationally heavy workloads, rather than supporting the entire Python syntax and all library APIs.
-
-2. *Non-Data Workloads:*
-Prioritize applications in data engineering, data science, and AI/ML. Bodo is not designed for general-purpose use cases that are non-data-centric.
-
-3. *Real-time:*
-Bodo DataFrames, is not yet optimized for small, fast workloads (e.g., workloads with execution times of only a few seconds).
 
 
 ## Key Features
@@ -102,7 +90,7 @@ with:
 ```python
 import bodo.pandas as pd
 ```
-which accelerates the following code segment by about 50-60x on a laptop.
+which accelerates the following code segment by about 20-30x on a laptop.
 
 ```python
 import bodo.pandas as pd
