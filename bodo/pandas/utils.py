@@ -402,7 +402,7 @@ def check_args_fallback(
                     # Fallback to Python. Call the same method in the base class.
                     msg = (
                         f"{func.__name__} is not "
-                        "implemented in Bodo dataframe library for the specified arguments yet. "
+                        "implemented in Bodo DataFrames for the specified arguments yet. "
                         "Falling back to Pandas (may be slow or run out of memory)."
                     )
                     if except_msg:
@@ -474,7 +474,7 @@ def check_args_fallback(
                         base_class = self.__class__.__bases__[0]
                     msg = (
                         f"{base_class.__name__}.{func.__name__} is not "
-                        "implemented in Bodo dataframe library for the specified arguments yet. "
+                        "implemented in Bodo DataFrames for the specified arguments yet. "
                         "Falling back to Pandas (may be slow or run out of memory)."
                     )
                     if except_msg:

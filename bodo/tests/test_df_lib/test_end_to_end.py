@@ -1119,7 +1119,7 @@ def test_parquet_read_partitioned(datapath):
         bodo_out = bd.read_parquet(path)
         py_out = pd.read_parquet(path)
 
-    # NOTE: Bodo dataframe library currently reads partitioned columns as
+    # NOTE: Bodo DataFrames currently reads partitioned columns as
     # dictionary-encoded strings but Pandas reads them as categorical.
     _test_equal(
         bodo_out.copy(),

@@ -27,7 +27,7 @@ relevant dataframes is larger than the memory of the node on which
 you started the application then this fallback may fail.  In either
 case, this fallback process requires the copying of all the distributed
 data for the dataframe back to the starting node which can be a very
-time consuming process.  The Bodo dataframe library can thus operate
+time consuming process. Bodo DataFrames can thus operate
 in one of three modes: 1) automatic fallback is disabled and an error
 is generated if fallback would be necessary to execute the operation,
 2) automatic fallback is enabled but a performance warning is generated
