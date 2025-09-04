@@ -2599,6 +2599,7 @@ class TestIO(unittest.TestCase):
         pd_fname = "test_write_csv1_pd.csv"
         with ensure_clean(pd_fname), ensure_clean(hp_fname):
             bodo_func(data_structure, hp_fname)
+            bodo.barrier()
             test_impl(data_structure, pd_fname)
             pd.testing.assert_frame_equal(
                 pd.read_csv(hp_fname), pd.read_csv(pd_fname), check_column_type=False
