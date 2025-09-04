@@ -2167,15 +2167,7 @@ def test_series_min_max_unsupported_types():
             bdf["A"].max()
 
 
-@pytest.mark.parametrize(
-    "method",
-    [
-        "sum",
-        "product",
-        "count",
-        "mean",
-    ],
-)  # "std"])
+@pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
 def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
     n = 10000

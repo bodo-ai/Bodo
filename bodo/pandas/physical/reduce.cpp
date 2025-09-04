@@ -4,13 +4,30 @@
 void ReductionFunction::ConsumeBatch(
     std::shared_ptr<arrow::Array> in_arrow_array) {
     arrow::ScalarVector reductions;
+    std::shared_ptr<arrow::Scalar> out_scalar_batch;
     for (const auto& function_name : this->function_names) {
-        // Reduce Arrow array using compute function
-        arrow::Result<arrow::Datum> cmp_res =
-            arrow::compute::CallFunction(function_name, {in_arrow_array});
-        CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
-        std::shared_ptr<arrow::Scalar> out_scalar_batch =
-            cmp_res.ValueOrDie().scalar();
+        if (function_name == "sum_of_squares") {
+            // Special case for sum_of_squares since Arrow does not have this
+            // function we need to compute it manually as sum(x*x)
+            arrow::Result<arrow::Datum> square_res =
+                arrow::compute::CallFunction("multiply",
+                                             {in_arrow_array, in_arrow_array});
+            CHECK_ARROW(square_res.status(),
+                        "Error in Arrow compute multiply for sum_of_squares");
+            std::shared_ptr<arrow::Array> square_array =
+                square_res.ValueOrDie().make_array();
+            arrow::Result<arrow::Datum> sum_res =
+                arrow::compute::CallFunction("sum", {square_array});
+            CHECK_ARROW(sum_res.status(),
+                        "Error in Arrow compute sum for sum_of_squares");
+            out_scalar_batch = sum_res.ValueOrDie().scalar();
+        } else {
+            // Reduce Arrow array using compute function
+            arrow::Result<arrow::Datum> cmp_res =
+                arrow::compute::CallFunction(function_name, {in_arrow_array});
+            CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
+            out_scalar_batch = cmp_res.ValueOrDie().scalar();
+        }
 
         reductions.push_back(out_scalar_batch);
     }
@@ -144,6 +161,9 @@ OperatorResult PhysicalReduce::ConsumeBatch(
             } else if (func_name == "mean") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionMean>());
+            } else if (func_name == "std") {
+                reduction_functions.push_back(
+                    std::make_unique<ReductionFunctionStd>());
             } else {
                 throw std::runtime_error("Unsupported reduction function: " +
                                          func_name);
@@ -170,7 +190,7 @@ void ReductionFunctionMean::Finalize() {
         this->results = {arrow::MakeNullScalar(sum_scalar->type)};
         return;
     }
-    // Mean should always be float64
+    // Mean should always be float64 so convert sum and count to float64
     std::shared_ptr<arrow::Scalar> sum_float_scalar;
     if (sum_scalar->type->id() != arrow::Type::DOUBLE) {
         arrow::Result<arrow::Datum> cast_res =
@@ -180,7 +200,6 @@ void ReductionFunctionMean::Finalize() {
     } else {
         sum_float_scalar = sum_scalar;
     }
-    // Convert count to float64
     arrow::Result<arrow::Datum> cast_res =
         arrow::compute::Cast(arrow::Datum(count_scalar), arrow::float64());
     CHECK_ARROW(cast_res.status(), "Error in Arrow compute cast");
@@ -188,20 +207,96 @@ void ReductionFunctionMean::Finalize() {
         cast_res.ValueOrDie().scalar();
 
     this->results = {sum_float_scalar, count_float_scalar};
+
     // Combine across ranks
     ReductionFunction::Finalize();
 
     // Compute mean from sum and count
     arrow::Result<arrow::Datum> mean_res = arrow::compute::CallFunction(
-        "divide", {arrow::Datum(sum_float_scalar), arrow::Datum(count_scalar)});
+        "divide",
+        {arrow::Datum(this->results[0]), arrow::Datum(this->results[1])});
     CHECK_ARROW(mean_res.status(), "Error in Arrow compute divide");
     this->results = {mean_res.ValueOrDie().scalar()};
 }
 
 void ReductionFunctionStd::Finalize() {
-    throw std::runtime_error("Std reduction not implemented yet.");
-}
+    const std::shared_ptr<arrow::Scalar>& sum_scalar = this->results[0];
+    const std::shared_ptr<arrow::Scalar>& count_scalar = this->results[1];
+    const std::shared_ptr<arrow::Scalar>& sumsq_scalar = this->results[2];
+    if (sum_scalar == nullptr || !sum_scalar->is_valid ||
+        sumsq_scalar == nullptr || !sumsq_scalar->is_valid ||
+        count_scalar == nullptr || !count_scalar->is_valid) {
+        this->results = {arrow::MakeNullScalar(sum_scalar->type)};
+        return;
+    }
+    // Std should always be float64 so convert sum, sumsq and count to float64
+    std::shared_ptr<arrow::Scalar> sum_float_scalar;
+    if (sum_scalar->type->id() != arrow::Type::DOUBLE) {
+        arrow::Result<arrow::Datum> cast_res =
+            arrow::compute::Cast(arrow::Datum(sum_scalar), arrow::float64());
+        CHECK_ARROW(cast_res.status(), "Error in Arrow compute cast");
+        sum_float_scalar = cast_res.ValueOrDie().scalar();
+    } else {
+        sum_float_scalar = sum_scalar;
+    }
+    std::shared_ptr<arrow::Scalar> sumsq_float_scalar;
+    if (sumsq_scalar->type->id() != arrow::Type::DOUBLE) {
+        arrow::Result<arrow::Datum> cast_res =
+            arrow::compute::Cast(arrow::Datum(sumsq_scalar), arrow::float64());
+        CHECK_ARROW(cast_res.status(), "Error in Arrow compute cast");
+        sumsq_float_scalar = cast_res.ValueOrDie().scalar();
+    } else {
+        sumsq_float_scalar = sumsq_scalar;
+    }
+    arrow::Result<arrow::Datum> cast_res =
+        arrow::compute::Cast(arrow::Datum(count_scalar), arrow::float64());
+    CHECK_ARROW(cast_res.status(), "Error in Arrow compute cast");
+    std::shared_ptr<arrow::Scalar> count_float_scalar =
+        cast_res.ValueOrDie().scalar();
 
-void ReductionFunctionStd::CombineResults(const arrow::ScalarVector& other) {
-    throw std::runtime_error("Std reduction not implemented yet.");
+    this->results = {sum_float_scalar, sumsq_float_scalar, count_float_scalar};
+
+    // Combine across ranks
+    ReductionFunction::Finalize();
+    arrow::Datum sum_datum(this->results[0]);
+    arrow::Datum sum_sq_datum(this->results[1]);
+    arrow::Datum count_datum(this->results[2]);
+
+    // --- Calculate sum^2 ---
+    arrow::Result<arrow::Datum> sum_squared_res =
+        arrow::compute::CallFunction("multiply", {sum_datum, sum_datum});
+    CHECK_ARROW(sum_squared_res.status(), "Error in Arrow compute 'multiply'");
+    arrow::Datum sum_squared_datum = sum_squared_res.ValueUnsafe();
+
+    // --- Calculate (sum^2) / count ---
+    arrow::Result<arrow::Datum> term_res = arrow::compute::CallFunction(
+        "divide", {sum_squared_datum, count_datum});
+    CHECK_ARROW(term_res.status(), "Error in Arrow compute 'divide'");
+    arrow::Datum term_datum = term_res.ValueUnsafe();
+
+    // --- Calculate the numerator: sum_sq - (sum^2 / count) ---
+    arrow::Result<arrow::Datum> numerator_res =
+        arrow::compute::CallFunction("subtract", {sum_sq_datum, term_datum});
+    CHECK_ARROW(numerator_res.status(), "Error in Arrow compute 'subtract'");
+    arrow::Datum numerator_datum = numerator_res.ValueUnsafe();
+
+    // --- Calculate the denominator: count - 1 ---
+    arrow::Result<arrow::Datum> denominator_res = arrow::compute::CallFunction(
+        "subtract", {count_datum, arrow::Datum(1)});
+    CHECK_ARROW(denominator_res.status(), "Error in Arrow compute 'subtract'");
+    arrow::Datum denominator_datum = denominator_res.ValueUnsafe();
+
+    // --- Calculate variance: numerator / denominator ---
+    arrow::Result<arrow::Datum> variance_res = arrow::compute::CallFunction(
+        "divide", {numerator_datum, denominator_datum});
+    CHECK_ARROW(variance_res.status(), "Error in Arrow compute 'divide'");
+    arrow::Datum variance_datum = variance_res.ValueUnsafe();
+
+    // --- Calculate standard deviation: sqrt(variance) ---
+    arrow::Result<arrow::Datum> std_dev_res =
+        arrow::compute::CallFunction("sqrt", {variance_datum});
+    CHECK_ARROW(std_dev_res.status(), "Error in Arrow compute 'sqrt'");
+    arrow::Datum std_dev_datum = std_dev_res.ValueUnsafe();
+
+    this->results = {std_dev_datum.scalar()};
 }

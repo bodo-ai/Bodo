@@ -106,7 +106,6 @@ struct ReductionFunctionStd : public ReductionFunction {
                ReductionType::AGGREGATION},
               {nullptr, nullptr, nullptr}) {}
     void Finalize() override;
-    void CombineResults(const arrow::ScalarVector& other_results) override;
 };
 
 /**
