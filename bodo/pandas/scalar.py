@@ -38,10 +38,16 @@ class BodoScalar(BodoLazyWrapper):
         return self.wrapped_series.is_lazy_plan()
 
     def get_value(self):
+        import warnings
+
         import bodo.spawn.spawner
+        from bodo.pandas.utils import BodoLibFallbackWarning
 
         self.wrapped_series.execute_plan()
         assert len(self.wrapped_series) == bodo.spawn.spawner.get_num_workers()
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
         assert self.wrapped_series.nunique() == 1
         return self.wrapped_series[0]
 
