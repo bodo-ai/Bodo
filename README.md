@@ -14,9 +14,14 @@ NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart
 
 # Bodo DataFrames: Drop-in Pandas Replacement for Acceleration and Scaling of Data and AI
 
-Bodo DataFrames is a high performance dataframe library for large scale Python data processing, AI, and ML use cases.
+Bodo DataFrames is a high performance DataFrame library for large scale Python data processing, AI/ML use cases.
 It functions as a drop-in replacement for Pandas while providing additional Pandas-compatible APIs for simplifying and scaling AI workloads,
-a Just-In-Time (JIT) compiler for accelerating custom transformations, as well as an integrated SQL engine for extra flexibility.
+a just-in-time (JIT) compiler for accelerating custom transformations, as well as an integrated SQL engine for extra flexibility.
+
+Under the hood, Bodo DataFrames relies on MPI-based high-performance computing (HPC) technology,
+often making it orders of magnitude faster than tools like Spark or Dask.
+Refer to our [NYC Taxi benchmark](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi)
+for an example where Bodo is 2-240x faster than other systems:
 
 <!-- TODO: updated graph with Taxi benchmark including Bodo DataFrames Pandas API -->
 <img src="benchmarks/img/nyc-taxi-benchmark.png" alt="NYC Taxi Benchmark" width="500"/>
@@ -51,7 +56,7 @@ Provide robust support for industry-leading data platforms like Apache Iceberg a
 C++ runtime,
 and parallel execution using MPI to achieve the best possible performance while leveraging all available cores.
 - Streaming execution to process larger-than-memory datasets.
-- Just in Time (JIT) compilation with native support for Pandas, Numpy and Scikit-learn
+- Just in time (JIT) compilation with native support for Pandas, Numpy and Scikit-learn
 for accelerating custom transformations or performance-critical functions.
 - High performance SQL engine that is natively integrated into Python.
 - Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
