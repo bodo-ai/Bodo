@@ -118,10 +118,7 @@ struct ReductionFunctionStd : public ReductionFunction {
                            ReductionType::AGGREGATION};
     }
     void Finalize() override;
-    void ConsumeBatch(std::shared_ptr<arrow::Array> in_arrow_array) override {
-        // This needs to be implemented specifically for std since arrow does
-        // not have a sum_of_squares function
-    }
+    void ConsumeBatch(std::shared_ptr<arrow::Array> in_arrow_array) override;
 };
 
 /**

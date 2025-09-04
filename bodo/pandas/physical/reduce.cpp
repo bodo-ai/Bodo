@@ -157,3 +157,16 @@ OperatorResult PhysicalReduce::ConsumeBatch(
                ? OperatorResult::FINISHED
                : OperatorResult::NEED_MORE_INPUT;
 }
+
+void ReductionFunctionMean::Finalize() {
+    throw std::runtime_error("Mean reduction not implemented yet.");
+}
+
+void ReductionFunctionStd::Finalize() {
+    throw std::runtime_error("Std reduction not implemented yet.");
+}
+
+void ReductionFunctionStd::ConsumeBatch(
+    std::shared_ptr<arrow::Array> in_arrow_array) {
+    throw std::runtime_error("Std reduction not implemented yet.");
+}
