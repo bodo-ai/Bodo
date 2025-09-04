@@ -84,7 +84,7 @@ void ReductionFunction::Finalize() {
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
 
     // Broadcast local max from each rank to all other ranks
-    for (size_t i = 0; i < n_ranks; i++) {
+    for (int i = 0; i < n_ranks; i++) {
         // Convert scalar to array so we can convert to bodo array for broadcast
         auto arrow_array_builder_res = arrow::MakeBuilder(results[0]->type);
         auto arrow_array_builder = arrow_array_builder_res.MoveValueUnsafe();
