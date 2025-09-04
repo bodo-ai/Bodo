@@ -2021,10 +2021,6 @@ def test_filter_pushdown_row_count_caching(
     assert "1 rows" in plan, "Plan should have 1 row in the cost estimate"
     assert "5.9849e4 rows" in plan, "Plan should have 59849 rows in the cost estimate"
 
-    # Empirically, it takes a moment for the query history to update,
-    # so we sleep for a few seconds to ensure that the query history is updated
-    time.sleep(2)
-
     # This query will get the list of all queries that match the specified pattern
     # in the past minute
     metadata_query = """select * from table(information_schema.QUERY_HISTORY_BY_WAREHOUSE(
@@ -2036,7 +2032,15 @@ def test_filter_pushdown_row_count_caching(
                             CONTAINS(QUERY_TEXT, 'SELECT COUNT(*) FROM (SELECT * FROM "TEST_DB"."PUBLIC"."TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY" WHERE "C_COMMENT" = ')
                     """
 
-    df = pd.read_sql(metadata_query, conn_str)
+    # Try 4 times to make sure history is updated
+    for _ in range(4):
+        # Empirically, it takes a moment for the query history to update,
+        # so we sleep for a few seconds to ensure that the query history is updated
+        time.sleep(2)
+        df = pd.read_sql(metadata_query, conn_str)
+        if len(df) != 0:
+            break
+
     # We expect two rows, one for each filter
     assert len(df) == 2, "We should have two rows in the query history"
     assert df["query_text"].str.contains("SELECT COUNT(*)", regex=False).all(), (
