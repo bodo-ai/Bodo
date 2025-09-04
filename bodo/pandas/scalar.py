@@ -40,15 +40,16 @@ class BodoScalar(BodoLazyWrapper):
     def get_value(self):
         import warnings
 
-        import bodo.spawn.spawner
         from bodo.pandas.utils import BodoLibFallbackWarning
 
+        prev_lazy = self._lazy
         self.wrapped_series.execute_plan()
-        assert len(self.wrapped_series) == bodo.spawn.spawner.get_num_workers()
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
-        assert self.wrapped_series.nunique() == 1
+        if prev_lazy:
+            # If we were lazy before we need to confirm
+            # that we have exactly one unique value
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+            assert self.wrapped_series.nunique() == 1
         return self.wrapped_series[0]
 
     def __getattribute__(self, name):
