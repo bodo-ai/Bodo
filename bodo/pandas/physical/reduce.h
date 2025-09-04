@@ -35,90 +35,78 @@ struct PhysicalReduceMetrics {
 };
 
 struct ReductionFunction {
-    virtual void Finalize();
-    virtual void ConsumeBatch(std::shared_ptr<arrow::Array> in_arrow_array);
-    virtual ~ReductionFunction() = default;
     std::vector<std::string> function_names;
     std::vector<std::string> reduction_names;
     std::vector<ReductionType> reduction_types;
     arrow::ScalarVector results;
     arrow::DataTypeVector result_types;
+    ReductionFunction(std::vector<std::string> function_names,
+                      std::vector<std::string> reduction_names,
+                      std::vector<ReductionType> reduction_types,
+                      arrow::ScalarVector initial_results)
+        : function_names(std::move(function_names)),
+          reduction_names(std::move(reduction_names)),
+          reduction_types(std::move(reduction_types)),
+          results(std::move(initial_results)) {
+        assert(this->function_names.size() == this->reduction_names.size());
+        assert(this->function_names.size() == this->reduction_types.size());
+        assert(this->function_names.size() == this->results.size());
+        assert(!this->function_names.empty());
+    }
+    virtual void Finalize();
+    void ConsumeBatch(std::shared_ptr<arrow::Array> in_arrow_array);
+    virtual void CombineResults(const arrow::ScalarVector& other_results);
+    virtual ~ReductionFunction() = default;
 };
 
 struct ReductionFunctionMax : public ReductionFunction {
-    ReductionFunctionMax(arrow::ScalarVector initial_results) {
-        assert(initial_results.size() == 1);
-        function_names = {"max"};
-        reduction_names = {"greater"};
-        results = initial_results;
-        reduction_types = {ReductionType::COMPARISON};
-    }
+    ReductionFunctionMax()
+        : ReductionFunction({"max"}, {"greater"}, {ReductionType::COMPARISON},
+                            {nullptr}) {}
 };
 
 struct ReductionFunctionMin : public ReductionFunction {
-    ReductionFunctionMin(arrow::ScalarVector initial_results) {
-        assert(initial_results.size() == 1);
-        function_names = {"min"};
-        reduction_names = {"less"};
-        results = initial_results;
-        reduction_types = {ReductionType::COMPARISON};
-    }
+    ReductionFunctionMin()
+        : ReductionFunction({"min"}, {"less"}, {ReductionType::COMPARISON},
+                            {nullptr}) {}
 };
 
 struct ReductionFunctionSum : public ReductionFunction {
-    ReductionFunctionSum(arrow::ScalarVector initial_results) {
-        assert(initial_results.size() == 1);
-        function_names = {"sum"};
-        reduction_names = {"add"};
-        results = initial_results;
-        reduction_types = {ReductionType::AGGREGATION};
-    }
+    ReductionFunctionSum()
+        : ReductionFunction({"sum"}, {"add"}, {ReductionType::AGGREGATION},
+                            {nullptr}) {}
 };
 
 struct ReductionFunctionProduct : public ReductionFunction {
-    ReductionFunctionProduct(arrow::ScalarVector initial_results) {
-        assert(initial_results.size() == 1);
-        function_names = {"product"};
-        reduction_names = {"multiply"};
-        results = initial_results;
-        reduction_types = {ReductionType::AGGREGATION};
-    }
+    ReductionFunctionProduct()
+        : ReductionFunction({"product"}, {"multiply"},
+                            {ReductionType::AGGREGATION}, {nullptr}) {}
 };
 
 struct ReductionFunctionCount : public ReductionFunction {
-    ReductionFunctionCount(arrow::ScalarVector initial_results) {
-        assert(initial_results.size() == 1);
-        function_names = {"count"};
-        reduction_names = {"add"};
-        results = initial_results;
-        reduction_types = {ReductionType::AGGREGATION};
-    }
+    ReductionFunctionCount()
+        : ReductionFunction({"count"}, {"add"}, {ReductionType::AGGREGATION},
+                            {nullptr}) {}
 };
 
 struct ReductionFunctionMean : public ReductionFunction {
-    ReductionFunctionMean(arrow::ScalarVector initial_results) {
-        assert(initial_results.size() == 2);
-        function_names = {"sum", "count"};
-        reduction_names = {"add", "add"};
-        results = initial_results;
-        reduction_types = {ReductionType::AGGREGATION,
-                           ReductionType::AGGREGATION};
-    }
+    ReductionFunctionMean()
+        : ReductionFunction(
+              {"sum", "count"}, {"add", "add"},
+              {ReductionType::AGGREGATION, ReductionType::AGGREGATION},
+              {nullptr, nullptr}) {}
     void Finalize() override;
 };
 
 struct ReductionFunctionStd : public ReductionFunction {
-    ReductionFunctionStd(arrow::ScalarVector initial_results) {
-        assert(initial_results.size() == 3);
-        function_names = {"sum", "count", "sum_of_squares"};
-        reduction_names = {"add", "add", "add"};
-        results = initial_results;
-        reduction_types = {ReductionType::AGGREGATION,
-                           ReductionType::AGGREGATION,
-                           ReductionType::AGGREGATION};
-    }
+    ReductionFunctionStd()
+        : ReductionFunction(
+              {"sum", "count", "sum_of_squares"}, {"add", "add", "add"},
+              {ReductionType::AGGREGATION, ReductionType::AGGREGATION,
+               ReductionType::AGGREGATION},
+              {nullptr, nullptr, nullptr}) {}
     void Finalize() override;
-    void ConsumeBatch(std::shared_ptr<arrow::Array> in_arrow_array) override;
+    void CombineResults(const arrow::ScalarVector& other_results) override;
 };
 
 /**

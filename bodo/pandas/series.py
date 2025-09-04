@@ -914,7 +914,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         from bodo.pandas.scalar import BodoScalar
 
-        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["min"]))["0"])
+        reduction = _compute_series_reduce(self, ["min"])
+        if isinstance(reduction, LazyPlan):
+            return BodoScalar(wrap_plan(plan=reduction)["0"])
+        else:
+            return reduction[0]
 
     @check_args_fallback(unsupported="all")
     def max(
@@ -922,7 +926,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         from bodo.pandas.scalar import BodoScalar
 
-        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["max"]))["0"])
+        reduction = _compute_series_reduce(self, ["max"])
+        if isinstance(reduction, LazyPlan):
+            return BodoScalar(wrap_plan(plan=reduction)["0"])
+        else:
+            return reduction[0]
 
     @check_args_fallback(unsupported="all")
     def sum(
@@ -935,7 +943,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         from bodo.pandas.scalar import BodoScalar
 
-        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["sum"]))["0"])
+        reduction = _compute_series_reduce(self, ["sum"])
+        if isinstance(reduction, LazyPlan):
+            return BodoScalar(wrap_plan(plan=reduction)["0"])
+        else:
+            return reduction[0]
 
     @check_args_fallback(unsupported="all")
     def prod(
@@ -948,9 +960,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         from bodo.pandas.scalar import BodoScalar
 
-        return BodoScalar(
-            wrap_plan(plan=_compute_series_reduce(self, ["product"]))["0"]
-        )
+        reduction = _compute_series_reduce(self, ["product"])
+        if isinstance(reduction, LazyPlan):
+            return BodoScalar(wrap_plan(plan=reduction)["0"])
+        else:
+            return reduction[0]
 
     product = prod
 
@@ -958,21 +972,33 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def count(self):
         from bodo.pandas.scalar import BodoScalar
 
-        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["count"]))["0"])
+        reduction = _compute_series_reduce(self, ["count"])
+        if isinstance(reduction, LazyPlan):
+            return BodoScalar(wrap_plan(plan=reduction)["0"])
+        else:
+            return reduction[0]
 
     @check_args_fallback(unsupported="all")
     def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
         """Returns sample mean."""
         from bodo.pandas.scalar import BodoScalar
 
-        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["mean"]))["0"])
+        reduction = _compute_series_reduce(self, ["mean"])
+        if isinstance(reduction, LazyPlan):
+            return BodoScalar(wrap_plan(plan=reduction)["0"])
+        else:
+            return reduction[0]
 
     @check_args_fallback(supported=["ddof"])
     def std(self, axis=None, skipna=True, ddof=1, numeric_only=False, **kwargs):
         """Returns sample standard deviation."""
         from bodo.pandas.scalar import BodoScalar
 
-        return BodoScalar(wrap_plan(plan=_compute_series_reduce(self, ["std"]))["0"])
+        reduction = _compute_series_reduce(self, ["std"])
+        if isinstance(reduction, LazyPlan):
+            return BodoScalar(wrap_plan(plan=reduction)["0"])
+        else:
+            return reduction[0]
 
     @check_args_fallback(supported=["percentiles"])
     def describe(self, percentiles=None, include=None, exclude=None):
@@ -1029,13 +1055,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         # Evaluate std
         squared = self.map(lambda x: x * x, na_action="ignore")
-        squared_sum = _compute_series_reduce(squared, ["sum"])[0]
+        _compute_series_reduce(squared, ["sum"])[0]
 
-        std_val = (
-            ((squared_sum - (sum**2) / count) / (count - 1)) ** 0.5
-            if count != 1
-            else pd.NA
-        )
+        std_val = _compute_series_reduce(squared, ["std"])[0]
 
         # Evaluate quantiles, min, and max altogether since KLL tracks exact min and max values
         min_q_max = [0.0] + quantile_qs + [1.0]
@@ -2081,14 +2103,8 @@ def is_numeric(other):
 
 def func_name_to_str(func_name):
     """Converts built-in functions to string."""
-    if func_name in ("min", "max", "sum", "product", "prod", "count"):
+    if func_name in ("min", "max", "sum", "product", "prod", "count", "mean", "std"):
         return func_name
-    if func_name == sum:
-        return "sum"
-    if func_name == max:
-        return "max"
-    if func_name == min:
-        return "min"
     raise BodoLibNotImplementedException(
         f"{func_name}() not supported for BodoSeries reduction."
     )
@@ -2137,6 +2153,13 @@ def validate_reduce(func_name, pa_type):
 
     elif func_name in ("count",):
         return pa.int64()
+    elif func_name in ("mean", "std"):
+        if pd.api.types.is_numeric_dtype(pd.ArrowDtype(pa_type)):
+            return pa.float64()
+        else:
+            raise BodoLibNotImplementedException(
+                f"{func_name}() not implemented for {pa_type} type."
+            )
     else:
         raise BodoLibNotImplementedException(
             f"{func_name}() not implemented for {pa_type} type."
@@ -2153,6 +2176,8 @@ def generate_null_reduce(func_names):
             res.append(0)
         elif func_name == "product":
             res.append(1)
+        elif func_name in ("mean", "std"):
+            res.append(pd.NA)
         else:
             raise BodoLibNotImplementedException(f"{func_name}() not implemented.")
     return res
@@ -2195,19 +2220,6 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
         exprs,
     )
     return plan
-    out_rank = execute_plan(plan)
-
-    df = pd.DataFrame(out_rank)
-    res = []
-    # TODO: use parallel reduction for slight improvement in very large scales
-    for i in range(len(df.columns)):
-        func_name = func_names[i]
-        reduced_val = getattr(
-            df[str(i)], "sum" if func_name == "count" else func_name
-        )()
-        res.append(reduced_val)
-    assert len(res) == len(func_names)
-    return res
 
 
 def validate_quantile(q):

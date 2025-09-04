@@ -42,9 +42,9 @@ class BodoScalar(BodoLazyWrapper):
 
         from bodo.pandas.utils import BodoLibFallbackWarning
 
-        prev_lazy = self._lazy
+        prev_lazy_plan = self.is_lazy_plan()
         self.wrapped_series.execute_plan()
-        if prev_lazy:
+        if prev_lazy_plan:
             # If we were lazy before we need to confirm
             # that we have exactly one unique value
             with warnings.catch_warnings():
@@ -61,10 +61,22 @@ class BodoScalar(BodoLazyWrapper):
             "_exec_state",
             "get_value",
             "_get_result_id",
+            "is_lazy_plan",
+            "execute_plan",
+            "update_from_lazy_metadata",
+            "from_lazy_metadata",
+            "__array__",
+            "__class__",
         }:
             return object.__getattribute__(self, name)
         scalar = self.get_value()
         return getattr(scalar, name)
+
+    def __array__(self, dtype=None):
+        import numpy as np
+
+        scalar = self.get_value()
+        return np.array(scalar, dtype=dtype)
 
     def _make_delegator(name):
         def delegator(self, *args, **kwargs):
@@ -122,6 +134,8 @@ class BodoScalar(BodoLazyWrapper):
         "__complex__",
         "__hash__",
         "__bool__",
+        "__len__",
+        "__contains__",
     ]
     # TODO: Support lazy operations if other is also a BodoScalar
     for _method_name in _dunder_methods:

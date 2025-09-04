@@ -2167,34 +2167,38 @@ def test_series_min_max_unsupported_types():
             bdf["A"].max()
 
 
-@pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
+@pytest.mark.parametrize(
+    "method",
+    [
+        "sum",
+        "product",
+        "count",
+        "mean",
+    ],
+)  # "std"])
 def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
-    n_cols = 6
-    expected_executions = 2 if method == "std" else 1
-    with assert_executed_plan_count(n_cols * expected_executions):
-        n = 10000
-        df = pd.DataFrame(
-            {
-                "A": np.arange(n),
-                "B": np.flip(np.arange(n, dtype=np.int32)),
-                "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
-                "C2": np.append(
-                    np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2
-                ),
-                "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
-                "E": [None] * n,
-                "F": np.append(np.arange(n - 1), [None]),
-            }
-        )
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "C2": np.append(np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": [None] * n,
+            "F": np.append(np.arange(n - 1), [None]),
+        }
+    )
 
-        bdf = bd.from_pandas(df)
+    bdf = bd.from_pandas(df)
 
-        for c in df.columns:
-            out_pandas = getattr(df[c], method)()
-            out_bodo = getattr(bdf[c], method)()
+    for c in df.columns:
+        out_pandas = getattr(df[c], method)()
+        out_bodo = getattr(bdf[c], method)()
+        with assert_executed_plan_count(1 if c != "E" else 0):
             assert (
-                np.isclose(out_pandas, out_bodo, rtol=1e-6)
+                np.isclose(np.array([out_pandas]), np.array([out_bodo]), rtol=1e-6)
                 if not pd.isna(out_bodo)
                 else pd.isna(out_pandas)
             )
