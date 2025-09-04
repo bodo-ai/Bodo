@@ -212,7 +212,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             and hasattr(pd.DataFrame, name)
         ):
             msg = (
-                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                f"{name} is not implemented in Bodo DataFrames yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             return fallback_wrapper(

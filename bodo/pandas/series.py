@@ -183,7 +183,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             and hasattr(pd.Series, name)
         ):
             msg = (
-                f"Series.{name} is not implemented in Bodo Dataframe Library yet. "
+                f"Series.{name} is not implemented in Bodo DataFrames yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             return fallback_wrapper(
@@ -1299,7 +1299,7 @@ class BodoStringMethods:
         except AttributeError:
             msg = (
                 f"StringMethods.{name} is not "
-                "implemented in Bodo dataframe library for the specified arguments yet. "
+                "implemented in Bodo DataFrames for the specified arguments yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
@@ -1906,7 +1906,7 @@ class BodoDatetimeProperties:
         except AttributeError:
             msg = (
                 f"Series.dt.{name} is not "
-                "implemented in Bodo dataframe library yet. "
+                "implemented in Bodo DataFrames yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):

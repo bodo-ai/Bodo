@@ -324,7 +324,7 @@ class SeriesGroupBy:
         except AttributeError:
             msg = (
                 f"SeriesGroupBy.{name} is not "
-                "implemented in Bodo dataframe library yet. "
+                "implemented in Bodo DataFrames yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             warnings.warn(BodoLibFallbackWarning(msg))
