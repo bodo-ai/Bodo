@@ -56,7 +56,7 @@ Provide robust support for industry-leading data platforms like Apache Iceberg a
 C++ runtime,
 and parallel execution using MPI to achieve the best possible performance while leveraging all available cores.
 - Streaming execution to process larger-than-memory datasets.
-- Just in Time (JIT) compilation with native support for Pandas, Numpy and Scikit-learn
+- Just in time (JIT) compilation with native support for Pandas, Numpy and Scikit-learn
 for accelerating custom transformations or performance-critical functions.
 - High performance SQL engine that is natively integrated into Python.
 - Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
