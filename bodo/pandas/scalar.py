@@ -49,7 +49,7 @@ class BodoScalar(BodoLazyWrapper):
             # that we have exactly one unique value
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
-            assert self.wrapped_series.nunique() == 1
+            assert self.wrapped_series.nunique() in {0, 1}
         return self.wrapped_series[0]
 
     def __getattribute__(self, name):
@@ -136,6 +136,7 @@ class BodoScalar(BodoLazyWrapper):
         "__bool__",
         "__len__",
         "__contains__",
+        "_is_na",
     ]
     # TODO: Support lazy operations if other is also a BodoScalar
     for _method_name in _dunder_methods:

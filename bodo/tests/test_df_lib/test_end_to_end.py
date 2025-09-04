@@ -2384,7 +2384,7 @@ def test_series_describe_numeric(percentiles):
     bdf = bd.from_pandas(df)
     for c in df.columns:
         with assert_executed_plan_count(
-            0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 3
+            0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 5
         ):
             describe_pd = df[c].describe(percentiles=percentiles)
             describe_bodo = bdf[c].describe(percentiles=percentiles)

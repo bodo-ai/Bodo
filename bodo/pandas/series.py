@@ -914,11 +914,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         from bodo.pandas.scalar import BodoScalar
 
-        reduction = _compute_series_reduce(self, ["min"])
-        if isinstance(reduction, LazyPlan):
-            return BodoScalar(wrap_plan(plan=reduction)["0"])
-        else:
-            return reduction[0]
+        df = _compute_series_reduce(self, ["min"])
+        if df.is_lazy_plan():
+            return BodoScalar(df["0"])
+        return df["0"][0]
 
     @check_args_fallback(unsupported="all")
     def max(
@@ -926,11 +925,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         from bodo.pandas.scalar import BodoScalar
 
-        reduction = _compute_series_reduce(self, ["max"])
-        if isinstance(reduction, LazyPlan):
-            return BodoScalar(wrap_plan(plan=reduction)["0"])
-        else:
-            return reduction[0]
+        df = _compute_series_reduce(self, ["max"])
+        if df.is_lazy_plan():
+            return BodoScalar(df["0"])
+        return df["0"][0]
 
     @check_args_fallback(unsupported="all")
     def sum(
@@ -943,11 +941,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         from bodo.pandas.scalar import BodoScalar
 
-        reduction = _compute_series_reduce(self, ["sum"])
-        if isinstance(reduction, LazyPlan):
-            return BodoScalar(wrap_plan(plan=reduction)["0"])
-        else:
-            return reduction[0]
+        df = _compute_series_reduce(self, ["sum"])
+        if df.is_lazy_plan():
+            return BodoScalar(df["0"])
+        return df["0"][0]
 
     @check_args_fallback(unsupported="all")
     def prod(
@@ -960,11 +957,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     ):
         from bodo.pandas.scalar import BodoScalar
 
-        reduction = _compute_series_reduce(self, ["product"])
-        if isinstance(reduction, LazyPlan):
-            return BodoScalar(wrap_plan(plan=reduction)["0"])
-        else:
-            return reduction[0]
+        df = _compute_series_reduce(self, ["product"])
+        if df.is_lazy_plan():
+            return BodoScalar(df["0"])
+        return df["0"][0]
 
     product = prod
 
@@ -972,33 +968,30 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
     def count(self):
         from bodo.pandas.scalar import BodoScalar
 
-        reduction = _compute_series_reduce(self, ["count"])
-        if isinstance(reduction, LazyPlan):
-            return BodoScalar(wrap_plan(plan=reduction)["0"])
-        else:
-            return reduction[0]
+        df = _compute_series_reduce(self, ["count"])
+        if df.is_lazy_plan():
+            return BodoScalar(df["0"])
+        return df["0"][0]
 
     @check_args_fallback(unsupported="all")
     def mean(self, axis=0, skipna=True, numeric_only=False, **kwargs):
         """Returns sample mean."""
         from bodo.pandas.scalar import BodoScalar
 
-        reduction = _compute_series_reduce(self, ["mean"])
-        if isinstance(reduction, LazyPlan):
-            return BodoScalar(wrap_plan(plan=reduction)["0"])
-        else:
-            return reduction[0]
+        df = _compute_series_reduce(self, ["mean"])
+        if df.is_lazy_plan():
+            return BodoScalar(df["0"])
+        return df["0"][0]
 
     @check_args_fallback(supported=["ddof"])
     def std(self, axis=None, skipna=True, ddof=1, numeric_only=False, **kwargs):
         """Returns sample standard deviation."""
         from bodo.pandas.scalar import BodoScalar
 
-        reduction = _compute_series_reduce(self, ["std"])
-        if isinstance(reduction, LazyPlan):
-            return BodoScalar(wrap_plan(plan=reduction)["0"])
-        else:
-            return reduction[0]
+        df = _compute_series_reduce(self, ["std"])
+        if df.is_lazy_plan():
+            return BodoScalar(df["0"])
+        return df["0"][0]
 
     @check_args_fallback(supported=["percentiles"])
     def describe(self, percentiles=None, include=None, exclude=None):
@@ -1040,7 +1033,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         index = ["count", "mean", "std", "min"] + quantile_index + ["max"]
 
         # Evaluate count and sum
-        count, sum = _compute_series_reduce(self, ["count", "sum"])
+        stats_df = _compute_series_reduce(self, ["count", "mean", "std"])
+        stats_df.execute_plan()
+        count = stats_df["0"][0]
+        mean = stats_df["1"][0]
+        std = stats_df["2"][0]
         if count == 0:
             return BodoSeries(
                 [0] + [pd.NA] * (len(index) - 1),
@@ -1049,15 +1046,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 dtype=pd.ArrowDtype(pa.float64()),
             )
         count = float(count)  # Float cast to match Pandas behavior
-
-        # Evaluate mean
-        mean_val = sum / count
-
-        # Evaluate std
-        squared = self.map(lambda x: x * x, na_action="ignore")
-        _compute_series_reduce(squared, ["sum"])[0]
-
-        std_val = _compute_series_reduce(squared, ["std"])[0]
 
         # Evaluate quantiles, min, and max altogether since KLL tracks exact min and max values
         min_q_max = [0.0] + quantile_qs + [1.0]
@@ -1087,9 +1075,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         out_rank = execute_plan(plan)
         quantile_df = pd.DataFrame(out_rank)
 
-        result = [count, mean_val, std_val] + [
-            quantile_df[str(val)][0] for val in min_q_max
-        ]
+        result = [count, mean, std] + [quantile_df[str(val)][0] for val in min_q_max]
 
         return BodoSeries(
             result,
@@ -2103,7 +2089,7 @@ def is_numeric(other):
 
 def func_name_to_str(func_name):
     """Converts built-in functions to string."""
-    if func_name in ("min", "max", "sum", "product", "prod", "count", "mean", "std"):
+    if func_name in ("min", "max", "sum", "product", "count", "mean", "std"):
         return func_name
     raise BodoLibNotImplementedException(
         f"{func_name}() not supported for BodoSeries reduction."
@@ -2168,6 +2154,8 @@ def validate_reduce(func_name, pa_type):
 
 def generate_null_reduce(func_names):
     """Generates a list that maps reduction operations to their default values."""
+    from bodo.pandas.frame import BodoDataFrame
+
     res = []
     for func_name in func_names:
         if func_name in ("max", "min"):
@@ -2180,7 +2168,7 @@ def generate_null_reduce(func_names):
             res.append(pd.NA)
         else:
             raise BodoLibNotImplementedException(f"{func_name}() not implemented.")
-    return res
+    return BodoDataFrame({f"{i}": [res[i]] for i in range(len(res))}).execute_plan()
 
 
 def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
@@ -2188,7 +2176,6 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
     Computes a list of reduction functions like ["min", "max"] on a BodoSeries.
     Returns a list of equal length that stores reduction values of each function.
     """
-
     if not isinstance(bodo_series.dtype, pd.ArrowDtype):
         raise BodoLibNotImplementedException()
 
@@ -2219,7 +2206,7 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
         [],
         exprs,
     )
-    return plan
+    return wrap_plan(plan=plan)
 
 
 def validate_quantile(q):
