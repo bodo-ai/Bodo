@@ -105,146 +105,55 @@ def collect_datasets(func: Callable):
 
 
 def tpch_q01(lineitem, pd=pd):
-    date = pd.Timestamp("1998-09-02")
-    lineitem_filtered = lineitem.loc[
-        :,
-        [
-            "L_QUANTITY",
-            "L_EXTENDEDPRICE",
-            "L_DISCOUNT",
-            "L_TAX",
-            "L_RETURNFLAG",
-            "L_LINESTATUS",
-            "L_SHIPDATE",
-            "L_ORDERKEY",
-        ],
-    ]
-    sel = lineitem_filtered.L_SHIPDATE <= date
-    lineitem_filtered = lineitem_filtered[sel]
-    lineitem_filtered["AVG_QTY"] = lineitem_filtered.L_QUANTITY
-    lineitem_filtered["AVG_PRICE"] = lineitem_filtered.L_EXTENDEDPRICE
-    lineitem_filtered["DISC_PRICE"] = lineitem_filtered.L_EXTENDEDPRICE * (
-        1 - lineitem_filtered.L_DISCOUNT
+    """Pandas code adapted from:
+    https://github.com/pola-rs/polars-benchmark/blob/main/queries/dask/q1.py
+    """
+    var1 = pd.Timestamp("1998-09-02")
+    filt = lineitem[lineitem["L_SHIPDATE"] <= var1]
+
+    filt["DISC_PRICE"] = filt.L_EXTENDEDPRICE * (1.0 - filt.L_DISCOUNT)
+    filt["CHARGE"] = filt.L_EXTENDEDPRICE * (1.0 - filt.L_DISCOUNT) * (1.0 + filt.L_TAX)
+
+    gb = filt.groupby(["L_RETURNFLAG", "L_LINESTATUS"], as_index=False)
+    agg = gb.agg(
+        SUM_QTY=pd.NamedAgg(column="L_QUANTITY", aggfunc="sum"),
+        SUM_BASE_PRICE=pd.NamedAgg(column="L_EXTENDEDPRICE", aggfunc="sum"),
+        SUM_DISC_PRICE=pd.NamedAgg(column="DISC_PRICE", aggfunc="sum"),
+        SUM_CHARGE=pd.NamedAgg(column="CHARGE", aggfunc="sum"),
+        AVG_QTY=pd.NamedAgg(column="L_QUANTITY", aggfunc="mean"),
+        AVG_PRICE=pd.NamedAgg(column="L_EXTENDEDPRICE", aggfunc="mean"),
+        AVG_DISC=pd.NamedAgg(column="L_DISCOUNT", aggfunc="mean"),
+        COUNT_ORDER=pd.NamedAgg(column="L_ORDERKEY", aggfunc="size"),
     )
-    lineitem_filtered["CHARGE"] = (
-        lineitem_filtered.L_EXTENDEDPRICE
-        * (1 - lineitem_filtered.L_DISCOUNT)
-        * (1 + lineitem_filtered.L_TAX)
-    )
-    gb = lineitem_filtered.groupby(["L_RETURNFLAG", "L_LINESTATUS"], as_index=False)[
-        [
-            "L_QUANTITY",
-            "L_EXTENDEDPRICE",
-            "DISC_PRICE",
-            "CHARGE",
-            "AVG_QTY",
-            "AVG_PRICE",
-            "L_DISCOUNT",
-            "L_ORDERKEY",
-        ]
-    ]
-    total = gb.agg(
-        {
-            "L_QUANTITY": "sum",
-            "L_EXTENDEDPRICE": "sum",
-            "DISC_PRICE": "sum",
-            "CHARGE": "sum",
-            "AVG_QTY": "mean",
-            "AVG_PRICE": "mean",
-            "L_DISCOUNT": "mean",
-            "L_ORDERKEY": "count",
-        }
-    )
-    total = total.sort_values(["L_RETURNFLAG", "L_LINESTATUS"])
-    return total
+
+    result_df = agg.sort_values(["L_RETURNFLAG", "L_LINESTATUS"])
+    return result_df
 
 
 def tpch_q02(part, partsupp, supplier, nation, region, pd=pd):
-    nation_filtered = nation.loc[:, ["N_NATIONKEY", "N_NAME", "N_REGIONKEY"]]
-    region_filtered = region[(region["R_NAME"] == "EUROPE")]
-    region_filtered = region_filtered.loc[:, ["R_REGIONKEY"]]
-    r_n_merged = nation_filtered.merge(
-        region_filtered, left_on="N_REGIONKEY", right_on="R_REGIONKEY", how="inner"
+    """Pandas code adapted from:
+    https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q2.py
+    """
+    var1 = 15
+    var2 = "BRASS"
+    var3 = "EUROPE"
+
+    jn = (
+        part.merge(partsupp, left_on="P_PARTKEY", right_on="PS_PARTKEY")
+        .merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
+        .merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+        .merge(region, left_on="N_REGIONKEY", right_on="R_REGIONKEY")
     )
-    r_n_merged = r_n_merged.loc[:, ["N_NATIONKEY", "N_NAME"]]
-    supplier_filtered = supplier.loc[
-        :,
-        [
-            "S_SUPPKEY",
-            "S_NAME",
-            "S_ADDRESS",
-            "S_NATIONKEY",
-            "S_PHONE",
-            "S_ACCTBAL",
-            "S_COMMENT",
-        ],
-    ]
-    s_r_n_merged = r_n_merged.merge(
-        supplier_filtered, left_on="N_NATIONKEY", right_on="S_NATIONKEY", how="inner"
-    )
-    s_r_n_merged = s_r_n_merged.loc[
-        :,
-        [
-            "N_NAME",
-            "S_SUPPKEY",
-            "S_NAME",
-            "S_ADDRESS",
-            "S_PHONE",
-            "S_ACCTBAL",
-            "S_COMMENT",
-        ],
-    ]
-    partsupp_filtered = partsupp.loc[:, ["PS_PARTKEY", "PS_SUPPKEY", "PS_SUPPLYCOST"]]
-    ps_s_r_n_merged = s_r_n_merged.merge(
-        partsupp_filtered, left_on="S_SUPPKEY", right_on="PS_SUPPKEY", how="inner"
-    )
-    ps_s_r_n_merged = ps_s_r_n_merged.loc[
-        :,
-        [
-            "N_NAME",
-            "S_NAME",
-            "S_ADDRESS",
-            "S_PHONE",
-            "S_ACCTBAL",
-            "S_COMMENT",
-            "PS_PARTKEY",
-            "PS_SUPPLYCOST",
-        ],
-    ]
-    part_filtered = part.loc[:, ["P_PARTKEY", "P_MFGR", "P_SIZE", "P_TYPE"]]
-    part_filtered = part_filtered[
-        (part_filtered["P_SIZE"] == 15)
-        & (part_filtered["P_TYPE"].str.endswith("BRASS"))
-    ]
-    part_filtered = part_filtered.loc[:, ["P_PARTKEY", "P_MFGR"]]
-    merged_df = part_filtered.merge(
-        ps_s_r_n_merged, left_on="P_PARTKEY", right_on="PS_PARTKEY", how="inner"
-    )
-    merged_df = merged_df.loc[
-        :,
-        [
-            "N_NAME",
-            "S_NAME",
-            "S_ADDRESS",
-            "S_PHONE",
-            "S_ACCTBAL",
-            "S_COMMENT",
-            "PS_SUPPLYCOST",
-            "P_PARTKEY",
-            "P_MFGR",
-        ],
-    ]
-    min_values = merged_df.groupby("P_PARTKEY", as_index=False, sort=False)[
-        "PS_SUPPLYCOST"
-    ].min()
-    min_values.columns = ["P_PARTKEY_CPY", "MIN_SUPPLYCOST"]
-    merged_df = merged_df.merge(
-        min_values,
-        left_on=["P_PARTKEY", "PS_SUPPLYCOST"],
-        right_on=["P_PARTKEY_CPY", "MIN_SUPPLYCOST"],
-        how="inner",
-    )
-    total = merged_df.loc[
+
+    jn = jn[jn["P_SIZE"] == var1]
+    jn = jn[jn["P_TYPE"].str.endswith(var2)]
+    jn = jn[jn["R_NAME"] == var3]
+
+    gb = jn.groupby("P_PARTKEY", as_index=False)
+    agg = gb["PS_SUPPLYCOST"].min()
+    jn2 = agg.merge(jn, on=["P_PARTKEY", "PS_SUPPLYCOST"])
+
+    sel = jn2.loc[
         :,
         [
             "S_ACCTBAL",
@@ -257,243 +166,202 @@ def tpch_q02(part, partsupp, supplier, nation, region, pd=pd):
             "S_COMMENT",
         ],
     ]
-    total = total.sort_values(
+
+    sort = sel.sort_values(
         by=["S_ACCTBAL", "N_NAME", "S_NAME", "P_PARTKEY"],
         ascending=[False, True, True, True],
     )
-    return total
+    result_df = sort.head(100)
+
+    return result_df
 
 
 def tpch_q03(lineitem, orders, customer, pd=pd):
-    date = pd.Timestamp("1995-03-04")
-    lineitem_filtered = lineitem.loc[
-        :, ["L_ORDERKEY", "L_EXTENDEDPRICE", "L_DISCOUNT", "L_SHIPDATE"]
-    ]
-    orders_filtered = orders.loc[
-        :, ["O_ORDERKEY", "O_CUSTKEY", "O_ORDERDATE", "O_SHIPPRIORITY"]
-    ]
-    customer_filtered = customer.loc[:, ["C_MKTSEGMENT", "C_CUSTKEY"]]
-    lsel = lineitem_filtered.L_SHIPDATE > date
-    osel = orders_filtered.O_ORDERDATE < date
-    csel = customer_filtered.C_MKTSEGMENT == "HOUSEHOLD"
-    flineitem = lineitem_filtered[lsel]
-    forders = orders_filtered[osel]
-    fcustomer = customer_filtered[csel]
-    jn1 = fcustomer.merge(forders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
-    jn2 = jn1.merge(flineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
-    jn2["TMP"] = jn2.L_EXTENDEDPRICE * (1 - jn2.L_DISCOUNT)
-    total = (
-        jn2.groupby(
-            ["L_ORDERKEY", "O_ORDERDATE", "O_SHIPPRIORITY"], as_index=False, sort=False
-        )["TMP"]
-        .sum()
-        .sort_values(["TMP"], ascending=False)
-    )
-    res = total.loc[:, ["L_ORDERKEY", "TMP", "O_ORDERDATE", "O_SHIPPRIORITY"]]
-    return res.head(10)
+    """Pandas code adapted from:
+    https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q3.py
+    """
+    var1 = "HOUSEHOLD"
+    var2 = pd.Timestamp("1995-03-04")
+
+    fcustomer = customer[customer["C_MKTSEGMENT"] == var1]
+
+    jn1 = fcustomer.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
+    jn2 = jn1.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
+
+    jn2 = jn2[jn2["O_ORDERDATE"] < var2]
+    jn2 = jn2[jn2["L_SHIPDATE"] > var2]
+    jn2["REVENUE"] = jn2.L_EXTENDEDPRICE * (1 - jn2.L_DISCOUNT)
+
+    gb = jn2.groupby(["O_ORDERKEY", "O_ORDERDATE", "O_SHIPPRIORITY"], as_index=False)
+    agg = gb["REVENUE"].sum()
+
+    sel = agg.loc[:, ["O_ORDERKEY", "REVENUE", "O_ORDERDATE", "O_SHIPPRIORITY"]]
+    sel = sel.rename(columns={"O_ORDERKEY": "L_ORDERKEY"})
+
+    sorted = sel.sort_values(by=["REVENUE", "O_ORDERDATE"], ascending=[False, True])
+    result_df = sorted.head(10)
+
+    return result_df
 
 
+# TODO: Fix fallback in drop_duplicates
 def tpch_q04(lineitem, orders, pd=pd):
-    date1 = pd.Timestamp("1993-11-01")
-    date2 = pd.Timestamp("1993-08-01")
-    lsel = lineitem.L_COMMITDATE < lineitem.L_RECEIPTDATE
-    osel = (orders.O_ORDERDATE < date1) & (orders.O_ORDERDATE >= date2)
-    flineitem = lineitem[lsel]
-    forders = orders[osel]
-    jn = forders[forders["O_ORDERKEY"].isin(flineitem["L_ORDERKEY"])]
-    total = (
-        jn.groupby("O_ORDERPRIORITY", as_index=False)["O_ORDERKEY"]
-        .count()
-        .sort_values(["O_ORDERPRIORITY"])
-    )
-    return total
+    """Pandas code adapted from:
+    https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q4.py
+    """
+    var1 = pd.Timestamp("1993-08-01")
+    var2 = pd.Timestamp("1993-11-01")
+
+    jn = lineitem.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+
+    jn = jn[(jn["O_ORDERDATE"] >= var1) & (jn["O_ORDERDATE"] < var2)]
+    jn = jn[jn["L_COMMITDATE"] < jn["L_RECEIPTDATE"]]
+
+    jn = jn.drop_duplicates(subset=["O_ORDERPRIORITY", "L_ORDERKEY"])
+
+    gb = jn.groupby("O_ORDERPRIORITY", as_index=False)
+    agg = gb.agg(ORDER_COUNT=pd.NamedAgg(column="O_ORDERKEY", aggfunc="count"))
+
+    result_df = agg.sort_values(["O_ORDERPRIORITY"])
+
+    return result_df
 
 
 def tpch_q05(lineitem, orders, customer, nation, region, supplier, pd=pd):
-    date1 = pd.Timestamp("1996-01-01")
-    date2 = pd.Timestamp("1997-01-01")
-    rsel = region.R_NAME == "ASIA"
-    osel = (orders.O_ORDERDATE >= date1) & (orders.O_ORDERDATE < date2)
-    forders = orders[osel]
-    fregion = region[rsel]
-    jn1 = fregion.merge(nation, left_on="R_REGIONKEY", right_on="N_REGIONKEY")
+    """Pandas code adapted from:
+    https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q5.py
+    """
+    var1 = "ASIA"
+    var2 = pd.Timestamp("1996-01-01")
+    var3 = pd.Timestamp("1997-01-01")
+
+    jn1 = region.merge(nation, left_on="R_REGIONKEY", right_on="N_REGIONKEY")
     jn2 = jn1.merge(customer, left_on="N_NATIONKEY", right_on="C_NATIONKEY")
-    jn3 = jn2.merge(forders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
+    jn3 = jn2.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
     jn4 = jn3.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
-    jn5 = supplier.merge(
-        jn4, left_on=["S_SUPPKEY", "S_NATIONKEY"], right_on=["L_SUPPKEY", "N_NATIONKEY"]
+    jn5 = jn4.merge(
+        supplier,
+        left_on=["L_SUPPKEY", "N_NATIONKEY"],
+        right_on=["S_SUPPKEY", "S_NATIONKEY"],
     )
-    jn5["TMP"] = jn5.L_EXTENDEDPRICE * (1.0 - jn5.L_DISCOUNT)
-    gb = jn5.groupby("N_NAME", as_index=False, sort=False)["TMP"].sum()
-    total = gb.sort_values("TMP", ascending=False)
-    return total
+
+    jn5 = jn5[jn5["R_NAME"] == var1]
+    jn5 = jn5[(jn5["O_ORDERDATE"] >= var2) & (jn5["O_ORDERDATE"] < var3)]
+    jn5["REVENUE"] = jn5.L_EXTENDEDPRICE * (1.0 - jn5.L_DISCOUNT)
+
+    gb = jn5.groupby("N_NAME", as_index=False)["REVENUE"].sum()
+    result_df = gb.sort_values("REVENUE", ascending=False)
+
+    return result_df
 
 
 def tpch_q06(lineitem, pd=pd):
-    date1 = pd.Timestamp("1996-01-01")
-    date2 = pd.Timestamp("1997-01-01")
-    lineitem_filtered = lineitem.loc[
-        :, ["L_QUANTITY", "L_EXTENDEDPRICE", "L_DISCOUNT", "L_SHIPDATE"]
-    ]
-    sel = (
-        (lineitem_filtered.L_SHIPDATE >= date1)
-        & (lineitem_filtered.L_SHIPDATE < date2)
-        & (lineitem_filtered.L_DISCOUNT >= 0.08)
-        & (lineitem_filtered.L_DISCOUNT <= 0.1)
-        & (lineitem_filtered.L_QUANTITY < 24)
-    )
-    flineitem = lineitem_filtered[sel]
-    total = (flineitem.L_EXTENDEDPRICE * flineitem.L_DISCOUNT).sum()
-    return total
+    """Pandas code adapted from:
+    https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q6.py
+    """
+    var1 = pd.Timestamp("1996-01-01")
+    var2 = pd.Timestamp("1997-01-01")
+    var3 = 0.08
+    var4 = 0.1
+    var5 = 24
+
+    filt = lineitem[(lineitem["L_SHIPDATE"] >= var1) & (lineitem["L_SHIPDATE"] < var2)]
+    filt = filt[(filt["L_DISCOUNT"] >= var3) & (filt["L_DISCOUNT"] <= var4)]
+    filt = filt[filt["L_QUANTITY"] < var5]
+    result_value = (filt["L_EXTENDEDPRICE"] * filt["L_DISCOUNT"]).sum()
+    result_df = pd.DataFrame({"REVENUE": [result_value]})
+
+    return result_df
 
 
 def tpch_q07(lineitem, supplier, orders, customer, nation, pd=pd):
-    """This version is faster than q07_old. Keeping the old one for reference"""
-    lineitem_filtered = lineitem[
-        (lineitem["L_SHIPDATE"] >= pd.Timestamp("1995-01-01"))
-        & (lineitem["L_SHIPDATE"] < pd.Timestamp("1997-01-01"))
-    ]
-    lineitem_filtered["L_YEAR"] = lineitem_filtered["L_SHIPDATE"].dt.year
-    lineitem_filtered["VOLUME"] = lineitem_filtered["L_EXTENDEDPRICE"] * (
-        1.0 - lineitem_filtered["L_DISCOUNT"]
-    )
-    lineitem_filtered = lineitem_filtered.loc[
-        :, ["L_ORDERKEY", "L_SUPPKEY", "L_YEAR", "VOLUME"]
-    ]
-    supplier_filtered = supplier.loc[:, ["S_SUPPKEY", "S_NATIONKEY"]]
-    orders_filtered = orders.loc[:, ["O_ORDERKEY", "O_CUSTKEY"]]
-    customer_filtered = customer.loc[:, ["C_CUSTKEY", "C_NATIONKEY"]]
-    n1 = nation[(nation["N_NAME"] == "FRANCE")].loc[:, ["N_NATIONKEY", "N_NAME"]]
-    n2 = nation[(nation["N_NAME"] == "GERMANY")].loc[:, ["N_NATIONKEY", "N_NAME"]]
+    """Pandas code adapted from:
+    https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q7.py
+    """
 
-    # ----- do nation 1 -----
-    N1_C = customer_filtered.merge(
-        n1, left_on="C_NATIONKEY", right_on="N_NATIONKEY", how="inner"
-    )
-    N1_C = N1_C.drop(columns=["C_NATIONKEY", "N_NATIONKEY"]).rename(
-        columns={"N_NAME": "CUST_NATION"}
-    )
-    N1_C_O = N1_C.merge(
-        orders_filtered, left_on="C_CUSTKEY", right_on="O_CUSTKEY", how="inner"
-    )
-    N1_C_O = N1_C_O.drop(columns=["C_CUSTKEY", "O_CUSTKEY"])
+    var1 = "FRANCE"
+    var2 = "GERMANY"
+    var3 = pd.Timestamp("1995-01-01")
+    var4 = pd.Timestamp("1997-01-01")
 
-    N2_S = supplier_filtered.merge(
-        n2, left_on="S_NATIONKEY", right_on="N_NATIONKEY", how="inner"
-    )
-    N2_S = N2_S.drop(columns=["S_NATIONKEY", "N_NATIONKEY"]).rename(
-        columns={"N_NAME": "SUPP_NATION"}
-    )
-    N2_S_L = N2_S.merge(
-        lineitem_filtered, left_on="S_SUPPKEY", right_on="L_SUPPKEY", how="inner"
-    )
-    N2_S_L = N2_S_L.drop(columns=["S_SUPPKEY", "L_SUPPKEY"])
+    n1 = nation[(nation["N_NAME"] == var1)]
+    n2 = nation[(nation["N_NAME"] == var2)]
 
-    total1 = N1_C_O.merge(
-        N2_S_L, left_on="O_ORDERKEY", right_on="L_ORDERKEY", how="inner"
-    )
-    total1 = total1.drop(columns=["O_ORDERKEY", "L_ORDERKEY"])
+    # Part 1
+    jn1 = customer.merge(n1, left_on="C_NATIONKEY", right_on="N_NATIONKEY")
+    jn2 = jn1.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
+    jn2 = jn2.rename(columns={"N_NAME": "CUST_NATION"})
+    jn3 = jn2.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
+    jn4 = jn3.merge(supplier, left_on="L_SUPPKEY", right_on="S_SUPPKEY")
+    jn5 = jn4.merge(n2, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+    df1 = jn5.rename(columns={"N_NAME": "SUPP_NATION"})
 
-    # ----- do nation 2 -----
-    N2_C = customer_filtered.merge(
-        n2, left_on="C_NATIONKEY", right_on="N_NATIONKEY", how="inner"
-    )
-    N2_C = N2_C.drop(columns=["C_NATIONKEY", "N_NATIONKEY"]).rename(
-        columns={"N_NAME": "CUST_NATION"}
-    )
-    N2_C_O = N2_C.merge(
-        orders_filtered, left_on="C_CUSTKEY", right_on="O_CUSTKEY", how="inner"
-    )
-    N2_C_O = N2_C_O.drop(columns=["C_CUSTKEY", "O_CUSTKEY"])
+    # Part 2
+    jn1 = customer.merge(n2, left_on="C_NATIONKEY", right_on="N_NATIONKEY")
+    jn2 = jn1.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY")
+    jn2 = jn2.rename(columns={"N_NAME": "CUST_NATION"})
+    jn3 = jn2.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
+    jn4 = jn3.merge(supplier, left_on="L_SUPPKEY", right_on="S_SUPPKEY")
+    jn5 = jn4.merge(n1, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+    df2 = jn5.rename(columns={"N_NAME": "SUPP_NATION"})
 
-    N1_S = supplier_filtered.merge(
-        n1, left_on="S_NATIONKEY", right_on="N_NATIONKEY", how="inner"
-    )
-    N1_S = N1_S.drop(columns=["S_NATIONKEY", "N_NATIONKEY"]).rename(
-        columns={"N_NAME": "SUPP_NATION"}
-    )
-    N1_S_L = N1_S.merge(
-        lineitem_filtered, left_on="S_SUPPKEY", right_on="L_SUPPKEY", how="inner"
-    )
-    N1_S_L = N1_S_L.drop(columns=["S_SUPPKEY", "L_SUPPKEY"])
+    # Combine
+    total = pd.concat([df1, df2])
 
-    total2 = N2_C_O.merge(
-        N1_S_L, left_on="O_ORDERKEY", right_on="L_ORDERKEY", how="inner"
-    )
-    total2 = total2.drop(columns=["O_ORDERKEY", "L_ORDERKEY"])
+    total = total[(total["L_SHIPDATE"] >= var3) & (total["L_SHIPDATE"] < var4)]
+    total["VOLUME"] = total["L_EXTENDEDPRICE"] * (1.0 - total["L_DISCOUNT"])
+    total["L_YEAR"] = total["L_SHIPDATE"].dt.year
 
-    # concat results
-    total = pd.concat([total1, total2])
+    gb = total.groupby(["SUPP_NATION", "CUST_NATION", "L_YEAR"], as_index=False)
+    agg = gb.agg(REVENUE=pd.NamedAgg(column="VOLUME", aggfunc="sum"))
 
-    total = total.groupby(["SUPP_NATION", "CUST_NATION", "L_YEAR"], as_index=False).agg(
-        REVENUE=pd.NamedAgg(column="VOLUME", aggfunc="sum")
-    )
-    total = total.sort_values(
-        by=["SUPP_NATION", "CUST_NATION", "L_YEAR"], ascending=[True, True, True]
-    )
-    return total
+    result_df = agg.sort_values(by=["SUPP_NATION", "CUST_NATION", "L_YEAR"])
+    return result_df
 
 
 def tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd=pd):
-    part_filtered = part[(part["P_TYPE"] == "ECONOMY ANODIZED STEEL")]
-    part_filtered = part_filtered.loc[:, ["P_PARTKEY"]]
-    lineitem_filtered = lineitem.loc[:, ["L_PARTKEY", "L_SUPPKEY", "L_ORDERKEY"]]
-    lineitem_filtered["VOLUME"] = lineitem["L_EXTENDEDPRICE"] * (
-        1.0 - lineitem["L_DISCOUNT"]
-    )
-    total = part_filtered.merge(
-        lineitem_filtered, left_on="P_PARTKEY", right_on="L_PARTKEY", how="inner"
-    )
-    total = total.loc[:, ["L_SUPPKEY", "L_ORDERKEY", "VOLUME"]]
-    supplier_filtered = supplier.loc[:, ["S_SUPPKEY", "S_NATIONKEY"]]
-    total = total.merge(
-        supplier_filtered, left_on="L_SUPPKEY", right_on="S_SUPPKEY", how="inner"
-    )
-    total = total.loc[:, ["L_ORDERKEY", "VOLUME", "S_NATIONKEY"]]
-    orders_filtered = orders[
-        (orders["O_ORDERDATE"] >= pd.Timestamp("1995-01-01"))
-        & (orders["O_ORDERDATE"] < pd.Timestamp("1997-01-01"))
-    ]
-    orders_filtered["O_YEAR"] = orders_filtered["O_ORDERDATE"].dt.year
-    orders_filtered = orders_filtered.loc[:, ["O_ORDERKEY", "O_CUSTKEY", "O_YEAR"]]
-    total = total.merge(
-        orders_filtered, left_on="L_ORDERKEY", right_on="O_ORDERKEY", how="inner"
-    )
-    total = total.loc[:, ["VOLUME", "S_NATIONKEY", "O_CUSTKEY", "O_YEAR"]]
-    customer_filtered = customer.loc[:, ["C_CUSTKEY", "C_NATIONKEY"]]
-    total = total.merge(
-        customer_filtered, left_on="O_CUSTKEY", right_on="C_CUSTKEY", how="inner"
-    )
-    total = total.loc[:, ["VOLUME", "S_NATIONKEY", "O_YEAR", "C_NATIONKEY"]]
-    n1_filtered = nation.loc[:, ["N_NATIONKEY", "N_REGIONKEY"]]
-    n2_filtered = nation.loc[:, ["N_NATIONKEY", "N_NAME"]].rename(
-        columns={"N_NAME": "NATION"}
-    )
-    total = total.merge(
-        n1_filtered, left_on="C_NATIONKEY", right_on="N_NATIONKEY", how="inner"
-    )
-    total = total.loc[:, ["VOLUME", "S_NATIONKEY", "O_YEAR", "N_REGIONKEY"]]
-    total = total.merge(
-        n2_filtered, left_on="S_NATIONKEY", right_on="N_NATIONKEY", how="inner"
-    )
-    total = total.loc[:, ["VOLUME", "O_YEAR", "N_REGIONKEY", "NATION"]]
-    region_filtered = region[(region["R_NAME"] == "AMERICA")]
-    region_filtered = region_filtered.loc[:, ["R_REGIONKEY"]]
-    total = total.merge(
-        region_filtered, left_on="N_REGIONKEY", right_on="R_REGIONKEY", how="inner"
-    )
-    total = total.loc[:, ["VOLUME", "O_YEAR", "NATION"]]
+    """Pandas code adapted from:
+    https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q8.py
+    """
+    var1 = "BRAZIL"
+    var2 = "AMERICA"
+    var3 = "ECONOMY ANODIZED STEEL"
+    var4 = pd.Timestamp("1995-01-01")
+    var5 = pd.Timestamp("1997-01-01")
+
+    n1 = nation.loc[:, ["N_NATIONKEY", "N_REGIONKEY"]]
+    n2 = nation.loc[:, ["N_NATIONKEY", "N_NAME"]]
+
+    jn1 = part.merge(lineitem, left_on="P_PARTKEY", right_on="L_PARTKEY")
+    jn2 = jn1.merge(supplier, left_on="L_SUPPKEY", right_on="S_SUPPKEY")
+    jn3 = jn2.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+    jn4 = jn3.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
+    jn5 = jn4.merge(n1, left_on="C_NATIONKEY", right_on="N_NATIONKEY")
+    jn6 = jn5.merge(region, left_on="N_REGIONKEY", right_on="R_REGIONKEY")
+
+    jn6 = jn6[(jn6["R_NAME"] == var2)]
+
+    jn7 = jn6.merge(n2, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+
+    jn7 = jn7[(jn7["O_ORDERDATE"] >= var4) & (jn7["O_ORDERDATE"] < var5)]
+    jn7 = jn7[jn7["P_TYPE"] == var3]
+
+    jn7["O_YEAR"] = jn7["O_ORDERDATE"].dt.year
+    jn7["VOLUME"] = jn7["L_EXTENDEDPRICE"] * (1.0 - jn7["L_DISCOUNT"])
+    jn7 = jn7.rename(columns={"N_NAME": "NATION"})
 
     def udf(df):
         demonimator = df["VOLUME"].sum()
-        df = df[df["NATION"] == "BRAZIL"]
+        df = df[df["NATION"] == var1]
         numerator = df["VOLUME"].sum()
-        return numerator / demonimator
+        return round(numerator / demonimator, 2)
 
-    total = total.groupby("O_YEAR", as_index=False).apply(udf)
-    total.columns = ["O_YEAR", "MKT_SHARE"]
-    total = total.sort_values(by=["O_YEAR"], ascending=[True])
-    return total
+    gb = jn7.groupby("O_YEAR", as_index=False)
+    agg = gb.apply(udf, include_groups=False)
+    agg.columns = ["O_YEAR", "MKT_SHARE"]
+    result_df = agg.sort_values("O_YEAR")
+
+    return result_df
 
 
 def tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd=pd):
