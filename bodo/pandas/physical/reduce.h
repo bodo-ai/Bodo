@@ -72,21 +72,22 @@ struct ReductionFunctionMin : public ReductionFunction {
 };
 
 struct ReductionFunctionSum : public ReductionFunction {
-    ReductionFunctionSum()
+    ReductionFunctionSum(std::shared_ptr<arrow::DataType> dt)
         : ReductionFunction({"sum"}, {"add"}, {ReductionType::AGGREGATION},
-                            {nullptr}) {}
+                            {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
 };
 
 struct ReductionFunctionProduct : public ReductionFunction {
-    ReductionFunctionProduct()
+    ReductionFunctionProduct(std::shared_ptr<arrow::DataType> dt)
         : ReductionFunction({"product"}, {"multiply"},
-                            {ReductionType::AGGREGATION}, {nullptr}) {}
+                            {ReductionType::AGGREGATION},
+                            {arrow::MakeScalar(dt, 1).ValueOrDie()}) {}
 };
 
 struct ReductionFunctionCount : public ReductionFunction {
-    ReductionFunctionCount()
+    ReductionFunctionCount(std::shared_ptr<arrow::DataType> dt)
         : ReductionFunction({"count"}, {"add"}, {ReductionType::AGGREGATION},
-                            {nullptr}) {}
+                            {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
 };
 
 struct ReductionFunctionMean : public ReductionFunction {
@@ -157,10 +158,17 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         time_pt start_produce_time = start_timer();
         // Create a vector of Arrow arrays from output_scalars
         std::vector<std::shared_ptr<arrow::Array>> arrow_arrays;
-        for (const auto& reduction_function : reduction_functions) {
+        for (size_t i = 0; i < reduction_functions.size(); i++) {
+            const std::unique_ptr<ReductionFunction>& reduction_function =
+                this->reduction_functions[i];
             // Every reduction function has one global output scalar after
             // Finalize which is called in FinalizeSink
-            const auto& output_scalar = reduction_function->results[0];
+            auto output_scalar = reduction_function->results[0];
+            if (output_scalar == nullptr) {
+                output_scalar = arrow::MakeNullScalar(
+                    out_schema->column_types[i]->ToArrowDataType());
+            }
+
             std::shared_ptr<arrow::Array> array =
                 ScalarToArrowArray(output_scalar);
             arrow_arrays.push_back(array);

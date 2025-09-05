@@ -1092,10 +1092,18 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Aggregate using one or more operations."""
         if isinstance(func, list):
             reduced = _compute_series_reduce(self, func)
-            return BodoSeries(reduced, index=func, name=self._name)
+            agg = reduced.iloc[0]
+            agg.index = func
+            agg.rename(self.name, inplace=True)
+            return agg
 
         elif isinstance(func, str):
-            return _compute_series_reduce(self, [func])[0]
+            from bodo.pandas.scalar import BodoScalar
+
+            df = _compute_series_reduce(self, [func])
+            if hasattr(df, "_lazy") and df.is_lazy_plan():
+                return BodoScalar(df["0"])
+            return df["0"][0]
 
         else:
             raise BodoLibNotImplementedException(

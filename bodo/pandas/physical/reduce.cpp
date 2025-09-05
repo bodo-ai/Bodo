@@ -1,4 +1,5 @@
 #include "physical/reduce.h"
+#include <arrow/array/util.h>
 #include "../libs/_shuffle.h"
 
 void ReductionFunction::ConsumeBatch(
@@ -83,9 +84,15 @@ void ReductionFunction::Finalize() {
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
 
-    // Broadcast local max from each rank to all other ranks
-    for (int i = 0; i < n_ranks; i++) {
-        // Convert scalar to array so we can convert to bodo array for broadcast
+    // Convert scalars to array so we can convert to bodo array for broadcast
+    std::shared_ptr<arrow::Array> arrow_array;
+    if (results[0] == nullptr) {
+        auto null_res = arrow::MakeArrayOfNull(arrow::null(), results.size());
+        CHECK_ARROW(null_res.status(),
+                    "Error in MakeArrayOfNull during reduction");
+        arrow_array = null_res.ValueOrDie();
+
+    } else {
         auto arrow_array_builder_res = arrow::MakeBuilder(results[0]->type);
         auto arrow_array_builder = arrow_array_builder_res.MoveValueUnsafe();
         CHECK_ARROW(arrow_array_builder_res.status(),
@@ -96,7 +103,10 @@ void ReductionFunction::Finalize() {
             arrow_array_builder->Finish();
         CHECK_ARROW(array_res.status(),
                     "Error in builder finalization during reduction");
-        auto arrow_array = array_res.ValueOrDie();
+        arrow_array = array_res.ValueOrDie();
+    }
+    // Broadcast local reduction from each rank to all other ranks
+    for (int i = 0; i < n_ranks; i++) {
         std::shared_ptr<array_info> send_array =
             i == rank ? arrow_array_to_bodo(arrow_array,
                                             bodo::BufferPool::DefaultPtr())
@@ -136,7 +146,8 @@ OperatorResult PhysicalReduce::ConsumeBatch(
         // Initialize reduction functions on first batch, we need to wait until
         // we have the input array to get the type for initializing the result
         // scalar.
-        for (const auto& func_name : function_names) {
+        for (size_t i = 0; i < this->function_names.size(); i++) {
+            const std::string func_name = this->function_names[i];
             if (func_name == "max") {
                 // Initialize with first value in the batch, we really should do
                 // this from the result of the first reduction but reductions
@@ -151,13 +162,16 @@ OperatorResult PhysicalReduce::ConsumeBatch(
                     std::make_unique<ReductionFunctionMin>());
             } else if (func_name == "sum") {
                 reduction_functions.push_back(
-                    std::make_unique<ReductionFunctionSum>());
+                    std::make_unique<ReductionFunctionSum>(
+                        this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "product") {
                 reduction_functions.push_back(
-                    std::make_unique<ReductionFunctionProduct>());
+                    std::make_unique<ReductionFunctionProduct>(
+                        this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "count") {
                 reduction_functions.push_back(
-                    std::make_unique<ReductionFunctionCount>());
+                    std::make_unique<ReductionFunctionCount>(
+                        this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "mean") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionMean>());
