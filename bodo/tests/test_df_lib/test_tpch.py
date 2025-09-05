@@ -68,7 +68,7 @@ def test_tpch_q05():
 
 
 def test_tpch_q06():
-    run_tpch_query_test(tpch.tpch_q06, plan_executions=1)
+    run_tpch_query_test(tpch.tpch_q06)
 
 
 def test_tpch_q07():
@@ -126,7 +126,7 @@ def test_tpch_q18():
 
 
 def test_tpch_q19():
-    run_tpch_query_test(tpch.tpch_q19, plan_executions=1)
+    run_tpch_query_test(tpch.tpch_q19)
 
 
 def test_tpch_q20():
