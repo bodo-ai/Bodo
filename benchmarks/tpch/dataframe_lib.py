@@ -274,7 +274,6 @@ def tpch_q07(lineitem, supplier, orders, customer, nation, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q7.py
     """
-
     var1 = "FRANCE"
     var2 = "GERMANY"
     var3 = pd.Timestamp("1995-01-01")
@@ -389,6 +388,7 @@ def tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd=bodo.pandas)
 
     gb = jn5.groupby(["NATION", "O_YEAR"], as_index=False)
     agg = gb.agg(SUM_PROFIT=pd.NamedAgg(column="AMOUNT", aggfunc="sum"))
+    agg["SUM_PROFIT"] = agg.SUM_PROFIT.round(2)
     result_df = agg.sort_values(by=["NATION", "O_YEAR"], ascending=[True, False])
 
     return result_df
@@ -401,15 +401,13 @@ def tpch_q10(lineitem, orders, customer, nation, pd=bodo.pandas):
     var1 = pd.Timestamp("1994-11-01")
     var2 = pd.Timestamp("1995-02-01")
 
-    osel = (orders.O_ORDERDATE >= var1) & (orders.O_ORDERDATE < var2)
-    lsel = lineitem.L_RETURNFLAG == "R"
-    forders = orders[osel]
-    flineitem = lineitem[lsel]
+    forders = orders[(orders.O_ORDERDATE >= var1) & (orders.O_ORDERDATE < var2)]
+    flineitem = lineitem[lineitem.L_RETURNFLAG == "R"]
     jn1 = flineitem.merge(forders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
     jn2 = jn1.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
     jn3 = jn2.merge(nation, left_on="C_NATIONKEY", right_on="N_NATIONKEY")
     jn3["REVENUE"] = jn3.L_EXTENDEDPRICE * (1.0 - jn3.L_DISCOUNT)
-    gb = jn3.groupby(
+    agg = jn3.groupby(
         [
             "C_CUSTKEY",
             "C_NAME",
@@ -422,7 +420,8 @@ def tpch_q10(lineitem, orders, customer, nation, pd=bodo.pandas):
         as_index=False,
         sort=False,
     )["REVENUE"].sum()
-    total = gb.sort_values("REVENUE", ascending=False)
+    agg["REVENUE"] = agg.REVENUE.round(2)
+    total = agg.sort_values("REVENUE", ascending=False)
     return total.head(20)
 
 
@@ -445,21 +444,21 @@ def tpch_q11(partsupp, supplier, nation, scale_factor=1.0, pd=bodo.pandas):
     gb = jn2.groupby("PS_PARTKEY", as_index=False)["VALUE"].sum()
 
     filt = gb[gb["VALUE"] > threshold]
-    rounded = filt
-    result_df = rounded.sort_values(by="VALUE", ascending=False)
+    filt["VALUE"] = filt.VALUE.round(2)
+    result_df = filt.sort_values(by="VALUE", ascending=False)
 
     return result_df
 
 
 def tpch_q12(lineitem, orders, pd=bodo.pandas):
     """Adapted from:
-    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    https://github.com/xorbitsai/benchmarks/blob/main/tpch/pandas_queries/queries.py
     """
     var1 = pd.Timestamp("1994-01-01")
     var2 = pd.Timestamp("1995-01-01")
 
     jn1 = orders.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
-    jn2 = jn1[
+    jn1 = jn1[
         (jn1["L_SHIPMODE"].isin(("MAIL", "SHIP")))
         & (jn1["L_COMMITDATE"] < jn1["L_RECEIPTDATE"])
         & (jn1["L_SHIPDATE"] < jn1["L_COMMITDATE"])
@@ -467,14 +466,13 @@ def tpch_q12(lineitem, orders, pd=bodo.pandas):
         & (jn1["L_RECEIPTDATE"] < var2)
     ]
 
-    # Bodo change: convert .where/agg part to use agg with UDF
     def g1(x):
         return ((x == "1-URGENT") | (x == "2-HIGH")).sum()
 
     def g2(x):
         return ((x != "1-URGENT") & (x != "2-HIGH")).sum()
 
-    gb = jn2.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
+    gb = jn1.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
     result_df = gb.sort_values("L_SHIPMODE")
 
     return result_df
@@ -491,21 +489,19 @@ def tpch_q13(customer, orders, pd=bodo.pandas):
 
     jn1 = customer.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY", how="left")
 
-    gb1 = jn1.groupby("C_CUSTKEY", as_index=False).agg(
+    agg1 = jn1.groupby("C_CUSTKEY", as_index=False).agg(
         C_COUNT=pd.NamedAgg(column="O_ORDERKEY", aggfunc="count")
     )
-    subquery = gb1[["C_CUSTKEY", "C_COUNT"]]
-
-    gb2 = subquery.groupby("C_COUNT", as_index=False).agg(
+    agg2 = agg1.groupby("C_COUNT", as_index=False).agg(
         CUSTDIST=pd.NamedAgg(column="C_CUSTKEY", aggfunc="size")
     )
 
-    result_df = gb2.sort_values(by=["CUSTDIST", "C_COUNT"], ascending=[False, False])
+    result_df = agg2.sort_values(by=["CUSTDIST", "C_COUNT"], ascending=[False, False])
 
     return result_df
 
 
-# TODO: support where
+# TODO: support Series.where
 def tpch_q14(lineitem, part, pd=bodo.pandas):
     """Adapted from:
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
@@ -515,19 +511,19 @@ def tpch_q14(lineitem, part, pd=bodo.pandas):
 
     jn1 = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
 
-    jn2 = jn1[(jn1["L_SHIPDATE"] >= var1) & (jn1["L_SHIPDATE"] < var2)]
+    jn1 = jn1[(jn1["L_SHIPDATE"] >= var1) & (jn1["L_SHIPDATE"] < var2)]
 
     # Promo revenue by line; CASE clause
-    jn2["PROMO_REVENUE"] = jn2["L_EXTENDEDPRICE"] * (1 - jn2["L_DISCOUNT"])
-    mask = jn2["P_TYPE"].str.match("PROMO*")
-    jn2["PROMO_REVENUE"] = jn2["PROMO_REVENUE"].where(mask, 0.00)
+    jn1["PROMO_REVENUE"] = jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])
+    mask = jn1["P_TYPE"].str.match("PROMO*")
+    jn1["PROMO_REVENUE"] = jn1["PROMO_REVENUE"].where(mask, 0.00)
 
-    total_promo_revenue = jn2["PROMO_REVENUE"].sum()
-    total_revenue = (jn2["L_EXTENDEDPRICE"] * (1 - jn2["L_DISCOUNT"])).sum()
+    total_promo_revenue = jn1["PROMO_REVENUE"].sum()
+    total_revenue = (jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])).sum()
 
     # aggregate promo revenue calculation
     ratio = 100.00 * total_promo_revenue / total_revenue
-    result_df = pd.DataFrame({"PROMO_REVENUE": [ratio]})
+    result_df = pd.DataFrame({"PROMO_REVENUE": [round(ratio, 2)]})
 
     return result_df
 
@@ -543,20 +539,19 @@ def tpch_q15(lineitem, supplier, pd=bodo.pandas):
 
     jn1["REVENUE"] = jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])
 
-    gb = jn1.groupby("L_SUPPKEY", as_index=False).agg(
+    agg = jn1.groupby("L_SUPPKEY", as_index=False).agg(
         TOTAL_REVENUE=pd.NamedAgg(column="REVENUE", aggfunc="sum")
     )
-    revenue = gb.rename(columns={"L_SUPPKEY": "SUPPLIER_NO"})
+    revenue = agg.rename(columns={"L_SUPPKEY": "SUPPLIER_NO"})
 
     jn2 = supplier.merge(
         revenue, left_on="S_SUPPKEY", right_on="SUPPLIER_NO", how="inner"
     )
 
     max_revenue = revenue["TOTAL_REVENUE"].max()
+    jn2 = jn2[jn2["TOTAL_REVENUE"] == max_revenue]
 
-    jn3 = jn2[jn2["TOTAL_REVENUE"] == max_revenue]
-
-    result_df = jn3[
+    result_df = jn2[
         ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE", "TOTAL_REVENUE"]
     ].sort_values(by="S_SUPPKEY")
 
@@ -585,10 +580,10 @@ def tpch_q16(part, partsupp, supplier, pd=bodo.pandas):
         & (jn2["P_SIZE"].isin((49, 14, 23, 45, 19, 3, 36, 9)))
     ]
 
-    gb = jn3.groupby(by=["P_BRAND", "P_TYPE", "P_SIZE"], as_index=False)[
+    agg = jn3.groupby(by=["P_BRAND", "P_TYPE", "P_SIZE"], as_index=False)[
         "PS_SUPPKEY"
     ].nunique()
-    agg = gb.rename(columns={"PS_SUPPKEY": "SUPPLIER_CNT"})
+    agg = agg.rename(columns={"PS_SUPPKEY": "SUPPLIER_CNT"})
 
     result_df = agg.sort_values(
         by=["SUPPLIER_CNT", "P_BRAND", "P_TYPE", "P_SIZE"],
@@ -606,15 +601,15 @@ def tpch_q17(lineitem, part, pd=bodo.pandas):
     var2 = "MED BOX"
 
     jn1 = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
-    jn2 = jn1[((jn1["P_BRAND"] == var1) & (jn1["P_CONTAINER"] == var2))]
+    jn1 = jn1[((jn1["P_BRAND"] == var1) & (jn1["P_CONTAINER"] == var2))]
 
-    gb = jn2.groupby("L_PARTKEY", as_index=False).agg(
+    agg = jn1.groupby("L_PARTKEY", as_index=False).agg(
         L_QUANTITY_AVG=pd.NamedAgg(column="L_QUANTITY", aggfunc="mean")
     )
 
-    jn4 = jn2.merge(gb, left_on="L_PARTKEY", right_on="L_PARTKEY", how="left")
-    jn5 = jn4[jn4["L_QUANTITY"] < 0.2 * jn4["L_QUANTITY_AVG"]]
-    total = jn5["L_EXTENDEDPRICE"].sum() / 7.0
+    jn4 = jn1.merge(agg, left_on="L_PARTKEY", right_on="L_PARTKEY", how="left")
+    jn4 = jn4[jn4["L_QUANTITY"] < 0.2 * jn4["L_QUANTITY_AVG"]]
+    total = jn4["L_EXTENDEDPRICE"].sum() / 7.0
 
     result_df = pd.DataFrame({"AVG_YEARLY": [round(total, 2)]})
 
@@ -627,16 +622,18 @@ def tpch_q18(lineitem, orders, customer, pd=bodo.pandas):
     """
     var1 = 300
 
-    gb1 = lineitem.groupby("L_ORDERKEY", as_index=False, sort=False)["L_QUANTITY"].sum()
-    fgb1 = gb1[gb1.L_QUANTITY > var1]
-    jn1 = fgb1.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+    agg1 = lineitem.groupby("L_ORDERKEY", as_index=False, sort=False)[
+        "L_QUANTITY"
+    ].sum()
+    filt = agg1[agg1.L_QUANTITY > var1]
+    jn1 = filt.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
     jn2 = jn1.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
-    gb2 = jn2.groupby(
+    agg2 = jn2.groupby(
         ["C_NAME", "C_CUSTKEY", "O_ORDERKEY", "O_ORDERDATE", "O_TOTALPRICE"],
         as_index=False,
         sort=False,
     )["L_QUANTITY"].sum()
-    total = gb2.sort_values(["O_TOTALPRICE", "O_ORDERDATE"], ascending=[False, True])
+    total = agg2.sort_values(["O_TOTALPRICE", "O_ORDERDATE"], ascending=[False, True])
     return total.head(100)
 
 
@@ -674,7 +671,7 @@ def tpch_q19(lineitem, part, pd=bodo.pandas):
 
     total = (jn2["L_EXTENDEDPRICE"] * (1 - jn2["L_DISCOUNT"])).sum()
 
-    result_df = pd.DataFrame({"REVENUE": [total]})
+    result_df = pd.DataFrame({"REVENUE": [round(total, 2)]})
 
     return result_df
 
@@ -691,10 +688,10 @@ def tpch_q20(lineitem, part, nation, partsupp, supplier, pd=bodo.pandas):
     flineitem = lineitem[
         (lineitem["L_SHIPDATE"] >= var1) & (lineitem["L_SHIPDATE"] < var2)
     ]
-    gb = flineitem.groupby(["L_SUPPKEY", "L_PARTKEY"], as_index=False).agg(
+    agg = flineitem.groupby(["L_SUPPKEY", "L_PARTKEY"], as_index=False).agg(
         SUM_QUANTITY=pd.NamedAgg(column="L_QUANTITY", aggfunc="sum")
     )
-    gb["SUM_QUANTITY"] = gb["SUM_QUANTITY"] * 0.5
+    agg["SUM_QUANTITY"] = agg["SUM_QUANTITY"] * 0.5
 
     fnation = nation[nation["N_NAME"] == var3]
 
@@ -704,7 +701,7 @@ def tpch_q20(lineitem, part, nation, partsupp, supplier, pd=bodo.pandas):
 
     jn2 = partsupp.merge(fpart, left_on="PS_PARTKEY", right_on="P_PARTKEY")
     jn3 = jn2.merge(
-        gb,
+        agg,
         left_on=["PS_SUPPKEY", "PS_PARTKEY"],
         right_on=["L_SUPPKEY", "L_PARTKEY"],
     )
@@ -739,14 +736,14 @@ def tpch_q21(lineitem, orders, supplier, nation, pd=bodo.pandas):
     jn4 = jn3.merge(supplier, left_on="L_SUPPKEY", right_on="S_SUPPKEY")
     jn5 = jn4.merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
 
-    filt = jn5[
+    jn5 = jn5[
         (
             (jn5["NUNIQUE_COL"] == 1)
             & (jn5["N_NAME"] == var1)
             & (jn5["O_ORDERSTATUS"] == "F")
         )
     ]
-    gb3 = filt.groupby("S_NAME", as_index=False).agg(
+    gb3 = jn5.groupby("S_NAME", as_index=False).agg(
         NUMWAIT=pd.NamedAgg(column="NUNIQUE_COL", aggfunc="size")
     )
 
@@ -762,17 +759,14 @@ def tpch_q22(customer, orders, pd=bodo.pandas):
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
     """
     customer["CNTRYCODE"] = customer["C_PHONE"].str.strip().str.slice(0, 2)
-
     fcustomers = customer[
         customer["CNTRYCODE"].isin(("13", "31", "23", "29", "30", "18", "17"))
     ]
 
     average_c_acctbal = fcustomers[fcustomers["C_ACCTBAL"] > 0.0]["C_ACCTBAL"].mean()
-
     custsale = fcustomers[fcustomers["C_ACCTBAL"] > average_c_acctbal]
 
     jn1 = custsale.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY", how="left")
-
     jn1 = jn1[jn1["O_CUSTKEY"].isnull()]
 
     agg1 = jn1.groupby("CNTRYCODE", as_index=False).agg(
