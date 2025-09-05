@@ -2,6 +2,7 @@ import datetime
 import operator
 import os
 import tempfile
+import warnings
 
 import numba
 import numpy as np
@@ -1119,7 +1120,7 @@ def test_parquet_read_partitioned(datapath):
         bodo_out = bd.read_parquet(path)
         py_out = pd.read_parquet(path)
 
-    # NOTE: Bodo dataframe library currently reads partitioned columns as
+    # NOTE: Bodo DataFrames currently reads partitioned columns as
     # dictionary-encoded strings but Pandas reads them as categorical.
     _test_equal(
         bodo_out.copy(),
@@ -3427,3 +3428,18 @@ def test_set_column_names():
 
     _test_equal(bdf.head(0), pdf.head(0), check_pandas_types=False)
     _test_equal(bdf, pdf, check_pandas_types=False)
+
+
+def test_print_no_warn():
+    """Make sure printing a BodoDataFrame or BodoSeries doesn't throw irrelevant
+    fallback warnings
+    """
+    df = bd.DataFrame({"A": np.arange(100) % 30, "B": np.arange(100)})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        print(df)
+
+    S = bd.Series(np.arange(100) % 30)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        print(S)
