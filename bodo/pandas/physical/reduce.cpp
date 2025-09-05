@@ -187,7 +187,7 @@ void ReductionFunctionMean::Finalize() {
     const std::shared_ptr<arrow::Scalar>& count_scalar = this->results[1];
     if (sum_scalar == nullptr || !sum_scalar->is_valid ||
         count_scalar == nullptr || !count_scalar->is_valid) {
-        this->results = {arrow::MakeNullScalar(sum_scalar->type)};
+        this->results = {arrow::MakeNullScalar(arrow::float64())};
         return;
     }
     // Mean should always be float64 so convert sum and count to float64
@@ -226,7 +226,7 @@ void ReductionFunctionStd::Finalize() {
     if (sum_scalar == nullptr || !sum_scalar->is_valid ||
         sumsq_scalar == nullptr || !sumsq_scalar->is_valid ||
         count_scalar == nullptr || !count_scalar->is_valid) {
-        this->results = {arrow::MakeNullScalar(sum_scalar->type)};
+        this->results = {arrow::MakeNullScalar(arrow::float64())};
         return;
     }
     // Std should always be float64 so convert sum, sumsq and count to float64

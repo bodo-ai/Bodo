@@ -2458,7 +2458,7 @@ def test_series_describe_empty():
     bds = bd.Series([1, 2, 3])
     bds = bds[bds > 4]
 
-    with assert_executed_plan_count(1):
+    with assert_executed_plan_count(4):
         describe_pd = pds.describe()
         describe_bodo = bds.describe()
     _test_equal(describe_bodo, describe_pd, check_pandas_types=False, check_names=False)

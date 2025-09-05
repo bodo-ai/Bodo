@@ -926,7 +926,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.scalar import BodoScalar
 
         df = _compute_series_reduce(self, ["max"])
-        if df.is_lazy_plan():
+        if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
         return df["0"][0]
 
@@ -942,7 +942,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.scalar import BodoScalar
 
         df = _compute_series_reduce(self, ["sum"])
-        if df.is_lazy_plan():
+        if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
         return df["0"][0]
 
@@ -958,7 +958,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.scalar import BodoScalar
 
         df = _compute_series_reduce(self, ["product"])
-        if df.is_lazy_plan():
+        if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
         return df["0"][0]
 
@@ -969,7 +969,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.scalar import BodoScalar
 
         df = _compute_series_reduce(self, ["count"])
-        if df.is_lazy_plan():
+        if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
         return df["0"][0]
 
@@ -979,7 +979,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.scalar import BodoScalar
 
         df = _compute_series_reduce(self, ["mean"])
-        if df.is_lazy_plan():
+        if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
         return df["0"][0]
 
@@ -989,7 +989,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.pandas.scalar import BodoScalar
 
         df = _compute_series_reduce(self, ["std"])
-        if df.is_lazy_plan():
+        if hasattr(df, "_lazy") and df.is_lazy_plan():
             return BodoScalar(df["0"])
         return df["0"][0]
 
