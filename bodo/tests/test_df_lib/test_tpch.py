@@ -30,11 +30,12 @@ def run_tpch_query_test(query_func, plan_executions=0):
     bd_args = [bd.from_pandas(df) for df in pd_args]
 
     pd_result = query_func(*pd_args, **pd_kwargs)
+
     with assert_executed_plan_count(plan_executions):
         bd_result = query_func(*bd_args)
 
     if isinstance(
-        bd_result,
+        pd_result,
         (
             pd.DataFrame,
             pd.Series,
@@ -49,10 +50,10 @@ def run_tpch_query_test(query_func, plan_executions=0):
         )
     else:
         # For scalar or numeric results
-        assert isinstance(bd_result, (int, float)) and isinstance(
-            pd_result, (int, float)
+        assert isinstance(pd_result, (int, float)) and isinstance(
+            bd_result, (int, float)
         )
-        assert np.isclose(bd_result, pd_result)
+        assert np.isclose(pd_result, bd_result)
 
 
 def test_tpch_q01():
@@ -108,7 +109,7 @@ def test_tpch_q13():
 
 
 def test_tpch_q14():
-    # TODO: implement Series.where
+    # TODO [BSE-5099]: Series.where
     run_tpch_query_test(tpch.tpch_q14, plan_executions=5)
 
 
@@ -116,9 +117,7 @@ def test_tpch_q15():
     run_tpch_query_test(tpch.tpch_q15, plan_executions=1)
 
 
-@pytest.mark.skip(
-    "RuntimeError: Unsupported expression type in projection 13 (NOT #[207.0])"
-)
+@pytest.mark.skip("TODO [BSE-5105]: Support not isin inside of selection")
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
