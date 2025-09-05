@@ -2038,7 +2038,7 @@ def test_filter_pushdown_row_count_caching(
         # so we sleep for a few seconds to ensure that the query history is updated
         time.sleep(2)
         df = pd.read_sql(metadata_query, conn_str)
-        if len(df) != 0:
+        if len(df) == 2:
             break
 
     # We expect two rows, one for each filter
