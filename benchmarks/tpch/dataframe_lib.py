@@ -5,11 +5,13 @@ import inspect
 import time
 from collections.abc import Callable
 
-import bodo.pandas as pd
+import pandas as pd
+
+import bodo.pandas
 
 
 @functools.lru_cache
-def load_lineitem(data_folder: str, pd=pd):
+def load_lineitem(data_folder: str, pd=bodo.pandas):
     print("Loading lineitem")
     data_path = data_folder + "/lineitem.pq"
     df = pd.read_parquet(data_path)
@@ -21,7 +23,7 @@ def load_lineitem(data_folder: str, pd=pd):
 
 
 @functools.lru_cache
-def load_part(data_folder: str, pd=pd):
+def load_part(data_folder: str, pd=bodo.pandas):
     print("Loading part")
     data_path = data_folder + "/part.pq"
     df = pd.read_parquet(data_path)
@@ -30,7 +32,7 @@ def load_part(data_folder: str, pd=pd):
 
 
 @functools.lru_cache
-def load_orders(data_folder: str, pd=pd):
+def load_orders(data_folder: str, pd=bodo.pandas):
     print("Loading orders")
     data_path = data_folder + "/orders.pq"
     df = pd.read_parquet(data_path)
@@ -40,7 +42,7 @@ def load_orders(data_folder: str, pd=pd):
 
 
 @functools.lru_cache
-def load_customer(data_folder: str, pd=pd):
+def load_customer(data_folder: str, pd=bodo.pandas):
     print("Loading customer")
     data_path = data_folder + "/customer.pq"
     df = pd.read_parquet(data_path)
@@ -49,7 +51,7 @@ def load_customer(data_folder: str, pd=pd):
 
 
 @functools.lru_cache
-def load_nation(data_folder: str, pd=pd):
+def load_nation(data_folder: str, pd=bodo.pandas):
     print("Loading nation")
     data_path = data_folder + "/nation.pq"
     df = pd.read_parquet(data_path)
@@ -58,7 +60,7 @@ def load_nation(data_folder: str, pd=pd):
 
 
 @functools.lru_cache
-def load_region(data_folder: str, pd=pd):
+def load_region(data_folder: str, pd=bodo.pandas):
     print("Loading region")
     data_path = data_folder + "/region.pq"
     df = pd.read_parquet(data_path)
@@ -67,7 +69,7 @@ def load_region(data_folder: str, pd=pd):
 
 
 @functools.lru_cache
-def load_supplier(data_folder: str, pd=pd):
+def load_supplier(data_folder: str, pd=bodo.pandas):
     print("Loading supplier")
     data_path = data_folder + "/supplier.pq"
     df = pd.read_parquet(data_path)
@@ -76,7 +78,7 @@ def load_supplier(data_folder: str, pd=pd):
 
 
 @functools.lru_cache
-def load_partsupp(data_folder: str, pd=pd):
+def load_partsupp(data_folder: str, pd=bodo.pandas):
     print("Loading partsupp")
     data_path = data_folder + "/partsupp.pq"
     df = pd.read_parquet(data_path)
@@ -94,17 +96,15 @@ def timethis(q: Callable):
     return wrapped
 
 
-_query_to_datasets: dict[int, list[str]] = {}
+_query_to_args: dict[int, list[str]] = {}
 
 
 def collect_datasets(func: Callable):
-    _query_to_datasets[int(func.__name__[1:])] = list(
-        inspect.signature(func).parameters
-    )
+    _query_to_args[int(func.__name__[1:])] = list(inspect.signature(func).parameters)
     return func
 
 
-def tpch_q01(lineitem, pd=pd):
+def tpch_q01(lineitem, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/dask/q1.py
     """
@@ -130,7 +130,7 @@ def tpch_q01(lineitem, pd=pd):
     return result_df
 
 
-def tpch_q02(part, partsupp, supplier, nation, region, pd=pd):
+def tpch_q02(part, partsupp, supplier, nation, region, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q2.py
     """
@@ -176,7 +176,7 @@ def tpch_q02(part, partsupp, supplier, nation, region, pd=pd):
     return result_df
 
 
-def tpch_q03(lineitem, orders, customer, pd=pd):
+def tpch_q03(lineitem, orders, customer, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q3.py
     """
@@ -204,30 +204,26 @@ def tpch_q03(lineitem, orders, customer, pd=pd):
     return result_df
 
 
-# TODO: Fix fallback in drop_duplicates
-def tpch_q04(lineitem, orders, pd=pd):
+def tpch_q04(lineitem, orders, pd=bodo.pandas):
     """Pandas code adapted from:
-    https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q4.py
+    https://github.com/xorbitsai/benchmarks/blob/main/tpch/pandas_queries/queries.py
     """
-    var1 = pd.Timestamp("1993-08-01")
-    var2 = pd.Timestamp("1993-11-01")
+    var1 = pd.Timestamp("1993-11-01")
+    var2 = pd.Timestamp("1993-08-01")
 
-    jn = lineitem.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
-
-    jn = jn[(jn["O_ORDERDATE"] >= var1) & (jn["O_ORDERDATE"] < var2)]
-    jn = jn[jn["L_COMMITDATE"] < jn["L_RECEIPTDATE"]]
-
-    jn = jn.drop_duplicates(subset=["O_ORDERPRIORITY", "L_ORDERKEY"])
-
-    gb = jn.groupby("O_ORDERPRIORITY", as_index=False)
-    agg = gb.agg(ORDER_COUNT=pd.NamedAgg(column="O_ORDERKEY", aggfunc="count"))
-
-    result_df = agg.sort_values(["O_ORDERPRIORITY"])
-
-    return result_df
+    flineitem = lineitem[lineitem.L_COMMITDATE < lineitem.L_RECEIPTDATE]
+    forders = orders[(orders.O_ORDERDATE < var1) & (orders.O_ORDERDATE >= var2)]
+    jn = forders[forders["O_ORDERKEY"].isin(flineitem["L_ORDERKEY"])]
+    total = (
+        jn.groupby("O_ORDERPRIORITY", as_index=False)["O_ORDERKEY"]
+        .count()
+        .sort_values(["O_ORDERPRIORITY"])
+    )
+    total.columns = ["O_ORDERPRIORITY", "ORDER_COUNT"]
+    return total
 
 
-def tpch_q05(lineitem, orders, customer, nation, region, supplier, pd=pd):
+def tpch_q05(lineitem, orders, customer, nation, region, supplier, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q5.py
     """
@@ -255,7 +251,7 @@ def tpch_q05(lineitem, orders, customer, nation, region, supplier, pd=pd):
     return result_df
 
 
-def tpch_q06(lineitem, pd=pd):
+def tpch_q06(lineitem, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q6.py
     """
@@ -274,11 +270,10 @@ def tpch_q06(lineitem, pd=pd):
     return result_df
 
 
-def tpch_q07(lineitem, supplier, orders, customer, nation, pd=pd):
+def tpch_q07(lineitem, supplier, orders, customer, nation, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q7.py
     """
-
     var1 = "FRANCE"
     var2 = "GERMANY"
     var3 = pd.Timestamp("1995-01-01")
@@ -319,7 +314,9 @@ def tpch_q07(lineitem, supplier, orders, customer, nation, pd=pd):
     return result_df
 
 
-def tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd=pd):
+def tpch_q08(
+    part, lineitem, supplier, orders, customer, nation, region, pd=bodo.pandas
+):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q8.py
     """
@@ -364,37 +361,53 @@ def tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd=pd):
     return result_df
 
 
-def tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd=pd):
-    psel = part.P_NAME.str.contains("ghost")
-    fpart = part[psel]
-    jn1 = lineitem.merge(fpart, left_on="L_PARTKEY", right_on="P_PARTKEY")
-    jn2 = jn1.merge(supplier, left_on="L_SUPPKEY", right_on="S_SUPPKEY")
-    jn3 = jn2.merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
-    jn4 = partsupp.merge(
-        jn3, left_on=["PS_PARTKEY", "PS_SUPPKEY"], right_on=["L_PARTKEY", "L_SUPPKEY"]
+def tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = "ghost"
+
+    part = part[part.P_NAME.str.contains(var1)]
+
+    jn1 = part.merge(partsupp, left_on="P_PARTKEY", right_on="PS_PARTKEY")
+    jn2 = jn1.merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
+    jn3 = jn2.merge(
+        lineitem,
+        left_on=["PS_PARTKEY", "PS_SUPPKEY"],
+        right_on=["L_PARTKEY", "L_SUPPKEY"],
     )
-    jn5 = jn4.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
-    jn5["TMP"] = jn5.L_EXTENDEDPRICE * (1 - jn5.L_DISCOUNT) - (
-        (1 * jn5.PS_SUPPLYCOST) * jn5.L_QUANTITY
+    jn4 = jn3.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+    jn5 = jn4.merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+
+    jn5["O_YEAR"] = jn5["O_ORDERDATE"].dt.year
+    jn5["NATION"] = jn5["N_NAME"]
+    jn5["AMOUNT"] = (
+        jn5["L_EXTENDEDPRICE"] * (1 - jn5["L_DISCOUNT"])
+        - jn5["PS_SUPPLYCOST"] * jn5["L_QUANTITY"]
     )
-    jn5["O_YEAR"] = jn5.O_ORDERDATE.dt.year
-    gb = jn5.groupby(["N_NAME", "O_YEAR"], as_index=False, sort=False)["TMP"].sum()
-    total = gb.sort_values(["N_NAME", "O_YEAR"], ascending=[True, False])
-    return total
+
+    gb = jn5.groupby(["NATION", "O_YEAR"], as_index=False)
+    agg = gb.agg(SUM_PROFIT=pd.NamedAgg(column="AMOUNT", aggfunc="sum"))
+    agg["SUM_PROFIT"] = agg.SUM_PROFIT.round(2)
+    result_df = agg.sort_values(by=["NATION", "O_YEAR"], ascending=[True, False])
+
+    return result_df
 
 
-def tpch_q10(lineitem, orders, customer, nation, pd=pd):
-    date1 = pd.Timestamp("1994-11-01")
-    date2 = pd.Timestamp("1995-02-01")
-    osel = (orders.O_ORDERDATE >= date1) & (orders.O_ORDERDATE < date2)
-    lsel = lineitem.L_RETURNFLAG == "R"
-    forders = orders[osel]
-    flineitem = lineitem[lsel]
+def tpch_q10(lineitem, orders, customer, nation, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = pd.Timestamp("1994-11-01")
+    var2 = pd.Timestamp("1995-02-01")
+
+    forders = orders[(orders.O_ORDERDATE >= var1) & (orders.O_ORDERDATE < var2)]
+    flineitem = lineitem[lineitem.L_RETURNFLAG == "R"]
     jn1 = flineitem.merge(forders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
     jn2 = jn1.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
     jn3 = jn2.merge(nation, left_on="C_NATIONKEY", right_on="N_NATIONKEY")
-    jn3["TMP"] = jn3.L_EXTENDEDPRICE * (1.0 - jn3.L_DISCOUNT)
-    gb = jn3.groupby(
+    jn3["REVENUE"] = jn3.L_EXTENDEDPRICE * (1.0 - jn3.L_DISCOUNT)
+    agg = jn3.groupby(
         [
             "C_CUSTKEY",
             "C_NAME",
@@ -406,50 +419,52 @@ def tpch_q10(lineitem, orders, customer, nation, pd=pd):
         ],
         as_index=False,
         sort=False,
-    )["TMP"].sum()
-    total = gb.sort_values("TMP", ascending=False)
+    )["REVENUE"].sum()
+    agg["REVENUE"] = agg.REVENUE.round(2)
+    total = agg.sort_values("REVENUE", ascending=False)
     return total.head(20)
 
 
-def tpch_q11(partsupp, supplier, nation, pd=pd):
-    partsupp_filtered = partsupp.loc[:, ["PS_PARTKEY", "PS_SUPPKEY"]]
-    partsupp_filtered["TOTAL_COST"] = (
-        partsupp["PS_SUPPLYCOST"] * partsupp["PS_AVAILQTY"]
-    )
-    supplier_filtered = supplier.loc[:, ["S_SUPPKEY", "S_NATIONKEY"]]
-    ps_supp_merge = partsupp_filtered.merge(
-        supplier_filtered, left_on="PS_SUPPKEY", right_on="S_SUPPKEY", how="inner"
-    )
-    ps_supp_merge = ps_supp_merge.loc[:, ["PS_PARTKEY", "S_NATIONKEY", "TOTAL_COST"]]
-    nation_filtered = nation[(nation["N_NAME"] == "GERMANY")]
-    nation_filtered = nation_filtered.loc[:, ["N_NATIONKEY"]]
-    ps_supp_n_merge = ps_supp_merge.merge(
-        nation_filtered, left_on="S_NATIONKEY", right_on="N_NATIONKEY", how="inner"
-    )
-    ps_supp_n_merge = ps_supp_n_merge.loc[:, ["PS_PARTKEY", "TOTAL_COST"]]
-    sum_val = ps_supp_n_merge["TOTAL_COST"].sum() * 0.0001
-    total = ps_supp_n_merge.groupby(["PS_PARTKEY"], as_index=False, sort=False).agg(
-        VALUE=pd.NamedAgg(column="TOTAL_COST", aggfunc="sum")
-    )
-    total = total[total["VALUE"] > sum_val]
-    total = total.sort_values("VALUE", ascending=False)
-    return total
+def tpch_q11(partsupp, supplier, nation, scale_factor=1.0, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = "GERMANY"
+    var2 = 0.0001 / scale_factor
+
+    jn1 = partsupp.merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
+    jn2 = jn1.merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+
+    jn2 = jn2[jn2["N_NAME"] == var1]
+
+    threshold = (jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]).sum() * var2
+
+    jn2["VALUE"] = jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]
+
+    gb = jn2.groupby("PS_PARTKEY", as_index=False)["VALUE"].sum()
+
+    filt = gb[gb["VALUE"] > threshold]
+    filt["VALUE"] = filt.VALUE.round(2)
+    result_df = filt.sort_values(by="VALUE", ascending=False)
+
+    return result_df
 
 
-def tpch_q12(lineitem, orders, pd=pd):
-    date1 = pd.Timestamp("1994-01-01")
-    date2 = pd.Timestamp("1995-01-01")
-    sel = (
-        (lineitem.L_RECEIPTDATE < date2)
-        & (lineitem.L_COMMITDATE < date2)
-        & (lineitem.L_SHIPDATE < date2)
-        & (lineitem.L_SHIPDATE < lineitem.L_COMMITDATE)
-        & (lineitem.L_COMMITDATE < lineitem.L_RECEIPTDATE)
-        & (lineitem.L_RECEIPTDATE >= date1)
-        & ((lineitem.L_SHIPMODE == "MAIL") | (lineitem.L_SHIPMODE == "SHIP"))
-    )
-    flineitem = lineitem[sel]
-    jn = flineitem.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+def tpch_q12(lineitem, orders, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/xorbitsai/benchmarks/blob/main/tpch/pandas_queries/queries.py
+    """
+    var1 = pd.Timestamp("1994-01-01")
+    var2 = pd.Timestamp("1995-01-01")
+
+    jn1 = orders.merge(lineitem, left_on="O_ORDERKEY", right_on="L_ORDERKEY")
+    jn1 = jn1[
+        (jn1["L_SHIPMODE"].isin(("MAIL", "SHIP")))
+        & (jn1["L_COMMITDATE"] < jn1["L_RECEIPTDATE"])
+        & (jn1["L_SHIPDATE"] < jn1["L_COMMITDATE"])
+        & (jn1["L_RECEIPTDATE"] >= var1)
+        & (jn1["L_RECEIPTDATE"] < var2)
+    ]
 
     def g1(x):
         return ((x == "1-URGENT") | (x == "2-HIGH")).sum()
@@ -457,344 +472,310 @@ def tpch_q12(lineitem, orders, pd=pd):
     def g2(x):
         return ((x != "1-URGENT") & (x != "2-HIGH")).sum()
 
-    total = jn.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
-    # total = total.reset_index()  # reset index to keep consistency with pandas
-    total = total.sort_values("L_SHIPMODE")
-    return total
+    gb = jn1.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg((g1, g2))
+    result_df = gb.sort_values("L_SHIPMODE")
+
+    return result_df
 
 
-def tpch_q13(customer, orders, pd=pd):
-    customer_filtered = customer.loc[:, ["C_CUSTKEY"]]
-    orders_filtered = orders[
-        ~orders["O_COMMENT"].str.contains(r"special[\S|\s]*requests")
-    ]
-    orders_filtered = orders_filtered.loc[:, ["O_ORDERKEY", "O_CUSTKEY"]]
-    c_o_merged = customer_filtered.merge(
-        orders_filtered, left_on="C_CUSTKEY", right_on="O_CUSTKEY", how="left"
-    )
-    c_o_merged = c_o_merged.loc[:, ["C_CUSTKEY", "O_ORDERKEY"]]
-    count_df = c_o_merged.groupby(["C_CUSTKEY"], as_index=False, sort=False).agg(
+def tpch_q13(customer, orders, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = "special"
+    var2 = "requests"
+
+    orders = orders[~orders["O_COMMENT"].str.contains(f"{var1}.*{var2}")]
+
+    jn1 = customer.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY", how="left")
+
+    agg1 = jn1.groupby("C_CUSTKEY", as_index=False).agg(
         C_COUNT=pd.NamedAgg(column="O_ORDERKEY", aggfunc="count")
     )
-    total = count_df.groupby(["C_COUNT"], as_index=False, sort=False).size()
-    total.columns = ["C_COUNT", "CUSTDIST"]
-    total = total.sort_values(by=["CUSTDIST", "C_COUNT"], ascending=[False, False])
-    return total
+    agg2 = agg1.groupby("C_COUNT", as_index=False).agg(
+        CUSTDIST=pd.NamedAgg(column="C_CUSTKEY", aggfunc="size")
+    )
+
+    result_df = agg2.sort_values(by=["CUSTDIST", "C_COUNT"], ascending=[False, False])
+
+    return result_df
 
 
-def tpch_q14(lineitem, part, pd=pd):
-    startDate = pd.Timestamp("1994-03-01")
-    endDate = pd.Timestamp("1994-04-01")
-    p_type_like = "PROMO"
-    part_filtered = part.loc[:, ["P_PARTKEY", "P_TYPE"]]
-    lineitem_filtered = lineitem.loc[
-        :, ["L_EXTENDEDPRICE", "L_DISCOUNT", "L_SHIPDATE", "L_PARTKEY"]
+def tpch_q14(lineitem, part, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = pd.Timestamp("1994-03-01")
+    var2 = var1 + pd.DateOffset(months=1)
+
+    jn1 = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
+
+    jn1 = jn1[(jn1["L_SHIPDATE"] >= var1) & (jn1["L_SHIPDATE"] < var2)]
+
+    # Promo revenue by line; CASE clause
+    jn1["PROMO_REVENUE"] = jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])
+    mask = jn1["P_TYPE"].str.match("PROMO*")
+    # TODO [BSE-5099]: Series.where
+    jn1["PROMO_REVENUE"] = jn1["PROMO_REVENUE"].where(mask, 0.00)
+
+    total_promo_revenue = jn1["PROMO_REVENUE"].sum()
+    total_revenue = (jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])).sum()
+
+    # aggregate promo revenue calculation
+    ratio = 100.00 * total_promo_revenue / total_revenue
+    result_df = pd.DataFrame({"PROMO_REVENUE": [round(ratio, 2)]})
+
+    return result_df
+
+
+def tpch_q15(lineitem, supplier, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = pd.Timestamp("1996-01-01")
+    var2 = var1 + pd.DateOffset(months=3)
+
+    jn1 = lineitem[(lineitem["L_SHIPDATE"] >= var1) & (lineitem["L_SHIPDATE"] < var2)]
+
+    jn1["REVENUE"] = jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])
+
+    agg = jn1.groupby("L_SUPPKEY", as_index=False).agg(
+        TOTAL_REVENUE=pd.NamedAgg(column="REVENUE", aggfunc="sum")
+    )
+    revenue = agg.rename(columns={"L_SUPPKEY": "SUPPLIER_NO"})
+
+    jn2 = supplier.merge(
+        revenue, left_on="S_SUPPKEY", right_on="SUPPLIER_NO", how="inner"
+    )
+
+    max_revenue = revenue["TOTAL_REVENUE"].max()
+    jn2 = jn2[jn2["TOTAL_REVENUE"] == max_revenue]
+
+    result_df = jn2[
+        ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE", "TOTAL_REVENUE"]
+    ].sort_values(by="S_SUPPKEY")
+
+    return result_df
+
+
+# TODO [BSE-5105] Support not isin inside of selection"
+def tpch_q16(part, partsupp, supplier, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = "Brand#45"
+
+    supplier["IS_COMPLAINT"] = supplier["S_COMMENT"].str.contains(
+        "Customer.*Complaints"
+    )
+
+    complaint_suppkeys = supplier[supplier["IS_COMPLAINT"]]["S_SUPPKEY"]
+
+    jn1 = partsupp[not partsupp["PS_SUPPKEY"].isin(complaint_suppkeys)]
+    jn2 = jn1.merge(part, left_on="PS_PARTKEY", right_on="P_PARTKEY")
+    jn2 = jn2[
+        (jn2["P_BRAND"] != var1)
+        & (~jn2["P_TYPE"].str.startswith("MEDIUM POLISHED"))
+        & (jn2["P_SIZE"].isin((49, 14, 23, 45, 19, 3, 36, 9)))
     ]
-    sel = (lineitem_filtered.L_SHIPDATE >= startDate) & (
-        lineitem_filtered.L_SHIPDATE < endDate
-    )
-    flineitem = lineitem_filtered[sel]
-    jn = flineitem.merge(part_filtered, left_on="L_PARTKEY", right_on="P_PARTKEY")
-    jn["TMP"] = jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)
-    total = jn[jn.P_TYPE.str.startswith(p_type_like)].TMP.sum() * 100 / jn.TMP.sum()
-    return total
 
-
-def tpch_q15(lineitem, supplier, pd=pd):
-    lineitem_filtered = lineitem[
-        (lineitem["L_SHIPDATE"] >= pd.Timestamp("1996-01-01"))
-        & (
-            lineitem["L_SHIPDATE"]
-            < (pd.Timestamp("1996-01-01") + pd.DateOffset(months=3))
-        )
-    ]
-    lineitem_filtered["REVENUE_PARTS"] = lineitem_filtered["L_EXTENDEDPRICE"] * (
-        1.0 - lineitem_filtered["L_DISCOUNT"]
-    )
-    lineitem_filtered = lineitem_filtered.loc[:, ["L_SUPPKEY", "REVENUE_PARTS"]]
-    revenue_table = (
-        lineitem_filtered.groupby("L_SUPPKEY", as_index=False, sort=False)
-        .agg(TOTAL_REVENUE=pd.NamedAgg(column="REVENUE_PARTS", aggfunc="sum"))
-        .rename(columns={"L_SUPPKEY": "SUPPLIER_NO"})
-    )
-    max_revenue = revenue_table["TOTAL_REVENUE"].max()
-    revenue_table = revenue_table[revenue_table["TOTAL_REVENUE"] == max_revenue]
-    supplier_filtered = supplier.loc[:, ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE"]]
-    total = supplier_filtered.merge(
-        revenue_table, left_on="S_SUPPKEY", right_on="SUPPLIER_NO", how="inner"
-    )
-    total = total.loc[
-        :, ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE", "TOTAL_REVENUE"]
-    ]
-    return total
-
-
-def tpch_q16(part, partsupp, supplier, pd=pd):
-    part_filtered = part[
-        (part["P_BRAND"] != "Brand#45")
-        & (~part["P_TYPE"].str.contains("^MEDIUM POLISHED"))
-        & part["P_SIZE"].isin([49, 14, 23, 45, 19, 3, 36, 9])
-    ]
-    part_filtered = part_filtered.loc[:, ["P_PARTKEY", "P_BRAND", "P_TYPE", "P_SIZE"]]
-    partsupp_filtered = partsupp.loc[:, ["PS_PARTKEY", "PS_SUPPKEY"]]
-    total = part_filtered.merge(
-        partsupp_filtered, left_on="P_PARTKEY", right_on="PS_PARTKEY", how="inner"
-    )
-    total = total.loc[:, ["P_BRAND", "P_TYPE", "P_SIZE", "PS_SUPPKEY"]]
-    supplier_filtered = supplier[
-        supplier["S_COMMENT"].str.contains(r"Customer(\S|\s)*Complaints")
-    ]
-    supplier_filtered = supplier_filtered.loc[:, ["S_SUPPKEY"]].drop_duplicates()
-    # left merge to select only PS_SUPPKEY values not in supplier_filtered
-    total = total.merge(
-        supplier_filtered, left_on="PS_SUPPKEY", right_on="S_SUPPKEY", how="left"
-    )
-    total = total[total["S_SUPPKEY"].isna()]
-    total = total.loc[:, ["P_BRAND", "P_TYPE", "P_SIZE", "PS_SUPPKEY"]]
-    total = total.groupby(["P_BRAND", "P_TYPE", "P_SIZE"], as_index=False, sort=False)[
+    agg = jn2.groupby(by=["P_BRAND", "P_TYPE", "P_SIZE"], as_index=False)[
         "PS_SUPPKEY"
     ].nunique()
-    total.columns = ["P_BRAND", "P_TYPE", "P_SIZE", "SUPPLIER_CNT"]
-    total = total.sort_values(
+    agg = agg.rename(columns={"PS_SUPPKEY": "SUPPLIER_CNT"})
+
+    result_df = agg.sort_values(
         by=["SUPPLIER_CNT", "P_BRAND", "P_TYPE", "P_SIZE"],
         ascending=[False, True, True, True],
     )
-    return total
+
+    return result_df
 
 
-def tpch_q17(lineitem, part, pd=pd):
-    left = lineitem.loc[:, ["L_PARTKEY", "L_QUANTITY", "L_EXTENDEDPRICE"]]
-    right = part[((part["P_BRAND"] == "Brand#23") & (part["P_CONTAINER"] == "MED BOX"))]
-    right = right.loc[:, ["P_PARTKEY"]]
-    line_part_merge = left.merge(
-        right, left_on="L_PARTKEY", right_on="P_PARTKEY", how="inner"
+def tpch_q17(lineitem, part, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = "Brand#23"
+    var2 = "MED BOX"
+
+    jn1 = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
+    jn1 = jn1[((jn1["P_BRAND"] == var1) & (jn1["P_CONTAINER"] == var2))]
+
+    agg = jn1.groupby("L_PARTKEY", as_index=False).agg(
+        L_QUANTITY_AVG=pd.NamedAgg(column="L_QUANTITY", aggfunc="mean")
     )
-    line_part_merge = line_part_merge.loc[
-        :, ["L_QUANTITY", "L_EXTENDEDPRICE", "P_PARTKEY"]
-    ]
-    lineitem_filtered = lineitem.loc[:, ["L_PARTKEY", "L_QUANTITY"]]
-    lineitem_avg = lineitem_filtered.groupby(
-        ["L_PARTKEY"], as_index=False, sort=False
-    ).agg(avg=pd.NamedAgg(column="L_QUANTITY", aggfunc="mean"))
-    lineitem_avg["avg"] = 0.2 * lineitem_avg["avg"]
-    lineitem_avg = lineitem_avg.loc[:, ["L_PARTKEY", "avg"]]
-    total = line_part_merge.merge(
-        lineitem_avg, left_on="P_PARTKEY", right_on="L_PARTKEY", how="inner"
-    )
-    total = total[total["L_QUANTITY"] < total["avg"]]
-    total = pd.DataFrame({"avg_yearly": [total["L_EXTENDEDPRICE"].sum() / 7.0]})
-    return total
+
+    jn4 = jn1.merge(agg, left_on="L_PARTKEY", right_on="L_PARTKEY", how="left")
+    jn4 = jn4[jn4["L_QUANTITY"] < 0.2 * jn4["L_QUANTITY_AVG"]]
+    total = jn4["L_EXTENDEDPRICE"].sum() / 7.0
+
+    result_df = pd.DataFrame({"AVG_YEARLY": [round(total, 2)]})
+
+    return result_df
 
 
-def tpch_q18(lineitem, orders, customer, pd=pd):
-    gb1 = lineitem.groupby("L_ORDERKEY", as_index=False, sort=False)["L_QUANTITY"].sum()
-    fgb1 = gb1[gb1.L_QUANTITY > 300]
-    jn1 = fgb1.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+def tpch_q18(lineitem, orders, customer, pd=bodo.pandas):
+    """Adapted from:
+    github.com/xorbitsai/benchmarks/blob/main/tpch/pandas_queries/queries.py
+    """
+    var1 = 300
+
+    agg1 = lineitem.groupby("L_ORDERKEY", as_index=False, sort=False)[
+        "L_QUANTITY"
+    ].sum()
+    filt = agg1[agg1.L_QUANTITY > var1]
+    jn1 = filt.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
     jn2 = jn1.merge(customer, left_on="O_CUSTKEY", right_on="C_CUSTKEY")
-    gb2 = jn2.groupby(
+    agg2 = jn2.groupby(
         ["C_NAME", "C_CUSTKEY", "O_ORDERKEY", "O_ORDERDATE", "O_TOTALPRICE"],
         as_index=False,
         sort=False,
     )["L_QUANTITY"].sum()
-    total = gb2.sort_values(["O_TOTALPRICE", "O_ORDERDATE"], ascending=[False, True])
+    total = agg2.sort_values(["O_TOTALPRICE", "O_ORDERDATE"], ascending=[False, True])
     return total.head(100)
 
 
-def tpch_q19(lineitem, part, pd=pd):
-    Brand31 = "Brand#31"
-    Brand43 = "Brand#43"
-    SMBOX = "SM BOX"
-    SMCASE = "SM CASE"
-    SMPACK = "SM PACK"
-    SMPKG = "SM PKG"
-    MEDBAG = "MED BAG"
-    MEDBOX = "MED BOX"
-    MEDPACK = "MED PACK"
-    MEDPKG = "MED PKG"
-    LGBOX = "LG BOX"
-    LGCASE = "LG CASE"
-    LGPACK = "LG PACK"
-    LGPKG = "LG PKG"
-    DELIVERINPERSON = "DELIVER IN PERSON"
-    AIR = "AIR"
-    AIRREG = "AIRREG"
-    lsel = (
+def tpch_q19(lineitem, part, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    jn1 = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
+    jn1 = jn1[
         (
-            ((lineitem.L_QUANTITY <= 36) & (lineitem.L_QUANTITY >= 26))
-            | ((lineitem.L_QUANTITY <= 25) & (lineitem.L_QUANTITY >= 15))
-            | ((lineitem.L_QUANTITY <= 14) & (lineitem.L_QUANTITY >= 4))
-        )
-        & (lineitem.L_SHIPINSTRUCT == DELIVERINPERSON)
-        & ((lineitem.L_SHIPMODE == AIR) | (lineitem.L_SHIPMODE == AIRREG))
-    )
-    psel = (part.P_SIZE >= 1) & (
-        (
-            (part.P_SIZE <= 5)
-            & (part.P_BRAND == Brand31)
-            & (part.P_CONTAINER.isin([SMBOX, SMCASE, SMPACK, SMPKG]))
+            (jn1["P_BRAND"] == "Brand#31")
+            & (jn1["P_CONTAINER"].isin(("SM CASE", "SM BOX", "SM PACK", "SM PKG")))
+            & ((jn1["L_QUANTITY"] >= 4) & (jn1["L_QUANTITY"] <= 14))
+            & (jn1["P_SIZE"] <= 5)
+            & (jn1["L_SHIPMODE"].isin(("AIR", "AIR REG")))
+            & (jn1["L_SHIPINSTRUCT"] == "DELIVER IN PERSON")
         )
         | (
-            (part.P_SIZE <= 10)
-            & (part.P_BRAND == Brand43)
-            & (part.P_CONTAINER.isin([MEDBAG, MEDBOX, MEDPACK, MEDPKG]))
+            (jn1["P_BRAND"] == "Brand#43")
+            & (jn1["P_CONTAINER"].isin(("MED BAG", "MED BOX", "MED PKG", "MED PACK")))
+            & ((jn1["L_QUANTITY"] >= 15) & (jn1["L_QUANTITY"] <= 25))
+            & ((jn1["P_SIZE"] >= 1) & (jn1["P_SIZE"] <= 10))
+            & (jn1["L_SHIPMODE"].isin(("AIR", "AIR REG")))
+            & (jn1["L_SHIPINSTRUCT"] == "DELIVER IN PERSON")
         )
         | (
-            (part.P_SIZE <= 15)
-            & (part.P_BRAND == Brand43)
-            & (part.P_CONTAINER.isin([LGBOX, LGCASE, LGPACK, LGPKG]))
+            (jn1["P_BRAND"] == "Brand#43")
+            & (jn1["P_CONTAINER"].isin(("LG CASE", "LG BOX", "LG PACK", "LG PKG")))
+            & ((jn1["L_QUANTITY"] >= 26) & (jn1["L_QUANTITY"] <= 36))
+            & (jn1["P_SIZE"] <= 15)
+            & (jn1["L_SHIPMODE"].isin(("AIR", "AIR REG")))
+            & (jn1["L_SHIPINSTRUCT"] == "DELIVER IN PERSON")
         )
-    )
-    flineitem = lineitem[lsel]
-    fpart = part[psel]
-    jn = flineitem.merge(fpart, left_on="L_PARTKEY", right_on="P_PARTKEY")
-    jnsel = (
-        (
-            (jn.P_BRAND == Brand31)
-            & (jn.P_CONTAINER.isin([SMBOX, SMCASE, SMPACK, SMPKG]))
-            & (jn.L_QUANTITY >= 4)
-            & (jn.L_QUANTITY <= 14)
-            & (jn.P_SIZE <= 5)
-        )
-        | (
-            (jn.P_BRAND == Brand43)
-            & (jn.P_CONTAINER.isin([MEDBAG, MEDBOX, MEDPACK, MEDPKG]))
-            & (jn.L_QUANTITY >= 15)
-            & (jn.L_QUANTITY <= 25)
-            & (jn.P_SIZE <= 10)
-        )
-        | (
-            (jn.P_BRAND == Brand43)
-            & (jn.P_CONTAINER.isin([LGBOX, LGCASE, LGPACK, LGPKG]))
-            & (jn.L_QUANTITY >= 26)
-            & (jn.L_QUANTITY <= 36)
-            & (jn.P_SIZE <= 15)
-        )
-    )
-    jn = jn[jnsel]
-    total = (jn.L_EXTENDEDPRICE * (1.0 - jn.L_DISCOUNT)).sum()
-    return total
-
-
-def tpch_q20(lineitem, part, nation, partsupp, supplier, pd=pd):
-    date1 = pd.Timestamp("1996-01-01")
-    date2 = pd.Timestamp("1997-01-01")
-    psel = part.P_NAME.str.startswith("azure")
-    nsel = nation.N_NAME == "JORDAN"
-    lsel = (lineitem.L_SHIPDATE >= date1) & (lineitem.L_SHIPDATE < date2)
-    fpart = part[psel]
-    fnation = nation[nsel]
-    flineitem = lineitem[lsel]
-    jn1 = fpart.merge(partsupp, left_on="P_PARTKEY", right_on="PS_PARTKEY")
-    jn2 = jn1.merge(
-        flineitem,
-        left_on=["PS_PARTKEY", "PS_SUPPKEY"],
-        right_on=["L_PARTKEY", "L_SUPPKEY"],
-    )
-    gb = jn2.groupby(
-        ["PS_PARTKEY", "PS_SUPPKEY", "PS_AVAILQTY"], as_index=False, sort=False
-    )["L_QUANTITY"].sum()
-    gbsel = gb.PS_AVAILQTY > (0.5 * gb.L_QUANTITY)
-    fgb = gb[gbsel]
-    jn3 = fgb.merge(supplier, left_on="PS_SUPPKEY", right_on="S_SUPPKEY")
-    jn4 = fnation.merge(jn3, left_on="N_NATIONKEY", right_on="S_NATIONKEY")
-    jn4 = jn4.loc[:, ["S_NAME", "S_ADDRESS"]]
-    total = jn4.sort_values("S_NAME").drop_duplicates()
-    return total
-
-
-def tpch_q21(lineitem, orders, supplier, nation, pd=pd):
-    lineitem_filtered = lineitem.loc[
-        :, ["L_ORDERKEY", "L_SUPPKEY", "L_RECEIPTDATE", "L_COMMITDATE"]
     ]
 
-    # Keep all rows that have another row in linetiem with the same orderkey and different suppkey
-    lineitem_orderkeys = (
-        lineitem_filtered.loc[:, ["L_ORDERKEY", "L_SUPPKEY"]]
-        .groupby("L_ORDERKEY", as_index=False, sort=False)["L_SUPPKEY"]
-        .nunique()
-    )
-    lineitem_orderkeys.columns = ["L_ORDERKEY", "nunique_col"]
-    lineitem_orderkeys = lineitem_orderkeys[lineitem_orderkeys["nunique_col"] > 1]
-    lineitem_orderkeys = lineitem_orderkeys.loc[:, ["L_ORDERKEY"]]
+    total = (jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])).sum()
 
-    # Keep all rows that have l_receiptdate > l_commitdate
-    lineitem_filtered = lineitem_filtered[
-        lineitem_filtered["L_RECEIPTDATE"] > lineitem_filtered["L_COMMITDATE"]
+    result_df = pd.DataFrame({"REVENUE": [round(total, 2)]})
+
+    return result_df
+
+
+def tpch_q20(lineitem, part, nation, partsupp, supplier, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = pd.Timestamp("1996-01-01")
+    var2 = pd.Timestamp("1997-01-01")
+    var3 = "JORDAN"
+    var4 = "azure"
+
+    flineitem = lineitem[
+        (lineitem["L_SHIPDATE"] >= var1) & (lineitem["L_SHIPDATE"] < var2)
     ]
-    lineitem_filtered = lineitem_filtered.loc[:, ["L_ORDERKEY", "L_SUPPKEY"]]
+    agg = flineitem.groupby(["L_SUPPKEY", "L_PARTKEY"], as_index=False).agg(
+        SUM_QUANTITY=pd.NamedAgg(column="L_QUANTITY", aggfunc="sum")
+    )
+    agg["SUM_QUANTITY"] = agg["SUM_QUANTITY"] * 0.5
 
-    # Merge Filter + Exists
-    lineitem_filtered = lineitem_filtered.merge(
-        lineitem_orderkeys, on="L_ORDERKEY", how="inner"
+    fnation = nation[nation["N_NAME"] == var3]
+
+    jn1 = supplier.merge(fnation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
+
+    fpart = part[part["P_NAME"].str.startswith(var4)]
+
+    jn2 = partsupp.merge(fpart, left_on="PS_PARTKEY", right_on="P_PARTKEY")
+    jn3 = jn2.merge(
+        agg,
+        left_on=["PS_SUPPKEY", "PS_PARTKEY"],
+        right_on=["L_SUPPKEY", "L_PARTKEY"],
+    )
+    jn3 = jn3[jn3["PS_AVAILQTY"] > jn3["SUM_QUANTITY"]]
+    jn4 = jn1.merge(jn3, left_on="S_SUPPKEY", right_on="PS_SUPPKEY")
+
+    result_df = jn4[["S_NAME", "S_ADDRESS"]].sort_values("S_NAME", ascending=True)
+
+    return result_df
+
+
+def tpch_q21(lineitem, orders, supplier, nation, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    var1 = "SAUDI ARABIA"
+
+    gb1 = lineitem.groupby("L_ORDERKEY", as_index=False).agg(
+        NUM_SUPPLIERS=pd.NamedAgg(column="L_SUPPKEY", aggfunc="nunique")
+    )
+    gb1 = gb1[gb1["NUM_SUPPLIERS"] > 1]
+
+    flineitem = lineitem[lineitem["L_RECEIPTDATE"] > lineitem["L_COMMITDATE"]]
+    jn1 = gb1.merge(flineitem, on="L_ORDERKEY")
+
+    gb2 = jn1.groupby("L_ORDERKEY", as_index=False).agg(
+        NUNIQUE_COL=pd.NamedAgg(column="L_SUPPKEY", aggfunc="nunique")
     )
 
-    # Not Exists: Check the exists condition isn't still satisfied on the output.
-    lineitem_orderkeys = lineitem_filtered.groupby(
-        "L_ORDERKEY", as_index=False, sort=False
-    )["L_SUPPKEY"].nunique()
-    lineitem_orderkeys.columns = ["L_ORDERKEY", "nunique_col"]
-    lineitem_orderkeys = lineitem_orderkeys[lineitem_orderkeys["nunique_col"] == 1]
-    lineitem_orderkeys = lineitem_orderkeys.loc[:, ["L_ORDERKEY"]]
+    jn2 = gb2.merge(jn1, on="L_ORDERKEY")
+    jn3 = jn2.merge(orders, left_on="L_ORDERKEY", right_on="O_ORDERKEY")
+    jn4 = jn3.merge(supplier, left_on="L_SUPPKEY", right_on="S_SUPPKEY")
+    jn5 = jn4.merge(nation, left_on="S_NATIONKEY", right_on="N_NATIONKEY")
 
-    # Merge Filter + Not Exists
-    lineitem_filtered = lineitem_filtered.merge(
-        lineitem_orderkeys, on="L_ORDERKEY", how="inner"
-    )
-
-    orders_filtered = orders.loc[:, ["O_ORDERSTATUS", "O_ORDERKEY"]]
-    orders_filtered = orders_filtered[orders_filtered["O_ORDERSTATUS"] == "F"]
-    orders_filtered = orders_filtered.loc[:, ["O_ORDERKEY"]]
-    total = lineitem_filtered.merge(
-        orders_filtered, left_on="L_ORDERKEY", right_on="O_ORDERKEY", how="inner"
-    )
-    total = total.loc[:, ["L_SUPPKEY"]]
-
-    supplier_filtered = supplier.loc[:, ["S_SUPPKEY", "S_NATIONKEY", "S_NAME"]]
-    total = total.merge(
-        supplier_filtered, left_on="L_SUPPKEY", right_on="S_SUPPKEY", how="inner"
-    )
-    total = total.loc[:, ["S_NATIONKEY", "S_NAME"]]
-    nation_filtered = nation.loc[:, ["N_NAME", "N_NATIONKEY"]]
-    nation_filtered = nation_filtered[nation_filtered["N_NAME"] == "SAUDI ARABIA"]
-    total = total.merge(
-        nation_filtered, left_on="S_NATIONKEY", right_on="N_NATIONKEY", how="inner"
-    )
-    total = total.loc[:, ["S_NAME"]]
-    total = total.groupby("S_NAME", as_index=False, sort=False).size()
-    total.columns = ["S_NAME", "NUMWAIT"]
-    total = total.sort_values(by=["NUMWAIT", "S_NAME"], ascending=[False, True])
-    return total
-
-
-def tpch_q22(customer, orders, pd=pd):
-    customer_filtered = customer.loc[:, ["C_ACCTBAL", "C_CUSTKEY"]]
-    customer_filtered["CNTRYCODE"] = customer["C_PHONE"].str.slice(0, 2)
-    customer_filtered = customer_filtered[
-        (customer["C_ACCTBAL"] > 0.00)
-        & customer_filtered["CNTRYCODE"].isin(
-            ["13", "31", "23", "29", "30", "18", "17"]
+    jn5 = jn5[
+        (
+            (jn5["NUNIQUE_COL"] == 1)
+            & (jn5["N_NAME"] == var1)
+            & (jn5["O_ORDERSTATUS"] == "F")
         )
     ]
-    avg_value = customer_filtered["C_ACCTBAL"].mean()
-    customer_filtered = customer_filtered[customer_filtered["C_ACCTBAL"] > avg_value]
-    # Select only the keys that don't match by performing a left join and only selecting columns with an na value
-    orders_filtered = orders.loc[:, ["O_CUSTKEY"]].drop_duplicates()
-    customer_keys = customer_filtered.loc[:, ["C_CUSTKEY"]].drop_duplicates()
-    customer_selected = customer_keys.merge(
-        orders_filtered, left_on="C_CUSTKEY", right_on="O_CUSTKEY", how="left"
+    gb3 = jn5.groupby("S_NAME", as_index=False).agg(
+        NUMWAIT=pd.NamedAgg(column="NUNIQUE_COL", aggfunc="size")
     )
-    customer_selected = customer_selected[customer_selected["O_CUSTKEY"].isna()]
-    customer_selected = customer_selected.loc[:, ["C_CUSTKEY"]]
-    customer_selected = customer_selected.merge(
-        customer_filtered, on="C_CUSTKEY", how="inner"
+
+    result_df = gb3.sort_values(["NUMWAIT", "S_NAME"], ascending=[False, True]).head(
+        100
     )
-    customer_selected = customer_selected.loc[:, ["CNTRYCODE", "C_ACCTBAL"]]
-    total = customer_selected.groupby(["CNTRYCODE"], as_index=False, sort=False).agg(
-        ["size", "sum"]
+
+    return result_df
+
+
+def tpch_q22(customer, orders, pd=bodo.pandas):
+    """Adapted from:
+    https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
+    """
+    customer["CNTRYCODE"] = customer["C_PHONE"].str.strip().str.slice(0, 2)
+    fcustomers = customer[
+        customer["CNTRYCODE"].isin(("13", "31", "23", "29", "30", "18", "17"))
+    ]
+
+    average_c_acctbal = fcustomers[fcustomers["C_ACCTBAL"] > 0.0]["C_ACCTBAL"].mean()
+    custsale = fcustomers[fcustomers["C_ACCTBAL"] > average_c_acctbal]
+
+    jn1 = custsale.merge(orders, left_on="C_CUSTKEY", right_on="O_CUSTKEY", how="left")
+    jn1 = jn1[jn1["O_CUSTKEY"].isnull()]
+
+    agg1 = jn1.groupby("CNTRYCODE", as_index=False).agg(
+        NUMCUST=pd.NamedAgg(column="C_ACCTBAL", aggfunc="size"),
+        TOTACCTBAL=pd.NamedAgg(column="C_ACCTBAL", aggfunc="sum"),
     )
-    total.columns = ["CNTRYCODE", "NUMCUST", "TOTACCTBAL"]
-    total = total.sort_values(by=["CNTRYCODE"], ascending=[True])
-    return total
+
+    result_df = agg1.sort_values("CNTRYCODE", ascending=True)
+
+    return result_df
 
 
 @timethis
@@ -859,8 +840,8 @@ def q10(lineitem, orders, customer, nation):
 
 @timethis
 @collect_datasets
-def q11(partsupp, supplier, nation):
-    print(tpch_q11(partsupp, supplier, nation))
+def q11(partsupp, supplier, nation, scale_factor):
+    print(tpch_q11(partsupp, supplier, nation, scale_factor))
 
 
 @timethis
@@ -929,17 +910,17 @@ def q22(customer, orders):
     print(tpch_q22(customer, orders))
 
 
-def run_queries(
-    root: str,
-    queries: list[int],
-):
+def run_queries(root: str, queries: list[int], scale_factor: float):
     total_start = time.time()
     print("Start data loading")
     queries_to_args = {}
     for query in queries:
         args = []
-        for dataset in _query_to_datasets[query]:
-            args.append(globals()[f"load_{dataset}"](root))
+        for arg in _query_to_args[query]:
+            if arg == "scale_factor":
+                args.append(scale_factor)
+            else:
+                args.append(globals()[f"load_{arg}"](root))
         queries_to_args[query] = args
     print(f"Data loading time (s): {time.time() - total_start}")
 
@@ -964,19 +945,24 @@ def main():
         required=False,
         help="Comma separated TPC-H queries to run.",
     )
+    parser.add_argument(
+        "--scale_factor",
+        type=float,
+        required=False,
+        default=1.0,
+        help="Scale factor (used in query 11).",
+    )
 
     args = parser.parse_args()
     data_set = args.folder
+    scale_factor = args.scale_factor
 
     queries = list(range(1, 23))
     if args.queries is not None:
         queries = args.queries
     print(f"Queries to run: {queries}")
 
-    run_queries(
-        data_set,
-        queries=queries,
-    )
+    run_queries(data_set, queries=queries, scale_factor=scale_factor)
 
 
 if __name__ == "__main__":
