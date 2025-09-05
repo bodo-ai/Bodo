@@ -15,6 +15,7 @@
 #include "_bodo_write_function.h"
 #include "_executor.h"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
+#include "duckdb/common/enums/cte_materialize.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/unique_ptr.hpp"
@@ -819,6 +820,31 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
                                                    std::move(bind_data1));
 
     return scalar_expr;
+}
+
+duckdb::unique_ptr<duckdb::LogicalMaterializedCTE> make_cte(
+    std::unique_ptr<duckdb::LogicalOperator> &duplicated,
+    std::unique_ptr<duckdb::LogicalOperator> &uses_duplicated,
+    PyObject *out_schema_py) {
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto duplicated_duck = to_duckdb(duplicated);
+    auto uses_duplicated_duck = to_duckdb(uses_duplicated);
+    auto table_idx = get_duckdb_binder().get()->GenerateTableIndex();
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
+
+    return duckdb::make_uniq<duckdb::LogicalMaterializedCTE>(
+        "bodo_cte", table_idx, arrow_schema->num_fields(),
+        std::move(duplicated_duck), std::move(uses_duplicated_duck));
+}
+
+duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
+    PyObject *out_schema_py) {
+    auto table_idx = get_duckdb_binder().get()->GenerateTableIndex();
+    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
+    auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
+    return duckdb::make_uniq<duckdb::LogicalCTERef>(
+        table_idx, 0, return_types, return_names,
+        duckdb::CTEMaterialize::CTE_MATERIALIZE_DEFAULT);
 }
 
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(

@@ -16,6 +16,8 @@
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/operator/logical_cteref.hpp"
+#include "duckdb/planner/operator/logical_materialized_cte.hpp"
 
 /**
  * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
@@ -36,6 +38,27 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
  */
 std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py);
+
+/**
+ * @brief Creates a LogicalMaterializedCTE node.
+ *
+ * @param duplicated - the duplicated part of the plan
+ * @param uses_duplicated - the plan that uses the duplicated part
+ * @param out_schema_py - the schema of data coming out
+ * @return duckdb::unique_ptr<duckdb::LogicalMaterializedCTE> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalMaterializedCTE> make_cte(
+    std::unique_ptr<duckdb::LogicalOperator> &duplicated,
+    std::unique_ptr<duckdb::LogicalOperator> &uses_duplicated,
+    PyObject *out_schema_py);
+
+/**
+ * @brief Creates a LogicalCTERef node.
+ *
+ * @param out_schema_py - the schema of data coming out
+ * @return duckdb::unique_ptr<duckdb::LogicalCTERef> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(PyObject *out_schema_py);
 
 /**
  * @brief Creates a LogicalComparisonJoin node.
