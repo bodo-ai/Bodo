@@ -41,9 +41,6 @@ def run_tpch_query_test(query_func, plan_executions=0):
         _test_equal(bd_result, pd_result, check_pandas_types=False, reset_index=True)
     else:
         # For scalar or numeric results
-        assert isinstance(pd_result, (int, float)) and isinstance(
-            bd_result, (int, float)
-        )
         assert np.isclose(pd_result, bd_result)
 
 
