@@ -15,7 +15,6 @@
 #include "duckdb/planner/operator/logical_prepare.hpp"
 
 #include "duckdb/function/scalar/generic_functions.hpp"
-#include <iostream>
 
 namespace duckdb {
 
@@ -89,18 +88,15 @@ void CTEInlining::TryInlining(unique_ptr<LogicalOperator> &op) {
 	if (op->type == LogicalOperatorType::LOGICAL_MATERIALIZED_CTE) {
 		auto &cte = op->Cast<LogicalMaterializedCTE>();
 		auto ref_count = CountCTEReferences(*op, cte.table_index);
-std::cout << "CTEInlining " << ref_count << std::endl;
 		if (ref_count == 0) {
 			// this CTE is not referenced, we can remove it
 			op = std::move(op->children[1]);
 			return;
 		}
-std::cout << "CTEInlining before materialize " << std::endl;
 		if (cte.materialize == CTEMaterialize::CTE_MATERIALIZE_ALWAYS) {
 			// This CTE is always materialized, we cannot inline it
 			return;
 		}
-std::cout << "CTEInlining after materialize " << std::endl;
 		if (ref_count == 1) {
 			// this CTE is only referenced once, we can inline it directly without copying
 			bool success = Inline(op->children[1], *op, false);
@@ -110,7 +106,6 @@ std::cout << "CTEInlining after materialize " << std::endl;
 			return;
 		}
 		if (ref_count > 1) {
-std::cout << "CTEInlining ref_count > 1" << std::endl;
 			if (cte.materialize == CTEMaterialize::CTE_MATERIALIZE_NEVER) {
 				// this CTE is referenced multiple times, but we are not allowed to materialize it
 				// we have to inline it if possible
@@ -124,20 +119,17 @@ std::cout << "CTEInlining ref_count > 1" << std::endl;
 			PreventInlining prevent_inlining;
 			prevent_inlining.VisitOperator(*op->children[0]);
 
-std::cout << "CTEInlining prevent_inlining" << prevent_inlining.prevent_inlining << std::endl;
 			if (prevent_inlining.prevent_inlining) {
 				// we cannot inline this CTE, we have to keep it materialized
 				return;
 			}
 
-std::cout << "CTEInlining before agg or distinct" << std::endl;
 			// Prevent inlining if the CTE ends in an aggregate or distinct operator
 			// This mimics the behavior of the CTE materialization in the binder
 			if (EndsInAggregateOrDistinct(*op->children[0])) {
 				return;
 			}
 
-std::cout << "CTEInlining before agg or distinct" << std::endl;
 			// CTEs require full materialization before the CTE scans begin,
 			// LIMIT and TOP_N operators cannot abort the materialization,
 			// even if only a part of the CTE result is needed.
@@ -151,7 +143,6 @@ std::cout << "CTEInlining before agg or distinct" << std::endl;
 				}
 				return;
 			}
-std::cout << "CTEInlining end" << std::endl;
 		}
 	}
 }
