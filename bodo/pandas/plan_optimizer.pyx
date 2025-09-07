@@ -252,11 +252,11 @@ cdef extern from "duckdb/common/enums/join_type.hpp" namespace "duckdb" nogil:
 
 cdef extern from "duckdb/planner/operator/logical_materialized_cte.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalMaterializedCTE" duckdb::LogicalMaterializedCTE"(CLogicalOperator):
-        pass
+        idx_t table_index
 
 cdef extern from "duckdb/planner/operator/logical_cteref.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalCTERef" duckdb::LogicalCTERef"(CLogicalOperator):
-        pass
+        idx_t table_index
 
 cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalOperator):
@@ -303,12 +303,13 @@ cdef extern from "duckdb/planner/operator/logical_copy_to_file.hpp" namespace "d
         pass
 
 cdef extern from "_plan.h" nogil:
+    cdef idx_t getTableIndex() except +
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate) except +
-    cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema) except +
-    cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema) except +
+    cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
+    cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
     cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
@@ -418,9 +419,9 @@ cdef class LogicalMaterializedCTE(LogicalOperator):
     """Wrapper around DuckDB's LogicalMaterializedCTE to provide access in Python.
     """
 
-    def __cinit__(self, out_schema, LogicalOperator duplicated, LogicalOperator uses_duplicated):
+    def __cinit__(self, out_schema, LogicalOperator duplicated, LogicalOperator uses_duplicated, idx_t table_index):
         self.out_schema = out_schema
-        cdef unique_ptr[CLogicalMaterializedCTE] c_logical_cte = make_cte(duplicated.c_logical_operator, uses_duplicated.c_logical_operator, out_schema)
+        cdef unique_ptr[CLogicalMaterializedCTE] c_logical_cte = make_cte(duplicated.c_logical_operator, uses_duplicated.c_logical_operator, out_schema, table_index)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_cte.release())
 
     def __str__(self):
@@ -431,9 +432,9 @@ cdef class LogicalCTERef(LogicalOperator):
     """Wrapper around DuckDB's LogicalCTERef to provide access in Python.
     """
 
-    def __cinit__(self, out_schema):
+    def __cinit__(self, out_schema, idx_t table_index):
         self.out_schema = out_schema
-        cdef unique_ptr[CLogicalCTERef] c_logical_cte_ref = make_cte_ref(out_schema)
+        cdef unique_ptr[CLogicalCTERef] c_logical_cte_ref = make_cte_ref(out_schema, table_index)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_cte_ref.release())
 
     def __str__(self):
@@ -1072,3 +1073,7 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
     if output_func is None:
         raise ValueError("output_func is None.")
     return output_func(cpp_table, out_schema)
+
+def py_get_table_index():
+    """Python-callable wrapper for getTableIndex()."""
+    return getTableIndex()

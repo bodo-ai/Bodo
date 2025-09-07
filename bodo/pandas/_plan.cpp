@@ -721,27 +721,17 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
  */
 static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
                         duckdb::Vector &result) {
-    std::cout << "runFunction elements " << args.size() << " columns "
-              << args.ColumnCount() << std::endl;
     std::vector<std::shared_ptr<array_info>> table_columns;
     duckdb::idx_t num_rows = args.size();
     for (duckdb::idx_t i = 0; i < args.ColumnCount(); ++i) {
-        duckdb::LogicalTypeId vtype = args.data[i].GetType().id();
-        std::cout << "vtype " << static_cast<int>(vtype) << std::endl;
-
         std::shared_ptr<arrow::Array> arrow_array =
             duckdbVectorToArrowArray(args.data[i], num_rows);
-        // std::cout << "arrow_array " << arrow_array->ToString() << std::endl;
         table_columns.emplace_back(
             arrow_array_to_bodo(arrow_array, bodo::BufferPool::DefaultPtr()));
     }
-    // for (auto &vec : args.data) {
-    //     std::cout << vec.ToString() << std::endl;
-    // }
     std::shared_ptr<table_info> in_table =
         std::make_shared<table_info>(table_columns);
 
-    std::cout << "state.expr " << state.expr.ToString() << std::endl;
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> empty_col_ref_map;
     auto expr_copy = state.expr.Copy();
     std::shared_ptr<PhysicalExpression> temp_pe =
@@ -770,7 +760,6 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
                             bodo::default_buffer_memory_manager());
 
     arrowArrayToDuckdbVector(arrow_array, result, num_rows);
-    // throw std::runtime_error("Cannot run Bodo UDFs during optimization.");
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
@@ -822,28 +811,31 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     return scalar_expr;
 }
 
+duckdb::idx_t getTableIndex() {
+    return get_duckdb_binder().get()->GenerateTableIndex();
+}
+
 duckdb::unique_ptr<duckdb::LogicalMaterializedCTE> make_cte(
     std::unique_ptr<duckdb::LogicalOperator> &duplicated,
     std::unique_ptr<duckdb::LogicalOperator> &uses_duplicated,
-    PyObject *out_schema_py) {
+    PyObject *out_schema_py, duckdb::idx_t table_index) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto duplicated_duck = to_duckdb(duplicated);
     auto uses_duplicated_duck = to_duckdb(uses_duplicated);
-    auto table_idx = get_duckdb_binder().get()->GenerateTableIndex();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
 
     return duckdb::make_uniq<duckdb::LogicalMaterializedCTE>(
-        "bodo_cte", table_idx, arrow_schema->num_fields(),
+        "bodo_cte", table_index, arrow_schema->num_fields(),
         std::move(duplicated_duck), std::move(uses_duplicated_duck));
 }
 
 duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
-    PyObject *out_schema_py) {
-    auto table_idx = get_duckdb_binder().get()->GenerateTableIndex();
+    PyObject *out_schema_py, duckdb::idx_t table_index) {
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
+    auto new_table_index = get_duckdb_binder().get()->GenerateTableIndex();
     return duckdb::make_uniq<duckdb::LogicalCTERef>(
-        table_idx, 0, return_types, return_names,
+        new_table_index, table_index, return_types, return_names,
         duckdb::CTEMaterialize::CTE_MATERIALIZE_DEFAULT);
 }
 

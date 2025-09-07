@@ -104,78 +104,19 @@ class LazyPlan:
                     queue.append(node.args[0])
         return None
 
-    def get_subqueries(self, seen=None):
-        """Find a duplicated subquery in the current plan."""
-        if seen is None:
-            seen = set()
-        # Ignore seq or par Pandas reading as there is no possible
-        # materialization of an already materialized plan.
-        if isinstance(self, LogicalOperatorLeaf):
-            return []
-        # seen will hold the id's of plans in the plan tree that
-        # we've seen thus far.  If the id of the current plan node
-        # has been seen before then we found a duplicated subplan so
-        # just return it.
-        if id(self) in seen:
-            return [self]
-        # Record that we've seen this plan node.
-        seen.add(id(self))
-        # Recursing into all args in the plan find too much duplication
-        # so only look at the part of args corresponding to source plans.
-        if isinstance(self, LogicalComparisonJoin):
-            # For comparison join, the first two args contain source plans.
-            for arg in self.args[0:2]:
-                if isinstance(arg, LazyPlan):
-                    ret = arg.get_subqueries(seen=seen)
-                    # If we've seen the given arg before then return it.
-                    if ret is not None:
-                        return ret
-        elif isinstance(self.args[0], LazyPlan):
-            # For all other node types, just look at the first arg for a
-            # source plan.
-            ret = self.args[0].get_subqueries(seen=seen)
-            if ret is not None:
-                # If we've seen the given arg before then return it.
-                return ret
-        return None
-
-    @classmethod
-    def replace(cls, self, old, new, seen=None):
-        """Look in a plan tree and find instances of a materialized
-        plan and replace the source plan with a materialized source
-        plan.  This looks in more nodes than get_subqueries above
-        because we also have to replace materialized plans in
-        ColRefExpressions.
-        """
-        if seen is None:
-            seen = set()
-        # Only check each node once since the plan tree has multiple
-        # references to the same objects.
-        if id(self) in seen:
-            return
-        seen.add(id(self))
-        if isinstance(self, LazyPlan):
-            for idx in range(len(self.args)):
-                if id(self.args[idx]) == id(old):
-                    self.args = (*self.args[:idx], new, *self.args[idx + 1 :])
-                else:
-                    cls.replace(self.args[idx], old, new, seen=seen)
-        elif isinstance(self, ColRefExpression):
-            if id(self.source) == id(old):
-                self.source = new
-        elif isinstance(self, (list, tuple)):
-            for elem in self:
-                cls.replace(elem, old, new, seen=seen)
-
     def generate_duckdb(self, cache=None, cte_ref=None):
         from bodo.ext import plan_optimizer
+
+        if cache is None:
+            cache = {}
 
         def recursive_check(x, use_cache, cte_ref=None):
             """Recursively convert LazyPlans but return other types unmodified."""
             if isinstance(x, LazyPlan):
-                return x.generate_duckdb(
+                ret = x.generate_duckdb(
                     cache=cache if use_cache else None, cte_ref=cte_ref
                 )
+                return ret
             elif isinstance(x, (tuple, list)):
                 return type(x)(
                     recursive_check(i, use_cache, cte_ref=cte_ref) for i in x
@@ -183,42 +124,45 @@ class LazyPlan:
             else:
                 return x
 
-        print("gen_duckdb:", type(self))
         if cte_ref is None:
             cte_node = self.bfs_duplicate()
+            if cte_node is not None:
+                cte_node = (cte_node, plan_optimizer.py_get_table_index())
         else:
             # Don't search for duplicates if we are processing the non-duplicate
             # side of a CTE plan.
             cte_node = None
 
-        if cte_node is not None:
-            print("gen_duckdb cte_node:", cte_node)
-
-        if self is cte_ref:
-            print("gen_duckdb self is cte_ref")
-            cte_ref_plan = LogicalCTERef(self.empty_data)
-            return getattr(plan_optimizer, cte_ref_plan.plan_class)(
-                cte_ref_plan.pa_schema
+        if cte_ref is not None and self is cte_ref[0]:
+            # Can't be an expression here.
+            if id(self) in cache:
+                return cache[id(self)]
+            cte_ref_plan = LogicalCTERef(self.empty_data, cte_ref[1])
+            ret = getattr(plan_optimizer, cte_ref_plan.plan_class)(
+                cte_ref_plan.pa_schema, cte_ref[1]
             )
+            cache[id(self)] = ret
+            return ret
         elif cte_node is not None:
-            print("gen_duckdb generating LogicalCTE")
-            duplicate = cte_node.generate_duckdb()
-            print("gen_duckdb after duplicate side")
-            uses_duplicate = self.generate_duckdb(cte_ref=cte_node)
-            print("gen_duckdb after uses duplicate side")
-            cte_plan = LogicalMaterializedCTE(self.empty_data, cte_node, self)
+            if id(self) in cache:
+                raise Exception("Should never find cache re-use for cte_node.")
+            duplicate = cte_node[0].generate_duckdb(cache=cache)
+            uses_duplicate = self.generate_duckdb(cache=cache, cte_ref=cte_node)
+            cte_plan = LogicalMaterializedCTE(
+                self.empty_data, cte_node[0], self, cte_node[1]
+            )
             use_cache = True
             if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
                 use_cache = False
 
-            return getattr(plan_optimizer, cte_plan.plan_class)(
-                cte_plan.pa_schema, duplicate, uses_duplicate
+            ret = getattr(plan_optimizer, cte_plan.plan_class)(
+                cte_plan.pa_schema, duplicate, uses_duplicate, cte_node[1]
             )
+            cache[id(self)] = ret
+            return ret
         else:
             # Sometimes the same LazyPlan object is encountered twice during the same
             # query so  we use the cache dict to only convert it once.
-            if cache is None:
-                cache = {}
             # If previously converted then use the last result.
             # Don't cache expression nodes.
             # TODO - Try to eliminate caching altogether since it seems to cause
@@ -839,30 +783,6 @@ def execute_plan(plan: LazyPlan):
         if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time execute", time.perf_counter() - start_time)
         return ret
-
-    # Find duplicated subqueries in the given plan and materialize them.
-    while False:
-        # Find the next duplicated subquery in the given plan.
-        top_most_subquery = plan.get_subqueries()
-        if top_most_subquery is not None:
-            # If there is one then go back from the plan to the
-            # dataframe or series object.
-            materialized_frame_or_series = wrap_plan(top_most_subquery)
-            if (
-                bodo.dataframe_library_profile
-                and bodo.libs.distributed_api.get_rank() == 0
-            ):
-                print("Materializing subquery plan", top_most_subquery)
-            # Force that subquery to execute.
-            materialized_frame_or_series.execute_plan()
-            # Replace all instances of the duplicated subquery plan in
-            # the larger input plan with the read dataframe plan type
-            # that we get from _plan of of the materialized frame.
-            LazyPlan.replace(
-                plan, top_most_subquery, materialized_frame_or_series._plan
-            )
-        else:
-            break
 
     if bodo.dataframe_library_run_parallel:
         import bodo.spawn.spawner

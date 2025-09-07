@@ -11,11 +11,24 @@
 
 class PhysicalPlanBuilder {
    public:
+    std::vector<std::shared_ptr<Pipeline>> locked_pipelines;
     // TODO: Make private properties later
     std::vector<std::shared_ptr<Pipeline>> finished_pipelines;
     std::shared_ptr<PipelineBuilder> active_pipeline;
 
     PhysicalPlanBuilder() : active_pipeline(nullptr) {}
+
+    /**
+     * @brief Move finshed_pipelines into locked category
+     * so that nothing can be inserted before them.
+     */
+    void lock_finished() {
+        locked_pipelines.insert(
+            locked_pipelines.end(),
+            std::make_move_iterator(finished_pipelines.begin()),
+            std::make_move_iterator(finished_pipelines.end()));
+        finished_pipelines.clear();
+    }
 
     void Visit(duckdb::LogicalGet& op);
     void Visit(duckdb::LogicalProjection& op);
@@ -31,6 +44,7 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalCopyToFile& op);
     void Visit(duckdb::LogicalDistinct& op);
     void Visit(duckdb::LogicalMaterializedCTE& op);
+    void Visit(duckdb::LogicalCTERef& op);
 
     void Visit(duckdb::LogicalOperator& op) {
         if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
@@ -66,6 +80,8 @@ class PhysicalPlanBuilder {
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE) {
             Visit(op.Cast<duckdb::LogicalMaterializedCTE>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_CTE_REF) {
+            Visit(op.Cast<duckdb::LogicalCTERef>());
         } else {
             throw std::runtime_error(
                 "PhysicalPlanBuilder::Visit unsupported logical operator "

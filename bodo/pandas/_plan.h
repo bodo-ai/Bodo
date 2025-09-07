@@ -40,25 +40,35 @@ std::pair<int64_t, PyObject *> execute_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py);
 
 /**
+ * @brief Creates a new table index.
+ *
+ * @return duckdb::idx_t
+ */
+duckdb::idx_t getTableIndex();
+
+/**
  * @brief Creates a LogicalMaterializedCTE node.
  *
  * @param duplicated - the duplicated part of the plan
  * @param uses_duplicated - the plan that uses the duplicated part
  * @param out_schema_py - the schema of data coming out
+ * @param table_index - a pre-allocated table_index to match with CTE ref
  * @return duckdb::unique_ptr<duckdb::LogicalMaterializedCTE> output node
  */
 duckdb::unique_ptr<duckdb::LogicalMaterializedCTE> make_cte(
     std::unique_ptr<duckdb::LogicalOperator> &duplicated,
     std::unique_ptr<duckdb::LogicalOperator> &uses_duplicated,
-    PyObject *out_schema_py);
+    PyObject *out_schema_py, duckdb::idx_t table_index);
 
 /**
  * @brief Creates a LogicalCTERef node.
  *
  * @param out_schema_py - the schema of data coming out
+ * @param table_index - a pre-allocated table_index that matches with CTE
  * @return duckdb::unique_ptr<duckdb::LogicalCTERef> output node
  */
-duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(PyObject *out_schema_py);
+duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
+    PyObject *out_schema_py, duckdb::idx_t table_index);
 
 /**
  * @brief Creates a LogicalComparisonJoin node.
