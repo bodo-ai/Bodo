@@ -571,9 +571,189 @@ std::shared_ptr<arrow::Array> duckdbVectorToArrowArray(duckdb::Vector &vec,
     arrow::Status status;
 
     switch (type_id) {
+        case duckdb::LogicalTypeId::BOOLEAN: {
+            auto data = duckdb::FlatVector::GetData<bool>(vec);
+            arrow::BooleanBuilder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::TINYINT: {
+            auto data = duckdb::FlatVector::GetData<int8_t>(vec);
+            arrow::Int8Builder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::SMALLINT: {
+            auto data = duckdb::FlatVector::GetData<int16_t>(vec);
+            arrow::Int16Builder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
         case duckdb::LogicalTypeId::INTEGER: {
             auto data = duckdb::FlatVector::GetData<int32_t>(vec);
             arrow::Int32Builder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::BIGINT: {
+            auto data = duckdb::FlatVector::GetData<int64_t>(vec);
+            arrow::Int64Builder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::UTINYINT: {
+            auto data = duckdb::FlatVector::GetData<uint8_t>(vec);
+            arrow::UInt8Builder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::USMALLINT: {
+            auto data = duckdb::FlatVector::GetData<uint16_t>(vec);
+            arrow::UInt16Builder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::UINTEGER: {
+            auto data = duckdb::FlatVector::GetData<uint32_t>(vec);
+            arrow::UInt32Builder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::UBIGINT: {
+            auto data = duckdb::FlatVector::GetData<uint64_t>(vec);
+            arrow::UInt64Builder builder;
+            for (idx_t i = 0; i < count; i++) {
+                if (!validity.RowIsValid(i)) {
+                    status = builder.AppendNull();
+                } else {
+                    status = builder.Append(data[i]);
+                }
+                if (!status.ok()) {
+                    throw std::runtime_error("builder.Append failed.");
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            status = builder.Finish(&arr);
+            if (!status.ok()) {
+                throw std::runtime_error("builder.Finish failed.");
+            }
+            return arr;
+        }
+        case duckdb::LogicalTypeId::FLOAT: {
+            auto data = duckdb::FlatVector::GetData<float>(vec);
+            arrow::FloatBuilder builder;
             for (idx_t i = 0; i < count; i++) {
                 if (!validity.RowIsValid(i)) {
                     status = builder.AppendNull();
@@ -634,7 +814,8 @@ std::shared_ptr<arrow::Array> duckdbVectorToArrowArray(duckdb::Vector &vec,
         }
         default:
             throw std::runtime_error(
-                "Unsupported DuckDB type for Arrow conversion");
+                "Unsupported DuckDB type for Arrow conversion " +
+                std::to_string(static_cast<int>(type_id)));
     }
 }
 
@@ -668,6 +849,30 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
             }
             break;
         }
+        case arrow::Type::INT8: {
+            auto int_arr = std::static_pointer_cast<arrow::Int8Array>(arr);
+            auto data = FlatVector::GetData<int8_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (int_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = int_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::INT16: {
+            auto int_arr = std::static_pointer_cast<arrow::Int16Array>(arr);
+            auto data = FlatVector::GetData<int16_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (int_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = int_arr->Value(i);
+                }
+            }
+            break;
+        }
         case arrow::Type::INT32: {
             auto int_arr = std::static_pointer_cast<arrow::Int32Array>(arr);
             auto data = FlatVector::GetData<int32_t>(vec);
@@ -676,6 +881,78 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
                     validity.SetInvalid(i);
                 } else {
                     data[i] = int_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::INT64: {
+            auto int_arr = std::static_pointer_cast<arrow::Int64Array>(arr);
+            auto data = FlatVector::GetData<int64_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (int_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = int_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::UINT8: {
+            auto int_arr = std::static_pointer_cast<arrow::UInt8Array>(arr);
+            auto data = FlatVector::GetData<uint8_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (int_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = int_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::UINT16: {
+            auto int_arr = std::static_pointer_cast<arrow::UInt16Array>(arr);
+            auto data = FlatVector::GetData<uint16_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (int_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = int_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::UINT32: {
+            auto int_arr = std::static_pointer_cast<arrow::UInt32Array>(arr);
+            auto data = FlatVector::GetData<uint32_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (int_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = int_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::UINT64: {
+            auto int_arr = std::static_pointer_cast<arrow::UInt64Array>(arr);
+            auto data = FlatVector::GetData<uint64_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (int_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = int_arr->Value(i);
+                }
+            }
+            break;
+        }
+        case arrow::Type::FLOAT: {
+            auto dbl_arr = std::static_pointer_cast<arrow::FloatArray>(arr);
+            auto data = FlatVector::GetData<float>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (dbl_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    data[i] = dbl_arr->Value(i);
                 }
             }
             break;
