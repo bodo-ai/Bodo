@@ -632,6 +632,27 @@ class ArithOpExpression(BinaryExpression):
     pass
 
 
+class SubqueryExpression(Expression):
+    """Expression representing a subquery in the query plan."""
+
+    def __init__(self, empty_data, subquery_plan):
+        self.subquery_plan = subquery_plan
+        super().__init__(empty_data, subquery_plan)
+
+    @property
+    def source(self):
+        """Return the source of the subquery expression."""
+        return self.subquery_plan
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        if self.subquery_plan == new_source:
+            return self
+
+        # Cannot replace source, return None to indicate failure
+        return None
+
+
 total_init_lazy = 0
 total_execute_plan = 0
 

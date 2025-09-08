@@ -51,6 +51,7 @@ from bodo.pandas.plan import (
     LogicalOrder,
     LogicalProjection,
     PythonScalarFuncExpression,
+    SubqueryExpression,
     UnaryOpExpression,
     _get_df_python_func_plan,
     execute_plan,
@@ -198,10 +199,13 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         with the given operator "op".
         """
         from bodo.pandas.base import _empty_like
+        from bodo.pandas.scalar import BodoScalar
 
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
-        zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other
+        zero_size_other = (
+            _empty_like(other) if isinstance(other, (BodoSeries, BodoScalar)) else other
+        )
         # This is effectively a check for a dataframe or series.
         if hasattr(other, "_plan"):
             other = other._plan
@@ -213,11 +217,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
         rhs = get_proj_expr_single(other) if isinstance(other, LazyPlan) else other
-        lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
-        if lhs is None and rhs is None:
-            raise BodoLibNotImplementedException(
-                "binary operation arguments should have the same dataframe source."
-            )
+        matched_lhs, matched_rhs = match_binop_expr_source_plans(lhs, rhs)
+        if matched_lhs is None and matched_rhs is None:
+            # Could not match source plans, need to use a subquery
+            rhs = SubqueryExpression(empty_data, rhs)
+
+        else:
+            lhs, rhs = matched_lhs, matched_rhs
+
         expr = ComparisonOpExpression(
             empty_data,
             lhs,
@@ -241,6 +248,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Called when a BodoSeries is element-wise boolean combined with a different entity (other)"""
         from bodo.pandas.base import _empty_like
 
+        # TODO Support scalar
         if not (
             (
                 isinstance(other, BodoSeries)
@@ -351,6 +359,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """Handles op(self, other) when other is a numeric BodoSeries or scalar."""
         from bodo.pandas.base import _empty_like
 
+        # TODO Support Scalar
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
         zero_size_other = _empty_like(other) if isinstance(other, BodoSeries) else other

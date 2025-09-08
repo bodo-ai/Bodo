@@ -288,6 +288,15 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype);
 
 /**
+ * @brief Create a subquery expression from a subquery plan.
+ *
+ * @param subquery_plan - the subquery plan to create the expression from
+ * @return duckdb::unique_ptr<duckdb::Expression> - the subquery expression
+ */
+duckdb::unique_ptr<duckdb::Expression> make_subquery_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &subquery_plan);
+
+/**
  * @brief Create a filter node.
  *
  * @param source - the source of the data to be filtered

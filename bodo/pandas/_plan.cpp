@@ -361,6 +361,11 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     }
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_subquery_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &subquery_plan) {
+    throw std::runtime_error("make_subquery_expr not implemented");
+}
+
 duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::unique_ptr<duckdb::Expression> &filter_expr) {

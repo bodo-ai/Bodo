@@ -49,6 +49,7 @@ from bodo.pandas.plan import (
     _get_df_python_func_plan,
     make_col_ref_exprs,
 )
+from bodo.pandas.scalar import BodoScalar
 from bodo.pandas.series import BodoSeries, _get_series_func_plan
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
@@ -142,8 +143,11 @@ def _empty_like(val):
     """
     import pyarrow as pa
 
-    if not isinstance(val, (BodoDataFrame, BodoSeries)):
+    if not isinstance(val, (BodoDataFrame, BodoSeries, BodoScalar)):
         raise TypeError(f"val must be a BodoDataFrame or BodoSeries, got {type(val)}")
+
+    if isinstance(val, BodoScalar):
+        return val.wrapped_series.head(0).dtype.type()
 
     is_series = isinstance(val, BodoSeries)
     # Avoid triggering data collection

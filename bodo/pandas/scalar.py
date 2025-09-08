@@ -36,7 +36,7 @@ class BodoScalar(BodoLazyWrapper):
 
     @property
     def _plan(self):
-        return self.wrapped_series._pla
+        return self.wrapped_series._plan
 
     def is_lazy_plan(self):
         return self.wrapped_series.is_lazy_plan()
