@@ -220,6 +220,18 @@ class LogicalComparisonJoin(LogicalOperator):
         return self.args[2]
 
 
+class LogicalCrossProduct(LogicalOperator):
+    """Logical operator for cross product joins."""
+
+    @property
+    def left_plan(self):
+        return self.args[0]
+
+    @property
+    def right_plan(self):
+        return self.args[1]
+
+
 class LogicalSetOperation(LogicalOperator):
     """Logical operator for set operations like union."""
 
@@ -630,36 +642,6 @@ class ArithOpExpression(BinaryExpression):
     """
 
     pass
-
-
-class ScalarSubqueryExpression(Expression):
-    """Expression representing a scalar subquery in the query plan."""
-
-    def __init__(self, empty_data, parent_plan, subquery_plan):
-        self.parent_plan = parent_plan
-        self.subquery_plan = subquery_plan
-        assert isinstance(subquery_plan, (LogicalAggregate, LogicalProjection)), (
-            "ScalarSubqueryExpression: subquery_plan must be a LogicalAggregate or LogicalProjection"
-        )
-        if isinstance(subquery_plan, LogicalProjection):
-            # Projection on top of aggregate is allowed
-            assert isinstance(subquery_plan.source, LogicalAggregate), (
-                "ScalarSubqueryExpression: if subquery_plan is a LogicalProjection then its source must be a LogicalAggregate"
-            )
-        super().__init__(empty_data, parent_plan, subquery_plan)
-
-    @property
-    def source(self):
-        """Return the source of the subquery expression."""
-        return self.subquery_plan
-
-    def replace_source(self, new_source: LazyPlan):
-        """Replace the source of the expression with a new source plan."""
-        if self.subquery_plan == new_source:
-            return self
-
-        # Cannot replace source, return None to indicate failure
-        return None
 
 
 total_init_lazy = 0
@@ -1138,3 +1120,10 @@ def assert_executed_plan_count(n: int):
     yield
     end = PlanExecutionCounter.get()
     assert end - start == n, f"Expected {n} plan executions, but got {end - start}"
+
+
+def insert_lazy_scalar(plan: LazyPlan, scalar):
+    """Insert a lazy scalar into a plan by cross joining with the scalar's plan.
+    Returns a tuple of (new_plan, scalar_col_ref) where new_plan is the updated plan
+    """
+    assert isinstance(scalar, bodo.pandas.scalar.BodoScalar)

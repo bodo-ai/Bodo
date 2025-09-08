@@ -255,6 +255,10 @@ cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace
     cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalOperator):
         CJoinType join_type
 
+cdef extern from "duckdb/planner/operator/logical_cross_product.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalCrossProduct" duckdb::LogicalCrossProduct"(CLogicalOperator):
+       pass
+
 cdef extern from "duckdb/planner/operator/logical_set_operation.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalSetOperation" duckdb::LogicalSetOperation"(CLogicalOperator):
         pass
@@ -301,6 +305,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
+    cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs) except +
     cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
@@ -313,7 +318,6 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
-    cdef unique_ptr[CExpression] make_scalar_subquery_expr(unique_ptr[CLogicalOperator] subquery, unique_ptr[CLogicalOperator] subquery) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
     cdef unique_ptr[CExpression] make_const_null(object arrow_schema, int64_t field_idx) except +
     cdef unique_ptr[CExpression] make_const_int_expr(int64_t val) except +
@@ -423,6 +427,18 @@ cdef class LogicalComparisonJoin(LogicalOperator):
         join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
         return f"LogicalComparisonJoin({join_type})"
 
+cdef class LogicalCrossProduct(LogicalOperator):
+    """Wrapper around DuckDB's LogicalCrossProduct to provide access in Python.
+    """
+
+    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs):
+        self.out_schema = out_schema
+
+        cdef unique_ptr[CLogicalCrossProduct] c_logical_cross_product = make_cross_product(lhs.c_logical_operator, rhs.c_logical_operator)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_cross_product.release())
+
+    def __str__(self):
+        return f"LogicalCrossProduct()"
 
 cdef class LogicalSetOperation(LogicalOperator):
     """Wrapper around DuckDB's LogicalSetOperation to provide access in Python.
@@ -766,19 +782,6 @@ cdef class UnaryOpExpression(Expression):
 
     def __str__(self):
         return f"UnaryOpExpression({self.out_schema})"
-
-
-cdef class ScalarSubqueryExpression(Expression):
-    """
-    Inserts a scalar into parent expression tree, returns a BoundColumnRefExpression to the result of the subquery.
-    """
-
-    def __cinit__(self, object out_schema, LogicalOperator parent_plan, LogicalOperator subquery_plan):
-        self.out_schema = out_schema
-        self.c_expression = make_scalar_subquery_expr(parent_plan.c_logical_operator, subquery_plan.c_logical_operator)
-
-    def __str__(self):
-        return f"SubqueryExpression({self.out_schema})"
 
 
 cdef class LogicalLimit(LogicalOperator):
