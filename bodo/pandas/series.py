@@ -460,7 +460,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback("all")
     def __getitem__(self, key):
-        """Called when df[key] is used."""
+        """Called when series[key] is used."""
         from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
