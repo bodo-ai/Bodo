@@ -170,6 +170,9 @@ exclude = [
 banned-module-level-imports = [
   "numba",
   "bodo.decorators",
+  "bodo.compiler",
+  "bodo.ext",
+  "bodo.types",
   "bodo.libs",
   "bodo.hiframes",
   "bodo.ir",
