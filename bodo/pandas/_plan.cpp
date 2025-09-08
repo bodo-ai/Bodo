@@ -366,6 +366,8 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
 duckdb::unique_ptr<duckdb::Expression> make_scalar_subquery_expr(
     std::unique_ptr<duckdb::LogicalOperator> &parent,
     std::unique_ptr<duckdb::LogicalOperator> &subquery_plan) {
+    std::cout << "make_scalar_subquery_expr not implemented, throwing exception"
+              << std::endl;
     throw std::runtime_error("make_scalar_subquery_expr not implemented");
 }
 

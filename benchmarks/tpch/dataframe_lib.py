@@ -549,7 +549,9 @@ def tpch_q15(lineitem, supplier, pd=bodo.pandas):
     )
 
     max_revenue = revenue["TOTAL_REVENUE"].max()
-    jn2 = jn2[jn2["TOTAL_REVENUE"] == max_revenue]
+    filter_expr = jn2["TOTAL_REVENUE"] == max_revenue
+    print(filter_expr)
+    jn2 = jn2[filter_expr]
 
     result_df = jn2[
         ["S_SUPPKEY", "S_NAME", "S_ADDRESS", "S_PHONE", "TOTAL_REVENUE"]

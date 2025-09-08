@@ -636,8 +636,17 @@ class ScalarSubqueryExpression(Expression):
     """Expression representing a scalar subquery in the query plan."""
 
     def __init__(self, empty_data, parent_plan, subquery_plan):
+        self.parent_plan = parent_plan
         self.subquery_plan = subquery_plan
-        super().__init__(empty_data, subquery_plan)
+        assert isinstance(subquery_plan, (LogicalAggregate, LogicalProjection)), (
+            "ScalarSubqueryExpression: subquery_plan must be a LogicalAggregate or LogicalProjection"
+        )
+        if isinstance(subquery_plan, LogicalProjection):
+            # Projection on top of aggregate is allowed
+            assert isinstance(subquery_plan.source, LogicalAggregate), (
+                "ScalarSubqueryExpression: if subquery_plan is a LogicalProjection then its source must be a LogicalAggregate"
+            )
+        super().__init__(empty_data, parent_plan, subquery_plan)
 
     @property
     def source(self):
