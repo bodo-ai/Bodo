@@ -184,7 +184,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             and hasattr(pd.Series, name)
         ):
             msg = (
-                f"Series.{name} is not implemented in Bodo Dataframe Library yet. "
+                f"Series.{name} is not implemented in Bodo DataFrames yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             return fallback_wrapper(
@@ -619,7 +619,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # count query before the actual plan which is unnecessary.
         if self._exec_state == ExecState.PLAN:
             self.execute_plan()
-        return super().__repr__()
+
+        # Avoid fallback warnings for prints
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+            return super().__repr__()
 
     @property
     def index(self):
@@ -1330,7 +1334,7 @@ class BodoStringMethods:
         except AttributeError:
             msg = (
                 f"StringMethods.{name} is not "
-                "implemented in Bodo dataframe library for the specified arguments yet. "
+                "implemented in Bodo DataFrames for the specified arguments yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
@@ -1937,7 +1941,7 @@ class BodoDatetimeProperties:
         except AttributeError:
             msg = (
                 f"Series.dt.{name} is not "
-                "implemented in Bodo dataframe library yet. "
+                "implemented in Bodo DataFrames yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             if not name.startswith("_"):
@@ -2191,7 +2195,7 @@ def generate_null_reduce(func_names):
 def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
     """
     Computes a list of reduction functions like ["min", "max"] on a BodoSeries.
-    Returns a list of equal length that stores reduction values of each function.
+    Returns a BodoDataFrame that stores reduction values of each function.
     """
     if not isinstance(bodo_series.dtype, pd.ArrowDtype):
         raise BodoLibNotImplementedException()

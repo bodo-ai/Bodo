@@ -212,7 +212,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             and hasattr(pd.DataFrame, name)
         ):
             msg = (
-                f"{name} is not implemented in Bodo Dataframe Library yet. "
+                f"{name} is not implemented in Bodo DataFrames yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             return fallback_wrapper(
@@ -328,7 +328,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # count query before the actual plan which is unnecessary.
         if self._exec_state == ExecState.PLAN:
             self.execute_plan()
-        return super().__repr__()
+
+        # Avoid fallback warnings for prints
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=BodoLibFallbackWarning)
+            return super().__repr__()
 
     @property
     def index(self):
@@ -399,10 +403,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Most cases of copy=False we have are the idiom A=A.rename(copy=False) where there is still
         # only one possible reference to the data so we can treat this case like copy=True since for us
         # we only materialize as needed and so copying isn't an overhead.
-        if copy == False:
-            warnings.warn(
-                "BodoDataFrame::rename copy=False argument ignored assuming A=A.rename(copy=False) idiom."
-            )
+
         renamed_plan = orig_plan.replace_empty_data(
             orig_plan.empty_data.rename(columns=columns)
         )

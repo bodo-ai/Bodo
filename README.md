@@ -12,60 +12,63 @@ NOTE: the example in this file is covered by tests in bodo/tests/test_quickstart
   <a href="https://www.bodo.ai/benchmarks/" target="_blank"><b>Benchmarks</b></a>
 </h3>
 
-# Bodo: High-Performance Python Compute Engine for Data and AI
+# Bodo DataFrames: Drop-in Pandas Replacement for Acceleration and Scaling of Data and AI
 
-Bodo is a cutting edge compute engine for large scale Python data processing. Powered by an innovative auto-parallelizing just-in-time compiler, Bodo transforms Python programs into highly optimized, parallel binaries without requiring code rewrites, which makes Bodo [20x to 240x faster](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi) compared to alternatives!
+Bodo DataFrames is a high performance DataFrame library for large scale Python data processing, AI/ML use cases.
+It functions as a drop-in replacement for Pandas while providing additional Pandas-compatible APIs for simplifying and scaling AI workloads,
+a just-in-time (JIT) compiler for accelerating custom transformations, as well as an integrated SQL engine for extra flexibility.
 
+Under the hood, Bodo DataFrames relies on MPI-based high-performance computing (HPC) technology,
+often making it orders of magnitude faster than tools like Spark or Dask.
+Refer to our [NYC Taxi benchmark](https://github.com/bodo-ai/Bodo/tree/main/benchmarks/nyc_taxi)
+for an example where Bodo is 2-240x faster than other systems:
+
+<!-- TODO: updated graph with Taxi benchmark including Bodo DataFrames Pandas API -->
 <img src="benchmarks/img/nyc-taxi-benchmark.png" alt="NYC Taxi Benchmark" width="500"/>
 
-Unlike traditional distributed computing frameworks, Bodo:
-- Seamlessly supports native Python APIs like Pandas and NumPy.
-- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) tech for true distributed execution.
+Unlike traditional distributed computing frameworks, Bodo DataFrames:
+- Automatically scales and accelerates Pandas workloads with a single line of code change.
+- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) technology for true parallel execution.
+
 
 ## Goals
 
-Bodo makes Python run much (much!) faster than it normally does!
+Bodo DataFrames makes Python run much (much!) faster than it normally does!
 
 1. **Exceptional Performance:**
 Deliver HPC-grade performance and scalability for Python data workloads as if the code was written in C++/MPI, whether running on a laptop or across large cloud clusters.
 
 2. **Easy to Use:**
-Easily integrate into Python workflows with a simple decorator, and support native Pandas and NumPy APIs.
+Easily integrate into Python workflows— it's as simple as changing `import pandas as pd` to `import bodo.pandas as pd`.
 
 3. **Interoperable:**
-Compatible with regular Python ecosystem, and can selectively speed up only the functions that are Bodo supported.
+Compatible with regular Python ecosystem, and can selectively speed up only the sections of the workload that are Bodo supported.
 
 4. **Integration with Modern Data Infrastructure:**
 Provide robust support for industry-leading data platforms like Apache Iceberg and Snowflake, enabling smooth interoperability with existing ecosystems.
 
 
-## Non-goals
-
-1. *Full Python Language Support:*
-We are currently focused on a targeted subset of Python used for data-intensive and computationally heavy workloads, rather than supporting the entire Python syntax and all library APIs.
-
-2. *Non-Data Workloads:*
-Prioritize applications in data engineering, data science, and AI/ML. Bodo is not designed for general-purpose use cases that are non-data-centric.
-
-3. *Real-time Compilation:*
-While compilation time is improving, Bodo is not yet optimized for scenarios requiring very short compilation times (e.g., workloads with execution times of only a few seconds).
-
-
 ## Key Features
 
-- Automatic optimization & parallelization of Python programs using Pandas and NumPy.
-- Linear scalability from laptops to large-scale clusters and supercomputers.
+- Drop-in Pandas replacement, (just change the import!) with a seamless fallback to vanilla Pandas to avoid breaking existing workloads.
+- Intuitive APIs for simplifying and scaling AI workloads.
+- Advanced query optimization,
+C++ runtime,
+and parallel execution using MPI to achieve the best possible performance while leveraging all available cores.
+- Streaming execution to process larger-than-memory datasets.
+- Just in time (JIT) compilation with native support for Pandas, Numpy and Scikit-learn
+for accelerating custom transformations or performance-critical functions.
+- High performance SQL engine that is natively integrated into Python.
 - Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
-- High performance SQL Engine that is natively integrated into Python.
 
-See Bodo documentation to learn more: https://docs.bodo.ai/
+See Bodo DataFrames documentation to learn more: https://docs.bodo.ai/
 
 
 ## Installation
 
-Note: Bodo requires Python 3.9+.
+Note: Bodo DataFrames requires Python 3.9+.
 
-Bodo can be installed using Pip or Conda:
+Bodo DataFrames can be installed using Pip or Conda:
 
 ```bash
 pip install -U bodo
@@ -79,20 +82,26 @@ conda activate Bodo
 conda install bodo -c conda-forge
 ```
 
-Bodo works with Linux x86, both Mac x86 and Mac ARM, and Windows right now. We will have Linux ARM support (and more) coming soon!
+Bodo DataFrames works with Linux x86, both Mac x86 and Mac ARM, and Windows right now. We will have Linux ARM support (and more) coming soon!
 
-## Example Code
+## Bodo DataFrames Example
 
-Here is an example Pandas code that reads and processes a sample Parquet dataset with Bodo.
-
-
+Here is an example Pandas code that reads and processes a sample Parquet dataset.
+Note that we replaced the typical import:
 ```python
 import pandas as pd
+```
+with:
+```python
+import bodo.pandas as pd
+```
+which accelerates the following code segment by about 20-30x on a laptop.
+
+```python
+import bodo.pandas as pd
 import numpy as np
-import bodo
 import time
 
-# Generate sample data
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
@@ -102,12 +111,11 @@ df = pd.DataFrame({
 })
 df.to_parquet("my_data.pq")
 
-@bodo.jit(cache=True)
 def computation():
     t1 = time.time()
     df = pd.read_parquet("my_data.pq")
-    df2 = pd.DataFrame({"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)})
-    df2.to_parquet("out.pq")
+    df["C"] = df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)
+    df.to_parquet("out.pq")
     print("Execution time:", time.time() - t1)
 
 computation()

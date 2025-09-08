@@ -4,7 +4,7 @@ Bodo DataFrames supports Pandas Series methods and accessors that are listed bel
 !!! note
     If the user code encounters an unsupported Pandas API or an unsupported parameter, Bodo
 	 Bodo DataFrames gracefully falls back to native Pandas. See [overview][overview] of
-	 the Bodo DataFrames for more info.
+	 Bodo DataFrames for more info.
 
 ## AI Functions
 - [`bodo.pandas.BodoSeries.ai.tokenize`][bodoseriesaitokenize]

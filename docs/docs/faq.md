@@ -1,55 +1,68 @@
 # Frequently Asked Questions (FAQ)
 
 
-### How well does Bodo scale?
+### How well does Bodo DataFrames scale?
 
-Bodo scales linearly across cores and nodes by using HPC technologies such as MPI in the backend.
-Bodo can parallelize applications from local laptops all the way to large clusters (5000+ cores) effectively.
+Bodo DataFrames scales linearly across cores and nodes by using HPC technologies such as MPI in the backend.
+It can parallelize applications from local laptops all the way to large clusters (5000+ cores) effectively.
 
-### What data formats does Bodo support?
+### What data formats does Bodo DataFrames support?
 
-Bodo supports various data storage formats such as Iceberg, Snowflake, Parquet, CSV, and JSON natively.
+Bodo DataFrames supports various data storage formats such as Iceberg, Snowflake, Parquet, CSV, and JSON natively.
 See the [File I/O][file_io] docs for more details.
 
 
-### What are the hardware requirements to run Bodo?
+### What are the hardware requirements to run Bodo DataFrames?
 
-Bodo is fully portable across various CPU architectures and environments.
-We currently distribute packages for Mac and Linux with x86 and ARM CPU architectures (Windows support is in progress).
-Bodo can run on any on-premises or cloud environment.
+Bodo DataFrames is fully portable across various CPU architectures and environments.
+We currently distribute packages for Mac with x86 and ARM CPU architectures and x86 Linux and Windows.
+Bodo DataFrames can run on any on-premises or cloud environment.
 
 
-### How is Bodo different from Dask, Ray, or Spark?
+### How is Bodo DataFrames different from Dask, Ray, or Spark?
 
-Unlike traditional distributed computing frameworks, Bodo:
+Unlike traditional distributed computing frameworks, Bodo DataFrames:
 
-- Seamlessly supports native Python APIs like Pandas and NumPy using a compiler approach.
+- Automatically scales and accelerates Pandas workloads with a single line of code change.
 - Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) technology for true parallel execution.
 
+### Will Bodo DataFrames “just work” on my existing code?
 
-### Will Bodo “just work” on my existing code?
+Yes, Bodo DataFrames is designed as a drop-in replacement for Pandas,
+simply replace the import `import pandas as pd` with `import bodo.pandas as pd` to transparently accelerate and scale Pandas workloads.
+For cases where Bodo DataFrames does not support a specific Pandas operation,
+it will warn the user before collecting the data and continuing execution in vanilla Pandas.
 
-Pretty close. You only need to annotate your Python compute functions with `@bodo.jit`, make sure they are jittable,
-and Bodo will handle the parallelization and optimization automatically.
-The vast majority of your application logic will remain unchanged, as long as it uses common libraries like Pandas, NumPy and Scikit-Learn.
+### What types of workloads are ideal for Bodo DataFrames?
 
-
-### What types of workloads are ideal for Bodo?
-
-Bodo excels at accelerating large-scale data processing, AI/ML workflows, and many other workloads requiring significant computation.
-
-
-### Can I use Bodo in Jupyter Notebooks or other IDEs?
-
-Bodo works in Jupyter, VS Code and other IDEs that support Python.
+Bodo DataFrames excels at accelerating large-scale data processing, AI/ML workflows, and many other workloads requiring significant computation.
 
 
-### Does Bodo support cloud environments?
+### Can I use Bodo DataFrames in Jupyter Notebooks or other IDEs?
 
-Bodo can run on any cloud environment using virtual machines or Kubernetes clusters.
+Bodo DataFrames works in Jupyter, VS Code and other IDEs that support Python.
+
+
+### Does Bodo DataFrames support cloud environments?
+
+Bodo DataFrames can run on any cloud environment using virtual machines or Kubernetes clusters.
 Creating multi-node clusters just requires network configuration for cross-node communication.
 Bodo cloud service simplifies managing compute clusters and jobs on AWS and Azure.
 
+
+### What is the difference between Bodo DataFrames' Pandas API vs JIT decorator and when should I use one over the other?
+
+Bodo DataFrames provides two methods of accelerating and scaling Pandas code. The first method involves using the
+Pandas API through the `bodo.pandas` module, which will lazily accumulate operations,
+optimize and then run them in a parallel, C++ runtime using MPI.
+The second method involves annotating functions with the Just-In-Time (JIT) compilation decorator (`bodo.jit`) in order to
+compile Python code to optimized, parallel binaries that run on an MPI backend.
+The Pandas API is easier to use; just replace the `import pandas as pd` with `import bodo.pandas as pd`,
+while JIT provides better performance in some cases at the cost of extra set up such as
+moving performance critical pieces to separate functions and ensuring those functions are jittable.
+In addition to Pandas, JIT also natively supports Numpy and Scikit-learn.
+We recommend using Bodo DataFrames' Pandas APIs when getting started and experimenting with JIT
+for even better performance. See our [Python local quick start guide][quickstart-local-python] for examples.
 
 ### How can I get help if I encounter an issue?
 
@@ -59,64 +72,65 @@ You can also refer to the documentation or raise an issue on GitHub if you’ve 
 
 ### Are there any usage limits or restrictions?
 
-No, there are no usage limits. Bodo is open source and distributed under the Apache-2.0 License. You can use Bodo in personal, academic, and commercial projects.
+No, there are no usage limits. Bodo DataFrames is open source and distributed under the Apache-2.0 License. You can use Bodo DataFrames in personal, academic, and commercial projects.
 
-### How does Bodo handle security and privacy?
+### How does Bodo DataFrames handle security and privacy?
 
-Since Bodo runs in your environment, you have complete control over the data and compute resources, ensuring that sensitive information remains secure.
+Since Bodo DataFrames runs in your environment, you have complete control over the data and compute resources, ensuring that sensitive information remains secure.
 
-### How does Bodo handle fault tolerance and failures? 
+### How does Bodo DataFrames handle fault tolerance and failures?
 
-The Bodo compiler creates binaries that run efficiently on bare metal, eliminating most software failures
+Bodo DataFrames runs parallel processes in an efficient, C++ runtime, eliminating most software failures
 of other framework (e.g., scheduler errors, JVM errors, ...).
 To handle rare case of hardware failures, we recommend simply configuring job restarts
 in your environment.
-Bodo's high performance ensures fast restart and job completion even with failures.
+Bodo DataFrames' high performance ensures fast restart and job completion even with failures.
 
-### Does Bodo have a job scheduler?
+### Does Bodo DataFrames have a job scheduler?
 
-Bodo provides parallel compute that can work with any job scheduler.
-Bodo does not bundle its own job scheduler.
+Bodo DataFrames provides parallel compute that can work with any job scheduler.
+Bodo DataFrames does not bundle its own job scheduler.
 
 ### Am I supposed to have MPI nodes set up already?
 
 MPI setup is required for distributed execution, which involves passwordless SSH access across nodes. See [cluster installation docs][cluster_setup].
 
-### How do I know if my function is actually being parallelized?
+### How do I know if my workload is actually being parallelized?
 
-You can see distributed diagnostics of the compiled function to understand parallelism decisions by the compiler. See [parallism docs][basics].
+If you are using Bodo DataFrames' Pandas API (`bodo.pandas`), all operations will automatically be executed in parallel
+unless otherwise indicated in the form of a user warning. For functions annotated with `bodo.jit`,
+you can see distributed diagnostics of the compiled function to understand parallelism decisions by the compiler. See [parallelism docs][basics].
 In addition, the Bodo compiler throws a warning if it didn't find any parallelism opportunities in a function.
-You can also see your local machine's CPU usage using tools like `top` and `htop`.
+You can also see your local machine's CPU usage using tools like `top` and `htop` for both Pandas API and JIT.
 
 
-### How do I handle unsupported operations or libraries?
+### How do I handle unsupported operations or libraries inside of JIT?
 
 You can use unsupported operations and libraries outside JIT functions, or use
 the `@bodo.wrap_python` decorator to use any regular Python function inside JIT functions.
 See [wrap_python docs][objmode].
 
 
-### Can Bodo read from databases like Postgres, Snowflake, or BigQuery?
+### Can Bodo DataFrames read from databases like Postgres, Snowflake, or BigQuery?
 
-Bodo can read from all databases that are readable in Python.
+Bodo DataFrames can read from all databases that are readable in Python.
 The Snowflake connector is especially optimized for very high performance.
 
-### Does Bodo work inside Databricks environment?
+### Does Bodo DataFrames work inside Databricks environment?
 
-Bodo currently does not work inside Databricks due to networking restrictions.
+Bodo DataFrames currently does not work inside Databricks due to networking restrictions.
 We plan to investigate and provide a solution.
 
+### Can I create custom user-defined functions (UDFs) with Bodo DataFrames?
 
-### Can I create custom user-defined functions (UDFs) with Bodo?
+Yes, Bodo DataFrames is particularly good at accelerating UDFs in Pandas APIs such as `DataFrame.apply` and `Series.map`.
 
-Yes, Bodo is particularly good at accelerating UDFs in Pandas APIs such as `DataFrame.apply` and `Series.map`.
+### What is the difference between the open source Bodo DataFrames and the Bodo Cloud Platform?
 
-### What is the difference between the open source compute engine and the Bodo Cloud Platform?
-
-The Bodo Cloud Platform simplifies managing compute clusters, notebooks and jobs that use the Bodo engine.
+The Bodo Cloud Platform simplifies managing compute clusters, notebooks and jobs that use Bodo DataFrames.
 Bodo Cloud Platform currently supports AWS and Azure.
 
-### Does Bodo have a SQL interface?
+### Does Bodo DataFrames have a SQL interface?
 
 Yes, BodoSQL is a high performance SQL engine that provides vectorized streaming execution and
 support distributed clusters using MPI.
@@ -124,6 +138,6 @@ BodoSQL compiles SQL queries into optimized binaries, which is particularly
 good for large batch jobs.
 
 
-### When is Bodo *Not* appropriate? What is it *not* designed for?
-Bodo is designed for large-scale data processing and may not be appropriate for other use cases
+### When is Bodo DataFrames *Not* appropriate? What is it *not* designed for?
+Bodo DataFrames is designed for large-scale data processing and may not be appropriate for other use cases
 such as accelerating Python web frameworks (e.g. Django) and other non-compute Python applications.
