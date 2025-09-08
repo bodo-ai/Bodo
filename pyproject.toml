@@ -166,6 +166,7 @@ exclude = [
 ]
 
 [tool.ruff.lint.flake8-tidy-imports]
+banned-module-level-imports = ["bodo.decorators"]
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "mpi4py".msg = "Use `bodo.mpi4py` instead of `mpi4py`"
 
