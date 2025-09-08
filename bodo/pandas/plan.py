@@ -632,10 +632,10 @@ class ArithOpExpression(BinaryExpression):
     pass
 
 
-class SubqueryExpression(Expression):
-    """Expression representing a subquery in the query plan."""
+class ScalarSubqueryExpression(Expression):
+    """Expression representing a scalar subquery in the query plan."""
 
-    def __init__(self, empty_data, subquery_plan):
+    def __init__(self, empty_data, parent_plan, subquery_plan):
         self.subquery_plan = subquery_plan
         super().__init__(empty_data, subquery_plan)
 

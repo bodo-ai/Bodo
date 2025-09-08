@@ -51,7 +51,7 @@ from bodo.pandas.plan import (
     LogicalOrder,
     LogicalProjection,
     PythonScalarFuncExpression,
-    SubqueryExpression,
+    ScalarSubqueryExpression,
     UnaryOpExpression,
     _get_df_python_func_plan,
     execute_plan,
@@ -220,7 +220,12 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         matched_lhs, matched_rhs = match_binop_expr_source_plans(lhs, rhs)
         if matched_lhs is None and matched_rhs is None:
             # Could not match source plans, need to use a subquery
-            rhs = SubqueryExpression(empty_data, rhs)
+            if isinstance(other, BodoScalar):
+                rhs = ScalarSubqueryExpression(empty_data, lhs.source, rhs.source)
+            else:
+                raise BodoLibNotImplementedException(
+                    "binary operation arguments should have the same dataframe source."
+                )
 
         else:
             lhs, rhs = matched_lhs, matched_rhs

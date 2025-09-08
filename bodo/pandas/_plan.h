@@ -288,12 +288,14 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype);
 
 /**
- * @brief Create a subquery expression from a subquery plan.
+ * @brief Create a BoundColRefExpression.
  *
+ * @param parent - the parent plan node to insert the expression into
  * @param subquery_plan - the subquery plan to create the expression from
  * @return duckdb::unique_ptr<duckdb::Expression> - the subquery expression
  */
-duckdb::unique_ptr<duckdb::Expression> make_subquery_expr(
+duckdb::unique_ptr<duckdb::Expression> make_scalar_subquery_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &parent,
     std::unique_ptr<duckdb::LogicalOperator> &subquery_plan);
 
 /**

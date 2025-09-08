@@ -28,6 +28,8 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
+#include "duckdb/planner/expression/bound_subquery_expression.hpp"
+#include "duckdb/planner/expression_binder.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_copy_to_file.hpp"
@@ -361,9 +363,10 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     }
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_subquery_expr(
+duckdb::unique_ptr<duckdb::Expression> make_scalar_subquery_expr(
+    std::unique_ptr<duckdb::LogicalOperator> &parent,
     std::unique_ptr<duckdb::LogicalOperator> &subquery_plan) {
-    throw std::runtime_error("make_subquery_expr not implemented");
+    throw std::runtime_error("make_scalar_subquery_expr not implemented");
 }
 
 duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
