@@ -83,13 +83,11 @@ class LazyPlan:
 
     def bfs_duplicate(self):
         visited = set()
-        if id(self) in visited:
-            return self
         queue = deque([self])
 
         while queue:
             node = queue.popleft()
-            if id(node) in visited:
+            if id(node) in visited and not isinstance(node, LogicalOperatorLeaf):
                 return node
             else:
                 visited.add(id(node))
