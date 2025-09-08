@@ -166,11 +166,73 @@ exclude = [
 ]
 
 [tool.ruff.lint.flake8-tidy-imports]
-banned-module-level-imports = ["bodo.decorators"]
+# Ban slow compiler imports in bodo.pandas, bodo.spawn, bodo.ai, bodo.io.fs_io and bodo.io.parquet_pio
+banned-module-level-imports = [
+  "numba",
+  "bodo.decorators",
+  "bodo.libs",
+  "bodo.hiframes",
+  "bodo.ir",
+  "bodo.pandas.utils_jit",
+  "bodo.transforms",
+  "bodo.ml_support",
+
+  # All bodo.utils submodules except tracing
+  "bodo.utils.conversion",
+  "bodo.utils.python_310_bytecode_pass",
+  "bodo.utils.del_column_utils",
+  "bodo.utils.search_templates",
+  "bodo.utils.aggregate_query_profiles",
+  "bodo.utils.generate_docs",
+  "bodo.utils.table_utils",
+  "bodo.utils.transform",
+  "bodo.utils.typing",
+  "bodo.utils.allocation_tracking",
+  "bodo.utils.indexing",
+  "bodo.utils.pandas_coverage_tracking",
+  "bodo.utils.testing",
+  "bodo.utils.user_logging_ext",
+  "bodo.utils.cg_helpers",
+  "bodo.utils.py_objs",
+  "bodo.utils.tracing_py",
+  "bodo.utils.collect_coverage",
+  "bodo.utils.utils",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Only allow compiler-related imports (ignore TID253) in these files/dirs.
+"bodo/pandas/utils_jit.py" = ["TID253"]
+"bodo/compiler.py" = ["TID253"]
+"bodo/decorators.py" = ["TID253"]
+"bodo/sql_plan_cache.py" = ["TID253"]
+"bodo/runtests_caching.py" = ["TID253"]
+
+# IO modules except fs_io and parquet_pio
+"bodo/io/iceberg/*" = ["TID253"]
+"bodo/io/arrow_reader.py" = ["TID253"]
+"bodo/io/csv_iterator_ext.py" = ["TID253"]
+"bodo/io/h5.py" = ["TID253"]
+"bodo/io/h5_api.py" = ["TID253"]
+"bodo/io/helpers.py" = ["TID253"]
+"bodo/io/np_io.py" = ["TID253"]
+"bodo/io/parquet_write.py" = ["TID253"]
+"bodo/io/snowflake.py" = ["TID253"]
+"bodo/io/snowflake_write.py" = ["TID253"]
+"bodo/io/stream_parquet_write.py" = ["TID253"]
+
+"**/BodoSQL/*" = ["TID253"]
+"**/e2e-tests/*" = ["TID253"]
+"**/buildscripts/*" = ["TID253"]
+"**/libs/*" = ["TID253"]
+"**/hiframes/*" = ["TID253"]
+"**/ir/*" = ["TID253"]
+"**/utils/*" = ["TID253"]
+"**/transforms/*" = ["TID253"]
+"**/ml_support/*" = ["TID253"]
+"**/tests/*" = ["TID253"]
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "mpi4py".msg = "Use `bodo.mpi4py` instead of `mpi4py`"
-[tool.ruff.lint.per-file-ignores]
-"bodo/pandas/series.py" = ["TID253"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["bodo", "bodosql", "BodoSQL/bodosql", "e2e-tests"]
