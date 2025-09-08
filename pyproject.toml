@@ -232,6 +232,7 @@ banned-module-level-imports = [
 "**/utils/*" = ["TID253"]
 "**/transforms/*" = ["TID253"]
 "**/ml_support/*" = ["TID253"]
+# TODO [BSE-5085]: avoid JIT imports in pytest utils files where not needed
 "**/tests/*" = ["TID253"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
