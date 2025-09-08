@@ -50,9 +50,6 @@ def run_tpch_query_test(query_func, plan_executions=0):
         )
     else:
         # For scalar or numeric results
-        assert isinstance(pd_result, (int, float)) and isinstance(
-            bd_result, (int, float)
-        )
         assert np.isclose(pd_result, bd_result)
 
 
@@ -77,7 +74,7 @@ def test_tpch_q05():
 
 
 def test_tpch_q06():
-    run_tpch_query_test(tpch.tpch_q06, plan_executions=1)
+    run_tpch_query_test(tpch.tpch_q06)
 
 
 def test_tpch_q07():
@@ -131,7 +128,7 @@ def test_tpch_q18():
 
 
 def test_tpch_q19():
-    run_tpch_query_test(tpch.tpch_q19, plan_executions=1)
+    run_tpch_query_test(tpch.tpch_q19)
 
 
 def test_tpch_q20():

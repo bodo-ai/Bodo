@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arrow/array/util.h>
 #include <arrow/compute/expression.h>
 #include <arrow/scalar.h>
 #include <arrow/type_fwd.h>
@@ -9,6 +10,7 @@
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_query_profile_collector.h"
 #include "operator.h"
+#include "physical/expression.h"
 
 #undef CHECK_ARROW
 #define CHECK_ARROW(expr, msg)                                                \
@@ -32,6 +34,81 @@ struct PhysicalReduceMetrics {
     time_t produce_time = 0;
 };
 
+struct ReductionFunction {
+    std::vector<std::string> function_names;
+    std::vector<std::string> reduction_names;
+    std::vector<ReductionType> reduction_types;
+    arrow::ScalarVector results;
+    arrow::DataTypeVector result_types;
+    ReductionFunction(std::vector<std::string> function_names,
+                      std::vector<std::string> reduction_names,
+                      std::vector<ReductionType> reduction_types,
+                      arrow::ScalarVector initial_results)
+        : function_names(std::move(function_names)),
+          reduction_names(std::move(reduction_names)),
+          reduction_types(std::move(reduction_types)),
+          results(std::move(initial_results)) {
+        assert(this->function_names.size() == this->reduction_names.size());
+        assert(this->function_names.size() == this->reduction_types.size());
+        assert(this->function_names.size() == this->results.size());
+        assert(!this->function_names.empty());
+    }
+    virtual void Finalize();
+    void ConsumeBatch(std::shared_ptr<arrow::Array> in_arrow_array);
+    virtual void CombineResults(const arrow::ScalarVector& other_results);
+    virtual ~ReductionFunction() = default;
+};
+
+struct ReductionFunctionMax : public ReductionFunction {
+    ReductionFunctionMax()
+        : ReductionFunction({"max"}, {"greater"}, {ReductionType::COMPARISON},
+                            {nullptr}) {}
+};
+
+struct ReductionFunctionMin : public ReductionFunction {
+    ReductionFunctionMin()
+        : ReductionFunction({"min"}, {"less"}, {ReductionType::COMPARISON},
+                            {nullptr}) {}
+};
+
+struct ReductionFunctionSum : public ReductionFunction {
+    ReductionFunctionSum(std::shared_ptr<arrow::DataType> dt)
+        : ReductionFunction({"sum"}, {"add"}, {ReductionType::AGGREGATION},
+                            {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
+};
+
+struct ReductionFunctionProduct : public ReductionFunction {
+    ReductionFunctionProduct(std::shared_ptr<arrow::DataType> dt)
+        : ReductionFunction({"product"}, {"multiply"},
+                            {ReductionType::AGGREGATION},
+                            {arrow::MakeScalar(dt, 1).ValueOrDie()}) {}
+};
+
+struct ReductionFunctionCount : public ReductionFunction {
+    ReductionFunctionCount(std::shared_ptr<arrow::DataType> dt)
+        : ReductionFunction({"count"}, {"add"}, {ReductionType::AGGREGATION},
+                            {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
+};
+
+struct ReductionFunctionMean : public ReductionFunction {
+    ReductionFunctionMean()
+        : ReductionFunction(
+              {"sum", "count"}, {"add", "add"},
+              {ReductionType::AGGREGATION, ReductionType::AGGREGATION},
+              {nullptr, nullptr}) {}
+    void Finalize() override;
+};
+
+struct ReductionFunctionStd : public ReductionFunction {
+    ReductionFunctionStd()
+        : ReductionFunction(
+              {"sum", "count", "sum_of_squares"}, {"add", "add", "add"},
+              {ReductionType::AGGREGATION, ReductionType::AGGREGATION,
+               ReductionType::AGGREGATION},
+              {nullptr, nullptr, nullptr}) {}
+    void Finalize() override;
+};
+
 /**
  * @brief Physical node for reductions like max.
  *
@@ -41,13 +118,16 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     explicit PhysicalReduce(std::shared_ptr<bodo::Schema> out_schema,
                             std::vector<std::string> function_names)
         // Drop Index columns since not necessary in output
-        : out_schema(out_schema),
-          function_names(function_names),
-          scalar_cmp_names(getScalarOpNames(function_names)) {}
+        : out_schema(std::move(out_schema)),
+          function_names(std::move(function_names)) {}
 
     virtual ~PhysicalReduce() = default;
 
-    void FinalizeSink() override {}
+    void FinalizeSink() override {
+        for (auto& reduction_function : reduction_functions) {
+            reduction_function->Finalize();
+        }
+    }
 
     void FinalizeSource() override {
         std::vector<MetricBase> metrics_out;
@@ -63,65 +143,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     }
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
-                                OperatorResult prev_op_result) override {
-        time_pt start_consume_time = start_timer();
-        // Convert to Arrow array
-        arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-        std::shared_ptr<arrow::Array> in_arrow_array = bodo_array_to_arrow(
-            bodo::BufferPool::DefaultPtr(), input_batch->columns[0],
-            false /*convert_timedelta_to_int64*/, "", time_unit,
-            false, /*downcast_time_ns_to_us*/
-            bodo::default_buffer_memory_manager());
-        for (size_t i = 0; i < function_names.size(); i++) {
-            auto function_name = function_names[i];
-            // Reduce Arrow array using compute function
-            arrow::Result<arrow::Datum> cmp_res =
-                arrow::compute::CallFunction(function_name, {in_arrow_array});
-            CHECK_ARROW(cmp_res.status(), "Error in Arrow compute kernel");
-            std::shared_ptr<arrow::Scalar> out_scalar_batch =
-                cmp_res.ValueOrDie().scalar();
-            ReductionType reduction_type = getReductionType(function_name);
-
-            // Update reduction result
-            if (iter == 0) {
-                output_scalars.push_back(out_scalar_batch);
-            } else if (!out_scalar_batch->is_valid) {
-                // If we get an empty batch which results in invalid
-                // arrow::Scalar result then just ignore it.
-                continue;
-            } else if (!output_scalars[i]->is_valid) {
-                // The last result can be null if there have been no rows
-                // seen thus far.  In which case, use the current result
-                // just on this batch as the result thus far.
-                output_scalars[i] = out_scalar_batch;
-            } else {
-                arrow::Result<arrow::Datum> cmp_res_scalar =
-                    arrow::compute::CallFunction(
-                        scalar_cmp_names[i],
-                        {out_scalar_batch, output_scalars[i]});
-                CHECK_ARROW(cmp_res_scalar.status(),
-                            "Error in Arrow compute scalar comparison");
-                const std::shared_ptr<arrow::Scalar> cmp_scalar =
-                    cmp_res_scalar.ValueOrDie().scalar();
-                if (reduction_type == ReductionType::COMPARISON) {
-                    if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
-                        output_scalars[i] = out_scalar_batch;
-                    }
-                } else if (reduction_type == ReductionType::AGGREGATION) {
-                    output_scalars[i] = cmp_scalar;
-                } else {
-                    throw std::runtime_error(
-                        "Unsupported reduction function: " + function_name);
-                }
-            }
-        }
-
-        iter++;
-        this->metrics.consume_time += end_timer(start_consume_time);
-        return prev_op_result == OperatorResult::FINISHED
-                   ? OperatorResult::FINISHED
-                   : OperatorResult::NEED_MORE_INPUT;
-    }
+                                OperatorResult prev_op_result) override;
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         throw std::runtime_error("GetResult called on a PhysicalReduce node.");
@@ -136,7 +158,17 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         time_pt start_produce_time = start_timer();
         // Create a vector of Arrow arrays from output_scalars
         std::vector<std::shared_ptr<arrow::Array>> arrow_arrays;
-        for (const auto& output_scalar : output_scalars) {
+        for (size_t i = 0; i < reduction_functions.size(); i++) {
+            const std::unique_ptr<ReductionFunction>& reduction_function =
+                this->reduction_functions[i];
+            // Every reduction function has one global output scalar after
+            // Finalize which is called in FinalizeSink
+            auto output_scalar = reduction_function->results[0];
+            if (output_scalar == nullptr) {
+                output_scalar = arrow::MakeNullScalar(
+                    out_schema->column_types[i]->ToArrowDataType());
+            }
+
             std::shared_ptr<arrow::Array> array =
                 ScalarToArrowArray(output_scalar);
             arrow_arrays.push_back(array);
@@ -157,72 +189,11 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     }
 
    private:
-    /**
-     * @brief Get comparison operator for comparing scalars for the reduction
-     * function
-     *
-     * @param func_name reduction function name (e.g., "max", "min")
-     * @return std::string scalar comparison operator name like "greater" or
-     * "less"
-     */
-    static std::string getScalarOpName(std::string func_name) {
-        if (func_name == "max") {
-            return "greater";
-        } else if (func_name == "min") {
-            return "less";
-        } else if (func_name == "sum") {
-            return "add";
-        } else if (func_name == "product") {
-            return "multiply";
-        } else if (func_name == "count") {
-            return "add";
-        } else {
-            throw std::runtime_error("Unsupported reduction function: " +
-                                     func_name);
-        }
-    }
-
-    static std::vector<std::string> getScalarOpNames(
-        const std::vector<std::string>& func_names) {
-        std::vector<std::string> scalar_cmp_names;
-        for (const auto& func_name : func_names) {
-            scalar_cmp_names.push_back(getScalarOpName(func_name));
-        }
-        return scalar_cmp_names;
-    }
-
-    static ReductionType getReductionType(std::string func_name) {
-        if (func_name == "max") {
-            return ReductionType::COMPARISON;
-        } else if (func_name == "min") {
-            return ReductionType::COMPARISON;
-        } else if (func_name == "sum") {
-            return ReductionType::AGGREGATION;
-        } else if (func_name == "product") {
-            return ReductionType::AGGREGATION;
-        } else if (func_name == "count") {
-            return ReductionType::AGGREGATION;
-        } else {
-            throw std::runtime_error("Unsupported reduction function: " +
-                                     func_name);
-        }
-    }
-
-    static std::vector<ReductionType> getReductionTypes(
-        const std::vector<std::string>& func_names) {
-        std::vector<ReductionType> reduction_types;
-        for (const auto& func_name : func_names) {
-            reduction_types.push_back(getReductionType(func_name));
-        }
-        return reduction_types;
-    }
-
     const std::shared_ptr<bodo::Schema> out_schema;
-    const std::vector<std::string> function_names;
-    const std::vector<std::string> scalar_cmp_names;
+    std::vector<std::unique_ptr<ReductionFunction>> reduction_functions;
+    std::vector<std::string> function_names;
 
     int64_t iter = 0;
-    std::vector<std::shared_ptr<arrow::Scalar>> output_scalars;
     PhysicalReduceMetrics metrics;
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {
         metrics_out.emplace_back(
