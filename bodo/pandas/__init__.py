@@ -38,7 +38,7 @@ def add_fallback():
             # Export the pandas functions that aren't implemented by bodo
             # into bodo.pandas.
             msg = (
-                f"{func} is not implemented in Bodo Dataframe Library yet. "
+                f"{func} is not implemented in Bodo DataFrames yet. "
                 "Falling back to Pandas (may be slow or run out of memory)."
             )
             setattr(current_module, func, fallback_wrapper(pandas, getattr(pandas, func), func, msg))
