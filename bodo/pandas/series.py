@@ -2182,7 +2182,7 @@ def generate_null_reduce(func_names):
 def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
     """
     Computes a list of reduction functions like ["min", "max"] on a BodoSeries.
-    Returns a list of equal length that stores reduction values of each function.
+    Returns a BodoDataFrame that stores reduction values of each function.
     """
     if not isinstance(bodo_series.dtype, pd.ArrowDtype):
         raise BodoLibNotImplementedException()
