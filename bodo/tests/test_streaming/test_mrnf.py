@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import re
+import typing as pt
 
 import numpy as np
 import pandas as pd
@@ -6,14 +9,19 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.streaming.groupby import (
-    delete_groupby_state,
-    groupby_build_consume_batch,
-    groupby_produce_output_batch,
-    init_groupby_state,
-)
 from bodo.tests.utils import check_func, pytest_mark_one_rank, temp_env_override
-from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
+
+if bodo.test_compiler:
+    from bodo.libs.streaming.groupby import (
+        delete_groupby_state,
+        groupby_build_consume_batch,
+        groupby_produce_output_batch,
+        init_groupby_state,
+    )
+    from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
+
+if pt.TYPE_CHECKING:
+    from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 def _test_mrnf_helper(

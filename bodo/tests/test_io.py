@@ -23,14 +23,14 @@ from bodo.tests.utils import (
     compress_dir,
     count_array_REPs,
     count_parfor_REPs,
-    get_rank,
-    get_start_end,
     pytest_mark_one_rank,
-    reduce_sum,
     uncompress_dir,
 )
-from bodo.utils.testing import ensure_clean
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    from bodo.tests.utils import get_rank, get_start_end, reduce_sum
+    from bodo.utils.testing import ensure_clean
+    from bodo.utils.typing import BodoError
 
 
 def compress_file(fname, dummy_extension=""):

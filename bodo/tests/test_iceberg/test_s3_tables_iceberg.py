@@ -15,9 +15,11 @@ from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
     pytest_s3_tables,
-    run_rank0,
     temp_env_override,
 )
+
+if bodo.test_compiler:
+    from bodo.tests.utils import run_rank0
 
 pytestmark = pytest_s3_tables
 

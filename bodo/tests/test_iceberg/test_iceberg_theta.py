@@ -1,6 +1,6 @@
 import datetime
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -24,8 +24,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
 )
-from bodo.tests.utils import _get_dist_arg
-from bodo.utils.utils import run_rank0
+from bodo.tests.utils import _get_dist_arg, run_rank0
 
 pytestmark = pytest.mark.iceberg
 

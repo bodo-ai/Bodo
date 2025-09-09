@@ -14,10 +14,12 @@ from bodo.tests.utils import (
     check_func,
     count_array_REPs,
     count_parfor_REPs,
-    get_start_end,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    from bodo.tests.utils import get_start_end
+    from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 

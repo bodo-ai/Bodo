@@ -7,7 +7,7 @@ import traceback
 from decimal import Decimal
 from urllib.parse import urlparse
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -16,10 +16,6 @@ import pytest
 import pytz
 
 import bodo
-from bodo.io.stream_parquet_write import (
-    parquet_writer_append_table,
-    parquet_writer_init,
-)
 from bodo.tests.conftest import DataPath
 from bodo.tests.utils import (
     _get_dist_arg,
@@ -30,11 +26,17 @@ from bodo.tests.utils import (
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
     pytest_mark_one_rank,
-    reduce_sum,
+    run_rank0,
 )
 from bodo.utils.testing import ensure_clean2, ensure_clean_dir
-from bodo.utils.typing import BodoError
-from bodo.utils.utils import run_rank0
+
+if bodo.test_compiler:
+    from bodo.io.stream_parquet_write import (
+        parquet_writer_append_table,
+        parquet_writer_init,
+    )
+    from bodo.tests.utils import reduce_sum
+    from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.parquet
 

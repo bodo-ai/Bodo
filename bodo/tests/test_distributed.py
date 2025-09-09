@@ -4,13 +4,12 @@ import random
 import sys
 from decimal import Decimal
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import psutil
 import pyarrow as pa
 import pytest
-from numba.core.ir_utils import find_callname, guard
 
 import bodo
 import bodo.spawn.spawner
@@ -19,8 +18,6 @@ from bodo.spawn.spawner import CommandType
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.test_numpy_array import arr_tuple_val  # noqa
 from bodo.tests.utils import (
-    DistTestPipeline,
-    SeqTestPipeline,
     _get_dist_arg,
     _test_equal,
     _test_equal_guard,
@@ -31,13 +28,22 @@ from bodo.tests.utils import (
     count_parfor_REPs,
     dist_IR_contains,
     gen_random_string_binary_array,
-    get_start_end,
     pytest_mark_spawn_mode,
-    reduce_sum,
 )
-from bodo.transforms.distributed_analysis import Distribution, is_REP
-from bodo.utils.typing import BodoError, BodoWarning
-from bodo.utils.utils import is_call_assign
+
+if bodo.test_compiler:
+    import numba
+    from numba.core.ir_utils import find_callname, guard
+
+    from bodo.tests.utils import (
+        DistTestPipeline,
+        SeqTestPipeline,
+        get_start_end,
+        reduce_sum,
+    )
+    from bodo.transforms.distributed_analysis import Distribution, is_REP
+    from bodo.utils.typing import BodoError, BodoWarning
+    from bodo.utils.utils import is_call_assign
 
 random.seed(4)
 np.random.seed(1)

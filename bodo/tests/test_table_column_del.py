@@ -3,11 +3,9 @@ import math
 import os
 import shutil
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core import ir
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -16,13 +14,17 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    ColumnDelTestPipeline,
     check_func,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
-    reduce_sum,
 )
-from bodo.utils.utils import is_expr
+
+if bodo.test_compiler:
+    import numba
+    from numba.core import ir
+
+    from bodo.tests.utils import ColumnDelTestPipeline, reduce_sum
+    from bodo.utils.utils import is_expr
 
 pytestmark = pytest.mark.slow
 

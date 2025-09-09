@@ -10,13 +10,15 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import (
     check_func,
     gen_nonascii_list,
     generate_comparison_ops_func,
 )
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    from bodo.libs.str_arr_ext import str_arr_from_sequence
+    from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow

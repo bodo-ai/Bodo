@@ -1,18 +1,21 @@
 import datetime
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.hiframes.boxing import (
-    _dtype_from_type_enum_list,
-    _infer_series_arr_type,
-)
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.series_common import series_val  # noqa
-from bodo.tests.utils import reduce_sum
+
+if bodo.test_compiler:
+    import numba
+
+    from bodo.hiframes.boxing import (
+        _dtype_from_type_enum_list,
+        _infer_series_arr_type,
+    )
+    from bodo.tests.utils import reduce_sum
 
 
 @pytest.fixture(

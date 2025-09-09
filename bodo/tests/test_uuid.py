@@ -1,5 +1,7 @@
 import bodo
-import bodo.libs.uuid
+
+if bodo.test_compiler:
+    import bodo.libs.uuid
 
 
 def test_uuid4(memory_leak_check):

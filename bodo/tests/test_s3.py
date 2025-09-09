@@ -8,10 +8,8 @@ import pytest
 from pyarrow import fs as pafs
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, cast_dt64_to_ns, check_func
+from bodo.tests.utils import _get_dist_arg, cast_dt64_to_ns, check_func, run_rank0
 from bodo.utils.testing import ensure_clean2
-from bodo.utils.typing import BodoError
-from bodo.utils.utils import run_rank0
 
 pytestmark = pytest.mark.s3
 
@@ -1263,6 +1261,8 @@ def test_s3_json_anon_public_dataset(memory_leak_check):
 def test_read_parquet_invalid_list_of_files(
     minio_server_with_s3_envs, s3_bucket, datapath
 ):
+    from bodo.utils.typing import BodoError
+
     def test_impl(fnames):
         df = pd.read_parquet(fnames)
         return df

@@ -18,9 +18,11 @@ from bodo.tests.utils import (
     gen_random_arrow_array_struct_list_int,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
-    get_start_end,
     pytest_pandas,
 )
+
+if bodo.test_compiler:
+    from bodo.tests.utils import get_start_end
 
 pytestmark = pytest_pandas
 

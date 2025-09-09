@@ -3,13 +3,17 @@ with Bodo data types. These tests should be used to check that specific
 compiler optimizations (i.e. dce) are working properly.
 """
 
-import numba
 import numpy as np
 import pandas as pd
-from numba import prange
 
 import bodo
-from bodo.tests.utils import ParforTestPipeline, check_func
+from bodo.tests.utils import check_func
+
+if bodo.test_compiler:
+    import numba
+    from numba import prange
+
+    from bodo.tests.utils import ParforTestPipeline
 
 
 def test_setna_parfor_dce(memory_leak_check):

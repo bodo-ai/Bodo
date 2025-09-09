@@ -7,8 +7,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
 from bodo.tests.utils import check_func, nullable_float_arr_maker
-from bodo.types import Time
+
+if bodo.test_compiler:
+    from bodo.types import Time
 
 
 @pytest.fixture
@@ -113,1033 +116,1404 @@ def permute_df_and_answer(df, answer):
     return df.iloc[perm], answer.iloc[perm]
 
 
-@pytest.fixture(
-    params=[
-        pytest.param(
-            (
-                ["A"],
-                (("row_number",),),
-                ("B",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [5, 4, 3, 4, 3, 5, 3, 2, 2, 2, 5, 1, 1, 1, 4],
-                    }
-                ),
-            ),
-            id="row_number-simple_ordering",
-        ),
-        pytest.param(
-            (
-                ["A"],
-                (("row_number",),),
-                ("C", "B"),
-                (False, True),
-                ("last", "first"),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [4, 2, 3, 3, 5, 1, 2, 4, 2, 5, 3, 4, 1, 1, 5],
-                    }
-                ),
-            ),
-            id="row_number-compound_ordering",
-        ),
-        pytest.param(
-            (
-                ["A"],
-                (("min_row_number_filter",),),
-                ("B",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [False] * 11 + [True] * 3 + [False],
-                    }
-                ),
-            ),
-            id="min_row_number_filter",
-        ),
-        pytest.param(
-            (
-                ["A"],
-                (("min_row_number_filter",),),
-                ("R",),
-                (False,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [True] * 3 + [False] * 12,
-                    }
-                ),
-            ),
-            id="min_row_number_filter_all_NA",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (("row_number",), ("min_row_number_filter",), ("row_number",)),
-                ("H",),
-                (True,),
-                ("first",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": list(range(1, 13)) + [1, 2, 3],
-                        "AGG_OUTPUT_1": [True] + [False] * 11 + [True, False, False],
-                        "AGG_OUTPUT_2": list(range(1, 13)) + [1, 2, 3],
-                    }
-                ),
-            ),
-            id="multiple_row_number_calls",
-        ),
-        pytest.param(
-            (
-                ["A"],
-                (("rank",), ("dense_rank",), ("percent_rank",), ("cume_dist",)),
-                ("C",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [1, 4, 3, 3, 1, 4, 3, 2, 4, 1, 3, 1, 5, 5, 1],
-                        "AGG_OUTPUT_1": [1, 4, 2, 2, 1, 3, 2, 2, 3, 1, 3, 1, 3, 5, 1],
-                        "AGG_OUTPUT_2": [
-                            0.0,
-                            0.75,
-                            0.5,
-                            0.5,
-                            0.0,
-                            0.75,
-                            0.5,
-                            0.25,
-                            0.75,
-                            0.0,
-                            0.5,
-                            0.0,
-                            1.0,
-                            1.0,
-                            0.0,
-                        ],
-                        "AGG_OUTPUT_3": [
-                            0.4,
-                            0.8,
-                            0.6,
-                            0.8,
-                            0.2,
-                            1.0,
-                            0.8,
-                            0.4,
-                            1.0,
-                            0.4,
-                            0.6,
-                            0.4,
-                            1.0,
-                            1.0,
-                            0.4,
-                        ],
-                    }
-                ),
-            ),
-            id="rank_fns",
-        ),
-        pytest.param(
-            (
-                # Testing rank with a partition key so that some of the partitions
-                # have only a single value (thus causing some of the rank functions
-                # to use special edge cases).
-                ["C"],
-                (("rank",), ("dense_rank",), ("percent_rank",), ("cume_dist",)),
-                ("A",),
-                (True,),
-                ("first",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 4, 1, 2, 4],
-                        "AGG_OUTPUT_1": [1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 3, 1, 2, 3],
-                        "AGG_OUTPUT_2": [
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.5,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.75,
-                            0.0,
-                            1.0,
-                            0.75,
-                        ],
-                        "AGG_OUTPUT_3": [
-                            0.4,
-                            1.0,
-                            1.0,
-                            1.0,
-                            0.6,
-                            1.0,
-                            1.0,
-                            1.0,
-                            1.0,
-                            0.4,
-                            1.0,
-                            1.0,
-                            0.5,
-                            1.0,
-                            1.0,
-                        ],
-                    }
-                ),
-            ),
-            id="rank_fns-mixed_sized_groups",
-        ),
-        pytest.param(
-            (
-                # Testing rank with a partition key so that some of the partitions
-                # are all-null.
-                ["D"],
-                (("rank",), ("dense_rank",), ("percent_rank",), ("cume_dist",)),
-                ("P",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": list(range(1, 13)) + [1] * 3,
-                        "AGG_OUTPUT_1": list(range(1, 13)) + [1] * 3,
-                        "AGG_OUTPUT_2": [i / 11 for i in range(12)] + [0] * 3,
-                        "AGG_OUTPUT_3": [(i + 1) / 12 for i in range(12)] + [1] * 3,
-                    }
-                ),
-            ),
-            id="rank_fns-all_null_group",
-        ),
-        pytest.param(
-            (
-                ["D"],
+if bodo.test_compiler:
+
+    @pytest.fixture(
+        params=[
+            pytest.param(
                 (
-                    # Note: row_number is included so that there is a mix of window functions that do & don't
-                    # take in arguments, to verify that the offsets are used correctly.
-                    ("ntile", 2),
-                    ("ntile", 3),
-                    ("row_number",),
-                    ("ntile", 5),
-                    ("ntile", 6),
-                    ("ntile", 10),
-                ),
-                ("H",),
-                (True,),
-                ("first",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [1] * 6 + [2] * 6 + [1, 1, 2],
-                        "AGG_OUTPUT_1": [1] * 4 + [2] * 4 + [3] * 4 + [1, 2, 3],
-                        "AGG_OUTPUT_2": list(range(1, 13)) + [1, 2, 3],
-                        "AGG_OUTPUT_3": [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 1, 2, 3],
-                        "AGG_OUTPUT_4": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 1, 2, 3],
-                        "AGG_OUTPUT_5": [1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3],
-                    }
-                ),
-            ),
-            id="ntile",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # Note: row_number & ntile are included so that there is a mix of window functions that
-                    # take in scalar arguments, vector arguments, and no arguments.
-                    ("conditional_true_event", "E"),
-                    ("row_number",),
-                    ("conditional_change_event", "E"),
-                    ("conditional_change_event", "F"),
-                    ("ntile", 6),
-                    ("conditional_change_event", "G"),
-                ),
-                ("B", "H"),
-                (True, True),
-                ("first", "first"),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [1, 5, 4, 5, 5, 2, 4, 5, 4, 4, 3, 3, 0, 1, 1],
-                        "AGG_OUTPUT_1": [
-                            1,
-                            12,
-                            6,
-                            9,
-                            11,
-                            2,
-                            8,
-                            10,
-                            5,
-                            7,
-                            3,
-                            4,
-                            1,
-                            2,
-                            3,
-                        ],
-                        "AGG_OUTPUT_2": [0, 5, 2, 4, 5, 0, 3, 4, 2, 3, 0, 1, 0, 0, 1],
-                        "AGG_OUTPUT_3": [0, 5, 4, 4, 4, 1, 4, 4, 3, 4, 1, 2, 0, 0, 1],
-                        "AGG_OUTPUT_4": [1, 6, 3, 5, 6, 1, 4, 5, 3, 4, 2, 2, 1, 2, 3],
-                        "AGG_OUTPUT_5": [0, 6, 2, 4, 5, 0, 3, 5, 1, 3, 1, 1, 0, 0, 0],
-                    }
-                ),
-            ),
-            id="conditional_events",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # COUNT(*) with no frame
-                    ("size", "None", "None"),
-                    # COUNT on an array of nullable integers with no frame
-                    ("count", "B", "None", "None"),
-                    # COUNT on an array of nullable booleans with no frame
-                    ("count", "E", "None", "None"),
-                    # COUNT_IF on an array of nullable booleans with no frame
-                    ("count_if", "E", "None", "None"),
-                ),
-                (),
-                (),
-                (),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [12] * 12 + [3] * 3,
-                        "AGG_OUTPUT_1": [9] * 12 + [3] * 3,
-                        "AGG_OUTPUT_2": [10] * 12 + [2] * 3,
-                        "AGG_OUTPUT_3": [5] * 12 + [1] * 3,
-                    }
-                ),
-            ),
-            id="count_fns-no_frame-no_order",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # COUNT(*) with a sliding frame
-                    ("size", -3, 3),
-                    # COUNT on an array of nullable integers with a sliding frame
-                    ("count", "B", -4, -2),
-                    # COUNT_IF on an array of nullable booleans with a sliding frame
-                    ("count_if", "E", 1, 6),
-                ),
-                ("B", "H"),
-                (True, True),
-                ("first", "first"),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [4, 4, 7, 7, 5, 5, 7, 6, 7, 7, 6, 7, 3, 3, 3],
-                        "AGG_OUTPUT_1": [0, 3, 1, 3, 3, 0, 3, 3, 0, 2, 0, 0, 0, 0, 1],
-                        "AGG_OUTPUT_2": [3, 0, 1, 0, 0, 2, 1, 0, 1, 1, 2, 2, 1, 0, 0],
-                    }
-                ),
-            ),
-            id="count_fns-sliding_frames",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # COUNT(*) with a prefix frame
-                    ("size", "None", -1),
-                    # COUNT on an array of nullable integers with a prefix frame
-                    ("count", "B", "None", 0),
-                    # COUNT_IF on an array of nullable booleans with a prefix frame
-                    ("count_if", "E", "None", 2),
-                ),
-                ("B", "H"),
-                (True, True),
-                ("first", "first"),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [0, 11, 5, 8, 10, 1, 7, 9, 4, 6, 2, 3, 0, 1, 2],
-                        "AGG_OUTPUT_1": [0, 9, 3, 6, 8, 0, 5, 7, 2, 4, 0, 1, 1, 2, 3],
-                        "AGG_OUTPUT_2": [3, 5, 4, 5, 5, 3, 5, 5, 4, 5, 4, 4, 1, 1, 1],
-                    }
-                ),
-            ),
-            id="count_fns-prefix_frames",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # COUNT(*) with a suffix frame
-                    ("size", 0, "None"),
-                    # COUNT on an array of nullable integers with a suffix frame
-                    ("count", "B", 1, "None"),
-                    # COUNT_IF on an array of nullable booleans with a suffix frame
-                    ("count_if", "E", -2, "None"),
-                ),
-                ("B", "H"),
-                (True, True),
-                ("first", "first"),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [
-                            12,
-                            1,
-                            7,
-                            4,
-                            2,
-                            11,
-                            5,
-                            3,
-                            8,
-                            6,
-                            10,
-                            9,
-                            3,
-                            2,
-                            1,
-                        ],
-                        "AGG_OUTPUT_1": [9, 0, 6, 3, 1, 9, 4, 2, 7, 5, 9, 8, 2, 1, 0],
-                        "AGG_OUTPUT_2": [5, 0, 2, 1, 1, 5, 1, 1, 3, 2, 5, 4, 1, 1, 1],
-                    }
-                ),
-            ),
-            id="count_fns-suffix_frames",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # COUNT on string array with no frame
-                    ("count", "F", "None", "None"),
-                    # COUNT on non-nullable integers with no frame
-                    ("count", "H", "None", "None"),
-                    # COUNT on timestamp (uses sentinal values as nuls) with no frame
-                    ("count", "I", "None", "None"),
-                    # COUNT on numpy floats (uses NaN as nuls) with no frame
-                    ("count", "J", "None", "None"),
-                    # COUNT on numpy boolean array with no frame
-                    ("count", "K", "None", "None"),
-                    # COUNT_IF on numpy boolean array with no frame
-                    ("count_if", "K", "None", "None"),
-                ),
-                (),
-                (),
-                (),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [9] * 12 + [2] * 3,
-                        "AGG_OUTPUT_1": [12] * 12 + [3] * 3,
-                        "AGG_OUTPUT_2": [9] * 12 + [2] * 3,
-                        "AGG_OUTPUT_3": [6] * 12 + [1] * 3,
-                        "AGG_OUTPUT_4": [12] * 12 + [3] * 3,
-                        "AGG_OUTPUT_5": [4] * 12 + [1] * 3,
-                    }
-                ),
-            ),
-            id="count_fns-other_arrays",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # Sample variance on a nullable integer array, no frame
-                    ("var", "B", "None", "None"),
-                    # Population variance on a nullable integer array, no frame
-                    ("var_pop", "B", "None", "None"),
-                    # Sample standard deviation on a nullable integer array, no frame
-                    ("std", "B", "None", "None"),
-                    # Population standard deviation on a nullable integer array, no frame
-                    ("std_pop", "B", "None", "None"),
-                    # Sample variance on a nullable float array, no frame
-                    ("var", "Q", "None", "None"),
-                    # Population variance on a nullable float array, no frame
-                    ("var_pop", "Q", "None", "None"),
-                    # Sample standard deviation on a nullable float array, no frame
-                    ("std", "Q", "None", "None"),
-                    # Population standard deviation on a nullable float array, no frame
-                    ("std_pop", "Q", "None", "None"),
-                ),
-                (),
-                (),
-                (),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": pd.Series(
-                            [563799.694444] * 12 + [1801.333333] * 3
-                        ),
-                        "AGG_OUTPUT_1": pd.Series(
-                            [501155.283951] * 12 + [1200.888889] * 3
-                        ),
-                        "AGG_OUTPUT_2": pd.Series([750.865963] * 12 + [42.442117] * 3),
-                        "AGG_OUTPUT_3": pd.Series([707.923219] * 12 + [34.653844] * 3),
-                        "AGG_OUTPUT_4": nullable_float_arr_maker(
-                            [0.0] * 15, [12, 13, 14], list(range(12))
-                        ),
-                        "AGG_OUTPUT_5": nullable_float_arr_maker(
-                            [0.0] * 15, [-1], list(range(12))
-                        ),
-                        "AGG_OUTPUT_6": nullable_float_arr_maker(
-                            [0.0] * 15, [12, 13, 14], list(range(12))
-                        ),
-                        "AGG_OUTPUT_7": nullable_float_arr_maker(
-                            [0.0] * 15, [-1], list(range(12))
-                        ),
-                    }
-                ),
-            ),
-            id="var_std-no_frame",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # Sample variance on a nullable integer array, prefix frame
-                    ("var", "B", "None", 0),
-                    # Population variance on a nullable float array, suffix frame
-                    ("var_pop", "Q", 0, "None"),
-                    # Sample standard deviation on a numpy float array, sliding frame
-                    ("std", "J", -1, 1),
-                    # Population standard deviation on a numpy integer array, prefix frame
-                    ("std_pop", "H", "None", -1),
-                ),
-                ("H",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": nullable_float_arr_maker(
-                            [
-                                0.0,
-                                0.0,
-                                648.0,
-                                325.33333333333337,
-                                261.3333333333333,
-                                261.3333333333333,
-                                197.79999999999998,
-                                167.8666666666667,
-                                813.4761904761905,
-                                699.4107142857143,
-                                699.4107142857143,
-                                563799.6944444444,
-                                0.0,
-                                50.0,
-                                1801.3333333333335,
+                    ["A"],
+                    (("row_number",),),
+                    ("B",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [
+                                5,
+                                4,
+                                3,
+                                4,
+                                3,
+                                5,
+                                3,
+                                2,
+                                2,
+                                2,
+                                5,
+                                1,
+                                1,
+                                1,
+                                4,
                             ],
-                            [0, 1, 12],
-                            [-1],
-                        ),
-                        "AGG_OUTPUT_1": nullable_float_arr_maker(
-                            [0.0] * 8 + [1.25, 0.6666666666666666, 0.25, 0.0, 0.0, 0.0],
-                            [-1],
-                            list(range(8)),
-                        ),
-                        "AGG_OUTPUT_2": nullable_float_arr_maker(
-                            [0.70710677] * 15, [0, 1, 3, 5, 7, 9, 11, 12, 13, 14], [-1]
-                        ),
-                        "AGG_OUTPUT_3": nullable_float_arr_maker(
-                            [
-                                0.0,
-                                0.0,
-                                0.5,
-                                0.816496580927726,
-                                1.118033988749895,
-                                1.4142135623730951,
-                                1.707825127659933,
-                                2.0,
-                                2.29128784747792,
-                                2.581988897471611,
-                                2.8722813232690143,
-                                3.1622776601683795,
-                                0.0,
-                                0.0,
-                                0.5,
+                        }
+                    ),
+                ),
+                id="row_number-simple_ordering",
+            ),
+            pytest.param(
+                (
+                    ["A"],
+                    (("row_number",),),
+                    ("C", "B"),
+                    (False, True),
+                    ("last", "first"),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [
+                                4,
+                                2,
+                                3,
+                                3,
+                                5,
+                                1,
+                                2,
+                                4,
+                                2,
+                                5,
+                                3,
+                                4,
+                                1,
+                                1,
+                                5,
                             ],
-                            [0, 12],
-                            [-1],
-                        ),
-                    }
+                        }
+                    ),
                 ),
+                id="row_number-compound_ordering",
             ),
-            id="var_std-with_frame",
-        ),
-        pytest.param(
-            (
-                ["D"],
+            pytest.param(
                 (
-                    # AVG on a nullable integer array, no frame
-                    ("mean", "B", "None", "None"),
-                    # AVG on a numpy integer array, no frame
-                    ("mean", "H", "None", "None"),
-                    # AVG on a nullable float array, no frame
-                    ("mean", "Q", "None", "None"),
-                    # AVG on a numpy float array, no frame
-                    ("mean", "J", "None", "None"),
-                    # AVG on a nullable integer array with an all-null partition, no frame
-                    ("mean", "P", "None", "None"),
+                    ["A"],
+                    (("min_row_number_filter",),),
+                    ("B",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [False] * 11 + [True] * 3 + [False],
+                        }
+                    ),
                 ),
-                (),
-                (),
-                (),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": pd.Series([-257.777778] * 12 + [23.333333] * 3),
-                        "AGG_OUTPUT_1": pd.Series([5.5] * 12 + [13.0] * 3),
-                        "AGG_OUTPUT_2": nullable_float_arr_maker(
-                            [13.0] * 15, [-1], list(range(12))
-                        ),
-                        "AGG_OUTPUT_3": pd.Series([3.0] * 12 + [6.5] * 3),
-                        "AGG_OUTPUT_4": pd.Series([74.0] * 12 + [None] * 3),
-                    }
-                ),
+                id="min_row_number_filter",
             ),
-            id="avg-no_frame",
-        ),
-        pytest.param(
-            (
-                ["D"],
+            pytest.param(
                 (
-                    # AVG on a nullable float array, prefix frame
-                    ("mean", "Q", "None", 0),
-                    # AVG on a nullable float array, sliding frame
-                    ("mean", "Q", 1, 4),
-                    # AVG on a nullable integer array, suffix frame
-                    ("mean", "B", 0, "None"),
-                    # AVG on a numpy integer array, prefix frame
-                    ("mean", "H", "None", -1),
-                    # AVG on a numpy float array, suffix frame
-                    ("mean", "J", -1, "None"),
-                    # AVG on a nullable integer array with an all-null partition, sliding frame
-                    ("mean", "P", -2, 1),
+                    ["A"],
+                    (("min_row_number_filter",),),
+                    ("R",),
+                    (False,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [True] * 3 + [False] * 12,
+                        }
+                    ),
                 ),
-                ("H",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": nullable_float_arr_maker(
-                            [0.0, 0.5, 1.0, 1.5, 2.0] + [-1.0] * 8 + [13.0, 13.0],
-                            [12],
-                            list(range(5, 12)),
-                        ),
-                        "AGG_OUTPUT_1": nullable_float_arr_maker(
-                            [2.5]
-                            + [-1.0] * 6
-                            + [9.5, 10.0, 10.5, 11.0, -1.0, 13.0, -1.0, -1.0],
-                            [11, 13, 14],
-                            list(range(1, 7)),
-                        ),
-                        "AGG_OUTPUT_2": [
-                            -257.77777777777777,
-                            -257.77777777777777,
-                            -291.875,
-                            -330.57142857142856,
-                            -385.5,
-                            -464.8,
-                            -464.8,
-                            -580.5,
-                            -776.6666666666666,
-                            -1131.5,
-                            -2259.0,
-                            -2259.0,
-                            23.333333333333332,
-                            38.0,
-                            72.0,
-                        ],
-                        "AGG_OUTPUT_3": [
-                            None,
-                            0.0,
-                            0.5,
-                            1.0,
-                            1.5,
-                            2.0,
-                            2.5,
-                            3.0,
-                            3.5,
-                            4.0,
-                            4.5,
-                            5.0,
-                            None,
-                            12.0,
-                            12.5,
-                        ],
-                        "AGG_OUTPUT_4": [
-                            3.0,
-                            3.0,
-                            3.0,
-                            3.5,
-                            3.5,
-                            4.0,
-                            4.0,
-                            4.5,
-                            4.5,
-                            5.0,
-                            5.0,
-                            5.5,
-                            6.5,
-                            6.5,
-                            6.5,
-                        ],
-                        "AGG_OUTPUT_5": [
-                            12.5,
-                            16.666666666666668,
-                            21.5,
-                            31.5,
-                            43.5,
-                            57.5,
-                            73.5,
-                            91.5,
-                            111.5,
-                            133.5,
-                            144.66666666666666,
-                            156.5,
-                            None,
-                            None,
-                            None,
-                        ],
-                    }
-                ),
+                id="min_row_number_filter_all_NA",
             ),
-            id="avg-with_frame",
-        ),
-        pytest.param(
-            (
-                ["D"],
+            pytest.param(
                 (
-                    ("mean", "P", "None", "None"),
-                    ("var", "P", "None", "None"),
-                    ("var_pop", "P", "None", "None"),
-                    ("std", "P", "None", "None"),
-                    ("std_pop", "P", "None", "None"),
+                    ["D"],
+                    (("row_number",), ("min_row_number_filter",), ("row_number",)),
+                    ("H",),
+                    (True,),
+                    ("first",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": list(range(1, 13)) + [1, 2, 3],
+                            "AGG_OUTPUT_1": [True]
+                            + [False] * 11
+                            + [True, False, False],
+                            "AGG_OUTPUT_2": list(range(1, 13)) + [1, 2, 3],
+                        }
+                    ),
                 ),
-                ("P",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": pd.Series(
-                            [74.000] * 12 + [None] * 3, dtype=None
-                        ),
-                        "AGG_OUTPUT_1": pd.Series(
-                            [2901.800000] * 12 + [None] * 3, dtype=None
-                        ),
-                        "AGG_OUTPUT_2": pd.Series(
-                            [2638.000000] * 12 + [None] * 3, dtype=None
-                        ),
-                        "AGG_OUTPUT_3": pd.Series(
-                            [53.868358059] * 12 + [None] * 3, dtype=None
-                        ),
-                        "AGG_OUTPUT_4": pd.Series(
-                            [51.361464154] * 12 + [None] * 3, dtype=None
-                        ),
-                    }
-                ),
+                id="multiple_row_number_calls",
             ),
-            id="moment_family-all_null",
-        ),
-        pytest.param(
-            (
-                ["D"],
+            pytest.param(
                 (
-                    # ANY_VALUE on a nullable integer array
-                    ("any_value", "B"),
-                    # ANY_VALUE on a non-nullable array of booleans
-                    ("any_value", "K"),
-                    # ANY_VALUE on a decimal array
-                    ("any_value", "M"),
-                    # ANY_VALUE on a non-nullable array of integers
-                    ("any_value", "H"),
-                    # ANY_VALUE on a date array
-                    ("any_value", "N"),
-                    # ANY_VALUE on a time array
-                    ("any_value", "O"),
-                    # ANY_VALUE on a string array
-                    ("any_value", "L"),
-                ),
-                ("H",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": pd.Series(
-                            [None] * 12 + [-6] * 3, dtype=pd.Int32Dtype()
-                        ),
-                        "AGG_OUTPUT_1": pd.Series([True] * 15, dtype=np.bool_),
-                        "AGG_OUTPUT_2": [Decimal("16")] * 12 + [None] * 3,
-                        "AGG_OUTPUT_3": [0] * 12 + [12] * 3,
-                        "AGG_OUTPUT_4": [datetime.date(2008, 7, 20)] * 15,
-                        "AGG_OUTPUT_5": [Time(nanosecond=1)] * 12 + [None] * 3,
-                        "AGG_OUTPUT_6": ["AB"] * 12 + [None] * 3,
-                    }
-                ),
-            ),
-            id="any_value",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # FIRST_VALUE on a non-nullable integer array with no order / frame
-                    ("first", "H", "None", "None"),
-                    # FIRST_VALUE on a nullable integer array with no order / frame
-                    ("first", "G", "None", "None"),
-                    # FIRST_VALUE on a nullable boolean with no order / frame
-                    ("first", "E", "None", "None"),
-                    # FIRST_VALUE on a string array with no order / frame
-                    ("first", "C", "None", "None"),
-                ),
-                ("H",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [0] * 12 + [12] * 3,
-                        "AGG_OUTPUT_1": pd.Series([None] * 15, dtype=pd.Int32Dtype()),
-                        "AGG_OUTPUT_2": pd.Series(
-                            [True] * 12 + [None] * 3, dtype=pd.BooleanDtype()
-                        ),
-                        "AGG_OUTPUT_3": ["A"] * 12 + ["M"] * 3,
-                    }
-                ),
-            ),
-            id="first_value-no_frame",
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (
-                    # FIRST_VALUE on a non-nullable integer array with a prefix frame
-                    ("first", "H", "None", -1),
-                    # FIRST_VALUE on a float array with a sliding frame
-                    ("first", "J", -1, 1),
-                    # FIRST_VALUE on a decimal array with a suffix frame
-                    ("first", "M", 0, "None"),
-                    # FIRST_VALUE on a string array with a sliding frame
-                    ("first", "C", -5, -2),
-                ),
-                ("H",),
-                (True,),
-                ("first",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": pd.Series(
-                            [None] + [0] * 11 + [None] + [12, 12], dtype=pd.Int32Dtype()
-                        ),
-                        "AGG_OUTPUT_1": pd.Series(
-                            [
-                                None,
-                                None,
+                    ["A"],
+                    (("rank",), ("dense_rank",), ("percent_rank",), ("cume_dist",)),
+                    ("C",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [
+                                1,
+                                4,
+                                3,
+                                3,
+                                1,
+                                4,
+                                3,
+                                2,
+                                4,
+                                1,
+                                3,
+                                1,
+                                5,
+                                5,
+                                1,
+                            ],
+                            "AGG_OUTPUT_1": [
+                                1,
+                                4,
+                                2,
+                                2,
+                                1,
+                                3,
+                                2,
+                                2,
+                                3,
+                                1,
+                                3,
+                                1,
+                                3,
+                                5,
+                                1,
+                            ],
+                            "AGG_OUTPUT_2": [
+                                0.0,
+                                0.75,
                                 0.5,
+                                0.5,
+                                0.0,
+                                0.75,
+                                0.5,
+                                0.25,
+                                0.75,
+                                0.0,
+                                0.5,
+                                0.0,
+                                1.0,
+                                1.0,
+                                0.0,
+                            ],
+                            "AGG_OUTPUT_3": [
+                                0.4,
+                                0.8,
+                                0.6,
+                                0.8,
+                                0.2,
+                                1.0,
+                                0.8,
+                                0.4,
+                                1.0,
+                                0.4,
+                                0.6,
+                                0.4,
+                                1.0,
+                                1.0,
+                                0.4,
+                            ],
+                        }
+                    ),
+                ),
+                id="rank_fns",
+            ),
+            pytest.param(
+                (
+                    # Testing rank with a partition key so that some of the partitions
+                    # have only a single value (thus causing some of the rank functions
+                    # to use special edge cases).
+                    ["C"],
+                    (("rank",), ("dense_rank",), ("percent_rank",), ("cume_dist",)),
+                    ("A",),
+                    (True,),
+                    ("first",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [
+                                1,
+                                1,
+                                1,
+                                1,
+                                3,
+                                1,
+                                1,
+                                1,
+                                1,
+                                1,
+                                1,
+                                4,
+                                1,
+                                2,
+                                4,
+                            ],
+                            "AGG_OUTPUT_1": [
+                                1,
+                                1,
+                                1,
+                                1,
+                                2,
+                                1,
+                                1,
+                                1,
+                                1,
+                                1,
+                                1,
+                                3,
+                                1,
+                                2,
+                                3,
+                            ],
+                            "AGG_OUTPUT_2": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.5,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.75,
+                                0.0,
+                                1.0,
+                                0.75,
+                            ],
+                            "AGG_OUTPUT_3": [
+                                0.4,
+                                1.0,
+                                1.0,
+                                1.0,
+                                0.6,
+                                1.0,
+                                1.0,
+                                1.0,
+                                1.0,
+                                0.4,
+                                1.0,
+                                1.0,
+                                0.5,
+                                1.0,
+                                1.0,
+                            ],
+                        }
+                    ),
+                ),
+                id="rank_fns-mixed_sized_groups",
+            ),
+            pytest.param(
+                (
+                    # Testing rank with a partition key so that some of the partitions
+                    # are all-null.
+                    ["D"],
+                    (("rank",), ("dense_rank",), ("percent_rank",), ("cume_dist",)),
+                    ("P",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": list(range(1, 13)) + [1] * 3,
+                            "AGG_OUTPUT_1": list(range(1, 13)) + [1] * 3,
+                            "AGG_OUTPUT_2": [i / 11 for i in range(12)] + [0] * 3,
+                            "AGG_OUTPUT_3": [(i + 1) / 12 for i in range(12)] + [1] * 3,
+                        }
+                    ),
+                ),
+                id="rank_fns-all_null_group",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # Note: row_number is included so that there is a mix of window functions that do & don't
+                        # take in arguments, to verify that the offsets are used correctly.
+                        ("ntile", 2),
+                        ("ntile", 3),
+                        ("row_number",),
+                        ("ntile", 5),
+                        ("ntile", 6),
+                        ("ntile", 10),
+                    ),
+                    ("H",),
+                    (True,),
+                    ("first",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [1] * 6 + [2] * 6 + [1, 1, 2],
+                            "AGG_OUTPUT_1": [1] * 4 + [2] * 4 + [3] * 4 + [1, 2, 3],
+                            "AGG_OUTPUT_2": list(range(1, 13)) + [1, 2, 3],
+                            "AGG_OUTPUT_3": [
+                                1,
+                                1,
+                                1,
+                                2,
+                                2,
+                                2,
+                                3,
+                                3,
+                                4,
+                                4,
+                                5,
+                                5,
+                                1,
+                                2,
+                                3,
+                            ],
+                            "AGG_OUTPUT_4": [
+                                1,
+                                1,
+                                2,
+                                2,
+                                3,
+                                3,
+                                4,
+                                4,
+                                5,
+                                5,
+                                6,
+                                6,
+                                1,
+                                2,
+                                3,
+                            ],
+                            "AGG_OUTPUT_5": [
+                                1,
+                                1,
+                                2,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10,
+                                1,
+                                2,
+                                3,
+                            ],
+                        }
+                    ),
+                ),
+                id="ntile",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # Note: row_number & ntile are included so that there is a mix of window functions that
+                        # take in scalar arguments, vector arguments, and no arguments.
+                        ("conditional_true_event", "E"),
+                        ("row_number",),
+                        ("conditional_change_event", "E"),
+                        ("conditional_change_event", "F"),
+                        ("ntile", 6),
+                        ("conditional_change_event", "G"),
+                    ),
+                    ("B", "H"),
+                    (True, True),
+                    ("first", "first"),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [
+                                1,
+                                5,
+                                4,
+                                5,
+                                5,
+                                2,
+                                4,
+                                5,
+                                4,
+                                4,
+                                3,
+                                3,
+                                0,
+                                1,
+                                1,
+                            ],
+                            "AGG_OUTPUT_1": [
+                                1,
+                                12,
+                                6,
+                                9,
+                                11,
+                                2,
+                                8,
+                                10,
+                                5,
+                                7,
+                                3,
+                                4,
+                                1,
+                                2,
+                                3,
+                            ],
+                            "AGG_OUTPUT_2": [
+                                0,
+                                5,
+                                2,
+                                4,
+                                5,
+                                0,
+                                3,
+                                4,
+                                2,
+                                3,
+                                0,
+                                1,
+                                0,
+                                0,
+                                1,
+                            ],
+                            "AGG_OUTPUT_3": [
+                                0,
+                                5,
+                                4,
+                                4,
+                                4,
+                                1,
+                                4,
+                                4,
+                                3,
+                                4,
+                                1,
+                                2,
+                                0,
+                                0,
+                                1,
+                            ],
+                            "AGG_OUTPUT_4": [
+                                1,
+                                6,
+                                3,
+                                5,
+                                6,
+                                1,
+                                4,
+                                5,
+                                3,
+                                4,
+                                2,
+                                2,
+                                1,
+                                2,
+                                3,
+                            ],
+                            "AGG_OUTPUT_5": [
+                                0,
+                                6,
+                                2,
+                                4,
+                                5,
+                                0,
+                                3,
+                                5,
+                                1,
+                                3,
+                                1,
+                                1,
+                                0,
+                                0,
+                                0,
+                            ],
+                        }
+                    ),
+                ),
+                id="conditional_events",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # COUNT(*) with no frame
+                        ("size", "None", "None"),
+                        # COUNT on an array of nullable integers with no frame
+                        ("count", "B", "None", "None"),
+                        # COUNT on an array of nullable booleans with no frame
+                        ("count", "E", "None", "None"),
+                        # COUNT_IF on an array of nullable booleans with no frame
+                        ("count_if", "E", "None", "None"),
+                    ),
+                    (),
+                    (),
+                    (),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [12] * 12 + [3] * 3,
+                            "AGG_OUTPUT_1": [9] * 12 + [3] * 3,
+                            "AGG_OUTPUT_2": [10] * 12 + [2] * 3,
+                            "AGG_OUTPUT_3": [5] * 12 + [1] * 3,
+                        }
+                    ),
+                ),
+                id="count_fns-no_frame-no_order",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # COUNT(*) with a sliding frame
+                        ("size", -3, 3),
+                        # COUNT on an array of nullable integers with a sliding frame
+                        ("count", "B", -4, -2),
+                        # COUNT_IF on an array of nullable booleans with a sliding frame
+                        ("count_if", "E", 1, 6),
+                    ),
+                    ("B", "H"),
+                    (True, True),
+                    ("first", "first"),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [
+                                4,
+                                4,
+                                7,
+                                7,
+                                5,
+                                5,
+                                7,
+                                6,
+                                7,
+                                7,
+                                6,
+                                7,
+                                3,
+                                3,
+                                3,
+                            ],
+                            "AGG_OUTPUT_1": [
+                                0,
+                                3,
+                                1,
+                                3,
+                                3,
+                                0,
+                                3,
+                                3,
+                                0,
+                                2,
+                                0,
+                                0,
+                                0,
+                                0,
+                                1,
+                            ],
+                            "AGG_OUTPUT_2": [
+                                3,
+                                0,
+                                1,
+                                0,
+                                0,
+                                2,
+                                1,
+                                0,
+                                1,
+                                1,
+                                2,
+                                2,
+                                1,
+                                0,
+                                0,
+                            ],
+                        }
+                    ),
+                ),
+                id="count_fns-sliding_frames",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # COUNT(*) with a prefix frame
+                        ("size", "None", -1),
+                        # COUNT on an array of nullable integers with a prefix frame
+                        ("count", "B", "None", 0),
+                        # COUNT_IF on an array of nullable booleans with a prefix frame
+                        ("count_if", "E", "None", 2),
+                    ),
+                    ("B", "H"),
+                    (True, True),
+                    ("first", "first"),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [
+                                0,
+                                11,
+                                5,
+                                8,
+                                10,
+                                1,
+                                7,
+                                9,
+                                4,
+                                6,
+                                2,
+                                3,
+                                0,
+                                1,
+                                2,
+                            ],
+                            "AGG_OUTPUT_1": [
+                                0,
+                                9,
+                                3,
+                                6,
+                                8,
+                                0,
+                                5,
+                                7,
+                                2,
+                                4,
+                                0,
+                                1,
+                                1,
+                                2,
+                                3,
+                            ],
+                            "AGG_OUTPUT_2": [
+                                3,
+                                5,
+                                4,
+                                5,
+                                5,
+                                3,
+                                5,
+                                5,
+                                4,
+                                5,
+                                4,
+                                4,
+                                1,
+                                1,
+                                1,
+                            ],
+                        }
+                    ),
+                ),
+                id="count_fns-prefix_frames",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # COUNT(*) with a suffix frame
+                        ("size", 0, "None"),
+                        # COUNT on an array of nullable integers with a suffix frame
+                        ("count", "B", 1, "None"),
+                        # COUNT_IF on an array of nullable booleans with a suffix frame
+                        ("count_if", "E", -2, "None"),
+                    ),
+                    ("B", "H"),
+                    (True, True),
+                    ("first", "first"),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [
+                                12,
+                                1,
+                                7,
+                                4,
+                                2,
+                                11,
+                                5,
+                                3,
+                                8,
+                                6,
+                                10,
+                                9,
+                                3,
+                                2,
+                                1,
+                            ],
+                            "AGG_OUTPUT_1": [
+                                9,
+                                0,
+                                6,
+                                3,
+                                1,
+                                9,
+                                4,
+                                2,
+                                7,
+                                5,
+                                9,
+                                8,
+                                2,
+                                1,
+                                0,
+                            ],
+                            "AGG_OUTPUT_2": [
+                                5,
+                                0,
+                                2,
+                                1,
+                                1,
+                                5,
+                                1,
+                                1,
+                                3,
+                                2,
+                                5,
+                                4,
+                                1,
+                                1,
+                                1,
+                            ],
+                        }
+                    ),
+                ),
+                id="count_fns-suffix_frames",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # COUNT on string array with no frame
+                        ("count", "F", "None", "None"),
+                        # COUNT on non-nullable integers with no frame
+                        ("count", "H", "None", "None"),
+                        # COUNT on timestamp (uses sentinal values as nuls) with no frame
+                        ("count", "I", "None", "None"),
+                        # COUNT on numpy floats (uses NaN as nuls) with no frame
+                        ("count", "J", "None", "None"),
+                        # COUNT on numpy boolean array with no frame
+                        ("count", "K", "None", "None"),
+                        # COUNT_IF on numpy boolean array with no frame
+                        ("count_if", "K", "None", "None"),
+                    ),
+                    (),
+                    (),
+                    (),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [9] * 12 + [2] * 3,
+                            "AGG_OUTPUT_1": [12] * 12 + [3] * 3,
+                            "AGG_OUTPUT_2": [9] * 12 + [2] * 3,
+                            "AGG_OUTPUT_3": [6] * 12 + [1] * 3,
+                            "AGG_OUTPUT_4": [12] * 12 + [3] * 3,
+                            "AGG_OUTPUT_5": [4] * 12 + [1] * 3,
+                        }
+                    ),
+                ),
+                id="count_fns-other_arrays",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # Sample variance on a nullable integer array, no frame
+                        ("var", "B", "None", "None"),
+                        # Population variance on a nullable integer array, no frame
+                        ("var_pop", "B", "None", "None"),
+                        # Sample standard deviation on a nullable integer array, no frame
+                        ("std", "B", "None", "None"),
+                        # Population standard deviation on a nullable integer array, no frame
+                        ("std_pop", "B", "None", "None"),
+                        # Sample variance on a nullable float array, no frame
+                        ("var", "Q", "None", "None"),
+                        # Population variance on a nullable float array, no frame
+                        ("var_pop", "Q", "None", "None"),
+                        # Sample standard deviation on a nullable float array, no frame
+                        ("std", "Q", "None", "None"),
+                        # Population standard deviation on a nullable float array, no frame
+                        ("std_pop", "Q", "None", "None"),
+                    ),
+                    (),
+                    (),
+                    (),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": pd.Series(
+                                [563799.694444] * 12 + [1801.333333] * 3
+                            ),
+                            "AGG_OUTPUT_1": pd.Series(
+                                [501155.283951] * 12 + [1200.888889] * 3
+                            ),
+                            "AGG_OUTPUT_2": pd.Series(
+                                [750.865963] * 12 + [42.442117] * 3
+                            ),
+                            "AGG_OUTPUT_3": pd.Series(
+                                [707.923219] * 12 + [34.653844] * 3
+                            ),
+                            "AGG_OUTPUT_4": nullable_float_arr_maker(
+                                [0.0] * 15, [12, 13, 14], list(range(12))
+                            ),
+                            "AGG_OUTPUT_5": nullable_float_arr_maker(
+                                [0.0] * 15, [-1], list(range(12))
+                            ),
+                            "AGG_OUTPUT_6": nullable_float_arr_maker(
+                                [0.0] * 15, [12, 13, 14], list(range(12))
+                            ),
+                            "AGG_OUTPUT_7": nullable_float_arr_maker(
+                                [0.0] * 15, [-1], list(range(12))
+                            ),
+                        }
+                    ),
+                ),
+                id="var_std-no_frame",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # Sample variance on a nullable integer array, prefix frame
+                        ("var", "B", "None", 0),
+                        # Population variance on a nullable float array, suffix frame
+                        ("var_pop", "Q", 0, "None"),
+                        # Sample standard deviation on a numpy float array, sliding frame
+                        ("std", "J", -1, 1),
+                        # Population standard deviation on a numpy integer array, prefix frame
+                        ("std_pop", "H", "None", -1),
+                    ),
+                    ("H",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": nullable_float_arr_maker(
+                                [
+                                    0.0,
+                                    0.0,
+                                    648.0,
+                                    325.33333333333337,
+                                    261.3333333333333,
+                                    261.3333333333333,
+                                    197.79999999999998,
+                                    167.8666666666667,
+                                    813.4761904761905,
+                                    699.4107142857143,
+                                    699.4107142857143,
+                                    563799.6944444444,
+                                    0.0,
+                                    50.0,
+                                    1801.3333333333335,
+                                ],
+                                [0, 1, 12],
+                                [-1],
+                            ),
+                            "AGG_OUTPUT_1": nullable_float_arr_maker(
+                                [0.0] * 8
+                                + [1.25, 0.6666666666666666, 0.25, 0.0, 0.0, 0.0],
+                                [-1],
+                                list(range(8)),
+                            ),
+                            "AGG_OUTPUT_2": nullable_float_arr_maker(
+                                [0.70710677] * 15,
+                                [0, 1, 3, 5, 7, 9, 11, 12, 13, 14],
+                                [-1],
+                            ),
+                            "AGG_OUTPUT_3": nullable_float_arr_maker(
+                                [
+                                    0.0,
+                                    0.0,
+                                    0.5,
+                                    0.816496580927726,
+                                    1.118033988749895,
+                                    1.4142135623730951,
+                                    1.707825127659933,
+                                    2.0,
+                                    2.29128784747792,
+                                    2.581988897471611,
+                                    2.8722813232690143,
+                                    3.1622776601683795,
+                                    0.0,
+                                    0.0,
+                                    0.5,
+                                ],
+                                [0, 12],
+                                [-1],
+                            ),
+                        }
+                    ),
+                ),
+                id="var_std-with_frame",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # AVG on a nullable integer array, no frame
+                        ("mean", "B", "None", "None"),
+                        # AVG on a numpy integer array, no frame
+                        ("mean", "H", "None", "None"),
+                        # AVG on a nullable float array, no frame
+                        ("mean", "Q", "None", "None"),
+                        # AVG on a numpy float array, no frame
+                        ("mean", "J", "None", "None"),
+                        # AVG on a nullable integer array with an all-null partition, no frame
+                        ("mean", "P", "None", "None"),
+                    ),
+                    (),
+                    (),
+                    (),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": pd.Series(
+                                [-257.777778] * 12 + [23.333333] * 3
+                            ),
+                            "AGG_OUTPUT_1": pd.Series([5.5] * 12 + [13.0] * 3),
+                            "AGG_OUTPUT_2": nullable_float_arr_maker(
+                                [13.0] * 15, [-1], list(range(12))
+                            ),
+                            "AGG_OUTPUT_3": pd.Series([3.0] * 12 + [6.5] * 3),
+                            "AGG_OUTPUT_4": pd.Series([74.0] * 12 + [None] * 3),
+                        }
+                    ),
+                ),
+                id="avg-no_frame",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # AVG on a nullable float array, prefix frame
+                        ("mean", "Q", "None", 0),
+                        # AVG on a nullable float array, sliding frame
+                        ("mean", "Q", 1, 4),
+                        # AVG on a nullable integer array, suffix frame
+                        ("mean", "B", 0, "None"),
+                        # AVG on a numpy integer array, prefix frame
+                        ("mean", "H", "None", -1),
+                        # AVG on a numpy float array, suffix frame
+                        ("mean", "J", -1, "None"),
+                        # AVG on a nullable integer array with an all-null partition, sliding frame
+                        ("mean", "P", -2, 1),
+                    ),
+                    ("H",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": nullable_float_arr_maker(
+                                [0.0, 0.5, 1.0, 1.5, 2.0] + [-1.0] * 8 + [13.0, 13.0],
+                                [12],
+                                list(range(5, 12)),
+                            ),
+                            "AGG_OUTPUT_1": nullable_float_arr_maker(
+                                [2.5]
+                                + [-1.0] * 6
+                                + [9.5, 10.0, 10.5, 11.0, -1.0, 13.0, -1.0, -1.0],
+                                [11, 13, 14],
+                                list(range(1, 7)),
+                            ),
+                            "AGG_OUTPUT_2": [
+                                -257.77777777777777,
+                                -257.77777777777777,
+                                -291.875,
+                                -330.57142857142856,
+                                -385.5,
+                                -464.8,
+                                -464.8,
+                                -580.5,
+                                -776.6666666666666,
+                                -1131.5,
+                                -2259.0,
+                                -2259.0,
+                                23.333333333333332,
+                                38.0,
+                                72.0,
+                            ],
+                            "AGG_OUTPUT_3": [
                                 None,
+                                0.0,
+                                0.5,
+                                1.0,
                                 1.5,
-                                None,
+                                2.0,
                                 2.5,
-                                None,
+                                3.0,
                                 3.5,
-                                None,
+                                4.0,
                                 4.5,
+                                5.0,
                                 None,
-                                None,
-                                None,
+                                12.0,
+                                12.5,
+                            ],
+                            "AGG_OUTPUT_4": [
+                                3.0,
+                                3.0,
+                                3.0,
+                                3.5,
+                                3.5,
+                                4.0,
+                                4.0,
+                                4.5,
+                                4.5,
+                                5.0,
+                                5.0,
+                                5.5,
+                                6.5,
+                                6.5,
                                 6.5,
                             ],
-                            dtype=np.float32,
-                        ),
-                        # This answer is identical to the input column M
-                        "AGG_OUTPUT_2": pd.Series(
-                            [
-                                None if i % 7 == 5 else Decimal(2 ** (4 - i % 8))
-                                for i in range(15)
-                            ]
-                        ),
-                        "AGG_OUTPUT_3": [None] * 2
-                        + list("AAAALPHATH")
-                        + [None, None, "M"],
-                    }
+                            "AGG_OUTPUT_5": [
+                                12.5,
+                                16.666666666666668,
+                                21.5,
+                                31.5,
+                                43.5,
+                                57.5,
+                                73.5,
+                                91.5,
+                                111.5,
+                                133.5,
+                                144.66666666666666,
+                                156.5,
+                                None,
+                                None,
+                                None,
+                            ],
+                        }
+                    ),
                 ),
+                id="avg-with_frame",
             ),
-            id="first_value-with_frame",
-        ),
-        pytest.param(
-            (
-                ["D"],
+            pytest.param(
                 (
-                    # LAST_VALUE on a non-nullable integer array with no order / frame
-                    ("last", "H", "None", "None"),
-                    # LAST_VALUE on a float array  with no order / frame
-                    ("last", "J", "None", "None"),
-                    # LAST_VALUE on a date array  with no order / frame
-                    ("last", "N", "None", "None"),
-                    # LAST_VALUE on a string array with no order / frame
-                    ("last", "L", "None", "None"),
+                    ["D"],
+                    (
+                        ("mean", "P", "None", "None"),
+                        ("var", "P", "None", "None"),
+                        ("var_pop", "P", "None", "None"),
+                        ("std", "P", "None", "None"),
+                        ("std_pop", "P", "None", "None"),
+                    ),
+                    ("P",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": pd.Series(
+                                [74.000] * 12 + [None] * 3, dtype=None
+                            ),
+                            "AGG_OUTPUT_1": pd.Series(
+                                [2901.800000] * 12 + [None] * 3, dtype=None
+                            ),
+                            "AGG_OUTPUT_2": pd.Series(
+                                [2638.000000] * 12 + [None] * 3, dtype=None
+                            ),
+                            "AGG_OUTPUT_3": pd.Series(
+                                [53.868358059] * 12 + [None] * 3, dtype=None
+                            ),
+                            "AGG_OUTPUT_4": pd.Series(
+                                [51.361464154] * 12 + [None] * 3, dtype=None
+                            ),
+                        }
+                    ),
                 ),
-                ("H",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [11] * 12 + [14] * 3,
-                        "AGG_OUTPUT_1": pd.Series(
-                            [5.5] * 12 + [None] * 3, dtype=np.float32
-                        ),
-                        "AGG_OUTPUT_2": [datetime.date(1999, 12, 31)] * 12 + [None] * 3,
-                        "AGG_OUTPUT_3": ["LMNO"] * 12 + ["OP"] * 3,
-                    }
-                ),
+                id="moment_family-all_null",
             ),
-            id="last_value-no_frame",
-        ),
-        pytest.param(
-            (
-                ["D"],
+            pytest.param(
                 (
-                    # LAST_VALUE on a nullable boolean array with a prefix frame
-                    ("last", "E", "None", 0),
-                    # LAST_VALUE on a decimal array with a suffix frame
-                    ("last", "M", 0, "None"),
-                    # LAST_VALUE on a time array  with with a sliding frame
-                    ("last", "O", -5, 0),
-                    # LAST_VALUE on a string array with a sliding frame
-                    ("last", "L", 3, 5),
+                    ["D"],
+                    (
+                        # ANY_VALUE on a nullable integer array
+                        ("any_value", "B"),
+                        # ANY_VALUE on a non-nullable array of booleans
+                        ("any_value", "K"),
+                        # ANY_VALUE on a decimal array
+                        ("any_value", "M"),
+                        # ANY_VALUE on a non-nullable array of integers
+                        ("any_value", "H"),
+                        # ANY_VALUE on a date array
+                        ("any_value", "N"),
+                        # ANY_VALUE on a time array
+                        ("any_value", "O"),
+                        # ANY_VALUE on a string array
+                        ("any_value", "L"),
+                    ),
+                    ("H",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": pd.Series(
+                                [None] * 12 + [-6] * 3, dtype=pd.Int32Dtype()
+                            ),
+                            "AGG_OUTPUT_1": pd.Series([True] * 15, dtype=np.bool_),
+                            "AGG_OUTPUT_2": [Decimal("16")] * 12 + [None] * 3,
+                            "AGG_OUTPUT_3": [0] * 12 + [12] * 3,
+                            "AGG_OUTPUT_4": [datetime.date(2008, 7, 20)] * 15,
+                            "AGG_OUTPUT_5": [Time(nanosecond=1)] * 12 + [None] * 3,
+                            "AGG_OUTPUT_6": ["AB"] * 12 + [None] * 3,
+                        }
+                    ),
                 ),
-                ("H",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        # This answer is identical to the input column
-                        "AGG_OUTPUT_0": pd.Series(
-                            [
-                                [True, False, None, True, False][i % 5]
+                id="any_value",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # FIRST_VALUE on a non-nullable integer array with no order / frame
+                        ("first", "H", "None", "None"),
+                        # FIRST_VALUE on a nullable integer array with no order / frame
+                        ("first", "G", "None", "None"),
+                        # FIRST_VALUE on a nullable boolean with no order / frame
+                        ("first", "E", "None", "None"),
+                        # FIRST_VALUE on a string array with no order / frame
+                        ("first", "C", "None", "None"),
+                    ),
+                    ("H",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [0] * 12 + [12] * 3,
+                            "AGG_OUTPUT_1": pd.Series(
+                                [None] * 15, dtype=pd.Int32Dtype()
+                            ),
+                            "AGG_OUTPUT_2": pd.Series(
+                                [True] * 12 + [None] * 3, dtype=pd.BooleanDtype()
+                            ),
+                            "AGG_OUTPUT_3": ["A"] * 12 + ["M"] * 3,
+                        }
+                    ),
+                ),
+                id="first_value-no_frame",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # FIRST_VALUE on a non-nullable integer array with a prefix frame
+                        ("first", "H", "None", -1),
+                        # FIRST_VALUE on a float array with a sliding frame
+                        ("first", "J", -1, 1),
+                        # FIRST_VALUE on a decimal array with a suffix frame
+                        ("first", "M", 0, "None"),
+                        # FIRST_VALUE on a string array with a sliding frame
+                        ("first", "C", -5, -2),
+                    ),
+                    ("H",),
+                    (True,),
+                    ("first",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": pd.Series(
+                                [None] + [0] * 11 + [None] + [12, 12],
+                                dtype=pd.Int32Dtype(),
+                            ),
+                            "AGG_OUTPUT_1": pd.Series(
+                                [
+                                    None,
+                                    None,
+                                    0.5,
+                                    None,
+                                    1.5,
+                                    None,
+                                    2.5,
+                                    None,
+                                    3.5,
+                                    None,
+                                    4.5,
+                                    None,
+                                    None,
+                                    None,
+                                    6.5,
+                                ],
+                                dtype=np.float32,
+                            ),
+                            # This answer is identical to the input column M
+                            "AGG_OUTPUT_2": pd.Series(
+                                [
+                                    None if i % 7 == 5 else Decimal(2 ** (4 - i % 8))
+                                    for i in range(15)
+                                ]
+                            ),
+                            "AGG_OUTPUT_3": [None] * 2
+                            + list("AAAALPHATH")
+                            + [None, None, "M"],
+                        }
+                    ),
+                ),
+                id="first_value-with_frame",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # LAST_VALUE on a non-nullable integer array with no order / frame
+                        ("last", "H", "None", "None"),
+                        # LAST_VALUE on a float array  with no order / frame
+                        ("last", "J", "None", "None"),
+                        # LAST_VALUE on a date array  with no order / frame
+                        ("last", "N", "None", "None"),
+                        # LAST_VALUE on a string array with no order / frame
+                        ("last", "L", "None", "None"),
+                    ),
+                    ("H",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [11] * 12 + [14] * 3,
+                            "AGG_OUTPUT_1": pd.Series(
+                                [5.5] * 12 + [None] * 3, dtype=np.float32
+                            ),
+                            "AGG_OUTPUT_2": [datetime.date(1999, 12, 31)] * 12
+                            + [None] * 3,
+                            "AGG_OUTPUT_3": ["LMNO"] * 12 + ["OP"] * 3,
+                        }
+                    ),
+                ),
+                id="last_value-no_frame",
+            ),
+            pytest.param(
+                (
+                    ["D"],
+                    (
+                        # LAST_VALUE on a nullable boolean array with a prefix frame
+                        ("last", "E", "None", 0),
+                        # LAST_VALUE on a decimal array with a suffix frame
+                        ("last", "M", 0, "None"),
+                        # LAST_VALUE on a time array  with with a sliding frame
+                        ("last", "O", -5, 0),
+                        # LAST_VALUE on a string array with a sliding frame
+                        ("last", "L", 3, 5),
+                    ),
+                    ("H",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            # This answer is identical to the input column
+                            "AGG_OUTPUT_0": pd.Series(
+                                [
+                                    [True, False, None, True, False][i % 5]
+                                    for i in range(15)
+                                ],
+                                dtype=pd.BooleanDtype(),
+                            ),
+                            "AGG_OUTPUT_1": [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
+                            # This answer is identical to the input column
+                            "AGG_OUTPUT_2": [
+                                None if i % 8 == 4 else Time(nanosecond=10**i)
                                 for i in range(15)
                             ],
-                            dtype=pd.BooleanDtype(),
-                        ),
-                        "AGG_OUTPUT_1": [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
-                        # This answer is identical to the input column
-                        "AGG_OUTPUT_2": [
-                            None if i % 8 == 4 else Time(nanosecond=10**i)
-                            for i in range(15)
-                        ],
-                        "AGG_OUTPUT_3": ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
-                        + ["LMNO"] * 3
-                        + [None] * 6,
-                    }
+                            "AGG_OUTPUT_3": ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
+                            + ["LMNO"] * 3
+                            + [None] * 6,
+                        }
+                    ),
                 ),
+                id="last_value-with_frame",
             ),
-            id="last_value-with_frame",
-        ),
-        pytest.param(
-            (
-                ["D"],
+            pytest.param(
                 (
-                    # NTH_VALUE on a string array with no order / frame
-                    ("nth_value", "L", 3, "None", "None"),
-                    # NTH_VALUE on a non-nullable integer array with no order / frame
-                    ("nth_value", "H", 7, "None", "None"),
-                    # NTH_VALUE on a nullable boolean array with no order / frame
-                    ("nth_value", "E", 2, "None", "None"),
-                    # NTH_VALUE on a date array with no order / frame
-                    ("nth_value", "N", 5, "None", "None"),
+                    ["D"],
+                    (
+                        # NTH_VALUE on a string array with no order / frame
+                        ("nth_value", "L", 3, "None", "None"),
+                        # NTH_VALUE on a non-nullable integer array with no order / frame
+                        ("nth_value", "H", 7, "None", "None"),
+                        # NTH_VALUE on a nullable boolean array with no order / frame
+                        ("nth_value", "E", 2, "None", "None"),
+                        # NTH_VALUE on a date array with no order / frame
+                        ("nth_value", "N", 5, "None", "None"),
+                    ),
+                    (),
+                    (),
+                    (),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [None] * 12 + ["OP"] * 3,
+                            "AGG_OUTPUT_1": pd.Series(
+                                [6] * 12 + [None] * 3, dtype=pd.Int32Dtype()
+                            ),
+                            "AGG_OUTPUT_2": pd.Series(
+                                [False] * 12 + [True] * 3, dtype=pd.BooleanDtype()
+                            ),
+                            "AGG_OUTPUT_3": [None] * 15,
+                        }
+                    ),
                 ),
-                (),
-                (),
-                (),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [None] * 12 + ["OP"] * 3,
-                        "AGG_OUTPUT_1": pd.Series(
-                            [6] * 12 + [None] * 3, dtype=pd.Int32Dtype()
-                        ),
-                        "AGG_OUTPUT_2": pd.Series(
-                            [False] * 12 + [True] * 3, dtype=pd.BooleanDtype()
-                        ),
-                        "AGG_OUTPUT_3": [None] * 15,
-                    }
+                id="nth_value-no_frame",
+                marks=pytest.mark.skip(
+                    reason="[BSE-903] TODO: support nth_value in groupby.window"
                 ),
             ),
-            id="nth_value-no_frame",
-            marks=pytest.mark.skip(
-                reason="[BSE-903] TODO: support nth_value in groupby.window"
-            ),
-        ),
-        pytest.param(
-            (
-                ["D"],
+            pytest.param(
                 (
-                    # NTH_VALUE on a string array with a prefix frame
-                    ("nth_value", "L", 2, "None", 0),
-                    # NTH_VALUE on a nullable integer array with a suffix frame
-                    ("nth_value", "B", 5, 0, "None"),
-                    # NTH_VALUE on a string array with a sliding frame
-                    ("nth_value", "C", 5, -4, 0),
-                    # NTH_VALUE on a float array with a sliding frame
-                    ("nth_value", "N", 25, 1, 50),
+                    ["D"],
+                    (
+                        # NTH_VALUE on a string array with a prefix frame
+                        ("nth_value", "L", 2, "None", 0),
+                        # NTH_VALUE on a nullable integer array with a suffix frame
+                        ("nth_value", "B", 5, 0, "None"),
+                        # NTH_VALUE on a string array with a sliding frame
+                        ("nth_value", "C", 5, -4, 0),
+                        # NTH_VALUE on a float array with a sliding frame
+                        ("nth_value", "N", 25, 1, 50),
+                    ),
+                    ("H",),
+                    (True,),
+                    ("last",),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [None]
+                            + ["BCD"] * 11
+                            + [None, "NOP", "NOP"],
+                            "AGG_OUTPUT_1": pd.Series(
+                                [11, None, -2, 8, -67, -4, None, -2259] + [None] * 7,
+                                dtype=pd.Int32Dtype(),
+                            ),
+                            "AGG_OUTPUT_2": [None] * 4
+                            + ["A", "T", "H", "E", "T", "A", "G", "A"]
+                            + [None] * 3,
+                            "AGG_OUTPUT_3": [None] * 15,
+                        }
+                    ),
                 ),
-                ("H",),
-                (True,),
-                ("last",),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [None] + ["BCD"] * 11 + [None, "NOP", "NOP"],
-                        "AGG_OUTPUT_1": pd.Series(
-                            [11, None, -2, 8, -67, -4, None, -2259] + [None] * 7,
-                            dtype=pd.Int32Dtype(),
-                        ),
-                        "AGG_OUTPUT_2": [None] * 4
-                        + ["A", "T", "H", "E", "T", "A", "G", "A"]
-                        + [None] * 3,
-                        "AGG_OUTPUT_3": [None] * 15,
-                    }
-                ),
-            ),
-            id="nth_value-with_frame",
-            marks=pytest.mark.skip(
-                reason="[BSE-903] TODO: support nth_value in groupby.window"
-            ),
-        ),
-        pytest.param(
-            (
-                ["D"],
-                (("ratio_to_report", "P"),),
-                (),
-                (),
-                (),
-                pd.DataFrame(
-                    {
-                        "AGG_OUTPUT_0": [
-                            0.011057,
-                            0.019656,
-                            0.030713,
-                            0.044226,
-                            0.060197,
-                            0.078624,
-                            0.099509,
-                            0.122850,
-                            0.148649,
-                            0.176904,
-                            0.207617,
-                        ]
-                        + [None] * 4,
-                    }
+                id="nth_value-with_frame",
+                marks=pytest.mark.skip(
+                    reason="[BSE-903] TODO: support nth_value in groupby.window"
                 ),
             ),
-            id="ratio_to_report",
-        ),
-    ],
-)
-def window_args(request):
-    """
-    Returns the arguments for a test of groupby.window as a tuple of the following:
-    - keys: the tuple of column names from test_window_df to group by.
-    - funcs: a tuple of tuples where each inner tuple contains a window funciton name
-             followed by any scalar/column arguments.
-    - orderby: a tuple of column names from test_window_df to order by within each group.
-    - ascending: a tuple of booleans indicating which columns from orderby to sort in ascending
-                 vs descending order.
-    - napos: a tuple of strings indicating which columns from orderby to place in nulls at the
-             begining vs the end when sorting.
-    - answer: the expected result of the call to groupby.window.
-    """
-    return request.param
+            pytest.param(
+                (
+                    ["D"],
+                    (("ratio_to_report", "P"),),
+                    (),
+                    (),
+                    (),
+                    pd.DataFrame(
+                        {
+                            "AGG_OUTPUT_0": [
+                                0.011057,
+                                0.019656,
+                                0.030713,
+                                0.044226,
+                                0.060197,
+                                0.078624,
+                                0.099509,
+                                0.122850,
+                                0.148649,
+                                0.176904,
+                                0.207617,
+                            ]
+                            + [None] * 4,
+                        }
+                    ),
+                ),
+                id="ratio_to_report",
+            ),
+        ],
+    )
+    def window_args(request):
+        """
+        Returns the arguments for a test of groupby.window as a tuple of the following:
+        - keys: the tuple of column names from test_window_df to group by.
+        - funcs: a tuple of tuples where each inner tuple contains a window funciton name
+                followed by any scalar/column arguments.
+        - orderby: a tuple of column names from test_window_df to order by within each group.
+        - ascending: a tuple of booleans indicating which columns from orderby to sort in ascending
+                    vs descending order.
+        - napos: a tuple of strings indicating which columns from orderby to place in nulls at the
+                begining vs the end when sorting.
+        - answer: the expected result of the call to groupby.window.
+        """
+        return request.param
 
 
 def test_window(test_window_df, window_args, memory_leak_check):

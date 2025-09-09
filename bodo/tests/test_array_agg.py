@@ -8,7 +8,13 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func, nullable_float_arr_maker
-from bodo.types import Time
+
+
+def _make_time_type(*args, **kwargs):
+    """Avoids importing Time at the module level."""
+    from bodo.types import Time
+
+    return Time(*args, **kwargs)
 
 
 @pytest.fixture(
@@ -108,7 +114,10 @@ from bodo.types import Time
         pytest.param(
             (
                 pd.Series(
-                    [None if i % 7 < 2 else Time(nanosecond=3**i) for i in range(45)]
+                    [
+                        None if i % 7 < 2 else _make_time_type(nanosecond=3**i)
+                        for i in range(45)
+                    ]
                 ),
                 pa.large_list(pa.time64("ns")),
             ),

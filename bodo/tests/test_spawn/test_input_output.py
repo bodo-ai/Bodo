@@ -5,8 +5,6 @@ import pandas as pd
 import pytest
 
 import bodo
-import bodo.hiframes
-import bodo.hiframes.table
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.tests.dataframe_common import df_value_params
@@ -182,6 +180,13 @@ def test_spawn_distributed():
     assert test(A) == 1000
 
 
+def table_arg():
+    import bodo.hiframes
+    import bodo.hiframes.table
+
+    return bodo.hiframes.table.Table((np.arange(6),))
+
+
 @pytest.mark.parametrize(
     "arg",
     [
@@ -194,7 +199,7 @@ def test_spawn_distributed():
             ],
             names=["AA", None],
         ),
-        bodo.hiframes.table.Table((np.arange(6),)),
+        table_arg(),
         pd.Categorical([1, 4, 5, 1, 4]),
         pd.arrays.IntervalArray(
             [

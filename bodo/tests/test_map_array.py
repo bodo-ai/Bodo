@@ -6,7 +6,6 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.map_arr_ext import contains_map_array
 from bodo.tests.utils import check_func, get_num_test_workers
 
 
@@ -229,4 +228,6 @@ def test_getitem_slice(map_arr_value):
     ],
 )
 def test_contains_map_array(arr, answer):
+    from bodo.libs.map_arr_ext import contains_map_array
+
     assert contains_map_array(arr) == answer

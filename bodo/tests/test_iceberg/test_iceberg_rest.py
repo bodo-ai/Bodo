@@ -13,8 +13,8 @@ from bodo.tests.utils import (
     check_func,
     get_rest_catalog_connection_string,
     pytest_polaris,
+    run_rank0,
 )
-from bodo.utils.utils import run_rank0
 
 pytestmark = pytest_polaris
 

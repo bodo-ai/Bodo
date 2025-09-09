@@ -6,16 +6,13 @@ import datetime
 import operator
 import random
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core.ir_utils import find_callname, guard
 
 import bodo
 from bodo.tests.dataframe_common import *  # noqa
 from bodo.tests.utils import (
-    DeadcodeTestPipeline,
     _get_dist_arg,
     _test_equal,
     check_func,
@@ -26,8 +23,15 @@ from bodo.tests.utils import (
     no_default,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError, BodoWarning
-from bodo.utils.utils import is_call_assign
+
+if bodo.test_compiler:
+    import numba
+    from numba.core.ir_utils import find_callname, guard
+
+    from bodo.tests.utils import DeadcodeTestPipeline
+    from bodo.utils.typing import BodoError, BodoWarning
+    from bodo.utils.utils import is_call_assign
+
 
 pytestmark = pytest_pandas
 

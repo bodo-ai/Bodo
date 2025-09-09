@@ -8,29 +8,32 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-from bodo.libs.streaming.groupby import (
-    delete_groupby_state,
-    groupby_build_consume_batch,
-    groupby_produce_output_batch,
-    init_groupby_state,
-)
-from bodo.libs.streaming.join import (
-    delete_join_state,
-    init_join_state,
-    join_build_consume_batch,
-    join_probe_consume_batch,
-)
 from bodo.mpi4py import MPI
 from bodo.tests.utils import (
     _get_dist_arg,
     get_query_profile_location,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
-    reduce_sum,
     temp_env_override,
 )
-from bodo.utils.typing import ColNamesMetaType, MetaType
+
+if bodo.test_compiler:
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.libs.streaming.groupby import (
+        delete_groupby_state,
+        groupby_build_consume_batch,
+        groupby_produce_output_batch,
+        init_groupby_state,
+    )
+    from bodo.libs.streaming.join import (
+        delete_join_state,
+        init_join_state,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
+    from bodo.tests.utils import reduce_sum
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="TODO[BSE-4580]: fix nightly test hangs on Windows"

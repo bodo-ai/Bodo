@@ -15,8 +15,6 @@ import pytest
 from pyiceberg.expressions.literals import TimeLiteral
 
 import bodo
-from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.catalog.dir import DirCatalog
 from bodo.tests.iceberg_database_helpers.utils import (
     PartitionField,
     create_iceberg_table,
@@ -27,7 +25,12 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, pytest_mark_one_rank, run_rank0
+from bodo.tests.utils import check_func, pytest_mark_one_rank
+
+if bodo.test_compiler:
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+    from bodo.io.iceberg.catalog.dir import DirCatalog
+    from bodo.tests.utils import run_rank0
 
 pytestmark = pytest.mark.iceberg
 

@@ -1,22 +1,24 @@
 """Tests I/O for HDF5 Files"""
 
 import h5py
-import numba
 import numpy as np
 import pytest
-from numba.core.ir_utils import build_definitions, find_callname
 
 import bodo
 from bodo.tests.utils import (
-    DeadcodeTestPipeline,
     check_func,
     count_array_REPs,
     count_parfor_REPs,
-    get_start_end,
     pytest_mark_one_rank,
 )
-from bodo.utils.testing import ensure_clean
-from bodo.utils.utils import is_call_assign
+
+if bodo.test_compiler:
+    import numba
+    from numba.core.ir_utils import build_definitions, find_callname
+
+    from bodo.tests.utils import get_start_end
+    from bodo.utils.testing import ensure_clean
+    from bodo.utils.utils import is_call_assign
 
 pytestmark = [pytest.mark.hdf5, pytest.mark.slow]
 
@@ -209,6 +211,8 @@ def test_h5_group_write(memory_leak_check):
 @pytest.mark.slow
 def test_h5_remove_dead(datapath, memory_leak_check):
     """make sure dead hdf5 read calls are removed properly"""
+    from bodo.tests.utils import DeadcodeTestPipeline
+
     fname = datapath("lr.hdf5")
 
     def impl():

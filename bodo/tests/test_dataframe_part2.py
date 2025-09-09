@@ -7,28 +7,30 @@ import os
 import sys
 from decimal import Decimal
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core.utils import PYVERSION
 from pandas import Series
 
 import bodo
 import bodo.tests.dataframe_common
 from bodo.tests.dataframe_common import *  # noqa
 from bodo.tests.utils import (
-    AnalysisTestPipeline,
-    DeadcodeTestPipeline,
     _get_dist_arg,
     check_func,
     get_num_test_workers,
     has_udf_call,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError, BodoWarning, ColNamesMetaType
 
 pytestmark = pytest_pandas
+
+if bodo.test_compiler:
+    import numba
+    from numba.core.utils import PYVERSION
+
+    from bodo.tests.utils import AnalysisTestPipeline, DeadcodeTestPipeline
+    from bodo.utils.typing import BodoError, BodoWarning, ColNamesMetaType
 
 
 def test_pd_isna_getitem(memory_leak_check):

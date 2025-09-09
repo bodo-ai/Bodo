@@ -3,7 +3,6 @@ import random
 import string
 from decimal import Decimal
 
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -11,8 +10,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
-    DeadcodeTestPipeline,
-    DistTestPipeline,
     check_func,
     check_parallel_coherency,
     convert_non_pandas_columns,
@@ -20,11 +17,15 @@ from bodo.tests.utils import (
     gen_nonascii_list,
     gen_random_decimal_array,
     gen_random_list_string_array,
-    get_start_end,
     has_udf_call,
     pytest_mark_pandas,
 )
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    import numba
+
+    from bodo.tests.utils import DeadcodeTestPipeline, DistTestPipeline, get_start_end
+    from bodo.utils.typing import BodoError
 
 # Note: this file tests a large mix of features that are critical
 # for BodoSQL, but also a large number that are only relevent

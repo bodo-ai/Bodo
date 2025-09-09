@@ -4,7 +4,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -21,6 +20,8 @@ df4 = pd.DataFrame({"A": [1, 2, 3], "C": ["aa", "bb", "c"], "E": ["aa", "bb", "c
 
 # tests left is of type dataframe
 def test_merge_left_dataframe(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1):
         return pd.merge("abc", df1)
 
@@ -30,6 +31,8 @@ def test_merge_left_dataframe(memory_leak_check):
 
 # tests right is of type dataframe
 def test_merge_right_dataframe(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1):
         return df1.merge("abc")
 
@@ -39,6 +42,8 @@ def test_merge_right_dataframe(memory_leak_check):
 
 # tests how is of type str
 def test_merge_how_str(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, how=3)
 
@@ -48,6 +53,8 @@ def test_merge_how_str(memory_leak_check):
 
 # tests how is one of ["left", "right", "outer", "inner"]
 def test_merge_how_invalid(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, how="break")
 
@@ -57,6 +64,8 @@ def test_merge_how_invalid(memory_leak_check):
 
 # tests invalid on key in left dataframe
 def test_merge_on_invalid_index_left(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, on=["A", "B"])
 
@@ -77,6 +86,8 @@ def test_merge_on_invalid_index_left(memory_leak_check):
 
 # tests invalid on key in right dataframe
 def test_merge_on_invalid_index_right(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, on=["A", "E"])
 
@@ -86,6 +97,8 @@ def test_merge_on_invalid_index_right(memory_leak_check):
 
 # tests invalid on key in both dataframes
 def test_merge_on_invalid_index_both(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, on=["A", "break"])
 
@@ -95,6 +108,8 @@ def test_merge_on_invalid_index_both(memory_leak_check):
 
 # tests on without common cols
 def test_merge_on_no_comm_cols(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     df3 = pd.DataFrame(
         {"AA": [1, 2, 3], "CC": ["aa", "b", "c"], "EE": ["aa", "bb", "cc"]}
     )
@@ -108,6 +123,8 @@ def test_merge_on_no_comm_cols(memory_leak_check):
 
 # tests lefton type
 def test_merge_on_str_strlist2(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, on=(1, "A"))
 
@@ -117,6 +134,8 @@ def test_merge_on_str_strlist2(memory_leak_check):
 
 # tests both on and left_on specified
 def test_merge_on_lefton(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, on=["A"], left_on=["C"])
 
@@ -130,6 +149,8 @@ def test_merge_on_lefton(memory_leak_check):
 
 # tests both on and lefton specified
 def test_merge_on_righton(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, on=["A"], right_on=["C"])
 
@@ -143,6 +164,8 @@ def test_merge_on_righton(memory_leak_check):
 
 # tests merging on columns with incompatible types
 def test_merge_on_incompatible_dtype(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_on="C", right_on="A")
 
@@ -158,6 +181,7 @@ def test_merge_on_incompatible_dtype_no_unliteral(memory_leak_check):
     is called again without literals, which would raise wrong error about non-constant
     'how' (issue #889)
     """
+    from bodo.utils.typing import BodoError
 
     def impl(df1, df2):
         return df1.merge(df2, how="left")
@@ -183,6 +207,8 @@ def test_merge_on_incompatible_dtype_no_unliteral(memory_leak_check):
 
 # tests only left_on specified
 def test_merge_lefton_only(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_on=["C"])
 
@@ -192,6 +218,8 @@ def test_merge_lefton_only(memory_leak_check):
 
 # tests only right_on specified
 def test_merge_righton_only(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, right_on=["C"])
 
@@ -201,6 +229,8 @@ def test_merge_righton_only(memory_leak_check):
 
 # tests invalid left_on key
 def test_merge_lefton_invalid(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_on=["A", "B"], right_on=["A", "B"])
 
@@ -210,6 +240,8 @@ def test_merge_lefton_invalid(memory_leak_check):
 
 # tests invalid right_on key
 def test_merge_righton_invalid(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_on=["A", "E"], right_on=["A", "E"])
 
@@ -219,6 +251,8 @@ def test_merge_righton_invalid(memory_leak_check):
 
 # tests lefton type
 def test_merge_lefton_str_strlist1(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_on=3, right_on=["A", "B"])
 
@@ -228,6 +262,8 @@ def test_merge_lefton_str_strlist1(memory_leak_check):
 
 # tests lefton type
 def test_merge_lefton_str_strlist2(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_on=(1, "A"), right_on=["A", "B"])
 
@@ -237,6 +273,8 @@ def test_merge_lefton_str_strlist2(memory_leak_check):
 
 # tests righton type
 def test_merge_righton_str_strlist1(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, right_on=3, left_on=["A", "C"])
 
@@ -246,6 +284,8 @@ def test_merge_righton_str_strlist1(memory_leak_check):
 
 # tests righton type
 def test_merge_righton_str_strlist2(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, right_on=(1, "A"), left_on=["A", "C"])
 
@@ -255,6 +295,8 @@ def test_merge_righton_str_strlist2(memory_leak_check):
 
 # tests unequal lengths of left_on and right_on
 def test_merge_lefton_righton_len_unequal(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_on=["A"], right_on=["A", "B"])
 
@@ -264,6 +306,8 @@ def test_merge_lefton_righton_len_unequal(memory_leak_check):
 
 # tests left_index is of type bool
 def test_merge_leftindex_bool(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_index="A", right_index=True)
 
@@ -275,6 +319,8 @@ def test_merge_leftindex_bool(memory_leak_check):
 
 # tests right_index is of type bool
 def test_merge_rightindex_bool(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_index=True, right_index="B")
 
@@ -286,6 +332,8 @@ def test_merge_rightindex_bool(memory_leak_check):
 
 # tests only left_on specified
 def test_merge_leftindex_only(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_index=True)
 
@@ -295,6 +343,8 @@ def test_merge_leftindex_only(memory_leak_check):
 
 # tests only right_on specified
 def test_merge_rightindex_only(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, right_index=True)
 
@@ -303,6 +353,8 @@ def test_merge_rightindex_only(memory_leak_check):
 
 
 def test_rightindex_lefton_len(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, right_index=True, left_on=["A", "C"])
 
@@ -315,6 +367,8 @@ def test_rightindex_lefton_len(memory_leak_check):
 
 
 def test_leftindex_righton_len(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, left_index=True, right_on=["A", "C"])
 
@@ -328,6 +382,8 @@ def test_leftindex_righton_len(memory_leak_check):
 
 # tests sort is of type bool
 def test_merge_sort_bool(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, sort="break")
 
@@ -339,6 +395,8 @@ def test_merge_sort_bool(memory_leak_check):
 
 # tests sort has default False
 def test_merge_sort(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, sort=True)
 
@@ -349,6 +407,8 @@ def test_merge_sort(memory_leak_check):
 
 
 def test_merge_suffixes_number(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, suffixes=["_x", "_y", "_z"])
 
@@ -358,6 +418,8 @@ def test_merge_suffixes_number(memory_leak_check):
 
 # tests copy is of type bool
 def test_merge_copy_bool(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, copy="break")
 
@@ -369,6 +431,8 @@ def test_merge_copy_bool(memory_leak_check):
 
 # tests copy has default True
 def test_merge_copy(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, copy=False)
 
@@ -380,6 +444,8 @@ def test_merge_copy(memory_leak_check):
 
 # tests indicator is of type bool
 def test_merge_indicator_bool(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, indicator="break")
 
@@ -391,6 +457,8 @@ def test_merge_indicator_bool(memory_leak_check):
 
 # tests validate has default None
 def test_merge_validate_none(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df1, df2):
         return df1.merge(df2, validate=["one_to_one"])
 
@@ -402,6 +470,7 @@ def test_merge_validate_none(memory_leak_check):
 
 def test_merge_map_key_err(memory_leak_check):
     """make sure map array as key throws an error in merge"""
+    from bodo.utils.typing import BodoError
 
     def impl(df1, df2):
         return df1.merge(df2, on="A")
@@ -425,6 +494,8 @@ df4 = pd.DataFrame({"B": [1, 2, 5], "D": ["aa", "b", "c"]})
 
 # tests right is of type dataframe
 def test_join_right_dataframe(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df3):
         return df3.join("abc")
 
@@ -434,6 +505,8 @@ def test_join_right_dataframe(memory_leak_check):
 
 # tests how is of type str
 def test_join_how_str(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df3, df4):
         return df3.join(df4, how=3)
 
@@ -443,6 +516,8 @@ def test_join_how_str(memory_leak_check):
 
 # tests how is one of ["left", "right", "outer", "inner"]
 def test_join_how_invalid(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df3, df4):
         return df3.join(df4, how="break")
 
@@ -452,6 +527,8 @@ def test_join_how_invalid(memory_leak_check):
 
 # tests on length
 def test_join_on_len(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df3, df4):
         return df3.join(df4, on=["B", "D"])
 
@@ -461,6 +538,8 @@ def test_join_on_len(memory_leak_check):
 
 # tests on key is a column in left dataframe
 def test_join_on_key(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df3, df4):
         return df3.join(df4, on=["B"])
 
@@ -470,6 +549,8 @@ def test_join_on_key(memory_leak_check):
 
 # tests sort is of type bool
 def test_join_sort_bool(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df3, df4):
         return df3.join(df4, sort="break")
 
@@ -481,6 +562,8 @@ def test_join_sort_bool(memory_leak_check):
 
 # tests sort has default False
 def test_join_sort(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df3, df4):
         return df3.join(df4, sort=True)
 
@@ -492,6 +575,8 @@ def test_join_sort(memory_leak_check):
 
 # tests left and other dataframes cannot have common columns
 def test_join_common_cols(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df3, df4):
         return df3.join(df4)
 

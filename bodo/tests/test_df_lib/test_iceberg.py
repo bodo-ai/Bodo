@@ -6,7 +6,7 @@ import os
 import random
 import tempfile
 
-import numba.core.utils
+import numba.core.utils  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa

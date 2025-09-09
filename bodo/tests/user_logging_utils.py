@@ -7,7 +7,9 @@ import logging
 from contextlib import contextmanager
 
 import bodo
-from bodo.tests.utils import reduce_sum
+
+if bodo.test_compiler:
+    from bodo.tests.utils import reduce_sum
 
 
 @contextmanager

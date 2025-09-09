@@ -8,7 +8,9 @@ import pytest
 import bodo
 from bodo.tests.timezone_common import representative_tz, sample_tz  # noqa
 from bodo.tests.utils import check_func, generate_comparison_ops_func
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.tz_aware
 

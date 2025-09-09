@@ -4,7 +4,9 @@ import pytest
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
-from bodo.utils.typing import ColNamesMetaType, MetaType
+
+if bodo.test_compiler:
+    from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 @pytest.mark.parametrize(

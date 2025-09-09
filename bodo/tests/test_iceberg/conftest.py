@@ -11,8 +11,7 @@ from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLES_MAP,
 )
-from bodo.tests.utils import temp_env_override
-from bodo.utils.utils import run_rank0
+from bodo.tests.utils import run_rank0, temp_env_override
 
 WRITE_TABLES = [
     "BOOL_BINARY_TABLE",

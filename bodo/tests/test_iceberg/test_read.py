@@ -4,16 +4,14 @@ import io
 import time
 from datetime import date
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyspark.sql.types as spark_types
 import pytest
-from numba.core import types
+from numba.core import types  # noqa TID253
 
 import bodo
-from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader, spark_reader
 from bodo.tests.iceberg_database_helpers.utils import (
@@ -27,14 +25,9 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    ColumnDelTestPipeline,
-    DistTestPipeline,
     check_func,
-    reduce_sum,
-    run_rank0,
     sync_dtypes,
 )
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.iceberg
 
@@ -360,6 +353,7 @@ def test_dict_encoded_string_arrays(
         Arrow gaps in being able to read files written by Snowflake
         as dict-encoded columns directly.
     """
+    from bodo.utils.typing import BodoError
 
     table_name = "SIMPLE_DICT_ENCODED_STRING"
 
@@ -565,6 +559,9 @@ def test_dict_encoded_string_arrays_streaming_read(
     The error-checking code paths are common between streaming and non-streaming,
     so we skip them here.
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.tests.utils import run_rank0
+
     table_name = "SIMPLE_DICT_ENCODED_STRING_STREAMING"
 
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -722,6 +719,7 @@ def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
     This is not guaranteed to work, but provides at least some
     protection against regressions.
     """
+    from bodo.tests.utils import ColumnDelTestPipeline, reduce_sum
 
     table_name = "TEST_DICT_ENCODING_SYNC_DETERMINATION"
 
@@ -1120,6 +1118,8 @@ def _check_for_sql_read_head_only(bodo_func, head_size):
 @pytest.mark.slow
 def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check):
     """Test that Limit Pushdown is successfully enabled"""
+    from bodo.tests.utils import DistTestPipeline
+
     table_name = "SIMPLE_STRING_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -1146,6 +1146,7 @@ def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check)
 @pytest.mark.slow
 def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
     """Tests error raised when a nonexistent Iceberg table is provided."""
+    from bodo.utils.typing import BodoError
 
     table_name = "NO_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1162,6 +1163,7 @@ def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
 @pytest.mark.slow
 def test_iceberg_invalid_path(iceberg_database, iceberg_table_conn):
     """Tests error raised when invalid path is provided."""
+    from bodo.utils.typing import BodoError
 
     table_name = "FILTER_PUSHDOWN_TEST_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1181,6 +1183,7 @@ def test_batched_read_agg(iceberg_database, iceberg_table_conn, memory_leak_chec
     Test a simple use of batched Iceberg reads by
     getting the max of a column
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 
     col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D"))
 
@@ -1230,6 +1233,7 @@ def test_batched_read_only_len(iceberg_database, iceberg_table_conn, memory_leak
     """
     Test shape pushdown with batched Snowflake reads
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 
     col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D"))
 
@@ -1359,6 +1363,8 @@ def test_filter_pushdown_complex(
 def test_time_travel_snapshot_id(
     iceberg_database, iceberg_table_conn, memory_leak_check
 ):
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+
     table_name = "TIME_TRAVEL_SNAPSHOT_ID"
 
     db_schema, warehouse_loc = iceberg_database(table_name)

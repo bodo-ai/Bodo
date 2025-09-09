@@ -1,19 +1,24 @@
 """Test Bodo's string array data type"""
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import (
-    SeqTestPipeline,
     check_func,
     dist_IR_contains,
     gen_nonascii_list,
     get_num_test_workers,
 )
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    import numba
+
+    from bodo.tests.utils import (
+        SeqTestPipeline,
+    )
+    from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(

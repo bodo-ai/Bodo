@@ -11,17 +11,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
-import bodo.io.snowflake
 import bodo.tests.utils
-from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-from bodo.libs.streaming.join import (
-    delete_join_state,
-    get_partition_state,
-    init_join_state,
-    join_build_consume_batch,
-    join_probe_consume_batch,
-    runtime_join_filter,
-)
 from bodo.memory import default_buffer_pool_smallest_size_class
 from bodo.tests.utils import (
     _get_dist_arg,
@@ -29,11 +19,23 @@ from bodo.tests.utils import (
     check_func,
     pytest_mark_one_rank,
     pytest_mark_snowflake,
-    reduce_sum,
     set_broadcast_join,
     temp_env_override,
 )
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    import bodo.io.snowflake
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.libs.streaming.join import (
+        delete_join_state,
+        get_partition_state,
+        init_join_state,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+        runtime_join_filter,
+    )
+    from bodo.tests.utils import reduce_sum
+    from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(params=[True, False])

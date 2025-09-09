@@ -15,7 +15,6 @@ import traceback
 from datetime import date, datetime
 from decimal import Decimal
 
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -23,7 +22,6 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
-    DeadcodeTestPipeline,
     _get_dist_arg,
     check_func,
     check_parallel_coherency,
@@ -39,9 +37,14 @@ from bodo.tests.utils import (
     gen_random_list_string_array,
     is_bool_object_series,
     pytest_pandas,
-    reduce_sum,
 )
-from bodo.utils.typing import BodoError, BodoWarning
+
+if bodo.test_compiler:
+    import numba
+
+    from bodo.tests.utils import DeadcodeTestPipeline, reduce_sum
+    from bodo.utils.typing import BodoError, BodoWarning
+
 
 pytestmark = pytest_pandas
 

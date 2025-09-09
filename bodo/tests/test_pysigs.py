@@ -2,21 +2,27 @@ from __future__ import annotations
 
 from inspect import Signature
 
-import numba
 import pandas as pd  # noqa
 import pytest
-from numba.core import utils
-from numba.core.target_extension import dispatcher_registry
 
 import bodo  # noqa
-from bodo.ir.declarative_templates import _OverloadDeclarativeMethodTemplate
-from bodo.tests.utils import run_rank0
-from bodo.utils.pandas_coverage_tracking import PANDAS_URLS, get_pandas_apis_from_url
-from bodo.utils.search_templates import (
-    _OverloadMissingOrIncorrect,
-    bodo_pd_types_dict,
-    get_overload_template,
-)
+
+if bodo.test_compiler:
+    import numba
+    from numba.core import utils
+    from numba.core.target_extension import dispatcher_registry
+
+    from bodo.ir.declarative_templates import _OverloadDeclarativeMethodTemplate
+    from bodo.tests.utils import run_rank0
+    from bodo.utils.pandas_coverage_tracking import (
+        PANDAS_URLS,
+        get_pandas_apis_from_url,
+    )
+    from bodo.utils.search_templates import (
+        _OverloadMissingOrIncorrect,
+        bodo_pd_types_dict,
+        get_overload_template,
+    )
 
 
 def _get_series_apis() -> list[str]:
@@ -94,61 +100,67 @@ def _skip_pysig_check(path: str) -> bool:
     return False
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "get_apis, keys", [pytest.param(_get_series_apis, ["Series"], id="series")]
-)
-@run_rank0
-def test_pandas_pysigs(get_apis, keys):
-    """
-    Check that the pysignature of overloaded series methods matches the pysig from
-    pandas. Additionally checks all Series methods are either have supported or
-    unsupported (but not both).
-    """
-    apis = get_apis()
-    disp = dispatcher_registry[numba.core.target_extension.CPU]
-    typing_ctx = disp.targetdescr.typing_context
+if bodo.test_compiler:
 
-    types_dict = bodo_pd_types_dict
+    @pytest.mark.slow
+    @pytest.mark.parametrize(
+        "get_apis, keys", [pytest.param(_get_series_apis, ["Series"], id="series")]
+    )
+    @run_rank0
+    def test_pandas_pysigs(get_apis, keys):
+        """
+        Check that the pysignature of overloaded series methods matches the pysig from
+        pandas. Additionally checks all Series methods are either have supported or
+        unsupported (but not both).
+        """
+        apis = get_apis()
+        disp = dispatcher_registry[numba.core.target_extension.CPU]
+        typing_ctx = disp.targetdescr.typing_context
 
-    diff_str = ""
-    total_decl_methods = 0
-    total_correct_signature = 0
-    invalid_ser_attrs = set()
+        types_dict = bodo_pd_types_dict
 
-    for api in apis:
-        path = api.split(".")
-        if path[0] in keys:
-            assert path[0] in types_dict, f"Could not match {path[0]} to bodo type(s)"
-            base_types = bodo_pd_types_dict[path[0]]
-            template = get_overload_template(typing_ctx, base_types, path[1:])
+        diff_str = ""
+        total_decl_methods = 0
+        total_correct_signature = 0
+        invalid_ser_attrs = set()
 
-            # check that method is either supported or unsupported (but not both)
-            if isinstance(template, _OverloadMissingOrIncorrect):
-                invalid_ser_attrs.add(api)
-
-            # check that the pysig matches with pandas API docs
-            elif isinstance(
-                template, _OverloadDeclarativeMethodTemplate
-            ) and not _skip_pysig_check(path):
-                pysig = _get_pysig_from_path(path)
-                overload_sig = template.get_signature()
-                changed_defaults = getattr(template, "changed_defaults", frozenset())
-                is_equivalent_signatures = signatures_equal(
-                    pysig, overload_sig, changed_defaults
+        for api in apis:
+            path = api.split(".")
+            if path[0] in keys:
+                assert path[0] in types_dict, (
+                    f"Could not match {path[0]} to bodo type(s)"
                 )
-                # keep track of all signatures that do not match and fail at the end.
-                if not is_equivalent_signatures:
-                    diff_str += f"\t{api}: overloaded signature: {str(overload_sig)} != {str(pysig)}\n"
-                else:
-                    total_correct_signature += 1
-                total_decl_methods += 1
+                base_types = bodo_pd_types_dict[path[0]]
+                template = get_overload_template(typing_ctx, base_types, path[1:])
 
-    invalid_ser_attrs_str = ", ".join(invalid_ser_attrs)
+                # check that method is either supported or unsupported (but not both)
+                if isinstance(template, _OverloadMissingOrIncorrect):
+                    invalid_ser_attrs.add(api)
 
-    assert len(invalid_ser_attrs) == 0, (
-        f"Found {len(invalid_ser_attrs)} Series attribute(s) that either do not have an overload or have both unsupported and supported overloads: {invalid_ser_attrs_str}"
-    )
-    assert total_decl_methods == total_correct_signature, (
-        f"Found differences in the following method signatures:\n{diff_str}"
-    )
+                # check that the pysig matches with pandas API docs
+                elif isinstance(
+                    template, _OverloadDeclarativeMethodTemplate
+                ) and not _skip_pysig_check(path):
+                    pysig = _get_pysig_from_path(path)
+                    overload_sig = template.get_signature()
+                    changed_defaults = getattr(
+                        template, "changed_defaults", frozenset()
+                    )
+                    is_equivalent_signatures = signatures_equal(
+                        pysig, overload_sig, changed_defaults
+                    )
+                    # keep track of all signatures that do not match and fail at the end.
+                    if not is_equivalent_signatures:
+                        diff_str += f"\t{api}: overloaded signature: {str(overload_sig)} != {str(pysig)}\n"
+                    else:
+                        total_correct_signature += 1
+                    total_decl_methods += 1
+
+        invalid_ser_attrs_str = ", ".join(invalid_ser_attrs)
+
+        assert len(invalid_ser_attrs) == 0, (
+            f"Found {len(invalid_ser_attrs)} Series attribute(s) that either do not have an overload or have both unsupported and supported overloads: {invalid_ser_attrs_str}"
+        )
+        assert total_decl_methods == total_correct_signature, (
+            f"Found differences in the following method signatures:\n{diff_str}"
+        )

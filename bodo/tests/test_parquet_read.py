@@ -8,7 +8,6 @@ import shutil
 import string
 import sys
 
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -16,15 +15,12 @@ import pyarrow.parquet as pq
 import pytest
 
 import bodo
-from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    DistTestPipeline,
-    SeriesOptTestPipeline,
     _check_for_io_reader_filters,
     _get_dist_arg,
     cast_dt64_to_ns,
@@ -38,8 +34,14 @@ from bodo.tests.utils import (
     pytest_mark_not_df_lib,
     temp_env_override,
 )
-from bodo.utils.testing import ensure_clean, ensure_clean2
-from bodo.utils.typing import BodoError, BodoWarning
+
+if bodo.test_compiler:
+    import numba
+
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.tests.utils import DistTestPipeline, SeriesOptTestPipeline
+    from bodo.utils.testing import ensure_clean, ensure_clean2
+    from bodo.utils.typing import BodoError, BodoWarning
 
 pytestmark = [pytest.mark.parquet, pytest.mark.df_lib]
 

@@ -22,15 +22,13 @@ import adlfs
 import pandas as pd
 import psutil
 import pytest
-from numba.core.runtime import rtsys
+from numba.core.runtime import rtsys  # noqa TID253
 
 import bodo
 import bodo.user_logging
-import bodo.utils.allocation_tracking
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
-from bodo.tests.utils import temp_env_override
-from bodo.utils.utils import run_rank0
+from bodo.tests.utils import run_rank0, temp_env_override
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -97,6 +95,7 @@ def memory_leak_check():
     https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/tests/support.py#L688
     """
     import bodo.tests.utils
+    import bodo.utils.allocation_tracking
 
     gc.collect()
     old = rtsys.get_allocation_stats()

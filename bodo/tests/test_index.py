@@ -6,19 +6,22 @@ import datetime
 import decimal
 import operator
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import (
-    AnalysisTestPipeline,
     check_func,
     get_num_test_workers,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    import numba
+
+    from bodo.tests.utils import AnalysisTestPipeline
+    from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 

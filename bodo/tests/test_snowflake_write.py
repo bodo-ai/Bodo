@@ -14,19 +14,12 @@ import uuid
 from decimal import Decimal
 from tempfile import TemporaryDirectory
 
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 
 import bodo
-import bodo.io.snowflake
-from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-from bodo.io.snowflake_write import (
-    snowflake_writer_append_table,
-    snowflake_writer_init,
-)
 from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -39,17 +32,26 @@ from bodo.tests.utils import (
     create_snowflake_table_from_select_query,
     drop_snowflake_table,
     get_snowflake_connection_string,
-    get_start_end,
     pytest_mark_one_rank,
     pytest_one_rank,
     pytest_snowflake,
-    reduce_sum,
-    run_rank0,
     snowflake_cred_env_vars_present,
     temp_env_override,
 )
-from bodo.utils.testing import ensure_clean_snowflake_table
-from bodo.utils.typing import BodoWarning
+
+if bodo.test_compiler:
+    import numba
+
+    import bodo.io.snowflake
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
+    from bodo.tests.utils import get_start_end, reduce_sum, run_rank0
+    from bodo.utils.testing import ensure_clean_snowflake_table
+    from bodo.utils.typing import BodoWarning
+
 
 pytestmark = pytest_snowflake
 

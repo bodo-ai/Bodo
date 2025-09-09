@@ -8,7 +8,9 @@ import bodo
 from bodo.mpi4py import MPI
 from bodo.utils import tracing
 from bodo.utils.tracing import TRACING_MEM_WARN
-from bodo.utils.typing import BodoWarning
+
+if bodo.test_compiler:
+    from bodo.utils.typing import BodoWarning
 
 # Enable tracing for all test in this file. This should be fine because
 # runtest.py ensure our tests run 1 file at a time so we will avoid any

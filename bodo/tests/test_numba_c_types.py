@@ -1,16 +1,17 @@
 import bodo
-from bodo.utils.utils import (
-    CArrayTypeEnum,
-    CTypeEnum,
-    numba_to_c_array_types,
-    numba_to_c_types,
-    run_rank0,
-)
+from bodo.tests.utils import run_rank0
 
 
 @run_rank0
 def test_numba_to_cpp_types_decimal():
     """Verifies that decimal types are properly serialized by creating a nested type with decimals are different levels"""
+    from bodo.utils.utils import (
+        CArrayTypeEnum,
+        CTypeEnum,
+        numba_to_c_array_types,
+        numba_to_c_types,
+    )
+
     precisions = [32, 31, 30, 29]
     scales = [12, 13, 14, 15]
     decimal_arr_types = [

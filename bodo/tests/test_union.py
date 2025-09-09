@@ -2,18 +2,21 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from numba.core import types
 
 import bodo
-from bodo.hiframes.table import TableType
-from bodo.libs.streaming.union import UnionStateType
 from bodo.tests.utils import (
     check_func,
     pytest_mark_one_rank,
     pytest_mark_pandas,
     temp_env_override,
 )
-from bodo.utils.typing import ColNamesMetaType, MetaType
+
+if bodo.test_compiler:
+    from numba.core import types
+
+    from bodo.hiframes.table import TableType
+    from bodo.libs.streaming.union import UnionStateType
+    from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 @pytest_mark_pandas

@@ -7,15 +7,17 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.streaming.groupby import (
-    get_partition_state,
-)
 from bodo.tests.utils import (
     check_func,
     pytest_mark_one_rank,
     temp_env_override,
 )
-from bodo.utils.typing import ColNamesMetaType, MetaType
+
+if bodo.test_compiler:
+    from bodo.libs.streaming.groupby import (
+        get_partition_state,
+    )
+    from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 def gen_simple_window_over_nothing_tests():

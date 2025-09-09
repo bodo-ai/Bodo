@@ -5,10 +5,8 @@ import io
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core.ir_utils import find_callname, find_const, guard
 
 import bodo
-from bodo.hiframes.table import Table
 from bodo.tests.test_table_column_del import _check_column_dels
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -16,31 +14,37 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    ColumnDelTestPipeline,
-    DistTestPipeline,
-    SeriesOptTestPipeline,
     check_func,
     dist_IR_contains,
 )
 
+if bodo.test_compiler:
+    from numba.core.ir_utils import find_callname, find_const, guard
 
-@pytest.fixture(
-    params=[
-        Table(
-            [
-                np.ones(10),
-                np.arange(10),
-                np.array(["AB"] * 10),
-                np.ones(10) * 3,
-                np.arange(10) + 1,
-                np.arange(10) + 2,
-                np.array(["A B C"] * 10),
-            ]
-        ),
-    ]
-)
-def table_value(request):
-    return request.param
+    from bodo.hiframes.table import Table
+    from bodo.tests.utils import (
+        ColumnDelTestPipeline,
+        DistTestPipeline,
+        SeriesOptTestPipeline,
+    )
+
+    @pytest.fixture(
+        params=[
+            Table(
+                [
+                    np.ones(10),
+                    np.arange(10),
+                    np.array(["AB"] * 10),
+                    np.ones(10) * 3,
+                    np.arange(10) + 1,
+                    np.arange(10) + 2,
+                    np.array(["A B C"] * 10),
+                ]
+            ),
+        ]
+    )
+    def table_value(request):
+        return request.param
 
 
 def test_unbox(table_value, memory_leak_check):

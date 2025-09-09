@@ -11,7 +11,6 @@ import pyspark.sql.types as spark_types
 import pytest
 
 import bodo
-from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
@@ -49,15 +48,17 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    DistTestPipeline,
     _gather_output,
     _get_dist_arg,
     _test_equal_guard,
     check_func,
     convert_non_pandas_columns,
-    reduce_sum,
-    run_rank0,
 )
+
+if bodo.test_compiler:
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.tests.utils import DistTestPipeline, reduce_sum, run_rank0
+
 
 pytestmark = [
     pytest.mark.iceberg,

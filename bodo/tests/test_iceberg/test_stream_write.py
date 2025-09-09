@@ -43,9 +43,11 @@ from bodo.tests.utils import (
     _test_equal_guard,
     convert_non_pandas_columns,
     pytest_mark_one_rank,
-    reduce_sum,
+    run_rank0,
 )
-from bodo.utils.utils import run_rank0
+
+if bodo.test_compiler:
+    from bodo.tests.utils import reduce_sum
 
 pytestmark = pytest.mark.iceberg
 
@@ -529,12 +531,14 @@ def test_iceberg_field_ids_in_pq_schema(
     )
 
 
-@run_rank0
-def _get_pq_files(warehouse_loc, db_schema, table_name):
-    data_files = glob.glob(
-        os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
-    )
-    return data_files
+if bodo.test_compiler:
+
+    @run_rank0
+    def _get_pq_files(warehouse_loc, db_schema, table_name):
+        data_files = glob.glob(
+            os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
+        )
+        return data_files
 
 
 @pytest_mark_one_rank

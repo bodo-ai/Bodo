@@ -9,7 +9,6 @@ import string
 import unittest
 from decimal import Decimal
 
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -24,7 +23,6 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    DeadcodeTestPipeline,
     _gather_output,
     _get_dist_arg,
     _test_equal,
@@ -34,10 +32,14 @@ from bodo.tests.utils import (
     gen_nonascii_list,
     gen_random_decimal_array,
     gen_random_list_string_array,
-    get_start_end,
     pytest_mark_pandas,
     temp_env_override,
 )
+
+if bodo.test_compiler:
+    import numba
+
+    from bodo.tests.utils import DeadcodeTestPipeline, get_start_end
 
 
 # pytest fixture for df3 = df1.merge(df2, on="A") tests with nested arrays.

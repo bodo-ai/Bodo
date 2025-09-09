@@ -9,26 +9,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.hiframes.pd_index_ext import (
-    IntervalIndexType,
-    cat_idx_unsupported_atrs,
-    cat_idx_unsupported_methods,
-    dt_index_unsupported_atrs,
-    dt_index_unsupported_methods,
-    index_unsupported_atrs,
-    index_unsupported_methods,
-    interval_idx_unsupported_atrs,
-    interval_idx_unsupported_methods,
-    multi_index_unsupported_atrs,
-    multi_index_unsupported_methods,
-    period_index_unsupported_atrs,
-    period_index_unsupported_methods,
-    td_index_unsupported_atrs,
-    td_index_unsupported_methods,
-)
-from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.tests.utils import check_func, pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -38,6 +19,7 @@ def test_object_dtype(memory_leak_check):
     Test that providing object as the dtype raises a reasonable
     error.
     """
+    from bodo.utils.typing import BodoError
 
     def impl():
         a = pd.Index(["a", "b", "c"], dtype="object")
@@ -138,85 +120,169 @@ def all_index_types(request):
     return request.param
 
 
-@pytest.fixture(params=index_unsupported_methods)
+def _get_index_unsupported_methods():
+    from bodo.hiframes.pd_index_ext import index_unsupported_methods
+
+    return index_unsupported_methods
+
+
+def _get_index_unsupported_atrs():
+    from bodo.hiframes.pd_index_ext import index_unsupported_atrs
+
+    return index_unsupported_atrs
+
+
+def _get_cat_idx_unsupported_methods():
+    from bodo.hiframes.pd_index_ext import cat_idx_unsupported_methods
+
+    return cat_idx_unsupported_methods
+
+
+def _get_cat_idx_unsupported_atrs():
+    from bodo.hiframes.pd_index_ext import cat_idx_unsupported_atrs
+
+    return cat_idx_unsupported_atrs
+
+
+def _get_interval_idx_unsupported_methods():
+    from bodo.hiframes.pd_index_ext import interval_idx_unsupported_methods
+
+    return interval_idx_unsupported_methods
+
+
+def _get_interval_idx_unsupported_atrs():
+    from bodo.hiframes.pd_index_ext import interval_idx_unsupported_atrs
+
+    return interval_idx_unsupported_atrs
+
+
+def _get_multi_index_unsupported_methods():
+    from bodo.hiframes.pd_index_ext import multi_index_unsupported_methods
+
+    return multi_index_unsupported_methods
+
+
+def _get_multi_index_unsupported_atrs():
+    from bodo.hiframes.pd_index_ext import multi_index_unsupported_atrs
+
+    return multi_index_unsupported_atrs
+
+
+def _get_dt_index_unsupported_methods():
+    from bodo.hiframes.pd_index_ext import dt_index_unsupported_methods
+
+    return dt_index_unsupported_methods
+
+
+def _get_dt_index_unsupported_atrs():
+    from bodo.hiframes.pd_index_ext import dt_index_unsupported_atrs
+
+    return dt_index_unsupported_atrs
+
+
+def _get_td_index_unsupported_methods():
+    from bodo.hiframes.pd_index_ext import td_index_unsupported_methods
+
+    return td_index_unsupported_methods
+
+
+def _get_td_index_unsupported_atrs():
+    from bodo.hiframes.pd_index_ext import td_index_unsupported_atrs
+
+    return td_index_unsupported_atrs
+
+
+def _get_period_index_unsupported_methods():
+    from bodo.hiframes.pd_index_ext import period_index_unsupported_methods
+
+    return period_index_unsupported_methods
+
+
+def _get_period_index_unsupported_atrs():
+    from bodo.hiframes.pd_index_ext import period_index_unsupported_atrs
+
+    return period_index_unsupported_atrs
+
+
+@pytest.fixture(params=_get_index_unsupported_methods())
 def index_unsuported_methods_fixture(request):
     """fixture around the methods that are unsupported for all index types"""
     return request.param
 
 
-@pytest.fixture(params=index_unsupported_atrs)
+@pytest.fixture(params=_get_index_unsupported_atrs())
 def index_unsupported_atrs_fixture(request):
     """fixture around the attributes that are unsupported for all index types"""
     return request.param
 
 
-@pytest.fixture(params=cat_idx_unsupported_atrs)
+@pytest.fixture(params=_get_cat_idx_unsupported_atrs())
 def cat_idx_unsupported_atrs_fixture(request):
     """fixture around the attributes that are unsupported for categorical index types"""
     return request.param
 
 
-@pytest.fixture(params=interval_idx_unsupported_atrs)
+@pytest.fixture(params=_get_interval_idx_unsupported_atrs())
 def interval_idx_unsupported_atrs_fixture(request):
     """fixture around the attributes that are unsupported for interval index types"""
     return request.param
 
 
-@pytest.fixture(params=multi_index_unsupported_atrs)
+@pytest.fixture(params=_get_multi_index_unsupported_atrs())
 def multi_index_unsupported_atrs_fixture(request):
     """fixture around the attributes that are unsupported for multi_index types"""
     return request.param
 
 
-@pytest.fixture(params=dt_index_unsupported_atrs)
+@pytest.fixture(params=_get_dt_index_unsupported_atrs())
 def dt_index_unsupported_atrs_fixture(request):
     """fixture around the attributes that are unsupported for datetime index types"""
     return request.param
 
 
-@pytest.fixture(params=td_index_unsupported_atrs)
+@pytest.fixture(params=_get_td_index_unsupported_atrs())
 def td_index_unsupported_atrs_fixture(request):
     """fixture around the attributes that are unsupported for timedelta index types"""
     return request.param
 
 
-@pytest.fixture(params=period_index_unsupported_atrs)
+@pytest.fixture(params=_get_period_index_unsupported_atrs())
 def period_index_unsupported_atrs_fixture(request):
     """fixture around the attributes that are unsupported for period index types"""
     return request.param
 
 
-@pytest.fixture(params=cat_idx_unsupported_methods)
+@pytest.fixture(params=_get_cat_idx_unsupported_methods())
 def cat_idx_unsupported_methods_fixture(request):
     """fixture around the methods that are unsupported for categorical index types"""
     return request.param
 
 
-@pytest.fixture(params=interval_idx_unsupported_methods)
+@pytest.fixture(params=_get_interval_idx_unsupported_methods())
 def interval_idx_unsupported_methods_fixture(request):
     """fixture around the methods that are unsupported for interval index types"""
     return request.param
 
 
-@pytest.fixture(params=multi_index_unsupported_methods)
+@pytest.fixture(params=_get_multi_index_unsupported_methods())
 def multi_index_unsupported_methods_fixture(request):
     """fixture around the methods that are unsupported for multi_index types"""
     return request.param
 
 
-@pytest.fixture(params=dt_index_unsupported_methods)
+@pytest.fixture(params=_get_dt_index_unsupported_methods())
 def dt_index_unsupported_methods_fixture(request):
     """fixture around the methods that are unsupported for datetime index types"""
     return request.param
 
 
-@pytest.fixture(params=td_index_unsupported_methods)
+@pytest.fixture(params=_get_td_index_unsupported_methods())
 def td_index_unsupported_methods_fixture(request):
     """fixture around the methods that are unsupported for timedelta index types"""
     return request.param
 
 
-@pytest.fixture(params=period_index_unsupported_methods)
+@pytest.fixture(params=_get_period_index_unsupported_methods())
 def period_index_unsupported_methods_fixture(request):
     """fixture around the methods that are unsupported for timedelta index types"""
     return request.param
@@ -393,6 +459,8 @@ def test_period_idx_unsupported_atrs(period_index_unsupported_atrs_fixture):
 
 @pytest.mark.slow
 def test_multiindex_from_arrays():
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.MultiIndex.from_arrays([[1, 2, 3], ["red", "blue", "red"]])
 
@@ -407,6 +475,8 @@ def test_multiindex_from_arrays():
 
 @pytest.mark.slow
 def test_multiindex_from_tuples():
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.MultiIndex.from_tuples(
             [(1, "red"), (1, "blue"), (2, "red"), (2, "blue")]
@@ -423,6 +493,8 @@ def test_multiindex_from_tuples():
 
 @pytest.mark.slow
 def test_multiindex_from_frame():
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.MultiIndex.from_frame(
             pd.DataFrame(
@@ -442,6 +514,8 @@ def test_multiindex_from_frame():
 
 @pytest.mark.slow
 def test_interval_index_from_arrays():
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.IntervalIndex.from_arrays([0, 1, 2], [1, 2, 3])
 
@@ -456,6 +530,8 @@ def test_interval_index_from_arrays():
 
 @pytest.mark.slow
 def test_interval_index_from_tuples():
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.IntervalIndex.from_tuples([(0, 1), (1, 2)])
 
@@ -470,6 +546,8 @@ def test_interval_index_from_tuples():
 
 @pytest.mark.slow
 def test_index_to_numpy_args():
+    from bodo.utils.typing import BodoError
+
     def impl1(index):
         return index.to_numpy(dtype="unicode")
 
@@ -501,6 +579,8 @@ def test_index_to_numpy_args():
 
 @pytest.mark.slow
 def test_index_to_series_malformed():
+    from bodo.utils.typing import BodoError
+
     def impl1(I, J):
         return I.to_series(index=J)
 
@@ -545,6 +625,8 @@ def test_index_to_series_malformed():
 
 @pytest.mark.slow
 def test_index_to_frame_malformed():
+    from bodo.utils.typing import BodoError
+
     def impl1(I):
         return I.to_frame(name=["Chocolate", "Vanilla"])
 
@@ -593,6 +675,8 @@ def test_index_to_frame_malformed():
 
 @pytest.mark.slow
 def test_interval_index_from_breaks():
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.IntervalIndex.from_breaks([0, 1, 2, 3])
 
@@ -606,6 +690,8 @@ def test_interval_index_from_breaks():
 
 
 def test_argmin_argmax_min_max_edgecases():
+    from bodo.utils.typing import BodoError
+
     def impl1(I):
         return I.argmin()
 
@@ -705,6 +791,8 @@ def test_argmin_argmax_min_max_edgecases():
 
 @pytest.mark.slow
 def test_range_index_from_range():
+    from bodo.utils.typing import BodoError
+
     def impl():
         return pd.RangeIndex.from_range(range(10))
 
@@ -719,6 +807,8 @@ def test_range_index_from_range():
 
 @pytest.mark.slow
 def test_sort_values_args():
+    from bodo.utils.typing import BodoError
+
     def impl1(I):
         return I.sort_values(return_indexer=True)
 
@@ -764,6 +854,8 @@ def test_sort_values_args():
 
 @pytest.mark.slow
 def test_where_args():
+    from bodo.utils.typing import BodoError
+
     def impl(I, C, O):
         return I.where(C, O)
 
@@ -790,6 +882,8 @@ def test_where_args():
 
 @pytest.mark.slow
 def test_putmask_args():
+    from bodo.utils.typing import BodoError
+
     def impl(I, C, O):
         return I.putmask(C, O)
 
@@ -816,6 +910,8 @@ def test_putmask_args():
 
 @pytest.mark.slow
 def test_set_operations_unsupported():
+    from bodo.utils.typing import BodoError
+
     def impl1(I, J):
         return I.union(J)
 
@@ -930,6 +1026,8 @@ def test_set_operations_unsupported():
 # TODO: handle cases where n is not the same length as I
 @pytest.mark.slow
 def test_repeat_malformed():
+    from bodo.utils.typing import BodoError
+
     def impl(I, n):
         return I.repeat(n)
 
@@ -948,6 +1046,8 @@ def test_repeat_malformed():
 
 
 def check_unsupported_atr(idx_format_str, idx_val, unsupported_atr):
+    from bodo.utils.typing import BodoError
+
     func_text = f"""
 def impl(I):
     return I.{unsupported_atr}
@@ -968,6 +1068,8 @@ def impl(I):
 
 
 def check_unsupported_method(idx_format_str, idx_val, unsupported_method):
+    from bodo.utils.typing import BodoError
+
     # The overload matches any combination of arguments, so we don't have to worry
     func_text = f"""
 def impl(I):
@@ -990,7 +1092,9 @@ def impl(I):
 
 def test_index_copy_kwd_arg_err_msg(all_index_types):
     """tests that the proper errors are raised when doing Index.copy() with unsupported kwd args"""
-    from bodo.hiframes.pd_index_ext import idx_typ_to_format_str_map
+    from bodo.hiframes.pd_index_ext import IntervalIndexType, idx_typ_to_format_str_map
+    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+    from bodo.utils.typing import BodoError
 
     idx_val = all_index_types[0]
 
@@ -1017,7 +1121,9 @@ def test_index_copy_kwd_arg_err_msg(all_index_types):
 
 def test_index_take_kwd_arg_err_msg(all_index_types):
     """tests that the proper errors are raised when doing Index.copy() with unsupported kwd args"""
-    from bodo.hiframes.pd_index_ext import idx_typ_to_format_str_map
+    from bodo.hiframes.pd_index_ext import IntervalIndexType, idx_typ_to_format_str_map
+    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+    from bodo.utils.typing import BodoError
 
     idx_val = all_index_types[0]
 
@@ -1044,6 +1150,8 @@ def test_index_take_kwd_arg_err_msg(all_index_types):
 
 
 def test_cat_idx_init_err():
+    from bodo.utils.typing import BodoError
+
     def impl():
         pd.CategoricalIndex(["A", "B", "C"])
 
@@ -1059,6 +1167,8 @@ def test_cat_idx_init_err():
 
 
 def test_dti_init_kwd_err():
+    from bodo.utils.typing import BodoError
+
     def impl():
         pd.DatetimeIndex(
             pd.date_range(start="2018-04-24", end="2018-04-25", periods=5),
@@ -1081,6 +1191,8 @@ def test_dti_init_kwd_err():
 
 
 def test_tdi_init_kwd_err():
+    from bodo.utils.typing import BodoError
+
     def impl():
         pd.TimedeltaIndex(np.arange(100), unit="s")
 
@@ -1144,6 +1256,7 @@ def test_monotonic_unsupported(index):
     throw error for unsupported index types (i.e. not a NumericIndex, DatetimeIndex,
     TimedeltaIndex, or RangeIndex).
     """
+    from bodo.utils.typing import BodoError
 
     def test_unsupp_is_monotonic_increasing(idx):
         return idx.is_monotonic_increasing

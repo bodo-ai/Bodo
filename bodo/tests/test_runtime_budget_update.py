@@ -5,26 +5,6 @@ import pandas as pd
 import pytest
 
 import bodo
-import bodo.io.snowflake
-import bodo.tests.utils
-from bodo.libs.memory_budget import (
-    OperatorType,
-)
-from bodo.libs.streaming.groupby import (
-    delete_groupby_state,
-    groupby_build_consume_batch,
-    groupby_produce_output_batch,
-    init_groupby_state,
-)
-from bodo.libs.streaming.join import (
-    delete_join_state,
-    init_join_state,
-    join_build_consume_batch,
-    join_probe_consume_batch,
-)
-from bodo.libs.streaming.join import (
-    get_op_pool_budget_bytes as join_get_op_pool_budget_bytes,
-)
 from bodo.tests.utils import pytest_mark_one_rank, temp_env_override
 
 pytestmark = [
@@ -39,6 +19,19 @@ def hash_join_impl(df1, df2):
     """
     Helper impl for test_hash_join_dynamic_budget_increase.
     """
+    from bodo.libs.memory_budget import (
+        OperatorType,
+    )
+    from bodo.libs.streaming.join import (
+        delete_join_state,
+        init_join_state,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
+    from bodo.libs.streaming.join import (
+        get_op_pool_budget_bytes as join_get_op_pool_budget_bytes,
+    )
+
     build_keys_inds = bodo.utils.typing.MetaType((0,))
     probe_keys_inds = bodo.utils.typing.MetaType((0,))
     kept_cols = bodo.utils.typing.MetaType((0, 1))
@@ -237,6 +230,16 @@ def groupby_impl(df, key_inds_list, func_names, f_in_offsets, f_in_cols):
     """
     Helper impl for test_groupby_dynamic_budget_increase.
     """
+    from bodo.libs.memory_budget import (
+        OperatorType,
+    )
+    from bodo.libs.streaming.groupby import (
+        delete_groupby_state,
+        groupby_build_consume_batch,
+        groupby_produce_output_batch,
+        init_groupby_state,
+    )
+
     keys_inds = bodo.utils.typing.MetaType(tuple(key_inds_list))
     out_col_meta_l = (
         ["key"]

@@ -56,10 +56,12 @@ from bodo.tests.utils import (
     _test_equal_guard,
     cast_dt64_to_ns,
     convert_non_pandas_columns,
-    reduce_sum,
 )
 from bodo.utils.testing import ensure_clean2
-from bodo.utils.utils import BodoError, run_rank0
+
+if bodo.test_compiler:
+    from bodo.tests.utils import reduce_sum
+    from bodo.utils.utils import BodoError, run_rank0
 
 pytestmark = pytest.mark.iceberg
 

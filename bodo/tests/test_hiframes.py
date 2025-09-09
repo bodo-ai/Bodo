@@ -8,9 +8,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import (
-    DistTestPipeline,
     check_func,
     count_array_OneDs,
     count_array_REPs,
@@ -18,9 +16,12 @@ from bodo.tests.utils import (
     count_parfor_REPs,
     dist_IR_contains,
     gen_random_string_binary_array,
-    get_start_end,
     pytest_pandas,
 )
+
+if bodo.test_compiler:
+    from bodo.tests.utils import DistTestPipeline, get_start_end
+
 
 pytestmark = pytest_pandas
 
@@ -338,6 +339,8 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_str_contains_regex(self):
+        from bodo.libs.str_arr_ext import str_arr_from_sequence
+
         def test_impl():
             A = str_arr_from_sequence(["ABC", "BB", "ADEF"])
             df = pd.DataFrame({"A": A})
@@ -348,6 +351,8 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(bodo_func(), 2)
 
     def test_str_contains_noregex(self):
+        from bodo.libs.str_arr_ext import str_arr_from_sequence
+
         def test_impl():
             A = str_arr_from_sequence(["ABC", "BB", "ADEF"])
             df = pd.DataFrame({"A": A})

@@ -4,12 +4,10 @@ import os
 import re
 import time
 
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from numba import types
 from pandas.core.dtypes.common import is_list_like
 
 import bodo
@@ -23,16 +21,20 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     _ensure_func_calls_optimized_out,
     _get_dist_arg,
     _test_equal_guard,
     check_func,
     no_default,
     pytest_pandas,
-    reduce_sum,
 )
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    import numba
+    from numba import types
+
+    from bodo.tests.utils import SeriesOptTestPipeline, reduce_sum
+    from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 

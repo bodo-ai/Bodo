@@ -1,7 +1,7 @@
 import re
 from string import ascii_lowercase
 
-import numba
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
@@ -9,8 +9,7 @@ import pytest
 import bodo
 from bodo.tests.series_common import numeric_series_val  # noqa
 from bodo.tests.test_parfor_optimizations import _check_num_parfors
-from bodo.tests.utils import ParforTestPipeline, check_func, no_default, pytest_pandas
-from bodo.utils.typing import BodoError
+from bodo.tests.utils import check_func, no_default, pytest_pandas
 
 pytestmark = pytest_pandas
 
@@ -404,6 +403,7 @@ def test_series_apply_no_func(memory_leak_check):
     doesn't match a method or Numpy function raises an
     Exception.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         # This function doesn't exist in Numpy or as a
@@ -422,6 +422,7 @@ def test_series_apply_pandas_unsupported_method(memory_leak_check):
     matches an unsupported Series method raises an appropriate
     exception.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         return S.apply("mode")
@@ -438,6 +439,7 @@ def test_series_apply_numpy_unsupported_ufunc(memory_leak_check):
     matches an unsupported ufunc raises an appropriate
     exception.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         return S.apply("frexp")
@@ -454,6 +456,7 @@ def test_series_apply_pandas_unsupported_type(memory_leak_check):
     matches a method but has an unsupported type
     raises an appropriate exception.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         # Mean is unsupported for string types
@@ -471,6 +474,7 @@ def test_series_apply_numpy_unsupported_type(memory_leak_check):
     matches a Numpy ufunc but has an unsupported type
     raises an appropriate exception.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         # radians is unsupported for string types
@@ -537,6 +541,7 @@ def test_series_apply_numpy_unsupported_ufunc_function(memory_leak_check):
     matches an unsupported ufunc raises an appropriate
     exception.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         return S.apply(np.frexp)
@@ -555,6 +560,7 @@ def test_series_apply_numpy_ufunc_unsupported_type(memory_leak_check):
     has an unsupported type raises an appropriate
     exception.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         # radians is unsupported for string types
@@ -572,6 +578,7 @@ def test_series_apply_numpy_literal_non_ufunc(memory_leak_check):
     matches a Numpy function but not a ufunc raises an
     appropriate exception.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         return S.apply("nansum")
@@ -587,6 +594,7 @@ def test_series_apply_numpy_func_non_ufunc(memory_leak_check):
     Test running series.apply with a numpy function
     but not a ufunc raises an appropriate exception.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         return S.apply(np.nansum)
@@ -722,6 +730,7 @@ def test_astype_nocopy(memory_leak_check):
     """
     Tests to make sure conversion of pd.Int32 series to pd.Int32 does no conversion.
     """
+    from bodo.tests.utils import ParforTestPipeline
 
     def impl(A):
         return A.astype("Int32", copy=False)
@@ -1070,6 +1079,7 @@ def test_series_rename_axis():
     """
     Tests Series.rename_axis() support.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(S, name):
         return S.rename_axis(name)
@@ -1103,6 +1113,7 @@ def test_unique(memory_leak_check):
     """
     Tests for pd.unique() on 1-d array and Series
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(vals):
         return pd.unique(vals)
@@ -1179,6 +1190,7 @@ def test_series_rank(S, method, na_option, ascending, pct, memory_leak_check):
     """
     Tests for Series.rank
     """
+    from bodo.utils.typing import BodoError
 
     def impl(S):
         return S.rank(method=method, na_option=na_option, ascending=ascending, pct=pct)

@@ -10,16 +10,12 @@ import re
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from numba.core import types
 
 import bodo
-import bodo.io.snowflake
-from bodo.libs.dict_arr_ext import is_dict_encoded
 from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -34,10 +30,17 @@ from bodo.tests.utils import (
     get_snowflake_connection_string,
     pytest_mark_one_rank,
     pytest_snowflake,
-    run_rank0,
     temp_env_override,
 )
-from bodo.utils.typing import BodoError, BodoWarning
+
+if bodo.test_compiler:
+    import numba
+    from numba.core import types
+
+    import bodo.io.snowflake
+    from bodo.libs.dict_arr_ext import is_dict_encoded
+    from bodo.tests.utils import run_rank0
+    from bodo.utils.typing import BodoError, BodoWarning
 
 if TYPE_CHECKING:  # pragma: no cover
     from pytest_mock import MockerFixture
@@ -710,189 +713,189 @@ def test_nested_in_struct_metadata_handling(cursor):
         ).equals(f)
 
 
-# TODO: Use numba_from_pyarrow to simplify parameterization
-@pytest.mark.parametrize(
-    "bodo_schema,pa_schema",
-    [
-        # All larger int
-        (
-            bodo.types.DataFrameType(
-                data=(
-                    types.Array(types.int64, 1, "C"),
-                    types.Array(types.int64, 1, "C"),
-                    types.Array(types.int64, 1, "C"),
+if bodo.test_compiler:
+    # TODO: Use numba_from_pyarrow to simplify parameterization
+    @pytest.mark.parametrize(
+        "bodo_schema,pa_schema",
+        [
+            # All larger int
+            (
+                bodo.types.DataFrameType(
+                    data=(
+                        types.Array(types.int64, 1, "C"),
+                        types.Array(types.int64, 1, "C"),
+                        types.Array(types.int64, 1, "C"),
+                    ),
+                    columns=("l_orderkey", "l_partkey", "l_suppkey"),
                 ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
-            pa.schema(
-                [
-                    pa.field("L_ORDERKEY", pa.int64(), nullable=False),
-                    pa.field("L_PARTKEY", pa.int64(), nullable=False),
-                    pa.field("L_SUPPKEY", pa.int64(), nullable=False),
-                ]
-            ),
-        ),
-        # Last column is larger int
-        (
-            bodo.types.DataFrameType(
-                data=(
-                    types.Array(types.int32, 1, "C"),
-                    types.Array(types.int32, 1, "C"),
-                    types.Array(types.int32, 1, "C"),
+                pa.schema(
+                    [
+                        pa.field("L_ORDERKEY", pa.int64(), nullable=False),
+                        pa.field("L_PARTKEY", pa.int64(), nullable=False),
+                        pa.field("L_SUPPKEY", pa.int64(), nullable=False),
+                    ]
                 ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
             ),
-            pa.schema(
-                [
-                    pa.field("L_ORDERKEY", pa.int32(), nullable=False),
-                    pa.field("L_PARTKEY", pa.int32(), nullable=False),
-                    pa.field("L_SUPPKEY", pa.int32(), nullable=False),
-                ]
+            # Last column is larger int
+            (
+                bodo.types.DataFrameType(
+                    data=(
+                        types.Array(types.int32, 1, "C"),
+                        types.Array(types.int32, 1, "C"),
+                        types.Array(types.int32, 1, "C"),
+                    ),
+                    columns=("l_orderkey", "l_partkey", "l_suppkey"),
+                ),
+                pa.schema(
+                    [
+                        pa.field("L_ORDERKEY", pa.int32(), nullable=False),
+                        pa.field("L_PARTKEY", pa.int32(), nullable=False),
+                        pa.field("L_SUPPKEY", pa.int32(), nullable=False),
+                    ]
+                ),
             ),
-        ),
-    ],
-)
-def test_snowflake_runtime_upcasting_int_to_int(
-    mocker: "MockerFixture",
-    bodo_schema,
-    pa_schema,
-    memory_leak_check,
-):
-    """
-    Test that Bodo can handles a scenario where the compile-time
-    schema uses larger types than the runtime data for integers.
-    """
-    # Mock the compile-time schema info
-    # Original (and runtime data):
-    #    L_ORDERKEY: int32 not null
-    #    L_PARTKEY: int32 not null
-    #    L_SUPPKEY: int16 not null
-    mocker.patch(
-        "bodo.io.snowflake.get_schema",
-        return_value=(
-            bodo_schema,
-            {"l_orderkey", "l_partkey", "l_suppkey"},
-            [],
-            [],
-            pa_schema,
-            None,
-            None,
-        ),
+        ],
     )
+    def test_snowflake_runtime_upcasting_int_to_int(
+        mocker: "MockerFixture",
+        bodo_schema,
+        pa_schema,
+        memory_leak_check,
+    ):
+        """
+        Test that Bodo can handles a scenario where the compile-time
+        schema uses larger types than the runtime data for integers.
+        """
+        # Mock the compile-time schema info
+        # Original (and runtime data):
+        #    L_ORDERKEY: int32 not null
+        #    L_PARTKEY: int32 not null
+        #    L_SUPPKEY: int16 not null
+        mocker.patch(
+            "bodo.io.snowflake.get_schema",
+            return_value=(
+                bodo_schema,
+                {"l_orderkey", "l_partkey", "l_suppkey"},
+                [],
+                [],
+                pa_schema,
+                None,
+                None,
+            ),
+        )
 
-    def impl(query, conn):
-        df = pd.read_sql(query, conn)
-        return df
+        def impl(query, conn):
+            df = pd.read_sql(query, conn)
+            return df
 
-    db = "SNOWFLAKE_SAMPLE_DATA"
-    schema = "TPCH_SF1"
-    conn = get_snowflake_connection_string(db, schema)
-    # need to sort the output to make sure pandas and Bodo get the same rows
-    query = "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
-    check_func(impl, (query, conn), check_dtype=False)
+        db = "SNOWFLAKE_SAMPLE_DATA"
+        schema = "TPCH_SF1"
+        conn = get_snowflake_connection_string(db, schema)
+        # need to sort the output to make sure pandas and Bodo get the same rows
+        query = "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+        check_func(impl, (query, conn), check_dtype=False)
 
-
-# TODO: Use numba_from_pyarrow to simplify parameterization
-@pytest.mark.parametrize(
-    "bodo_schema,pa_schema",
-    [
-        # All are larger decimal
-        (
-            bodo.types.DataFrameType(
-                data=(
-                    bodo.types.DecimalArrayType(38, 0),
-                    bodo.types.DecimalArrayType(38, 0),
-                    bodo.types.DecimalArrayType(18, 0),
+    # TODO: Use numba_from_pyarrow to simplify parameterization
+    @pytest.mark.parametrize(
+        "bodo_schema,pa_schema",
+        [
+            # All are larger decimal
+            (
+                bodo.types.DataFrameType(
+                    data=(
+                        bodo.types.DecimalArrayType(38, 0),
+                        bodo.types.DecimalArrayType(38, 0),
+                        bodo.types.DecimalArrayType(18, 0),
+                    ),
+                    columns=("l_orderkey", "l_partkey", "l_suppkey"),
                 ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
-            ),
-            pa.schema(
-                [
-                    pa.field("L_ORDERKEY", pa.decimal128(38, 0), nullable=False),
-                    pa.field("L_PARTKEY", pa.decimal128(38, 0), nullable=False),
-                    pa.field("L_SUPPKEY", pa.decimal128(18, 0), nullable=False),
-                ]
-            ),
-        ),
-        # First column is larger decimal
-        (
-            bodo.types.DataFrameType(
-                data=(
-                    bodo.types.DecimalArrayType(38, 0),
-                    types.Array(types.int32, 1, "C"),
-                    types.Array(types.int32, 1, "C"),
+                pa.schema(
+                    [
+                        pa.field("L_ORDERKEY", pa.decimal128(38, 0), nullable=False),
+                        pa.field("L_PARTKEY", pa.decimal128(38, 0), nullable=False),
+                        pa.field("L_SUPPKEY", pa.decimal128(18, 0), nullable=False),
+                    ]
                 ),
-                columns=("l_orderkey", "l_partkey", "l_suppkey"),
             ),
-            pa.schema(
-                [
-                    pa.field("L_ORDERKEY", pa.decimal128(38, 0), nullable=False),
-                    pa.field("L_PARTKEY", pa.int32(), nullable=False),
-                    pa.field("L_SUPPKEY", pa.int32(), nullable=False),
-                ]
+            # First column is larger decimal
+            (
+                bodo.types.DataFrameType(
+                    data=(
+                        bodo.types.DecimalArrayType(38, 0),
+                        types.Array(types.int32, 1, "C"),
+                        types.Array(types.int32, 1, "C"),
+                    ),
+                    columns=("l_orderkey", "l_partkey", "l_suppkey"),
+                ),
+                pa.schema(
+                    [
+                        pa.field("L_ORDERKEY", pa.decimal128(38, 0), nullable=False),
+                        pa.field("L_PARTKEY", pa.int32(), nullable=False),
+                        pa.field("L_SUPPKEY", pa.int32(), nullable=False),
+                    ]
+                ),
             ),
-        ),
-    ],
-)
-def test_snowflake_runtime_upcasting_int_to_decimal(
-    mocker: "MockerFixture",
-    bodo_schema,
-    pa_schema,
-    memory_leak_check,
-):
-    """
-    Test that Bodo can handles a scenario where the compile-time
-    schema uses larger types than the runtime data for integers.
-    The larger type is a decimal type
-    """
-    # Mock the compile-time schema info
-    # Original (and runtime data):
-    #    L_ORDERKEY: int32 not null
-    #    L_PARTKEY: int32 not null
-    #    L_SUPPKEY: int16 not null
-    mocker.patch(
-        "bodo.io.snowflake.get_schema",
-        return_value=(
-            bodo_schema,
-            {"l_orderkey", "l_partkey", "l_suppkey"},
-            [],
-            [],
-            pa_schema,
-            None,
-            None,
-        ),
+        ],
     )
+    def test_snowflake_runtime_upcasting_int_to_decimal(
+        mocker: "MockerFixture",
+        bodo_schema,
+        pa_schema,
+        memory_leak_check,
+    ):
+        """
+        Test that Bodo can handles a scenario where the compile-time
+        schema uses larger types than the runtime data for integers.
+        The larger type is a decimal type
+        """
+        # Mock the compile-time schema info
+        # Original (and runtime data):
+        #    L_ORDERKEY: int32 not null
+        #    L_PARTKEY: int32 not null
+        #    L_SUPPKEY: int16 not null
+        mocker.patch(
+            "bodo.io.snowflake.get_schema",
+            return_value=(
+                bodo_schema,
+                {"l_orderkey", "l_partkey", "l_suppkey"},
+                [],
+                [],
+                pa_schema,
+                None,
+                None,
+            ),
+        )
 
-    def impl(query, conn):
-        df = pd.read_sql(query, conn)
-        return df
+        def impl(query, conn):
+            df = pd.read_sql(query, conn)
+            return df
 
-    db = "SNOWFLAKE_SAMPLE_DATA"
-    schema = "TPCH_SF1"
-    conn = get_snowflake_connection_string(db, schema)
-    # need to sort the output to make sure pandas and Bodo get the same rows
-    query = "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+        db = "SNOWFLAKE_SAMPLE_DATA"
+        schema = "TPCH_SF1"
+        conn = get_snowflake_connection_string(db, schema)
+        # need to sort the output to make sure pandas and Bodo get the same rows
+        query = "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
 
-    @run_rank0
-    def read_to_decimal():
-        df = pd.read_sql(query, conn)
-        for field in pa_schema:
-            if pa.types.is_decimal128(field.type):
-                df[field.name.lower()] = df[field.name.lower()].apply(
-                    lambda x: Decimal(x)
-                )
-        return df
+        @run_rank0
+        def read_to_decimal():
+            df = pd.read_sql(query, conn)
+            for field in pa_schema:
+                if pa.types.is_decimal128(field.type):
+                    df[field.name.lower()] = df[field.name.lower()].apply(
+                        lambda x: Decimal(x)
+                    )
+            return df
 
-    df = read_to_decimal()
+        df = read_to_decimal()
 
-    check_func(
-        impl,
-        (query, conn),
-        py_output=df,
-        sort_output=True,
-        reset_index=True,
-        check_dtype=False,
-    )
+        check_func(
+            impl,
+            (query, conn),
+            py_output=df,
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
 
 
 def test_snowflake_runtime_upcasting_timestamp(memory_leak_check):

@@ -7,7 +7,6 @@ import pytest
 import bodo
 from bodo.tests.timezone_common import representative_tz_or_none  # noqa
 from bodo.tests.utils import check_func, pytest_pandas
-from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -118,6 +117,7 @@ def test_pd_concat_dataframe_error(memory_leak_check):
     """Tests trying to concatenate rows of a Series
     with different Timezones throw reasonable errors.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl(S1, S2):
@@ -176,6 +176,7 @@ def test_pd_concat_dataframe_error(memory_leak_check):
 
 def test_tz_aware_unsupported(memory_leak_check):
     """Test that a tz-naive values cannot be assigned to tz-aware series"""
+    from bodo.utils.typing import BodoError
 
     def impl(df, value):
         df[0] = value

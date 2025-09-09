@@ -180,12 +180,11 @@ banned-module-level-imports = [
   "bodo.transforms",
   "bodo.ml_support",
 
-  # All bodo.utils submodules except tracing
+  # All bodo.utils submodules except tracing, testing, aggregate_query_profiles
   "bodo.utils.conversion",
   "bodo.utils.python_310_bytecode_pass",
   "bodo.utils.del_column_utils",
   "bodo.utils.search_templates",
-  "bodo.utils.aggregate_query_profiles",
   "bodo.utils.generate_docs",
   "bodo.utils.table_utils",
   "bodo.utils.transform",
@@ -193,7 +192,6 @@ banned-module-level-imports = [
   "bodo.utils.allocation_tracking",
   "bodo.utils.indexing",
   "bodo.utils.pandas_coverage_tracking",
-  "bodo.utils.testing",
   "bodo.utils.user_logging_ext",
   "bodo.utils.cg_helpers",
   "bodo.utils.py_objs",
@@ -233,7 +231,7 @@ banned-module-level-imports = [
 "**/transforms/*" = ["TID253"]
 "**/ml_support/*" = ["TID253"]
 # TODO [BSE-5085]: avoid JIT imports in pytest utils files where not needed
-"**/tests/*" = ["TID253"]
+"**/test_streaming/*" = ["TID253"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "mpi4py".msg = "Use `bodo.mpi4py` instead of `mpi4py`"

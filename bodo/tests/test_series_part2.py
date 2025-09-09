@@ -16,7 +16,6 @@ from bodo.tests.series_common import (  # noqa
     series_val,
 )
 from bodo.tests.utils import (
-    AnalysisTestPipeline,
     _get_dist_arg,
     check_func,
     get_num_test_workers,
@@ -24,7 +23,10 @@ from bodo.tests.utils import (
     no_default,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError
+
+if bodo.test_compiler:
+    from bodo.tests.utils import AnalysisTestPipeline
+    from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 

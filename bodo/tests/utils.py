@@ -25,32 +25,56 @@ from typing import TypeVar
 from urllib.parse import urlencode
 from uuid import uuid4
 
-import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from numba.core import ir, types
-from numba.core.compiler_machinery import FunctionPass, register_pass
-from numba.core.ir_utils import build_definitions, find_callname, guard
-from numba.core.typed_passes import NopythonRewrites
-from numba.core.untyped_passes import PreserveIR
 
 import bodo
-
-# Import compiler
-import bodo.decorators  # isort:skip # noqa
 import bodo.pandas as bodo_pd
 from bodo.mpi4py import MPI
 from bodo.spawn.spawner import SpawnDispatcher
-from bodo.utils.typing import BodoWarning, dtype_to_array_type, is_bodosql_context_type
-from bodo.utils.utils import (
-    is_assign,
-    is_distributable_tuple_typ,
-    is_distributable_typ,
-    is_expr,
-    run_rank0,  # noqa
-)
+
+if bodo.test_compiler:
+    import numba
+    from numba.core import ir, types
+    from numba.core.compiler_machinery import FunctionPass, register_pass
+    from numba.core.ir_utils import build_definitions, find_callname, guard
+    from numba.core.typed_passes import NopythonRewrites
+    from numba.core.untyped_passes import PreserveIR
+
+    # Import compiler
+    import bodo.decorators  # isort:skip # noqa
+    from bodo.utils.typing import (
+        BodoWarning,
+        dtype_to_array_type,
+        is_bodosql_context_type,
+    )
+    from bodo.utils.utils import (
+        is_assign,
+        is_distributable_tuple_typ,
+        is_distributable_typ,
+        is_expr,
+        run_rank0,  # noqa
+    )
+
+    @numba.njit
+    def get_rank():
+        return bodo.libs.distributed_api.get_rank()
+
+    @numba.njit(cache=True)
+    def get_start_end(n):
+        rank = bodo.libs.distributed_api.get_rank()
+        n_pes = bodo.libs.distributed_api.get_size()
+        start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
+        end = bodo.libs.distributed_api.get_end(n, n_pes, rank)
+        return start, end
+
+    @numba.njit
+    def reduce_sum(val):
+        sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+        return bodo.libs.distributed_api.dist_reduce(val, np.int32(sum_op))
+
 
 test_spawn_mode_enabled = os.environ.get("BODO_CHECK_FUNC_SPAWN_MODE", "0") != "0"
 
@@ -138,24 +162,11 @@ def dist_IR_count(f_ir, func_name):
     return f_ir_text.count(func_name)
 
 
-@numba.njit
-def get_rank():
-    return bodo.libs.distributed_api.get_rank()
+def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
+    """Can be used in top level imports in tests."""
+    from bodo.utils.utils import run_rank0
 
-
-@numba.njit(cache=True)
-def get_start_end(n):
-    rank = bodo.libs.distributed_api.get_rank()
-    n_pes = bodo.libs.distributed_api.get_size()
-    start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
-    end = bodo.libs.distributed_api.get_end(n, n_pes, rank)
-    return start, end
-
-
-@numba.njit
-def reduce_sum(val):
-    sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
-    return bodo.libs.distributed_api.dist_reduce(val, np.int32(sum_op))
+    return run_rank0(func, bcast_result, result_default)
 
 
 def check_func(
@@ -1701,176 +1712,171 @@ def has_udf_call(fir):
     return False
 
 
-class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_join_deadcode_cleanup and test_csv_remove_col0_used_for_len
-    with an additional PreserveIR pass then bodo_pipeline
-    """
+if bodo.test_compiler:
 
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, NopythonRewrites)
-        pipeline.finalize()
-        return [pipeline]
+    class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
+        """
+        pipeline used in test_join_deadcode_cleanup and test_csv_remove_col0_used_for_len
+        with an additional PreserveIR pass then bodo_pipeline
+        """
 
+        def define_pipelines(self):
+            [pipeline] = self._create_bodo_pipeline(
+                distributed=True, inline_calls_pass=False
+            )
+            pipeline._finalized = False
+            pipeline.add_pass_after(PreserveIR, NopythonRewrites)
+            pipeline.finalize()
+            return [pipeline]
 
-class SeriesOptTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_series_apply_df_output with an additional PreserveIR pass
-    after SeriesPass
-    """
+    class SeriesOptTestPipeline(bodo.compiler.BodoCompiler):
+        """
+        pipeline used in test_series_apply_df_output with an additional PreserveIR pass
+        after SeriesPass
+        """
 
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIRTypeMap, bodo.compiler.BodoSeriesPass)
-        pipeline.finalize()
-        return [pipeline]
+        def define_pipelines(self):
+            [pipeline] = self._create_bodo_pipeline(
+                distributed=True, inline_calls_pass=False
+            )
+            pipeline._finalized = False
+            pipeline.add_pass_after(PreserveIRTypeMap, bodo.compiler.BodoSeriesPass)
+            pipeline.finalize()
+            return [pipeline]
 
+    class ParforTestPipeline(bodo.compiler.BodoCompiler):
+        """
+        pipeline used in test_parfor_optimizations with an additional PreserveIR pass
+        after ParforPass
+        """
 
-class ParforTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_parfor_optimizations with an additional PreserveIR pass
-    after ParforPass
-    """
+        def define_pipelines(self):
+            [pipeline] = self._create_bodo_pipeline(
+                distributed=True, inline_calls_pass=False
+            )
+            pipeline._finalized = False
+            pipeline.add_pass_after(PreserveIR, bodo.compiler.ParforPreLoweringPass)
+            pipeline.finalize()
+            return [pipeline]
 
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.ParforPreLoweringPass)
-        pipeline.finalize()
-        return [pipeline]
+    class ColumnDelTestPipeline(bodo.compiler.BodoCompiler):
+        """
+        pipeline used in test_column_del_pass with an additional PreserveIRTypeMap pass
+        after BodoTableColumnDelPass
+        """
 
+        def define_pipelines(self):
+            [pipeline] = self._create_bodo_pipeline(
+                distributed=True, inline_calls_pass=False
+            )
+            pipeline._finalized = False
+            pipeline.add_pass_after(
+                PreserveIRTypeMap, bodo.compiler.BodoTableColumnDelPass
+            )
+            pipeline.finalize()
+            return [pipeline]
 
-class ColumnDelTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_column_del_pass with an additional PreserveIRTypeMap pass
-    after BodoTableColumnDelPass
-    """
+    @register_pass(mutates_CFG=False, analysis_only=False)
+    class PreserveIRTypeMap(PreserveIR):
+        """
+        Extension to PreserveIR that also saves the typemap.
+        """
 
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIRTypeMap, bodo.compiler.BodoTableColumnDelPass)
-        pipeline.finalize()
-        return [pipeline]
+        _name = "preserve_ir_typemap"
 
+        def __init__(self):
+            PreserveIR.__init__(self)
 
-@register_pass(mutates_CFG=False, analysis_only=False)
-class PreserveIRTypeMap(PreserveIR):
-    """
-    Extension to PreserveIR that also saves the typemap.
-    """
+        def run_pass(self, state):
+            PreserveIR.run_pass(self, state)
+            state.metadata["preserved_typemap"] = state.typemap.copy()
+            state.metadata["preserved_calltypes"] = state.calltypes.copy()
+            return False
 
-    _name = "preserve_ir_typemap"
+    class TypeInferenceTestPipeline(bodo.compiler.BodoCompiler):
+        """
+        pipeline used in bodosql tests with an additional PreserveIR pass
+        after BodoTypeInference. This is used to monitor the code being generated.
+        """
 
-    def __init__(self):
-        PreserveIR.__init__(self)
+        def define_pipelines(self):
+            [pipeline] = self._create_bodo_pipeline(
+                distributed=True, inline_calls_pass=False
+            )
+            pipeline._finalized = False
+            pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoTypeInference)
+            pipeline.finalize()
+            return [pipeline]
 
-    def run_pass(self, state):
-        PreserveIR.run_pass(self, state)
-        state.metadata["preserved_typemap"] = state.typemap.copy()
-        state.metadata["preserved_calltypes"] = state.calltypes.copy()
-        return False
+    class DistTestPipeline(bodo.compiler.BodoCompiler):
+        """
+        pipeline with an additional PreserveIR pass
+        after DistributedPass
+        """
 
+        def define_pipelines(self):
+            [pipeline] = self._create_bodo_pipeline(
+                distributed=True, inline_calls_pass=False
+            )
+            pipeline._finalized = False
+            pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoDistributedPass)
+            pipeline.finalize()
+            return [pipeline]
 
-class TypeInferenceTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in bodosql tests with an additional PreserveIR pass
-    after BodoTypeInference. This is used to monitor the code being generated.
-    """
+    class SeqTestPipeline(bodo.compiler.BodoCompiler):
+        """
+        Bodo sequential pipeline with an additional PreserveIR pass
+        after LowerBodoIRExtSeq
+        """
 
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoTypeInference)
-        pipeline.finalize()
-        return [pipeline]
+        def define_pipelines(self):
+            [pipeline] = self._create_bodo_pipeline(
+                distributed=False, inline_calls_pass=False
+            )
+            pipeline._finalized = False
+            pipeline.add_pass_after(PreserveIR, bodo.compiler.LowerBodoIRExtSeq)
+            pipeline.finalize()
+            return [pipeline]
 
+    @register_pass(analysis_only=False, mutates_CFG=True)
+    class ArrayAnalysisPass(FunctionPass):
+        _name = "array_analysis_pass"
 
-class DistTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline with an additional PreserveIR pass
-    after DistributedPass
-    """
+        def __init__(self):
+            FunctionPass.__init__(self)
 
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoDistributedPass)
-        pipeline.finalize()
-        return [pipeline]
+        def run_pass(self, state):
+            array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
+                state.typingctx,
+                state.func_ir,
+                state.typemap,
+                state.calltypes,
+            )
+            array_analysis.run(state.func_ir.blocks)
+            state.func_ir._definitions = numba.core.ir_utils.build_definitions(
+                state.func_ir.blocks
+            )
+            state.metadata["preserved_array_analysis"] = array_analysis
+            return False
 
+    class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
+        """
+        pipeline used in test_dataframe_array_analysis()
+        additional ArrayAnalysis pass that preserves analysis object
+        """
 
-class SeqTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    Bodo sequential pipeline with an additional PreserveIR pass
-    after LowerBodoIRExtSeq
-    """
+        # Avoid copy propagation so we don't delete variables used to
+        # check array analysis.
+        avoid_copy_propagation = True
 
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=False, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.LowerBodoIRExtSeq)
-        pipeline.finalize()
-        return [pipeline]
-
-
-@register_pass(analysis_only=False, mutates_CFG=True)
-class ArrayAnalysisPass(FunctionPass):
-    _name = "array_analysis_pass"
-
-    def __init__(self):
-        FunctionPass.__init__(self)
-
-    def run_pass(self, state):
-        array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
-            state.typingctx,
-            state.func_ir,
-            state.typemap,
-            state.calltypes,
-        )
-        array_analysis.run(state.func_ir.blocks)
-        state.func_ir._definitions = numba.core.ir_utils.build_definitions(
-            state.func_ir.blocks
-        )
-        state.metadata["preserved_array_analysis"] = array_analysis
-        return False
-
-
-class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_dataframe_array_analysis()
-    additional ArrayAnalysis pass that preserves analysis object
-    """
-
-    # Avoid copy propagation so we don't delete variables used to
-    # check array analysis.
-    avoid_copy_propagation = True
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(ArrayAnalysisPass, bodo.compiler.BodoSeriesPass)
-        pipeline.finalize()
-        return [pipeline]
+        def define_pipelines(self):
+            [pipeline] = self._create_bodo_pipeline(
+                distributed=True, inline_calls_pass=False
+            )
+            pipeline._finalized = False
+            pipeline.add_pass_after(ArrayAnalysisPass, bodo.compiler.BodoSeriesPass)
+            pipeline.finalize()
+            return [pipeline]
 
 
 def check_timing_func(func, args):

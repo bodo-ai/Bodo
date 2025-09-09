@@ -3,12 +3,9 @@ import operator
 import sys
 from decimal import Decimal
 
-import numba
-import numba.np.ufunc_db
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core.ir_utils import find_callname, guard
 
 import bodo
 from bodo.tests.series_common import (  # noqa
@@ -18,15 +15,24 @@ from bodo.tests.series_common import (  # noqa
     series_val,
 )
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     _test_equal,
     check_func,
     is_bool_object_series,
     no_default,
     pytest_pandas,
 )
-from bodo.utils.typing import BodoError
-from bodo.utils.utils import is_call_assign
+
+if bodo.test_compiler:
+    import numba
+    import numba.np.ufunc_db
+    from numba.core.ir_utils import find_callname, guard
+
+    from bodo.tests.utils import (
+        SeriesOptTestPipeline,
+    )
+    from bodo.utils.typing import BodoError
+    from bodo.utils.utils import is_call_assign
+
 
 pytestmark = pytest_pandas
 
@@ -2373,18 +2379,20 @@ def test_series_ufunc(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    # avoiding isnat since only supported for datetime/timedelta
-    "ufunc",
-    [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
-)
-def test_series_unary_ufunc(ufunc, memory_leak_check):
-    def test_impl(S):
-        return ufunc(S)
+if bodo.test_compiler:
 
-    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
-    check_func(test_impl, (S,))
+    @pytest.mark.slow
+    @pytest.mark.parametrize(
+        # avoiding isnat since only supported for datetime/timedelta
+        "ufunc",
+        [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
+    )
+    def test_series_unary_ufunc(ufunc, memory_leak_check):
+        def test_impl(S):
+            return ufunc(S)
+
+        S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
+        check_func(test_impl, (S,))
 
 
 def test_series_unary_ufunc_np_call(memory_leak_check):
@@ -2397,28 +2405,31 @@ def test_series_unary_ufunc_np_call(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1]
-)
-def test_series_binary_ufunc(ufunc, memory_leak_check):
-    def test_impl(S1, S2):
-        return ufunc(S1, S2)
+if bodo.test_compiler:
 
-    # Numpy <2 seems to have a bug with ldexp on Windows for int64
-    if (
-        ufunc == np.ldexp
-        and sys.platform == "win32"
-        and np.lib.NumpyVersion(np.__version__) < "2.0.0b1"
-    ):
-        return
+    @pytest.mark.slow
+    @pytest.mark.parametrize(
+        "ufunc",
+        [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1],
+    )
+    def test_series_binary_ufunc(ufunc, memory_leak_check):
+        def test_impl(S1, S2):
+            return ufunc(S1, S2)
 
-    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
-    A = np.array([1, 3, 7, 11])
-    # TODO [BE-3747]: Fix nightly and remove check_dtype=False
-    check_func(test_impl, (S, S), check_dtype=False)
-    check_func(test_impl, (S, A), check_dtype=False)
-    check_func(test_impl, (A, S), check_dtype=False)
+        # Numpy <2 seems to have a bug with ldexp on Windows for int64
+        if (
+            ufunc == np.ldexp
+            and sys.platform == "win32"
+            and np.lib.NumpyVersion(np.__version__) < "2.0.0b1"
+        ):
+            return
+
+        S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
+        A = np.array([1, 3, 7, 11])
+        # TODO [BE-3747]: Fix nightly and remove check_dtype=False
+        check_func(test_impl, (S, S), check_dtype=False)
+        check_func(test_impl, (S, A), check_dtype=False)
+        check_func(test_impl, (A, S), check_dtype=False)
 
 
 @pytest.mark.slow

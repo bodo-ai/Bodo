@@ -10,7 +10,6 @@ import pytz
 
 import bodo
 from bodo.tests.utils import check_func, generate_comparison_ops_func, no_default
-from bodo.utils.typing import BodoError
 
 
 # ------------------------- Test datetime OPs ------------------------- #
@@ -964,6 +963,8 @@ def test_datetime_date_replace(memory_leak_check):
 
 
 def test_datetime_date_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     message = "year must be an integer"
     date = datetime.date(314, 1, 5)
     with pytest.raises(BodoError, match=message):
@@ -1754,6 +1755,7 @@ def test_series_dt_type(memory_leak_check):
     """
     Test dt is called on series of type dt64
     """
+    from bodo.utils.typing import BodoError
 
     def impl(S):
         return S.dt.year
@@ -1812,6 +1814,8 @@ def test_timestamp_number(time_num, memory_leak_check):
 
 @pytest.mark.slow
 def test_timestamp_unit_constructor_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl(time_int, unit):
         return pd.Timestamp(time_int, unit=unit)
 
@@ -2426,6 +2430,8 @@ def test_timestamp_datetime_conversion(timestamp, memory_leak_check):
 
 
 def test_timestamp_datetime_conversion_error(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     timestamp = pd.Timestamp(42, unit="s")
 
     def test_impl(ts):

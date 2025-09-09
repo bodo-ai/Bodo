@@ -2,8 +2,8 @@ import io
 
 import numpy as np
 import pytest
-from numba.core import types
-from numba.core.typeconv.castgraph import Conversion
+from numba.core import types  # noqa TID253
+from numba.core.typeconv.castgraph import Conversion  # noqa TID253
 
 import bodo
 from bodo.tests.user_logging_utils import (

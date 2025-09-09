@@ -5,9 +5,11 @@ import pandas as pd
 import pytest
 
 import bodo
-import bodo.libs.table_builder
 from bodo.tests.utils import check_func
-from bodo.utils.typing import ColNamesMetaType, MetaType
+
+if bodo.test_compiler:
+    import bodo.libs.table_builder
+    from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 def test_table_builder_empty(memory_leak_check):

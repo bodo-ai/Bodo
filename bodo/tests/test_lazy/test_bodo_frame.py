@@ -12,9 +12,9 @@ from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 from bodo.tests.utils import (
     _gather_output,
     pytest_spawn_mode,
+    run_rank0,
 )
 from bodo.utils.testing import ensure_clean2
-from bodo.utils.utils import run_rank0
 
 pytestmark = pytest_spawn_mode
 

@@ -18,12 +18,13 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     check_func,
-    get_start_end,
     oracle_user_pass_and_hostname,
-    reduce_sum,
     sql_user_pass_and_hostname,
 )
-from bodo.utils.testing import ensure_clean_mysql_psql_table
+
+if bodo.test_compiler:
+    from bodo.tests.utils import get_start_end, reduce_sum
+    from bodo.utils.testing import ensure_clean_mysql_psql_table
 
 pytestmark = [pytest.mark.sql, pytest.mark.slow]
 

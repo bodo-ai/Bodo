@@ -1,10 +1,14 @@
 """Tests bytecode changes that are unique to Bodo."""
 
-import numba
-from numba.core import ir
+import bodo
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 
-from bodo.tests.utils import DeadcodeTestPipeline, check_func, pytest_mark_one_rank
-from bodo.transforms.typing_pass import _bc_stream_to_bytecode
+if bodo.test_compiler:
+    import numba
+    from numba.core import ir
+
+    from bodo.tests.utils import DeadcodeTestPipeline
+    from bodo.transforms.typing_pass import _bc_stream_to_bytecode
 
 
 def test_very_large_tuple(memory_leak_check):

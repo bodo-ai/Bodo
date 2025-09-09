@@ -1,8 +1,10 @@
 import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.libs.str_arr_ext import StringArrayType
-from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.typing import ColNamesMetaType, MetaType
+
+if bodo.test_compiler:
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+    from bodo.libs.str_arr_ext import StringArrayType
+    from bodo.transforms.distributed_analysis import Distribution
+    from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 def test_stream_sort_compiles():

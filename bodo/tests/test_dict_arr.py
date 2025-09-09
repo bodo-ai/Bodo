@@ -8,12 +8,13 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     _test_equal_guard,
     check_func,
     dist_IR_contains,
-    reduce_sum,
 )
+
+if bodo.test_compiler:
+    from bodo.tests.utils import SeriesOptTestPipeline, reduce_sum
 
 
 @pytest.fixture(
