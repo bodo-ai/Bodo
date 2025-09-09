@@ -120,13 +120,21 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         """Support bodo.pandas.DataFrame() constructor by creating a pandas DataFrame
         and then converting it to a BodoDataFrame.
         """
+        from bodo.pandas.scalar import BodoScalar
+
         # Handle Pandas internal use which creates an empty object and then assigns the
         # manager:
         # https://github.com/pandas-dev/pandas/blob/1da0d022057862f4352113d884648606efd60099/pandas/core/generic.py#L309
         if not args and not kwargs:
             return super().__new__(cls, *args, **kwargs)
 
+        # TODO: Optimize creation from other BodoDataFrames, BodoSeries, or BodoScalars
+
         df = pd.DataFrame(*args, **kwargs)
+        for col in df.select_dtypes(include=["object"]).columns:
+            df[col] = df[col].apply(
+                lambda x: x.get_value() if isinstance(x, BodoScalar) else x
+            )
         return bodo.pandas.base.from_pandas(df)
 
     def __init__(self, *args, **kwargs):
