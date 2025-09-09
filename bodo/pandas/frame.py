@@ -1718,6 +1718,28 @@ def get_isin_filter_plan(source_plan: LazyPlan, key_plan: LazyPlan) -> LazyPlan 
     it. Returns None if the plan pattern does not match.
     """
     from bodo.ext import plan_optimizer
+    from bodo.pandas.plan import UnaryOpExpression
+
+    # Support not in case like df1[~df1.A.isin(df2.B)] using anti-join
+    is_anti = False
+    if (
+        is_single_projection(key_plan)
+        and isinstance(
+            (key_expr := get_proj_expr_single(key_plan)),
+            UnaryOpExpression,
+        )
+        and key_expr.op == "__invert__"
+        and isinstance(key_expr.source, LogicalComparisonJoin)
+        and key_expr.source.join_type == plan_optimizer.CJoinType.MARK
+    ):
+        # Match df1[~df1.A.isin(df2.B)] and convert to df1[df1.A.isin(df2.B)] for
+        # matching below but with anti-join flag set
+        is_anti = True
+        key_plan = LogicalProjection(
+            key_plan.empty_data,
+            key_expr.source,
+            [key_expr.source_expr],
+        )
 
     # Match df1.A.isin(df2.B) case which is a mark join generated in our Series.isin()
     if not (
@@ -1734,7 +1756,7 @@ def get_isin_filter_plan(source_plan: LazyPlan, key_plan: LazyPlan) -> LazyPlan 
         source_plan.empty_data,
         source_plan,
         key_plan.source.right_plan,
-        plan_optimizer.CJoinType.INNER,
+        plan_optimizer.CJoinType.ANTI if is_anti else plan_optimizer.CJoinType.INNER,
         [(left_key_ind, 0)],
     )
 
