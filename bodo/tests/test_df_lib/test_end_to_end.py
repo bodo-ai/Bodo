@@ -2032,6 +2032,43 @@ def test_filter_series_isin():
     )
 
 
+def test_filter_series_not_isin(index_val):
+    """Test dataframe filter with not isin case"""
+    with assert_executed_plan_count(0):
+        df1 = pd.DataFrame(
+            {
+                "A": [1.4, 2.1, 3.3],
+                "B": ["A", "B", "C"],
+                "C": [1, 2, 3],
+                "D": [True, False, True],
+            },
+            index=index_val[:3],
+        )
+        df2 = pd.DataFrame(
+            {
+                "A": ["A", "B", "C", "D"],
+                "B": [11, 2, 2, 4],
+            }
+        )
+
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bodo_out = bdf1[~bdf1.C.isin(bdf2.B)]
+        py_out = df1[~df1.C.isin(df2.B)]
+
+        # Reverse the order so the planner flips sides to put smaller table in build
+        # side creating right-anti join.
+        bodo_out2 = bdf2[~bdf2.B.isin(bdf1.C)]
+        py_out2 = df2[~df2.B.isin(df1.C)]
+
+    _test_equal(
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+    _test_equal(
+        bodo_out2, py_out2, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+
+
 def test_rename(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     with assert_executed_plan_count(0):
