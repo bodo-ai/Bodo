@@ -66,7 +66,6 @@ class BodoScalar(BodoLazyWrapper):
             "update_from_lazy_metadata",
             "from_lazy_metadata",
             "__array__",
-            "__class__",
         }:
             return object.__getattribute__(self, name)
         scalar = self.get_value()
@@ -139,6 +138,7 @@ class BodoScalar(BodoLazyWrapper):
         "__len__",
         "__contains__",
         "_is_na",
+        "__class__",
     ]
     # TODO: Support lazy operations if other is also a BodoScalar
     for _method_name in _dunder_methods:
