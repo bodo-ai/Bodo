@@ -1585,6 +1585,26 @@ std::unique_ptr<array_info> alloc_array_like(
     }
 }
 
+std::unique_ptr<array_info> alloc_array_like(
+    std::unique_ptr<bodo::DataType>& in_dtype, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    bodo_array_type::arr_type_enum arr_type = in_dtype->array_type;
+    Bodo_CTypes::CTypeEnum dtype = in_dtype->c_type;
+    if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        throw std::runtime_error("Unimplemented");
+    } else if (arr_type == bodo_array_type::STRUCT) {
+        throw std::runtime_error("Unimplemented");
+    } else if (arr_type == bodo_array_type::MAP) {
+        throw std::runtime_error("Unimplemented");
+    } else {
+        std::unique_ptr<array_info> out_arr = alloc_array_top_level(
+            0, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false, pool, mm);
+        out_arr->precision = in_dtype->precision;
+        out_arr->scale = in_dtype->scale;
+        return out_arr;
+    }
+}
+
 int64_t array_memory_size(std::shared_ptr<array_info> earr,
                           bool include_dict_size, bool include_children,
                           bool approximate_string_size) {

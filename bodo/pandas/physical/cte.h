@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include "../../libs/_table_builder_utils.h"
 #include "../../libs/streaming/_join.h"
 #include "../_util.h"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
@@ -64,6 +65,8 @@ class PhysicalCTE : public PhysicalSink {
     duckdb::LogicalMaterializedCTE& node;
 };
 
+#include <iostream>
+
 class PhysicalCTERef : public PhysicalSource {
    public:
     explicit PhysicalCTERef(std::shared_ptr<PhysicalCTE> _cte) : cte(_cte) {}
@@ -76,8 +79,13 @@ class PhysicalCTERef : public PhysicalSource {
             cte->collected_rows->builder->FinalizeActiveChunk();
             chunk_iter = cte->collected_rows->builder->chunks.begin();
         }
-        std::shared_ptr<table_info> next_batch = *chunk_iter;
-        ++chunk_iter;
+        std::shared_ptr<table_info> next_batch;
+        if (chunk_iter == cte->collected_rows->builder->chunks.end()) {
+            next_batch = alloc_table_like(cte->output_schema);
+        } else {
+            next_batch = *chunk_iter;
+            ++chunk_iter;
+        }
         bool at_end =
             (chunk_iter == cte->collected_rows->builder->chunks.end());
         return {next_batch, at_end ? OperatorResult::FINISHED

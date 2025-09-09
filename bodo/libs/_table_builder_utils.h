@@ -40,6 +40,18 @@ std::shared_ptr<table_info> alloc_table_like(
         bodo::default_buffer_memory_manager());
 
 /**
+ * @brief Allocate an empty table with the given schema
+ *
+ * @param schema the schema to create from
+ * @return std::shared_ptr<table_info> Allocated table
+ */
+std::shared_ptr<table_info> alloc_table_like(
+    const std::shared_ptr<bodo::Schema>& schema,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+/**
  * @brief Helper for UnifyBuildTableDictionaryArrays and
  * UnifyProbeTableDictionaryArrays. Unifies dictionaries of input table with
  * dictionaries in dict_builders by appending its new dictionary values to
