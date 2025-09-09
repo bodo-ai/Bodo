@@ -15,12 +15,14 @@ import traceback
 from datetime import date, datetime
 from decimal import Decimal
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 
 import bodo
+from bodo import BodoWarning
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
@@ -38,13 +40,6 @@ from bodo.tests.utils import (
     is_bool_object_series,
     pytest_pandas,
 )
-
-if bodo.test_compiler:
-    import numba
-
-    from bodo.tests.utils import DeadcodeTestPipeline, reduce_sum
-    from bodo.utils.typing import BodoError, BodoWarning
-
 
 pytestmark = pytest_pandas
 
@@ -1070,6 +1065,7 @@ def test_sort_values_key_rm_dead(memory_leak_check):
     """
     Make sure dead column elimination works for sort key outputs
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def impl(df):
         return df.sort_values(by=["A", "C", "E"])[["A", "D"]]
@@ -1113,6 +1109,7 @@ def test_sort_values_rm_dead(memory_leak_check):
     """
     Make sure dead Sort IR nodes are removed
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def impl(df):
         df.sort_values(by=["A"])
@@ -1135,6 +1132,7 @@ def test_sort_values_empty_df_key_rm_dead(memory_leak_check):
     Tests to make sure that we can index and access remaining
     columns after the sort operation.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def impl(df):
         df = df.sort_values(
@@ -1259,6 +1257,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
     """
     Test sort_values() with redistribution boundaries passed in manually
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit(distributed=["df", "A"])
     def impl(df, A):
@@ -1849,6 +1848,7 @@ def test_sort_table_for_interval_join(
     Test the sort_table_for_interval_join for multiple data types.
     Tests both the point (n_keys=1) and interval (n_keys=2) cases.
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     @bodo.jit(distributed=["df"])
     def impl_point(df, bounds):
@@ -1997,6 +1997,7 @@ def test_sort_for_interval_join_err_checking():
     Tests that simple compile time checks are enforced when using
     _bodo_interval_sort = True.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit(distributed=["df"])
     def impl(df, by, bounds):
@@ -2202,6 +2203,7 @@ def test_sort_values_by_const_str_or_str_list(memory_leak_check):
     """
     Test sort_values(): 'by' is of type str or list of str
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.sort_values(by=None)
@@ -2225,6 +2227,7 @@ def test_sort_values_by_labels(memory_leak_check):
     """
     Test sort_values(): 'by' is a valid label or label lists
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.sort_values(by=["C"])
@@ -2243,6 +2246,7 @@ def test_sort_values_axis_default(memory_leak_check):
     """
     Test sort_values(): 'axis' cannot be values other than integer value 0
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.sort_values(by=["A"], axis=1)
@@ -2271,6 +2275,7 @@ def test_sort_values_ascending_bool(memory_leak_check):
     """
     Test sort_values(): 'ascending' must be of type bool
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.sort_values(by=["A", "B"], ascending=None)
@@ -2333,6 +2338,7 @@ def test_sort_values_inplace_bool(memory_leak_check):
     """
     Test sort_values(): 'inplace' must be of type bool
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.sort_values(by=["A", "B"], inplace=None)
@@ -2378,6 +2384,7 @@ def test_sort_values_na_position_no_spec(memory_leak_check):
     """
     Test sort_values(): 'na_position' should not be specified by users
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.sort_values(by=["A", "B"], na_position=None)
@@ -2404,6 +2411,7 @@ def test_inplace_sort_values_series(memory_leak_check):
     """
     Test sort_values(inplace=True): inplace not supported for Series.sort_values
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(S):
         return S.sort_values(inplace=True)

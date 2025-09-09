@@ -1,10 +1,6 @@
-import bodo
-
-if bodo.test_compiler:
+def test_uuid4(memory_leak_check):
     import bodo.libs.uuid
 
-
-def test_uuid4(memory_leak_check):
     @bodo.jit
     def impl():
         return bodo.libs.uuid.uuidV4()
@@ -19,6 +15,8 @@ def test_uuid4(memory_leak_check):
 
 
 def test_uuid5(memory_leak_check):
+    import bodo.libs.uuid
+
     @bodo.jit
     def impl(namespace, name):
         return bodo.libs.uuid.uuidV5(namespace, name)
@@ -36,6 +34,8 @@ def test_uuid5(memory_leak_check):
 
 
 def test_uuid5_invalid_namespace(memory_leak_check):
+    import bodo.libs.uuid
+
     @bodo.jit
     def impl(namespace, name):
         return bodo.libs.uuid.uuidV5(namespace, name)

@@ -17,24 +17,6 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 
-if bodo.test_compiler:
-    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-    from bodo.libs.streaming.groupby import (
-        delete_groupby_state,
-        groupby_build_consume_batch,
-        groupby_produce_output_batch,
-        init_groupby_state,
-    )
-    from bodo.libs.streaming.join import (
-        delete_join_state,
-        init_join_state,
-        join_build_consume_batch,
-        join_probe_consume_batch,
-    )
-    from bodo.tests.utils import reduce_sum
-    from bodo.utils.typing import ColNamesMetaType, MetaType
-
-
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="TODO[BSE-4580]: fix nightly test hangs on Windows"
 )
@@ -96,6 +78,13 @@ def test_join_row_count_collection(memory_leak_check):
     Check that Join submits its row counts to the QueryProfileCollector
     as expected.
     """
+    from bodo.libs.streaming.join import (
+        delete_join_state,
+        init_join_state,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
+    from bodo.tests.utils_jit import reduce_sum
 
     build_keys_inds = bodo.utils.typing.MetaType((0,))
     probe_keys_inds = bodo.utils.typing.MetaType((0,))
@@ -221,6 +210,13 @@ def test_groupby_row_count_collection(memory_leak_check):
     Check that Groupby submits its row counts to the QueryProfileCollector
     as expected.
     """
+    from bodo.libs.streaming.groupby import (
+        delete_groupby_state,
+        groupby_build_consume_batch,
+        groupby_produce_output_batch,
+        init_groupby_state,
+    )
+    from bodo.tests.utils_jit import reduce_sum
 
     df = pd.DataFrame(
         {
@@ -325,6 +321,8 @@ def test_snowflake_read_row_count_collection(memory_leak_check):
     Check that Snowflake Reader submits its row counts to the QueryProfileCollector
     as expected.
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.tests.utils_jit import reduce_sum
 
     @bodo.jit()
     def impl(conn):
@@ -379,6 +377,8 @@ def test_iceberg_read_row_count_collection(
     Check that Iceberg Reader submits its row counts to the QueryProfileCollector
     as expected.
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.tests.utils_jit import reduce_sum
 
     col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D"))
 
@@ -435,6 +435,8 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
     Check that Parquet Reader submits its row counts to the QueryProfileCollector
     as expected.
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+    from bodo.tests.utils_jit import reduce_sum
 
     @bodo.jit()
     def impl(path):
@@ -475,6 +477,12 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by hash join.
     """
+    from bodo.libs.streaming.join import (
+        delete_join_state,
+        init_join_state,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -653,6 +661,12 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by nested loop join.
     """
+    from bodo.libs.streaming.join import (
+        delete_join_state,
+        init_join_state,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -799,6 +813,12 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by groupby in the incremental aggregation case.
     """
+    from bodo.libs.streaming.groupby import (
+        delete_groupby_state,
+        groupby_build_consume_batch,
+        groupby_produce_output_batch,
+        init_groupby_state,
+    )
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -927,6 +947,12 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by groupby in the accumulate input case.
     """
+    from bodo.libs.streaming.groupby import (
+        delete_groupby_state,
+        groupby_build_consume_batch,
+        groupby_produce_output_batch,
+        init_groupby_state,
+    )
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -1051,6 +1077,12 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by MRNF.
     """
+    from bodo.libs.streaming.groupby import (
+        delete_groupby_state,
+        groupby_build_consume_batch,
+        groupby_produce_output_batch,
+        init_groupby_state,
+    )
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -1425,6 +1457,7 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by Snowflake Reader.
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -1512,6 +1545,8 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
 def test_iceberg_metrics_collection(
     memory_leak_check, tmp_path, iceberg_database, iceberg_table_conn
 ):
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     tmp_path_rank0 = comm.bcast(str(tmp_path))
@@ -1632,6 +1667,7 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
     Test that generated query profile has the metrics that we expect
     to be reported by sort.
     """
+    from bodo.utils.typing import ColNamesMetaType, MetaType
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()

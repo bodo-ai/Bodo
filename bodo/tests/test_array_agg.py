@@ -10,7 +10,7 @@ import bodo
 from bodo.tests.utils import check_func, nullable_float_arr_maker
 
 
-def _make_time_type(*args, **kwargs):
+def _make_time(*args, **kwargs):
     """Avoids importing Time at the module level."""
     from bodo.types import Time
 
@@ -115,7 +115,7 @@ def _make_time_type(*args, **kwargs):
             (
                 pd.Series(
                     [
-                        None if i % 7 < 2 else _make_time_type(nanosecond=3**i)
+                        None if i % 7 < 2 else _make_time(nanosecond=3**i)
                         for i in range(45)
                     ]
                 ),

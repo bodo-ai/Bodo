@@ -3,17 +3,13 @@ with Bodo data types. These tests should be used to check that specific
 compiler optimizations (i.e. dce) are working properly.
 """
 
+import numba  # noqa TID253
+from numba import prange  # noqa TID253
 import numpy as np
 import pandas as pd
 
 import bodo
 from bodo.tests.utils import check_func
-
-if bodo.test_compiler:
-    import numba
-    from numba import prange
-
-    from bodo.tests.utils import ParforTestPipeline
 
 
 def test_setna_parfor_dce(memory_leak_check):
@@ -22,6 +18,7 @@ def test_setna_parfor_dce(memory_leak_check):
     that should be unused that the parfor can be properly
     removed.
     """
+    from bodo.tests.utils_jit import ParforTestPipeline
 
     def test_impl(df):
         # This filter should be removed because the result is
@@ -54,6 +51,7 @@ def test_parfor_and_or_dce(memory_leak_check):
     creates a parfor that should be unused, then the parfor
     can be properly removed.
     """
+    from bodo.tests.utils_jit import ParforTestPipeline
 
     def test_impl_and(df):
         # This filter should be removed because the result is
@@ -96,6 +94,7 @@ def test_parfor_str_eq_dce(memory_leak_check):
     Check that when a string equality operator is used
     in a dead parfor that it can be properly eliminated.
     """
+    from bodo.tests.utils_jit import ParforTestPipeline
 
     def test_impl(df):
         # This filter should be removed because the result is
@@ -123,6 +122,7 @@ def test_tuple_parfor_fusion(memory_leak_check):
     Check to make sure numba can fuse a loop when `ShapeEquivSet._getnames()
     attempts to analyze an unsupported type (float tuple).
     """
+    from bodo.tests.utils_jit import ParforTestPipeline
 
     def test_impl(arr):
         a = (1.2, 1.3)

@@ -6,9 +6,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func
-
-if bodo.test_compiler:
-    from bodo.utils.testing import ensure_clean
+from bodo.utils.testing import ensure_clean
 
 
 @pytest.mark.parametrize(

@@ -5,9 +5,6 @@ import pytest
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
 
-if bodo.test_compiler:
-    from bodo.utils.typing import ColNamesMetaType, MetaType
-
 
 @pytest.mark.parametrize(
     "pattern",
@@ -331,6 +328,8 @@ def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_chec
     """
     Tests a streaming join when one of the data columns is TIMESTAMPTZ.
     """
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     global_1 = MetaType((0, 1))
     global_2 = MetaType((0,))
     global_3 = MetaType((0,))
@@ -534,6 +533,8 @@ def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_chec
     """
     Tests a streaming join when the keys are TIMESTAMPTZ.
     """
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
     global_1 = MetaType((0, 1))
     global_2 = MetaType((0,))
     global_3 = MetaType((0,))

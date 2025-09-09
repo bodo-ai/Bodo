@@ -10,9 +10,11 @@ import pandas as pd
 import psutil
 import pyarrow as pa
 import pytest
+from numba.core.ir_utils import find_callname, guard  # noqa TID253
 
 import bodo
 import bodo.spawn.spawner
+from bodo import BodoWarning
 from bodo.mpi4py import MPI
 from bodo.spawn.spawner import CommandType
 from bodo.tests.dataframe_common import df_value  # noqa
@@ -31,20 +33,6 @@ from bodo.tests.utils import (
     pytest_mark_spawn_mode,
 )
 
-if bodo.test_compiler:
-    import numba
-    from numba.core.ir_utils import find_callname, guard
-
-    from bodo.tests.utils import (
-        DistTestPipeline,
-        SeqTestPipeline,
-        get_start_end,
-        reduce_sum,
-    )
-    from bodo.transforms.distributed_analysis import Distribution, is_REP
-    from bodo.utils.typing import BodoError, BodoWarning
-    from bodo.utils.utils import is_call_assign
-
 random.seed(4)
 np.random.seed(1)
 
@@ -52,6 +40,8 @@ np.random.seed(1)
 @pytest.mark.slow
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
 def test_array_shape1(A, memory_leak_check):
+    from bodo.tests.utils_jit import DistTestPipeline, get_start_end
+
     # get first dimention size using array.shape for distributed arrays
     def impl1(A):
         return A.shape[0]
@@ -68,6 +58,8 @@ def test_array_shape1(A, memory_leak_check):
 
 @pytest.mark.slow
 def test_array_shape2(memory_leak_check):
+    from bodo.tests.utils_jit import DistTestPipeline, get_start_end
+
     # get first dimention size using array.shape for distributed arrays
     # transposed array case
     def impl1(A):
@@ -90,6 +82,8 @@ def test_array_shape2(memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
 def test_array_shape3(A, memory_leak_check):
+    from bodo.tests.utils_jit import DistTestPipeline, get_start_end
+
     # get first dimention size using array.shape for distributed arrays
     def impl1(A):
         return A.shape
@@ -106,6 +100,8 @@ def test_array_shape3(A, memory_leak_check):
 
 @pytest.mark.slow
 def test_array_shape4(memory_leak_check):
+    from bodo.tests.utils_jit import DistTestPipeline, get_start_end
+
     # transposed array case
     def impl1(A):
         B = A.T
@@ -125,6 +121,8 @@ def test_array_shape4(memory_leak_check):
 
 @pytest.mark.slow
 def test_array_len1(memory_leak_check):
+    from bodo.tests.utils_jit import DistTestPipeline, get_start_end
+
     # get first dimention size using array.shape for distributed arrays
     def impl1(A):
         return len(A)
@@ -145,6 +143,8 @@ def test_array_len1(memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
 def test_array_size1(A, memory_leak_check):
+    from bodo.tests.utils_jit import DistTestPipeline, get_start_end
+
     def impl1(A):
         return A.size
 
@@ -183,6 +183,8 @@ def test_concat_axis_1(memory_leak_check):
 
 
 def test_1D_Var_parfor1(memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     # 1D_Var parfor where index is used in computation
     def impl1(A, B):
         C = A[B != 0]
@@ -200,6 +202,8 @@ def test_1D_Var_parfor1(memory_leak_check):
 
 
 def test_1D_Var_parfor2(memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     # 1D_Var parfor where index is used in computation
     def impl1(A, B):
         C = A[B != 0]
@@ -220,6 +224,7 @@ def test_1D_Var_parfor3(memory_leak_check):
     """test 1D parfor on length of an array that is assigned in an if/else block.
     Array analysis may not generate 'size_var = C.shape[0]' (keep 'len(C)').
     """
+    from bodo.tests.utils_jit import get_start_end
 
     def impl1(A, B, flag):
         if flag:
@@ -242,6 +247,7 @@ def test_1D_Var_parfor3(memory_leak_check):
 
 def test_1D_Var_parfor4(memory_leak_check):
     """test 1D parfor inside a sequential loop"""
+    from bodo.tests.utils_jit import get_start_end
 
     def impl1(A, B):
         C = A[B]
@@ -520,6 +526,7 @@ def test_bodo_func_dist_call_tup2(memory_leak_check):
     """make sure calling other bodo functions with their distributed flags set works
     when they return tuples with only one distributed data structure.
     """
+    from bodo.utils.typing import BodoError
 
     # two return values are distributable, but one is distributed
     @bodo.jit(distributed=["B"], returns_maybe_distributed=False)
@@ -566,6 +573,7 @@ def test_diag_for_return_error(memory_leak_check):
     """make sure the proper error is raised when calling other bodo functions with
     replicated args that conflict with distributed flag
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit(distributed=["A"], returns_maybe_distributed=False)
     def f2(n):
@@ -589,6 +597,7 @@ def test_diag_for_return_error(memory_leak_check):
 
 def test_diag_code_loc(memory_leak_check):
     """make sure code location info is printed along with diagnostics info"""
+    from bodo.utils.typing import BodoError
 
     @bodo.jit(distributed=["S2"])
     def impl():
@@ -751,6 +760,8 @@ def test_bodo_func_rep(memory_leak_check):
 @pytest.mark.smoke
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
 def test_1D_Var_alloc_simple(A, memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     # make sure 1D_Var alloc and parfor handling works for 1D/2D arrays
     def impl1(A, B):
         C = A[B]
@@ -764,6 +775,8 @@ def test_1D_Var_alloc_simple(A, memory_leak_check):
 
 
 def test_1D_Var_alloc1(memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     # XXX: test with different PYTHONHASHSEED values
     def impl1(A, B):
         C = A[B]
@@ -793,6 +806,8 @@ def test_1D_Var_alloc1(memory_leak_check):
 
 
 def test_1D_Var_alloc2(memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     # XXX: test with different PYTHONHASHSEED values
     # 2D case
     def impl1(A, B):
@@ -824,6 +839,8 @@ def test_1D_Var_alloc2(memory_leak_check):
 
 
 def test_1D_Var_alloc3():
+    from bodo.tests.utils_jit import get_start_end
+
     # Memory leak occurs with test_1D_Var_alloc3 and Python 3.10.
     # XXX: test with different PYTHONHASHSEED values
     # Series case
@@ -878,6 +895,8 @@ def test_1D_Var_alloc4(memory_leak_check):
 
 
 def test_str_alloc_equiv1(memory_leak_check):
+    from bodo.tests.utils_jit import DistTestPipeline
+
     def impl(n):
         C = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 10)
         return len(C)
@@ -914,6 +933,8 @@ def test_dist_list_mul_concat(memory_leak_check):
 
 
 def test_series_alloc_equiv1(memory_leak_check):
+    from bodo.tests.utils_jit import DistTestPipeline
+
     def impl(n):
         if n < 10:
             S = pd.Series(np.ones(n))
@@ -969,6 +990,8 @@ def test_getitem_slice(A, s, memory_leak_check):
 )
 @pytest.mark.parametrize("s", [0, 1, 3, 7, 10, -1, -2])
 def test_getitem_int_1D(A, s, memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     # get a single value of 1D_Block array
     def impl1(A, s):
         return A.values[s]
@@ -986,6 +1009,8 @@ def test_getitem_int_1D(A, s, memory_leak_check):
 #    pd.Series(['aafa', 'bbac', 'cff']*4)])
 @pytest.mark.parametrize("s", [0, 1, 3, -1, -2])
 def test_getitem_int_1D_Var(A, s, memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     # get a single value of 1D_Block array
     def impl1(A, B, s):
         C = A.values[B]
@@ -1005,6 +1030,7 @@ def test_getitem_int_1D_Var(A, s, memory_leak_check):
 
 def test_getitem_int_multi_dim(memory_leak_check):
     """Test distributed int getitem on multi-dimensional array"""
+    from bodo.tests.utils_jit import get_start_end
 
     def impl1(A, ind):
         return A[ind, 1]
@@ -1292,6 +1318,8 @@ def test_np_dot(is_slow_run, memory_leak_check):
 
 
 def test_dist_tuple1(memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     def impl1(A):
         B1, B2 = A
         return (B1 + B2).sum()
@@ -1306,6 +1334,8 @@ def test_dist_tuple1(memory_leak_check):
 
 
 def test_dist_tuple2(memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     # TODO: tuple getitem with variable index
     def impl1(A, B):
         C = (A, B)
@@ -1721,6 +1751,7 @@ def test_user_distributed_rep(memory_leak_check):
     but it must be replicated then it throws an error.
     See [BE-508]
     """
+    from bodo.utils.typing import BodoError
 
     def impl(arr):
         return list(arr)
@@ -1752,6 +1783,7 @@ def test_user_distributed_rep(memory_leak_check):
 
 def test_replicated_flag(memory_leak_check):
     """test replicated flag in jit decorator"""
+    from bodo.transforms.distributed_analysis import Distribution, is_REP
 
     # mix of dist/rep inputs
     @bodo.jit(distributed=["df1"], replicated=["df2"])
@@ -1837,6 +1869,7 @@ def test_replicated_flag(memory_leak_check):
 
 def test_replicated_error_check(memory_leak_check):
     """make sure Bodo raises an error if a variable is marked as both distributed and replicated"""
+    from bodo.utils.typing import BodoError
 
     @bodo.jit(distributed=["S"], replicated=["S"])
     def impl(S):
@@ -1873,6 +1906,8 @@ def test_dist_objmode(memory_leak_check):
 @pytest.mark.slow
 def test_unique_allgatherv(memory_leak_check):
     """make sure allgatherv of unique is removed in sequential compiler pipline"""
+    from bodo.tests.utils_jit import SeqTestPipeline
+    from bodo.utils.utils import is_call_assign
 
     def impl(S):
         return S.unique()
@@ -1910,6 +1945,7 @@ def test_diagnostics_not_compiled_error(memory_leak_check):
     """make sure error is thrown when calling diagnostics for a function that is not
     compiled yet
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         return np.arange(10).sum()
@@ -1967,6 +2003,7 @@ def test_df_1D_Var_col_set_string(memory_leak_check):
     """Test setting a new column of a 1D_Var dataframe to a string value, making sure
     the number of characters for the local string array is correct
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     def impl(df):
         df["B"] = "A"
@@ -1995,6 +2032,8 @@ def check_dist_meta(df, dist):
 @pytest.mark.parquet
 def test_bodo_meta(memory_leak_check, datapath):
     """Test Bodo metadata on data structures returned from JIT functions"""
+    from bodo.transforms.distributed_analysis import Distribution
+
     fname = datapath("example.parquet")
 
     # df created inside JIT function
@@ -2221,6 +2260,8 @@ def test_dist_type_change_multi_func3(memory_leak_check):
 def _check_scatterv_gatherv_allgatherv(orig_data, n):
     """check the output of scatterv() on 'data'. Confirms that calling gatherv and allgatherv on the distributed data
     succeeds"""
+    from bodo.tests.utils_jit import reduce_sum
+
     if bodo.get_rank() != 0:
         data_to_scatter = None
     else:
@@ -2558,6 +2599,7 @@ def test_scatterv_gatherv_allgatherv_df_python(df_value, memory_leak_check):
 
 def test_scatterv_gatherv_allgatherv_df_jit(df_value, memory_leak_check):
     """test using scatterv for all supported dataframe types inside jit functions"""
+    from bodo.tests.utils_jit import reduce_sum
 
     def impl(df):
         return bodo.scatterv(df)
@@ -2635,6 +2677,7 @@ def test_gatherv_str(memory_leak_check):
 
 def test_get_chunk_bounds(memory_leak_check):
     """make sure get_chunk_bounds() works properly"""
+    from bodo.utils.typing import BodoError
 
     @bodo.jit(distributed=["A"])
     def impl(A):

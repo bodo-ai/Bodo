@@ -21,9 +21,6 @@ from bodo.tests.utils import (
     pytest_pandas,
 )
 
-if bodo.test_compiler:
-    from bodo.tests.utils import get_start_end
-
 pytestmark = pytest_pandas
 
 
@@ -123,6 +120,7 @@ def test_dataframe_sample_index(memory_leak_check):
 @pytest.mark.slow
 def test_dataframe_sample_nested_datastructures():
     """The sample function relies on allgather operations that deserve to be tested"""
+    from bodo.tests.utils_jit import get_start_end
 
     def check_gather_operation(df):
         siz = df.size

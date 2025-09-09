@@ -4,10 +4,12 @@ import os
 import re
 import time
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from numba import types  # noqa TID253
 from pandas.core.dtypes.common import is_list_like
 
 import bodo
@@ -28,13 +30,6 @@ from bodo.tests.utils import (
     no_default,
     pytest_pandas,
 )
-
-if bodo.test_compiler:
-    import numba
-    from numba import types
-
-    from bodo.tests.utils import SeriesOptTestPipeline, reduce_sum
-    from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -103,6 +98,7 @@ def test_dataframe_apply_no_func(memory_leak_check):
     doesn't match a method or Numpy function raises an
     Exception.
     """
+    from bodo.errors import BodoError
 
     def impl1(df):
         # This function doesn't exist in Numpy or as a
@@ -126,6 +122,7 @@ def test_dataframe_apply_pandas_unsupported_method(memory_leak_check):
     matches an unsupported DataFrame method raises an appropriate
     exception.
     """
+    from bodo.errors import BodoError
 
     def impl1(df):
         return df.apply("argmin", axis=1)
@@ -147,6 +144,7 @@ def test_dataframe_apply_numpy_unsupported_ufunc(memory_leak_check):
     matches an unsupported ufunc raises an appropriate
     exception.
     """
+    from bodo.errors import BodoError
 
     def impl1(df):
         return df.apply("cbrt", axis=1)
@@ -168,6 +166,7 @@ def test_dataframe_apply_pandas_unsupported_type(memory_leak_check):
     matches a method but has an unsupported type
     raises an appropriate exception.
     """
+    from bodo.errors import BodoError
 
     def impl1(df):
         # Mean is unsupported for string types
@@ -189,6 +188,7 @@ def test_dataframe_apply_pandas_unsupported_axis(memory_leak_check):
     Test running dataframe.apply with a method using
     axis=1 when Bodo doesn't support axis=1 yet.
     """
+    from bodo.errors import BodoError
 
     def impl1(df):
         # nunique is unsupported for axis=1
@@ -211,6 +211,7 @@ def test_dataframe_apply_numpy_unsupported_type(memory_leak_check):
     matches a Numpy ufunc but has an unsupported type
     raises an appropriate exception.
     """
+    from bodo.errors import BodoError
 
     def impl1(df):
         # radians is unsupported for string types
@@ -423,6 +424,7 @@ def test_avoid_static_getitem_const(memory_leak_check):
 
 def test_df_gatherv_table_format(memory_leak_check):
     """test gathering a distributed dataframe with table format"""
+    from bodo.tests.utils_jit import reduce_sum
 
     def impl(df):
         return bodo.gatherv(df)
@@ -658,6 +660,7 @@ def test_apply_inline_optimization(memory_leak_check):
     properly optimizes out the intermediate series and tuple
     values that are used if the call can't be inlined.
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl(df):
         def f(row):
@@ -726,6 +729,8 @@ def test_df_itertuples(memory_leak_check):
 )
 # TODO: [BE-1738]: Add memory_leak_check
 def test_df_merge_error_handling(func, err_regex):
+    from bodo.errors import BodoError
+
     df1 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [1, 2, 3, 5]})
     df2 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [5, 6, 7, 8]})
     df1.index.name = "x"
@@ -1094,6 +1099,8 @@ def test_df_iloc_col_slice_assign(memory_leak_check):
 
 
 def test_df_mask_where_df(df_value, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_where(df, cond, val):
         return df.where(cond, val)
 
@@ -1170,6 +1177,7 @@ def test_df_mask_where_series_other(memory_leak_check):
     """
     Test df.mask and df.where with pd.Series `other`.
     """
+    from bodo.utils.typing import BodoError
 
     def test_mask(df, cond, val):
         return df.mask(cond, val)
@@ -1748,6 +1756,8 @@ def test_df_table_rename(use_copy, datapath, memory_leak_check):
 @pytest.mark.parametrize("ascending", [False, True])
 @pytest.mark.parametrize("pct", [True, False])
 def test_df_rank(method, na_option, ascending, pct):
+    from bodo.utils.typing import BodoError
+
     def impl(df):
         return df.rank(method=method, na_option=na_option, ascending=ascending, pct=pct)
 

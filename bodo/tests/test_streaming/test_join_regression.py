@@ -48,9 +48,7 @@ from bodo.tests.utils import (
     pytest_mark_snowflake,
     pytest_perf_regression,
 )
-
-if bodo.test_compiler:
-    from bodo.utils.typing import ColNamesMetaType, MetaType
+from bodo.utils.typing import ColNamesMetaType, MetaType
 
 # Skip for all CI
 pytestmark = pytest_perf_regression

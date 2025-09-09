@@ -25,56 +25,19 @@ from typing import TypeVar
 from urllib.parse import urlencode
 from uuid import uuid4
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from numba.core import ir, types  # noqa TID253
+from numba.core.ir_utils import build_definitions, find_callname, guard  # noqa TID253
 
 import bodo
 import bodo.pandas as bodo_pd
+from bodo import BodoWarning
 from bodo.mpi4py import MPI
 from bodo.spawn.spawner import SpawnDispatcher
-
-if bodo.test_compiler:
-    import numba
-    from numba.core import ir, types
-    from numba.core.compiler_machinery import FunctionPass, register_pass
-    from numba.core.ir_utils import build_definitions, find_callname, guard
-    from numba.core.typed_passes import NopythonRewrites
-    from numba.core.untyped_passes import PreserveIR
-
-    # Import compiler
-    import bodo.decorators  # isort:skip # noqa
-    from bodo.utils.typing import (
-        BodoWarning,
-        dtype_to_array_type,
-        is_bodosql_context_type,
-    )
-    from bodo.utils.utils import (
-        is_assign,
-        is_distributable_tuple_typ,
-        is_distributable_typ,
-        is_expr,
-        run_rank0,  # noqa
-    )
-
-    @numba.njit
-    def get_rank():
-        return bodo.libs.distributed_api.get_rank()
-
-    @numba.njit(cache=True)
-    def get_start_end(n):
-        rank = bodo.libs.distributed_api.get_rank()
-        n_pes = bodo.libs.distributed_api.get_size()
-        start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
-        end = bodo.libs.distributed_api.get_end(n, n_pes, rank)
-        return start, end
-
-    @numba.njit
-    def reduce_sum(val):
-        sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
-        return bodo.libs.distributed_api.dist_reduce(val, np.int32(sum_op))
-
 
 test_spawn_mode_enabled = os.environ.get("BODO_CHECK_FUNC_SPAWN_MODE", "0") != "0"
 
@@ -247,6 +210,8 @@ def check_func(
     nullable float flag is on.
     - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
+    from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
+
     # If dataframe_library_enabled then run compiler tests as df library tests
     # (replaces import pandas as pd with import bodo.pandas as pd)
     # NOTE: This variable takes precedence over other variables
@@ -693,6 +658,8 @@ def check_func_seq(
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     if n_pes is None:
         n_pes = bodo.get_size()
 
@@ -775,6 +742,8 @@ def check_func_1D(
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     kwargs = {}
     if distributed is None:
         kwargs["all_returns_distributed"] = is_out_distributed
@@ -860,6 +829,8 @@ def check_func_1D_var(
     """Check function output against Python while setting the inputs/outputs as
     1D distributed variable length
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     kwargs = {}
     if distributed is None:
         kwargs["all_returns_distributed"] = is_out_distributed
@@ -1055,6 +1026,10 @@ def _get_dist_arg(
     a: T, copy: bool = False, var_length: bool = False, check_typing_issues: bool = True
 ) -> T:
     """Get distributed chunk for 'a' on current rank (for input to test functions)"""
+    from bodo.tests.utils_jit import get_start_end
+    from bodo.utils.typing import is_bodosql_context_type
+    from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
+
     if copy and hasattr(a, "copy"):
         a = a.copy()
 
@@ -1260,6 +1235,8 @@ def _test_equal(
     rtol: float = 1e-05,
     check_pandas_types=True,
 ) -> None:
+    from bodo.utils.utils import is_distributable_typ
+
     try:
         from scipy.sparse import csr_matrix
     except ImportError:
@@ -1629,6 +1606,8 @@ def _gather_output(bodo_output):
 
 
 def _typeof(val):
+    from bodo.utils.typing import dtype_to_array_type
+
     # Pandas returns an object array for .values or to_numpy() call on Series of
     # nullable int/float, which can't be handled in typeof. Bodo returns a
     # nullable int/float array
@@ -1710,173 +1689,6 @@ def has_udf_call(fir):
                     return True
 
     return False
-
-
-if bodo.test_compiler:
-
-    class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
-        """
-        pipeline used in test_join_deadcode_cleanup and test_csv_remove_col0_used_for_len
-        with an additional PreserveIR pass then bodo_pipeline
-        """
-
-        def define_pipelines(self):
-            [pipeline] = self._create_bodo_pipeline(
-                distributed=True, inline_calls_pass=False
-            )
-            pipeline._finalized = False
-            pipeline.add_pass_after(PreserveIR, NopythonRewrites)
-            pipeline.finalize()
-            return [pipeline]
-
-    class SeriesOptTestPipeline(bodo.compiler.BodoCompiler):
-        """
-        pipeline used in test_series_apply_df_output with an additional PreserveIR pass
-        after SeriesPass
-        """
-
-        def define_pipelines(self):
-            [pipeline] = self._create_bodo_pipeline(
-                distributed=True, inline_calls_pass=False
-            )
-            pipeline._finalized = False
-            pipeline.add_pass_after(PreserveIRTypeMap, bodo.compiler.BodoSeriesPass)
-            pipeline.finalize()
-            return [pipeline]
-
-    class ParforTestPipeline(bodo.compiler.BodoCompiler):
-        """
-        pipeline used in test_parfor_optimizations with an additional PreserveIR pass
-        after ParforPass
-        """
-
-        def define_pipelines(self):
-            [pipeline] = self._create_bodo_pipeline(
-                distributed=True, inline_calls_pass=False
-            )
-            pipeline._finalized = False
-            pipeline.add_pass_after(PreserveIR, bodo.compiler.ParforPreLoweringPass)
-            pipeline.finalize()
-            return [pipeline]
-
-    class ColumnDelTestPipeline(bodo.compiler.BodoCompiler):
-        """
-        pipeline used in test_column_del_pass with an additional PreserveIRTypeMap pass
-        after BodoTableColumnDelPass
-        """
-
-        def define_pipelines(self):
-            [pipeline] = self._create_bodo_pipeline(
-                distributed=True, inline_calls_pass=False
-            )
-            pipeline._finalized = False
-            pipeline.add_pass_after(
-                PreserveIRTypeMap, bodo.compiler.BodoTableColumnDelPass
-            )
-            pipeline.finalize()
-            return [pipeline]
-
-    @register_pass(mutates_CFG=False, analysis_only=False)
-    class PreserveIRTypeMap(PreserveIR):
-        """
-        Extension to PreserveIR that also saves the typemap.
-        """
-
-        _name = "preserve_ir_typemap"
-
-        def __init__(self):
-            PreserveIR.__init__(self)
-
-        def run_pass(self, state):
-            PreserveIR.run_pass(self, state)
-            state.metadata["preserved_typemap"] = state.typemap.copy()
-            state.metadata["preserved_calltypes"] = state.calltypes.copy()
-            return False
-
-    class TypeInferenceTestPipeline(bodo.compiler.BodoCompiler):
-        """
-        pipeline used in bodosql tests with an additional PreserveIR pass
-        after BodoTypeInference. This is used to monitor the code being generated.
-        """
-
-        def define_pipelines(self):
-            [pipeline] = self._create_bodo_pipeline(
-                distributed=True, inline_calls_pass=False
-            )
-            pipeline._finalized = False
-            pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoTypeInference)
-            pipeline.finalize()
-            return [pipeline]
-
-    class DistTestPipeline(bodo.compiler.BodoCompiler):
-        """
-        pipeline with an additional PreserveIR pass
-        after DistributedPass
-        """
-
-        def define_pipelines(self):
-            [pipeline] = self._create_bodo_pipeline(
-                distributed=True, inline_calls_pass=False
-            )
-            pipeline._finalized = False
-            pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoDistributedPass)
-            pipeline.finalize()
-            return [pipeline]
-
-    class SeqTestPipeline(bodo.compiler.BodoCompiler):
-        """
-        Bodo sequential pipeline with an additional PreserveIR pass
-        after LowerBodoIRExtSeq
-        """
-
-        def define_pipelines(self):
-            [pipeline] = self._create_bodo_pipeline(
-                distributed=False, inline_calls_pass=False
-            )
-            pipeline._finalized = False
-            pipeline.add_pass_after(PreserveIR, bodo.compiler.LowerBodoIRExtSeq)
-            pipeline.finalize()
-            return [pipeline]
-
-    @register_pass(analysis_only=False, mutates_CFG=True)
-    class ArrayAnalysisPass(FunctionPass):
-        _name = "array_analysis_pass"
-
-        def __init__(self):
-            FunctionPass.__init__(self)
-
-        def run_pass(self, state):
-            array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
-                state.typingctx,
-                state.func_ir,
-                state.typemap,
-                state.calltypes,
-            )
-            array_analysis.run(state.func_ir.blocks)
-            state.func_ir._definitions = numba.core.ir_utils.build_definitions(
-                state.func_ir.blocks
-            )
-            state.metadata["preserved_array_analysis"] = array_analysis
-            return False
-
-    class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
-        """
-        pipeline used in test_dataframe_array_analysis()
-        additional ArrayAnalysis pass that preserves analysis object
-        """
-
-        # Avoid copy propagation so we don't delete variables used to
-        # check array analysis.
-        avoid_copy_propagation = True
-
-        def define_pipelines(self):
-            [pipeline] = self._create_bodo_pipeline(
-                distributed=True, inline_calls_pass=False
-            )
-            pipeline._finalized = False
-            pipeline.add_pass_after(ArrayAnalysisPass, bodo.compiler.BodoSeriesPass)
-            pipeline.finalize()
-            return [pipeline]
 
 
 def check_timing_func(func, args):
@@ -2154,6 +1966,8 @@ def check_parallel_coherency(
     reset_index=False,
     additional_compiler_arguments=None,
 ):
+    from bodo.tests.utils_jit import reduce_sum
+
     n_pes = bodo.get_size()
 
     # Computing the output in serial mode
@@ -2606,6 +2420,8 @@ def check_caching(
     input_dist: The InputDist for the dataframe arguments. This is used
         in the flags for compiling the function.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     if py_output is no_default:
         py_output = impl(*args)
 
@@ -2697,6 +2513,8 @@ def _check_for_io_reader_filters(bodo_func, node_class):
     """make sure a Connector node has filters set, and the filtering code in the IR
     is removed
     """
+    from bodo.utils.utils import is_assign, is_expr
+
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     read_found = False
     for stmt in fir.blocks[0].body:

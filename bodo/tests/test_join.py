@@ -9,6 +9,7 @@ import string
 import unittest
 from decimal import Decimal
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -35,11 +36,6 @@ from bodo.tests.utils import (
     pytest_mark_pandas,
     temp_env_override,
 )
-
-if bodo.test_compiler:
-    import numba
-
-    from bodo.tests.utils import DeadcodeTestPipeline, get_start_end
 
 
 # pytest fixture for df3 = df1.merge(df2, on="A") tests with nested arrays.
@@ -450,6 +446,7 @@ def test_merge_empty_suffix_keys(memory_leak_check):
     """
     Test merge(): merging on keys and having an empty suffix.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f1(df1, df2):
         df3 = df1.merge(df2, left_on="A", right_on="C", suffixes=("", "_t"))
@@ -546,6 +543,7 @@ def test_merge_left_index_dce(memory_leak_check):
     Test merge(): merging on left_index and only returning
     one of the output Series.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f1(df1, df2):
         df3 = df1.merge(df2, left_index=True, right_on=["A"])
@@ -613,6 +611,7 @@ def test_merge_right_index_dce(memory_leak_check):
     Test merge(): merging on right_index and only returning
     one of the output Series.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f1(df1, df2):
         df3 = df1.merge(df2, right_index=True, left_on=["A"])
@@ -680,6 +679,7 @@ def test_merge_left_right_index_dce(memory_leak_check):
     Test merge(): merging on index and only returning
     one of the output Series.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f(df1, df2):
         df3 = df1.merge(df2, left_index=True, right_index=True)
@@ -724,6 +724,7 @@ def test_merge_left_right_only_index(memory_leak_check):
     Test merge(): merging on index and only returning
     the output index.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def f(df1, df2):
         df3 = df1.merge(df2, left_index=True, right_index=True)
@@ -2227,6 +2228,7 @@ def test_merge_datetime_parallel(memory_leak_check):
     Test merge(): merge on key column of type DatetimeIndex
     ensure parallelism
     """
+    from bodo.tests.utils_jit import get_start_end
 
     def test_impl(df1, df2):
         df3 = pd.merge(df1, df2, on="time")
@@ -2462,6 +2464,7 @@ def test_indicator_true_deadcol(memory_leak_check):
     test merge(): indicator=True where the indicator column can be optimized out
     as a dead column.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def test_impl(df1, df2):
         merged_df = df1.merge(df2, how="outer", on="join_keys", indicator=True)
@@ -3810,6 +3813,7 @@ def test_merge_left_parallel(memory_leak_check):
     Test merge(): merge with only left dataframe columns distributed
     ensure parallelism
     """
+    from bodo.tests.utils_jit import get_start_end
 
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on=["A", "B"])
@@ -3866,6 +3870,7 @@ def test_join_deadcode_cleanup(memory_leak_check):
     Test join dead code elimination when a merged dataframe is never used,
     merge() is not executed
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def test_impl(df1, df2):  # pragma: no cover
         df1.merge(df2, on=["A"])
@@ -4228,6 +4233,7 @@ def test_merge_partial_distributed(memory_leak_check):
     However, in case of having say left table replicated and how='left',
     we need to handle how the rows of the left table are matched.
     """
+    from bodo.tests.utils_jit import get_start_end
 
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A", how="outer")

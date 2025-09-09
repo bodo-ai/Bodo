@@ -6,6 +6,7 @@ import datetime
 import decimal
 import operator
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
@@ -16,12 +17,6 @@ from bodo.tests.utils import (
     get_num_test_workers,
     pytest_pandas,
 )
-
-if bodo.test_compiler:
-    import numba
-
-    from bodo.tests.utils import AnalysisTestPipeline
-    from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
 
@@ -1586,6 +1581,8 @@ def test_index_contains(args, memory_leak_check):
     ],
 )
 def test_range_index_malformed(args):
+    from bodo.utils.typing import BodoError
+
     # Compile time check: step passed in is zero
     def impl1(start, stop, step):
         return pd.RangeIndex(start, stop, step)
@@ -1947,6 +1944,8 @@ def test_init_datetime_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_datetime_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
+    from bodo.tests.utils_jit import AnalysisTestPipeline
+
     def impl(d):
         I = pd.DatetimeIndex(d)
         return I
@@ -2074,6 +2073,8 @@ def test_timedelta_index_constant_lowering(memory_leak_check):
 def test_init_timedelta_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_timedelta_index() is applied correctly"""
     import numba.tests.test_array_analysis
+
+    from bodo.tests.utils_jit import AnalysisTestPipeline
 
     def impl(d):
         I = pd.TimedeltaIndex(d)
@@ -2220,6 +2221,8 @@ def test_init_string_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_binary_str_index() is applied correctly for string indexes"""
     import numba.tests.test_array_analysis
 
+    from bodo.tests.utils_jit import AnalysisTestPipeline
+
     def impl(d):
         I = bodo.hiframes.pd_index_ext.init_binary_str_index(d, "AA")
         return I
@@ -2236,6 +2239,8 @@ def test_init_string_index_array_analysis(memory_leak_check):
 def test_init_binary_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_binary_str_index() is applied for binary indexes"""
     import numba.tests.test_array_analysis
+
+    from bodo.tests.utils_jit import AnalysisTestPipeline
 
     def impl(d):
         I = bodo.hiframes.pd_index_ext.init_binary_str_index(d, "AA")
@@ -2477,6 +2482,8 @@ def test_index_getitem(index, memory_leak_check):
 def test_init_range_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_range_index() is applied correctly"""
     import numba.tests.test_array_analysis
+
+    from bodo.tests.utils_jit import AnalysisTestPipeline
 
     def impl(n):
         I = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)
@@ -3243,6 +3250,7 @@ def test_index_unsupported(data):
     """Test that a Bodo error is raised for unsupported
     Index methods
     """
+    from bodo.utils.typing import BodoError
 
     def test_append(idx):
         return idx.append()
@@ -4016,6 +4024,7 @@ def test_index_rename(idx, new_name):
 
 def test_index_rename_dist_bug(memory_leak_check):
     """tests index.rename() for distribution match between input and output [BE-2285]"""
+    from bodo.utils.typing import BodoError
 
     @bodo.jit(distributed=["I"], returns_maybe_distributed=False)
     def f(I):

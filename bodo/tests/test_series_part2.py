@@ -24,10 +24,6 @@ from bodo.tests.utils import (
     pytest_pandas,
 )
 
-if bodo.test_compiler:
-    from bodo.tests.utils import AnalysisTestPipeline
-    from bodo.utils.typing import BodoError
-
 pytestmark = pytest_pandas
 
 
@@ -524,6 +520,7 @@ def test_monotonicity(memory_leak_check):
 
 def test_series_map_error_check(memory_leak_check):
     """make sure proper error is raised when UDF is not supported"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(S):
         # lambda calling a non-jit function that we don't support
@@ -771,6 +768,8 @@ def test_series_min_max_int_output_type(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_idxmin(series_val, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     # Binary not supported in pandas
     if isinstance(series_val.values[0], bytes):
         return
@@ -821,6 +820,8 @@ def test_series_idxmin(series_val, memory_leak_check):
 
 
 def test_series_idxmax(series_val, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     # Binary not supported in pandas
     if isinstance(series_val.values[0], bytes):
         return
@@ -1136,6 +1137,7 @@ def test_series_equals_true(series_val, memory_leak_check):
     Tests that all series values can be used in equals.
     Every value is expected to return True.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(S1, S2):
         return S1.equals(S2)
@@ -1158,6 +1160,8 @@ def test_series_equals_false(series_val, memory_leak_check):
     Tests that all series values with different types
     return False.
     """
+    from bodo.utils.typing import BodoError
+
     # Series that matches another series but differs in type
     other = pd.Series([1, 8, 4, 0, 3], dtype=np.uint16)
 
@@ -1487,6 +1491,7 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
 @pytest.mark.slow
 def test_series_quantile_q(memory_leak_check):
     """Tests passing list, int, and unsupported type to q argument"""
+    from bodo.utils.typing import BodoError
 
     # List
     def test_impl(S):
@@ -1626,6 +1631,7 @@ def test_series_reset_index_error(memory_leak_check):
     """make sure compilation doesn't hang with reset_index/setattr combination,
     see [BE-140]
     """
+    from bodo.utils.typing import BodoError
 
     def impl(S):
         df = S.reset_index(drop=False)
@@ -1788,6 +1794,7 @@ def test_series_dropna(S, memory_leak_check):
 
 def test_series_to_frame(memory_leak_check):
     """test Series.to_frame(). Series name should be known at compile time"""
+    from bodo.utils.typing import BodoError
 
     # Series name is constant
     def impl1():
@@ -1819,6 +1826,7 @@ def test_series_to_frame(memory_leak_check):
 
 def test_series_drop_inplace_check(memory_leak_check):
     """make sure inplace=True is not use in Series.dropna()"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(S):
         S.dropna(inplace=True)
@@ -2045,6 +2053,7 @@ def test_series_shift_type_check(series_val, memory_leak_check):
     Make sure Series.shift() works for supported data types but throws error for
     unsupported ones.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(A):
         return A.shift(1)
@@ -2071,6 +2080,8 @@ def test_series_shift_type_check(series_val, memory_leak_check):
 
 @pytest.mark.slow
 def test_series_shift_error_periods(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     S = pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A")
 
     def test_impl(S, periods):
@@ -2434,6 +2445,7 @@ def test_series_np_where_num(memory_leak_check):
 def test_series_where_true_scalar(series_val, memory_leak_check):
     """Tests that all types can be used in Series.where(cond, scalar)
     with all True values."""
+    from bodo.utils.typing import BodoError
 
     cond = np.array([True] * len(series_val))
     val = series_val.iloc[0]
@@ -2456,6 +2468,7 @@ def test_series_where_true_scalar(series_val, memory_leak_check):
 
 def test_series_where_np_array(series_val, memory_leak_check):
     """Tests that all types can be used in Series.where(cond, ndarray)"""
+    from bodo.utils.typing import BodoError
 
     np.random.seed(42)
     cond = np.random.randint(2, size=len(series_val)).astype(bool)
@@ -2490,6 +2503,7 @@ def test_series_where_np_array(series_val, memory_leak_check):
 
 def test_series_where_series(series_val, memory_leak_check):
     """Tests that all types can be used in Series.where(cond, Series)"""
+    from bodo.utils.typing import BodoError
 
     np.random.seed(42)
     cond = np.random.randint(2, size=len(series_val)).astype(bool)
@@ -2516,6 +2530,8 @@ def test_series_where_series(series_val, memory_leak_check):
 
 def test_series_mask_np_array(series_val, memory_leak_check):
     """Tests that all types can be used in Series.mask(cond, ndarray)"""
+    from bodo.utils.typing import BodoError
+
     np.random.seed(42)
 
     cond = np.random.randint(2, size=len(series_val)).astype(bool)
@@ -2550,6 +2566,8 @@ def test_series_mask_np_array(series_val, memory_leak_check):
 
 def test_series_mask_series(series_val, memory_leak_check):
     """Tests that all supported types can be used in Series.mask(cond, Series)."""
+    from bodo.utils.typing import BodoError
+
     np.random.seed(42)
 
     cond = np.random.randint(2, size=len(series_val)).astype(bool)
@@ -2706,6 +2724,7 @@ def test_np_where_one_arg(memory_leak_check):
 def test_series_mask_false(series_val, memory_leak_check):
     """Tests that all types can be used in Series.mask(cond)
     with all False values."""
+    from bodo.utils.typing import BodoError
 
     cond = np.array([False] * len(series_val))
     val = series_val.iloc[0]
@@ -2874,6 +2893,7 @@ def test_cut():
 
 def test_qcut(memory_leak_check):
     """Tests for pd.qcut()"""
+    from bodo.utils.typing import BodoError
 
     def impl(S, q):
         return pd.qcut(S, q)
@@ -2948,6 +2968,8 @@ def test_astype_call_warn(memory_leak_check):
 def test_get_series_index_array_analysis():
     """make sure shape equivalence for get_series_index() is applied correctly"""
     import numba.tests.test_array_analysis
+
+    from bodo.tests.utils_jit import AnalysisTestPipeline
 
     def impl(S):
         B = S.index
@@ -3237,6 +3259,7 @@ def test_series_round(S, d, memory_leak_check):
 @pytest.mark.slow
 def test_series_unsupported_error_checking(memory_leak_check):
     """make sure BodoError is raised for unsupported Series attributes and methods"""
+    from bodo.utils.typing import BodoError
 
     # test an example attribute
     def test_attr(S):
@@ -3347,6 +3370,8 @@ def is_where_mask_supported_series(S):
 
 def test_series_np_select(series_val):
     """tests np select for nullable series"""
+    from bodo.utils.typing import BodoError
+
     np.random.seed(42)
 
     cond1 = np.random.randint(2, size=len(series_val)).astype(bool)

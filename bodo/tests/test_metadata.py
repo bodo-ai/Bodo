@@ -1,5 +1,6 @@
 import datetime
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,15 +8,6 @@ import pytest
 import bodo
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.series_common import series_val  # noqa
-
-if bodo.test_compiler:
-    import numba
-
-    from bodo.hiframes.boxing import (
-        _dtype_from_type_enum_list,
-        _infer_series_arr_type,
-    )
-    from bodo.tests.utils import reduce_sum
 
 
 @pytest.fixture(
@@ -213,8 +205,12 @@ def check_series_typing_metadata(orig_series, output_series):
     """Helper function that returns True if the series has Bodo metadata such that the dtype infered
     from the metadata will be the same as the infered dtype of the original series
     (original series must contain >= 1 non null element)
-
     """
+    from bodo.hiframes.boxing import (
+        _dtype_from_type_enum_list,
+        _infer_series_arr_type,
+    )
+
     meta_dtype = _dtype_from_type_enum_list(
         output_series._bodo_meta["type_metadata"][1]
     )
@@ -238,6 +234,11 @@ def check_dataframe_typing_metadata(orig_df, output_df):
     from the metadata will be the same as the infered dtypes of the original dataframe
     (original dataframe must contain 1 >= columns, each containing >= 1 non null element)
     """
+    from bodo.hiframes.boxing import (
+        _dtype_from_type_enum_list,
+        _infer_series_arr_type,
+    )
+
     if not (
         hasattr(output_df, "_bodo_meta")
         and "type_metadata" in output_df._bodo_meta
@@ -454,6 +455,8 @@ def test_df_return_metadata(gen_func, use_func):
     a dataframe that only contains data on rank 0. "use_func" is a Bodo function that uses the distributed data, in
     such a way that an error would be thrown if the dataframe's column's type was infered as the default (string).
     """
+    from bodo.hiframes.boxing import _dtype_from_type_enum_list
+    from bodo.tests.utils_jit import reduce_sum
 
     # Disable this test with table format as we don't
     # have type metadata support with table format yet.
@@ -570,6 +573,8 @@ def test_series_return_metadata(gen_func, use_func):
     a series that only contains data on rank 0. "use_func" is a Bodo function that uses the distributed data, in
     such a way that an error would be thrown if the series dtype was infered as the default (string).
     """
+    from bodo.hiframes.boxing import _dtype_from_type_enum_list
+    from bodo.tests.utils import reduce_sum
 
     out = gen_func()
 
@@ -617,6 +622,8 @@ def test_index_type_return(metadata_supported_index_types):
     Tests that the index typing information is properly preserved when returning a dataframe
     to pandas.
     """
+    from bodo.tests.utils import reduce_sum
+
     idx = metadata_supported_index_types[:1]
     is_obj_index = pd.api.types.is_object_dtype(idx)
     is_str_idx = isinstance(idx[0], str)

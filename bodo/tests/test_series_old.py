@@ -17,10 +17,6 @@ from bodo.tests.utils import (
     pytest_pandas,
 )
 
-if bodo.test_compiler:
-    from bodo.tests.utils import get_start_end
-    from bodo.utils.typing import BodoError
-
 pytestmark = pytest_pandas
 
 _cov_corr_series = [
@@ -633,6 +629,8 @@ class TestSeries(unittest.TestCase):
         np.testing.assert_array_equal(bodo_func(S1), test_impl(S2))
 
     def test_series_dropna_str_parallel1(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(A):
             B = A.dropna()
             return (B == "gg").sum()
@@ -724,6 +722,8 @@ class TestSeries(unittest.TestCase):
         )
 
     def test_series_dist_input1(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(S):
             return S.max()
 
@@ -748,6 +748,8 @@ class TestSeries(unittest.TestCase):
 
     @unittest.skip("pending handling of build_tuple in dist pass")
     def test_series_tuple_input_dist1(self):
+        from bodo.tests.utils_jit import get_start_end
+
         def test_impl(s_tup):
             return s_tup[0].max()
 
@@ -1133,6 +1135,8 @@ class TestSeries(unittest.TestCase):
         check_func(test_impl, (), only_seq=True, sort_output=True)
 
     def test_series_shift_default1(self):
+        from bodo.utils.typing import BodoError
+
         def test_impl(S):
             return S.shift()
 

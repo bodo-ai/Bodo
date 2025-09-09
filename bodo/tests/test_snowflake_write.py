@@ -14,12 +14,14 @@ import uuid
 from decimal import Decimal
 from tempfile import TemporaryDirectory
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 
 import bodo
+from bodo import BodoWarning
 from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -35,23 +37,11 @@ from bodo.tests.utils import (
     pytest_mark_one_rank,
     pytest_one_rank,
     pytest_snowflake,
+    run_rank0,
     snowflake_cred_env_vars_present,
     temp_env_override,
 )
-
-if bodo.test_compiler:
-    import numba
-
-    import bodo.io.snowflake
-    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-    from bodo.io.snowflake_write import (
-        snowflake_writer_append_table,
-        snowflake_writer_init,
-    )
-    from bodo.tests.utils import get_start_end, reduce_sum, run_rank0
-    from bodo.utils.testing import ensure_clean_snowflake_table
-    from bodo.utils.typing import BodoWarning
-
+from bodo.utils.testing import ensure_clean_snowflake_table
 
 pytestmark = pytest_snowflake
 
@@ -64,6 +54,7 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     Tests creating an internal stage within Snowflake
     """
     from bodo.io.snowflake import create_internal_stage, snowflake_connect
+    from bodo.tests.utils_jit import reduce_sum
 
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -122,6 +113,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     Tests dropping an internal stage within Snowflake
     """
     from bodo.io.snowflake import drop_internal_stage, snowflake_connect
+    from bodo.tests.utils_jit import reduce_sum
 
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -185,6 +177,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     Tests uploading files to Snowflake internal stage using PUT command
     """
     from bodo.io.snowflake import do_upload_and_cleanup, snowflake_connect
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     db = "TEST_DB"
     schema = "SNOWFLAKE_WRITE_TEST"
@@ -311,7 +304,9 @@ def test_snowflake_write_create_table_handle_exists():
     """
     Test Snowflake write table creation, both with and without a pre-existing table
     """
+    import bodo.io.snowflake
     from bodo.io.snowflake import create_table_handle_exists, snowflake_connect
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     db = "TEST_DB"
     schema = "SNOWFLAKE_WRITE_TEST"
@@ -531,7 +526,9 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
     """
     Tests executing COPY_INTO into a Snowflake table from internal stage
     """
+    import bodo.io.snowflake
     from bodo.io.snowflake import execute_copy_into, snowflake_connect
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     db = "TEST_DB"
     schema = "SNOWFLAKE_WRITE_TEST"
@@ -818,6 +815,7 @@ def test_to_sql_snowflake(df_size, sf_write_use_put, snowflake_user, memory_leak
 
     import bodo
     import bodo.io.snowflake
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     rng = np.random.default_rng(5)
     letters = np.array(list(string.ascii_letters))
@@ -882,6 +880,7 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
     This compares the dataframe Bodo writes and reads vs.
     the dataframe Pandas writes and reads
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     bodo_tablename = "BODO_DT_P1"
     py_tablename = "PY_DT_P1"
@@ -1005,6 +1004,8 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
         # 3. Decimal. I don't know why but probably precision difference.
         # 4. Others have datatype differences.
     """
+    import bodo.types
+    from bodo.tests.utils_jit import reduce_sum
 
     bodo_tablename = "BODO_DT_P2"
     db = "TEST_DB"
@@ -1233,6 +1234,8 @@ def test_snowflake_to_sql_bodo_datatypes_part3(df, memory_leak_check):
 
 def test_snowflake_to_sql_nullarray(memory_leak_check):
     """Tests that df.to_sql works with NullArrayType."""
+    import bodo.libs.null_arr_ext
+    from bodo.tests.utils_jit import reduce_sum
 
     bodo_tablename = "BODO_DT_P4"
     db = "TEST_DB"
@@ -1331,6 +1334,7 @@ def test_snowflake_to_sql_colname_case(memory_leak_check):
     """
     Tests that df.to_sql works with different upper/lower case of column name
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     tablename = "TEST_CASE"
     db = "TEST_DB"
@@ -1428,6 +1432,8 @@ def test_to_sql_snowflake_nulls_in_dict(memory_leak_check):
     We also explicitly test the table-format case since the codegen
     for it is slightly different.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     S = pa.DictionaryArray.from_arrays(
         np.array([0, 2, 1, 0, 1, 3, 0, 1, 3, 3, 2, 0, 2, 3, 1] * 2, dtype=np.int32),
         pd.Series(["B", None, "A", None]),
@@ -1596,6 +1602,17 @@ def test_batched_write_agg(
     Test a simple use of batched Snowflake writes by reading a table, writing
     the results, then reading again
     """
+    import bodo.io.snowflake
+    from bodo.io.arrow_reader import (
+        arrow_reader_del,
+        read_arrow_next,
+    )
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
+    from bodo.tests.utils_jit import reduce_sum
+
     comm = MPI.COMM_WORLD
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
@@ -1888,6 +1905,10 @@ def test_batched_write_nested_array(
         column_type = "variant"
 
     from bodo.io.snowflake import snowflake_connect
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
 
     conn = bodo.tests.utils.get_snowflake_connection_string("TEST_DB", "PUBLIC")
     kept_cols = bodo.utils.typing.MetaType(tuple(range(len(df.columns))))
@@ -1975,6 +1996,11 @@ def test_write_with_string_precision(memory_leak_check):
     Tests streaming write using string column precisions to specify the maximum
     number of bytes for each column.
     """
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
+
     global_1 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C"))
     global_2 = bodo.utils.typing.MetaType((0, 1, 2))
     global_3 = bodo.utils.typing.MetaType((8, -1, 3))
@@ -2041,6 +2067,11 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
     Tests streaming write using timestamp/time column precisions to specify the
     precision for each column.
     """
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
+
     global_1 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D", "E", "F"))
     global_2 = bodo.utils.typing.MetaType((0, 1, 2, 3, 4, 5))
     # Note: BodoSQL shouldn't generate -1, but we check just in case.
@@ -2141,6 +2172,8 @@ def test_decimal_sub_38_precision_write(memory_leak_check):
     Tests that reading and writing a number column that requires > int64 but
     is smaller than Number(38, 0) is read and written correctly by Bodo.
     """
+    from bodo.io.snowflake_write import snowflake_writer_init
+
     snowflake_user = 1
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -2259,6 +2292,8 @@ def test_create_table_with_comments(memory_leak_check):
     Tests using streaming Snowflake write functions to create a new table
     with table comments and column comments.
     """
+    from bodo.io.snowflake_write import snowflake_writer_init
+
     if bodo.get_size() != 1:
         pytest.skip("This test is only designed for 1 rank")
 

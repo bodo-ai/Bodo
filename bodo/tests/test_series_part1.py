@@ -3,9 +3,12 @@ import operator
 import sys
 from decimal import Decimal
 
+import numba  # noqa TID253
+import numba.np.ufunc_db  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core.ir_utils import find_callname, guard  # noqa TID253
 
 import bodo
 from bodo.tests.series_common import (  # noqa
@@ -21,18 +24,6 @@ from bodo.tests.utils import (
     no_default,
     pytest_pandas,
 )
-
-if bodo.test_compiler:
-    import numba
-    import numba.np.ufunc_db
-    from numba.core.ir_utils import find_callname, guard
-
-    from bodo.tests.utils import (
-        SeriesOptTestPipeline,
-    )
-    from bodo.utils.typing import BodoError
-    from bodo.utils.utils import is_call_assign
-
 
 pytestmark = pytest_pandas
 
@@ -179,6 +170,8 @@ def test_series_cov_ddof(memory_leak_check):
 
 
 def test_series_fillna_series_val(series_val):
+    from bodo.utils.typing import BodoError
+
     def impl(S):
         val = S.iat[0]
         return S.fillna(val)
@@ -284,6 +277,8 @@ def test_replace_series_val(series_val):
     """Run series.replace on the types in the series_val fixture. Catch
     expected failures from lack of coverage.
     """
+    from bodo.utils.typing import BodoError
+
     series = series_val.dropna()
     to_replace = series.iat[0]
     value = series.iat[1]
@@ -454,6 +449,8 @@ def test_replace_types_supported(series_replace):
 )
 def test_replace_types_unsupported(series_replace):
     """Run series.replace on particular types that all fail."""
+    from bodo.utils.typing import BodoError
+
     series = series_replace.series
     to_replace = series_replace.to_replace
     value = series_replace.value
@@ -1163,6 +1160,8 @@ def test_series_iat_getitem_datetime(memory_leak_check):
 
 @pytest.mark.smoke
 def test_series_iat_setitem(series_val, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     val = series_val.iat[0]
 
     def test_impl(S, val):
@@ -1319,6 +1318,7 @@ def test_series_loc_getitem_int_range(memory_leak_check):
 @pytest.mark.slow
 def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
     """Tests that setitem with Series.loc works with a Boolean List index"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(S, val):
         S.loc[[True, True, False, True, False]] = val
@@ -1448,6 +1448,7 @@ def test_series_iloc_setitem_int(series_val, memory_leak_check):
     """
     Test setitem for Series.iloc with int idx.
     """
+    from bodo.utils.typing import BodoError
 
     val = series_val.iat[0]
 
@@ -1490,6 +1491,7 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
     """
     Test setitem for Series.iloc and Series with bool arr/list idx.
     """
+    from bodo.utils.typing import BodoError
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support conversion between dt64/Timestamp
@@ -1628,6 +1630,7 @@ def test_series_iloc_setitem_scalar(series_val, memory_leak_check):
     Tests that series.iloc setitem with array/index/slice
     properly supports a Scalar RHS
     """
+    from bodo.utils.typing import BodoError
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support setitem array idx, scalar value for Categorical arrays
@@ -1684,6 +1687,7 @@ def test_series_iloc_setitem_slice(series_val, memory_leak_check):
     """
     Test setitem for Series.iloc and Series.values with slice idx.
     """
+    from bodo.utils.typing import BodoError
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support conversion between dt64/Timestamp
@@ -1802,6 +1806,7 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
     Test setitem for Series.iloc and Series.values with list/array
     of ints idx.
     """
+    from bodo.utils.typing import BodoError
 
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         # TODO: [BE-49] support conversion between dt64/Timestamp
@@ -1926,6 +1931,8 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
 # TODO: add memory_leak_check
 @pytest.mark.smoke
 def test_series_getitem_int(series_val):
+    from bodo.utils.typing import BodoError
+
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
@@ -1963,6 +1970,8 @@ def test_series_getitem_slice(series_val, memory_leak_check):
 
 @pytest.mark.parametrize("idx", [[1, 3], np.array([1, 3]), pd.Series([1, 3])])
 def test_series_getitem_list_int(series_val, idx, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl(S, idx):
         return S[idx]
 
@@ -2020,6 +2029,8 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
 
 @pytest.mark.smoke
 def test_series_setitem_int(series_val, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -2069,6 +2080,8 @@ def test_series_setitem_slice(series_val, memory_leak_check):
 @pytest.mark.parametrize("idx", [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
 @pytest.mark.parametrize("list_val_arg", [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -2379,20 +2392,18 @@ def test_series_ufunc(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-if bodo.test_compiler:
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    # avoiding isnat since only supported for datetime/timedelta
+    "ufunc",
+    [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
+)
+def test_series_unary_ufunc(ufunc, memory_leak_check):
+    def test_impl(S):
+        return ufunc(S)
 
-    @pytest.mark.slow
-    @pytest.mark.parametrize(
-        # avoiding isnat since only supported for datetime/timedelta
-        "ufunc",
-        [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
-    )
-    def test_series_unary_ufunc(ufunc, memory_leak_check):
-        def test_impl(S):
-            return ufunc(S)
-
-        S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
-        check_func(test_impl, (S,))
+    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
+    check_func(test_impl, (S,))
 
 
 def test_series_unary_ufunc_np_call(memory_leak_check):
@@ -2405,31 +2416,29 @@ def test_series_unary_ufunc_np_call(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-if bodo.test_compiler:
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "ufunc",
+    [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1],
+)
+def test_series_binary_ufunc(ufunc, memory_leak_check):
+    def test_impl(S1, S2):
+        return ufunc(S1, S2)
 
-    @pytest.mark.slow
-    @pytest.mark.parametrize(
-        "ufunc",
-        [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1],
-    )
-    def test_series_binary_ufunc(ufunc, memory_leak_check):
-        def test_impl(S1, S2):
-            return ufunc(S1, S2)
+    # Numpy <2 seems to have a bug with ldexp on Windows for int64
+    if (
+        ufunc == np.ldexp
+        and sys.platform == "win32"
+        and np.lib.NumpyVersion(np.__version__) < "2.0.0b1"
+    ):
+        return
 
-        # Numpy <2 seems to have a bug with ldexp on Windows for int64
-        if (
-            ufunc == np.ldexp
-            and sys.platform == "win32"
-            and np.lib.NumpyVersion(np.__version__) < "2.0.0b1"
-        ):
-            return
-
-        S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
-        A = np.array([1, 3, 7, 11])
-        # TODO [BE-3747]: Fix nightly and remove check_dtype=False
-        check_func(test_impl, (S, S), check_dtype=False)
-        check_func(test_impl, (S, A), check_dtype=False)
-        check_func(test_impl, (A, S), check_dtype=False)
+    S = pd.Series([4, 6, 7, 1], [3, 5, 0, 7], name="ABC")
+    A = np.array([1, 3, 7, 11])
+    # TODO [BE-3747]: Fix nightly and remove check_dtype=False
+    check_func(test_impl, (S, S), check_dtype=False)
+    check_func(test_impl, (S, A), check_dtype=False)
+    check_func(test_impl, (A, S), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2719,6 +2728,9 @@ def test_series_apply_df_output(memory_leak_check):
 
 def _check_IR_no_const_arr(test_impl, args):
     """makes sure there is no const array call left in the IR after optimization"""
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
+    from bodo.utils.utils import is_call_assign
+
     bodo_func = numba.njit(pipeline_class=SeriesOptTestPipeline, parallel=True)(
         test_impl
     )
@@ -2799,6 +2811,7 @@ def test_series_apply_supported_types(series_val, memory_leak_check):
 @pytest.mark.slow
 def test_series_apply_args(memory_leak_check):
     """Test Series.apply with unsupported and wrong arguments"""
+    from bodo.utils.typing import BodoError
 
     def test_convert_dtype_false(S):
         return S.apply(lambda a: a, convert_dtype=False)
@@ -2852,6 +2865,7 @@ def test_series_map_supported_types(series_val):
 @pytest.mark.slow
 def test_series_map_args(memory_leak_check):
     """Test Series.map with unsupported and wrong arguments"""
+    from bodo.utils.typing import BodoError
 
     def test_na_action_none(S):
         return S.map(lambda a: a, na_action=None)

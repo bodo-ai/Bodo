@@ -46,9 +46,6 @@ from bodo.tests.utils import (
     run_rank0,
 )
 
-if bodo.test_compiler:
-    from bodo.tests.utils import reduce_sum
-
 pytestmark = pytest.mark.iceberg
 
 
@@ -389,6 +386,8 @@ def test_iceberg_write_part_sort(
     and verify that the append was done correctly, i.e. validate
     that each file is correctly sorted and partitioned.
     """
+    from bodo.tests.utils import reduce_sum
+
     table_name = (
         f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}_streaming_{use_dict_encoding_boxing}"
     )
@@ -531,14 +530,12 @@ def test_iceberg_field_ids_in_pq_schema(
     )
 
 
-if bodo.test_compiler:
-
-    @run_rank0
-    def _get_pq_files(warehouse_loc, db_schema, table_name):
-        data_files = glob.glob(
-            os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
-        )
-        return data_files
+@run_rank0
+def _get_pq_files(warehouse_loc, db_schema, table_name):
+    data_files = glob.glob(
+        os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
+    )
+    return data_files
 
 
 @pytest_mark_one_rank

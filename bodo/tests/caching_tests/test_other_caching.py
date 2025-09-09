@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 from caching_tests_common import fn_distribution  # noqa
 
-import bodo
 from bodo.tests.test_metadata import (  # noqa
     bytes_gen_dist_df,
     int_gen_dist_df,
@@ -12,9 +11,6 @@ from bodo.tests.test_metadata import (  # noqa
     struct_gen_dist_df,
 )
 from bodo.tests.utils import InputDist, check_caching
-
-if bodo.test_compiler:
-    from bodo.tests.utils import reduce_sum
 
 
 def test_groupby_agg_caching(fn_distribution, is_cached, memory_leak_check):
@@ -212,6 +208,7 @@ def test_caching_version_check(is_cached, memory_leak_check):
     import os
 
     import bodo
+    from bodo.tests.utils_jit import reduce_sum
 
     @bodo.jit(cache=True)
     def impl(x):

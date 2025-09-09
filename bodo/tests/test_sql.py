@@ -21,10 +21,7 @@ from bodo.tests.utils import (
     oracle_user_pass_and_hostname,
     sql_user_pass_and_hostname,
 )
-
-if bodo.test_compiler:
-    from bodo.tests.utils import get_start_end, reduce_sum
-    from bodo.utils.testing import ensure_clean_mysql_psql_table
+from bodo.utils.testing import ensure_clean_mysql_psql_table
 
 pytestmark = [pytest.mark.sql, pytest.mark.slow]
 
@@ -32,6 +29,7 @@ pytestmark = [pytest.mark.sql, pytest.mark.slow]
 @pytest.mark.parametrize("chunksize", [None, 4])
 def test_write_sql_aws(chunksize, memory_leak_check):
     """This test for a write down on a SQL database"""
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     def test_impl_write_sql(df, table_name, conn, chunksize):
         df.to_sql(table_name, conn, if_exists="replace", chunksize=chunksize)
@@ -470,6 +468,7 @@ def test_write_sql_oracle(is_distributed, memory_leak_check):
     """Test to_sql with Oracle database
     Data is compared vs. original DF
     """
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     def test_impl_write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, if_exists="replace")
@@ -776,6 +775,7 @@ def test_to_sql_postgres(is_distributed, memory_leak_check):
     Test to_sql with PostgreSQL database
     Data is compared vs. original DF
     """
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     def test_impl_write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, if_exists="replace")
@@ -831,6 +831,7 @@ def test_to_sql_oracle(is_distributed, memory_leak_check):
     """Test to_sql with Oracle database
     Data is compared vs. original DF
     """
+    from bodo.tests.utils_jit import get_start_end, reduce_sum
 
     def test_impl_write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, index=False, if_exists="replace")

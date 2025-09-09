@@ -3,6 +3,7 @@ import random
 import string
 from decimal import Decimal
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -20,12 +21,6 @@ from bodo.tests.utils import (
     has_udf_call,
     pytest_mark_pandas,
 )
-
-if bodo.test_compiler:
-    import numba
-
-    from bodo.tests.utils import DeadcodeTestPipeline, DistTestPipeline, get_start_end
-    from bodo.utils.typing import BodoError
 
 # Note: this file tests a large mix of features that are critical
 # for BodoSQL, but also a large number that are only relevent
@@ -500,6 +495,7 @@ def test_agg_set_error(memory_leak_check):
     Test Groupby.agg() with constant set input but no single
     output column.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(df):
         return df.groupby("A").agg({"max"})
@@ -2631,6 +2627,7 @@ def test_groupby_agg_func_list(memory_leak_check):
     """
     Test groupy.agg with list of functions in const dict input
     """
+    from bodo.tests.utils_jit import DistTestPipeline
 
     def impl(df):
         return df.groupby("A").agg(
@@ -2663,6 +2660,7 @@ def test_groupby_agg_nullable_or(memory_leak_check):
     """
     Test groupy.agg with & and | can take the optimized path
     """
+    from bodo.tests.utils_jit import DistTestPipeline
 
     def impl(df):
         return df.groupby("A").agg(
@@ -2825,6 +2823,7 @@ def test_agg_global_func(memory_leak_check):
     """
     Test Groupby.agg() with a global function as UDF
     """
+    from bodo.tests.utils_jit import DistTestPipeline
 
     def impl_str(df):
         A = df.groupby("A")["B"].agg(g)
@@ -3621,6 +3620,7 @@ def test_groupby_apply_objmode():
     """
     Test Groupby.apply() with objmode inside UDF
     """
+    from bodo.tests.utils import DeadcodeTestPipeline
 
     bodo.numba.types.test_df_type = bodo.types.DataFrameType(
         (bodo.types.string_array_type, bodo.types.float64[::1]),
@@ -4398,6 +4398,7 @@ def test_groupby_as_index_mean(memory_leak_check):
 @pytest.mark.slow
 def test_mean_median_other_supported_types(memory_leak_check):
     """Test Groupby.mean()/median() with cases not in test_df"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").mean()
@@ -4514,6 +4515,7 @@ def test_min(test_df, memory_leak_check):
 @pytest.mark.slow
 def test_min_max_other_supported_types(memory_leak_check):
     """Test Groupby.min()/max() with other types not in df_test"""
+    from bodo.utils.typing import BodoError
 
     # TODO: [BE-435] HA: Once all these groupby functions are done, merge the dataframe examples with df_test
     def impl1(df):
@@ -4834,6 +4836,7 @@ def test_groupby_as_index_prod(memory_leak_check):
 @pytest.mark.slow
 def test_sum_prod_empty_mix(memory_leak_check):
     """Test Groupby.sum()/prod() with cases not in test_df"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").sum()
@@ -4944,6 +4947,7 @@ def test_first_last(test_df):
 @pytest.mark.slow
 def test_first_last_supported_types(memory_leak_check):
     """Test Groupby.first()/last() with other types not in test_df"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").first()
@@ -5452,6 +5456,7 @@ def test_agg_multikey_parallel(memory_leak_check):
     """
     Test groupby multikey with distributed df
     """
+    from bodo.tests.utils_jit import get_start_end
 
     def test_impl(df):
         A = df.groupby(["A", "C"])["B"].sum()
@@ -5499,6 +5504,7 @@ def test_var_std_supported_types(memory_leak_check):
     """
     Test Groupby.var()
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").var()
@@ -5753,6 +5759,7 @@ def test_const_list_inference(memory_leak_check):
     """
     Test passing non-const list that can be inferred as constant to groupby()
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         return df.groupby(["A"] + ["B"]).sum()
@@ -6350,6 +6357,7 @@ def test_cumulatives_supported_cases(memory_leak_check):
     """
     Test Groupby.cummin, cummax, cumsum, cumprod
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").cummin()
@@ -6588,6 +6596,7 @@ def test_count_supported_cases(memory_leak_check):
     """
     Test Groupby.count
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         A = df.groupby("A").count()
@@ -6617,6 +6626,7 @@ def test_count_supported_cases(memory_leak_check):
 @pytest_mark_pandas
 def test_value_counts(memory_leak_check):
     """Test groupby.value_counts"""
+    from bodo.utils.typing import BodoError
 
     # SeriesGroupBy
     def impl1(df):
@@ -7729,6 +7739,7 @@ def test_bit_agg(data, dtype, memory_leak_check):
 def test_boolagg_or_invalid(data_col, memory_leak_check):
     """Tests calling a groupby with boolagg_or, a function used by
     BodoSQL and not part or regular pandas, on unsupported datatypes."""
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def impl(df):

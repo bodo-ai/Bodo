@@ -177,6 +177,7 @@ banned-module-level-imports = [
   "bodo.hiframes",
   "bodo.ir",
   "bodo.pandas.utils_jit",
+  "bodo.tests.utils_jit",
   "bodo.transforms",
   "bodo.ml_support",
 
@@ -203,6 +204,7 @@ banned-module-level-imports = [
 [tool.ruff.lint.per-file-ignores]
 # Only allow compiler-related imports (ignore TID253) in these files/dirs.
 "bodo/pandas/utils_jit.py" = ["TID253"]
+"bodo/tests/utils_jit.py" = ["TID253"]
 "bodo/compiler.py" = ["TID253"]
 "bodo/decorators.py" = ["TID253"]
 "bodo/sql_plan_cache.py" = ["TID253"]
@@ -230,7 +232,7 @@ banned-module-level-imports = [
 "**/utils/*" = ["TID253"]
 "**/transforms/*" = ["TID253"]
 "**/ml_support/*" = ["TID253"]
-# TODO [BSE-5085]: avoid JIT imports in pytest utils files where not needed
+# Tests for BodoSQL internals
 "**/test_streaming/*" = ["TID253"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

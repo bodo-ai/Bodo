@@ -30,14 +30,6 @@ from bodo.tests.utils import (
 )
 from bodo.utils.testing import ensure_clean2, ensure_clean_dir
 
-if bodo.test_compiler:
-    from bodo.io.stream_parquet_write import (
-        parquet_writer_append_table,
-        parquet_writer_init,
-    )
-    from bodo.tests.utils import reduce_sum
-    from bodo.utils.typing import BodoError
-
 pytestmark = pytest.mark.parquet
 
 
@@ -417,6 +409,9 @@ def gen_dataframe(num_elements, write_index):
 
 @pytest.mark.slow
 def test_read_write_parquet(memory_leak_check):
+    from bodo.tests.utils_jit import reduce_sum
+    from bodo.utils.typing import BodoError
+
     def write(df, filename):
         df.to_parquet(filename)
 
@@ -636,6 +631,7 @@ def test_write_parquet_dict(memory_leak_check):
     Test to_parquet when dictionary arrays are used
     in a DataFrame.
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     @bodo.jit(distributed=["arr1", "arr2"])
     def impl(arr1, arr2):
@@ -701,6 +697,7 @@ def test_write_parquet_dict_table(memory_leak_check):
     To do this consistently we load heavily compressed data
     from parquet.
     """
+    from bodo.tests.utils_jit import reduce_sum
 
     if bodo.get_rank() == 0:
         df = pd.DataFrame(
@@ -823,6 +820,8 @@ def test_tz_to_parquet(memory_leak_check):
     Tests loading and returning an array with timezone information
     from Arrow. This tests both `to_parquet` and `array_to_info` support.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     py_output = pd.DataFrame(
         {
             "A": pd.date_range(
@@ -893,6 +892,8 @@ def test_to_pq_nulls_in_dict(memory_leak_check):
     We also explicitly test the table-format case since the codegen
     for it is slightly different.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     S = pa.DictionaryArray.from_arrays(
         np.array([0, 2, 1, 0, 1, 3, 0, 1, 3, 3, 2, 0], dtype=np.int32),
         pd.Series(["B", None, "A", None]),
@@ -963,6 +964,11 @@ def test_to_pq_nulls_in_dict(memory_leak_check):
 
 def test_streaming_parquet_write(memory_leak_check):
     """Test streaming Parquet write"""
+    from bodo.io.stream_parquet_write import (
+        parquet_writer_append_table,
+        parquet_writer_init,
+    )
+    from bodo.tests.utils_jit import reduce_sum
 
     df = gen_dataframe(80, None)
 
@@ -1027,6 +1033,11 @@ def test_streaming_parquet_write(memory_leak_check):
 
 def test_streaming_parquet_write_rep(memory_leak_check):
     """Test streaming Parquet write with replicated input"""
+    from bodo.io.stream_parquet_write import (
+        parquet_writer_append_table,
+        parquet_writer_init,
+    )
+    from bodo.tests.utils_jit import reduce_sum
 
     df = gen_dataframe(80, None)
 
@@ -1186,6 +1197,8 @@ def test_to_parquet_missing_arg(memory_leak_check):
 
 @pytest.mark.slow
 def test_to_parquet_engine():
+    from bodo.utils.typing import BodoError
+
     msg = r".*DataFrame.to_parquet\(\): only pyarrow engine supported.*"
 
     @bodo.jit
@@ -1199,6 +1212,8 @@ def test_to_parquet_engine():
 
 @pytest.mark.slow
 def test_to_parquet_row_group_size():
+    from bodo.utils.typing import BodoError
+
     msg = r".*to_parquet\(\): row_group_size must be integer.*"
 
     @bodo.jit

@@ -25,17 +25,14 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, pytest_mark_one_rank
-
-if bodo.test_compiler:
-    from bodo.io.iceberg.catalog import conn_str_to_catalog
-    from bodo.io.iceberg.catalog.dir import DirCatalog
-    from bodo.tests.utils import run_rank0
+from bodo.tests.utils import check_func, pytest_mark_one_rank, run_rank0
 
 pytestmark = pytest.mark.iceberg
 
 
 def _write_iceberg_table(input_df: pd.DataFrame, warehouse: str, table_id: str):
+    from bodo.io.iceberg.catalog.dir import DirCatalog
+
     catalog = DirCatalog("write_catalog", warehouse=warehouse)
     table = catalog.create_table(table_id, pa.Schema.from_pandas(input_df))
     table.append(pa.table(input_df))
@@ -47,6 +44,8 @@ def test_filter_pushdown_time_direct(iceberg_database, iceberg_table_conn):
     Test that directly calls the filter pushdown functions to work around the time comparison
     issue (see test_filter_pushdown_time)
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+
     table_name = "filter_pushdown_time_table"
     db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)

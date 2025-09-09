@@ -1,5 +1,7 @@
 """Tests I/O for HDF5 Files"""
 
+import numba  # noqa TID253
+from numba.core.ir_utils import build_definitions, find_callname  # noqa TID253
 import h5py
 import numpy as np
 import pytest
@@ -11,14 +13,8 @@ from bodo.tests.utils import (
     count_parfor_REPs,
     pytest_mark_one_rank,
 )
+from bodo.utils.testing import ensure_clean
 
-if bodo.test_compiler:
-    import numba
-    from numba.core.ir_utils import build_definitions, find_callname
-
-    from bodo.tests.utils import get_start_end
-    from bodo.utils.testing import ensure_clean
-    from bodo.utils.utils import is_call_assign
 
 pytestmark = [pytest.mark.hdf5, pytest.mark.slow]
 
@@ -70,6 +66,8 @@ def test_h5_read_parallel(datapath, memory_leak_check):
     "H5py bug breaks boolean arrays, https://github.com/h5py/h5py/issues/1847"
 )
 def test_h5_filter(datapath, memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     fname = datapath("h5_test_filter.h5")
 
     def test_impl():
@@ -86,6 +84,8 @@ def test_h5_filter(datapath, memory_leak_check):
 
 
 def test_h5_slice1(datapath, memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     fname = datapath("h5_test_filter.h5")
 
     def test_impl():
@@ -101,6 +101,8 @@ def test_h5_slice1(datapath, memory_leak_check):
 
 
 def test_h5_slice2(datapath, memory_leak_check):
+    from bodo.tests.utils_jit import get_start_end
+
     fname = datapath("lr.hdf5")
 
     def test_impl():
@@ -211,7 +213,8 @@ def test_h5_group_write(memory_leak_check):
 @pytest.mark.slow
 def test_h5_remove_dead(datapath, memory_leak_check):
     """make sure dead hdf5 read calls are removed properly"""
-    from bodo.tests.utils import DeadcodeTestPipeline
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
+    from bodo.utils.utils import is_call_assign
 
     fname = datapath("lr.hdf5")
 

@@ -1,5 +1,6 @@
 """Test Bodo's string array data type"""
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
@@ -11,14 +12,6 @@ from bodo.tests.utils import (
     gen_nonascii_list,
     get_num_test_workers,
 )
-
-if bodo.test_compiler:
-    import numba
-
-    from bodo.tests.utils import (
-        SeqTestPipeline,
-    )
-    from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(
@@ -510,6 +503,7 @@ def test_astype_str(memory_leak_check):
 )
 def test_str_copy_inplace(memory_leak_check):
     """Test inplace string copy optimization across arrays in series pass"""
+    from bodo.tests.utils import SeqTestPipeline
 
     # scalar case
     def impl1(A):
@@ -561,6 +555,8 @@ def test_str_copy_inplace(memory_leak_check):
 
 def _check_str_item_length(impl):
     """make sure 'impl' is optimized to use str_item_length"""
+    from bodo.tests.utils import SeqTestPipeline
+
     A = np.array(["AA", "B"] * 4, object)
     j_func = numba.njit(pipeline_class=SeqTestPipeline, parallel=True)(impl)
     assert j_func(A) == impl(A)
@@ -599,6 +595,7 @@ def test_str_array_setitem_unsupported(memory_leak_check):
     after initialization, but since these tests should error at compile
     time, this shouldn't be an issue.
     """
+    from bodo.utils.typing import BodoError
 
     def impl(arr, idx, val):
         arr[idx] = val

@@ -47,18 +47,16 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
+
+# from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.tests.utils import (
     _gather_output,
     _get_dist_arg,
     _test_equal_guard,
     check_func,
     convert_non_pandas_columns,
+    run_rank0,
 )
-
-if bodo.test_compiler:
-    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-    from bodo.tests.utils import DistTestPipeline, reduce_sum, run_rank0
-
 
 pytestmark = [
     pytest.mark.iceberg,
@@ -133,6 +131,8 @@ def test_write_schema_evolved_table(
     different types of evolutions (promotion, nullability, reordering,
     renaming, dropping, etc.) and multiple combinations of these.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     if ("DECIMALS_TABLE" in table_name) or (
         "DECIMALS_PRECISION_PROMOTION_TABLE" in table_name
     ):
@@ -843,6 +843,8 @@ def test_filter_pushdown_filter_on_pruned_column(
     This stress-tests some of the ordering semantics and guarantees
     in our code. We test this with both streaming and non-streaming.
     """
+    from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+
     table_name = "ADVERSARIAL_SCHEMA_EVOLUTION_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -924,6 +926,8 @@ def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check)
     Tests that Limit Pushdown is successfully enabled even when the
     table has gone through schema evolution.
     """
+    from bodo.tests.utils_jit import DistTestPipeline
+
     table_name = "ADVERSARIAL_SCHEMA_EVOLUTION_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -1011,6 +1015,8 @@ def test_write_partition_schema_evolved_table(
     more exhaustive tests, one can remove
     the filter in the pytest parameter for 'table_name'.
     """
+    from bodo.tests.utils_jit import reduce_sum
+
     db_schema, warehouse_loc = iceberg_database()
     postfix = "_WRITE_TEST"
 

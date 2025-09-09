@@ -7,13 +7,15 @@ import os
 import sys
 from decimal import Decimal
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core.utils import PYVERSION  # noqa TID253
 from pandas import Series
 
 import bodo
-import bodo.tests.dataframe_common
+from bodo import BodoWarning
 from bodo.tests.dataframe_common import *  # noqa
 from bodo.tests.utils import (
     _get_dist_arg,
@@ -24,13 +26,6 @@ from bodo.tests.utils import (
 )
 
 pytestmark = pytest_pandas
-
-if bodo.test_compiler:
-    import numba
-    from numba.core.utils import PYVERSION
-
-    from bodo.tests.utils import AnalysisTestPipeline, DeadcodeTestPipeline
-    from bodo.utils.typing import BodoError, BodoWarning, ColNamesMetaType
 
 
 def test_pd_isna_getitem(memory_leak_check):
@@ -370,6 +365,7 @@ def test_set_column_detect_update_err1(memory_leak_check):
     """Make sure invalid dataframe column set is detected properly when new column
     is being set in UDF.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def f(r, data, _bodo_inline=True):
@@ -392,6 +388,7 @@ def test_set_column_detect_update_err2(memory_leak_check):
     """Make sure invalid dataframe column set is detected properly when column data type
     changes in UDF.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def f(r, data, _bodo_inline=True):
@@ -480,6 +477,7 @@ def test_set_column_detect_update_err3(memory_leak_check):
     """Make sure invalid dataframe column set is detected properly when column data type
     changes in nested Bodo JIT calls.
     """
+    from bodo.utils.typing import BodoError
 
     @bodo.jit
     def f(data):
@@ -935,6 +933,7 @@ def test_df_apply_wrap_python(memory_leak_check):
 @pytest.mark.df_lib
 def test_df_apply_freevar(memory_leak_check):
     """Test transforming freevars into apply() arguments"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df, b):
         return df.apply(lambda r: r.A == b, axis=1)
@@ -981,6 +980,7 @@ def test_df_apply_freevar(memory_leak_check):
 
 def test_df_apply_error_check():
     """make sure a proper error is raised when UDF is not supported (not compilable)"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(df):
         # some UDF that cannot be supported, lambda calling a non-jit function
@@ -1077,6 +1077,7 @@ def test_df_apply_udf_inline(memory_leak_check):
     """make sure UDFs with dataframe input are not inlined, but _bodo_inline=True can
     be used to force inlining.
     """
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     def g(r, df, _bodo_inline=False):
         return r.A + df.A.sum()
@@ -1458,6 +1459,8 @@ def test_init_dataframe_array_analysis():
     """make sure shape equivalence for init_dataframe() is applied correctly"""
     import numba.tests.test_array_analysis
 
+    from bodo.tests.utils_jit import AnalysisTestPipeline
+
     def impl(n):
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
         return df
@@ -1475,6 +1478,8 @@ def test_get_dataframe_data_array_analysis():
     """make sure shape equivalence for get_dataframe_data() is applied correctly"""
     import numba.tests.test_array_analysis
 
+    from bodo.tests.utils_jit import AnalysisTestPipeline
+
     def impl(df):
         B = df.A.values
         return B
@@ -1491,6 +1496,8 @@ def test_get_dataframe_data_array_analysis():
 def test_get_dataframe_index_array_analysis():
     """make sure shape equivalence for get_dataframe_index() is applied correctly"""
     import numba.tests.test_array_analysis
+
+    from bodo.tests.utils_jit import AnalysisTestPipeline
 
     def impl(df):
         B = df.index
@@ -1543,6 +1550,8 @@ def test_df_fillna_df_value(df_value):
 
 @pytest.mark.slow
 def test_df_fillna_type_mismatch_failure():
+    from bodo.utils.typing import BodoError
+
     df = pd.DataFrame({"A": [1.2, np.nan, 242.1] * 5})
     value = "A"
     message = "Cannot use value type"
@@ -1640,6 +1649,8 @@ def test_dataframe_fillna_method(fillna_dataframe, method, memory_leak_check):
 
 @pytest.mark.slow
 def test_df_replace_df_value(df_value):
+    from bodo.utils.typing import BodoError
+
     def impl(df, to_replace, value):
         return df.replace(to_replace, value)
 
@@ -1702,6 +1713,7 @@ def test_df_dropna(memory_leak_check):
 
 def test_df_dropna_inplace_check():
     """make sure inplace=True is not used in df.dropna()"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(df):
         df.dropna(inplace=True)
@@ -1713,6 +1725,7 @@ def test_df_dropna_inplace_check():
 
 def test_df_drop_inplace_instability_check():
     """make sure df.drop(inplace=True) doesn't cause type instability"""
+    from bodo.utils.typing import BodoError
 
     def test_impl(a):
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
@@ -1801,6 +1814,7 @@ def test_df_slice(memory_leak_check):
 
 def test_df_setitem_multi(memory_leak_check):
     """test df[col_names] setitem where col_names is a list of column names"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         df[["A", "B"]] = 1.3
@@ -2067,6 +2081,7 @@ def test_iloc_slice_col_ind(memory_leak_check):
 
 def test_iloc_slice_col_slice(memory_leak_check):
     """test df.iloc[slice, slice] which selects a set of columns"""
+    from bodo.utils.typing import BodoError
 
     def test_impl1(df):
         return df.iloc[:, 1:]
@@ -2505,6 +2520,7 @@ def test_df_schema_change(memory_leak_check):
 
 def test_set_df_column_names(memory_leak_check):
     """test setting dataframe column names using df.columns"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         df.columns = ["a", "b"]
@@ -2555,6 +2571,7 @@ def test_set_df_column_names(memory_leak_check):
 
 def test_set_df_index(memory_leak_check):
     """test setting dataframe index using df.index"""
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         df.index = ["AA", "BB", "CC", "DD"]
@@ -2604,6 +2621,8 @@ def test_df_multi_schema_change(memory_leak_check):
 
 
 def test_df_drop_column_check(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def test_impl(df):
         return df.drop(columns=["C"])
 
@@ -2664,6 +2683,7 @@ def test_df_type_unify_error():
     """makes sure type unification error is thrown when two dataframe schemas for the
     same variable are not compatible.
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(a):
         if len(a) > 3:  # some computation that cannot be inferred statically
@@ -2754,6 +2774,8 @@ def test_dataframe_empty_with_index():
     """Make sure dataframe boxing works when dataframe has no columns but has a
     non-empty Index.
     """
+    from bodo.hiframes.pd_dataframe_ext import ColNamesMetaType
+
     col_names = ColNamesMetaType(())
 
     def impl(A):
@@ -2781,6 +2803,7 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
     """Test unrolling constant loops when necessary for typing in getitem/setitem of
     dataframe columns.
     """
+    from bodo.utils.typing import BodoError
 
     def impl1(df):
         s = 0
@@ -2906,6 +2929,7 @@ def test_df_copy_update(memory_leak_check):
 @pytest.mark.slow
 def test_unsupported_df_method():
     """Raise Bodo error for unsupported df methods"""
+    from bodo.utils.typing import BodoError
 
     def test_impl():
         df = pd.DataFrame({"A": [1, 2, 3], "B": [2, 3, 4]})

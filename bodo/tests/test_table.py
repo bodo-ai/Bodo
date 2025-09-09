@@ -5,6 +5,7 @@ import io
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core.ir_utils import find_callname, find_const, guard  # noqa TID253
 
 import bodo
 from bodo.tests.test_table_column_del import _check_column_dels
@@ -18,33 +19,22 @@ from bodo.tests.utils import (
     dist_IR_contains,
 )
 
-if bodo.test_compiler:
-    from numba.core.ir_utils import find_callname, find_const, guard
 
+@pytest.fixture
+def table_value(request):
     from bodo.hiframes.table import Table
-    from bodo.tests.utils import (
-        ColumnDelTestPipeline,
-        DistTestPipeline,
-        SeriesOptTestPipeline,
-    )
 
-    @pytest.fixture(
-        params=[
-            Table(
-                [
-                    np.ones(10),
-                    np.arange(10),
-                    np.array(["AB"] * 10),
-                    np.ones(10) * 3,
-                    np.arange(10) + 1,
-                    np.arange(10) + 2,
-                    np.array(["A B C"] * 10),
-                ]
-            ),
+    return Table(
+        [
+            np.ones(10),
+            np.arange(10),
+            np.array(["AB"] * 10),
+            np.ones(10) * 3,
+            np.arange(10) + 1,
+            np.arange(10) + 2,
+            np.array(["A B C"] * 10),
         ]
     )
-    def table_value(request):
-        return request.param
 
 
 def test_unbox(table_value, memory_leak_check):
@@ -71,6 +61,8 @@ def test_constant_lowering(table_value, memory_leak_check):
 
 def test_logical_table(memory_leak_check):
     """Test converting a logical table to TableType"""
+    from bodo.hiframes.table import Table
+    from bodo.tests.utils_jit import ColumnDelTestPipeline, SeriesOptTestPipeline
     from bodo.utils.utils import find_build_tuple, is_call_assign
 
     col_inds = bodo.utils.typing.MetaType((2, 3, 1))
@@ -175,6 +167,8 @@ def test_logical_table_to_table_dels(datapath, memory_leak_check):
     """
     Make sure table columns are deleted properly for logical_table_to_table() calls
     """
+    from bodo.tests.utils_jit import ColumnDelTestPipeline
+
     filename = datapath("many_columns.parquet")
     col_inds = bodo.utils.typing.MetaType((2, 99, 11, 7))
     col_names = bodo.utils.typing.ColNamesMetaType(("C1", "C2", "C3", "C4"))
@@ -215,6 +209,7 @@ def test_table_shape_opt(datapath, table_value, memory_leak_check):
     """
     Make sure table.shape[1] is optimized out (used in BodoSQL)
     """
+    from bodo.tests.utils_jit import SeriesOptTestPipeline
 
     def impl(T):
         return T.shape[1]
@@ -284,6 +279,8 @@ def test_create_empty_table_len(memory_leak_check):
     Tests the implementation of create empty table is defined to be length 0
     and can optimized out the create_empty_table call.
     """
+    from bodo.tests.utils_jit import DistTestPipeline
+
     empty_table = bodo.hiframes.table.Table(
         [
             pd.array([], dtype="Int64"),

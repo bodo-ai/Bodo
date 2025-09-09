@@ -6,9 +6,11 @@ import datetime
 import operator
 import random
 
+import numba  # noqa TID253
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core.ir_utils import find_callname, guard  # noqa TID253
 
 import bodo
 from bodo.tests.dataframe_common import *  # noqa
@@ -23,15 +25,6 @@ from bodo.tests.utils import (
     no_default,
     pytest_pandas,
 )
-
-if bodo.test_compiler:
-    import numba
-    from numba.core.ir_utils import find_callname, guard
-
-    from bodo.tests.utils import DeadcodeTestPipeline
-    from bodo.utils.typing import BodoError, BodoWarning
-    from bodo.utils.utils import is_call_assign
-
 
 pytestmark = pytest_pandas
 
@@ -205,6 +198,9 @@ def test_dataframe_rename_dropped_col():
 
 def _check_IR_no_get_dataframe_data(test_impl, args):
     """ensures there is get_dataframe_data after optimizations"""
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
+    from bodo.utils.utils import is_call_assign
+
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
         test_impl
     )
@@ -467,6 +463,7 @@ def test_assign_lambda(memory_leak_check):
 )
 def test_df_insert(memory_leak_check, is_slow_run):
     """Test df.insert()"""
+    from bodo.utils.typing import BodoError, BodoWarning
 
     # new column
     def impl1(df):
@@ -662,6 +659,7 @@ def test_empty_df_set_column(memory_leak_check):
 @pytest.mark.slow
 def test_empty_df_drop_column(memory_leak_check):
     """test dropping the only column of a dataframe so it becomes empty"""
+    from bodo.utils.typing import BodoError
 
     def impl1(n):
         df = pd.DataFrame({"A": np.arange(n) * 2})
@@ -1304,6 +1302,8 @@ def test_df_rename_mapper_all_types(df_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_df_rename(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     def impl(df):
         return df.rename(columns={"B": "bb", "C": "cc"})
 
@@ -2036,6 +2036,7 @@ def test_df_idxmax_all_types_axis0(df_value, memory_leak_check):
     """
     Test df.idxmax on all df types with axis=0
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(df):
         return df.idxmax()
@@ -2113,6 +2114,7 @@ def test_df_idxmax_all_types_axis1(df_value, memory_leak_check):
     """
     Test df.idxmax on all df types with axis=1
     """
+    from bodo.utils.typing import BodoError
 
     # TODO: Support axis=1 [BE-281]
     def test_impl(df):
@@ -2128,6 +2130,7 @@ def test_df_idxmin_all_types_axis0(df_value, memory_leak_check):
     """
     Test df.idxmin on all df types with axis=0
     """
+    from bodo.utils.typing import BodoError
 
     def test_impl(df):
         return df.idxmin()
@@ -2205,6 +2208,7 @@ def test_df_idxmin_all_types_axis1(df_value, memory_leak_check):
     """
     Test df.idxmin on all df types with axis=1
     """
+    from bodo.utils.typing import BodoError
 
     # TODO: Support axis=1 [BE-281]
     def test_impl(df):
@@ -2316,6 +2320,8 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
     """
     Test for the Dataframe.shift inputs that are expected to be unsupported.
     """
+    from bodo.utils.typing import BodoError
+
     # Dataframe.shift supports ints, floats, dt64, nullable
     # int/bool/decimal/date and strings
     is_unsupported = False
@@ -2338,6 +2344,8 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_df_shift_error_periods(memory_leak_check):
+    from bodo.utils.typing import BodoError
+
     df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
 
     def test_impl(df, periods):

@@ -5,21 +5,18 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.libs.streaming.groupby import (
+    delete_groupby_state,
+    get_op_pool_bytes_allocated,
+    get_op_pool_bytes_pinned,
+    get_partition_state,
+    groupby_build_consume_batch,
+    groupby_produce_output_batch,
+    init_groupby_state,
+)
 from bodo.mpi4py import MPI
 from bodo.tests.utils import _get_dist_arg, pytest_mark_one_rank, temp_env_override
-
-if bodo.test_compiler:
-    from bodo.libs.streaming.groupby import (
-        delete_groupby_state,
-        get_op_pool_bytes_allocated,
-        get_op_pool_bytes_pinned,
-        get_partition_state,
-        groupby_build_consume_batch,
-        groupby_produce_output_batch,
-        init_groupby_state,
-    )
-    from bodo.utils.typing import ColNamesMetaType, MetaType
-
+from bodo.utils.typing import ColNamesMetaType, MetaType
 
 pytestmark = [
     pytest.mark.skipif(

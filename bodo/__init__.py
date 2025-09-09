@@ -156,8 +156,6 @@ prefetch_sf_iceberg = os.environ.get("BODO_PREFETCH_SF_ICEBERG", "1") != "0"
 
 spawn_mode = os.environ.get("BODO_SPAWN_MODE", "1") != "0"
 
-test_compiler = os.environ.get("BODO_TEST_COMPILER", "0") != "0"
-
 
 def get_sql_config_str() -> str:
     """

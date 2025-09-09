@@ -8,12 +8,11 @@ from contextlib import contextmanager
 
 import bodo
 
-if bodo.test_compiler:
-    from bodo.tests.utils import reduce_sum
-
 
 @contextmanager
 def set_logging_stream(logger, verbose_level):
+    from bodo.tests.utils_jit import reduce_sum
+
     err = None
     try:
         passed = 1
