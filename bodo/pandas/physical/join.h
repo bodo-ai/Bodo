@@ -12,19 +12,20 @@
 #include "operator.h"
 
 #ifndef CONSUME_PROBE_BATCH
-#define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,          \
-                            has_non_equi_cond, use_bloom_filter,           \
-                            build_table_outer_exp, probe_table_outer_exp,  \
-                            has_non_equi_cond_exp, use_bloom_filter_exp)   \
-    if (build_table_outer == build_table_outer_exp &&                      \
-        probe_table_outer == probe_table_outer_exp &&                      \
-        has_non_equi_cond == has_non_equi_cond_exp &&                      \
-        use_bloom_filter == use_bloom_filter_exp) {                        \
-        is_last = join_probe_consume_batch<                                \
-            build_table_outer_exp, probe_table_outer_exp,                  \
-            has_non_equi_cond_exp, use_bloom_filter_exp>(                  \
-            join_state, std::move(input_batch_reordered), build_kept_cols, \
-            probe_kept_cols, is_last);                                     \
+#define CONSUME_PROBE_BATCH(                                                   \
+    build_table_outer, probe_table_outer, has_non_equi_cond, use_bloom_filter, \
+    is_anti_join, build_table_outer_exp, probe_table_outer_exp,                \
+    has_non_equi_cond_exp, use_bloom_filter_exp, is_anti_join_exp)             \
+    if (build_table_outer == build_table_outer_exp &&                          \
+        probe_table_outer == probe_table_outer_exp &&                          \
+        has_non_equi_cond == has_non_equi_cond_exp &&                          \
+        use_bloom_filter == use_bloom_filter_exp &&                            \
+        is_anti_join == is_anti_join_exp) {                                    \
+        is_last = join_probe_consume_batch<                                    \
+            build_table_outer_exp, probe_table_outer_exp,                      \
+            has_non_equi_cond_exp, use_bloom_filter_exp, is_anti_join_exp>(    \
+            join_state, std::move(input_batch_reordered), build_kept_cols,     \
+            probe_kept_cols, is_last);                                         \
     }
 #endif
 
@@ -51,7 +52,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         const std::shared_ptr<bodo::Schema> build_table_schema,
         const std::shared_ptr<bodo::Schema> probe_table_schema)
         : has_non_equi_cond(false),
-          is_mark_join(logical_join.join_type == duckdb::JoinType::MARK) {
+          is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
+          is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
+                       logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
         time_pt start_init = start_timer();
         duckdb::vector<duckdb::ColumnBinding> left_bindings =
             logical_join.children[0]->GetColumnBindings();
@@ -192,12 +195,17 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
         // ---------------------------------------------------
 
+        // Implement anti-join by setting an outer flag and adding an anti-join
+        // flag to avoid producing matching rows. Anti join is used for
+        // ~Series.isin in dataframe library
+
         bool build_table_outer =
             (logical_join.join_type == duckdb::JoinType::RIGHT) ||
-            (logical_join.join_type == duckdb::JoinType::OUTER);
+            (logical_join.join_type == duckdb::JoinType::OUTER) ||
+            is_right_anti;
         bool probe_table_outer =
             (logical_join.join_type == duckdb::JoinType::LEFT) ||
-            (logical_join.join_type == duckdb::JoinType::OUTER);
+            (logical_join.join_type == duckdb::JoinType::OUTER) || is_left_anti;
 
         cond_expr_fn_t join_func = nullptr;
         if (has_non_equi_cond) {
@@ -417,54 +425,134 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             std::shared_ptr<table_info> input_batch_reordered =
                 ProjectTable(input_batch, this->probe_col_inds);
 
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, true, true, true, true)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, true, true, true, false)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, true, true, false, true)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, true, true, false, false)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, true, false, true, true)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, true, false, true, false)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, true, false, false, true)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, true, false, false, false)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, false, true, true, true)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, false, true, true, false)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, false, true, false, true)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, false, true, false, false)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, false, false, true, true)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, false, false, true, false)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, false, false, false, true)
-            CONSUME_PROBE_BATCH(
-                join_state->build_table_outer, join_state->probe_table_outer,
-                has_non_equi_cond, has_bloom_filter, false, false, false, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, true, true, true, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, true, true, false, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, true, false, true, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, true, false, false, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, false, true, true, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, false, true, false, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, false, false, true, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, false, false, false, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, true, true, true, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, true, true, false, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, true, false, true, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, true, false, false, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, false, true, true, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, false, true, false, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, false, false, true, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, false, false, false, false)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, true, true, true, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, true, true, false, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, true, false, true, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, true, false, false, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, false, true, true, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, false, true, false, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, false, false, true, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, true, false, false, false, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, true, true, true, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, true, true, false, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, true, false, true, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, true, false, false, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, false, true, true, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, false, true, false, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, false, false, true, true)
+            CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                                join_state->probe_table_outer,
+                                has_non_equi_cond, has_bloom_filter,
+                                is_anti_join, false, false, false, false, true)
 
             if (join_state->probe_shuffle_state.BuffersFull()) {
                 request_input = false;
@@ -569,6 +657,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     std::shared_ptr<PhysicalExpression> physExprTree;
 
     bool is_mark_join = false;
+    bool is_anti_join = false;
 
     PhysicalJoinMetrics metrics;
 };
