@@ -63,23 +63,29 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
             right_col_ref_map = getColRefMap(right_bindings);
 
+        bool is_left_anti = logical_join.join_type == duckdb::JoinType::ANTI;
+        bool is_right_anti =
+            logical_join.join_type == duckdb::JoinType::RIGHT_ANTI;
+
         // Find left/right table columns that will be in the join output.
         // Similar to DuckDB:
         // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_hash_join.cpp#L58
-        if (logical_join.left_projection_map.empty()) {
-            for (duckdb::idx_t i = 0;
-                 i < logical_join.children[0]->GetColumnBindings().size();
-                 i++) {
-                this->bound_left_inds.insert(i);
-            }
-        } else {
-            for (const auto& c : logical_join.left_projection_map) {
-                this->bound_left_inds.insert(c);
+        if (!is_right_anti) {
+            if (logical_join.left_projection_map.empty()) {
+                for (duckdb::idx_t i = 0;
+                     i < logical_join.children[0]->GetColumnBindings().size();
+                     i++) {
+                    this->bound_left_inds.insert(i);
+                }
+            } else {
+                for (const auto& c : logical_join.left_projection_map) {
+                    this->bound_left_inds.insert(c);
+                }
             }
         }
 
         // Mark join does not output the build table columns
-        if (!this->is_mark_join) {
+        if (!this->is_mark_join && !is_left_anti) {
             if (logical_join.right_projection_map.empty()) {
                 for (duckdb::idx_t i = 0;
                      i < logical_join.children[1]->GetColumnBindings().size();
