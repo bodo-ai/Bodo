@@ -1738,7 +1738,7 @@ def get_isin_filter_plan(source_plan: LazyPlan, key_plan: LazyPlan) -> LazyPlan 
         key_plan = LogicalProjection(
             key_plan.empty_data,
             key_expr.source,
-            [key_expr.source_expr],
+            (key_expr.source_expr,) + key_plan.exprs[1:],
         )
 
     # Match df1.A.isin(df2.B) case which is a mark join generated in our Series.isin()
