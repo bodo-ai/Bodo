@@ -5,6 +5,7 @@ import functools
 import importlib
 import inspect
 import time
+import typing as pt
 import warnings
 
 import pandas as pd
@@ -13,6 +14,10 @@ import pyarrow as pa
 import bodo
 from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
 from bodo.pandas.managers import LazyBlockManager, LazySingleBlockManager
+
+if pt.TYPE_CHECKING:
+    from bodo.pandas.plan import ColRefExpression, LazyPlan
+    from bodo.pandas.scalar import BodoScalar
 
 BODO_NONE_DUMMY = "_bodo_none_dummy_"
 
@@ -1336,3 +1341,18 @@ class JITFallback:
 
         JITFallback.python_fallback += 1
         raise JITFallback.JITFallbackFail()
+
+
+def insert_bodo_scalar(
+    plan: LazyPlan, scalar: BodoScalar
+) -> tuple[LazyPlan, ColRefExpression]:
+    """
+    Insert a scalar as a column in the given plan.
+    Args:
+        plan (LazyPlan): The plan to insert the scalar into.
+        scalar (BodoScalar): The scalar to insert.
+    Returns:
+        Tuple[LazyPlan, ColRefExpression]: The new plan with the scalar inserted as a column,
+            and the column reference expression for the new column.
+    """
+    raise NotImplementedError("insert_bodo_scalar is not implemented yet.")

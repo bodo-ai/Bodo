@@ -51,7 +51,6 @@ from bodo.pandas.plan import (
     LogicalOrder,
     LogicalProjection,
     PythonScalarFuncExpression,
-    ScalarSubqueryExpression,
     UnaryOpExpression,
     _get_df_python_func_plan,
     execute_plan,
@@ -79,6 +78,7 @@ from bodo.pandas.utils import (
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
+    insert_bodo_scalar,
     wrap_plan,
 )
 
@@ -206,29 +206,31 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         zero_size_other = (
             _empty_like(other) if isinstance(other, (BodoSeries, BodoScalar)) else other
         )
-        # Check if other is a BodoScalar, if so we need to wrap it in a
-        # ScalarSubqueryExpression.
+        # Check if other is a BodoScalar, if so we need to insert it into the plan.
         is_bodo_scalar = isinstance(other, (BodoScalar))
-        # This is effectively a check for a dataframe or series.
-        if hasattr(other, "_plan"):
-            other = other._plan
 
         # Compute schema of new series.
         empty_data = zero_size_self._cmp_method(zero_size_other, op)
         assert isinstance(empty_data, pd.Series), "_cmp_method: Series expected"
-        breakpoint()
+
+        # The plan of the parent table without the Series projection node.
+        lhs_plan = self._plan.args[0]
 
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
 
+        # If other is a BodoScalar we need to insert it into the plan.
         if is_bodo_scalar:
-            # Wrap the scalar in a ScalarSubqueryExpression so it can be used
-            # in comparisons.
-            rhs = ScalarSubqueryExpression(empty_data, self._plan, other)
-        elif isinstance(other, LazyPlan):
-            rhs = get_proj_expr_single(other)
+            lhs_plan, rhs = insert_bodo_scalar(lhs_plan, other)
+
+        # If other is a LazyPlan we need to extract the expression.
+        elif hasattr(other, "_plan") and isinstance(other._plan, LazyPlan):
+            rhs = get_proj_expr_single(other._plan)
+        # If other is a Pandas Series or a scalar we can use it directly.
         else:
             rhs = other
+
+        # Match the source plans of lhs and rhs, if they don't match return None, None
         lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
         if lhs is None and rhs is None:
             raise BodoLibNotImplementedException(
@@ -248,8 +250,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         plan = LogicalProjection(
             empty_data,
-            # Use the original table without the Series projection node.
-            self._plan.args[0],
+            lhs_plan,
             (expr,) + key_exprs,
         )
         return wrap_plan(plan=plan)
