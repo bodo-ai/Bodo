@@ -599,34 +599,34 @@ class UntypedPass:
             )
 
         # handling pd.DataFrame() here since input can be constant dictionary
-        if fdef == ("DataFrame", "pandas"):
+        if fdef in (("DataFrame", "pandas"), ("DataFrame", "bodo.pandas")):
             return self._handle_pd_DataFrame(assign, lhs, rhs, label)
 
         # handling pd.read_csv() here since input can have constants
         # like dictionaries for typing
-        if fdef == ("read_csv", "pandas"):
+        if fdef in (("read_csv", "pandas"), ("read_csv", "bodo.pandas")):
             return self._handle_pd_read_csv(assign, lhs, rhs, label)
 
         # handling pd.read_sql() here since input can have constants
         # like dictionaries for typing
-        if fdef == ("read_sql", "pandas"):
+        if fdef in (("read_sql", "pandas"), ("read_sql", "bodo.pandas")):
             return self._handle_pd_read_sql(assign, lhs, rhs, label)
 
         # handling pd.read_json() here since input can have constants
         # like dictionaries for typing
-        if fdef == ("read_json", "pandas"):
+        if fdef in (("read_json", "pandas"), ("read_json", "bodo.pandas")):
             return self._handle_pd_read_json(assign, lhs, rhs, label)
 
         # handling pd.read_excel() here since typing info needs to be extracted
-        if fdef == ("read_excel", "pandas"):
+        if fdef in (("read_excel", "pandas"), ("read_excel", "bodo.pandas")):
             return self._handle_pd_read_excel(assign, lhs, rhs, label)
 
         # match flatmap pd.Series(list(itertools.chain(*A))) and flatten
-        if fdef == ("Series", "pandas"):
+        if fdef in (("Series", "pandas"), ("Series", "bodo.pandas")):
             return self._handle_pd_Series(assign, lhs, rhs)
 
         # replace pd.NamedAgg() with equivalent tuple to be handled in groupby typing
-        if fdef == ("NamedAgg", "pandas"):
+        if fdef in (("NamedAgg", "pandas"), ("NamedAgg", "bodo.pandas")):
             return self._handle_pd_named_agg(assign, lhs, rhs)
 
         # replace bodo.ExtendedNamedAgg() with equivalent tuple to be handled in groupby typing
@@ -643,7 +643,7 @@ class UntypedPass:
         ):
             return self._handle_pq_to_pandas(assign, lhs, rhs, func_mod)
 
-        if fdef == ("read_parquet", "pandas"):
+        if fdef in (("read_parquet", "pandas"), ("read_parquet", "bodo.pandas")):
             return self._handle_pd_read_parquet(assign, lhs, rhs)
 
         if fdef == ("fromfile", "numpy"):
