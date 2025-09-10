@@ -1290,7 +1290,8 @@ def test_index_argminmax(index, memory_leak_check):
             id="decimal",
         ),
         pytest.param(
-            pd.Index([bodo.types.Time(nanosecond=10**i) for i in range(12)]), id="time"
+            lambda: pd.Index([bodo.types.Time(nanosecond=10**i) for i in range(12)]),
+            id="time",
         ),
         pytest.param(
             pd.Index([datetime.date.fromordinal(738886 + i**2) for i in range(12)]),
@@ -1341,7 +1342,7 @@ def test_index_argminmax(index, memory_leak_check):
             id="ord_cat_decimal",
         ),
         pytest.param(
-            pd.CategoricalIndex(
+            lambda: pd.CategoricalIndex(
                 [bodo.types.Time(nanosecond=10**i) for i in range(12)], ordered=True
             ),
             id="ord_cat_time",
@@ -1379,6 +1380,8 @@ def test_index_argminmax(index, memory_leak_check):
     ],
 )
 def test_index_min_max(index):
+    index = index() if callable(index) else index
+
     def impl1(I):
         return I.min()
 
@@ -1681,7 +1684,34 @@ def test_datetime_index_unbox(dti_val, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(dti_val), test_impl(dti_val))
 
 
-@pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.date_fields)
+@pytest.mark.parametrize(
+    "field",
+    [
+        "year",
+        "month",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "microsecond",
+        "nanosecond",
+        "quarter",
+        "dayofyear",
+        "day_of_year",
+        "dayofweek",
+        "day_of_week",
+        "daysinmonth",
+        "days_in_month",
+        "is_leap_year",
+        "is_month_start",
+        "is_month_end",
+        "is_quarter_start",
+        "is_quarter_end",
+        "is_year_start",
+        "is_year_end",
+        "weekday",
+    ],
+)
 def test_datetime_field(dti_val, field, memory_leak_check):
     """tests datetime index.field. This should be inlined in series pass"""
 
@@ -2089,7 +2119,7 @@ def test_init_timedelta_index_array_analysis(memory_leak_check):
     assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
 
 
-@pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
+@pytest.mark.parametrize("field", ["days", "seconds", "microseconds", "nanoseconds"])
 def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
     """tests timedelta index.field. This should be inlined in series pass"""
 

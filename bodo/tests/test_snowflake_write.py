@@ -37,7 +37,6 @@ from bodo.tests.utils import (
     pytest_mark_one_rank,
     pytest_one_rank,
     pytest_snowflake,
-    run_rank0,
     snowflake_cred_env_vars_present,
     temp_env_override,
 )
@@ -1612,6 +1611,7 @@ def test_batched_write_agg(
         snowflake_writer_init,
     )
     from bodo.tests.utils_jit import reduce_sum
+    from bodo.utils.utils import run_rank0
 
     comm = MPI.COMM_WORLD
     col_meta = bodo.utils.typing.ColNamesMetaType(
@@ -1898,6 +1898,8 @@ def test_batched_write_nested_array(
     Test writing a table with a column of nested arrays to Snowflake
     and then reading it back
     """
+    from bodo.utils.utils import run_rank0
+
     if is_variant and write_type == "replace":
         pytest.skip("When replacing a table columns are never written as variant")
 

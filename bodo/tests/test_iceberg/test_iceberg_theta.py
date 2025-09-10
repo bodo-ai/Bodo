@@ -7,15 +7,11 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.iceberg_database_helpers.metadata_utils import (
-    get_metadata_field,
-    get_metadata_path,
-)
 from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
 )
-from bodo.tests.utils import _get_dist_arg, run_rank0
+from bodo.tests.utils import _get_dist_arg
 
 pytestmark = pytest.mark.iceberg
 
@@ -66,7 +62,10 @@ def test_iceberg_write_theta_estimates(
 ):
     """Test basic streaming Iceberg write with theta sketches enabled to ensure
     that they are generated for 4/5 columns. This"""
-    from bodo.tests.test_iceberg.utils_jit import get_statistics_ndvs
+    from bodo.tests.test_iceberg.utils_jit import (
+        check_ndv_metadata,
+        get_statistics_ndvs,
+    )
 
     table_name = "iceberg_ctas_theta_test_table_1"
     # A: 10000 unique values, valid type (integer)
@@ -128,6 +127,8 @@ def test_iceberg_write_disabled_theta(
 ):
     """Same as test_iceberg_write_theta_estimates but where theta sketches are disabled for
     all columns"""
+    from bodo.tests.test_iceberg.utils_jit import check_no_statistics_file
+
     table_name = "iceberg_ctas_theta_test_table_2"
     df = pd.DataFrame(
         {
@@ -166,64 +167,6 @@ def test_iceberg_write_disabled_theta(
         bodo.enable_theta_sketches = orig_enable_theta
 
 
-@run_rank0
-def check_ndv_metadata(
-    warehouse_loc, db_schema, table_name, expected_ndvs, num_statistics=1
-):
-    """
-    Check the NDV information found in the metadata file and return the path to the
-    puffin file for further testing.
-    """
-    metadata_path = get_metadata_path(warehouse_loc, db_schema, table_name)
-    statistics_lst = get_metadata_field(metadata_path, "statistics")
-    assert len(statistics_lst) == num_statistics, (
-        f"Expected {num_statistics} statistics file(s)"
-    )
-    if num_statistics > 1:
-        # Need to fetch the latest snapshot and iterate through them to select the match statistics file
-        latest_snapshot_id = get_metadata_field(metadata_path, "current-snapshot-id")
-        for entry in statistics_lst:
-            if entry["snapshot-id"] == latest_snapshot_id:
-                statistics = entry
-                break
-    elif num_statistics == 0:
-        assert len(statistics_lst) == 0, (
-            "Found a statistics file when none should exist"
-        )
-        return None
-    else:
-        statistics = statistics_lst[0]
-    # Check the NDVs match expectations
-    blob_metadata = statistics["blob-metadata"]
-    seen_fields = set()
-    for blob in blob_metadata:
-        fields = blob["fields"]
-        assert len(fields) == 1, "Expected only one field in the puffin file"
-        field = fields[0]
-        properties = blob["properties"]
-        ndv = properties["ndv"]
-        assert field in expected_ndvs, "Unexpected field ID blob"
-        assert ndv == expected_ndvs[field], f"Incorrect NDV for blob {field}"
-        seen_fields.add(field)
-    assert len(seen_fields) == len(expected_ndvs), (
-        "An expected column didn't have a theta sketch"
-    )
-    # Check the puffin file exists, can be read, and the theta sketch is correct.
-    return statistics["statistics-path"]
-
-
-@run_rank0
-def check_no_statistics_file(warehouse_loc, db_schema, table_name):
-    import json
-
-    metadata_path = get_metadata_path(warehouse_loc, db_schema, table_name)
-    with open(metadata_path) as f:
-        metadata = json.load(f)
-    assert "statistics" not in metadata or len(metadata["statistics"]) == 0, (
-        "Found a statistics file when none should exist"
-    )
-
-
 def get_iceberg_pyarrow_schema(conn, table_id):
     _, _, pyarrow_schema = bodo.io.iceberg.get_iceberg_orig_schema(conn, table_id)
     return pyarrow_schema
@@ -246,7 +189,10 @@ def test_full_iceberg_theta_write(
     7. The NDV matches a hardcoded expected value to avoid regressions. This is feasible
         because the result should be deterministic.
     """
-    from bodo.tests.test_iceberg.utils_jit import get_statistics_ndvs
+    from bodo.tests.test_iceberg.utils_jit import (
+        check_ndv_metadata,
+        get_statistics_ndvs,
+    )
 
     df = pd.DataFrame(
         {
@@ -341,6 +287,8 @@ def test_no_theta_enabled_columns(
     Test that when we don't have any enabled columns we don't write a puffin
     file, even if they are enabled.
     """
+    from bodo.tests.test_iceberg.utils_jit import check_no_statistics_file
+
     df = pd.DataFrame(
         {
             "A": pd.array([1.4, 1.5, 2.451, 0] * 5, dtype=pd.Float64Dtype()),
@@ -370,7 +318,10 @@ def test_theta_insert_into(iceberg_database, iceberg_table_conn, memory_leak_che
     Test that insert into operations generate theta sketches by updating the
     existing sketches.
     """
-    from bodo.tests.test_iceberg.utils_jit import get_statistics_ndvs
+    from bodo.tests.test_iceberg.utils_jit import (
+        check_ndv_metadata,
+        get_statistics_ndvs,
+    )
 
     df1 = pd.DataFrame(
         {
@@ -440,7 +391,10 @@ def test_enable_sketches_per_column(
     Test that we can enable/disable theta sketches on a per-column basis,
     through setting the table property of `bodo.write.theta_sketch_enabled.<column_name>`.
     """
-    from bodo.tests.test_iceberg.utils_jit import get_statistics_ndvs
+    from bodo.tests.test_iceberg.utils_jit import (
+        check_ndv_metadata,
+        get_statistics_ndvs,
+    )
 
     df = pd.DataFrame(
         {

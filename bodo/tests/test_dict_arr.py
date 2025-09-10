@@ -1293,7 +1293,20 @@ def test_str_count(test_unicode_dict_str_arr, memory_leak_check):
     assert dist_IR_contains(f_ir, "str_count")
 
 
-@pytest.mark.parametrize("method", bodo.hiframes.pd_series_ext.str2bool_methods)
+@pytest.mark.parametrize(
+    "method",
+    [
+        "isalnum",
+        "isalpha",
+        "isdigit",
+        "isspace",
+        "islower",
+        "isupper",
+        "istitle",
+        "isnumeric",
+        "isdecimal",
+    ],
+)
 def test_str_str2bool_methods(test_unicode_dict_str_arr, memory_leak_check, method):
     """
     test optimization of Series.str.isalnum/isalpha/isdigit/isspae/islower/

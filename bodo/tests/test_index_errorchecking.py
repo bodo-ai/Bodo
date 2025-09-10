@@ -120,341 +120,216 @@ def all_index_types(request):
     return request.param
 
 
-def _get_index_unsupported_methods():
+@pytest.mark.slow
+def test_all_idx_unsupported_methods(all_index_types):
+    """tests that the unsupported index methods raise the propper errors"""
     from bodo.hiframes.pd_index_ext import index_unsupported_methods
 
-    return index_unsupported_methods
+    for unsupported_method in index_unsupported_methods:
+        idx_val = all_index_types[0]
+        idx_formatstr = all_index_types[1]
+        check_unsupported_method(idx_formatstr, idx_val, unsupported_method)
 
 
-def _get_index_unsupported_atrs():
+@pytest.mark.slow
+def test_all_idx_unsupported_attrs(all_index_types):
+    """tests that the unsupported index attributes raise the propper errors"""
     from bodo.hiframes.pd_index_ext import index_unsupported_atrs
 
-    return index_unsupported_atrs
+    for unsupported_attr in index_unsupported_atrs:
+        idx_val = all_index_types[0]
+        idx_formatstr = all_index_types[1]
+        check_unsupported_atr(idx_formatstr, idx_val, unsupported_attr)
 
 
-def _get_cat_idx_unsupported_methods():
+@pytest.mark.slow
+def test_cat_idx_unsupported_methods():
+    """tests that the unsupported categorical index methods raise the propper errors"""
     from bodo.hiframes.pd_index_ext import cat_idx_unsupported_methods
 
-    return cat_idx_unsupported_methods
+    for unsupported_method in cat_idx_unsupported_methods:
+        check_unsupported_method(
+            "pandas.CategoricalIndex.{}",
+            pd.Index(["hello", "world", "how are", "you"] * 3).astype("category"),
+            unsupported_method,
+        )
 
 
-def _get_cat_idx_unsupported_atrs():
-    from bodo.hiframes.pd_index_ext import cat_idx_unsupported_atrs
-
-    return cat_idx_unsupported_atrs
-
-
-def _get_interval_idx_unsupported_methods():
+@pytest.mark.slow
+def test_interval_idx_unsupported_methods():
+    """tests that the unsupported interval index methods raise the propper errors"""
     from bodo.hiframes.pd_index_ext import interval_idx_unsupported_methods
 
-    return interval_idx_unsupported_methods
+    for unsupported_method in interval_idx_unsupported_methods:
+        check_unsupported_method(
+            "pandas.IntervalIndex.{}",
+            pd.interval_range(start=0, end=10),
+            unsupported_method,
+        )
 
 
-def _get_interval_idx_unsupported_atrs():
-    from bodo.hiframes.pd_index_ext import interval_idx_unsupported_atrs
-
-    return interval_idx_unsupported_atrs
-
-
-def _get_multi_index_unsupported_methods():
+@pytest.mark.slow
+def test_multi_idx_unsupported_methods():
+    """tests that the unsupported multi_index methods raise the propper errors"""
     from bodo.hiframes.pd_index_ext import multi_index_unsupported_methods
 
-    return multi_index_unsupported_methods
+    for unsupported_method in multi_index_unsupported_methods:
+        check_unsupported_method(
+            "pandas.MultiIndex.{}",
+            pd.MultiIndex.from_arrays(
+                [[1, 1, 2, 2], ["red", "blue", "red", "blue"]],
+                names=("number", "color"),
+            ),
+            unsupported_method,
+        )
 
 
-def _get_multi_index_unsupported_atrs():
-    from bodo.hiframes.pd_index_ext import multi_index_unsupported_atrs
-
-    return multi_index_unsupported_atrs
-
-
-def _get_dt_index_unsupported_methods():
+@pytest.mark.slow
+def test_dt_idx_unsupported_methods():
+    """tests that the unsupported datetime index methods raise the propper errors"""
     from bodo.hiframes.pd_index_ext import dt_index_unsupported_methods
 
-    return dt_index_unsupported_methods
+    for unsupported_method in dt_index_unsupported_methods:
+        check_unsupported_method(
+            "pandas.DatetimeIndex.{}",
+            pd.Index(
+                [
+                    pd.Timestamp("2020-02-23"),
+                    pd.Timestamp("2017-11-02"),
+                    pd.Timestamp("2000-8-18"),
+                ]
+                * 3
+            ),
+            unsupported_method,
+        )
 
 
-def _get_dt_index_unsupported_atrs():
-    from bodo.hiframes.pd_index_ext import dt_index_unsupported_atrs
-
-    return dt_index_unsupported_atrs
-
-
-def _get_td_index_unsupported_methods():
+@pytest.mark.slow
+def test_td_idx_unsupported_methods():
+    """tests that the unsupported timedelta index methods raise the propper errors"""
     from bodo.hiframes.pd_index_ext import td_index_unsupported_methods
 
-    return td_index_unsupported_methods
+    for unsupported_method in td_index_unsupported_methods:
+        check_unsupported_method(
+            "pandas.TimedeltaIndex.{}",
+            pd.Index(
+                [
+                    pd.Timedelta(12, unit="d"),
+                    pd.Timedelta(123, unit="ns"),
+                    pd.Timedelta(100, unit="h"),
+                ]
+                * 3
+            ),
+            unsupported_method,
+        )
 
 
-def _get_td_index_unsupported_atrs():
-    from bodo.hiframes.pd_index_ext import td_index_unsupported_atrs
-
-    return td_index_unsupported_atrs
-
-
-def _get_period_index_unsupported_methods():
+@pytest.mark.slow
+def test_period_idx_unsupported_methods():
+    """tests that the unsupported period index methods raise the propper errors"""
     from bodo.hiframes.pd_index_ext import period_index_unsupported_methods
 
-    return period_index_unsupported_methods
+    for unsupported_method in period_index_unsupported_methods:
+        check_unsupported_method(
+            "pandas.PeriodIndex.{}",
+            pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+            unsupported_method,
+        )
 
 
-def _get_period_index_unsupported_atrs():
+@pytest.mark.slow
+def test_cat_idx_unsupported_atrs():
+    """tests that the categorical index attributes raise the propper errors"""
+    from bodo.hiframes.pd_index_ext import cat_idx_unsupported_atrs
+
+    for unsupported_atr in cat_idx_unsupported_atrs:
+        check_unsupported_atr(
+            "pandas.CategoricalIndex.{}",
+            pd.Index(["hello", "world", "how are", "you"] * 3).astype("category"),
+            unsupported_atr,
+        )
+
+
+@pytest.mark.slow
+def test_interval_idx_unsupported_atrs():
+    """tests that the interval index attributes raise the propper errors"""
+    from bodo.hiframes.pd_index_ext import interval_idx_unsupported_atrs
+
+    for unsupported_atr in interval_idx_unsupported_atrs:
+        check_unsupported_atr(
+            "pandas.IntervalIndex.{}",
+            pd.interval_range(start=0, end=10),
+            unsupported_atr,
+        )
+
+
+@pytest.mark.slow
+def test_multi_idx_unsupported_atrs():
+    """tests that the categorical index attributes raise the propper errors"""
+    from bodo.hiframes.pd_index_ext import multi_index_unsupported_atrs
+
+    for unsupported_atr in multi_index_unsupported_atrs:
+        check_unsupported_atr(
+            "pandas.MultiIndex.{}",
+            pd.MultiIndex.from_arrays(
+                [[1, 1, 2, 2], ["red", "blue", "red", "blue"]],
+                names=("number", "color"),
+            ),
+            unsupported_atr,
+        )
+
+
+@pytest.mark.slow
+def test_dt_idx_unsupported_atrs():
+    """tests that the datetime index attributes raise the propper errors"""
+    from bodo.hiframes.pd_index_ext import dt_index_unsupported_atrs
+
+    for unsupported_atr in dt_index_unsupported_atrs:
+        check_unsupported_atr(
+            "pandas.DatetimeIndex.{}",
+            pd.Index(
+                [
+                    pd.Timestamp("2020-02-23"),
+                    pd.Timestamp("2017-11-02"),
+                    pd.Timestamp("2000-8-18"),
+                ]
+                * 3
+            ),
+            unsupported_atr,
+        )
+
+
+@pytest.mark.slow
+def test_td_idx_unsupported_atrs():
+    """tests that the timedelta index attributes raise the propper errors"""
+    from bodo.hiframes.pd_index_ext import td_index_unsupported_atrs
+
+    for unsupported_atr in td_index_unsupported_atrs:
+        check_unsupported_atr(
+            "pandas.TimedeltaIndex.{}",
+            pd.Index(
+                [
+                    pd.Timedelta(12, unit="d"),
+                    pd.Timedelta(123, unit="ns"),
+                    pd.Timedelta(100, unit="h"),
+                ]
+                * 3
+            ),
+            unsupported_atr,
+        )
+
+
+@pytest.mark.slow
+def test_period_idx_unsupported_atrs():
+    """tests that the period index attributes raise the propper errors"""
     from bodo.hiframes.pd_index_ext import period_index_unsupported_atrs
 
-    return period_index_unsupported_atrs
-
-
-@pytest.fixture(params=_get_index_unsupported_methods())
-def index_unsuported_methods_fixture(request):
-    """fixture around the methods that are unsupported for all index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_index_unsupported_atrs())
-def index_unsupported_atrs_fixture(request):
-    """fixture around the attributes that are unsupported for all index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_cat_idx_unsupported_atrs())
-def cat_idx_unsupported_atrs_fixture(request):
-    """fixture around the attributes that are unsupported for categorical index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_interval_idx_unsupported_atrs())
-def interval_idx_unsupported_atrs_fixture(request):
-    """fixture around the attributes that are unsupported for interval index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_multi_index_unsupported_atrs())
-def multi_index_unsupported_atrs_fixture(request):
-    """fixture around the attributes that are unsupported for multi_index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_dt_index_unsupported_atrs())
-def dt_index_unsupported_atrs_fixture(request):
-    """fixture around the attributes that are unsupported for datetime index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_td_index_unsupported_atrs())
-def td_index_unsupported_atrs_fixture(request):
-    """fixture around the attributes that are unsupported for timedelta index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_period_index_unsupported_atrs())
-def period_index_unsupported_atrs_fixture(request):
-    """fixture around the attributes that are unsupported for period index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_cat_idx_unsupported_methods())
-def cat_idx_unsupported_methods_fixture(request):
-    """fixture around the methods that are unsupported for categorical index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_interval_idx_unsupported_methods())
-def interval_idx_unsupported_methods_fixture(request):
-    """fixture around the methods that are unsupported for interval index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_multi_index_unsupported_methods())
-def multi_index_unsupported_methods_fixture(request):
-    """fixture around the methods that are unsupported for multi_index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_dt_index_unsupported_methods())
-def dt_index_unsupported_methods_fixture(request):
-    """fixture around the methods that are unsupported for datetime index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_td_index_unsupported_methods())
-def td_index_unsupported_methods_fixture(request):
-    """fixture around the methods that are unsupported for timedelta index types"""
-    return request.param
-
-
-@pytest.fixture(params=_get_period_index_unsupported_methods())
-def period_index_unsupported_methods_fixture(request):
-    """fixture around the methods that are unsupported for timedelta index types"""
-    return request.param
-
-
-@pytest.mark.slow
-def test_all_idx_unsupported_methods(all_index_types, index_unsuported_methods_fixture):
-    """tests that the unsupported index methods raise the propper errors"""
-    idx_val = all_index_types[0]
-    idx_formatstr = all_index_types[1]
-    check_unsupported_method(idx_formatstr, idx_val, index_unsuported_methods_fixture)
-
-
-@pytest.mark.slow
-def test_all_idx_unsupported_attrs(all_index_types, index_unsupported_atrs_fixture):
-    """tests that the unsupported index attributes raise the propper errors"""
-
-    idx_val = all_index_types[0]
-    idx_formatstr = all_index_types[1]
-    check_unsupported_atr(idx_formatstr, idx_val, index_unsupported_atrs_fixture)
-
-
-@pytest.mark.slow
-def test_cat_idx_unsupported_methods(cat_idx_unsupported_methods_fixture):
-    """tests that the unsupported categorical index methods raise the propper errors"""
-    check_unsupported_method(
-        "pandas.CategoricalIndex.{}",
-        pd.Index(["hello", "world", "how are", "you"] * 3).astype("category"),
-        cat_idx_unsupported_methods_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_interval_idx_unsupported_methods(interval_idx_unsupported_methods_fixture):
-    """tests that the unsupported interval index methods raise the propper errors"""
-    check_unsupported_method(
-        "pandas.IntervalIndex.{}",
-        pd.interval_range(start=0, end=10),
-        interval_idx_unsupported_methods_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_multi_idx_unsupported_methods(multi_index_unsupported_methods_fixture):
-    """tests that the unsupported multi_index methods raise the propper errors"""
-    check_unsupported_method(
-        "pandas.MultiIndex.{}",
-        pd.MultiIndex.from_arrays(
-            [[1, 1, 2, 2], ["red", "blue", "red", "blue"]], names=("number", "color")
-        ),
-        multi_index_unsupported_methods_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_dt_idx_unsupported_methods(dt_index_unsupported_methods_fixture):
-    """tests that the unsupported datetime index methods raise the propper errors"""
-    check_unsupported_method(
-        "pandas.DatetimeIndex.{}",
-        pd.Index(
-            [
-                pd.Timestamp("2020-02-23"),
-                pd.Timestamp("2017-11-02"),
-                pd.Timestamp("2000-8-18"),
-            ]
-            * 3
-        ),
-        dt_index_unsupported_methods_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_td_idx_unsupported_methods(td_index_unsupported_methods_fixture):
-    """tests that the unsupported timedelta index methods raise the propper errors"""
-    check_unsupported_method(
-        "pandas.TimedeltaIndex.{}",
-        pd.Index(
-            [
-                pd.Timedelta(12, unit="d"),
-                pd.Timedelta(123, unit="ns"),
-                pd.Timedelta(100, unit="h"),
-            ]
-            * 3
-        ),
-        td_index_unsupported_methods_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_period_idx_unsupported_methods(period_index_unsupported_methods_fixture):
-    """tests that the unsupported period index methods raise the propper errors"""
-    check_unsupported_method(
-        "pandas.PeriodIndex.{}",
-        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
-        period_index_unsupported_methods_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_cat_idx_unsupported_atrs(cat_idx_unsupported_atrs_fixture):
-    """tests that the categorical index attributes raise the propper errors"""
-    check_unsupported_atr(
-        "pandas.CategoricalIndex.{}",
-        pd.Index(["hello", "world", "how are", "you"] * 3).astype("category"),
-        cat_idx_unsupported_atrs_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_interval_idx_unsupported_atrs(interval_idx_unsupported_atrs_fixture):
-    """tests that the interval index attributes raise the propper errors"""
-    check_unsupported_atr(
-        "pandas.IntervalIndex.{}",
-        pd.interval_range(start=0, end=10),
-        interval_idx_unsupported_atrs_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_multi_idx_unsupported_atrs(multi_index_unsupported_atrs_fixture):
-    """tests that the categorical index attributes raise the propper errors"""
-    check_unsupported_atr(
-        "pandas.MultiIndex.{}",
-        pd.MultiIndex.from_arrays(
-            [[1, 1, 2, 2], ["red", "blue", "red", "blue"]], names=("number", "color")
-        ),
-        multi_index_unsupported_atrs_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_dt_idx_unsupported_atrs(dt_index_unsupported_atrs_fixture):
-    """tests that the datetime index attributes raise the propper errors"""
-    check_unsupported_atr(
-        "pandas.DatetimeIndex.{}",
-        pd.Index(
-            [
-                pd.Timestamp("2020-02-23"),
-                pd.Timestamp("2017-11-02"),
-                pd.Timestamp("2000-8-18"),
-            ]
-            * 3
-        ),
-        dt_index_unsupported_atrs_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_td_idx_unsupported_atrs(td_index_unsupported_atrs_fixture):
-    """tests that the timedelta index attributes raise the propper errors"""
-    check_unsupported_atr(
-        "pandas.TimedeltaIndex.{}",
-        pd.Index(
-            [
-                pd.Timedelta(12, unit="d"),
-                pd.Timedelta(123, unit="ns"),
-                pd.Timedelta(100, unit="h"),
-            ]
-            * 3
-        ),
-        td_index_unsupported_atrs_fixture,
-    )
-
-
-@pytest.mark.slow
-def test_period_idx_unsupported_atrs(period_index_unsupported_atrs_fixture):
-    """tests that the period index attributes raise the propper errors"""
-    check_unsupported_atr(
-        "pandas.PeriodIndex.{}",
-        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
-        period_index_unsupported_atrs_fixture,
-    )
+    for unsupported_atr in period_index_unsupported_atrs:
+        check_unsupported_atr(
+            "pandas.PeriodIndex.{}",
+            pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+            unsupported_atr,
+        )
 
 
 @pytest.mark.slow

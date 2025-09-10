@@ -33,7 +33,6 @@ from bodo.tests.utils import (
     get_snowflake_connection_string,
     pytest_mark_one_rank,
     pytest_snowflake,
-    run_rank0,
     temp_env_override,
 )
 
@@ -873,6 +872,8 @@ def test_snowflake_runtime_upcasting_int_to_decimal(
     schema uses larger types than the runtime data for integers.
     The larger type is a decimal type
     """
+    from bodo.utils.utils import run_rank0
+
     # Mock the compile-time schema info
     # Original (and runtime data):
     #    L_ORDERKEY: int32 not null

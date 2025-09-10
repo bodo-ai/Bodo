@@ -25,7 +25,7 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, pytest_mark_one_rank, run_rank0
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 
 pytestmark = pytest.mark.iceberg
 
@@ -111,6 +111,8 @@ def test_filter_pushdown_time(iceberg_database, iceberg_table_conn):
 def test_filter_pushdown_binary(iceberg_database, iceberg_table_conn):
     """Simple test that with a filter that selects all of the data, which is stored in
     a single file"""
+    from bodo.utils.utils import run_rank0
+
     table_name = "filter_pushdown_bytes_table"
     input_df = pd.DataFrame({"ID": np.arange(10), "bytes_col": [b"todo"] * 10})
 
@@ -153,6 +155,8 @@ def test_filter_pushdown_binary_complex(iceberg_database, iceberg_table_conn):
     More complex test with two filters that test row filtering, and file level
     filtering respectively.
     """
+    from bodo.utils.utils import run_rank0
+
     table_name = "filter_pushdown_bytes_table_2"
     input_df = pd.DataFrame(
         {
@@ -211,6 +215,7 @@ def test_filter_pushdown_binary_complex(iceberg_database, iceberg_table_conn):
 
 def test_filter_pushdown_logging_msg(iceberg_database, iceberg_table_conn):
     """Simple test to make sure that the logged messages for iceberg filter pushdown are correct"""
+    from bodo.utils.utils import run_rank0
 
     ten_partition_table_name = "ten_partition_table"
     many_partition_table_name = "many_partition_table"

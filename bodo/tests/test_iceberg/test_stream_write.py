@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import glob
+import math
 import os
 import traceback
 import typing as pt
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -39,7 +41,6 @@ from bodo.tests.utils import (
     _test_equal_guard,
     convert_non_pandas_columns,
     pytest_mark_one_rank,
-    run_rank0,
 )
 
 pytestmark = pytest.mark.iceberg
@@ -530,14 +531,6 @@ def test_iceberg_field_ids_in_pq_schema(
     )
 
 
-@run_rank0
-def _get_pq_files(warehouse_loc, db_schema, table_name):
-    data_files = glob.glob(
-        os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
-    )
-    return data_files
-
-
 @pytest_mark_one_rank
 @pytest.mark.parametrize("max_pq_chunksize", [6400000, 3200000, 1600000, 800000])
 def test_iceberg_max_pq_chunksize(
@@ -547,9 +540,7 @@ def test_iceberg_max_pq_chunksize(
     Test that number of raw bytes written to each parquet file are less than "write.target-file-size-bytes"
     and that number of files generated is also consistent with the threshold
     """
-    import math
-
-    import numpy as np
+    from bodo.utils.utils import run_rank0
 
     table_name = "SIMPLE_INT_TABLE_test_pq_chunksize"
 
@@ -575,6 +566,13 @@ def test_iceberg_max_pq_chunksize(
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
     table_id = f"{db_schema}.{table_name}"
     spark = get_spark()
+
+    @run_rank0
+    def _get_pq_files(warehouse_loc, db_schema, table_name):
+        data_files = glob.glob(
+            os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
+        )
+        return data_files
 
     @run_rank0
     def setup():

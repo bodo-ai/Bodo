@@ -10,15 +10,6 @@ import bodo
 from bodo.tests.utils import check_func, nullable_float_arr_maker
 
 
-def _make_time(*args, **kwargs):
-    """Avoids importing Time at the module level."""
-    return None
-
-    # from bodo.types import Time
-
-    # return Time(*args, **kwargs)
-
-
 @pytest.fixture(
     params=[
         pytest.param(
@@ -69,7 +60,7 @@ def _make_time(*args, **kwargs):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
+            lambda: (
                 nullable_float_arr_maker(
                     [i / 10 for i in range(25)],
                     [3, 9, 15, 18],
@@ -114,10 +105,10 @@ def _make_time(*args, **kwargs):
             id="date",
         ),
         pytest.param(
-            (
+            lambda: (
                 pd.Series(
                     [
-                        None if i % 7 < 2 else _make_time(nanosecond=3**i)
+                        None if i % 7 < 2 else bodo.types.Time(nanosecond=3**i)
                         for i in range(45)
                     ]
                 ),
@@ -378,7 +369,13 @@ def array_agg_data(request):
     The distribution of data between various keys, as well as the values of the ordering column,
     are set up so that they will vary with different lengths of input data.
     """
-    data, array_dtype = request.param
+    # Import compiler for bodo.types
+    import bodo.decorators  # noqa
+
+    val = request.param
+    if callable(val):
+        val = val()
+    data, array_dtype = val
     keys = [
         "AABAABCBAABCDCBA"[int(10 * np.tan(i + len(data))) % 16]
         for i in range(len(data))

@@ -28,7 +28,7 @@ import bodo
 import bodo.user_logging
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
-from bodo.tests.utils import run_rank0, temp_env_override
+from bodo.tests.utils import temp_env_override
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -905,6 +905,7 @@ def tmp_abfs_path(abfs_fs):
     """
     Create a temporary ABFS path for testing.
     """
+    from bodo.utils.utils import run_rank0
 
     @run_rank0
     def setup():

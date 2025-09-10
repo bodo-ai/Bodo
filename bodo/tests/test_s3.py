@@ -8,7 +8,7 @@ import pytest
 from pyarrow import fs as pafs
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, cast_dt64_to_ns, check_func, run_rank0
+from bodo.tests.utils import _get_dist_arg, cast_dt64_to_ns, check_func
 from bodo.utils.testing import ensure_clean2
 
 pytestmark = pytest.mark.s3
@@ -397,6 +397,8 @@ def test_s3_parquet_write_seq(
     writing to s3_bucket_us_west_2 will check if the s3 auto region
     detection functionality works
     """
+    from bodo.utils.utils import run_rank0
+
     request.getfixturevalue(bucket_fixture)
 
     def test_write(test_df, fpath):
@@ -427,6 +429,7 @@ def test_s3_parquet_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_parquet in 1D distributed
     """
+    from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
         test_df.to_parquet("s3://bodo-test/test_df_bodo_1D.pq")
@@ -456,6 +459,7 @@ def test_s3_parquet_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_parquet in 1D var
     """
+    from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
         test_df.to_parquet("s3://bodo-test/test_df_bodo_1D_var.pq")
@@ -490,6 +494,8 @@ def test_s3_csv_write_seq(
     writing to s3_bucket_us_west_2 will check if the s3 auto region
     detection functionality works
     """
+    from bodo.utils.utils import run_rank0
+
     request.getfixturevalue(bucket_fixture)
 
     def test_write(test_df, fpath):
@@ -530,6 +536,7 @@ def test_s3_csv_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv in 1D distributed
     """
+    from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
         test_df.to_csv("s3://bodo-test/test_df_bodo_1D.csv", index=False, header=False)
@@ -573,6 +580,7 @@ def test_s3_csv_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv in 1D var
     """
+    from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
         test_df.to_csv(
@@ -616,6 +624,7 @@ def test_s3_csv_write_header_seq(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv with header sequentially
     """
+    from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
         test_df.to_csv("s3://bodo-test/test_df_bodo_header_seq.csv", index=False)
@@ -642,6 +651,7 @@ def test_s3_csv_write_header_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv with header in 1D distributed
     """
+    from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
         test_df.to_csv("s3://bodo-test/test_df_bodo_header_1D.csv", index=False)
@@ -679,6 +689,7 @@ def test_s3_csv_write_header_1D_var(minio_server_with_s3_envs, s3_bucket, test_d
     """
     test s3 to_csv with header in 1D var
     """
+    from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
         test_df.to_csv("s3://bodo-test/test_df_bodo_header_1D_var.csv", index=False)
@@ -766,6 +777,8 @@ def test_s3_json_write_records_lines_seq(
     writing to s3_bucket_us_west_2 will check if the s3 auto region
     detection functionality works
     """
+    from bodo.utils.utils import run_rank0
+
     request.getfixturevalue(bucket_fixture)
 
     def test_write(test_df, fpath):
@@ -802,6 +815,7 @@ def test_s3_json_write_records_lines_1D(minio_server_with_s3_envs, s3_bucket, te
     """
     test s3 to_json(orient="records", lines=True) in 1D distributed
     """
+    from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
         test_df.to_json(
@@ -834,6 +848,7 @@ def test_s3_json_write_records_lines_1D_var(
     """
     test s3 to_json(orient="records", lines=True) in 1D var
     """
+    from bodo.utils.utils import run_rank0
 
     def test_write(test_df):
         test_df.to_json(
@@ -865,6 +880,7 @@ def test_s3_parquet_read(minio_server_with_s3_envs, s3_bucket, test_df):
     read_parquet
     test the parquet file we just wrote sequentially
     """
+    from bodo.utils.utils import run_rank0
 
     @run_rank0
     def write_table():
@@ -885,6 +901,7 @@ def test_s3_csv_read(minio_server_with_s3_envs, s3_bucket, test_df):
     read_csv
     test the csv file we just wrote sequentially
     """
+    from bodo.utils.utils import run_rank0
 
     @run_rank0
     def write_table():
@@ -917,6 +934,7 @@ def test_s3_csv_read_header(minio_server_with_s3_envs, s3_bucket, test_df):
     read_csv with header and infer dtypes
     test the csv file we just wrote sequentially
     """
+    from bodo.utils.utils import run_rank0
 
     @run_rank0
     def write_table():
@@ -1085,6 +1103,7 @@ def test_s3_json_read(minio_server_with_s3_envs, s3_bucket, test_df):
     read_json(orient="records", lines=True)
     test the json file we just wrote sequentially
     """
+    from bodo.utils.utils import run_rank0
 
     @run_rank0
     def write_table():

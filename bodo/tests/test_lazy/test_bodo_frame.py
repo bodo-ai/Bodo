@@ -11,8 +11,8 @@ from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table, get_
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 from bodo.tests.utils import (
     _gather_output,
+    pytest_mark_one_rank,
     pytest_spawn_mode,
-    run_rank0,
 )
 from bodo.utils.testing import ensure_clean2
 
@@ -434,7 +434,7 @@ def test_slice(pandas_managers, head_df, collect_func):
 
 
 @pytest.mark.iceberg
-@run_rank0
+@pytest_mark_one_rank
 def test_sql(iceberg_database, iceberg_table_conn, collect_func):
     """Tests that to_sql() writes the frame correctly and does not trigger data fetch"""
 

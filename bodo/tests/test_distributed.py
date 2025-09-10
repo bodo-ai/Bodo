@@ -2522,7 +2522,7 @@ def get_random_int64index(n):
             id="tuple",
         ),
         pytest.param(
-            pd.Series(
+            lambda: pd.Series(
                 [
                     bodo.types.Time(17, 33, 26, 91, 8, 79),
                     bodo.types.Time(0, 24, 43, 365, 18, 74),
@@ -2576,7 +2576,13 @@ def get_random_int64index(n):
     ],
 )
 def scatter_gather_data(request):
-    return request.param
+    # Import compiler for bodo.types.Time
+    import bodo.decorators  #  noqa
+
+    val = request.param
+    if callable(val):
+        return val()
+    return val
 
 
 def test_scatterv_gatherv_allgatherv_python(scatter_gather_data, memory_leak_check):
@@ -3280,9 +3286,11 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     _test_equal(out, scatter_gather_data)
 
 
-@pytest.mark.parametrize(
-    "dtype",
-    [
+def test_get_value_for_type():
+    """Make sure get_value_for_type() produces correct sample data that matches input
+    data type.
+    """
+    dtypes = [
         bodo.types.MapArrayType(
             bodo.types.dict_str_arr_type,
             bodo.types.FloatingArrayType(bodo.types.float32),
@@ -3297,14 +3305,11 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
             ),
             ("A", "B"),
         ),
-    ],
-)
-def test_get_value_for_type(dtype):
-    """Make sure get_value_for_type() produces correct sample data that matches input
-    data type.
-    """
-    data = bodo.libs.distributed_api.get_value_for_type(dtype)
-    assert bodo.typeof(data) == dtype
+    ]
+
+    for dtype in dtypes:
+        data = bodo.libs.distributed_api.get_value_for_type(dtype)
+        assert bodo.typeof(data) == dtype
 
 
 @pytest.mark.slow

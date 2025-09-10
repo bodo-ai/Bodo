@@ -913,13 +913,12 @@ def test_df_apply_func_case2(memory_leak_check):
 g_var = [3, 1, 5]
 
 
-@bodo.wrap_python(bodo.types.int64)
-def g3(r):
-    return r.A + g_var[0]
-
-
 def test_df_apply_wrap_python(memory_leak_check):
     """Test wrap_python function in df.apply()"""
+
+    @bodo.wrap_python(bodo.types.int64)
+    def g3(r):
+        return r.A + g_var[0]
 
     def test_impl(df):
         return df.apply(g3, axis=1)
@@ -2421,11 +2420,11 @@ def test_loc_setitem(memory_leak_check):
     check_func(impl10, (df, A), check_dtype=False)
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_loc_setitem_str(memory_leak_check):
     """test df.iloc[idx, col_ind] setitem for string array"""
+
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def impl(df):
         df.loc[df.A > 3, "B"] = "CCD"
@@ -2459,11 +2458,10 @@ def test_iat_getitem(df_value, memory_leak_check):
     check_func(impl, (df, n))
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
-)
 def test_iat_setitem_all_types(df_value, memory_leak_check):
     """test df.iat[] setitem (single value)"""
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def impl(df, n, val):
         df.iat[n - 1, 0] = val
@@ -2628,12 +2626,10 @@ def test_df_drop_column_check(memory_leak_check):
         bodo.jit(test_impl)(df)
 
 
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type,
-    reason="not supported for dict string type",
-)
 def test_df_fillna_str_inplace(memory_leak_check):
     """Make sure inplace fillna for string columns is reflected in output"""
+    if bodo.hiframes.boxing._use_dict_str_type:
+        pytest.skip("not supported for dict string type")
 
     def test_impl(df):
         df.B.fillna("ABC", inplace=True)

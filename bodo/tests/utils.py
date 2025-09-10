@@ -125,13 +125,6 @@ def dist_IR_count(f_ir, func_name):
     return f_ir_text.count(func_name)
 
 
-def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
-    """Can be used in top level imports in tests."""
-    from bodo.utils.utils import run_rank0
-
-    return run_rank0(func, bcast_result, result_default)
-
-
 def check_func(
     func,
     args,

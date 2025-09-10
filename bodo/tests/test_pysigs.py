@@ -9,7 +9,7 @@ from numba.core import utils  # noqa TID253
 from numba.core.target_extension import dispatcher_registry  # noqa TID253
 
 import bodo  # noqa
-from bodo.tests.utils import run_rank0
+from bodo.tests.utils import pytest_mark_one_rank
 
 
 def _get_series_apis() -> list[str]:
@@ -96,7 +96,7 @@ def _skip_pysig_check(path: str) -> bool:
 @pytest.mark.parametrize(
     "get_apis, keys", [pytest.param(_get_series_apis, ["Series"], id="series")]
 )
-@run_rank0
+@pytest_mark_one_rank
 def test_pandas_pysigs(get_apis, keys):
     """
     Check that the pysignature of overloaded series methods matches the pysig from

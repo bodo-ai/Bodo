@@ -125,8 +125,7 @@ jobs:
             PYTEST_IGNORE: >-
               ${{ inputs.test-type == 'NORMAL' && '' || 
                   '--ignore bodo/tests/test_streaming
-                  --ignore bodo/tests/caching_tests
-                  --ignore bodo/tests/test_metadata.py' }}
+                  --ignore bodo/tests/caching_tests' }}
             BODO_TEST_SPAWN_MODE: ${{ inputs.test-type == 'SPAWN' && '1' || '0' }}
             # Disabling the DataFrame library for spawn tests since some of the tests
             # create Pandas manager states for testing that are not fully functional.

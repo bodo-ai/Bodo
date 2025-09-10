@@ -560,7 +560,7 @@ def test_dict_encoded_string_arrays_streaming_read(
     so we skip them here.
     """
     from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-    from bodo.tests.utils import run_rank0
+    from bodo.utils.utils import run_rank0
 
     table_name = "SIMPLE_DICT_ENCODED_STRING_STREAMING"
 

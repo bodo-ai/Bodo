@@ -1017,13 +1017,14 @@ def test_pure_func(datapath):
 
 
 # default string type changes with _use_dict_str_type making type annotation invalid
-@pytest.mark.skipif(
-    bodo.hiframes.boxing._use_dict_str_type, reason="cannot test with dict string type"
-)
 def test_objmode_types():
     """
     Test creating types in JIT code and passing to objmode
     """
+    from bodo.hiframes.boxing import _use_dict_str_type
+
+    if _use_dict_str_type:
+        pytest.skip("cannot test with dict string type")
 
     def impl(A):
         with numba.objmode(B=bodo.types.int64[::1]):

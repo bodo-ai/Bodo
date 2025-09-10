@@ -14,16 +14,6 @@ from bodo.tests.utils import pytest_pandas
 pytestmark = pytest_pandas
 
 
-@pytest.fixture(params=bodo.hiframes.pd_dataframe_ext.dataframe_unsupported)
-def df_unsupported_method(request):
-    return request.param
-
-
-@pytest.fixture(params=bodo.hiframes.pd_dataframe_ext.dataframe_unsupported_attrs)
-def df_unsupported_attr(request):
-    return request.param
-
-
 @pytest.mark.slow
 def test_df_filter_err_check(memory_leak_check):
     """
@@ -1282,51 +1272,55 @@ def test_dd_map_array_drop_all(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_df_unsupported_methods(df_unsupported_method):
+def test_df_unsupported_methods():
     """tests that unsupported dataframe methods throw the expected error"""
+    from bodo.hiframes.pd_dataframe_ext import dataframe_unsupported
     from bodo.utils.typing import BodoError
 
-    df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
-    func_text = f"""
-def impl(df):
-    return df.{df_unsupported_method}()
-"""
+    for df_unsupported_method in dataframe_unsupported:
+        df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+        func_text = f"""
+    def impl(df):
+        return df.{df_unsupported_method}()
+    """
 
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
-    impl = loc_vars["impl"]
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+        impl = loc_vars["impl"]
 
-    err_msg = re.escape(f"DataFrame.{df_unsupported_method}() not supported yet")
+        err_msg = re.escape(f"DataFrame.{df_unsupported_method}() not supported yet")
 
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)(df_val)
+        with pytest.raises(
+            BodoError,
+            match=err_msg,
+        ):
+            bodo.jit(impl)(df_val)
 
 
 @pytest.mark.slow
 def test_df_unsupported_atrs(df_unsupported_attr):
     """tests that unsupported dataframe attributes throw the expected error"""
+    from bodo.hiframes.pd_dataframe_ext import dataframe_unsupported_attrs
     from bodo.utils.typing import BodoError
 
-    df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
-    func_text = f"""
-def impl(df):
-    return df.{df_unsupported_attr}
-"""
+    for df_unsupported_attr in dataframe_unsupported_attrs:
+        df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+        func_text = f"""
+    def impl(df):
+        return df.{df_unsupported_attr}
+    """
 
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
-    impl = loc_vars["impl"]
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+        impl = loc_vars["impl"]
 
-    err_msg = f"DataFrame.{df_unsupported_attr} not supported yet"
+        err_msg = f"DataFrame.{df_unsupported_attr} not supported yet"
 
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)(df_val)
+        with pytest.raises(
+            BodoError,
+            match=err_msg,
+        ):
+            bodo.jit(impl)(df_val)
 
 
 @pytest.mark.skip("TODO: throw the propper error messages for df.plot.x")

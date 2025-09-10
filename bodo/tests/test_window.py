@@ -7,15 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
 from bodo.tests.utils import check_func, nullable_float_arr_maker
-
-
-def _make_time(*args, **kwargs):
-    """Avoids importing Time at the module level."""
-    return None
-    # from bodo.types import Time
-
-    # return Time(*args, **kwargs)
 
 
 @pytest.fixture
@@ -94,7 +87,8 @@ def test_window_df():
                 for i in range(15)
             ],
             "O": [
-                None if i % 8 == 4 else _make_time(nanosecond=10**i) for i in range(15)
+                None if i % 8 == 4 else bodo.types.Time(nanosecond=10**i)
+                for i in range(15)
             ],
             "P": pd.Series(
                 [None if i > 10 else (i + 3) ** 2 for i in range(15)],
@@ -899,7 +893,7 @@ def permute_df_and_answer(df, answer):
             id="count_fns-other_arrays",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # Sample variance on a nullable integer array, no frame
@@ -950,7 +944,7 @@ def permute_df_and_answer(df, answer):
             id="var_std-no_frame",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # Sample variance on a nullable integer array, prefix frame
@@ -1025,7 +1019,7 @@ def permute_df_and_answer(df, answer):
             id="var_std-with_frame",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # AVG on a nullable integer array, no frame
@@ -1057,7 +1051,7 @@ def permute_df_and_answer(df, answer):
             id="avg-no_frame",
         ),
         pytest.param(
-            (
+            lambda: (
                 ["D"],
                 (
                     # AVG on a nullable float array, prefix frame
@@ -1229,7 +1223,8 @@ def permute_df_and_answer(df, answer):
                         "AGG_OUTPUT_2": [Decimal("16")] * 12 + [None] * 3,
                         "AGG_OUTPUT_3": [0] * 12 + [12] * 3,
                         "AGG_OUTPUT_4": [datetime.date(2008, 7, 20)] * 15,
-                        "AGG_OUTPUT_5": [_make_time(nanosecond=1)] * 12 + [None] * 3,
+                        "AGG_OUTPUT_5": [bodo.types.Time(nanosecond=1)] * 12
+                        + [None] * 3,
                         "AGG_OUTPUT_6": ["AB"] * 12 + [None] * 3,
                     }
                 ),
@@ -1380,7 +1375,7 @@ def permute_df_and_answer(df, answer):
                         "AGG_OUTPUT_1": [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
                         # This answer is identical to the input column
                         "AGG_OUTPUT_2": [
-                            None if i % 8 == 4 else _make_time(nanosecond=10**i)
+                            None if i % 8 == 4 else bodo.types.Time(nanosecond=10**i)
                             for i in range(15)
                         ],
                         "AGG_OUTPUT_3": ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
@@ -1503,6 +1498,9 @@ def window_args(request):
             begining vs the end when sorting.
     - answer: the expected result of the call to groupby.window.
     """
+    val = request.param
+    if callable(val):
+        return val()
     return request.param
 
 

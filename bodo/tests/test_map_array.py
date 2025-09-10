@@ -172,15 +172,17 @@ def test_getitem_slice(map_arr_value):
     "arr,answer",
     [
         pytest.param(
-            bodo.types.MapArrayType(bodo.types.int64, bodo.types.float64),
+            lambda: bodo.types.MapArrayType(bodo.types.int64, bodo.types.float64),
             True,
             id="simple_map_array",
         ),
         pytest.param(
-            bodo.types.IntegerArrayType(bodo.types.int64), False, id="simple_false"
+            lambda: bodo.types.IntegerArrayType(bodo.types.int64),
+            False,
+            id="simple_false",
         ),
         pytest.param(
-            bodo.types.ArrayItemArrayType(
+            lambda: bodo.types.ArrayItemArrayType(
                 bodo.types.MapArrayType(
                     bodo.types.IntegerArrayType(bodo.types.int64),
                     bodo.types.FloatingArrayType(bodo.types.float64),
@@ -190,7 +192,7 @@ def test_getitem_slice(map_arr_value):
             id="map_inside_array",
         ),
         pytest.param(
-            bodo.types.ArrayItemArrayType(
+            lambda: bodo.types.ArrayItemArrayType(
                 bodo.types.ArrayItemArrayType(
                     bodo.types.IntegerArrayType(bodo.types.int64)
                 )
@@ -199,7 +201,7 @@ def test_getitem_slice(map_arr_value):
             id="array_false",
         ),
         pytest.param(
-            bodo.types.StructArrayType(
+            lambda: bodo.types.StructArrayType(
                 (
                     bodo.types.IntegerArrayType(bodo.types.int64),
                     bodo.types.MapArrayType(
@@ -213,7 +215,7 @@ def test_getitem_slice(map_arr_value):
             id="map_inside_struct",
         ),
         pytest.param(
-            bodo.types.StructArrayType(
+            lambda: bodo.types.StructArrayType(
                 (
                     bodo.types.IntegerArrayType(bodo.types.int64),
                     bodo.types.ArrayItemArrayType(
@@ -229,5 +231,8 @@ def test_getitem_slice(map_arr_value):
 )
 def test_contains_map_array(arr, answer):
     from bodo.libs.map_arr_ext import contains_map_array
+
+    if callable(arr):
+        arr = arr()
 
     assert contains_map_array(arr) == answer

@@ -3488,16 +3488,15 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
     check_func(impl12, (df,), sort_output=True, reset_index=True)
 
 
-df_type = bodo.typeof(pd.DataFrame({"AA": [1.1], "BB": [4.1]}))
-
-
-@bodo.wrap_python(df_type)
-def g_wrapped(df):
-    return pd.DataFrame({"AA": [df.C.mean(), df.C.sum()], "BB": [3.1, df["C"].iloc[0]]})
-
-
 def test_groupby_apply_wrap_python(memory_leak_check):
     """Test groupby apply with a wrap_python UDF"""
+    df_type = bodo.typeof(pd.DataFrame({"AA": [1.1], "BB": [4.1]}))
+
+    @bodo.wrap_python(df_type)
+    def g_wrapped(df):
+        return pd.DataFrame(
+            {"AA": [df.C.mean(), df.C.sum()], "BB": [3.1, df["C"].iloc[0]]}
+        )
 
     def impl1(df):
         df2 = df.groupby("A").apply(g_wrapped)
@@ -7721,7 +7720,7 @@ def test_bit_agg(data, dtype, memory_leak_check):
         # date (try in snowflake: select date_from_parts(2000, 1, 1)::boolean)
         pd.Series([datetime.date(2022, 10, 10), datetime.date(2022, 11, 10)] * 6),
         # time (try in snowflake: select time_from_parts(12, 55, 55)::boolean)
-        pd.Series(
+        lambda: pd.Series(
             [
                 bodo.types.Time(12, 34, 56, precision=0),
                 bodo.types.Time(12, 46, 56, precision=0),
@@ -7740,6 +7739,8 @@ def test_boolagg_or_invalid(data_col, memory_leak_check):
     """Tests calling a groupby with boolagg_or, a function used by
     BodoSQL and not part or regular pandas, on unsupported datatypes."""
     from bodo.utils.typing import BodoError
+
+    data_col = data_col() if callable(data_col) else data_col
 
     @bodo.jit
     def impl(df):
@@ -8083,7 +8084,7 @@ def test_timestamptz_gb_key(memory_leak_check):
         ),
         pytest.param(
             "first",
-            pd.DataFrame(
+            lambda: pd.DataFrame(
                 {
                     "A": ["A", "B", "C", "D"],
                     "B": [
@@ -8098,7 +8099,7 @@ def test_timestamptz_gb_key(memory_leak_check):
         ),
         pytest.param(
             "last",
-            pd.DataFrame(
+            lambda: pd.DataFrame(
                 {
                     "A": ["A", "B", "C", "D"],
                     "B": [
@@ -8113,7 +8114,7 @@ def test_timestamptz_gb_key(memory_leak_check):
         ),
         pytest.param(
             "min",
-            pd.DataFrame(
+            lambda: pd.DataFrame(
                 {
                     "A": ["A", "B", "C", "D"],
                     "B": [
@@ -8128,7 +8129,7 @@ def test_timestamptz_gb_key(memory_leak_check):
         ),
         pytest.param(
             "max",
-            pd.DataFrame(
+            lambda: pd.DataFrame(
                 {
                     "A": ["A", "B", "C", "D"],
                     "B": [
@@ -8145,6 +8146,8 @@ def test_timestamptz_gb_key(memory_leak_check):
 )
 def test_timestamptz_gb_agg(fstr, expected, memory_leak_check):
     """Tests groupby with timestamptz column and aggregation"""
+
+    expected = expected() if callable(expected) else expected
 
     def impl(df):
         return df.groupby("A", as_index=False, dropna=False).agg(fstr)

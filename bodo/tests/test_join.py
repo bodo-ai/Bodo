@@ -1189,7 +1189,7 @@ def test_interval_join_detection(memory_leak_check):
         ),
         pytest.param(
             (
-                pd.DataFrame(
+                lambda: pd.DataFrame(
                     {
                         "P": [
                             bodo.types.Time(x, 0, 0, x, precision=9) for x in range(8)
@@ -1205,7 +1205,7 @@ def test_interval_join_detection(memory_leak_check):
                         * 2,
                     }
                 ),
-                pd.DataFrame(
+                lambda: pd.DataFrame(
                     {
                         "A": [bodo.types.Time(x, 0, 0, precision=9) for x in range(4)]
                         * 5,
@@ -1298,6 +1298,8 @@ def test_interval_join_detection(memory_leak_check):
 )
 def interval_join_test_tables(request):
     ldf, rdf = request.param
+    ldf = ldf() if callable(ldf) else ldf
+    rdf = rdf() if callable(rdf) else rdf
     cross_df = ldf.merge(rdf, how="cross")
     return (ldf, rdf, cross_df)
 

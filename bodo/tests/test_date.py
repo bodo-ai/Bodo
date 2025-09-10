@@ -1511,7 +1511,34 @@ def series_value(request):
     return request.param
 
 
-@pytest.mark.parametrize("date_fields", bodo.hiframes.pd_timestamp_ext.date_fields)
+@pytest.mark.parametrize(
+    "date_fields",
+    [
+        "year",
+        "month",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "microsecond",
+        "nanosecond",
+        "quarter",
+        "dayofyear",
+        "day_of_year",
+        "dayofweek",
+        "day_of_week",
+        "daysinmonth",
+        "days_in_month",
+        "is_leap_year",
+        "is_month_start",
+        "is_month_end",
+        "is_quarter_start",
+        "is_quarter_end",
+        "is_year_start",
+        "is_year_end",
+        "weekday",
+    ],
+)
 def test_dt_extract(series_value, date_fields, memory_leak_check):
     """Test Series.dt extraction"""
     func_text = "def impl(S, date_fields):\n"
@@ -1522,7 +1549,7 @@ def test_dt_extract(series_value, date_fields, memory_leak_check):
     check_func(impl, (series_value, date_fields), check_dtype=False)
 
 
-@pytest.mark.parametrize("date_methods", bodo.hiframes.pd_timestamp_ext.date_methods)
+@pytest.mark.parametrize("date_methods", ["normalize", "day_name", "month_name"])
 def test_dt_date_methods(series_value, date_methods, memory_leak_check):
     """Test Series.dt datetime methods"""
     func_text = "def impl(S, date_methods):\n"
@@ -1671,7 +1698,7 @@ def test_dt_round_timestamp_others(series_value_no_bad_dates, memory_leak_check)
 
 
 @pytest.mark.parametrize(
-    "timedelta_fields", bodo.hiframes.pd_timestamp_ext.timedelta_fields
+    "timedelta_fields", ["days", "seconds", "microseconds", "nanoseconds"]
 )
 def test_dt_timedelta_fields(timedelta_fields, memory_leak_check):
     """Test Series.dt for timedelta64 fields"""
@@ -1685,9 +1712,7 @@ def test_dt_timedelta_fields(timedelta_fields, memory_leak_check):
     check_func(impl, (S, timedelta_fields), check_dtype=False)
 
 
-@pytest.mark.parametrize(
-    "timedelta_methods", bodo.hiframes.pd_timestamp_ext.timedelta_methods
-)
+@pytest.mark.parametrize("timedelta_methods", ["total_seconds", "to_pytimedelta"])
 def test_dt_timedelta_methods(timedelta_methods, memory_leak_check):
     """Test Series.dt for timedelta64 methods"""
     func_text = "def impl(S, timedelta_methods):\n"

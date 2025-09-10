@@ -56,7 +56,6 @@ from bodo.tests.utils import (
     _test_equal_guard,
     cast_dt64_to_ns,
     convert_non_pandas_columns,
-    run_rank0,
 )
 from bodo.utils.testing import ensure_clean2
 
@@ -1355,6 +1354,8 @@ def test_iceberg_middle_optional_column(iceberg_database, iceberg_table_conn):
     of a struct.
     The entire column should be filled with nulls instead of failing.
     """
+    from bodo.utils.utils import run_rank0
+
     table_name = "SIMPLE_OPTIONAL_TABLE_MIDDLE"
     write_table_name = f"{table_name}_WRITE"
     db_schema, warehouse_loc = iceberg_database(table_name)

@@ -85,7 +85,10 @@ def make_date_time_mode_test_params(name, format_str, is_slow):
     val_from_format = lambda x: eval(
         format_str.format(x), {"bodo": bodo, "datetime": datetime, "pd": pd}
     )
-    data_dict = {
+
+    # Creating lambdas to avoid evaluating "bodo.types.Time" outside of test
+    # where JIT is not imported.
+    data_dict = lambda: {
         13: [val_from_format(500)] * 2 + [val_from_format(5000)] * 3,
         10: [val_from_format((i**8) % (10**4 - 1)) for i in range(500)],
         -1: [None] * 4 + [val_from_format(0)] + [val_from_format(7**6)] * 3,
@@ -94,7 +97,7 @@ def make_date_time_mode_test_params(name, format_str, is_slow):
         1024: [val_from_format(76543)],
         256: [val_from_format(2**i) for i in [10, 10, 11, 11, 11, 12]],
     }
-    answer_dict = {
+    answer_dict = lambda: {
         13: val_from_format(5000),
         10: val_from_format(6561),
         -1: val_from_format(7**6),
@@ -103,6 +106,7 @@ def make_date_time_mode_test_params(name, format_str, is_slow):
         1024: val_from_format(76543),
         256: val_from_format(2**11),
     }
+
     slow_mark_opt = pytest.mark.slow if is_slow else ()
     return pytest.param(
         data_dict, answer_dict, None, False, id=name, marks=slow_mark_opt
@@ -332,6 +336,8 @@ def test_mode(data_dict, answer_dict, dtype, is_dict, memory_leak_check):
         A       5
         B       1
     """
+    data_dict = data_dict() if callable(data_dict) else data_dict
+    answer_dict = answer_dict() if callable(answer_dict) else answer_dict
 
     def impl(df):
         # Note we choose all of these flag + code format because

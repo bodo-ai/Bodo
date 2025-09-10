@@ -26,7 +26,6 @@ from bodo.tests.utils import (
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
     pytest_mark_one_rank,
-    run_rank0,
 )
 from bodo.utils.testing import ensure_clean2, ensure_clean_dir
 
@@ -41,6 +40,8 @@ def check_write_func(
     check_index: list[str] | None = None,
     pandas_fn=None,
 ):
+    from bodo.utils.utils import run_rank0
+
     DISTRIBUTIONS = {
         "sequential": [lambda x, *args: x, [], {}],
         "1d-distributed": [

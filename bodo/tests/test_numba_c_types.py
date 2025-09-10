@@ -1,8 +1,8 @@
 import bodo
-from bodo.tests.utils import run_rank0
+from bodo.tests.utils import pytest_mark_one_rank
 
 
-@run_rank0
+@pytest_mark_one_rank
 def test_numba_to_cpp_types_decimal():
     """Verifies that decimal types are properly serialized by creating a nested type with decimals are different levels"""
     from bodo.utils.utils import (

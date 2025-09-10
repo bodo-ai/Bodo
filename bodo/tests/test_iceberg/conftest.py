@@ -11,7 +11,7 @@ from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLES_MAP,
 )
-from bodo.tests.utils import run_rank0, temp_env_override
+from bodo.tests.utils import temp_env_override
 
 WRITE_TABLES = [
     "BOOL_BINARY_TABLE",
@@ -139,6 +139,7 @@ def polaris_package():
     """
     Ensure that the polaris client is installed
     """
+    from bodo.utils.utils import run_rank0
 
     # Install the polaris client if it is not already installed
     # This is a temporary solution until the polaris client is published
@@ -166,6 +167,8 @@ def polaris_token(polaris_server, polaris_package):
     from polaris.catalog.api_client import (
         Configuration as CatalogApiClientConfiguration,
     )
+
+    from bodo.utils.utils import run_rank0
 
     host, port, user, password = polaris_server
 
@@ -212,6 +215,8 @@ def aws_polaris_warehouse(polaris_token, polaris_server, polaris_package):
     from polaris.management import (
         ApiClient as ManagementApiClient,
     )
+
+    from bodo.utils.utils import run_rank0
 
     host, port, _, _ = polaris_server
 
@@ -310,6 +315,8 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
     from polaris.management import (
         ApiClient as ManagementApiClient,
     )
+
+    from bodo.utils.utils import run_rank0
 
     host, port, _, _ = polaris_server
 
