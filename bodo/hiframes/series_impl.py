@@ -18,6 +18,7 @@ from numba.extending import (
 )
 
 import bodo
+import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes.datetime_datetime_ext import (
     datetime_datetime_type,
@@ -2793,6 +2794,7 @@ def _gen_bins_handling(bins, dtype):
 
 
 @overload(pd.cut, inline="always", no_unliteral=True, jit_options={"cache": True})
+@overload(bd.cut, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_cut(
     x,
     bins,
@@ -2903,6 +2905,7 @@ def get_q_list_overload(q):
 
 
 @overload(pd.unique, inline="always", no_unliteral=True, jit_options={"cache": True})
+@overload(bd.unique, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_unique(values):
     # TODO: accept values of list and index types
 
@@ -2926,6 +2929,7 @@ def overload_unique(values):
 
 
 @overload(pd.qcut, inline="always", no_unliteral=True, jit_options={"cache": True})
+@overload(bd.qcut, inline="always", no_unliteral=True, jit_options={"cache": True})
 def overload_qcut(
     x,
     q,

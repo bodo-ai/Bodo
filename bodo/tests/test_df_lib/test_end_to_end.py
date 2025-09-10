@@ -3475,3 +3475,21 @@ def test_print_no_warn():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         print(S)
+
+
+def test_bodo_pandas_inside_jit():
+    """Make sure using bodo.pandas functions inside a bodo.jit function works as
+    expected and is same as pandas.
+    """
+    df = bd.DataFrame({"A": np.arange(100)})
+
+    def test1(df):
+        df2 = bd.DataFrame({"B": np.arange(len(df))})
+        return df2.B.sum()
+
+    assert test1(df) == bodo.jit(spawn=False, distributed=False)(test1)(df)
+
+    def test2(df):
+        return bd.Timestamp(df.A.iloc[0])
+
+    assert test2(df) == bodo.jit(spawn=False, distributed=False)(test2)(df)

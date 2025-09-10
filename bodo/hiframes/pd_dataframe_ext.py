@@ -38,6 +38,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_index_ext import (
@@ -2284,6 +2285,7 @@ def _cast_df_data_to_tuple_format(
 
 
 @overload(pd.DataFrame, inline="always", no_unliteral=True, jit_options={"cache": True})
+@overload(bd.DataFrame, inline="always", no_unliteral=True, jit_options={"cache": True})
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support other input combinations
     # TODO: error checking
@@ -2860,6 +2862,7 @@ def lower_join_dummy(context, builder, sig, args):
 
 
 @overload(pd.concat, inline="always", no_unliteral=True)
+@overload(bd.concat, inline="always", no_unliteral=True)
 def concat_overload(
     objs,
     axis=0,
@@ -4904,6 +4907,7 @@ def to_json_overload(
 
 
 @overload(pd.get_dummies, inline="always", no_unliteral=True)
+@overload(bd.get_dummies, inline="always", no_unliteral=True)
 def get_dummies(
     data,
     prefix=None,

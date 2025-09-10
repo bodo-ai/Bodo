@@ -1701,7 +1701,7 @@ class TypingTransforms:
             len(call_list) == 2
             and (
                 isinstance(call_list[1], ir.Var)
-                or call_list[1] == "pandas"
+                or call_list[1] in ("pandas", "bodo.pandas")
                 or call_list[1] == "bodosql.kernels"
             )
         )
@@ -2327,7 +2327,12 @@ class TypingTransforms:
             # matches the data types before filter comparison (in this case, calls
             # pd.Timestamp on partition's string value)
             # BodoSQL generates pd.Series(arr) calls for expressions
-            if fdef in (("to_datetime", "pandas"), ("Series", "pandas")):
+            if fdef in (
+                ("to_datetime", "pandas"),
+                ("Series", "pandas"),
+                ("to_datetime", "bodo.pandas"),
+                ("Series", "bodo.pandas"),
+            ):
                 # We don't want to perform filter pushdown if there is a format argument
                 # i.e. pd.to_datetime(col, format="%Y-%d-%m")
                 # https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
@@ -2517,7 +2522,8 @@ class TypingTransforms:
         # remove pd.Series() calls
         if (
             is_call(var_def)
-            and guard(find_callname, self.func_ir, var_def) == ("Series", "pandas")
+            and guard(find_callname, self.func_ir, var_def)
+            in (("Series", "pandas"), ("Series", "bodo.pandas"))
             and (len(var_def.args) == 1)
             and not var_def.kws
         ):
@@ -2935,10 +2941,10 @@ class TypingTransforms:
 
         func_name, func_mod = fdef
 
-        if fdef == ("read_sql_table", "pandas"):
+        if fdef in (("read_sql_table", "pandas"), ("read_sql_table", "bodo.pandas")):
             return self._run_call_read_sql_table(assign, rhs, func_name, label)
 
-        if func_mod == "pandas":
+        if func_mod in ("pandas", "bodo.pandas"):
             return self._run_call_pd_top_level(assign, rhs, func_name, label)
 
         # handle pd.Timestamp.method() calls
@@ -5803,7 +5809,7 @@ class TypingTransforms:
                 isinstance(call_list[1], ir.Var)
                 # checking call_list[1] == "pandas" to handle pd.isna/pd.notna cases generated
                 # by BodoSQL
-                or call_list[1] == "pandas"
+                or call_list[1] in ("pandas", "bodo.pandas")
                 or call_list[1] == "bodosql.kernels"
             ):
                 return call_list[0] in (
