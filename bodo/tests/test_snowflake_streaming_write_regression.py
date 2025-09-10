@@ -9,12 +9,6 @@ import pandas as pd
 import pytest
 
 import bodo
-import bodo.io.snowflake
-from bodo.io.arrow_reader import read_arrow_next
-from bodo.io.snowflake_write import (
-    snowflake_writer_append_table,
-    snowflake_writer_init,
-)
 from bodo.mpi4py import MPI
 from bodo.tests.utils import (  # noqa
     get_snowflake_connection_string,
@@ -124,6 +118,13 @@ def test_streaming_write(
     Benchmark a simple use of streaming Snowflake writes by reading a table, writing
     the results, then reading again
     """
+    import bodo.io.snowflake
+    from bodo.io.arrow_reader import read_arrow_next
+    from bodo.io.snowflake_write import (
+        snowflake_writer_append_table,
+        snowflake_writer_init,
+    )
+
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
             "l_orderkey",

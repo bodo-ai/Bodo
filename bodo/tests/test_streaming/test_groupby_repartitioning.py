@@ -23,9 +23,9 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     pytest_mark_one_rank,
-    reduce_sum,
     temp_env_override,
 )
+from bodo.tests.utils_jit import reduce_sum
 
 pytestmark = [
     pytest.mark.skipif(

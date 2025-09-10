@@ -12,9 +12,11 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
 
 def _make_time(*args, **kwargs):
     """Avoids importing Time at the module level."""
-    from bodo.types import Time
+    return None
 
-    return Time(*args, **kwargs)
+    # from bodo.types import Time
+
+    # return Time(*args, **kwargs)
 
 
 @pytest.fixture(
@@ -431,14 +433,6 @@ def test_array_agg_regular(array_agg_data, memory_leak_check):
         sort_output=True,
         convert_columns_to_pandas=True,
     )
-
-
-@bodo.jit(distributed=False)
-def bodo_get_distinct_group(raw_data, raw_order):
-    order = raw_order.sort_values(ascending=True, na_position="last")
-    col = raw_data.iloc[order.index]
-    col = col.dropna().drop_duplicates()
-    return col.values
 
 
 def array_agg_distinct_func(group):

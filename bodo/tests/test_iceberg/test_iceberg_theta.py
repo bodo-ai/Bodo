@@ -7,15 +7,6 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.stream_iceberg_write import (
-    iceberg_writer_append_table,
-    iceberg_writer_init,
-)
-from bodo.io.iceberg.theta import (
-    read_puffin_file_ndvs,
-    table_columns_have_theta_sketches,
-)
 from bodo.tests.iceberg_database_helpers.metadata_utils import (
     get_metadata_field,
     get_metadata_path,
@@ -31,6 +22,11 @@ pytestmark = pytest.mark.iceberg
 
 def write_iceberg_table_with_puffin_files(df, table_id, conn, write_type):
     """Helper to create an Iceberg table with puffin files."""
+    from bodo.io.iceberg.stream_iceberg_write import (
+        iceberg_writer_append_table,
+        iceberg_writer_init,
+    )
+
     col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
     batch_size = 5
 
@@ -70,6 +66,8 @@ def test_iceberg_write_theta_estimates(
 ):
     """Test basic streaming Iceberg write with theta sketches enabled to ensure
     that they are generated for 4/5 columns. This"""
+    from bodo.tests.test_iceberg.utils_jit import get_statistics_ndvs
+
     table_name = "iceberg_ctas_theta_test_table_1"
     # A: 10000 unique values, valid type (integer)
     # B: 256 unique values, valid type (integer)
@@ -226,11 +224,6 @@ def check_no_statistics_file(warehouse_loc, db_schema, table_name):
     )
 
 
-@numba.njit
-def get_statistics_ndvs(puffin_file_name, iceberg_schema):
-    return read_puffin_file_ndvs(puffin_file_name, iceberg_schema)
-
-
 def get_iceberg_pyarrow_schema(conn, table_id):
     _, _, pyarrow_schema = bodo.io.iceberg.get_iceberg_orig_schema(conn, table_id)
     return pyarrow_schema
@@ -253,6 +246,8 @@ def test_full_iceberg_theta_write(
     7. The NDV matches a hardcoded expected value to avoid regressions. This is feasible
         because the result should be deterministic.
     """
+    from bodo.tests.test_iceberg.utils_jit import get_statistics_ndvs
+
     df = pd.DataFrame(
         {
             "A": pd.array(list(range(10)) * 2, dtype=pd.Int64Dtype()),
@@ -298,6 +293,9 @@ def test_theta_sketch_detection(
     Test if we can correctly detect which columns have a theta sketch in the
     connector.
     """
+    from bodo.io.iceberg.catalog import conn_str_to_catalog
+    from bodo.io.iceberg.theta import table_columns_have_theta_sketches
+
     df = pd.DataFrame(
         {
             "A": pd.array(list(range(10)) * 2, dtype=pd.Int64Dtype()),
@@ -372,6 +370,8 @@ def test_theta_insert_into(iceberg_database, iceberg_table_conn, memory_leak_che
     Test that insert into operations generate theta sketches by updating the
     existing sketches.
     """
+    from bodo.tests.test_iceberg.utils_jit import get_statistics_ndvs
+
     df1 = pd.DataFrame(
         {
             "A": pd.array(list(range(10)) * 2, dtype=pd.Int64Dtype()),
@@ -440,6 +440,8 @@ def test_enable_sketches_per_column(
     Test that we can enable/disable theta sketches on a per-column basis,
     through setting the table property of `bodo.write.theta_sketch_enabled.<column_name>`.
     """
+    from bodo.tests.test_iceberg.utils_jit import get_statistics_ndvs
+
     df = pd.DataFrame(
         {
             "A": pd.array(list(range(10)) * 2, dtype=pd.Int64Dtype()),

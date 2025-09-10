@@ -9,10 +9,6 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.io.iceberg.stream_iceberg_write import (
-    iceberg_writer_append_table,
-    iceberg_writer_init,
-)
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     BASE_NAME as PART_SORT_TABLE_BASE_NAME,
@@ -58,6 +54,10 @@ def _write_iceberg_table(
     parallel: bool = True,
 ):
     """helper that writes Iceberg table using Bodo's streaming write"""
+    from bodo.io.iceberg.stream_iceberg_write import (
+        iceberg_writer_append_table,
+        iceberg_writer_init,
+    )
 
     col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
     batch_size = 11

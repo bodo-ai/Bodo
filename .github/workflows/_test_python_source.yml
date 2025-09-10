@@ -99,7 +99,7 @@ jobs:
               --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
               --store-durations --clean-durations \
               --durations-path=../buildscripts/github/test_dur_bodosql.json \
-              -m "$PYTEST_MARKER" bodosql/tests/
+              -m "$PYTEST_MARKER" "$PYTEST_IGNORE" bodosql/tests/
             sql_test_exit_code=$?
 
             # Pytest exits code 5 if no tests are run. Some markers are only in python or sql
@@ -120,6 +120,13 @@ jobs:
           env:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
             PYTEST_MARKER: ${{ inputs.pytest-marker }}
+            # Ignore streaming, caching and other tests that would
+            # normally import the compiler in spawn/df_lib modes.
+            PYTEST_IGNORE: >-
+              ${{ inputs.test-type == 'NORMAL' && '' || 
+                  '--ignore bodo/tests/test_streaming
+                  --ignore bodo/tests/caching_tests
+                  --ignore bodo/tests/test_metadata.py' }}
             BODO_TEST_SPAWN_MODE: ${{ inputs.test-type == 'SPAWN' && '1' || '0' }}
             # Disabling the DataFrame library for spawn tests since some of the tests
             # create Pandas manager states for testing that are not fully functional.

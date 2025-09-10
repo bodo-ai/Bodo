@@ -20,6 +20,7 @@ from bodo.tests.utils import _test_equal
 
 def test_write_s3_vectors(datapath):
     """Test writing to S3 Vectors using Bodo DataFrame API."""
+    # breakpoint()
 
     texts = [
         "Star Wars: A farm boy joins rebels to fight an evil empire in space",

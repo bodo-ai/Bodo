@@ -181,6 +181,19 @@ banned-module-level-imports = [
   "bodo.transforms",
   "bodo.ml_support",
 
+  # All bodo.io submodules except fs_io and parquet_pio
+  "bodo.io.iceberg",
+  "bodo.io.arrow_reader",
+  "bodo.io.csv_iterator_ext",
+  "bodo.io.h5",
+  "bodo.io.h5_api",
+  "bodo.io.helpers",
+  "bodo.io.np_io",
+  "bodo.io.parquet_write",
+  "bodo.io.snowflake",
+  "bodo.io.snowflake_write",
+  "bodo.io.stream_parquet_write",
+
   # All bodo.utils submodules except tracing, testing, aggregate_query_profiles
   "bodo.utils.conversion",
   "bodo.utils.python_310_bytecode_pass",
@@ -205,6 +218,7 @@ banned-module-level-imports = [
 # Only allow compiler-related imports (ignore TID253) in these files/dirs.
 "bodo/pandas/utils_jit.py" = ["TID253"]
 "bodo/tests/utils_jit.py" = ["TID253"]
+"bodo/tests/test_iceberg/utils_jit.py" = ["TID253"]
 "bodo/compiler.py" = ["TID253"]
 "bodo/decorators.py" = ["TID253"]
 "bodo/sql_plan_cache.py" = ["TID253"]

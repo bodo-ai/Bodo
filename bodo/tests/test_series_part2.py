@@ -139,30 +139,16 @@ def g1(a):
     return 2 * a
 
 
-@bodo.jit
-def g2(a):
-    return 2 * a + 3
-
-
-@bodo.jit
-def g3(a):
-    return g2(a=a)
-
-
-out_type = bodo.typeof([1.0, 2.0])
-
-
-@bodo.wrap_python(out_type)
-def g4(a):
-    return [a, 2 * a]
-
-
 @pytest.mark.df_lib
 @pytest.mark.slow
 def test_series_map_func_cases1(memory_leak_check):
     """test map() called with a function defined as global/freevar outside or passed as
     argument.
     """
+
+    @bodo.jit
+    def g2(a):
+        return 2 * a + 3
 
     # const function defined as global
     def test_impl1(S):
@@ -208,6 +194,10 @@ def test_series_map_func_cases1(memory_leak_check):
 def test_series_map_global_jit(memory_leak_check):
     """Test UDF defined as a global jit function"""
 
+    @bodo.jit
+    def g2(a):
+        return 2 * a + 3
+
     def test_impl(S):
         return S.map(g2)
 
@@ -218,6 +208,12 @@ def test_series_map_global_jit(memory_leak_check):
 @pytest.mark.df_lib
 def test_series_map_wrap_python(memory_leak_check):
     """Test UDF defined as a wrap_python function"""
+
+    out_type = bodo.typeof([1.0, 2.0])
+
+    @bodo.wrap_python(out_type)
+    def g4(a):
+        return [a, 2 * a]
 
     def test_impl(S):
         return S.map(g4)
@@ -453,6 +449,14 @@ def test_series_map_dt_str(memory_leak_check):
 @pytest.mark.slow
 def test_series_map_nested_func(memory_leak_check):
     """test nested Bodo call in map UDF"""
+
+    @bodo.jit
+    def g2(a):
+        return 2 * a + 3
+
+    @bodo.jit
+    def g3(a):
+        return g2(a=a)
 
     def test_impl(S):
         return S.map(lambda a: g3(a))

@@ -324,7 +324,7 @@ def test_reduce_init_val(memory_leak_check):
     """make sure _root_rank_select is not generated for common reductions with neutral
     init value.
     """
-    from bodo.tests.utils import DistTestPipeline
+    from bodo.tests.utils_jit import DistTestPipeline
 
     def impl(n):
         return np.ones(n).sum()
@@ -385,7 +385,7 @@ def test_array_reduce(memory_leak_check):
 
 def _check_IR_no_getitem(test_impl, args):
     """makes sure there is no getitem/static_getitem left in the IR after optimization"""
-    from bodo.tests.utils import DeadcodeTestPipeline
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
     from bodo.utils.utils import is_assign, is_expr
 
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
@@ -421,7 +421,7 @@ def test_trivial_slice_getitem_opt(memory_leak_check):
 
 def _check_IR_single_label(test_impl, args):
     """makes sure the IR has a single label"""
-    from bodo.tests.utils import DeadcodeTestPipeline
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
         test_impl

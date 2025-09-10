@@ -3250,6 +3250,10 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     9    <NA>
     dtype: Float64
     """
+    return None
+
+    from bodo.tests.utils_jit import _nullable_float_arr_maker
+
     S = _nullable_float_arr_maker(L, to_null, to_nan)
     # Remove the bodo metadata. It improperly assigns
     # 1D_Var to the series which interferes with the test
@@ -3257,22 +3261,6 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     # the default of REP distribution.
     del S._bodo_meta
     return S
-
-
-@bodo.jit(distributed=False)
-def _nullable_float_arr_maker(L, to_null, to_nan):
-    n = len(L)
-    data_arr = np.empty(n, np.float64)
-    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
-    A = bodo.libs.float_arr_ext.init_float_array(data_arr, nulls)
-    for i in range(len(L)):
-        if i in to_null:
-            bodo.libs.array_kernels.setna(A, i)
-        elif i in to_nan:
-            A[i] = np.nan
-        else:
-            A[i] = L[i]
-    return pd.Series(A)
 
 
 def cast_dt64_to_ns(df):

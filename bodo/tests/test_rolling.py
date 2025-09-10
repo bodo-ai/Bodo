@@ -298,14 +298,13 @@ def test_nullable_int(memory_leak_check):
     check_func(impl, (S,))
 
 
-@bodo.jit(distributed=False)
-def g(a):
-    return a.sum()
-
-
 @pytest.mark.slow
 def test_fixed_apply_nested_func(memory_leak_check):
     """test nested UDF decorated with Bodo (make sure it doesn't hang due to barriers)"""
+
+    @bodo.jit(distributed=False)
+    def g(a):
+        return a.sum()
 
     # test sequentially with manually created dfs
     def test_impl(df):

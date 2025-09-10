@@ -503,7 +503,7 @@ def test_astype_str(memory_leak_check):
 )
 def test_str_copy_inplace(memory_leak_check):
     """Test inplace string copy optimization across arrays in series pass"""
-    from bodo.tests.utils import SeqTestPipeline
+    from bodo.tests.utils_jit import SeqTestPipeline
 
     # scalar case
     def impl1(A):
@@ -555,7 +555,7 @@ def test_str_copy_inplace(memory_leak_check):
 
 def _check_str_item_length(impl):
     """make sure 'impl' is optimized to use str_item_length"""
-    from bodo.tests.utils import SeqTestPipeline
+    from bodo.tests.utils_jit import SeqTestPipeline
 
     A = np.array(["AA", "B"] * 4, object)
     j_func = numba.njit(pipeline_class=SeqTestPipeline, parallel=True)(impl)

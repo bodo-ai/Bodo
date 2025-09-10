@@ -719,7 +719,7 @@ def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
     This is not guaranteed to work, but provides at least some
     protection against regressions.
     """
-    from bodo.tests.utils import ColumnDelTestPipeline, reduce_sum
+    from bodo.tests.utils_jit import ColumnDelTestPipeline, reduce_sum
 
     table_name = "TEST_DICT_ENCODING_SYNC_DETERMINATION"
 
@@ -1118,7 +1118,7 @@ def _check_for_sql_read_head_only(bodo_func, head_size):
 @pytest.mark.slow
 def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check):
     """Test that Limit Pushdown is successfully enabled"""
-    from bodo.tests.utils import DistTestPipeline
+    from bodo.tests.utils_jit import DistTestPipeline
 
     table_name = "SIMPLE_STRING_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)

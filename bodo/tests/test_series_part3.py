@@ -730,7 +730,7 @@ def test_astype_nocopy(memory_leak_check):
     """
     Tests to make sure conversion of pd.Int32 series to pd.Int32 does no conversion.
     """
-    from bodo.tests.utils import ParforTestPipeline
+    from bodo.tests.utils_jit import ParforTestPipeline
 
     def impl(A):
         return A.astype("Int32", copy=False)

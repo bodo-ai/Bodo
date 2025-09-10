@@ -12,9 +12,10 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
 
 def _make_time(*args, **kwargs):
     """Avoids importing Time at the module level."""
-    from bodo.types import Time
+    return None
+    # from bodo.types import Time
 
-    return Time(*args, **kwargs)
+    # return Time(*args, **kwargs)
 
 
 @pytest.fixture

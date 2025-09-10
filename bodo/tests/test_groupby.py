@@ -3620,7 +3620,7 @@ def test_groupby_apply_objmode():
     """
     Test Groupby.apply() with objmode inside UDF
     """
-    from bodo.tests.utils import DeadcodeTestPipeline
+    from bodo.tests.utils_jit import DeadcodeTestPipeline
 
     bodo.numba.types.test_df_type = bodo.types.DataFrameType(
         (bodo.types.string_array_type, bodo.types.float64[::1]),
