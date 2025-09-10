@@ -126,6 +126,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if not args and not kwargs:
             return super().__new__(cls, *args, **kwargs)
 
+        # TODO: Optimize creation from other BodoDataFrames, BodoSeries, or BodoScalars
+
         df = pd.DataFrame(*args, **kwargs)
         return bodo.pandas.base.from_pandas(df)
 
