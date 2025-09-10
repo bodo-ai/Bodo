@@ -752,7 +752,7 @@ inline void produce_probe_output(
 
     // 0 means not found in build table
     if (group_id == 0) {
-        if (probe_table_outer) {
+        if constexpr (probe_table_outer) {
             // Add unmatched rows from probe table to output table
             build_idxs.push_back(-1);
             probe_idxs.push_back(i_row);
@@ -760,7 +760,7 @@ inline void produce_probe_output(
         return;
     }
 
-    if (is_anti_join && probe_table_outer) {
+    if constexpr (is_anti_join && probe_table_outer) {
         // In the anti join case, if we have a match in the build table, we
         // don't want to output anything for this probe row.
         return;
@@ -782,7 +782,7 @@ inline void produce_probe_output(
 
     for (size_t idx = group_start_idx; idx < group_end_idx; idx++) {
         const size_t j_build = (*partition_groups_)[idx];
-        if (non_equi_condition) {
+        if constexpr (non_equi_condition) {
             // Check for matches with the non-equality portion.
             bool match =
                 cond_func(probe_table_info_ptrs.data(),
@@ -794,10 +794,10 @@ inline void produce_probe_output(
             }
             has_match = true;
         }
-        if (build_table_outer) {
+        if constexpr (build_table_outer) {
             SetBitTo(partition_build_table_matched_->data(), j_build, true);
         }
-        if (!is_anti_join) {
+        if constexpr (!is_anti_join) {
             build_idxs.push_back(j_build);
             probe_idxs.push_back(i_row);
         }
@@ -846,7 +846,7 @@ void generate_build_table_outer_rows_for_partition(
     JoinPartition* partition, bodo::vector<int64_t>& build_idxs,
     bodo::vector<int64_t>& probe_idxs) {
     auto& build_table_matched_ = partition->build_table_matched_guard.value();
-    if (requires_reduction) {
+    if constexpr (requires_reduction) {
         auto pin = *build_table_matched_;
         MPI_Allreduce_bool_or({pin.data(), pin.size()});
     }
@@ -893,7 +893,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     std::vector<void*> build_null_bitmaps;
     std::vector<void*> probe_null_bitmaps;
 
-    if (non_equi_condition) {
+    if constexpr (non_equi_condition) {
         get_gen_cond_data_ptrs(this->build_table_buffer->data_table,
                                &build_table_info_ptrs, &build_col_ptrs,
                                &build_null_bitmaps);
@@ -923,7 +923,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
         this->metrics.probe_inactive_pop_chunk_time += end_timer(start_pop);
         this->probe_table = std::move(probe_table_chunk);
 
-        if (non_equi_condition) {
+        if constexpr (non_equi_condition) {
             get_gen_cond_data_ptrs(this->probe_table, &probe_table_info_ptrs,
                                    &probe_col_ptrs, &probe_null_bitmaps);
         }
@@ -961,7 +961,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     }
 
     // Add unmatched rows from build table to output table
-    if (build_table_outer) {
+    if constexpr (build_table_outer) {
         time_pt start_build_outer = start_timer();
         // If an inactive partition exists, this means that the build side is
         // distributed and therefore no reduction is required.
@@ -2573,7 +2573,7 @@ std::shared_ptr<table_info> filter_na_values(
     bodo::vector<int64_t> idx_list;
     // For appending NAs in outer join (build case).
     std::vector<bool> append_nas;
-    if (!is_probe) {
+    if constexpr (!is_probe) {
         append_nas.resize(in_table->nrows(), false);
     }
 
@@ -2611,10 +2611,10 @@ std::shared_ptr<table_info> filter_na_values(
         // No NA values, skip the copy.
         return in_table;
     } else {
-        if (table_outer) {
+        if constexpr (table_outer) {
             // If have an outer join we must push the NA values directly to
             // the output, not just filter them.
-            if (is_probe) {
+            if constexpr (is_probe) {
                 na_out_buffer.AppendJoinOutput(
                     build_table, in_table, build_idxs, probe_idxs,
                     build_kept_cols, probe_kept_cols);
@@ -3527,7 +3527,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     // case, the planner will automatically generate IS NOT NULL filters
     // and push them down as much as possible. It won't do so in the outer case
     // since the rows need to be preserved and we need to handle them here.
-    if (probe_table_outer) {
+    if constexpr (probe_table_outer) {
         time_pt start_filter = start_timer();
         in_table = filter_na_values<probe_table_outer, true>(
             std::move(in_table), join_state->n_keys, join_state->probe_parallel,
@@ -3574,7 +3574,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     std::vector<void*> build_col_ptrs, probe_col_ptrs;
     // Vectors for null bitmaps for fast null checking from the cfunc
     std::vector<void*> build_null_bitmaps, probe_null_bitmaps;
-    if (non_equi_condition) {
+    if constexpr (non_equi_condition) {
         std::tie(build_table_info_ptrs, build_col_ptrs, build_null_bitmaps) =
             get_gen_cond_data_ptrs(
                 active_partition->build_table_buffer->data_table);
@@ -3873,7 +3873,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         local_is_last && join_state->probe_shuffle_state.SendRecvEmpty(),
         join_state);
 
-    if (!build_table_outer) {
+    if constexpr (!build_table_outer) {
         join_state->global_probe_reduce_done = true;
     }
 
