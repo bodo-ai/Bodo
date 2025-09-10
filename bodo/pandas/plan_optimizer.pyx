@@ -670,6 +670,8 @@ cdef unique_ptr[CExpression] make_const_expr(val):
         # NOTE: Timestamp.value always converts to nanoseconds
         # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/_libs/tslibs/timestamps.pyx#L242
         return move(make_const_timestamp_ns_expr(val.value))
+    elif isinstance(val, bodo.pandas.scalar.BodoScalar):
+        return move(make_const_expr(val.get_value()))
     else:
         raise NotImplementedError("Unknown expr type in make_const_expr " + str(type(val)))
 
