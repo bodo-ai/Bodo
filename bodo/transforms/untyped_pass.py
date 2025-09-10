@@ -39,6 +39,7 @@ import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.join
 import bodo.ir.sort
+import bodo.pandas as bd
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType, PDCategoricalDtype
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import RangeIndexType
@@ -253,7 +254,7 @@ class UntypedPass:
         if (
             isinstance(val_def, ir.Global)
             and isinstance(val_def.value, pytypes.ModuleType)
-            and val_def.value == pd
+            and val_def.value in (pd, bd)
             and rhs.attr in ("read_csv", "read_parquet", "read_json")
         ):
             # put back the definition removed earlier but remove node
@@ -335,7 +336,7 @@ class UntypedPass:
         ):
             val_def.attr = "Index"
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 return compile_func_single_block(
                     eval("lambda: bodo.hiframes.pd_multi_index_ext.from_product"),
                     (),
@@ -353,7 +354,7 @@ class UntypedPass:
             and val_def.attr == "MultiIndex"
         ):  # pragma: no cover
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 raise bodo.utils.typing.BodoError(
                     f"pandas.MultiIndex.{rhs.attr}() is not yet supported"
                 )
@@ -369,7 +370,7 @@ class UntypedPass:
             and val_def.attr == "IntervalIndex"
         ):  # pragma: no cover
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 raise bodo.utils.typing.BodoError(
                     f"pandas.IntervalIndex.{rhs.attr}() is not yet supported"
                 )
@@ -381,7 +382,7 @@ class UntypedPass:
             and val_def.attr == "RangeIndex"
         ):  # pragma: no cover
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 raise bodo.utils.typing.BodoError(
                     f"pandas.RangeIndex.{rhs.attr}() is not yet supported"
                 )
@@ -424,7 +425,7 @@ class UntypedPass:
             and val_def.attr == "Timestamp"
         ):
             mod_def = guard(get_definition, self.func_ir, val_def.value)
-            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+            if isinstance(mod_def, ir.Global) and mod_def.value in (pd, bd):
                 return compile_func_single_block(
                     eval("lambda: bodo.hiframes.pd_timestamp_ext.now_impl"),
                     (),
@@ -450,13 +451,15 @@ class UntypedPass:
         if rhs.attr in ["max", "min", "resolution"]:
             if is_expr(val_def, "getattr") and val_def.attr == "Timedelta":
                 mod_def = guard(get_definition, self.func_ir, val_def.value)
-                is_pd_Timedelta = isinstance(mod_def, ir.Global) and mod_def.value == pd
+                is_pd_Timedelta = isinstance(mod_def, ir.Global) and mod_def.value in (
+                    pd,
+                    bd,
+                )
             else:
                 # Handle relative imports by checking if the value matches importing from Python
-                is_pd_Timedelta = (
-                    isinstance(val_def, (ir.Global, ir.FreeVar))
-                    and val_def.value == pd.Timedelta
-                )
+                is_pd_Timedelta = isinstance(
+                    val_def, (ir.Global, ir.FreeVar)
+                ) and val_def.value in (pd.Timedelta, bd.Timedelta)
             if is_pd_Timedelta:
                 raise BodoError(f"pandas.Timedelta.{rhs.attr} not yet supported.")
 
@@ -477,15 +480,14 @@ class UntypedPass:
             is_timestamp_unsupported = False
             if is_expr(val_def, "getattr") and val_def.attr == "Timestamp":
                 mod_def = guard(get_definition, self.func_ir, val_def.value)
-                is_timestamp_unsupported = (
-                    isinstance(mod_def, ir.Global) and mod_def.value == pd
-                )
+                is_timestamp_unsupported = isinstance(
+                    mod_def, ir.Global
+                ) and mod_def.value in (pd, bd)
             else:
                 # Handle relative imports by checking if the value matches importing from Python
-                is_timestamp_unsupported = (
-                    isinstance(val_def, (ir.Global, ir.FreeVar))
-                    and val_def.value == pd.Timestamp
-                )
+                is_timestamp_unsupported = isinstance(
+                    val_def, (ir.Global, ir.FreeVar)
+                ) and val_def.value in (pd.Timestamp, bd.Timestamp)
             if is_timestamp_unsupported:
                 raise BodoError("pandas.Timestamp." + rhs.attr + " not supported yet")
 
