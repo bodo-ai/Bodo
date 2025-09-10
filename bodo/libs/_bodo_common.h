@@ -1674,6 +1674,18 @@ std::unique_ptr<array_info> alloc_array_like(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+/**
+ * @brief Allocate an empty array with the given datatype
+ *
+ * @param dtype - the dtype for the array
+ * @return std::unique_ptr<array_info> Pointer to the allocated array
+ */
+std::unique_ptr<array_info> alloc_array_like(
+    std::unique_ptr<bodo::DataType>& in_dtype,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
 /* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.
    We cannot use at(idx) statements.
@@ -1827,6 +1839,7 @@ struct table_info {
           column_names(column_names),
           metadata(metadata),
           _nrows(nrows) {}
+
     uint64_t ncols() const { return columns.size(); }
     uint64_t nrows() const {
         // TODO: Replace with _nrows always.

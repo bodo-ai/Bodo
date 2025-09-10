@@ -20,7 +20,6 @@ class Pipeline {
     std::vector<std::shared_ptr<PhysicalProcessBatch>> between_ops;
     std::shared_ptr<PhysicalSink> sink;
     bool executed;
-    std::vector<std::shared_ptr<Pipeline>> dependencies;
 
     /**
      * @brief Execute the pipeline starting at a certain point.
@@ -47,7 +46,17 @@ class Pipeline {
     /// @brief Get the final result. Result collector returns table_info,
     // Parquet write returns null table_info pointer, and Iceberg write
     // returns a PyObject* of Iceberg files infos.
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult();
+    std::variant<std::shared_ptr<table_info>, PyObject *> GetResult();
+
+#ifdef DEBUG_PIPELINE
+    void printPipeline(void) {
+        std::cout << source->ToString() << std::endl;
+        for (auto &op : between_ops) {
+            std::cout << op->ToString() << std::endl;
+        }
+        std::cout << sink->ToString() << std::endl;
+    }
+#endif
 };
 
 class PipelineBuilder {

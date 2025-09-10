@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import time
 import traceback
+from collections import deque
 from contextlib import contextmanager
 
 import pandas as pd
@@ -80,55 +81,122 @@ class LazyPlan:
 
     __repr__ = __str__
 
-    def generate_duckdb(self, cache=None):
+    def bfs_duplicate(self):
+        visited = set()
+        queue = deque([self])
+
+        while queue:
+            node = queue.popleft()
+            if id(node) in visited and not isinstance(node, LogicalOperatorLeaf):
+                return node
+            else:
+                visited.add(id(node))
+                if isinstance(node, LogicalComparisonJoin):
+                    # For comparison join, the first two args contain source plans.
+                    for arg in node.args[0:2]:
+                        if isinstance(arg, LazyPlan):
+                            queue.append(arg)
+                elif isinstance(node.args[0], LazyPlan):
+                    # For all other node types, just look at the first arg for a
+                    # source plan.
+                    queue.append(node.args[0])
+        return None
+
+    def generate_duckdb(self, cache=None, cte_ref=None):
         from bodo.ext import plan_optimizer
 
-        # Sometimes the same LazyPlan object is encountered twice during the same
-        # query so  we use the cache dict to only convert it once.
         if cache is None:
             cache = {}
-        # If previously converted then use the last result.
-        # Don't cache expression nodes.
-        # TODO - Try to eliminate caching altogether since it seems to cause
-        # more problems than lack of caching.
-        if not isinstance(self, Expression) and id(self) in cache:
-            return cache[id(self)]
 
-        def recursive_check(x, use_cache):
+        def recursive_check(x, use_cache, cte_ref=None):
             """Recursively convert LazyPlans but return other types unmodified."""
             if isinstance(x, LazyPlan):
-                return x.generate_duckdb(cache=cache if use_cache else None)
+                ret = x.generate_duckdb(
+                    cache=cache if use_cache else None, cte_ref=cte_ref
+                )
+                return ret
             elif isinstance(x, (tuple, list)):
-                return type(x)(recursive_check(i, use_cache) for i in x)
+                return type(x)(
+                    recursive_check(i, use_cache, cte_ref=cte_ref) for i in x
+                )
             else:
                 return x
 
-        # NOTE: Caching is necessary to make sure source operators which have table
-        # indexes and are reused in various nodes (e.g. expressions) are not re-created
-        # with different table indexes.
-        # Join however doesn't need this and cannot use caching since a sub-plan may
-        # be reused across right and left sides (e.g. self-join) leading to unique_ptr
-        # errors.
-        use_cache = True
-        if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
-            use_cache = False
+        if cte_ref is None:
+            cte_node = self.bfs_duplicate()
+            if cte_node is not None:
+                cte_node = (cte_node, plan_optimizer.py_get_table_index())
+        else:
+            # Don't search for duplicates if we are processing the non-duplicate
+            # side of a CTE plan.
+            cte_node = None
 
-        # Convert any LazyPlan in the args.
-        # We do this in reverse order because we expect the first arg to be
-        # the source of the plan and for the node being created to take
-        # ownership of that source.  If other args reference that
-        # plan then if we process them after we have taken ownership then
-        # we will get nullptr exceptions.  So, process the args that don't
-        # claim ownership first (in the reverse direction) and finally
-        # process the first arg which we expect will take ownership.
-        args = [recursive_check(x, use_cache) for x in reversed(self.args)]
-        args.reverse()
+        if cte_ref is not None and self is cte_ref[0]:
+            # Can't be an expression here.
+            if id(self) in cache:
+                return cache[id(self)]
+            cte_ref_plan = LogicalCTERef(self.empty_data, cte_ref[1])
+            ret = getattr(plan_optimizer, cte_ref_plan.plan_class)(
+                cte_ref_plan.pa_schema, cte_ref[1]
+            )
+            cache[id(self)] = ret
+            return ret
+        elif cte_node is not None:
+            if id(self) in cache:
+                raise Exception("Should never find cache re-use for cte_node.")
+            duplicate = cte_node[0].generate_duckdb(cache=cache)
+            uses_duplicate = self.generate_duckdb(cache=cache, cte_ref=cte_node)
+            cte_plan = LogicalMaterializedCTE(
+                self.empty_data, cte_node[0], self, cte_node[1]
+            )
+            use_cache = True
+            if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
+                use_cache = False
 
-        # Create real duckdb class.
-        ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args)
-        # Add to cache so we don't convert it again.
-        cache[id(self)] = ret
-        return ret
+            ret = getattr(plan_optimizer, cte_plan.plan_class)(
+                cte_plan.pa_schema, duplicate, uses_duplicate, cte_node[1]
+            )
+            cache[id(self)] = ret
+            return ret
+        else:
+            # Sometimes the same LazyPlan object is encountered twice during the same
+            # query so  we use the cache dict to only convert it once.
+            # If previously converted then use the last result.
+            # Don't cache expression nodes.
+            # TODO - Try to eliminate caching altogether since it seems to cause
+            # more problems than lack of caching.
+            if not isinstance(self, Expression) and id(self) in cache:
+                return cache[id(self)]
+
+            # NOTE: Caching is necessary to make sure source operators which have table
+            # indexes and are reused in various nodes (e.g. expressions) are not re-created
+            # with different table indexes.
+            # Join however doesn't need this and cannot use caching since a sub-plan may
+            # be reused across right and left sides (e.g. self-join) leading to unique_ptr
+            # errors.
+            use_cache = True
+            if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
+                use_cache = False
+
+            # Convert any LazyPlan in the args.
+            # We do this in reverse order because we expect the first arg to be
+            # the source of the plan and for the node being created to take
+            # ownership of that source.  If other args reference that
+            # plan then if we process them after we have taken ownership then
+            # we will get nullptr exceptions.  So, process the args that don't
+            # claim ownership first (in the reverse direction) and finally
+            # process the first arg which we expect will take ownership.
+            args = [
+                recursive_check(x, use_cache, cte_ref=cte_ref)
+                for x in reversed(self.args)
+            ]
+            args.reverse()
+
+            # Create real duckdb class.
+            ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args)
+            # Add to cache so we don't convert it again.
+            cache[id(self)] = ret
+            return ret
 
     def replace_empty_data(self, empty_data):
         """Replace the empty_data of the plan with a new empty_data."""
@@ -145,6 +213,13 @@ class LogicalOperator(LazyPlan):
 
     def __init__(self, empty_data, *args):
         super().__init__(self.__class__.__name__, empty_data, *args)
+
+
+class LogicalOperatorLeaf(LogicalOperator):
+    """Base class for all logical operators in the Bodo query plan."""
+
+    def __init__(self, empty_data, *args):
+        super().__init__(empty_data, *args)
 
 
 class Expression(LazyPlan):
@@ -204,6 +279,18 @@ class LogicalDistinct(LogicalOperator):
     pass
 
 
+class LogicalMaterializedCTE(LogicalOperator):
+    """Logical operator for CTE."""
+
+    pass
+
+
+class LogicalCTERef(LogicalOperator):
+    """Logical operator for CTE ref."""
+
+    pass
+
+
 class LogicalComparisonJoin(LogicalOperator):
     """Logical operator for comparison-based joins."""
 
@@ -238,26 +325,26 @@ class LogicalOrder(LogicalOperator):
     pass
 
 
-class LogicalGetParquetRead(LogicalOperator):
+class LogicalGetParquetRead(LogicalOperatorLeaf):
     """Logical operator for reading Parquet files."""
 
     pass
 
 
-class LogicalGetPandasReadSeq(LogicalOperator):
+class LogicalGetPandasReadSeq(LogicalOperatorLeaf):
     """Logical operator for sequential read of a Pandas DataFrame."""
 
     pass
 
 
-class LogicalGetPandasReadParallel(LogicalOperator):
+class LogicalGetPandasReadParallel(LogicalOperatorLeaf):
     """Logical operator for parallel read of a Pandas DataFrame.\
     """
 
     pass
 
 
-class LogicalGetIcebergRead(LogicalOperator):
+class LogicalGetIcebergRead(LogicalOperatorLeaf):
     """Logical operator for reading Apache Iceberg tables."""
 
     def __init__(

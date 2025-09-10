@@ -15,21 +15,39 @@ bool Pipeline::midPipelineExecute(unsigned idx,
     // Terminate the recursion when we have processed all the operators
     // and only have the sink to go which cannot HAVE_MORE_OUTPUT.
     if (idx >= between_ops.size()) {
+        // Iterating here as in the normal section below so that if the sink
+        // says HAVE_MORE_OUTPUT that we can iterate with an empty batch.
+        while (true) {
 #ifdef DEBUG_PIPELINE
-        for (unsigned i = 0; i < idx; ++i)
-            std::cout << " ";
-        std::cout << "midPipelineExecute before ConsumeBatch "
-                  << sink->ToString() << std::endl;
+            for (unsigned i = 0; i < idx; ++i)
+                std::cout << " ";
+            std::cout << "midPipelineExecute before ConsumeBatch "
+                      << sink->ToString() << " "
+                      << static_cast<int>(prev_op_result) << std::endl;
 #endif
-        auto ret = sink->ConsumeBatch(batch, prev_op_result) ==
-                   OperatorResult::FINISHED;
+            OperatorResult consume_result =
+                sink->ConsumeBatch(batch, prev_op_result);
 #ifdef DEBUG_PIPELINE
-        for (unsigned i = 0; i < idx; ++i)
-            std::cout << " ";
-        std::cout << "midPipelineExecute after ConsumeBatch "
-                  << sink->ToString() << std::endl;
+            for (unsigned i = 0; i < idx; ++i)
+                std::cout << " ";
+            std::cout << "midPipelineExecute after ConsumeBatch "
+                      << sink->ToString() << " "
+                      << static_cast<int>(consume_result) << std::endl;
 #endif
-        return ret;
+            if (consume_result == OperatorResult::FINISHED) {
+                return true;
+            }
+            if (consume_result == OperatorResult::NEED_MORE_INPUT) {
+                return false;
+            }
+            if (batch->nrows() != 0) {
+#ifdef DEBUG_PIPELINE
+                std::cout << "Looping in consume part of midPipelineExecute"
+                          << std::endl;
+#endif
+                batch = RetrieveTable(batch, std::vector<int64_t>());
+            }
+        }
     } else {
         // Get the current operator.
         std::shared_ptr<PhysicalProcessBatch>& op = between_ops[idx];
@@ -38,7 +56,8 @@ bool Pipeline::midPipelineExecute(unsigned idx,
             for (unsigned i = 0; i < idx; ++i)
                 std::cout << " ";
             std::cout << "midPipelineExecute before ProcessBatch "
-                      << op->ToString() << std::endl;
+                      << op->ToString() << " "
+                      << static_cast<int>(prev_op_result) << std::endl;
 #endif
             // Process this batch with this operator.
             std::pair<std::shared_ptr<table_info>, OperatorResult> result =
@@ -49,7 +68,8 @@ bool Pipeline::midPipelineExecute(unsigned idx,
             for (unsigned i = 0; i < idx; ++i)
                 std::cout << " ";
             std::cout << "midPipelineExecute after ProcessBatch "
-                      << op->ToString() << std::endl;
+                      << op->ToString() << " "
+                      << static_cast<int>(prev_op_result) << std::endl;
 #endif
             // Execute subsequent operators and if any of them said that
             // no more output is needed or the current operator knows no
@@ -82,9 +102,8 @@ uint64_t Pipeline::Execute() {
 
     uint64_t batches_processed = 0;
     bool finished = false;
+    std::shared_ptr<table_info> batch;
     while (!finished) {
-        std::shared_ptr<table_info> batch;
-
         batches_processed++;
 
 #ifdef DEBUG_PIPELINE
@@ -94,10 +113,6 @@ uint64_t Pipeline::Execute() {
         // Execute the source to get the base batch
         std::pair<std::shared_ptr<table_info>, OperatorResult> result =
             source->ProduceBatch();
-#ifdef DEBUG_PIPELINE
-        std::cout << "Pipeline::Execute after ProduceBatch "
-                  << source->ToString() << std::endl;
-#endif
         batch = result.first;
         // Use NEED_MORE_INPUT for sources
         // just for compatibility with other operators' input expectations and
@@ -106,9 +121,30 @@ uint64_t Pipeline::Execute() {
             result.second == OperatorResult::FINISHED
                 ? OperatorResult::FINISHED
                 : OperatorResult::NEED_MORE_INPUT;
+#ifdef DEBUG_PIPELINE
+        std::cout << "Pipeline::Execute after ProduceBatch "
+                  << source->ToString() << " "
+                  << static_cast<int>(produce_result) << std::endl;
+#endif
         // Run the between_ops and sink of the pipeline allowing repetition
         // in the HAVE_MORE_OUTPUT case.
         finished = midPipelineExecute(0, batch, produce_result);
+
+        // If the next operator in the pipeline isn't finished even though we
+        // told it that the input has been exhausted then create an empty batch
+        // to pass to that operator until it isn't finished.  We do that looping
+        // in the loop below and break out of this one so as not to record
+        // additional batches processed and muddy this code with checks for this
+        // state.
+        if (!finished && result.second == OperatorResult::FINISHED) {
+            batch = RetrieveTable(batch, std::vector<int64_t>());
+            break;
+        }
+    }
+
+    // Iterate passing empty batch to the first op until it says it is done.
+    while (!finished) {
+        finished = midPipelineExecute(0, batch, OperatorResult::FINISHED);
     }
 
     // Finalize
