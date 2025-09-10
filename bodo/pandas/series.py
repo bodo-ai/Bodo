@@ -206,8 +206,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         zero_size_other = (
             _empty_like(other) if isinstance(other, (BodoSeries, BodoScalar)) else other
         )
-        # Check if other is a BodoScalar, if so we need to insert it into the plan.
-        is_bodo_scalar = isinstance(other, (BodoScalar))
 
         # Compute schema of new series.
         empty_data = zero_size_self._cmp_method(zero_size_other, op)
@@ -219,9 +217,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Extract argument expressions
         lhs = get_proj_expr_single(self._plan)
 
-        # If other is a BodoScalar we need to insert it into the plan.
-        if is_bodo_scalar:
+        # If other is a lazy BodoScalar we need to insert it into the plan.
+        if isinstance(other, (BodoScalar)) and other.is_lazy_plan():
             lhs_plan, rhs = insert_bodo_scalar(lhs_plan, other)
+            # Point lhs to the new plan, col_index is the same since we added rhs at the end.
+            lhs = ColRefExpression(lhs.empty_data, lhs_plan, lhs.col_index)
 
         # If other is a LazyPlan we need to extract the expression.
         elif hasattr(other, "_plan") and isinstance(other._plan, LazyPlan):

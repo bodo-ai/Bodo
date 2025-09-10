@@ -1355,4 +1355,19 @@ def insert_bodo_scalar(
         Tuple[LazyPlan, ColRefExpression]: The new plan with the scalar inserted as a column,
             and the column reference expression for the new column.
     """
-    raise NotImplementedError("insert_bodo_scalar is not implemented yet.")
+    from bodo.pandas.base import _empty_like
+    from bodo.pandas.plan import ColRefExpression, LogicalCrossProduct
+
+    assert scalar.is_lazy_plan(), (
+        "Expected scalar to have a lazy plan, use a constant expression if the scalar is not lazy."
+    )
+
+    empty_data = plan.empty_data.copy()
+    col_name = "_scalar_col"
+    empty_data[col_name] = _empty_like(scalar.wrapped_series)
+
+    new_plan = LogicalCrossProduct(empty_data, plan, scalar._plan)
+    col_expr = ColRefExpression(
+        empty_data[col_name], new_plan, empty_data.columns.get_loc(col_name)
+    )
+    return new_plan, col_expr
