@@ -3493,3 +3493,39 @@ def test_bodo_pandas_inside_jit():
         return bd.Timestamp(df.A.iloc[0])
 
     assert test2(df) == bodo.jit(spawn=False, distributed=False)(test2)(df)
+
+
+def test_join_non_equi_key_not_in_output():
+    """Test for joins with non-equi keys that are not in the output and require special
+    handling in column reordering of physical join.
+    """
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([0, 1], "Float64"),
+            "B": pd.array([2, 3], "Float64"),
+            "C": pd.array([5, 6], "Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "D": pd.array([0, 1, 5, 6], "Int32"),
+            "E": pd.array([2, 3, 4, 5], "Float64"),
+        }
+    )
+
+    df3 = df1.merge(df2, left_on="C", right_on="D", how="inner")
+    df3 = df3[df3.A < df3.E]
+
+    bdf1 = bd.from_pandas(df1)
+    bdf2 = bd.from_pandas(df2)
+    bdf3 = bdf1.merge(bdf2, left_on="C", right_on="D", how="inner")
+    bdf3 = bdf3[bdf3.A < bdf3.E]
+
+    _test_equal(
+        bdf3["B"],
+        df3["B"],
+        check_pandas_types=False,
+        reset_index=True,
+        sort_output=True,
+    )
