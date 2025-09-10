@@ -156,6 +156,9 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         time_pt start_produce_time = start_timer();
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
         // Create a vector of Arrow arrays from output_scalars
         std::vector<std::shared_ptr<arrow::Array>> arrow_arrays;
         for (size_t i = 0; i < reduction_functions.size(); i++) {
@@ -176,8 +179,11 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         // Wrap Arrow arrays into Bodo arrays
         std::vector<std::shared_ptr<array_info>> bodo_arrays;
         for (const auto& arr : arrow_arrays) {
+            // Only rank 0 returns the single row with the result, other ranks
+            // return an empty array
+            auto sliced_arr = arr->Slice(0, 1 ? rank == 0 : 0);
             std::shared_ptr<array_info> bodo_arr =
-                arrow_array_to_bodo(arr, bodo::BufferPool::DefaultPtr());
+                arrow_array_to_bodo(sliced_arr, bodo::BufferPool::DefaultPtr());
             bodo_arrays.push_back(bodo_arr);
         }
         std::shared_ptr<table_info> next_batch =
