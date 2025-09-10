@@ -110,7 +110,15 @@ class LazyPlan:
         # be reused across right and left sides (e.g. self-join) leading to unique_ptr
         # errors.
         use_cache = True
-        if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
+        if isinstance(
+            self,
+            (
+                LogicalComparisonJoin,
+                LogicalSetOperation,
+                LogicalInsertScalarSubquery,
+                LogicalCrossProduct,
+            ),
+        ):
             use_cache = False
 
         # Convert any LazyPlan in the args.
@@ -1128,10 +1136,3 @@ def assert_executed_plan_count(n: int):
     yield
     end = PlanExecutionCounter.get()
     assert end - start == n, f"Expected {n} plan executions, but got {end - start}"
-
-
-def insert_lazy_scalar(plan: LazyPlan, scalar):
-    """Insert a lazy scalar into a plan by cross joining with the scalar's plan.
-    Returns a tuple of (new_plan, scalar_col_ref) where new_plan is the updated plan
-    """
-    assert isinstance(scalar, bodo.pandas.scalar.BodoScalar)

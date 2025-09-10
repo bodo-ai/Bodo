@@ -204,7 +204,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # Get empty Pandas objects for self and other with same schema.
         zero_size_self = _empty_like(self)
         zero_size_other = (
-            _empty_like(other) if isinstance(other, (BodoSeries, BodoScalar)) else other
+            _empty_like(other) if type(other) in {BodoSeries, BodoScalar} else other
         )
 
         # Compute schema of new series.
@@ -218,7 +218,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         lhs = get_proj_expr_single(self._plan)
 
         # If other is a lazy BodoScalar we need to insert it into the plan.
-        if isinstance(other, (BodoScalar)) and other.is_lazy_plan():
+        if type(other) is BodoScalar and other.is_lazy_plan():
             lhs_plan, rhs = insert_bodo_scalar(lhs_plan, other)
             # Point lhs to the new plan, col_index is the same since we added rhs at the end.
             lhs = ColRefExpression(lhs.empty_data, lhs_plan, lhs.col_index)

@@ -1102,8 +1102,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             plan = self._plan
             # If the key is a scalar subquery, then we use that plan since it's just
             # this plan with the extra column containing the scalar value.
-            if isinstance(key._plan.args[0], LogicalInsertScalarSubquery):
-                plan = key._plan.args[0]
+            if isinstance(key._plan.source, LogicalInsertScalarSubquery):
+                plan = key._plan.source
 
             key_expr = get_proj_expr_single(key._plan)
             key_expr = key_expr.replace_source(plan)
