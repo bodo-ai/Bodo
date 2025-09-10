@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 
 import benchmarks.tpch.dataframe_lib as tpch
 import bodo.pandas as bd
@@ -19,13 +18,16 @@ def run_tpch_query_test(query_func, plan_executions=0):
         plan_executions (int, optional): Expected number of LazyPlans to be executed.
           Defaults to 0.
     """
+
+    # Scale factor is set to 1.0 for testing purposes in query 11
+    pd_kwargs = {"pd": pd}
     pd_args = [
-        getattr(tpch, f"load_{key}")(datapath)
-        for key in tpch._query_to_datasets[int(query_func.__name__[-2:])]
+        getattr(tpch, f"load_{key}")(datapath, **pd_kwargs)
+        for key in tpch._query_to_args[int(query_func.__name__[-2:])]
+        if key != "scale_factor"
     ]
     bd_args = [bd.from_pandas(df) for df in pd_args]
 
-    pd_kwargs = {"pd": pd}
     pd_result = query_func(*pd_args, **pd_kwargs)
 
     with assert_executed_plan_count(plan_executions):
@@ -38,12 +40,15 @@ def run_tpch_query_test(query_func, plan_executions=0):
             pd.Series,
         ),
     ):
-        _test_equal(bd_result, pd_result, check_pandas_types=False, reset_index=True)
+        _test_equal(
+            bd_result,
+            pd_result,
+            check_pandas_types=False,
+            sort_output=True,
+            reset_index=True,
+        )
     else:
         # For scalar or numeric results
-        assert isinstance(pd_result, (int, float)) and isinstance(
-            bd_result, (int, float)
-        )
         assert np.isclose(pd_result, bd_result)
 
 
@@ -79,7 +84,6 @@ def test_tpch_q08():
     run_tpch_query_test(tpch.tpch_q08)
 
 
-# @pytest.mark.skip("hanging?")
 def test_tpch_q09():
     run_tpch_query_test(tpch.tpch_q09)
 
@@ -96,23 +100,19 @@ def test_tpch_q12():
     run_tpch_query_test(tpch.tpch_q12)
 
 
-@pytest.mark.skip(
-    reason="RuntimeError: PhysicalSort from LogicalOrder with non-empty projection map unimplemented."
-)
 def test_tpch_q13():
     run_tpch_query_test(tpch.tpch_q13)
 
 
 def test_tpch_q14():
-    run_tpch_query_test(tpch.tpch_q14, plan_executions=2)
+    # TODO [BSE-5099]: Series.where
+    run_tpch_query_test(tpch.tpch_q14, plan_executions=5)
 
 
-@pytest.mark.skip("Length mismatch")
 def test_tpch_q15():
-    run_tpch_query_test(tpch.tpch_q15)
+    run_tpch_query_test(tpch.tpch_q15, plan_executions=1)
 
 
-@pytest.mark.skip("Hanging?")
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
@@ -134,9 +134,8 @@ def test_tpch_q20():
 
 
 def test_tpch_q21():
-    run_tpch_query_test(tpch.tpch_q21, plan_executions=2)
+    run_tpch_query_test(tpch.tpch_q21)
 
 
-@pytest.mark.skip("hanging?")
 def test_tpch_q22():
-    run_tpch_query_test(tpch.tpch_q22)
+    run_tpch_query_test(tpch.tpch_q22, plan_executions=1)

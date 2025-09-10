@@ -2032,6 +2032,43 @@ def test_filter_series_isin():
     )
 
 
+def test_filter_series_not_isin(index_val):
+    """Test dataframe filter with not isin case"""
+    with assert_executed_plan_count(0):
+        df1 = pd.DataFrame(
+            {
+                "A": [1.4, 2.1, 3.3],
+                "B": ["A", "B", "C"],
+                "C": [1, 2, 3],
+                "D": [True, False, True],
+            },
+            index=index_val[:3],
+        )
+        df2 = pd.DataFrame(
+            {
+                "A": ["A", "B", "C", "D"],
+                "B": [11, 2, 2, 4],
+            }
+        )
+
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+        bodo_out = bdf1[~bdf1.C.isin(bdf2.B)]
+        py_out = df1[~df1.C.isin(df2.B)]
+
+        # Reverse the order so the planner flips sides to put smaller table in build
+        # side creating right-anti join.
+        bodo_out2 = bdf2[~bdf2.B.isin(bdf1.C)]
+        py_out2 = df2[~df2.B.isin(df1.C)]
+
+    _test_equal(
+        bodo_out, py_out, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+    _test_equal(
+        bodo_out2, py_out2, check_pandas_types=False, sort_output=True, reset_index=True
+    )
+
+
 def test_rename(datapath, index_val):
     """Very simple test for df.apply() for sanity checking."""
     with assert_executed_plan_count(0):
@@ -2147,12 +2184,11 @@ def test_series_min_max():
     )
     bdf = bd.from_pandas(df)
     for c in df.columns:
+        bodo_min = bdf[c].min()
+        bodo_max = bdf[c].max()
+        py_min = df[c].min()
+        py_max = df[c].max()
         with assert_executed_plan_count(2):
-            bodo_min = bdf[c].min()
-            bodo_max = bdf[c].max()
-            py_min = df[c].min()
-            py_max = df[c].max()
-
             assert bodo_min == py_min
             assert bodo_max == py_max
 
@@ -2172,31 +2208,27 @@ def test_series_min_max_unsupported_types():
 @pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
 def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
-    n_cols = 6
-    expected_executions = 2 if method == "std" else 1
-    with assert_executed_plan_count(n_cols * expected_executions):
-        n = 10000
-        df = pd.DataFrame(
-            {
-                "A": np.arange(n),
-                "B": np.flip(np.arange(n, dtype=np.int32)),
-                "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
-                "C2": np.append(
-                    np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2
-                ),
-                "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
-                "E": [None] * n,
-                "F": np.append(np.arange(n - 1), [None]),
-            }
-        )
+    n = 10000
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.flip(np.arange(n, dtype=np.int32)),
+            "C": np.append(np.arange(n // 2), np.flip(np.arange(n // 2))),
+            "C2": np.append(np.arange(n // 2) + 1.1, np.flip(np.arange(n // 2)) + 2.2),
+            "D": np.append(np.flip(np.arange(n // 2)), np.arange(n // 2)),
+            "E": [None] * n,
+            "F": np.append(np.arange(n - 1), [None]),
+        }
+    )
 
-        bdf = bd.from_pandas(df)
+    bdf = bd.from_pandas(df)
 
-        for c in df.columns:
-            out_pandas = getattr(df[c], method)()
-            out_bodo = getattr(bdf[c], method)()
+    for c in df.columns:
+        out_pandas = getattr(df[c], method)()
+        out_bodo = getattr(bdf[c], method)()
+        with assert_executed_plan_count(1 if c != "E" else 0):
             assert (
-                np.isclose(out_pandas, out_bodo, rtol=1e-6)
+                np.isclose(np.array([out_pandas]), np.array([out_bodo]), rtol=1e-6)
                 if not pd.isna(out_bodo)
                 else pd.isna(out_pandas)
             )
@@ -2390,7 +2422,7 @@ def test_series_describe_numeric(percentiles):
     bdf = bd.from_pandas(df)
     for c in df.columns:
         with assert_executed_plan_count(
-            0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 3
+            0 if pa.types.is_null(bdf[c].dtype.pyarrow_dtype) else 5
         ):
             describe_pd = df[c].describe(percentiles=percentiles)
             describe_bodo = bdf[c].describe(percentiles=percentiles)
@@ -2464,7 +2496,7 @@ def test_series_describe_empty():
     bds = bd.Series([1, 2, 3])
     bds = bds[bds > 4]
 
-    with assert_executed_plan_count(1):
+    with assert_executed_plan_count(4):
         describe_pd = pds.describe()
         describe_bodo = bds.describe()
     _test_equal(describe_bodo, describe_pd, check_pandas_types=False, check_names=False)

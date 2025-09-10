@@ -32,8 +32,13 @@ std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string& value,
 
 std::shared_ptr<arrow::Array> ScalarToArrowArray(
     const std::shared_ptr<arrow::Scalar>& value, size_t num_elements) {
-    arrow::Result<std::shared_ptr<arrow::Array>> array_result =
-        arrow::MakeArrayFromScalar(*value, num_elements);
+    arrow::Result<std::shared_ptr<arrow::Array>> array_result;
+    if (value == nullptr || value->is_valid == false) {
+        array_result = arrow::MakeArrayOfNull(
+            value ? value->type : arrow::null(), num_elements);
+    } else {
+        array_result = arrow::MakeArrayFromScalar(*value, num_elements);
+    }
     if (!array_result.ok()) {
         throw std::runtime_error("MakeArrayFromScalar failed: " +
                                  array_result.status().message());
