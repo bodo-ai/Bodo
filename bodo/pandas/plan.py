@@ -232,6 +232,14 @@ class LogicalCrossProduct(LogicalOperator):
         return self.args[1]
 
 
+class LogicalInsertScalarSubquery(LogicalCrossProduct):
+    """Logical operator for inserting scalar subquery results into a DataFrame.
+    This is just a cross product with a single row DataFrame. This isn't enforced automatically.
+    """
+
+    pass
+
+
 class LogicalSetOperation(LogicalOperator):
     """Logical operator for set operations like union."""
 

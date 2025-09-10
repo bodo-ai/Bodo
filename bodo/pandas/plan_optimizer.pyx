@@ -440,6 +440,13 @@ cdef class LogicalCrossProduct(LogicalOperator):
     def __str__(self):
         return f"LogicalCrossProduct()"
 
+cdef class LogicalInsertScalarSubquery(LogicalCrossProduct):
+    """
+    Wrapper around LogicalCrossProduct to represent an insert of a scalar subquery result.
+    """
+    def __str__(self):
+        return f"LogicalInsertScalarSubquery()"
+
 cdef class LogicalSetOperation(LogicalOperator):
     """Wrapper around DuckDB's LogicalSetOperation to provide access in Python.
     """

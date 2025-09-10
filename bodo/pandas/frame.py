@@ -51,6 +51,7 @@ from bodo.pandas.plan import (
     LogicalGetPandasReadParallel,
     LogicalGetPandasReadSeq,
     LogicalIcebergWrite,
+    LogicalInsertScalarSubquery,
     LogicalLimit,
     LogicalOrder,
     LogicalParquetWrite,
@@ -1096,8 +1097,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             if (out_plan := get_isin_filter_plan(self._plan, key._plan)) is not None:
                 return wrap_plan(out_plan)
 
+            plan = self._plan
+            # If the key is a scalar subquery, then we use that plan since it's just
+            # this plan with the extra column containing the scalar value.
+            if isinstance(key._plan.args[0], LogicalInsertScalarSubquery):
+                plan = key._plan.args[0]
+
             key_expr = get_proj_expr_single(key._plan)
-            key_expr = key_expr.replace_source(self._plan)
+            key_expr = key_expr.replace_source(plan)
             if key_expr is None:
                 raise BodoLibNotImplementedException(
                     "DataFrame filter expression must be on the same dataframe."
@@ -1105,7 +1112,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             zero_size_key = _empty_like(key)
             empty_data = zero_size_self.__getitem__(zero_size_key)
             return wrap_plan(
-                plan=LogicalFilter(empty_data, self._plan, key_expr),
+                plan=LogicalFilter(empty_data, plan, key_expr),
             )
         # Select one or more columns
         elif isinstance(key, str) or (
