@@ -25,6 +25,7 @@ from numba.extending import (
     unbox,
 )
 
+import bodo.pandas as bd
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
@@ -118,6 +119,7 @@ def unbox_month_begin(typ, val, c):
 
 # 6. Implement the constructor
 @overload(pd.tseries.offsets.MonthBegin, no_unliteral=True)
+@overload(bd.tseries.offsets.MonthBegin, no_unliteral=True)
 def MonthBegin(
     n=1,
     normalize=False,
@@ -313,6 +315,7 @@ def unbox_month_end(typ, val, c):
 
 
 @overload(pd.tseries.offsets.MonthEnd, no_unliteral=True)
+@overload(bd.tseries.offsets.MonthEnd, no_unliteral=True)
 def MonthEnd(
     n=1,
     normalize=False,
@@ -745,6 +748,7 @@ def lower_constant_date_offset(context, builder, ty, pyval):
 
 
 @overload(pd.tseries.offsets.DateOffset, no_unliteral=True)
+@overload(bd.tseries.offsets.DateOffset, no_unliteral=True)
 def DateOffset(
     n=1,
     normalize=False,
@@ -1378,6 +1382,7 @@ make_attribute_wrapper(WeekType, "weekday", "weekday")
 
 # Constructor Overload
 @overload(pd.tseries.offsets.Week, no_unliteral=True)
+@overload(bd.tseries.offsets.Week, no_unliteral=True)
 def Week(
     n=1,
     normalize=False,
