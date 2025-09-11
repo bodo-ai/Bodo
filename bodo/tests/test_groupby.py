@@ -8079,72 +8079,84 @@ def test_timestamptz_gb_key(memory_leak_check):
 @pytest.fixture(
     params=[
         pytest.param(
-            "count",
-            pd.DataFrame({"A": ["A", "B", "C", "D"], "B": [6, 3, 6, 0]}),
+            (
+                "count",
+                pd.DataFrame({"A": ["A", "B", "C", "D"], "B": [6, 3, 6, 0]}),
+            ),
             id="count",
         ),
         pytest.param(
-            "size",
-            pd.DataFrame({"A": ["A", "B", "C", "D"], "size": [6, 6, 6, 6]}),
+            (
+                "size",
+                pd.DataFrame({"A": ["A", "B", "C", "D"], "size": [6, 6, 6, 6]}),
+            ),
             id="size",
         ),
         pytest.param(
-            "first",
-            lambda: pd.DataFrame(
-                {
-                    "A": ["A", "B", "C", "D"],
-                    "B": [
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
-                        None,
-                    ],
-                }
+            (
+                "first",
+                lambda: pd.DataFrame(
+                    {
+                        "A": ["A", "B", "C", "D"],
+                        "B": [
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+                            None,
+                        ],
+                    }
+                ),
             ),
             id="first",
         ),
         pytest.param(
-            "last",
-            lambda: pd.DataFrame(
-                {
-                    "A": ["A", "B", "C", "D"],
-                    "B": [
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
-                        None,
-                    ],
-                }
+            (
+                "last",
+                lambda: pd.DataFrame(
+                    {
+                        "A": ["A", "B", "C", "D"],
+                        "B": [
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 0),
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                            None,
+                        ],
+                    }
+                ),
             ),
             id="last",
         ),
         pytest.param(
-            "min",
-            lambda: pd.DataFrame(
-                {
-                    "A": ["A", "B", "C", "D"],
-                    "B": [
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
-                        None,
-                    ],
-                }
+            (
+                "min",
+                lambda: pd.DataFrame(
+                    {
+                        "A": ["A", "B", "C", "D"],
+                        "B": [
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                            None,
+                        ],
+                    }
+                ),
             ),
             id="min",
         ),
         pytest.param(
-            "max",
-            lambda: pd.DataFrame(
-                {
-                    "A": ["A", "B", "C", "D"],
-                    "B": [
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
-                        bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
-                        None,
-                    ],
-                }
+            (
+                "max",
+                lambda: pd.DataFrame(
+                    {
+                        "A": ["A", "B", "C", "D"],
+                        "B": [
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2021-01-02 03:04:05", 400),
+                            bodo.types.TimestampTZ.fromUTC("2024-01-01 01:00:00", 0),
+                            None,
+                        ],
+                    }
+                ),
             ),
             id="max",
         ),
