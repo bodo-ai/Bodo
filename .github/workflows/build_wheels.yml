@@ -74,7 +74,7 @@ jobs:
 
     steps:
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           aws-region: us-east-2
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
@@ -121,7 +121,7 @@ jobs:
     needs: build_bodosql_wheels
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python_version }}
       - uses: actions/download-artifact@v5
@@ -181,7 +181,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python_version }}
       - name: Download Iceberg Wheel
