@@ -4,12 +4,7 @@ import pandas as pd
 import pytest
 from caching_tests_common import fn_distribution  # noqa
 
-from bodo.tests.test_metadata import (  # noqa
-    bytes_gen_dist_df,
-    int_gen_dist_df,
-    str_gen_dist_df,
-    struct_gen_dist_df,
-)
+from bodo.tests.test_metadata import gen_use_df_funcs  # noqa
 from bodo.tests.utils import InputDist, check_caching
 
 
@@ -94,21 +89,16 @@ def test_lowered_rootlogger_cache(fn_distribution, is_cached, memory_leak_check)
 
 
 @pytest.mark.parametrize(
-    "gen_type_annotated_df_func",
-    [
-        pytest.param(int_gen_dist_df, id="int"),
-        pytest.param(str_gen_dist_df, id="str"),
-        pytest.param(bytes_gen_dist_df, id="bytes"),
-        pytest.param(struct_gen_dist_df, id="struct"),
-    ],
+    "gen_use_df_funcs", ["int", "str", "bytes", "struct"], indirect=True
 )
-def test_metadata_cache(gen_type_annotated_df_func, is_cached, memory_leak_check):
+def test_metadata_cache(gen_use_df_funcs, is_cached, memory_leak_check):
     """Checks that, in a situation where we need type inference to determine the type of the input
     dataframe (i.e. empty array on certain ranks), we still get caching when running on other
     dataframes of the same type.
 
     gen_type_annotated_df_func: function that returns a dataframe that requires type annotation to infer the dtype
     """
+    gen_type_annotated_df_func, _ = gen_use_df_funcs
 
     def impl(df):
         return df

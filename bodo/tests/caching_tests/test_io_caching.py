@@ -4,6 +4,7 @@ import pytest
 from caching_tests_common import fn_distribution  # noqa
 
 import bodo
+import bodo.decorators  # noqa
 from bodo.tests.utils import (
     check_caching,
     get_snowflake_connection_string,
