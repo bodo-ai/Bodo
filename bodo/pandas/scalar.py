@@ -59,7 +59,7 @@ class BodoScalar(BodoLazyWrapper):
     @property
     def __pandas_priority__(self):
         """
-        Overrride this so we don't call get_value during planning.'
+        Override this so we don't call get_value during planning.'
         This is used by pandas during comparisons and arithmetic operations.'
         """
         return None
