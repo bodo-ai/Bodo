@@ -214,17 +214,32 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             (logical_join.join_type == duckdb::JoinType::OUTER) || is_left_anti;
 
         cond_expr_fn_t join_func = nullptr;
-        if (has_non_equi_cond) {
-            join_func = PhysicalExpression::join_expr;
+        size_t n_equality_keys = left_keys.size();
+        if (n_equality_keys == 0) {
+            if (has_non_equi_cond) {
+                // NestedLoopJoinState's constructor requires a cond_expr_fn_t
+                // even though it uses it as a cond_expr_fn_batch_t.
+                join_func = (cond_expr_fn_t)PhysicalExpression::join_expr_batch;
+            }
+            // No equality keys, so we do a nested loop join.
+            this->join_state_ = std::make_shared<NestedLoopJoinState>(
+                build_table_schema_reordered, probe_table_schema_reordered,
+                build_table_outer, probe_table_outer, std::vector<int64_t>(),
+                false, join_func, true, true, get_streaming_batch_size(), -1,
+                getOpId());
+        } else {
+            if (has_non_equi_cond) {
+                join_func = PhysicalExpression::join_expr;
+            }
+            this->join_state_ = std::make_shared<HashJoinState>(
+                build_table_schema_reordered, probe_table_schema_reordered,
+                this->left_keys.size(), build_table_outer, probe_table_outer,
+                // TODO: support forcing broadcast by the planner
+                false, join_func, true, true, get_streaming_batch_size(), -1,
+                //  TODO: support query profiling
+                getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
+                /*is_na_equal*/ true, is_mark_join);
         }
-        this->join_state_ = std::make_shared<HashJoinState>(
-            build_table_schema_reordered, probe_table_schema_reordered,
-            this->left_keys.size(), build_table_outer, probe_table_outer,
-            // TODO: support forcing broadcast by the planner
-            false, join_func, true, true, get_streaming_batch_size(), -1,
-            //  TODO: support query profiling
-            getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
-            /*is_na_equal*/ true, is_mark_join);
 
         this->initOutputSchema(build_table_schema_reordered,
                                probe_table_schema_reordered,
@@ -317,13 +332,11 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                  const std::shared_ptr<bodo::Schema> probe_table_schema)
         : has_non_equi_cond(false) {
         time_pt start_init = start_timer();
-        // TODO[BSE-4998]: support cross join with conditions.
-        cond_expr_fn_t join_func = nullptr;
         this->join_state_ = std::make_shared<NestedLoopJoinState>(
             build_table_schema, probe_table_schema, false, false,
             std::vector<int64_t>(),
             // TODO: support forcing broadcast by the planner
-            false, join_func, true, true, get_streaming_batch_size(), -1, -1);
+            false, nullptr, true, true, get_streaming_batch_size(), -1, -1);
 
         // Cross join doesn't have any keys, so we keep all columns.
         for (uint64_t i = 0; i < probe_table_schema->ncols(); i++) {

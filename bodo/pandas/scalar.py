@@ -34,6 +34,10 @@ class BodoScalar(BodoLazyWrapper):
     def _lazy(self) -> bool:
         return self._get_result_id() is not None
 
+    @property
+    def _plan(self):
+        return self.wrapped_series._plan
+
     def is_lazy_plan(self):
         return self.wrapped_series.is_lazy_plan()
 
@@ -52,11 +56,20 @@ class BodoScalar(BodoLazyWrapper):
             assert self.wrapped_series.nunique() in {0, 1}
         return self.wrapped_series[0]
 
+    @property
+    def __pandas_priority__(self):
+        """
+        Override this so we don't call get_value during planning.'
+        This is used by pandas during comparisons and arithmetic operations.'
+        """
+        return None
+
     def __getattribute__(self, name):
         # Delegate attribute access to the underlying scalar value
         #
         if name in {
             "wrapped_series",
+            "_plan",
             "_lazy",
             "_exec_state",
             "get_value",
@@ -66,6 +79,7 @@ class BodoScalar(BodoLazyWrapper):
             "update_from_lazy_metadata",
             "from_lazy_metadata",
             "__array__",
+            "__pandas_priority__",
         }:
             return object.__getattribute__(self, name)
         scalar = self.get_value()

@@ -262,6 +262,10 @@ cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace
     cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalOperator):
         CJoinType join_type
 
+cdef extern from "duckdb/planner/operator/logical_cross_product.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalCrossProduct" duckdb::LogicalCrossProduct"(CLogicalOperator):
+       pass
+
 cdef extern from "duckdb/planner/operator/logical_set_operation.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalSetOperation" duckdb::LogicalSetOperation"(CLogicalOperator):
         pass
@@ -311,6 +315,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec) except +
+    cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs) except +
     cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
@@ -458,6 +463,25 @@ cdef class LogicalComparisonJoin(LogicalOperator):
         join_type = join_type_to_string((<CLogicalComparisonJoin*>(self.c_logical_operator.get())).join_type)
         return f"LogicalComparisonJoin({join_type})"
 
+cdef class LogicalCrossProduct(LogicalOperator):
+    """Wrapper around DuckDB's LogicalCrossProduct to provide access in Python.
+    """
+
+    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs):
+        self.out_schema = out_schema
+
+        cdef unique_ptr[CLogicalCrossProduct] c_logical_cross_product = make_cross_product(lhs.c_logical_operator, rhs.c_logical_operator)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_cross_product.release())
+
+    def __str__(self):
+        return f"LogicalCrossProduct()"
+
+cdef class LogicalInsertScalarSubquery(LogicalCrossProduct):
+    """
+    Wrapper around LogicalCrossProduct to represent an insert of a scalar subquery result.
+    """
+    def __str__(self):
+        return f"LogicalInsertScalarSubquery()"
 
 cdef class LogicalSetOperation(LogicalOperator):
     """Wrapper around DuckDB's LogicalSetOperation to provide access in Python.

@@ -131,6 +131,17 @@ class LazyPlan:
             # side of a CTE plan.
             cte_node = None
 
+        def should_use_cache(node):
+            return not isinstance(
+                node,
+                (
+                    LogicalComparisonJoin,
+                    LogicalSetOperation,
+                    LogicalInsertScalarSubquery,
+                    LogicalCrossProduct,
+                ),
+            )
+
         if cte_ref is not None and self is cte_ref[0]:
             # Can't be an expression here.
             if id(self) in cache:
@@ -149,9 +160,7 @@ class LazyPlan:
             cte_plan = LogicalMaterializedCTE(
                 self.empty_data, cte_node[0], self, cte_node[1]
             )
-            use_cache = True
-            if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
-                use_cache = False
+            use_cache = should_use_cache(self)
 
             ret = getattr(plan_optimizer, cte_plan.plan_class)(
                 cte_plan.pa_schema, duplicate, uses_duplicate, cte_node[1]
@@ -174,9 +183,7 @@ class LazyPlan:
             # Join however doesn't need this and cannot use caching since a sub-plan may
             # be reused across right and left sides (e.g. self-join) leading to unique_ptr
             # errors.
-            use_cache = True
-            if isinstance(self, (LogicalComparisonJoin, LogicalSetOperation)):
-                use_cache = False
+            use_cache = should_use_cache(self)
 
             # Convert any LazyPlan in the args.
             # We do this in reverse order because we expect the first arg to be
@@ -305,6 +312,26 @@ class LogicalComparisonJoin(LogicalOperator):
     @property
     def join_type(self):
         return self.args[2]
+
+
+class LogicalCrossProduct(LogicalOperator):
+    """Logical operator for cross product joins."""
+
+    @property
+    def left_plan(self):
+        return self.args[0]
+
+    @property
+    def right_plan(self):
+        return self.args[1]
+
+
+class LogicalInsertScalarSubquery(LogicalCrossProduct):
+    """Logical operator for inserting scalar subquery results into a DataFrame.
+    This is just a cross product with a single row DataFrame. This isn't enforced automatically.
+    """
+
+    pass
 
 
 class LogicalSetOperation(LogicalOperator):

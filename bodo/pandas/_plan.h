@@ -321,6 +321,18 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype);
 
 /**
+ * @brief Create a cross product node.
+ *
+ * @param lhs - the left-hand side of the cross product
+ * @param rhs - the right-hand side of the cross product
+ * @return duckdb::unique_ptr<duckdb::LogicalCrossProduct> - the cross product
+ * node
+ */
+duckdb::unique_ptr<duckdb::LogicalCrossProduct> make_cross_product(
+    std::unique_ptr<duckdb::LogicalOperator> &lhs,
+    std::unique_ptr<duckdb::LogicalOperator> &rhs);
+
+/**
  * @brief Create a filter node.
  *
  * @param source - the source of the data to be filtered

@@ -609,4 +609,18 @@ bool PhysicalExpression::join_expr(array_info** left_table,
     }
 }
 
+void PhysicalExpression::join_expr_batch(
+    array_info** left_table, array_info** right_table, void** left_data,
+    void** right_data, void** left_null_bitmap, void** right_null_bitmap,
+    uint8_t* match_arr, int64_t left_index_start, int64_t left_index_end,
+    int64_t right_index_start, int64_t right_index_end) {
+    for (int64_t j = right_index_start; j < right_index_end; j++) {
+        for (int64_t i = left_index_start; i < left_index_end; i++) {
+            SetBitTo(match_arr, i + j,
+                     join_expr(left_table, right_table, left_data, right_data,
+                               left_null_bitmap, right_null_bitmap, i, j));
+        }
+    }
+}
+
 PhysicalExpression* PhysicalExpression::cur_join_expr = nullptr;

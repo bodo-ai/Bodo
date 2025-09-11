@@ -102,6 +102,11 @@ class PhysicalExpression {
                           void **left_data, void **right_data,
                           void **left_null_bitmap, void **right_null_bitmap,
                           int64_t left_index, int64_t right_index);
+    static void join_expr_batch(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        uint8_t *match_arr, int64_t left_index_start, int64_t left_index_end,
+        int64_t right_index_start, int64_t right_index_end);
 
     static PhysicalExpression *cur_join_expr;
 
