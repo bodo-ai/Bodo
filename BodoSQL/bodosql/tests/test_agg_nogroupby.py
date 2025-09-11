@@ -9,12 +9,12 @@ import pytest
 import bodo
 import bodosql
 from bodo.tests.utils import (
-    DistTestPipeline,
     check_func,
     count_array_REPs,
     dist_IR_contains,
     pytest_slow_unless_groupby,
 )
+from bodo.tests.utils_jit import DistTestPipeline
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 # Skip unless any groupby-related files were changed
