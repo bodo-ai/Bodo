@@ -3243,8 +3243,6 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     9    <NA>
     dtype: Float64
     """
-    return None
-
     from bodo.tests.utils_jit import _nullable_float_arr_maker
 
     S = _nullable_float_arr_maker(L, to_null, to_nan)

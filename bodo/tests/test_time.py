@@ -9,6 +9,7 @@ from bodo.tests.utils import check_func
 from bodo.utils.testing import ensure_clean
 
 
+@pytest.fixture
 def lazy_time_fixture(request):
     """Lazyily import Time to avoid importing the compiler at test collection time."""
     import bodo.decorators  # noqa

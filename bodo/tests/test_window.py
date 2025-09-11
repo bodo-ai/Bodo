@@ -41,6 +41,8 @@ def test_window_df():
     Q: Nullable float array which when grouped by D will have a partition containing NaNs.
     R: Nullable float array with all NA values to test all NA corner cases.
     """
+    import bodo.decorators  # noqa
+
     return pd.DataFrame(
         {
             "A": pd.Series(["A", "B", "C"] * 5),
@@ -1502,9 +1504,8 @@ def window_args(request):
 
     # evaluates arguments potentially lazily to avoid importing the compiler at test collection time.
     val = request.param
-    if callable(val):
-        return val()
-    return request.param
+
+    return val() if callable(val) else val
 
 
 def test_window(test_window_df, window_args, memory_leak_check):
