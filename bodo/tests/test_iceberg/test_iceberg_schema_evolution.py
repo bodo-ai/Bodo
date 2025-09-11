@@ -47,8 +47,6 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-
-# from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.tests.utils import (
     _gather_output,
     _get_dist_arg,

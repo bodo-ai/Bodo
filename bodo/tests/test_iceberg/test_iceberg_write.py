@@ -59,9 +59,6 @@ from bodo.tests.utils import (
 )
 from bodo.utils.testing import ensure_clean2
 
-# from bodo.tests.utils import reduce_sum
-# from bodo.utils.utils import BodoError
-
 pytestmark = pytest.mark.iceberg
 
 

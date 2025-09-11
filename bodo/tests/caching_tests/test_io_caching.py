@@ -8,10 +8,10 @@ from bodo.tests.utils import (
     check_caching,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
-    run_rank0,
     sql_user_pass_and_hostname,
 )
 from bodo.utils.testing import ensure_clean2
+from bodo.utils.utils import run_rank0
 
 
 @bodo.jit
